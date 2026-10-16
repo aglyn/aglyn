@@ -3810,6 +3810,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let campaignEmailsQuery: ListQueryDeclaration
   public let companyListDeclaration: ListQueryDeclaration
   public let componentListQuery: ListQueryDeclaration
+  public let componentPropTokenPrefix: String
   public let contactLifecycleStageLabels: [String: String]
   public let contactListDeclaration: ListQueryDeclaration
   public let contentSchemaTypeDefault: ContentSchemaType
@@ -3834,6 +3835,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let dropOffMaxHours: Double
   public let dropOffWaitHours: [Double]
   public let dropOffWatchesMax: Int
+  public let emailBlockStarterTreesJson: String
   public let emailListQuery: ListQueryDeclaration
   public let emailTemplateQuery: ListQueryDeclaration
   public let entryListFilterHeaders: [String: String]
@@ -3867,6 +3869,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let heldLicenceQuery: ListQueryDeclaration
   public let hostEvents: [HostEventDeclaration]
   public let hostVariableTypeLabels: [String: String]
+  public let imageEditAspectsJson: String
+  public let imageEditJpegQuality: Double
+  public let imageEditPreviewMax: Int
   public let installTargets: [String: [InstallTarget]]
   public let layoutListQuery: ListQueryDeclaration
   public let leadListDeclaration: ListQueryDeclaration
@@ -3972,9 +3977,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let reminderWindowStartHours: Int
   public let replyBodyMax: Int
   public let replySubjectMax: Int
+  public let reservedScreenRouteSegments: [String]
   public let returnReasonLabels: [String: String]
   public let returnReasons: [ReturnReason]
   public let scopedSearchJoin: String
+  public let screenRootPath: String
+  public let screenSlugPathSeparatorMessage: String
   public let searchEngineVerificationLabels: [String: String]
   public let searchEngineVerificationMetaNames: [String: String]
   public let seoFindingLabels: [String: String]
@@ -3996,6 +4004,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let templateListQuery: ListQueryDeclaration
   public let tenantEmailCollection: String
   public let tenantEmails: [TenantEmailEntry]
+  public let timeZoneChoices: [String]
+  public let timeZoneDefaultLabel: String
   public let workflowMaxSteps: Int
 
   enum CodingKeys: String, CodingKey {
@@ -4026,6 +4036,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
     case companyListDeclaration = "COMPANY_LIST_DECLARATION"
     case componentListQuery = "COMPONENT_LIST_QUERY"
+    case componentPropTokenPrefix = "COMPONENT_PROP_TOKEN_PREFIX"
     case contactLifecycleStageLabels = "CONTACT_LIFECYCLE_STAGE_LABELS"
     case contactListDeclaration = "CONTACT_LIST_DECLARATION"
     case contentSchemaTypeDefault = "CONTENT_SCHEMA_TYPE_DEFAULT"
@@ -4050,6 +4061,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case dropOffMaxHours = "DROP_OFF_MAX_HOURS"
     case dropOffWaitHours = "DROP_OFF_WAIT_HOURS"
     case dropOffWatchesMax = "DROP_OFF_WATCHES_MAX"
+    case emailBlockStarterTreesJson = "EMAIL_BLOCK_STARTER_TREES_JSON"
     case emailListQuery = "EMAIL_LIST_QUERY"
     case emailTemplateQuery = "EMAIL_TEMPLATE_QUERY"
     case entryListFilterHeaders = "ENTRY_LIST_FILTER_HEADERS"
@@ -4083,6 +4095,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case heldLicenceQuery = "HELD_LICENCE_QUERY"
     case hostEvents = "HOST_EVENTS"
     case hostVariableTypeLabels = "HOST_VARIABLE_TYPE_LABELS"
+    case imageEditAspectsJson = "IMAGE_EDIT_ASPECTS_JSON"
+    case imageEditJpegQuality = "IMAGE_EDIT_JPEG_QUALITY"
+    case imageEditPreviewMax = "IMAGE_EDIT_PREVIEW_MAX"
     case installTargets = "INSTALL_TARGETS"
     case layoutListQuery = "LAYOUT_LIST_QUERY"
     case leadListDeclaration = "LEAD_LIST_DECLARATION"
@@ -4188,9 +4203,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case reminderWindowStartHours = "REMINDER_WINDOW_START_HOURS"
     case replyBodyMax = "REPLY_BODY_MAX"
     case replySubjectMax = "REPLY_SUBJECT_MAX"
+    case reservedScreenRouteSegments = "RESERVED_SCREEN_ROUTE_SEGMENTS"
     case returnReasonLabels = "RETURN_REASON_LABELS"
     case returnReasons = "RETURN_REASONS"
     case scopedSearchJoin = "SCOPED_SEARCH_JOIN"
+    case screenRootPath = "SCREEN_ROOT_PATH"
+    case screenSlugPathSeparatorMessage = "SCREEN_SLUG_PATH_SEPARATOR_MESSAGE"
     case searchEngineVerificationLabels = "SEARCH_ENGINE_VERIFICATION_LABELS"
     case searchEngineVerificationMetaNames = "SEARCH_ENGINE_VERIFICATION_META_NAMES"
     case seoFindingLabels = "SEO_FINDING_LABELS"
@@ -4212,6 +4230,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case templateListQuery = "TEMPLATE_LIST_QUERY"
     case tenantEmailCollection = "TENANT_EMAIL_COLLECTION"
     case tenantEmails = "TENANT_EMAILS"
+    case timeZoneChoices = "TIME_ZONE_CHOICES"
+    case timeZoneDefaultLabel = "TIME_ZONE_DEFAULT_LABEL"
     case workflowMaxSteps = "WORKFLOW_MAX_STEPS"
   }
 }

@@ -28,6 +28,8 @@ import {
 } from '../usage/assist-credits'
 import { assistUsageMonth } from '../usage/assist-usage'
 import {
+  aiSpendCell,
+  aiSpendSortValue,
   parseStaffOrgIds,
   type StaffOrgsAiSpendWire,
 } from '../usage/staff-orgs-ai-spend'
@@ -107,6 +109,18 @@ async function handler(request: Request): Promise<Response> {
           spendOf(snapshots?.[index]),
         ]),
       ),
+    }
+    // The column as it prints, for a client that draws no table (the staff apps): the cell each org shows, and the
+    // number the header sorts by, with the unmeasured as null so they sort last in both directions.
+    if (String(query['view'] ?? '') === 'prepared') {
+      return Response.json(
+        {
+          month,
+          cells: Object.fromEntries(Object.entries(body.spendUsd).map(([id, spend]) => [id, aiSpendCell(spend)])),
+          sort: Object.fromEntries(Object.entries(body.spendUsd).map(([id, spend]) => [id, aiSpendSortValue(spend)])),
+        },
+        { status: 200 },
+      )
     }
     return Response.json(body, { status: 200 })
   } catch (error) {

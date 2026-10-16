@@ -14,20 +14,76 @@
       "why": "Reached by variables: the binding token grammar."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/business-profile-values.ts",
+      "why": "The business profile's fields, limits, sources and owner-write rule, no imports: the native workspace defaults replay them (AGL-3671)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/business-profile.ts",
+      "why": "A site's business profile: what the owner typed, what the site's own settings say and the workspace defaults, field by field with where each came from, and the owner's save; the native Business profile section reads and writes the same document (AGL-3668)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/collection-entry-date.ts",
       "why": "Reached by entry-list-declaration: the entry date fields and publish sort key, no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/compress.ts",
+      "why": "A stored node tree is msgpack bytes; the native readers decode them and the cases record what the console's encoder makes (AGL-3668). Its one import is the msgpack coder."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/consent-groups.ts",
+      "why": "Which sites present as one sender, read by the CRM's scope (crmScopeTokens, crmReadTokens) in the apps (AGL-3669)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/contacts.ts",
+      "why": "Reached by crm.ts: a contact's shape and its holder facets."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/content-authors.ts",
+      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/content-schema-type.ts",
       "why": "The content collection schema types the native collection settings offer (AGL-3668), no imports."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "why": "Reached by sequence-validation: the merge fields a step may use."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/crm-kinds.ts",
-      "why": "Reached by the automation step vocabulary: the CRM lifecycle stages, task and activity kinds, plain lists."
+      "why": "Reached by crm.ts: the CRM's fixed vocabularies, no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "why": "The CRM's vocabularies, scope tokens and list fields, read by the native contracts and the CRM's replayed function cases (AGL-3669)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/detect-template-placeholders.ts",
+      "why": "The {{name}} placeholders a saved template asks for when it is used; the native Save as template declares the same (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/element-animation.ts",
+      "why": "Reached by reusable-component-keys: animation prop names."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/email-block-starters.ts",
+      "why": "The Header and Footer bands an email block starts from, as plain data: the email plugin registers them as presets and the native apps start a component from the same trees (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "why": "Reached by crm.ts: an address's deliverability states."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/email-text.ts",
+      "why": "Reached by sequence-validation: a thread's subject."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/entry-list-declaration.ts",
       "why": "A collection's entry list declaration, filter fields and statuses; the native content screens plan the same Firestore query (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/entry-preview-link.ts",
+      "why": "Reached by screen-slug: the reserved preview segment. No imports."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/functions.ts",
@@ -42,8 +98,20 @@
       "why": "Reached by organizations: site naming and slug rules over strings."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "why": "The media image editor's arithmetic: the quarter-turn size, the crop a drag draws, where an edit cuts and how big it comes out, the copy's name and type (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/leaving-notice.ts",
+      "why": "Reached by screen-slug: the reserved leaving-notice segment. No imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/local-business.ts",
       "why": "The local business types, limits and opening-hours check the native SEO setup offers and replays (AGL-3668), no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/marketing-consent.ts",
+      "why": "Reached by contacts.ts: the consent record's shape."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/media-alt.ts",
@@ -67,11 +135,11 @@
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/media-ref.ts",
-      "why": "The media: reference grammar the pickers write and the previews read (mediaNodeSrc, resolveMediaSrc); its one import is the tenant apex constant (AGL-3668)."
+      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/message-search.ts",
-      "why": "Who sent a form submission (`messageSender`), which the native submissions list and detail name the same way (AGL-3668)."
+      "why": "Who wrote a message in, by the field-name convention the Inbox's From filter is stamped from, so an app row names the sender the console does (AGL-3669)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
@@ -90,12 +158,28 @@
       "why": "An order's payment-risk signals and their pure summaries; the native contracts emit the order's paymentRisk from it (AGL-3651)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/picklists.ts",
+      "why": "Reached by crm.ts: the picklist value rules over plain data."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/platform-brand.ts",
       "why": "Reached by payment-risk: the platform brand name constants, no imports."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/plugin-host-events.generated.ts",
       "why": "Reached by host-events: each plugin's declared host events, generated data with no imports."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/resolve-named-tokens.ts",
+      "why": "A template's {{name}} placeholders filled in as a page, component or layout is made from it (AGL-3668). Type-only import."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/retained-refusals.ts",
+      "why": "Reached by contacts.ts: the refusals a removed contact keeps."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/reusable-component-keys.ts",
+      "why": "Reached by detect-template-placeholders: the {{prop.*}} prefix a template placeholder never takes (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
@@ -106,8 +190,32 @@
       "why": "The per-page traffic table's fold over screen day documents (AGL-3670)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/screen-kind.ts",
+      "why": "Reached by email-design-document: the email screen kind, a leaf."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/screen-seo-fields.ts",
+      "why": "Reached by seo-listing-fields: a page's search text fields (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "why": "A page address: the slug normalizer, the reserved segments and the one-segment rule the native publish and template screens ask the same way (AGL-3668). Leaf imports only."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/search-engine-verification.ts",
       "why": "Search engine verification labels and the token extraction the native SEO setup replays (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
+      "why": "The SEO check's report model, finding labels and the target-keyword lines; the native SEO check card reads the same report and writes the same lines (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/seo-keywords.ts",
+      "why": "Target keywords: the limits and how a typed list is split; the native keyword rows hold the same limits (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/seo-listing-fields.ts",
+      "why": "Reached by seo-audit: the listing fields' lengths (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/seo-title-variables.ts",
@@ -126,6 +234,10 @@
       "why": "Reached by the Commerce app's product writes: the site-wide outbox document shape and keys."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/sso-enforcement.ts",
+      "why": "The single sign-on rehearsal table's rows and the break-glass eligibility rule, no imports: the native workspace settings replay them (AGL-3671)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/staff-role-gate.ts",
       "why": "The staff role gate the native staff section replays (AGL-3667): a pure verdict over a role string and a role list."
     },
@@ -134,8 +246,20 @@
       "why": "Reached by the commerce model: test or live mode from a plain value, no Stripe SDK."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/template-slug.ts",
+      "why": "Where a page made from a template lands: de-conflicted against the taken addresses, refused when reserved (AGL-3668)."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/tenant-apex.ts",
       "why": "Reached by host-naming: the tenant apex domain constants."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/time-zone-choices.ts",
+      "why": "The time zones the pickers offer and how they are labeled, as data with no imports: the native workspace and site settings show the console's list (AGL-3671)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/url-slug.ts",
+      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/variables.ts",
@@ -150,8 +274,16 @@
       "why": "What an imported site item changes: the leaf-by-leaf diff and the keys a merge chooses between, shown by the site package import (AGL-3671)."
     },
     {
+      "path": "libs/aglyn/src/lib/foundation/constants/canvas.ts",
+      "why": "Reached by email-design-document: the canvas root element id, a leaf."
+    },
+    {
       "path": "libs/aglyn/src/lib/foundation/definitions/contact.types.ts",
-      "why": "Reached by booking-contact-fields: contact shapes and the phone normalizer; no imports."
+      "why": "Reached by crm.ts: the postal address shape and its normalizers."
+    },
+    {
+      "path": "libs/aglyn/src/lib/foundation/definitions/platform.types.ts",
+      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
     },
     {
       "path": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
@@ -160,6 +292,10 @@
     {
       "path": "libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts",
       "why": "Reached by enabled-plugins: the generated first-party catalog rows; every other import is type-only (AGL-3671)."
+    },
+    {
+      "path": "libs/plugins/ai/src/lib/model/ai-products-bulk.ts",
+      "why": "The copy job a landed product import starts: its brief, inputs and the created ids read from the import's results; no imports, so the native apps replay it (AGL-3671)."
     },
     {
       "path": "libs/plugins/bookings/src/lib/model/booking-contact-fields.ts",
@@ -190,6 +326,10 @@
       "why": "The service shape, slot walk and the 24-hour reminder band the console's Bookings card counts (AGL-3670)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts",
+      "why": "The pickup and delivery queue's tabs and its one Firestore query per tab (AGL-3624), which the native Aglyn app runs too; a type-only import."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/constants/orders-list-query.ts",
       "why": "The orders list query declaration the console grid plans with; the Commerce app screens (AGL-3621) plan the same Firestore query from it."
     },
@@ -206,10 +346,6 @@
       "why": "Whether an open dispute blocks a refund, the rule the app's order actions share with the refund route (AGL-3621)."
     },
     {
-      "path": "libs/plugins/commerce/src/lib/model/order-annotations.ts",
-      "why": "The restock question's sentence the order screen prints (AGL-3651, AGL-3652); imports only commerce-orders."
-    },
-    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "why": "The order record shape and its pure helpers, read by the Commerce app order and sales screens (AGL-3621)."
     },
@@ -222,16 +358,24 @@
       "why": "The offline register's sale, sync answer and kit shapes and its totals arithmetic (AGL-3625); the Aglyn POS app queues offline cash sales and syncs them through the same route."
     },
     {
-      "path": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
-      "why": "The register's payment ledger, display and receipt shapes and their pure helpers, imports nothing; the native contracts emit an order's payments from it (AGL-3651)."
-    },
-    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts",
       "why": "The register's shifts, cash drawer and returns (AGL-3609): the shift and report shapes the native register reads, and the drawer's expected-cash formula; imports commerce-pos, commerce-printers (type only), commerce-receipt."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-pos.ts",
+      "why": "The register's payment ledger, display and receipt shapes and their pure helpers, imports nothing; the native contracts emit an order's payments from it (AGL-3651)."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
       "why": "The receipt data an order makes, so the app's printed and shared receipt matches the register's (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-returns.ts",
+      "why": "The return reasons and their labels, so the register's return sheet offers the same ones the console does (AGL-3609); imports only commerce, commerce-orders and order-fulfillment."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-shipping.ts",
+      "why": "What a store's shipping zones and rates cover: the resolver checkout builds its shipping options from and the Coverage block's words. Pure arithmetic over the settings document; the native Shipping page replays it from function-cases.generated.json."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-tax.ts",
@@ -242,20 +386,24 @@
       "why": "The product, collection and store shapes, read by the Commerce app product screens (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/order-annotations.ts",
+      "why": "The restock question's sentence the order screen prints (AGL-3651, AGL-3652); imports only commerce-orders."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/order-figures.ts",
       "why": "Integer-cent order totals, so the app's sales figures match the console's to the cent (AGL-3621)."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
+      "why": "Fulfillment state of an order line, reached by the app's order screens (AGL-3621)."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/order-local-fulfillment.ts",
       "why": "Pickup and local delivery on an order (AGL-3624): the statuses, labels, transitions and queue fields the native Aglyn app shows and queries; no imports."
     },
     {
-      "path": "libs/plugins/commerce/src/lib/constants/local-fulfillment-list-query.ts",
-      "why": "The pickup and delivery queue's tabs and its one Firestore query per tab (AGL-3624), which the native Aglyn app runs too; a type-only import."
-    },
-    {
-      "path": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
-      "why": "Fulfillment state of an order line, reached by the app's order screens (AGL-3621)."
+      "path": "libs/plugins/commerce/src/lib/model/paid-media.ts",
+      "why": "What an author is told before a file becomes private paid media (the places that use it, and the sentence confirmed) and which library a media route is asked of. Pure string and list work; the native product page replays it from function-cases.generated.json."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/product-channel.ts",
@@ -282,12 +430,72 @@
       "why": "The print layout as plain text, for the app's share sheet (AGL-3621)."
     },
     {
+      "path": "libs/plugins/crm/src/lib/constants/company-filters.ts",
+      "why": "The Companies list declaration the apps' companies list plans (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/constants/contact-filters.ts",
+      "why": "The Contacts list declaration the apps' contacts list plans (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/constants/deal-filters.ts",
+      "why": "The Deals list declaration the apps' deals list plans (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/constants/field-list-query.ts",
+      "why": "The Fields list declaration (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/crm-list-query.ts",
+      "why": "Reached by the CRM declarations: the CRM's shared search."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/crm-next-activity.ts",
+      "why": "Reached by the CRM declarations: the next-activity filter field."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/crm-reports.ts",
+      "why": "The CRM reports' figures (pipelineTotals, leadFunnel), replayed by the apps' reports (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/deal-board-model.ts",
+      "why": "The pipeline board's columns, for the apps' board (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/lead-filters.ts",
+      "why": "The Leads list declaration the apps' leads list plans (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/lead-source-direction.ts",
+      "why": "Reached by lead-filters: a lead source's inbound or outbound group."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/native-vocabulary.ts",
+      "why": "The CRM's vocabularies as flat arrays and maps for the native contracts; no web code imports it (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/task-picklists.ts",
+      "why": "The task picklists' meanings (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/crm/src/lib/model/task-views.ts",
+      "why": "The Tasks list declaration and its views (AGL-3669)."
+    },
+    {
       "path": "libs/plugins/data/src/lib/components/dataset-record-filter.ts",
       "why": "The records table query a dataset model plans (`planDatasetRecordQuery`): the native records list asks the same Firestore query for a filter or a search (AGL-3668); type-only imports beside the pure planner and dataset-model-core."
     },
     {
       "path": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
       "why": "The dataset model and field types, a stored value as the records table shows it and as its input reads, the field-id rules and the records filter grammar; the native Data screens read, show and filter records from it (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/email/src/lib/constants/list-queries.ts",
+      "why": "The Email lists' declarations (lists, members, designs, suppressions) the apps plan (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/email/src/lib/model/email-design-document.ts",
+      "why": "A new email design's screen and first version (emailDesignDocuments, emailDesignStarterNodes), replayed by the apps' Templates (AGL-3669)."
     },
     {
       "path": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
@@ -323,7 +531,55 @@
     },
     {
       "path": "libs/plugins/inbox/src/lib/constants/list-queries.ts",
-      "why": "The submissions list query declarations; the native submissions screens plan the same query (AGL-3668)."
+      "why": "The Inbox's list declarations (submissions, site members, leads), so the apps' Inbox lists run the console's own queries (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/model/reply-policy.ts",
+      "why": "The Inbox reply's limits and default subject, so the apps' reply sheet offers what the route accepts (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
+      "why": "The Inbox's sender label, initials and routing chips, replayed by the apps' submission rows (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/model/formula-names.ts",
+      "why": "The names a function's formula can read, grouped as the builder lists them (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/model/formula.ts",
+      "why": "The formula builder: the expression a picked operation and its values write; the native function editors build the same text (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/model/parameter-choice-rows.ts",
+      "why": "A function parameter's choices as rows and back to the stored options (AGL-3668); a type-only import."
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/model/structured-value.ts",
+      "why": "A dictionary or list variable as rows and back to the stored JSON string; the native Logic editors show and save the same rows (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "why": "A send's progress and display state (campaignSendDisplay), replayed by the apps (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/model/campaign-list-query.ts",
+      "why": "The Emails and Campaigns list declarations the apps' lists plan (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/model/campaign-report.ts",
+      "why": "A send's report figures (campaignReport), replayed by the apps (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/model/experiment-list-query.ts",
+      "why": "The A/B testing list declaration the apps plan (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/model/experiments.ts",
+      "why": "A/B experiments' rules and results (validateExperiment, experimentResultRows, describeVariantComparison), replayed by the apps' A/B testing (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/marketing/src/lib/model/native-vocabulary.ts",
+      "why": "The site-level Emails and Campaigns declarations as values for the native contracts; no web code imports it (AGL-3669)."
     },
     {
       "path": "libs/plugins/marketplace/src/lib/model/listing-query.ts",
@@ -338,6 +594,54 @@
       "why": "Artifact type labels, install targets, categories, a plugin's install state and each type's install route and message; the native marketplace screens install from it (AGL-3668); type-only imports."
     },
     {
+      "path": "libs/plugins/marketplace/src/lib/model/payout-readiness.ts",
+      "why": "Whether a publisher's Stripe account can take charges and release payouts, as the seller panel says it (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/seller-ledger-totals.ts",
+      "why": "What a publisher was actually paid: the sums over the seller ledger, net of what was pulled back (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/engine/click-tracking.ts",
+      "why": "Reached by outreach.types and sequence-validation: the body's links."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/engine/ip-range.ts",
+      "why": "Reached by open-source: IP blocks."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/engine/mail-gateway.ts",
+      "why": "Reached by outreach.types: the gateway day counts shape."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/engine/open-source.ts",
+      "why": "Reached by open-tracking: an open's source."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/engine/open-tracking.ts",
+      "why": "Reached by outreach.types: an open's machine reasons."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/engine/sequence-validation.ts",
+      "why": "A sequence's validation (validateOutreachSequence), replayed by the apps' sequence editor (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/model/do-not-contact-domain-list-query.ts",
+      "why": "The do-not-contact domains list declaration (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/model/enrollment-list-query.ts",
+      "why": "A sequence's Enrollments list declaration (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/model/outreach.types.ts",
+      "why": "Reached by the outreach declarations and validation: the sequence, step and enrollment shapes and limits."
+    },
+    {
+      "path": "libs/plugins/outreach/src/lib/model/sequence-list-query.ts",
+      "why": "The Sequences list declaration the apps plan (AGL-3669)."
+    },
+    {
       "path": "libs/plugins/redirects/src/lib/model/redirects.ts",
       "why": "The redirect rule's shape and evaluation order, shared by the console page, the tenant serve path and the Redirects mobile screen."
     },
@@ -350,12 +654,28 @@
       "why": "A workflow's shape and its pure runner over site functions and variables, the native test run's (AGL-3670)."
     },
     {
+      "path": "libs/shared/ui/email-campaigns/src/lib/model/send-report.ts",
+      "why": "A send's stats shape, rates and link report (sendRate, sendLinkReport), replayed by the apps (AGL-3669)."
+    },
+    {
       "path": "libs/shared/ui/jsx/src/lib/const/list-query-plan.ts",
       "why": "The console's list-plan entry the Commerce app's list page imports; it re-exports the pure list-query grammar (AGL-3622)."
     },
     {
+      "path": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
+      "why": "The weekly hours picker's model: a week of open intervals read from and written back as the stored opening-hours lines (`Mo-Fr 09:00-17:00`); the native apps' hours pickers write the same text (AGL-3668). No imports."
+    },
+    {
       "path": "libs/shared/util/email/src/lib/hosted-page-screen.ts",
       "why": "Reached by the redirects model: string screens over a destination URL, no I/O."
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/list-unsubscribe.ts",
+      "why": "Reached by campaign-container: the List-Unsubscribe header shape."
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/mail-gateway.ts",
+      "why": "Reached by the outreach mail-gateway: gateway names."
     },
     {
       "path": "libs/shared/util/email/src/lib/outbound-phishing-screen.ts",
@@ -394,264 +714,8 @@
       "why": "The pure list query planner (AGL-3622): a list filter becomes the same Firestore constraints on web and native."
     },
     {
-      "path": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
-      "why": "The Inbox's sender label, initials and routing chips, replayed by the apps' submission rows (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/inbox/src/lib/model/reply-policy.ts",
-      "why": "The Inbox reply's limits and default subject, so the apps' reply sheet offers what the route accepts (AGL-3669)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm.ts",
-      "why": "The CRM's vocabularies, scope tokens and list fields, read by the native contracts and the CRM's replayed function cases (AGL-3669)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/picklists.ts",
-      "why": "Reached by crm.ts: the picklist value rules over plain data."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/consent-groups.ts",
-      "why": "Which sites present as one sender, read by the CRM's scope (crmScopeTokens, crmReadTokens) in the apps (AGL-3669)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/email-state.ts",
-      "why": "Reached by crm.ts: an address's deliverability states."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/contacts.ts",
-      "why": "Reached by crm.ts: a contact's shape and its holder facets."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/constants/deal-filters.ts",
-      "why": "The Deals list declaration the apps' deals list plans (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/constants/company-filters.ts",
-      "why": "The Companies list declaration the apps' companies list plans (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/model/lead-filters.ts",
-      "why": "The Leads list declaration the apps' leads list plans (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/constants/contact-filters.ts",
-      "why": "The Contacts list declaration the apps' contacts list plans (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/model/crm-list-query.ts",
-      "why": "Reached by the CRM declarations: the CRM's shared search."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/constants/field-list-query.ts",
-      "why": "The Fields list declaration (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/model/deal-board-model.ts",
-      "why": "The pipeline board's columns, for the apps' board (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/model/crm-reports.ts",
-      "why": "The CRM reports' figures (pipelineTotals, leadFunnel), replayed by the apps' reports (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/model/task-picklists.ts",
-      "why": "The task picklists' meanings (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/model/crm-next-activity.ts",
-      "why": "Reached by the CRM declarations: the next-activity filter field."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/model/lead-source-direction.ts",
-      "why": "Reached by lead-filters: a lead source's inbound or outbound group."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/marketing-consent.ts",
-      "why": "Reached by contacts.ts: the consent record's shape."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/retained-refusals.ts",
-      "why": "Reached by contacts.ts: the refusals a removed contact keeps."
-    },
-    {
       "path": "libs/shared/util/tools/src/lib/list-query/list-query-refusals.ts",
       "why": "Reached by the CRM list declarations: the planner's refusal wording."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/model/task-views.ts",
-      "why": "The Tasks list declaration and its views (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/crm/src/lib/model/native-vocabulary.ts",
-      "why": "The CRM's vocabularies as flat arrays and maps for the native contracts; no web code imports it (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/model/campaign-list-query.ts",
-      "why": "The Emails and Campaigns list declarations the apps' lists plan (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
-      "why": "A send's progress and display state (campaignSendDisplay), replayed by the apps (AGL-3669)."
-    },
-    {
-      "path": "libs/shared/ui/email-campaigns/src/lib/model/send-report.ts",
-      "why": "A send's stats shape, rates and link report (sendRate, sendLinkReport), replayed by the apps (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/email/src/lib/constants/list-queries.ts",
-      "why": "The Email lists' declarations (lists, members, designs, suppressions) the apps plan (AGL-3669)."
-    },
-    {
-      "path": "libs/shared/util/email/src/lib/list-unsubscribe.ts",
-      "why": "Reached by campaign-container: the List-Unsubscribe header shape."
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/model/campaign-report.ts",
-      "why": "A send's report figures (campaignReport), replayed by the apps (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/model/native-vocabulary.ts",
-      "why": "The site-level Emails and Campaigns declarations as values for the native contracts; no web code imports it (AGL-3669)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/screen-kind.ts",
-      "why": "Reached by email-design-document: the email screen kind, a leaf."
-    },
-    {
-      "path": "libs/aglyn/src/lib/foundation/constants/canvas.ts",
-      "why": "Reached by email-design-document: the canvas root element id, a leaf."
-    },
-    {
-      "path": "libs/plugins/email/src/lib/model/email-design-document.ts",
-      "why": "A new email design's screen and first version (emailDesignDocuments, emailDesignStarterNodes), replayed by the apps' Templates (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/model/experiments.ts",
-      "why": "A/B experiments' rules and results (validateExperiment, experimentResultRows, describeVariantComparison), replayed by the apps' A/B testing (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/marketing/src/lib/model/experiment-list-query.ts",
-      "why": "The A/B testing list declaration the apps plan (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/model/sequence-list-query.ts",
-      "why": "The Sequences list declaration the apps plan (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/model/enrollment-list-query.ts",
-      "why": "A sequence's Enrollments list declaration (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/model/do-not-contact-domain-list-query.ts",
-      "why": "The do-not-contact domains list declaration (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/model/outreach.types.ts",
-      "why": "Reached by the outreach declarations and validation: the sequence, step and enrollment shapes and limits."
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/engine/sequence-validation.ts",
-      "why": "A sequence's validation (validateOutreachSequence), replayed by the apps' sequence editor (AGL-3669)."
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/engine/click-tracking.ts",
-      "why": "Reached by outreach.types and sequence-validation: the body's links."
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/engine/open-tracking.ts",
-      "why": "Reached by outreach.types: an open's machine reasons."
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/engine/open-source.ts",
-      "why": "Reached by open-tracking: an open's source."
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/engine/ip-range.ts",
-      "why": "Reached by open-source: IP blocks."
-    },
-    {
-      "path": "libs/plugins/outreach/src/lib/engine/mail-gateway.ts",
-      "why": "Reached by outreach.types: the gateway day counts shape."
-    },
-    {
-      "path": "libs/shared/util/email/src/lib/mail-gateway.ts",
-      "why": "Reached by the outreach mail-gateway: gateway names."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
-      "why": "Reached by sequence-validation: the merge fields a step may use."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/email-text.ts",
-      "why": "Reached by sequence-validation: a thread's subject."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/business-profile-values.ts",
-      "why": "The business profile's fields, limits, sources and owner-write rule, no imports: the native workspace defaults replay them (AGL-3671)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/business-profile.ts",
-      "why": "A site's business profile: what the owner typed, what the site's own settings say and the workspace defaults, field by field with where each came from, and the owner's save; the native Business profile section reads and writes the same document (AGL-3668)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/content-authors.ts",
-      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/screen-seo-fields.ts",
-      "why": "Reached by seo-listing-fields: a page's search text fields (AGL-3668)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/seo-audit.ts",
-      "why": "The SEO check's report model, finding labels and the target-keyword lines; the native SEO check card reads the same report and writes the same lines (AGL-3668)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/seo-keywords.ts",
-      "why": "Target keywords: the limits and how a typed list is split; the native keyword rows hold the same limits (AGL-3668)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/seo-listing-fields.ts",
-      "why": "Reached by seo-audit: the listing fields' lengths (AGL-3668)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/url-slug.ts",
-      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
-    },
-    {
-      "path": "libs/aglyn/src/lib/foundation/definitions/platform.types.ts",
-      "why": "Reached by business-profile: pure helpers it reads (AGL-3668)."
-    },
-    {
-      "path": "libs/plugins/commerce/src/lib/model/commerce-returns.ts",
-      "why": "The return reasons and their labels, so the register's return sheet offers the same ones the console does (AGL-3609); imports only commerce, commerce-orders and order-fulfillment."
-    },
-    {
-      "path": "libs/plugins/logic/src/lib/model/formula-names.ts",
-      "why": "The names a function's formula can read, grouped as the builder lists them (AGL-3668). No imports."
-    },
-    {
-      "path": "libs/plugins/logic/src/lib/model/formula.ts",
-      "why": "The formula builder: the expression a picked operation and its values write; the native function editors build the same text (AGL-3668). No imports."
-    },
-    {
-      "path": "libs/plugins/logic/src/lib/model/parameter-choice-rows.ts",
-      "why": "A function parameter's choices as rows and back to the stored options (AGL-3668); a type-only import."
-    },
-    {
-      "path": "libs/plugins/logic/src/lib/model/structured-value.ts",
-      "why": "A dictionary or list variable as rows and back to the stored JSON string; the native Logic editors show and save the same rows (AGL-3668). No imports."
-    },
-    {
-      "path": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
-      "why": "The weekly hours picker's model: a week of open intervals read from and written back as the stored opening-hours lines (`Mo-Fr 09:00-17:00`); the native apps' hours pickers write the same text (AGL-3668). No imports."
-    },
-    {
-      "path": "libs/plugins/marketplace/src/lib/model/seller-ledger-totals.ts",
-      "why": "What a publisher was actually paid: the sums over the seller ledger, net of what was pulled back (AGL-3668). No imports."
-    },
-    {
-      "path": "libs/plugins/marketplace/src/lib/model/payout-readiness.ts",
-      "why": "Whether a publisher's Stripe account can take charges and release payouts, as the seller panel says it (AGL-3668). No imports."
     }
   ]
 }

@@ -177,10 +177,55 @@ Measured 2026-10-01.
 
 | Project | Serves | Posture |
 | --- | --- | --- |
-| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 10 scoped bypass rules, 1 rate limit (enforcing) |
-| `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 4 scoped bypass rules |
-| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces, and every Sequences link domain | ✅ protected — challenge, 8 scoped bypass rules, 1 rate limit (enforcing) |
+| `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 11 scoped bypass rules, 1 rate limit (enforcing) |
+| `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 5 scoped bypass rules |
+| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces, and every Sequences link domain | ✅ protected — challenge, 11 scoped bypass rules, 1 rate limit (enforcing) |
 | `aglyn-plugins` | `plugins.aglyn.com` — plugin loader origin | ⚠️ **no WAF config** — reviewed, deliberate |
+
+### Store reviewers and app-association verifiers (AGL-3804)
+
+Bot protection answers any client that cannot run JavaScript and is not a
+Vercel-verified bot with `429` and `x-vercel-mitigated: challenge`. Google
+Play's and the App Store's URL checks are such clients, and so are Apple's
+`apple-app-site-association` fetcher and Google's Digital Asset Links
+verifier. A challenged privacy policy or account-deletion page gets a store
+listing flagged; a challenged `/.well-known/` file means app links and
+passkeys never verify, with no error on our side.
+
+The rule **Store review + app verification bypass** lifts the challenge, and
+nothing else, for these public, read-only paths:
+
+| Project | Paths |
+| --- | --- |
+| `aglyn-tenant` | exactly `/support` and `/contact`; prefixes `/legal/` and `/.well-known/` |
+| `aglyn-docs` | exactly `/workspace-and-billing/manage-account` (with and without the trailing slash) |
+| `aglyn-console` | prefix `/.well-known/` |
+
+Prefixes end in a slash, so the bare `/legal` index and look-alike paths such
+as `/supportx` or `/.well-knownx` stay challenged. A new page a store listing
+links to, or a new association file under another path, needs its own entry
+here and in `tools/scripts/lib/firewall-posture.mjs`.
+
+### The native apps (AGL-3800)
+
+The iOS, Android and desktop apps call the console's `/api/` routes from
+URLSession and OkHttp. Those clients run no JavaScript, so bot protection
+answered every call with the challenge page: sign-up, SSO, passkeys, invites,
+the desktop hand-off and every call made after sign-in.
+
+The console rule **Native app API bypass** lifts the challenge, and nothing
+else, for two kinds of request:
+
+| Group | Matches | Why it is safe |
+| --- | --- | --- |
+| Signed-in calls | path starts with `/api/` AND the `authorization` header matches `^Bearer <jwt>$` (three base64url segments) | every such route verifies the Firebase ID token itself and answers 401 without a valid one |
+| Sign-in doors | exactly `/api/auth/native-handoff/redeem`, `sso-lookup`, `resolve-identifier`, `send-password-reset`, `passkeys/signin/options` and `passkeys/signin/verify` | each carries its own rate limit, except `sso-lookup`, which returns only public SSO routing facts |
+
+A request with no `Authorization`, a non-JWT bearer such as `Bearer x`, a page
+rather than an `/api/` route, or a look-alike path such as
+`/api/auth/sso-lookupX` is still challenged. A new route the apps call before
+sign-in needs adding to the doors expression, here and in
+`tools/scripts/lib/firewall-posture.mjs`.
 
 ### How the console was closed, and why the order mattered
 

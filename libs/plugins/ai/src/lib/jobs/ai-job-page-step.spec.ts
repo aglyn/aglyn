@@ -650,7 +650,22 @@ describe('the passes', () => {
       detail: expect.stringContaining('Rule 12'),
       findings: [expect.objectContaining({ rule: 12, code: 'grid-not-container', nodeIds: [rowId] })],
       outline: [
-        { id: rowId, depth: 0, componentId: 'muiGrid', props: ['ariaLabel'], children: cells.map(() => 'muiGrid') },
+        // The last pass gave the row of cards the site's stagger before it was checked (AGL-3838).
+        {
+          id: rowId,
+          depth: 0,
+          componentId: 'muiGrid',
+          props: [
+            'ariaLabel',
+            'aglynAnimation',
+            'aglynAnimationTrigger',
+            'aglynAnimationDuration',
+            'aglynAnimationEase',
+            'aglynAnimationStagger',
+            'aglynAnimationStaggerStep',
+          ],
+          children: cells.map(() => 'muiGrid'),
+        },
         ...cells.flatMap((cell) => [
           expect.objectContaining({ id: cell, depth: 1, componentId: 'muiGrid', grid: { size: 'xs:12 md:4' } }),
           expect.objectContaining({ id: nodes[cell].nodes?.[0], depth: 2, componentId: 'reusableInstance' }),
@@ -782,8 +797,58 @@ describe('the passes', () => {
     await step()(context({ plan: long }))
     const seo = mockDocs.get(DRAFT)?.['seo'] as { title: string; description: string }
     expect(seo.title.length).toBeLessThanOrEqual(SCREEN_SEO_TEXT_GUIDANCE.title)
-    expect(seo.title).toBe('Spring roof inspections for homes across Springfield,')
+    expect(seo.title).toBe('Spring roof inspections for homes across Springfield')
     expect(seo.description).toBe(SCREEN.seoDescription)
+  })
+
+  it('takes a joining word off a listing the cut leaves dangling (AGL-3813)', async () => {
+    await buildSections()
+    // The live golden law-firm page (2026-10-15): 61 characters, cut at 60 to "…Practice Areas and".
+    const long = { ...PLAN, screens: [{ ...SCREEN, seoTitle: 'About Brightwater Law | Our Firm, Practice Areas and Approach', seoDescription: SCREEN.seoDescription }] }
+    seoFields.mockResolvedValueOnce({ status: 'needs_input', violations: [], message: 'no', attempts: 2, usage: USAGE, estCostUsd: 0.002, effort: null, model: 'claude-haiku-4-5', stopReason: 'tool_use' })
+    await step()(context({ plan: long }))
+    const seo = mockDocs.get(DRAFT)?.['seo'] as { title: string; description: string }
+    expect(seo.title).toBe('About Brightwater Law | Our Firm, Practice Areas')
+  })
+
+  describe('a listing clipped in the plan’s language (AGL-3828)', () => {
+    const title = 'Panadería Flor de Oaxaca: conchas, bolillos, pan dulce y pasteles'
+    const description =
+      'Horneamos cada mañana conchas, bolillos, orejas y cuernitos en el centro de Oaxaca, y preparamos pasteles de tres leches por encargo, con amor, para la fiesta de tus hijos'
+    const listing = async (language?: string) => {
+      await buildSections()
+      const plan = { ...PLAN, ...(language ? { language } : {}), screens: [{ ...SCREEN, seoTitle: title, seoDescription: description }] }
+      seoFields.mockResolvedValueOnce({ status: 'needs_input', violations: [], message: 'no', attempts: 2, usage: USAGE, estCostUsd: 0.002, effort: null, model: 'claude-haiku-4-5', stopReason: 'tool_use' })
+      await step()(context({ plan }))
+      return mockDocs.get(DRAFT)?.['seo'] as { title: string; description: string }
+    }
+
+    it('takes a Spanish conjunction, article or preposition off a Spanish plan’s clipped listing', async () => {
+      // Cut at 60 and 155: "…pan dulce y" and "…con amor, para la".
+      expect(await listing('es')).toEqual({
+        title: 'Panadería Flor de Oaxaca: conchas, bolillos, pan dulce',
+        description:
+          'Horneamos cada mañana conchas, bolillos, orejas y cuernitos en el centro de Oaxaca, y preparamos pasteles de tres leches por encargo, con amor',
+      })
+    })
+
+    it('clips a plan with no language by English’s words, as before', async () => {
+      expect(await listing()).toEqual({
+        title: 'Panadería Flor de Oaxaca: conchas, bolillos, pan dulce y',
+        description:
+          'Horneamos cada mañana conchas, bolillos, orejas y cuernitos en el centro de Oaxaca, y preparamos pasteles de tres leches por encargo, con amor, para la',
+      })
+    })
+  })
+
+  it('keeps a word in any script whole when it clips a listing', async () => {
+    await buildSections()
+    const long = { ...PLAN, screens: [{ ...SCREEN, seoTitle: 'Galería de la panadería familiar con conchas recién horneadas cada día', seoDescription: SCREEN.seoDescription }] }
+    seoFields.mockResolvedValueOnce({ status: 'needs_input', violations: [], message: 'no', attempts: 2, usage: USAGE, estCostUsd: 0.002, effort: null, model: 'claude-haiku-4-5', stopReason: 'tool_use' })
+    await step()(context({ plan: long }))
+    const seo = mockDocs.get(DRAFT)?.['seo'] as { title: string; description: string }
+    expect(seo.title.length).toBeLessThanOrEqual(SCREEN_SEO_TEXT_GUIDANCE.title)
+    expect(seo.title).toBe('Galería de la panadería familiar con conchas recién')
   })
 
   it('asks for no listing when the SEO model cannot answer inside the pass, and writes the plan’s', async () => {

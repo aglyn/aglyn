@@ -450,6 +450,12 @@ jobs:
       - run: npm run test:native-ci-changed
       - run: npm run generate:native-contracts:check
       - run: npm run generate:native-derived-values:check
+      # And the words the staff screens read from the console's health probes
+      # and maintenance jobs (AGL-3667).
+      - run: npm run generate:native-staff-constants:check
+      # And the email HTML the staff apps' message viewer is tested with, which
+      # the console's renderer produces (AGL-3667).
+      - run: npm run generate:native-email-html-cases:check
       # And the notification catalog the app's push settings list (AGL-3620):
       # a new notification type or category stales it.
       - run: npm run generate:mobile-notification-catalog:check

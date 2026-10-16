@@ -531,7 +531,7 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       'Product and commerce analytics, including server-reported purchase and subscription events, and the Google Tag Manager container and Google Ads tag where either is configured',
     publishedOn: '2026-08-18',
     reason:
-      "The Data Manager API's `audienceMembers:ingest` and `audienceMembers:remove`, reached from the nightly account-holder audience sync (`libs/tenant/data/admin/src/lib/server/ad-audience-sync.ts`, AGL-3780) when the `GOOGLE_AUDIENCE_SYNC_*` variables are set and `release_ad_audience_sync` is on, to keep the operator's own Google Ads Customer Match list of US account holders in step. The Data Manager API, not the Google Ads API, because Google stopped accepting Customer Match uploads through the latter for projects with no recent use. ⚠️ Not yet in the published Privacy Policy: the disclosure is drafted in the legal Google Doc and is not on the website, so `release_ad_audience_sync` stays off (it is OFF by default) and nothing is sent until that publication; on it, the /legal/subprocessors purpose cell for this entity owes the customer-list use as well.",
+      "The Data Manager API's `audienceMembers:ingest` and `audienceMembers:remove`, reached from the nightly account-holder audience sync (`libs/tenant/data/admin/src/lib/server/ad-audience-sync.ts`, AGL-3780) when the `GOOGLE_AUDIENCE_SYNC_*` variables are set and `release_ad_audience_sync` is on, to keep the operator's own Google Ads Customer Match list of US account holders in step. The Data Manager API, not the Google Ads API, because Google stopped accepting Customer Match uploads through the latter for projects with no recent use. Disclosed in Privacy Policy §3 (legal v15, published 2026-10-14) and in this entity's /legal/subprocessors row (purpose and data, change log October 14, 2026); `release_ad_audience_sync` still gates any send.",
     dataReceived:
       "For each account holder the nightly sync finds eligible — a verified address, not staff, not locked, banned or opted out, and a United States billing or sign-up country — the SHA-256 hash of the address normalized as Google documents, and nothing else about the person; on later nights, the hashes of accounts no longer eligible, to remove them. No address in the clear, no name, no account id. Also the operator's own OAuth access token, which authenticates each call.",
   },
@@ -588,7 +588,7 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       META_ADVERTISING_PURPOSE,
     publishedOn: '2026-08-27',
     reason:
-      "The Marketing API's Custom Audiences replace session (`POST /{audience}/usersreplace`), reached from the nightly account-holder audience sync (`libs/tenant/data/admin/src/lib/server/ad-audience-sync.ts`, AGL-3780) when `META_AUDIENCE_SYNC_ACCESS_TOKEN` and `META_AUDIENCE_SYNC_AUDIENCE_ID` are set and `release_ad_audience_sync` is on, to keep the operator's own customer-list audience of US account holders in step for retargeting and prospecting exclusion. ⚠️ Not yet in the published Privacy Policy: the disclosure is drafted in the legal Google Doc and is not on the website, so `release_ad_audience_sync` stays off (it is OFF by default) and nothing is sent until that publication; on it, the /legal/subprocessors purpose cell for this entity owes the customer-list use as well.",
+      "The Marketing API's Custom Audiences replace session (`POST /{audience}/usersreplace`), reached from the nightly account-holder audience sync (`libs/tenant/data/admin/src/lib/server/ad-audience-sync.ts`, AGL-3780) when `META_AUDIENCE_SYNC_ACCESS_TOKEN` and `META_AUDIENCE_SYNC_AUDIENCE_ID` are set and `release_ad_audience_sync` is on, to keep the operator's own customer-list audience of US account holders in step for retargeting and prospecting exclusion. Disclosed in Privacy Policy §3 (legal v15, published 2026-10-14) and in this entity's /legal/subprocessors row (purpose and data, change log October 14, 2026); `release_ad_audience_sync` still gates any send.",
     dataReceived:
       "For each account holder the nightly sync finds eligible — a verified address, not staff, not locked, banned or opted out, and a United States billing or sign-up country — the SHA-256 hash of the address normalized as Meta documents, and nothing else about the person; on later nights, the hashes of accounts no longer eligible, to remove them. No address in the clear, no name, no account id. Also the operator's own access token, which authenticates each call.",
   },
@@ -633,7 +633,7 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       LINKEDIN_ADVERTISING_PURPOSE,
     publishedOn: '2026-08-27',
     reason:
-      "The Marketing API's DMP segment users endpoint (`POST /rest/dmpSegments/{id}/users`), reached from the nightly account-holder audience sync (`libs/tenant/data/admin/src/lib/server/ad-audience-sync.ts`, AGL-3780) when `LINKEDIN_AUDIENCE_SYNC_ACCESS_TOKEN` and `LINKEDIN_AUDIENCE_SYNC_SEGMENT_ID` are set and `release_ad_audience_sync` is on, to keep the operator's own matched audience of US account holders in step. ⚠️ Not yet in the published Privacy Policy: the disclosure is drafted in the legal Google Doc and is not on the website, so `release_ad_audience_sync` stays off (it is OFF by default) and nothing is sent until that publication; on it, the /legal/subprocessors purpose cell for this entity owes the customer-list use as well.",
+      "The Marketing API's DMP segment users endpoint (`POST /rest/dmpSegments/{id}/users`), reached from the nightly account-holder audience sync (`libs/tenant/data/admin/src/lib/server/ad-audience-sync.ts`, AGL-3780) when `LINKEDIN_AUDIENCE_SYNC_ACCESS_TOKEN` and `LINKEDIN_AUDIENCE_SYNC_SEGMENT_ID` are set and `release_ad_audience_sync` is on, to keep the operator's own matched audience of US account holders in step. Disclosed in Privacy Policy §3 (legal v15, published 2026-10-14) and in this entity's /legal/subprocessors row (purpose and data, change log October 14, 2026); `release_ad_audience_sync` still gates any send.",
     dataReceived:
       "For each account holder the nightly sync finds eligible — a verified address, not staff, not locked, banned or opted out, and a United States billing or sign-up country — the SHA-256 hash of the address normalized as LinkedIn documents, and nothing else about the person; on later nights, the hashes of accounts no longer eligible, to remove them. No address in the clear, no name, no account id. Also the operator's own access token, which authenticates each call.",
   },
@@ -810,6 +810,26 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     disposition: 'no-request',
     reason:
       "The Android resource namespace URI (`xmlns:android`) in the vector drawables and adaptive icon `tools/scripts/lib/native-brand.mjs` generates for the native Android app (AGL-3651). An identifier inside the XML the build compiles.",
+    dataReceived: 'Nothing. No request is made.',
+  },
+  'androidpublisher.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "Release tooling, not the product. `tools/scripts/native-release.mjs` (AGL-3800) uploads the team's own signed Android app bundle to a Google Play testing track through the Play Developer API, when a team member runs a release. No customer site, console request or visitor ever reaches it.",
+    dataReceived:
+      "The platform's own release artifacts: the signed app bundle, its version code and the testing track, under the publisher service account's short-lived token. No customer, member or visitor record.",
+  },
+  'iamcredentials.googleapis.com': {
+    disposition: 'not-a-subprocessor',
+    reason:
+      "Release tooling, not the product. `tools/scripts/native-release.mjs` (AGL-3800) asks IAM Credentials for a short-lived access token by impersonating the Play publisher service account, so the release needs no key file. It runs only when a team member runs a release.",
+    dataReceived:
+      "The releasing team member's own Google credential and the publisher service account's name and scope. No customer, member or visitor record.",
+  },
+  'www.apple.com': {
+    disposition: 'no-request',
+    reason:
+      'The property-list DTD identifier (`<!DOCTYPE plist … "http://www.apple.com/DTDs/PropertyList-1.0.dtd">`) in the export options plist `tools/scripts/native-release.mjs` writes for `xcodebuild -exportArchive` (AGL-3800). A document type identifier, never fetched.',
     dataReceived: 'Nothing. No request is made.',
   },
   'ns.adobe.com': {

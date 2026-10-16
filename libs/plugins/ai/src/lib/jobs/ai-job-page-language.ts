@@ -24,6 +24,7 @@ import {
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
 import { AI_LAYOUT_POST_ADDRESS_TOKENS, aiCompileLayoutPage } from '../layout-language/ai-layout-compiler'
+import { aiWithSiteMotion } from '../layout-language/ai-layout-motion'
 import { aiLayoutListingAt, aiLayoutListingsOf, aiLayoutRecordHref, type AiLayoutListing } from '../layout-language/ai-layout-listings'
 import {
   AI_LAYOUT_LANGUAGE_TEXT,
@@ -40,6 +41,7 @@ import { aiLayoutCopyCheck, aiLayoutWithoutSections } from '../layout-language/a
 import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { AI_STEP_TIERS } from '../providers/catalog'
+import { aiCacheWriteHourSum } from '../providers/cache-write-hour'
 import {
   runValidatedGeneration,
   type AiGenerationCheck,
@@ -95,12 +97,17 @@ export function aiJobUsesLayoutLanguage(job: Pick<AiJob, 'inputs'>): boolean {
 
 /**
  * How the language doors think (AGL-3660): adaptively, at an effort named
- * rather than left to the model's default. Zach, 2026-10-07: quality first —
- * a page and a site's frame are designed, not transcribed, and the caching
- * work pays for the thinking. Medium is where Claude Sonnet 5.5, the balanced
- * default, is tuned to start for multistep design work.
+ * rather than left to the model's default — a page and a site's frame are
+ * designed, not transcribed.
+ *
+ * Low since AGL-3781. The live round of 2026-10-14 built the layout-language
+ * briefs (`ai-job-layout-language-live.spec.ts`) at medium and at low: low
+ * built 39 of 39 pages and 13 of 13 frames, 64 of 65 answers held their rules
+ * on the first ask, and none was cut off at its ceiling. The ceilings keep
+ * the thinking room sized at medium (`AI_LAYOUT_PAGE_THINKING_TOKENS`,
+ * `AI_LAYOUT_FRAME_THINKING_TOKENS`), so a page that thinks longer still fits.
  */
-export const AI_LAYOUT_LANGUAGE_THINKING = { thinking: 'adaptive', effort: 'medium' } as const
+export const AI_LAYOUT_LANGUAGE_THINKING = { thinking: 'adaptive', effort: 'low' } as const
 
 /**
  * Room for the thinking a page's answer does before it writes, inside the
@@ -168,7 +175,20 @@ export const AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS: readonly AiSystemBlock[] = [
   },
 ]
 
-/** The page of a site plan that places its form: the form the plan creates, or one the site has. */
+/**
+ * The page of a site plan that places its form: the form the plan creates, or
+ * one the site has. Home only when no other page places it (AGL-3805).
+ *
+ * Every call to action that asks a visitor to get in touch goes here — the
+ * header's button on every page, the footer's, a page's own — so a page whose
+ * purpose is the form outranks the home page that closes on a copy of it. A
+ * plan lists Home first, and a home page that ends "visit us or order" places
+ * the form too: the first page placing it was Home, and a Spanish bakery's
+ * header "Pide tu pastel" and footer "Contáctanos" (beta.253, job eg4maZMGtN)
+ * linked the home page on every page, itself included, while /pasteles and
+ * /visitanos held the form. Eight of the 21 newest AI-built sites linked their
+ * header's call to action home the same way, six of them with such a page.
+ */
 export function aiLayoutFormPageOfPlan(
   plan: Pick<AiJobPlan, 'create' | 'screens'>,
   formIds: readonly string[] = [],
@@ -179,14 +199,17 @@ export function aiLayoutFormPageOfPlan(
       .map((entry) => `new:${entry.name}`.toLowerCase()),
   )
   const forms = new Set(formIds)
-  const screen = plan.screens.find((entry) =>
-    entry.sections.some((section) =>
-      section.uses.some((ref) =>
-        isAiPlanNewRef(ref) ? created.has(ref.toLowerCase()) : forms.has(ref),
+  const placing = plan.screens.filter(
+    (entry) =>
+      typeof entry.id === 'string' &&
+      entry.sections.some((section) =>
+        section.uses.some((ref) =>
+          isAiPlanNewRef(ref) ? created.has(ref.toLowerCase()) : forms.has(ref),
+        ),
       ),
-    ),
   )
-  return typeof screen?.id === 'string' ? screen.id : null
+  const screen = placing.find((entry) => !aiLayoutIsHomeSlug(entry.slug)) ?? placing[0]
+  return screen?.id ?? null
 }
 
 /** Every word the job was given, which a page's contact details are held to. */
@@ -310,6 +333,32 @@ export function aiLayoutListingContext(
   return { ...context, bindingTokens: [...new Set([...(context.bindingTokens ?? []), ...tokens])] }
 }
 
+/** The most of the text of the page a planned page starts from that its prompt shows: about 1,000 tokens (AGL-3832). */
+export const AI_LAYOUT_START_PAGE_MAX_CHARS = 4_000
+
+/** The site's page a planned page starts from (its plan's `duplicateOf`), by its name and its words. */
+export interface AiLayoutStartPage {
+  label: string
+  text: string
+}
+
+/**
+ * The page a planned page starts from, as its prompt shows it (AGL-3832): its
+ * words, never its tree. A page in the layout language is written whole, so
+ * a copy of the page would be replaced by the answer, and what the copy was
+ * for — what the site already says there — reaches the page only through
+ * the model. Empty when the page has no words to show.
+ */
+export function aiLayoutStartPageLines(start: AiLayoutStartPage | null | undefined): string[] {
+  const text = start?.text.trim() ?? ''
+  if (!start || !text) return []
+  const shown = text.length > AI_LAYOUT_START_PAGE_MAX_CHARS ? `${text.slice(0, AI_LAYOUT_START_PAGE_MAX_CHARS).trimEnd()} …` : text
+  return [
+    `This page starts from the site's page "${start.label}": keep its facts, names and details wherever a section below covers them, and design every section anew. Its text:`,
+    shown,
+  ]
+}
+
 /** The page's user turn: the page, the brief, the plan, its sections and where its links may go. */
 export function aiLayoutPagePrompt(input: {
   job: Pick<AiJob, 'brief' | 'inputs' | '$id'>
@@ -317,6 +366,8 @@ export function aiLayoutPagePrompt(input: {
   screen: AiBuildPlanScreen
   targets: AiLayoutTargets
   reusableComponents: boolean
+  /** The site's page the plan starts this page from, read off the site (AGL-3832). */
+  startsFrom?: AiLayoutStartPage | null
   /** The sections a re-ask still needs, by plan index; absent on the first ask. */
   missing?: readonly number[]
 }): string {
@@ -368,6 +419,7 @@ export function aiLayoutPagePrompt(input: {
     // The kind of site the person picked sets how its pages are arranged (AGL-3660).
     ...aiSiteKindDesignLines(job.inputs),
     ...aiPlanReferenceLines(plan),
+    ...aiLayoutStartPageLines(input.startsFrom),
     `Sections to design, in order:`,
     ...sections,
     pages.length
@@ -401,6 +453,15 @@ export function aiLayoutDesignOf(job: Pick<AiJob, '$id' | 'inputs'>, slug: strin
   return { kind: kind.id, seed, home: aiLayoutIsHomeSlug(slug) }
 }
 
+/**
+ * The site a page's entrance motion is drawn for (AGL-3838): its design where
+ * the job names a kind of site, else the job's own seed, which moves in the
+ * standard mood — so every page of one site moves alike.
+ */
+export function aiLayoutMotionSiteOf(job: Pick<AiJob, '$id' | 'inputs'>, slug: string): { kind?: string; seed: number } {
+  return aiLayoutDesignOf(job, slug) ?? { seed: aiSiteSeed(aiOriginJobId(job)) }
+}
+
 /** A validated language page, stored as the page keeps it. */
 export interface AiLayoutPageBuilt {
   nodes: NodesMap
@@ -429,6 +490,8 @@ export interface AiLayoutPageCheckInput {
   design?: AiLayoutDesign | null
   /** The site's language, which the compiler's own words are written in (AGL-3760); absent, English. */
   language?: string
+  /** The site the page's entrance motion is drawn for (`aiLayoutMotionSiteOf`); absent, its design. */
+  motion?: { kind?: string; seed: number }
 }
 
 /**
@@ -693,7 +756,10 @@ export function aiLayoutPageCheck(
       value: violations.length
         ? null
         : {
-            nodes,
+            // Entrance motion is the site's, decided here in code and never
+            // asked of the model (AGL-3838): written once the page has passed,
+            // so no check above reads a prop the palette does not list.
+            nodes: aiWithSiteMotion(nodes, input.motion ?? input.design ?? { seed: 0 }, { sectionIds: input.sectionIds }),
             load: report.load,
             settled: [...reading.settled, ...compiled.settled],
             dropped,
@@ -714,6 +780,8 @@ export interface AiLayoutPageRunInput {
   reusableComponents: boolean
   inventory: AiSiteInventory | null
   model: string
+  /** The site's page the plan starts this page from (AGL-3832). */
+  startsFrom?: AiLayoutStartPage | null
   signal?: AbortSignal
   /** Wraps the check, for an eval that records each answer it reads. */
   observe?: (check: AiGenerationCheck<AiLayoutPageBuilt>) => AiGenerationCheck<AiLayoutPageBuilt>
@@ -726,6 +794,7 @@ function spentTogether(first: AiGenerationSpend, second: AiGenerationSpend): AiG
     outputTokens: first.usage.outputTokens + second.usage.outputTokens,
     cacheReadTokens: first.usage.cacheReadTokens + second.usage.cacheReadTokens,
     cacheWriteTokens: first.usage.cacheWriteTokens + second.usage.cacheWriteTokens,
+    ...aiCacheWriteHourSum(first.usage, second.usage),
   }
   return {
     attempts: first.attempts + second.attempts,
@@ -752,6 +821,7 @@ export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiVa
     screen: input.screen,
     targets: input.targets,
     reusableComponents: input.reusableComponents,
+    startsFrom: input.startsFrom ?? null,
   })
   const ask = (content: string, maxTokens: number, only?: readonly number[]) =>
     runValidatedGeneration<AiLayoutPageBuilt>(AI_LAYOUT_PAGE_KIND, {
@@ -773,6 +843,7 @@ export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiVa
           reusableComponents: input.reusableComponents,
           kept,
           design: aiLayoutDesignOf(input.job, input.screen.slug),
+          motion: aiLayoutMotionSiteOf(input.job, input.screen.slug),
           ...(only ? { only } : {}),
           ...(input.plan.language ? { language: input.plan.language } : {}),
         }),

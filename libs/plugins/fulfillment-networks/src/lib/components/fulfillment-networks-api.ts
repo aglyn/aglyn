@@ -54,7 +54,7 @@ export interface NetworkOrderAnswer {
 export interface FulfillmentNetworksApi {
   list(): Promise<{ offered: NetworkOffer[]; connections: NetworkConnectionView[] }>
   connect(provider: NetworkProviderId, returnTo: string): Promise<string>
-  /** Connects a network with the merchant's own API key (ShipMonk, AGL-3697). */
+  /** Connects a network with the merchant's own API key (ShipMonk, AGL-3697) or API token (Flexport, AGL-3822). */
   connectKey(
     provider: NetworkProviderId,
     input: { apiKey: string; storeId: string },

@@ -17,6 +17,7 @@
 
 import { AI_SETTING_PLATFORM, AI_STEP_MODEL_SETTING } from '../plugin-config'
 import {
+  AI_MODEL_CATALOG,
   AI_STEP_TIERS,
   aiCatalogEntry,
   aiDefaultModelFor,
@@ -48,6 +49,21 @@ export const ASSIST_MODEL_ENV = 'ASSIST_MODEL'
 
 /** The org's resolved `pluginSettings/ai` values, as `getPluginConfig` merges them. */
 export type AiPluginSettings = Record<string, unknown>
+
+/**
+ * The model that serves a catalog id (AGL-3781): the id itself, or for a
+ * retired row the successor it names, followed to a current row. An id the
+ * catalog does not know is returned as it is, for the caller to refuse.
+ */
+export function aiServingModelId(modelId: string): string {
+  let current = modelId
+  for (let hops = 0; hops < AI_MODEL_CATALOG.length; hops += 1) {
+    const successor = aiCatalogEntry(current)?.successor
+    if (!successor) return current
+    current = successor
+  }
+  return current
+}
 
 export interface AiRoute {
   provider: AiProvider
@@ -83,8 +99,12 @@ export function resolveAiRoute(
 ): AiRoute | undefined {
   const provider = resolveAiProvider(settings)
   if (!provider) return undefined
-  const servedBy = (modelId: string | undefined): string | undefined =>
-    modelId && aiCatalogEntry(modelId)?.provider === provider.id ? modelId : undefined
+  // A setting or an override that names a retired model is served by its
+  // successor, never by the retired model itself.
+  const servedBy = (modelId: string | undefined): string | undefined => {
+    const serving = modelId ? aiServingModelId(modelId) : undefined
+    return serving && aiCatalogEntry(serving)?.provider === provider.id ? serving : undefined
+  }
   const model =
     servedBy(chosen(settings, AI_STEP_MODEL_SETTING[kind])) ??
     (kind === 'assist.chat' ? servedBy(process.env[ASSIST_MODEL_ENV]?.trim()) : undefined) ??
@@ -100,7 +120,11 @@ export function resolveAiRoute(
  * briefs (AGL-2937).
  */
 export interface AiRoutingRow {
-  /** `null` sends no setting: the model's own default, and all a fast-tier model accepts. */
+  /**
+   * `null` sends no setting: the model's own default, which on every current
+   * model is adaptive thinking. A row whose ceiling holds the answer alone
+   * says `off` (AGL-3781).
+   */
   thinking: AiThinking | null
   effort: AiEffort | null
   /** The answer ceiling, thinking included. */
@@ -108,7 +132,27 @@ export interface AiRoutingRow {
   /** What the ceiling is sized from. */
   maxTokensBasis: string
   eval: AiRoutingEval
+  /**
+   * How long the step's prompt cache lives (AGL-3830): `1h` on every step a
+   * site job runs, in production as in a live run, and the provider's five
+   * minutes on a row that leaves it out. A guided start's routes each write
+   * their prefix once and read it only inside the job, a beat or more apart,
+   * so a five-minute entry is gone before the next job could read it; at an
+   * hour the next site job reads what the last one wrote. The write costs 2x
+   * the input price instead of 1.25x, so a step no job runs leaves it out.
+   * Read by `runValidatedGeneration` into the request's `cacheTtl`; a door
+   * that sends its own request on the same step (the copy assistant's blog
+   * draft) keeps five minutes.
+   */
+  cacheTtl?: '1h'
 }
+
+/**
+ * The cache lifetime every step a site job runs asks for (AGL-3830): the
+ * plan, the look, the header and footer, every page and its listing, the
+ * creations, the first posts and products, and the welcome email.
+ */
+const AI_SITE_JOB_CACHE_TTL = '1h' as const
 
 export interface AiRoutingEval {
   /** The golden-brief kinds the step answers. */
@@ -150,7 +194,10 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     eval: { kinds: ['chat'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
   },
   'copy.element': {
-    thinking: null,
+    // One element's copy on the fast tier, whose model thinks unless told not
+    // to (AGL-3781): the ceiling holds the copy alone, as it always has, and
+    // the effort is the model's own.
+    thinking: 'off',
     effort: null,
     maxTokens: 1024,
     maxTokensBasis: 'one element of copy, about the length of the text it replaces',
@@ -169,6 +216,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokens: 2048,
     maxTokensBasis: 'one blog post body in markdown-lite',
     eval: { kinds: ['blog'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'generate.section': {
     thinking: null,
@@ -179,20 +227,28 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
   },
   'job.layout': {
     // The plan was reasoned out and confirmed before the step, so it writes without thinking.
+    // A site's header and footer in the layout language think adaptively, at
+    // low since AGL-3781 (`AI_LAYOUT_LANGUAGE_THINKING`): the live round of
+    // 2026-10-14 built 13 of 13 frames at low, none cut off.
     thinking: 'off',
     effort: null,
     maxTokens: 8000,
     maxTokensBasis:
       "tighter than the doctrine's default for a layout, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
     eval: { kinds: ['layout'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.template': {
+    // Medium since the golden A/B of 2026-10-14 (AGL-3781): both template
+    // briefs passed at medium as at the default, with about a third fewer
+    // output tokens.
     thinking: 'off',
-    effort: null,
+    effort: 'medium',
     maxTokens: 8000,
     maxTokensBasis:
       "tighter than the doctrine's default for a template, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
     eval: { kinds: ['template'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.component': {
     // A component's tree and the properties it declares, in one answer, from a
@@ -203,14 +259,17 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       "the ceiling the layout and template steps keep, so one step and its re-ask fit the job beat's budget; the tree is held to its rule 17 budget either way",
     eval: { kinds: ['component'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.crm': {
     // CRM by AI (AGL-2917): short answers through a strict tool, written from
     // the facts the CRM reports about the record the member opened, with no
     // thinking. The ceiling fits an inline door, so a member is answered in
-    // the request that asked.
-    thinking: null,
-    effort: null,
+    // the request that asked, and has no room for thinking: the fast tier's
+    // model thinks unless told not to, so the row says off, and its effort
+    // is the low one a short answer read off given facts needs (AGL-3781).
+    thinking: 'off',
+    effort: 'low',
     maxTokens: 700,
     maxTokensBasis:
       "the largest answer a CRM tool accepts: sixty columns matched to fields by number, or an email draft at its length limits, at three characters a token with room, as ai-job-crm-step.spec.ts measures it",
@@ -238,6 +297,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       "the largest form the doctrine's output budget admits, a form's fields, its consent and routing declaration and the design that renders them written as JSON at the wordiest golden's characters a stored byte, under it with room; ai-job-form-step.spec.ts measures it",
     eval: { kinds: ['form'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.insight': {
     // Readers chosen, then their tables phrased (AGL-2915): short sentences
@@ -256,13 +316,17 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     // confirmed, so it writes without thinking (AGL-2907). The ceiling here
     // is the MOST a pass may ask for; each pass sizes its own down from it to
     // what fits the time the job beat can give the step, which on the
-    // balanced tier is about half of this.
+    // balanced tier is about half of this. A page in the layout language
+    // thinks adaptively, at low since AGL-3781 (`AI_LAYOUT_LANGUAGE_THINKING`):
+    // the live round of 2026-10-14 built 39 of 39 pages at low, 64 of 65
+    // answers held their rules on the first ask, none cut off.
     thinking: 'off',
     effort: null,
     maxTokens: 2000,
     maxTokensBasis:
       "a section of a page written as JSON, about forty elements at the step's measured 45 tokens an element; a pass lowers it to the worst case that fits AI_JOB_PAGE_STEP_MINIMUM_MS on the model it runs",
     eval: { kinds: ['page'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9833 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.products': {
     // A product's copy from its name, text and photo, or a store's first
@@ -280,6 +344,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       passRate: 1,
       meanScore: 0.9922,
     },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.email': {
     // One email design from the email palette, written against the brief with
@@ -291,6 +356,7 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     maxTokensBasis:
       "an email's node map written as JSON, with three subject lines and three preheaders beside it",
     eval: { kinds: ['email'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.campaign': {
     // The campaign job generates its email through the email step, so it is
@@ -337,29 +403,46 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
     eval: { kinds: ['edit'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
   },
   'job.seo': {
-    thinking: null,
-    effort: null,
+    // A listing written from the page's own text to fixed lengths, sized for
+    // the answer alone: no thinking, which the fast tier's model does unless
+    // told not to, at the low effort a short bounded answer needs (AGL-3781).
+    // The audit's site proposal and fix batches run on the same row.
+    thinking: 'off',
+    effort: 'low',
     maxTokens: 1024,
     maxTokensBasis:
       "the largest listing the tool accepts, at three characters a token with a quarter again, as ai-job-seo-step.spec.ts measures it; an audit's site proposal and fix batches keep ceilings of their own, measured the same way",
     eval: { kinds: ['seo'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.text': {
+    // Low since the golden A/B of 2026-10-14 (AGL-3781): the tagline brief
+    // passed at low, its copy scored higher than at the default.
     thinking: 'adaptive',
-    effort: null,
+    effort: 'low',
     maxTokens: 1024,
     maxTokensBasis: 'a few paragraphs of copy; a brief asking for more gets a draft to extend',
     eval: { kinds: ['text'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 1 },
   },
   'job.theme': {
+    // Medium since the golden A/B of 2026-10-14 (AGL-3781): the theme brief
+    // passed at medium with the default's scores and half its output tokens.
+    // A site start's look runs its own setting (`ai-job-site-look.ts`).
     thinking: 'adaptive',
-    effort: null,
+    effort: 'medium',
     maxTokens: 8000,
     maxTokensBasis:
       'the largest answer the theme tool accepts, about 2,500 tokens of JSON as ai-job-theme-step.spec.ts measures it, with as much again to think in',
     eval: { kinds: ['theme'], scores: 'answers', source: 'authored', passRate: 1, meanScore: 0.9688 },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
   'job.plan': {
+    // A site's plan is an outline written without thinking (AGL-3594), and a
+    // paid site's asks medium (`AI_PAID_SITE_PLAN_EFFORT`, AGL-3781): the live
+    // round of 2026-10-14 planned 11 of 11 paid site briefs at medium in 16
+    // attempts to the default's 22, $0.129 to $0.164, with no refusal and no
+    // rule broken. Every other plan, and a Free site's on the fast tier, asks
+    // this row's effort — the model's default — until a round holds it lower.
     thinking: 'adaptive',
     effort: null,
     maxTokens: 8000,
@@ -371,7 +454,21 @@ export const AI_ROUTING_TABLE: Readonly<Record<AiStepKind, AiRoutingRow>> = {
       passRate: 1,
       meanScore: null,
     },
+    cacheTtl: AI_SITE_JOB_CACHE_TTL,
   },
+}
+
+/**
+ * What a step kind's row asks of its model, as the fields a request carries:
+ * only those the row names, so a row that names none sends none and the
+ * model's own default stands.
+ */
+export function aiRouteSettings(kind: AiStepKind): { thinking?: AiThinking; effort?: AiEffort } {
+  const row = AI_ROUTING_TABLE[kind]
+  return {
+    ...(row.thinking ? { thinking: row.thinking } : {}),
+    ...(row.effort ? { effort: row.effort } : {}),
+  }
 }
 
 /** The model id alone — what a door records on the meter and the job. */

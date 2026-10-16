@@ -24,6 +24,23 @@ import {
 } from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import {
+  ANIMATION_EASINGS,
+  ANIMATION_MAX_DELAY_MS,
+  ANIMATION_MAX_DURATION_MS,
+  ANIMATION_MAX_STAGGER_STEP_MS,
+  ANIMATION_NONE,
+  ANIMATION_PRESETS,
+  ANIMATION_TRIGGERS,
+  NODE_ANIMATION_DELAY_PROP,
+  NODE_ANIMATION_DURATION_PROP,
+  NODE_ANIMATION_EASE_PROP,
+  NODE_ANIMATION_PROP,
+  NODE_ANIMATION_REPEAT_PROP,
+  NODE_ANIMATION_STAGGER_PROP,
+  NODE_ANIMATION_STAGGER_STEP_PROP,
+  NODE_ANIMATION_TRIGGER_PROP,
+} from '@aglyn/aglyn/app-utils/element-animation'
+import {
   NODE_MAX_INTERACTIONS,
   nodeInteractionSelector,
   type NodeInteraction,
@@ -244,6 +261,78 @@ export function assistEditTool(kind: AssistEditDocumentKind): AiTool {
 }
 
 /* ------------------------------------------------------------------ *
+ * An element's entrance motion (AGL-3838)
+ * ------------------------------------------------------------------ */
+
+/**
+ * The settings an element's Animation section writes, and the values each
+ * takes: the vocabulary's own lists, and a whole number of milliseconds up to
+ * its cap. `none` takes an animation off, as the section's None does.
+ */
+const MOTION_SETTINGS: Readonly<Record<string, readonly string[] | number | 'switch'>> = {
+  [NODE_ANIMATION_PROP]: ANIMATION_PRESETS,
+  [NODE_ANIMATION_TRIGGER_PROP]: ANIMATION_TRIGGERS,
+  [NODE_ANIMATION_EASE_PROP]: ANIMATION_EASINGS,
+  [NODE_ANIMATION_DURATION_PROP]: ANIMATION_MAX_DURATION_MS,
+  [NODE_ANIMATION_DELAY_PROP]: ANIMATION_MAX_DELAY_MS,
+  [NODE_ANIMATION_STAGGER_STEP_PROP]: ANIMATION_MAX_STAGGER_STEP_MS,
+  [NODE_ANIMATION_STAGGER_PROP]: 'switch',
+  [NODE_ANIMATION_REPEAT_PROP]: 'switch',
+}
+
+/**
+ * The line of the edit protocol that offers motion: a pure function of the
+ * vocabulary, so it sits in the cached prefix with the rest of the block.
+ */
+export const ASSIST_EDIT_MOTION_LINE =
+  `- Animation: updateProps also sets ${NODE_ANIMATION_PROP} (${ANIMATION_PRESETS.filter((preset) => preset !== ANIMATION_NONE).join(', ')}; ${ANIMATION_NONE} removes it), ` +
+  `${NODE_ANIMATION_TRIGGER_PROP} (${ANIMATION_TRIGGERS.join(', ')}), ${NODE_ANIMATION_EASE_PROP} (${ANIMATION_EASINGS.join(', ')}), ` +
+  `${NODE_ANIMATION_DURATION_PROP} and ${NODE_ANIMATION_DELAY_PROP} (ms ≤${ANIMATION_MAX_DURATION_MS}), ` +
+  `${NODE_ANIMATION_STAGGER_PROP} ("true": its children in turn), ${NODE_ANIMATION_STAGGER_STEP_PROP} (ms ≤${ANIMATION_MAX_STAGGER_STEP_MS}).`
+
+/**
+ * An `updateProps` patch split into its motion settings, held to the
+ * vocabulary, and everything else, which the palette validator judges.
+ *
+ * Every element takes the motion settings — the renderer reads them off any
+ * node — so they are in no palette entry and the palette validator would drop
+ * them all. They are held here instead, and a value outside the vocabulary or
+ * past a cap is REFUSED with its reason, never coerced: a proposal that says
+ * "slide in over ten seconds" and lands as three would be an edit the card
+ * misdescribes.
+ */
+export function assistEditMotionPatch(props: Readonly<Record<string, unknown>>): {
+  motion: Record<string, unknown>
+  rest: Record<string, unknown>
+  refused: string[]
+} {
+  const motion: Record<string, unknown> = {}
+  const rest: Record<string, unknown> = {}
+  const refused: string[] = []
+  for (const [name, raw] of Object.entries(props)) {
+    const allowed = MOTION_SETTINGS[name]
+    if (allowed === undefined) {
+      rest[name] = raw
+      continue
+    }
+    const text = String(raw ?? '').trim()
+    if (allowed === 'switch') {
+      if (text === 'true' || text === 'false') motion[name] = text === 'true'
+      else refused.push(`${name} is "true" or "false"`)
+    } else if (typeof allowed === 'number') {
+      const ms = /^\d{1,5}$/.test(text) ? Number(text) : NaN
+      if (ms <= allowed) motion[name] = ms
+      else refused.push(`${name} is a whole number of milliseconds up to ${allowed}`)
+    } else if (allowed.includes(text)) {
+      motion[name] = text
+    } else {
+      refused.push(`${name} is one of ${allowed.join(', ')}`)
+    }
+  }
+  return { motion, rest, refused }
+}
+
+/* ------------------------------------------------------------------ *
  * The cached block
  * ------------------------------------------------------------------ */
 
@@ -272,6 +361,7 @@ export function editCanvasBlock(kind: AssistEditDocumentKind): string {
     ASSIST_MUSIC_EDIT_LINE,
     'Operations — every field is required; fill the ones an operation does not use with "", [] or -1:',
     '- updateProps: nodeId and props — only the settings to change, as name/value strings ("true" or "false" for a switch). Every other setting on the element is kept.',
+    ASSIST_EDIT_MOTION_LINE,
     `- updateSx: nodeId and sx as key/value/breakpoint. A color is a theme token — ${AI_SX_TOKENS.palette.join(', ')} — never a hex, rgb or color name. A unitless number is theme spacing units; a size carries its unit ("320px", "50%"). breakpoint is "" or one of ${AI_SX_TOKENS.breakpoints.join(', ')}.`,
     '- insertSubtree: parentId, index (-1 appends) and nodes — the new elements, nodes[0] their root, each listing its children by the ids you gave them in this operation. Build only from the elements below, and keep it small.',
     '- move: nodeId, parentId and index — the position the element takes among the parent’s children once moved (-1 appends).',
@@ -1188,34 +1278,47 @@ function validatePendingEdit(output: {
         })
         return
       }
-      case 'updateProps':
-      case 'updateSx': {
-        const result = validateAiNodePatch(
-          pending.componentId,
-          pending.op === 'updateProps' ? { props: pending.props } : { sx: pending.sx },
-        )
+      case 'updateProps': {
+        // Motion settings are held to the animation vocabulary, the rest to the palette (AGL-3838).
+        const { motion, rest, refused } = assistEditMotionPatch(pending.props)
+        if (refused.length) {
+          violations.push(`${label}: ${refused.join('; ')}`)
+          return
+        }
+        if (!Object.keys(rest).length) {
+          ops.push({ ...pending, props: motion })
+          return
+        }
+        const result = validateAiNodePatch(pending.componentId, { props: rest })
         if (result.ok === false) {
           violations.push(`${label}: ${result.error}`)
           return
         }
-        // The first repairs say why a patch came out empty — a prop the
+        if (!Object.keys(result.props).length) {
+          violations.push(
+            `${label}: ${result.repairs.length ? result.repairs.slice(0, 2).join('; ') : 'none of the settings named are ones this element takes'}`,
+          )
+          return
+        }
+        ops.push({ ...pending, props: { ...result.props, ...motion } })
+        return
+      }
+      case 'updateSx': {
+        const result = validateAiNodePatch(pending.componentId, { sx: pending.sx })
+        if (result.ok === false) {
+          violations.push(`${label}: ${result.error}`)
+          return
+        }
+        // The first repairs say why a patch came out empty — a style the
         // element does not take reads differently from one that carried
         // markup, and the reader of `dropped` needs to tell them apart.
-        const why = (fallback: string) =>
-          result.repairs.length ? result.repairs.slice(0, 2).join('; ') : fallback
-        if (pending.op === 'updateProps') {
-          if (!Object.keys(result.props).length) {
-            violations.push(`${label}: ${why('none of the settings named are ones this element takes')}`)
-            return
-          }
-          ops.push({ ...pending, props: result.props })
-        } else {
-          if (!result.sx) {
-            violations.push(`${label}: ${why('none of the styles named are allowed')}`)
-            return
-          }
-          ops.push({ ...pending, sx: result.sx })
+        if (!result.sx) {
+          violations.push(
+            `${label}: ${result.repairs.length ? result.repairs.slice(0, 2).join('; ') : 'none of the styles named are allowed'}`,
+          )
+          return
         }
+        ops.push({ ...pending, sx: result.sx })
         return
       }
       case 'move': {

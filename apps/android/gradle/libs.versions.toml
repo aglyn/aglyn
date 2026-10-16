@@ -28,8 +28,13 @@ firebase-auth = "24.2.0"
 firebase-firestore = "26.6.0"
 firebase-messaging = "25.1.3"
 firebase-installations = "19.1.2"
+firebase-appcheck = "19.4.1"
+# Google Play Integrity (approved 2026-10-15, AGL-3818): the attestation Firebase App Check's Android provider asks Play for.
+play-integrity = "1.6.0"
 # Stripe Terminal Android (Tap to Pay + Bluetooth readers), Aglyn POS only.
 stripe-terminal = "5.8.2"
+# Stripe's card form (PaymentSheet) for a card typed in at the register, Aglyn POS only.
+stripe-android = "23.21.0"
 # Camera barcode scanning: CameraX preview + ML Kit's bundled barcode model.
 camerax = "1.6.2"
 mlkit-barcode = "17.3.0"
@@ -75,12 +80,18 @@ compose-material-icons-extended = { module = "org.jetbrains.compose.material:mat
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "androidx-splashscreen" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
+# Not used directly: Firebase's play-services-basement still asks for fragment 1.1, and the
+# Activity Result API (permission prompts) needs 1.3 or later, which release lint enforces.
+androidx-fragment = { module = "androidx.fragment:fragment", version = "1.8.9" }
 firebase-auth = { module = "com.google.firebase:firebase-auth", version.ref = "firebase-auth" }
 firebase-firestore = { module = "com.google.firebase:firebase-firestore", version.ref = "firebase-firestore" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging", version.ref = "firebase-messaging" }
 firebase-installations = { module = "com.google.firebase:firebase-installations", version.ref = "firebase-installations" }
+firebase-appcheck-playintegrity = { module = "com.google.firebase:firebase-appcheck-playintegrity", version.ref = "firebase-appcheck" }
+play-integrity = { module = "com.google.android.play:integrity", version.ref = "play-integrity" }
 stripe-terminal = { module = "com.stripe:stripeterminal", version.ref = "stripe-terminal" }
 stripe-terminal-taptopay = { module = "com.stripe:stripeterminal-taptopay", version.ref = "stripe-terminal" }
+stripe-paymentsheet = { module = "com.stripe:paymentsheet", version.ref = "stripe-android" }
 androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }

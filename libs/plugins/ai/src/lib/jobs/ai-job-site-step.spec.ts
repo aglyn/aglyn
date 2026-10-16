@@ -55,6 +55,8 @@ import {
   AI_SITE_BLOG_NAV_ID,
   AI_SITE_DATASETS_MAX,
   AI_SITE_EMAIL_TYPE,
+  AI_FREE_SITE_WORST_CASE_CREDITS,
+  AI_SITE_FREE_PAGES,
   AI_SITE_MAX_SECTIONS,
   AI_SITE_PAGES,
   aiSiteBlogNavPage,
@@ -104,11 +106,14 @@ import {
   type AiSiteUnit,
 } from './ai-job-site-step'
 import {
+  AI_SITE_FREE_POSTS,
   AI_SITE_POST_BUDGET,
+  AI_SITE_POST_LABEL,
   AI_SITE_POSTS,
   AI_SITE_POSTS_LABEL,
   AI_SITE_PRODUCTS_LABEL,
   AI_SITE_PRODUCTS_PRICE_NOTE,
+  type AiSitePostsInput,
 } from './ai-job-site-content'
 import { aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
 import { AI_SITE_DATASET_BUDGET } from './ai-job-site-datasets'
@@ -456,6 +461,16 @@ describe('a site start that writes its posts links its blog (AGL-3660)', () => {
     )
     expect(page).not.toHaveBeenCalled()
     expect(outcome.item).toEqual({ slot, status: 'skipped', note: AI_SITE_BLOG_MERGED_NOTE })
+  })
+
+  it('names the blog in a link’s words whatever the merged page’s language, and only where a whole word names it (AGL-3791)', () => {
+    const merged = (standsInFor: string) => ({ kind: 'path', href: '/blog', standsInFor, label: 'Blog' }) as const
+    expect(aiLayoutRenamedLabel('Ver noticias', merged('Noticias'))).toBe('Ver blog')
+    expect(aiLayoutRenamedLabel('Ver el menú', merged('Menú'))).toBe('Ver el blog')
+    expect(aiLayoutRenamedLabel('Événements à venir', merged('Événements'))).toBe('Blog à venir')
+    // A name is matched as a whole word, never as the start of a longer one.
+    expect(aiLayoutRenamedLabel('Lee los artículos', merged('Art'))).toBe('Lee los artículos')
+    expect(aiLayoutRenamedLabel('Read the articles', merged('Art'))).toBe('Read the articles')
   })
 
   it('links no blog where the posts are not owed, or the part was skipped', () => {
@@ -920,6 +935,31 @@ describe('the site’s own listing, from the answers', () => {
     })
   })
 
+  it('says it in the language the plan writes the site in, with no English around the answers (AGL-3792)', async () => {
+    const step = stepWith({
+      page: fakeRunner([], () => ({ outputs: [output('screen', 's')] })),
+    })
+    const outcome = await step(
+      context(
+        siteJob({
+          inputs: {
+            businessType: 'Una panadería familiar de San Antonio con pan dulce y conchas',
+            audience: 'Familias de San Antonio',
+            businessName: 'Panadería Flor de Oaxaca',
+            pages: AI_SITE_PAGES.min,
+            welcomeEmail: false,
+          },
+          plan: { ...confirmedPlan(), language: 'es' },
+        }),
+      ),
+    )
+    // Composed as English, it read "Panadería Flor de Oaxaca is an una panadería familiar…".
+    expect(aiSiteSeoProposalOf(outcome.outputs)?.values).toEqual({
+      'seo.title': 'Panadería Flor de Oaxaca',
+      'seo.description': 'Una panadería familiar de San Antonio con pan dulce y conchas.',
+    })
+  })
+
   it('spends nothing to report it', async () => {
     const step = stepWith({ page: fakeRunner([], () => ({ outputs: [output('screen', 's')] })) })
     const outcome = await step(context(siteJob()))
@@ -1056,7 +1096,7 @@ describe('what a scaffold is admitted with', () => {
     const prompt = aiFreeSitePrompt({ left: 70, resetsOn: '2026-11-01' }, 2)
     expect(asked).toEqual({ status: 409, error: aiCreditsPromptText(prompt!, 'site'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt })
     expect(asked?.error).toBe(
-      'This site is about 137 credits (up to 283). You have 70 left, so it will build as much as it can and pause ' +
+      'This site is about 113 credits (up to 243). You have 70 left, so it will build as much as it can and pause ' +
         'when your credits run out. You can upgrade or resume when they renew on November 1.',
     )
     expect(seen).toEqual(['org-1'])
@@ -1081,6 +1121,12 @@ describe('what a scaffold is admitted with', () => {
     seen.length = 0
     await expect(admission(0)(context(2, { plan: { screens: [], create: [], reuse: [], status: 'confirmed' } }))).resolves.not.toMatchObject({ status: 429 })
     expect(seen).toEqual([])
+    // A Free blog's one first post is part of what it is quoted (AGL-3798).
+    const blog = await admission(70)(context(2, { inputs: { ...good, pages: 2, siteKind: 'blog' } }))
+    const blogPrompt = aiFreeSitePrompt({ left: 70, resetsOn: '2026-11-01' }, 2, { siteKind: 'blog' })
+    expect(blog).toMatchObject({ status: 409, credits: blogPrompt })
+    expect(blogPrompt?.ceiling).toBe(aiFreeSiteCreditEstimate(2) + AI_FREE_SITE_WORST_CASE_CREDITS.post)
+    seen.length = 0
     // A paid workspace is never asked.
     await expect(admission(0)({ ...context(AI_SITE_PAGES.min), org: { plan: 'pro' } })).resolves.toBeNull()
     expect(seen).toEqual([])
@@ -1534,6 +1580,26 @@ describe('a blog’s first posts and a store’s first products (AGL-3676)', () 
     await step(context(siteJob({ inputs: blogInputs, outputs, items })))
     expect(contentRefusal).not.toHaveBeenCalled()
     expect((seen[0].inputs['siteContent'] as { written: unknown[] }).written).toEqual([{ id: 'job-1-posts-0', title: 'One' }])
+  })
+
+  it('writes a Free blog ONE post, under its own row, and owes none to a Free start whose ledger predates it (AGL-3798)', async () => {
+    const plan = confirmedPlan({ screens: confirmedPlan().screens.slice(0, AI_SITE_FREE_PAGES.max) })
+    const posts = aiSiteJobUnits(plan, { content: 'posts', posts: AI_SITE_FREE_POSTS }).find((unit) => unit.kind === 'posts')
+    expect(posts).toMatchObject({ posts: 1, label: AI_SITE_POST_LABEL })
+    expect(aiSiteJobUnits(plan, { content: 'posts' }).find((unit) => unit.kind === 'posts')).toMatchObject({ posts: AI_SITE_POSTS, label: AI_SITE_POSTS_LABEL })
+    const seen: AiJob[] = []
+    const freeInputs = { ...blogInputs, pages: AI_SITE_FREE_PAGES.max }
+    const free = (job: AiJob): AiJobStepContext => ({ ...context(job), org: { plan: 'free' } as never })
+    const step = stepWith({ page: pageRunner() }, { posts: fakeRunner(seen, () => ({ outputs: [entry('job-1-posts-0', 'One')] })), contentRefusal: async () => null })
+    const outcome = await step(free(siteJob({ inputs: freeInputs, plan })))
+    expect((seen[0].inputs['siteContent'] as AiSitePostsInput).total).toBe(AI_SITE_FREE_POSTS)
+    expect(outcome.item).toMatchObject({ slot: 'posts', status: 'succeeded', outputs: ['job-1-posts-0'] })
+    // A Free blog start already running when this shipped has no row for it, and goes on to its pages.
+    const before = aiSiteInitialLedger(aiSiteJobUnits(plan), [LOOK])
+    seen.length = 0
+    const later = await step(free(siteJob({ inputs: freeInputs, plan, items: before })))
+    expect(seen).toEqual([])
+    expect(later.item?.slot).toBe('p0')
   })
 
   it('skips the part, unspent, where the member or the plan may not have it, and says why', async () => {

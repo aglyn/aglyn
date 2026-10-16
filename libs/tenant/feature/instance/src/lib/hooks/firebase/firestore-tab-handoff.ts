@@ -67,21 +67,35 @@ import {
  *    tab.
  * 3. In ONE IndexedDB transaction over `owner`, `clientMetadata` and
  *    `mutations`, decide with {@link decideLeaseClaim}. When the holder is
- *    another tab that has recorded itself as hidden and no write is pending,
- *    write this tab's row as foreground and the lease in this tab's name.
+ *    another tab that has recorded itself as hidden, its lease has LAPSED
+ *    and no write is pending, write this tab's row as foreground and the
+ *    lease in this tab's name.
  * 4. Cycle this tab's network (`disableNetwork` then `enableNetwork`): each
  *    step runs the SDK's own election at once, and the second finds a valid
  *    lease that is this tab's and becomes primary.
  *
  * ## Why this is safe
  *
- * - **It is the SDK's own handoff.** A holder that finds the lease in another
- *   tab's name is exactly a holder whose lease lapsed: every
- *   `readwrite-primary` transaction re-verifies the lease inside the
- *   transaction (`verifyPrimaryLease`), fails, flips the tab to secondary and
- *   throws the `failed-precondition` its sync engine already swallows
- *   (`ignoreIfPrimaryLeaseLoss`). IndexedDB serialises our transaction against
- *   the SDK's (which span every store), so no election interleaves with it.
+ * - **Never from a live holder (AGL-3788).** A lease renewed under 5 s ago
+ *   belongs to a tab whose remote store is running: its Watch stream keeps
+ *   applying events and resuming targets until its next 4 s tick notices the
+ *   lease is gone. Taking that lease makes two tabs primary over one cache,
+ *   and their target bookkeeping diverges — a resumed document target that
+ *   comes back `current` without its key in this cache's mapping is written
+ *   as a NoDocument, so a live host or org reads as deleted, and the
+ *   tombstone outlives reloads because a resumed listen only pulls deltas.
+ *   That is what the Sites page's "No sites yet" and an Enterprise org
+ *   showing Free were, in a browser with several console tabs. The SDK never
+ *   takes a valid lease (`canActAsPrimary`), and neither does this.
+ * - **It is the SDK's own handoff.** A lapsed lease is one the SDK's next
+ *   election would hand to a foreground tab anyway; this only stops the
+ *   hidden holder winning it back on a stale `inForeground: false` row. A
+ *   holder that then finds the lease in another tab's name fails its next
+ *   `readwrite-primary` transaction (`verifyPrimaryLease`), flips to
+ *   secondary and throws the `failed-precondition` its sync engine already
+ *   swallows (`ignoreIfPrimaryLeaseLoss`). IndexedDB serialises our
+ *   transaction against the SDK's (which span every store), so no election
+ *   interleaves with it.
  * - **The old holder cannot take it back.** The lease is valid and not its
  *   own, so its `canActAsPrimary` is `false`. Should this tab fail to renew,
  *   the lease lapses in 5 s and the corrected `inForeground: true` row makes
@@ -99,8 +113,8 @@ import {
  *   same one `firestore-stall-recovery.ts` runs.
  * - **Every failure is the old behaviour.** Anything unexpected — no
  *   database, the store locked (the AGL-3428 wedge), two new tabs at once, a
- *   holder that is visible — skips the claim, and the SDK's own election runs
- *   as it always has.
+ *   holder that is visible or whose lease is still live — skips the claim,
+ *   and the SDK's own election runs as it always has.
  *
  * Not chosen: `persistentSingleTabManager` (rejected in AGL-3373/3428, and
  * `forceOwnership` there fails every other tab with
@@ -150,6 +164,7 @@ export type LeaseClaimSkip =
   | 'exclusive-holder'
   | 'holder-unknown'
   | 'holder-visible'
+  | 'holder-live'
   | 'pending-writes'
 
 export type LeaseClaimDecision =
@@ -160,16 +175,19 @@ export type LeaseClaimDecision =
  * caller reads every input inside the one transaction that writes the result.
  *
  * A vacant or lapsed-and-vacant lease is left to the SDK, whose next election
- * takes it; only a lease another tab holds is ever claimed, and only from a
- * holder whose own row says it is in the background.
+ * takes it; only a lease another tab holds is ever claimed, only from a
+ * holder whose own row says it is in the background, and only once that
+ * lease has lapsed — a live one would leave two tabs running as primary.
  */
 export function decideLeaseClaim(input: {
   owner: LeaseRow | undefined
   holder: ClientRow | undefined
   self: ClientRow | undefined
   pendingWrites: number
+  /** The clock the lease is measured against, in ms. */
+  now: number
 }): LeaseClaimDecision {
-  const { owner, holder, self, pendingWrites } = input
+  const { owner, holder, self, pendingWrites, now } = input
   if (!self) return { claim: false, reason: 'unidentified' }
   if (!owner) return { claim: false, reason: 'vacant' }
   if (owner.ownerId === self.clientId)
@@ -181,6 +199,10 @@ export function decideLeaseClaim(input: {
   if (pendingWrites > 0) return { claim: false, reason: 'pending-writes' }
   if (!holder) return { claim: false, reason: 'holder-unknown' }
   if (holder.inForeground) return { claim: false, reason: 'holder-visible' }
+  // `MAX_PRIMARY_ELIGIBLE_AGE_MS`: the SDK's lease is valid while younger
+  // than this, and a timestamp ahead of our clock is younger still.
+  if (now - owner.leaseTimestampMs < PRIMARY_LEASE_MAX_AGE_MS)
+    return { claim: false, reason: 'holder-live' }
   return { claim: true }
 }
 
@@ -403,17 +425,18 @@ export async function claimPrimaryLease(
         // Requests in one transaction complete in order: both gets landed.
         const self = selfRequest?.result as ClientRow | undefined
         const holder = holderRequest?.result as ClientRow | undefined
+        const at = now()
         const decision = decideLeaseClaim({
           owner,
           holder,
           self,
           pendingWrites: countRequest.result,
+          now: at,
         })
         if ('reason' in decision) {
           result = { state: 'skipped', reason: decision.reason }
           return
         }
-        const at = now()
         // The row the SDK's first election should have written, then the
         // lease in this tab's name — `acquireOrExtendPrimaryLease`'s shape.
         clients.put({ ...self, inForeground: true, updateTimeMs: at })

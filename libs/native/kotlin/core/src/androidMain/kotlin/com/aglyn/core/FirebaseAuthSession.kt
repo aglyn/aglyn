@@ -10,33 +10,151 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.tasks.await
 
-/** [AuthSession] on the Firebase Android SDK; the SDK persists the session. */
-class FirebaseAuthSession(private val auth: FirebaseAuth) : AuthSession {
+/**
+ * [AuthSession] on the Firebase Android SDK; the SDK persists the session. [support] opens a support session (a staff member
+ * signed in as a customer) in a Firebase app of its own, leaving this one's sign-in as it is.
+ */
+class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBackend? = null) : AuthSession {
   private val mutable = MutableStateFlow<AuthState>(AuthState.Restoring)
   override val state: StateFlow<AuthState> = mutable
+  private val supportSessions = SupportSessions(support)
+  override val impersonation: StateFlow<Impersonation?> = supportSessions.impersonation
 
   init {
     auth.addAuthStateListener { current ->
+      // While a support session is on, the SDK's user is the staff member's, set aside.
+      if (supportSessions.active) return@addAuthStateListener
       val user = current.currentUser
       mutable.value = if (user == null) {
         AuthState.SignedOut
       } else {
-        AuthState.SignedIn(AuthUser(user.uid, user.email, user.displayName))
+        AuthState.SignedIn(user.toAuthUser())
       }
     }
   }
 
-  override suspend fun idToken(forceRefresh: Boolean): String? =
-    auth.currentUser?.getIdToken(forceRefresh)?.await()?.token
+  private fun com.google.firebase.auth.FirebaseUser.toAuthUser() = AuthUser(uid, email, displayName, isEmailVerified)
+
+  override suspend fun beginImpersonation(customToken: String, tenantId: String?) {
+    // A support session already on ends first, so the state it set aside is back before the next one starts.
+    if (supportSessions.active) endImpersonation()
+    val customer = supportSessions.begin(customToken, tenantId, mutable.value)
+    mutable.value = AuthState.SignedIn(customer)
+  }
+
+  override suspend fun endImpersonation() {
+    mutable.value = supportSessions.end() ?: return
+  }
+
+  override suspend fun idToken(forceRefresh: Boolean): String? {
+    if (supportSessions.active) {
+      val token = supportSessions.idToken(forceRefresh)
+      // A refresh the server refuses (the support session was revoked) ends it, and the staff session returns.
+      if (token == null) endImpersonation()
+      return token
+    }
+    return auth.currentUser?.getIdToken(forceRefresh)?.await()?.token
+  }
 
   override suspend fun signInWithEmail(email: String, password: String) {
+    requireProjectPool()
     try {
       auth.signInWithEmailAndPassword(email.trim(), password).await()
     } catch (error: FirebaseAuthException) {
+      throw AuthError(authErrorMessage(error.errorCode), error, error.errorCode)
+    } catch (error: Exception) {
+      throw AuthError(authErrorMessage(appCheckRefusalCode(error)), error, appCheckRefusalCode(error))
+    }
+  }
+
+  override suspend fun signUpWithEmail(email: String, password: String): AuthUser {
+    requireProjectPool()
+    val created = try {
+      auth.createUserWithEmailAndPassword(email.trim(), password).await().user
+    } catch (error: FirebaseAuthException) {
+      throw AuthError(signUpErrorMessage(error.errorCode), error, error.errorCode)
+    } catch (error: Exception) {
+      throw AuthError(signUpErrorMessage(appCheckRefusalCode(error) ?: "NETWORK"), error, appCheckRefusalCode(error))
+    } ?: throw AuthError(signUpErrorMessage(null))
+    return created.toAuthUser().also { if (!supportSessions.active) mutable.value = AuthState.SignedIn(it) }
+  }
+
+  override suspend fun signInWithGoogle(googleIdToken: String): Boolean = try {
+    requireProjectPool()
+    val result = auth.signInWithCredential(GoogleAuthProvider.getCredential(googleIdToken, null)).await()
+    result.additionalUserInfo?.isNewUser == true
+  } catch (error: FirebaseAuthException) {
+    throw AuthError(signUpErrorMessage(error.errorCode), error, error.errorCode)
+  } catch (error: Exception) {
+    throw AuthError(signUpErrorMessage(appCheckRefusalCode(error) ?: "NETWORK"), error, appCheckRefusalCode(error))
+  }
+
+  override suspend fun reload() {
+    val user = auth.currentUser ?: return
+    runCatching { user.reload().await() }
+    val current = auth.currentUser ?: return
+    // The fresh token carries `email_verified`, which the routes read.
+    if (current.isEmailVerified) runCatching { current.getIdToken(true).await() }
+    if (!supportSessions.active) mutable.value = AuthState.SignedIn(current.toAuthUser())
+  }
+
+  override suspend fun applyActionCode(code: String) {
+    try {
+      auth.applyActionCode(code).await()
+    } catch (error: FirebaseAuthException) {
+      throw AuthError(signUpErrorMessage(error.errorCode), error, error.errorCode)
+    } catch (error: Exception) {
+      throw AuthError(signUpErrorMessage(appCheckRefusalCode(error) ?: "NETWORK"), error)
+    }
+    reload()
+  }
+
+  override suspend fun verifyPasswordResetCode(code: String): String = try {
+    auth.verifyPasswordResetCode(code).await().orEmpty()
+  } catch (error: FirebaseAuthException) {
+    throw AuthError(signUpErrorMessage(error.errorCode), error, error.errorCode)
+  } catch (error: Exception) {
+    throw AuthError(signUpErrorMessage(appCheckRefusalCode(error) ?: "NETWORK"), error)
+  }
+
+  override suspend fun confirmPasswordReset(code: String, newPassword: String) {
+    try {
+      auth.confirmPasswordReset(code, newPassword).await()
+    } catch (error: FirebaseAuthException) {
+      throw AuthError(signUpErrorMessage(error.errorCode), error, error.errorCode)
+    } catch (error: Exception) {
+      throw AuthError(signUpErrorMessage(appCheckRefusalCode(error) ?: "NETWORK"), error)
+    }
+  }
+
+  override suspend fun providerIds(): List<String> = auth.currentUser?.providerData?.map { it.providerId }.orEmpty()
+
+  override suspend fun signInWithCustomToken(token: String) {
+    try {
+      auth.signInWithCustomToken(token).await()
+    } catch (error: FirebaseAuthException) {
       throw AuthError(authErrorMessage(error.errorCode), error)
     } catch (error: Exception) {
-      throw AuthError(authErrorMessage(null), error)
+      throw AuthError(authErrorMessage(appCheckRefusalCode(error)), error)
     }
+  }
+
+  /**
+   * The console hand-off's custom token, in the pool it was minted in. The Android SDK can aim its instance at a tenant but
+   * never back at the project pool (`setTenantId` takes no null), so after a single sign-on this process signs in to that
+   * tenant only; the other doors say so rather than creating or finding the account in the wrong pool (AGL-1993).
+   */
+  override suspend fun signInWithCustomToken(token: String, tenantId: String?) {
+    if (!tenantId.isNullOrEmpty()) {
+      auth.setTenantId(tenantId)
+    } else {
+      requireProjectPool()
+    }
+    signInWithCustomToken(token)
+  }
+
+  private fun requireProjectPool() {
+    if (auth.tenantId != null) throw AuthError(TENANT_STUCK_MESSAGE)
   }
 
   override suspend fun changePassword(current: String, new: String) {
@@ -48,7 +166,7 @@ class FirebaseAuthSession(private val auth: FirebaseAuth) : AuthSession {
     } catch (error: FirebaseAuthException) {
       throw AuthError(passwordChangeMessage(error.errorCode), error)
     } catch (error: Exception) {
-      throw AuthError(passwordChangeMessage(null), error)
+      throw AuthError(passwordChangeMessage(appCheckRefusalCode(error)), error)
     }
   }
 
@@ -79,10 +197,15 @@ class FirebaseAuthSession(private val auth: FirebaseAuth) : AuthSession {
   override suspend fun updateDisplayName(name: String) {
     val user = auth.currentUser ?: return
     user.updateProfile(UserProfileChangeRequest.Builder().setDisplayName(name).build()).await()
-    mutable.value = AuthState.SignedIn(AuthUser(user.uid, user.email, name.ifEmpty { null }))
+    mutable.value = AuthState.SignedIn(AuthUser(user.uid, user.email, name.ifEmpty { null }, user.isEmailVerified))
   }
 
   override suspend fun signOut() {
+    // Leaving the app from a support session ends it, and then signs the staff member out as well.
+    endImpersonation()
     auth.signOut()
   }
 }
+
+/** Why a sign-in after a single sign-on in the same process is refused on Android. */
+internal const val TENANT_STUCK_MESSAGE = "To sign in with another account after single sign-on, close the app and open it again."

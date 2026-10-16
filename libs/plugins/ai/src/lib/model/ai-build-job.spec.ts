@@ -331,6 +331,39 @@ describe('what a failure does to what depends on it', () => {
       'Not built: the email design “Welcome” it needs could not be created.',
     )
   })
+
+  it('a menu is built with the pages that were made and without the one that failed, and skipped only when none was made (AGL-3832)', () => {
+    const menuPlan: AiBuildPlan = {
+      reuse: [],
+      create: [],
+      screens: [screen('About', '/about'), screen('Contact', '/get-in-touch'), screen('Book a tasting', '/book-a-tasting')],
+      items: [
+        item(0, {
+          op: 'navigation',
+          name: 'Add new pages to header and footer',
+          args: { menu: 'both', add: ['About => new:About', 'Contact us => new:Contact', 'Book a tasting => new:Book a tasting'] },
+        }),
+      ],
+    }
+    const menuUnits = aiBuildUnits(menuPlan)
+    const menu = menuUnits.find((one) => one.slot === 'i0') as (typeof menuUnits)[number]
+    expect(menu.deps).toEqual(['p0', 'p1', 'p2'])
+    const ops: AiBuildOps = new Map([...OPS, ['navigation', capability('navigation', { estimateCredits: () => 0 })]])
+    const someFailed = aiBuildDegradation(menu, {
+      units: menuUnits,
+      ledger: ledgerOf(menuPlan, { p0: 'failed', p1: 'failed', p2: 'succeeded' }),
+      ops,
+    })
+    expect(someFailed).toMatchObject({
+      skip: null,
+      degradedBy: ['p0', 'p1'],
+      notes: ['Built without the page “About”: it could not be created.', 'Built without the page “Contact”: it could not be created.'],
+    })
+    expect([...someFailed.dropped]).toEqual(['about', 'contact'])
+    expect(
+      aiBuildDegradation(menu, { units: menuUnits, ledger: ledgerOf(menuPlan, { p0: 'failed', p1: 'failed', p2: 'failed' }), ops }).skip,
+    ).toBe('Not built: the page “About” it needs could not be created.')
+  })
 })
 
 describe('the ledger', () => {

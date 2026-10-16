@@ -335,7 +335,13 @@ describe('a store’s home compiles as a storefront (Willow Wick, AGL-3676)', ()
   })
 
   it('places the store’s real reviews, written by nobody here, and its newsletter field', () => {
-    expect(section(6).find((node) => node.componentId === 'product-reviews')?.props).toEqual({ scope: 'store', heading: 'What our customers say', maxItems: '3' })
+    // Its settings, beside the entrance the site's motion gives it (AGL-3838).
+    const reviews = section(6).find((node) => node.componentId === 'product-reviews')?.props ?? {}
+    expect(Object.fromEntries(Object.entries(reviews).filter(([name]) => !name.startsWith('aglynAnimation')))).toEqual({
+      scope: 'store',
+      heading: 'What our customers say',
+      maxItems: '3',
+    })
     expect(JSON.stringify(section(6))).not.toContain('Lovely candle')
     expect(has(7, 'newsletter-signup')).toBe(true)
     expect(has(7, 'form')).toBe(false)

@@ -43,6 +43,8 @@
             "muiRadio",
             "muiFormControlLabel",
             "muiRating",
+            "muiDatePicker",
+            "muiTimePicker",
             "videoEmbed",
             "socialLinks",
             "dataTable",
@@ -472,9 +474,9 @@
           "register": "registerCommerceNative"
         },
         "contributes": {
-          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.display", "commerce.kiosk", "commerce.settings", "commerce.import.giftCards"],
+          "screens": ["commerce.orders", "commerce.order", "commerce.products", "commerce.product", "commerce.productMedia", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.settings", "commerce.returns", "commerce.returnsByStatus", "commerce.return", "commerce.startReturn", "commerce.returnSettings", "commerce.stockMovements", "commerce.stockMovementsReason", "commerce.stockMovementsProduct", "commerce.stockMovementsOrder", "commerce.stockMovementsLocation", "commerce.stockMovementsProducts", "commerce.stockMovementsLocations", "commerce.categories", "commerce.collections", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.discounts", "commerce.coupons", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.recovery", "commerce.fulfillmentQueue", "commerce.fulfillmentPickup", "commerce.fulfillmentDelivery", "commerce.reservations", "commerce.storeSettings", "commerce.notifications", "commerce.reviewSettings", "commerce.reviews", "commerce.suppliers", "commerce.locations", "commerce.tax", "commerce.payments", "commerce.paymentMethods", "commerce.shipstation", "commerce.shippingeasy", "commerce.orderWebhooks", "commerce.orderWebhookDeliveries", "commerce.memberPosts", "commerce.taxSummary", "commerce.shipping", "commerce.shippingTiers", "commerce.localDelivery", "commerce.manage", "commerce.promotions", "commerce.orderServices", "commerce.transfer", "commerce.ordersBulk", "commerce.productDetails", "commerce.productRelated", "commerce.display", "commerce.kiosk", "commerce.import.giftCards"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
-          "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship"],
+          "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship", "commerce.glance"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
           "deepLinks": ["commerce.orders-page", "commerce.products-page"]
         }
@@ -1015,6 +1017,16 @@
           "description": "Tracking numbers from a label tool, each recorded as a shipment on the order it names."
         }
       ],
+      "recordPages": [
+        {
+          "kind": "order",
+          "path": "/products/orders",
+          "record": {
+            "path": "/products/orders",
+            "param": "order"
+          }
+        }
+      ],
       "contributes": {
         "site": {
           "components": [
@@ -1068,12 +1080,13 @@
         "planEntitlements": "marketplacePlanEntitlements"
       },
       "mobile": {
-        "$comment": "AGL-3668: the workspace's Marketplace page in the Aglyn app (and, from AGL-3671, publishing the site as a template with the Publisher Agreement it needs, as spec screens in src/android/screens/marketplace.screens.json): browse (category, search and order on the query, over what the workspace may see), a listing's page (details, versions, reviews), install through each artifact type's route (a plugin on this site or every site), update and remove a plugin, rate, review and report, the installed plugins, and the workspace's licenses; browse and a listing side by side on tablets and desktop.",
+        "$comment": "AGL-3668: the workspace's Marketplace page in the Aglyn app (and, from AGL-3671, publishing the site as a template with the Publisher Agreement it needs, as spec screens in src/android/screens/marketplace.screens.json): browse (category, search and order on the query, over what the workspace may see), a listing's page (details, versions, reviews), install through each artifact type's route (a plugin on this site or every site), update and remove a plugin, rate, review and report, the installed plugins, and the workspace's licenses; browse and a listing side by side on tablets and desktop. From AGL-3671 it also fills two slots of the workspace's plugin pages, as the console's marketplace does: the plugins installed from it (every site's pins, with a chip where a newer version is on offer) and one plugin's installation (current or behind, which sites run it, update, add, split, promote and remove with the uninstall impact check, and its permissions).",
         "ios": { "module": "AglynMarketplacePlugin", "register": "registerMarketplaceNative" },
         "android": { "package": "com.aglyn.plugins.marketplace", "register": "registerMarketplaceNative" },
         "contributes": {
-          "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.sell", "marketplace.publish", "marketplace.publishTemplate", "marketplace.publisherAgreement", "marketplace.publishLayout", "marketplace.publishComponent", "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter"],
+          "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.sell", "marketplace.publish", "marketplace.publishTemplate", "marketplace.publisherAgreement", "marketplace.publishLayout", "marketplace.publishComponent", "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter"],
           "quickActions": ["marketplace.open"],
+          "widgets": ["marketplace.org-installs", "marketplace.plugin-installation"],
           "deepLinks": ["marketplace.listing-page", "marketplace.page"]
         }
       },
@@ -1572,6 +1585,28 @@
     },
     {
       "id": "accounting",
+      "mobile": {
+        "$comment": "AGL-3652: accounting natively (QuickBooks Online, Xero, and other software through Codat): connect (the provider's sign-in opens in the secure browser), the account and tax mapping, how sales post, disconnect, and the sync log with retry, from the spec in src/android/screens/accounting.screens.json.",
+        "ios": {
+          "module": "AglynAccountingPlugin",
+          "register": "registerAccountingNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.accounting",
+          "register": "registerAccountingNative"
+        },
+        "contributes": {
+          "screens": [
+            "accounting.books",
+            "accounting.attention",
+            "accounting.activity"
+          ],
+          "deepLinks": [
+            "accounting.books.link",
+            "accounting.books.link2"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-accounting",
       "register": {
         "console": "registerAccountingConsole",
@@ -1805,7 +1840,7 @@
         "ios": { "module": "AglynEmailPlugin", "register": "registerEmailNative" },
         "android": { "package": "com.aglyn.plugins.email", "register": "registerEmailNative" },
         "contributes": {
-          "screens": ["email.messages", "email.templates", "email.audiences", "email.topics", "email.sending", "email.suppressions", "email.import.existing", "email.import.consent"],
+          "screens": ["email.messages", "email.templates", "email.audiences", "email.topics", "email.sending", "email.suppressions", "email.import.existing", "email.import.consent", "email.list.transfer"],
           "quickActions": ["email.open"],
           "deepLinks": ["email.page", "email.messages-page", "email.templates-page", "email.audiences-page", "email.topics-page", "email.sending-page", "email.suppressions-page", "email.message-page", "email.list-page"]
         }
@@ -2739,7 +2774,7 @@
     {
       "id": "ai",
       "mobile": {
-        "$comment": "AGL-3671: AI jobs and their status, credits and the AI caps, per-member use, and the staffOrg and staffUser zones, natively from the spec in src/android/screens/ai.screens.json.",
+        "$comment": "AGL-3671: AI jobs and their status, credits and the AI caps, per-member use, and the staffOrg and staffUser zones, natively from the spec in src/android/screens/ai.screens.json. AGL-3668: the site's listing from the guided start, in Setup → SEO's zone, and what Aglyn AI learned, in Setup → Business profile's.",
         "ios": {
           "module": "AglynAiPlugin",
           "register": "registerAINative"
@@ -2757,8 +2792,18 @@
             "ai.staffOrg",
             "ai.staffUser",
             "ai.signals",
+            "ai.staffRequests",
+            "ai.requests",
+            "ai.request",
+            "ai.orgsSpendColumn",
             "ai.hostMember",
-            "ai.allotment"
+            "ai.allotment",
+            "ai.import.productCopy"
+          ],
+          "widgets": [
+            "ai.seo-audit",
+            "ai.seo-start",
+            "ai.site-memory"
           ],
           "quickActions": [
             "ai.open"
@@ -2947,6 +2992,36 @@
     },
     {
       "id": "shipping",
+      "mobile": {
+        "$comment": "AGL-3652: shipping natively: where parcels ship from, boxes, label format, signature and insurance, checkout services, paying for labels, carrier accounts, the merchant's own Easyship/Sendcloud/ShipperHQ account, and the label spend on Billing, from the spec in src/android/screens/shipping.screens.json. Buying a label on an order is the order screen's.",
+        "ios": {
+          "module": "AglynShippingPlugin",
+          "register": "registerShippingNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.shipping",
+          "register": "registerShippingNative"
+        },
+        "contributes": {
+          "screens": [
+            "shipping.service",
+            "shipping.shipFrom",
+            "shipping.boxes",
+            "shipping.labels",
+            "shipping.services",
+            "shipping.billing",
+            "shipping.carriers",
+            "shipping.connectCarrier",
+            "shipping.own",
+            "shipping.connectOwn",
+            "shipping.spend",
+            "shipping.order",
+            "shipping.returnLabel",
+            "shipping.batch",
+            "shipping.batchReview"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-shipping",
       "register": {
         "console": "registerShippingConsole",
@@ -3009,7 +3084,8 @@
         },
         "contributes": {
           "screens": [
-            "post-purchase.service"
+            "post-purchase.service",
+            "post-purchase.order"
           ]
         }
       },
@@ -3044,6 +3120,23 @@
     },
     {
       "id": "review-platforms",
+      "mobile": {
+        "$comment": "AGL-3652: review platforms natively (Trustpilot invitations, Yotpo Reviews), from the spec in src/android/screens/review-platforms.screens.json. It sits in Commerce settings' commerceSettings zone. The per-order widget (whether each service was asked to invite one buyer) is the order screen's.",
+        "ios": {
+          "module": "AglynReviewPlatformsPlugin",
+          "register": "registerReviewPlatformsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.reviewplatforms",
+          "register": "registerReviewPlatformsNative"
+        },
+        "contributes": {
+          "screens": [
+            "review-platforms.service",
+            "review-platforms.order"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-review-platforms",
       "register": {
         "console": "registerReviewPlatformsConsole",
@@ -3075,6 +3168,26 @@
     },
     {
       "id": "loyalty",
+      "mobile": {
+        "$comment": "AGL-3652: Rewards natively, from the spec in src/android/screens/loyalty.screens.json: the program (earn and redeem rates, referral offer, emails, what members hold), the store's own Smile.io or Yotpo Loyalty account, members and their history, and adjusting a balance by hand with a key per press. The program, account and members sit in Commerce promotions' commercePromotions zone; what one order earned and spent is the order screen's.",
+        "ios": {
+          "module": "AglynLoyaltyPlugin",
+          "register": "registerLoyaltyNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.loyalty",
+          "register": "registerLoyaltyNative"
+        },
+        "contributes": {
+          "screens": [
+            "loyalty.rewards",
+            "loyalty.connection",
+            "loyalty.members",
+            "loyalty.member",
+            "loyalty.order"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-loyalty",
       "register": {
         "console": "registerLoyaltyConsole",
@@ -3178,6 +3291,24 @@
     },
     {
       "id": "marketing-platforms",
+      "mobile": {
+        "$comment": "AGL-3652: the Email platforms cards natively (Mailchimp, Klaviyo, Omnisend, Attentive), from the spec in src/android/screens/marketing-platforms.screens.json. It sits in the site's plugin settings (sitePluginSettings zone), where the console's hostSettings slot draws it.",
+        "ios": {
+          "module": "AglynMarketingPlatformsPlugin",
+          "register": "registerMarketingPlatformsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.marketingplatforms",
+          "register": "registerMarketingPlatformsNative"
+        },
+        "contributes": {
+          "screens": [
+            "marketing-platforms.service",
+            "marketing-platforms.platform"
+          ],
+          "widgets": ["marketing-platforms.service.card"]
+        }
+      },
       "package": "@aglyn/plugins-marketing-platforms",
       "register": {
         "console": "registerMarketingPlatformsConsole",
@@ -3222,7 +3353,75 @@
       }
     },
     {
+      "id": "help-desks",
+      "package": "@aglyn/plugins-help-desks",
+      "register": {
+        "console": "registerHelpDesksConsole",
+        "consoleApi": "registerHelpDesksConsoleApi",
+        "serverDeclarations": "registerHelpDesksServerDeclarations",
+        "consoleServerDeclarations": "registerHelpDesksConsoleServerDeclarations",
+        "subprocessors": "helpDesksSubprocessors"
+      },
+      "apiPrefixes": [
+        "help-desks"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A site's connection to the merchant's OWN Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, the credential sealed, with its sync cursors and its log subcollection (AGL-3824). Top level and closed to every client, so org erasure removes them by orgId.",
+          "name": "helpDeskConnections",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "Orders and contact form messages owed to one connection, written by the server declarations and delivered by the console job (AGL-3824).",
+          "name": "helpDeskOutbox",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "What one connection knows of one buyer: the help desk's id for them and their latest orders (AGL-3824).",
+          "name": "helpDeskCustomers",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 40,
+        "$comment": "Each buyer and their recent orders kept in step with a merchant's OWN help desk, and contact form messages sent there as tickets when the merchant switches it on (AGL-3824): Gorgias, Re:amaze, Kustomer, Gladly and Richpanel, each by the merchant's own API credential. It reaches the CRM's people only through core's person-records seam, commerce's orders only through the domain-event outbox and the `commerce.orderHistory` service by its id, and form submissions only through the runtime's host event listeners; it imports none of those plugins. Sold with the store (`features.commerce`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: the card draws nothing until the console sets HELP_DESKS_TOKEN_KEY, the key merchants' credentials are sealed under.",
+        "label": "Help desks",
+        "alwaysOnForWorkspace": true,
+        "description": "Your buyers and their recent orders in your own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and contact form messages as tickets.",
+        "siteOff": {
+          "stops": "Switching Help desks off for this site stops its buyers, orders and contact form messages reaching the help desks it connected.",
+          "keeps": "The connections are kept, and everything already sent stays in the help desk."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "hostSettings"
+          ]
+        }
+      }
+    },
+    {
       "id": "ad-conversions",
+      "mobile": {
+        "$comment": "AGL-3652: ad conversions natively (Meta, TikTok and Pinterest server-side events with the merchant's own token), from the spec in src/android/screens/ad-conversions.screens.json. It sits in the site's plugin settings (sitePluginSettings zone).",
+        "ios": {
+          "module": "AglynAdConversionsPlugin",
+          "register": "registerAdConversionsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.adconversions",
+          "register": "registerAdConversionsNative"
+        },
+        "contributes": {
+          "screens": [
+            "ad-conversions.service",
+            "ad-conversions.provider"
+          ],
+          "widgets": ["ad-conversions.service.card"]
+        }
+      },
       "package": "@aglyn/plugins-ad-conversions",
       "register": {
         "console": "registerAdConversionsConsole",
@@ -3273,6 +3472,23 @@
     },
     {
       "id": "zapier",
+      "mobile": {
+        "$comment": "AGL-3652: Zapier natively (the Zaps that take this site's records, and disconnecting one), from the spec in src/android/screens/zapier.screens.json. It sits in the site's plugin settings (sitePluginSettings zone).",
+        "ios": {
+          "module": "AglynZapierPlugin",
+          "register": "registerZapierNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.zapier",
+          "register": "registerZapierNative"
+        },
+        "contributes": {
+          "screens": [
+            "zapier.connections"
+          ],
+          "widgets": ["zapier.connections.card"]
+        }
+      },
       "$comment": "AGL-3643: the REST hooks Aglyn's Zapier app subscribes to (`/v1/sites/{siteId}/hooks`, console server declarations), delivering commerce's order events, the bookings plugin's booking events, and relayed contactCreated / formSubmission host events through core's domain-event outbox to the URL Zapier minted for each Zap. It imports no other plugin. Infrastructure, like sms: no catalog entry and no switch — a hook is a standing read held to the API key's scopes and the plan features of what it reads, asked at every delivery. The console card on a site's setup page lists the site's Zaps; it draws nothing, and the user docs say nothing, until the deployment sets ZAPIER_APP_URL, the published app's link. The Zapier app itself lives in apps/zapier and is published from Zapier's developer platform by the operator.",
       "package": "@aglyn/plugins-zapier",
       "register": {
@@ -3320,7 +3536,8 @@
         "contributes": {
           "screens": [
             "fulfillment-networks.service",
-            "fulfillment-networks.network"
+            "fulfillment-networks.network",
+            "fulfillment-networks.order"
           ]
         }
       },
@@ -3337,7 +3554,7 @@
       ],
       "orgKeyedCollections": [
         {
-          "$comment": "A site's connection to the merchant's OWN ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment account, its grant (or ShipMonk API key and webhook secret, AGL-3697) sealed, with its settings, its last stock count and its log subcollection (AGL-3634). Top level and closed to every client, so org erasure removes them by orgId.",
+          "$comment": "A site's connection to the merchant's OWN ShipBob, ShipMonk, Flexport or Amazon Multi-Channel Fulfillment account, its grant (or ShipMonk API key and webhook secret, AGL-3697, or Flexport API token, AGL-3822) sealed, with its settings, its last stock count and its log subcollection (AGL-3634). Top level and closed to every client, so org erasure removes them by orgId.",
           "name": "fulfillmentNetworkConnections",
           "orgField": "orgId"
         },
@@ -3370,6 +3587,23 @@
     },
     {
       "id": "couriers",
+      "mobile": {
+        "$comment": "AGL-3652: couriers natively (DoorDash Drive with the merchant's own keys): live and test keys, testing them, the store phone and note and the webhook, from the spec in src/android/screens/couriers.screens.json. It sits in Commerce settings' commerceSettings zone. A courier on one order is the order screen's.",
+        "ios": {
+          "module": "AglynCouriersPlugin",
+          "register": "registerCouriersNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.couriers",
+          "register": "registerCouriersNative"
+        },
+        "contributes": {
+          "screens": [
+            "couriers.service",
+            "couriers.order"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-couriers",
       "register": {
         "console": "registerCouriersConsole",
@@ -3417,6 +3651,24 @@
     },
     {
       "id": "marketplaces",
+      "mobile": {
+        "$comment": "AGL-3652: the Marketplaces cards natively (Amazon, eBay, Etsy, TikTok Shop, Walmart, Faire), from the spec in src/android/screens/marketplaces.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynMarketplacesPlugin",
+          "register": "registerMarketplacesNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.marketplaces",
+          "register": "registerMarketplacesNative"
+        },
+        "contributes": {
+          "screens": [
+            "marketplaces.service",
+            "marketplaces.marketplace",
+            "marketplaces.order"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-marketplaces",
       "register": {
         "console": "registerMarketplacesConsole",
@@ -3463,6 +3715,27 @@
     },
     {
       "id": "print-on-demand",
+      "mobile": {
+        "$comment": "AGL-3652: print on demand natively (Printful and Printify with the merchant's own token): connections and settings, importing products from the service's catalog, imported products and the orders sent, from the spec in src/android/screens/print-on-demand.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynPrintOnDemandPlugin",
+          "register": "registerPrintOnDemandNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.printondemand",
+          "register": "registerPrintOnDemandNative"
+        },
+        "contributes": {
+          "screens": [
+            "print-on-demand.service",
+            "print-on-demand.connection",
+            "print-on-demand.catalog",
+            "print-on-demand.imported",
+            "print-on-demand.orders",
+            "print-on-demand.order"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-print-on-demand",
       "register": {
         "console": "registerPrintOnDemandConsole",
@@ -3515,6 +3788,23 @@
     },
     {
       "id": "inventory-sync",
+      "mobile": {
+        "$comment": "AGL-3652: inventory and ERP natively (Cin7 Core, inFlow Inventory with the merchant's keys; Brightpearl by signing in; an Ordoro connection made on the web is shown, AGL-3823): stock counts, location, product sync, sending paid orders, the orders not sent and recent activity, from the spec in src/android/screens/inventory-sync.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynInventorySyncPlugin",
+          "register": "registerInventorySyncNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.inventorysync",
+          "register": "registerInventorySyncNative"
+        },
+        "contributes": {
+          "screens": [
+            "inventory-sync.service",
+            "inventory-sync.order"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-inventory-sync",
       "register": {
         "console": "registerInventorySyncConsole",
@@ -3528,7 +3818,7 @@
       ],
       "orgKeyedCollections": [
         {
-          "$comment": "A site's connection to the merchant's OWN Cin7 Core, inFlow or Brightpearl account, its keys or grant sealed, with its sync settings, last stock count, cursors and log subcollection (AGL-3642). Top level and closed to every client, so org erasure removes them by orgId.",
+          "$comment": "A site's connection to the merchant's OWN Cin7 Core, inFlow, Brightpearl or Ordoro account, its keys or grant sealed, with its sync settings, last stock count, cursors and log subcollection (AGL-3642). Top level and closed to every client, so org erasure removes them by orgId.",
           "name": "inventorySyncConnections",
           "orgField": "orgId"
         },
@@ -3545,12 +3835,12 @@
       ],
       "catalog": {
         "order": 29,
-        "$comment": "Inventory and ERP sync for the commerce plugin's stores (AGL-3642): stock counts kept in step in the direction each connection names (the system's counts set through core's stock-levels seam, or the store's catalog read through core's product-catalog seam and adjusted into the system), products imported through core's product-writer seam or made in the system, and paid orders sent through commerce's order events; it imports neither commerce nor any other plugin. Sold with commerce (`features.commerce`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: nothing draws until the console holds INVENTORY_SYNC_TOKEN_KEY (Cin7 Core and inFlow, on the merchant's own keys), and Brightpearl also needs BRIGHTPEARL_APP_REF and BRIGHTPEARL_DEV_REF.",
+        "$comment": "Inventory and ERP sync for the commerce plugin's stores (AGL-3642): stock counts kept in step in the direction each connection names (the system's counts set through core's stock-levels seam, or the store's catalog read through core's product-catalog seam and adjusted into the system), products imported through core's product-writer seam or made in the system, and paid orders sent through commerce's order events; it imports neither commerce nor any other plugin. Sold with commerce (`features.commerce`), no price of its own. On for every workspace, off for a site only when that site says so, and no release flag: nothing draws until the console holds INVENTORY_SYNC_TOKEN_KEY (Cin7 Core, inFlow and Ordoro, on the merchant's own keys), and Brightpearl also needs BRIGHTPEARL_APP_REF and BRIGHTPEARL_DEV_REF.",
         "label": "Inventory sync",
         "alwaysOnForWorkspace": true,
-        "description": "Stock, products and paid orders kept in step with your own Cin7 Core, inFlow or Brightpearl account.",
+        "description": "Stock, products and paid orders kept in step with your own Cin7 Core, inFlow, Brightpearl or Ordoro account.",
         "siteOff": {
-          "stops": "Switching Inventory sync off for this site stops its stock counts, products and paid orders syncing with Cin7 Core, inFlow or Brightpearl.",
+          "stops": "Switching Inventory sync off for this site stops its stock counts, products and paid orders syncing with Cin7 Core, inFlow, Brightpearl or Ordoro.",
           "keeps": "The connection and its settings are kept, and everything already synced stays on both sides."
         },
         "publishedSiteImpact": "console-only"
@@ -3566,6 +3856,27 @@
     },
     {
       "id": "delivery-apps",
+      "mobile": {
+        "$comment": "AGL-3652: delivery apps natively (DoorDash, Uber Eats, Grubhub): linking a store, auto-accept and prep time, sending the menu and matching items to products, from the spec in src/android/screens/delivery-apps.screens.json. It sits in Commerce settings' commerceSettings zone. AGL-3651/AGL-3652: the register's delivery-order queue, a widget in the Aglyn POS register's posOrders zone (the commerce plugin hosts the zone and names no plugin): each open DoorDash, Uber Eats or Grubhub order with the one next step, through delivery-apps/queue and delivery-apps/order-action as the signed-in member.",
+        "ios": {
+          "module": "AglynDeliveryAppsPlugin",
+          "register": "registerDeliveryAppsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.deliveryapps",
+          "register": "registerDeliveryAppsNative"
+        },
+        "contributes": {
+          "screens": [
+            "delivery-apps.service",
+            "delivery-apps.store",
+            "delivery-apps.match"
+          ],
+          "widgets": [
+            "delivery-apps.pos-orders"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-delivery-apps",
       "register": {
         "console": "registerDeliveryAppsConsole",
@@ -3611,6 +3922,25 @@
     },
     {
       "id": "sales-channels",
+      "mobile": {
+        "$comment": "AGL-3652: sales channels natively: each shopping channel's feed (switch, address, setup steps), the store defaults, the catalog check, and the Google and Meta API connections, from the spec in src/android/screens/sales-channels.screens.json. It sits in Commerce settings' commerceSettings zone.",
+        "ios": {
+          "module": "AglynSalesChannelsPlugin",
+          "register": "registerSalesChannelsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.saleschannels",
+          "register": "registerSalesChannelsNative"
+        },
+        "contributes": {
+          "screens": [
+            "sales-channels.service",
+            "sales-channels.channel",
+            "sales-channels.diagnostics",
+            "sales-channels.diagnosticsChannel"
+          ]
+        }
+      },
       "package": "@aglyn/plugins-sales-channels",
       "register": {
         "console": "registerSalesChannelsConsole",
@@ -3738,6 +4068,23 @@
     },
     {
       "id": "live-chat",
+      "mobile": {
+        "$comment": "AGL-3652: live chat natively (the merchant's own Tidio or LiveChat account), from the spec in src/android/screens/live-chat.screens.json. It sits in the site's plugin settings (sitePluginSettings zone).",
+        "ios": {
+          "module": "AglynLiveChatPlugin",
+          "register": "registerLiveChatNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.livechat",
+          "register": "registerLiveChatNative"
+        },
+        "contributes": {
+          "screens": [
+            "live-chat.settings"
+          ],
+          "widgets": ["live-chat.settings.card"]
+        }
+      },
       "$comment": "AGL-3698: the merchant's OWN Tidio or LiveChat account on their site's pages, by the public key or license number its install code carries (not a secret; stored in hosts/{hostId}/pluginSettings/live-chat, written only by the console route /api/live-chat/settings, which a site admin reaches). tenantApi registers the page enricher: a page the chat shows on gets a `liveChat` slice, every other page nothing, so the site bundle loads only where the chat is. The site runtime draws a launcher once the page is idle and loads the vendor's widget only on a press, or for a site that chose 'load with the page', once idle AND for a visitor whose recorded consent grants analytics. `siteCsp` names the vendor hosts the tenant policy admits for a site that runs it. Off for a site until that site turns it on; no workspace switch, no release flag, no env: the merchant's own key is all it needs. Every plan.",
       "package": "@aglyn/plugins-live-chat",
       "register": {

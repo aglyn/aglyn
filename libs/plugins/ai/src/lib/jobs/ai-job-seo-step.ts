@@ -64,7 +64,7 @@ import {
   type AiSeoSiteFormField,
   type AiSeoSiteProposal,
 } from '../model/ai-seo'
-import { aiModelForStep } from '../providers/routing'
+import { aiModelForStep, aiRouteSettings } from '../providers/routing'
 import type { AiSystemBlock, AiUsage } from '../runtime/ai-runtime'
 import { aiSeoAudit, aiSeoAuditBatches, aiSeoHeadingDemotions } from '../runtime/seo-audit'
 import {
@@ -89,6 +89,7 @@ import {
   AI_SEO_SITE_MAX_TOKENS,
   aiSeoGenerationMaxTokens,
 } from './ai-job-seo-budget'
+import { aiCacheWriteHourSum } from '../providers/cache-write-hour'
 import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-job-text-step'
 
 /**
@@ -227,6 +228,7 @@ function addSpent(a: Spent, b: Spent): Spent {
       outputTokens: a.usage.outputTokens + b.usage.outputTokens,
       cacheReadTokens: a.usage.cacheReadTokens + b.usage.cacheReadTokens,
       cacheWriteTokens: a.usage.cacheWriteTokens + b.usage.cacheWriteTokens,
+      ...aiCacheWriteHourSum(a.usage, b.usage),
     },
     estCostUsd: round6(a.estCostUsd + b.estCostUsd),
     model: b.model || a.model,
@@ -631,6 +633,7 @@ async function proposeSite(
   const siteText = scan.pages.map((page) => page.facts.text).join('\n')
   const generation = await runValidatedGeneration('seo-site', {
     step: 'job.seo',
+    ...aiRouteSettings('job.seo'),
     model,
     instructions: AI_SEO_SITE_INSTRUCTIONS,
     messages: [{ role: 'user', content: prompt }],
@@ -789,6 +792,7 @@ async function proposeFixes(
   if (pages.length) {
     const generation = await runValidatedGeneration('seo-fixes', {
       step: 'job.seo',
+      ...aiRouteSettings('job.seo'),
       model,
       instructions: AI_SEO_FIXES_INSTRUCTIONS,
       messages: [{ role: 'user', content: aiSeoFixesPrompt(pages, titlesElsewhere) }],

@@ -8,8 +8,10 @@ name: Native tests
 # TWO REQUIRED CHECKS, AND A JOB THAT DECIDES FOR THEM
 #   `native changes`  ubuntu: asks `tools/scripts/native-ci-changed.mjs`
 #                     whether anything Kotlin-relevant and anything
-#                     Swift-relevant changed since the base (the PR's base, or
-#                     `before` on a push). An unknown base answers "both".
+#                     Swift-relevant changed: a PR's own change (its test
+#                     merge against the base it was merged onto), a push's
+#                     `before`, or a dispatch's `base`. An unknown base answers
+#                     "both".
 #   `native kotlin`   ubuntu: every module's `desktopTest`, plus the Android
 #                     sources of both apps compiled (`compileDebugKotlin`).
 #   `native swift`    every Swift test target in the repository built ONCE and
@@ -30,16 +32,18 @@ name: Native tests
 #   and run everything: its outputs are empty, and empty is not "false".
 #
 # THE SWIFT BUILD IS CACHED, FROM MAIN (AGL-3783)
-#   One cache entry holds the SwiftPM scratch path and the xcodebuild
-#   DerivedData (about 0.9 GB compressed). A push to `main` saves it under its
-#   own sha; a PR restores main's newest, so it recompiles only what differs
-#   from that commit. A PR saves its own entry only when nothing was restored,
-#   because a PR's entry is readable by that PR alone and per-PR entries would
-#   evict main's (the repository has 10 GB of cache). For a restored build to
-#   be reusable, every tracked file is first stamped with a modification time
-#   derived from its content (`native-swift-tests.mjs mtimes`): a fresh
-#   checkout otherwise dates every file "now", and both build systems would
-#   recompile everything.
+#   One cache entry holds the SwiftPM scratch path, the xcodebuild DerivedData
+#   and the compiled package manifests (1.7 GB compressed), keyed by Xcode and
+#   the runner image. A run on `main` saves it under its own sha: a push, or
+#   the dispatch auto-merge-green.yml sends after it merges (a merge made with
+#   GITHUB_TOKEN starts no push run). A PR restores main's newest, so it
+#   recompiles only what differs from that commit. A PR never saves: its entry
+#   is readable by that PR alone, and on 2026-10-14 five PR entries filled the
+#   repository's 10 GB of cache within an hour and evicted the rest, the
+#   entries PRs restore included. For a restored build to be reusable, every
+#   tracked file is first stamped with a modification time derived from its
+#   content (`native-swift-tests.mjs mtimes`): a fresh checkout otherwise dates
+#   every file "now", and both build systems would recompile everything.
 
 on:
   pull_request:
@@ -47,6 +51,11 @@ on:
   push:
     branches: [main, production]
   workflow_dispatch:
+    inputs:
+      base:
+        description: 'Run only what changed since this commit. Empty runs everything.'
+        required: false
+        default: ''
 
 concurrency:
   # A PR's re-push supersedes its running check. A push is never cancelled
@@ -76,11 +85,21 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      # A PR is checked out as GitHub's test merge, so its own change is the
+      # merge against its first parent: the base it was merged onto.
+      # `pull_request.base.sha` is not that commit. It can lag the base the
+      # merge was made on, and then the diff also carries everything merged
+      # to main in between, which sent web-only PRs to macOS whenever main had
+      # just taken a native change.
       - name: Did anything native change?
         id: changed
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: node tools/scripts/native-ci-changed.mjs --base "$BASE" --head HEAD
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.before || inputs.base }}
+        run: |
+          base=$BASE
+          if [ "$EVENT" = pull_request ]; then base=$(git rev-parse --verify --quiet 'HEAD^1' || true); fi
+          node tools/scripts/native-ci-changed.mjs --base "$base" --head HEAD
 
   kotlin:
     name: native kotlin
@@ -169,8 +188,11 @@ jobs:
           sudo xcode-select -s "$best"
           xcodebuild -version
           swift --version
-          # A build from another compiler is useless, so the cache key names it.
+          # A build from another compiler is useless, so the cache key names it,
+          # and the runner image: a new image's SDK and toolchain files are new
+          # files, so a build from another image recompiles much of itself.
           echo "version=$best_version-$(xcodebuild -version | awk '/Build version/ {print $3}')" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
 
       # Content-derived modification times (see the header), and XCBuild told
       # to compare files by them rather than by inode, which a restore changes.
@@ -180,6 +202,10 @@ jobs:
           defaults write com.apple.dt.XCBuild IgnoreFileSystemDeviceInodeChanges -bool YES
           node tools/scripts/native-swift-tests.mjs mtimes
 
+      # Same Xcode and image first; failing that, same Xcode on another image
+      # (during an image rollout), which still saves resolving the packages.
+      # The compiled Package.swift manifests are cached too: compiling the
+      # nineteen of them took a minute on every run without it.
       - name: Restore the Swift build
         id: swift-cache
         if: env.RUN == 'true'
@@ -188,8 +214,11 @@ jobs:
           path: |
             ${{ runner.temp }}/spm-scratch
             ${{ runner.temp }}/DerivedData
-          key: native-swift-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ github.sha }}
-          restore-keys: native-swift-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
+            ~/Library/Caches/org.swift.swiftpm/manifests
+          key: native-swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ steps.xcode.outputs.image }}-${{ github.sha }}
+          restore-keys: |
+            native-swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ steps.xcode.outputs.image }}-
+            native-swift-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
 
       - name: swift test (every package's test targets, built once) + the plugin manifest
         if: env.RUN == 'true'
@@ -199,32 +228,61 @@ jobs:
           --scratch "$RUNNER_TEMP/spm-scratch"
           --build-system "$SPM_BUILD_SYSTEM"
 
+      # Coverage is off for both schemes, so the two builds share every package.
+      # Neither app has a shared scheme, and Xcode's generated `Aglyn` scheme
+      # builds with coverage where `AglynPOS`'s does not: the swiftc lines of
+      # one package target differ between the two builds by exactly
+      # `-profile-generate -profile-coverage-mapping`. Both builds write the
+      # same intermediates, so each threw the other's away: AglynPOS
+      # recompiled all ~650 package files right after Aglyn had, and the next
+      # run's Aglyn recompiled them again from the POS-shaped cache. This is a
+      # build, not a test run, so nothing reads the coverage.
+      # `CLANG_COVERAGE_MAPPING` is the setting both the Swift and the clang
+      # flags hang off; `-enableCodeCoverage NO` is refused outside `test`.
+      #
+      # The full log goes to a file. What is printed: how many tasks of each
+      # kind ran (a warm build should compile next to nothing, so this is
+      # where a cache that stopped working shows), the timing summary, every
+      # distinct error and warning, and on failure the end of the log.
       - name: xcodebuild Aglyn and AglynPOS (macOS)
         if: env.RUN == 'true'
         run: |
           set -euo pipefail
           for scheme in Aglyn AglynPOS; do
             echo "::group::xcodebuild $scheme"
+            log="$RUNNER_TEMP/xcodebuild-$scheme.log"
+            status=0
             xcodebuild build \
               -project apps/ios/Aglyn.xcodeproj \
               -scheme "$scheme" \
               -destination 'platform=macOS' \
               -derivedDataPath "$RUNNER_TEMP/DerivedData" \
               -skipPackagePluginValidation \
+              -showBuildTimingSummary \
               CODE_SIGNING_ALLOWED=NO \
               COMPILER_INDEX_STORE_ENABLE=NO \
-              -quiet
+              CLANG_COVERAGE_MAPPING=NO \
+              > "$log" 2>&1 || status=$?
+            echo "tasks run:"
+            grep -oE '^(SwiftCompile|SwiftEmitModule|SwiftDriver|CompileC|Ld|Libtool|ProcessXCFramework|CopySwiftLibs|PhaseScriptExecution|ScanDependencies|PrecompileModule) ' "$log" | sort | uniq -c || true
+            sed -n '/Build Timing Summary/,$p' "$log" | head -40
+            grep -E ': (error|warning): ' "$log" | sort -u | head -300 || true
             echo "::endgroup::"
+            if [ "$status" != 0 ]; then
+              tail -80 "$log"
+              echo "::error::xcodebuild $scheme failed (exit $status)"
+              exit "$status"
+            fi
           done
 
-      # Main's push saves (each under its own sha; the oldest are evicted
-      # first). A PR saves only when it restored nothing at all. The git
+      # Only a run on a branch saves, each under its own sha (the oldest are
+      # evicted first); see the header for why a PR never does. The git
       # mirrors are left out: the checkouts beside them are what a build reads.
       - name: Trim the Swift build for the cache
         id: save
         if: >-
           ${{ !cancelled() && env.RUN == 'true' && steps.swift-cache.outcome == 'success'
-          && (github.event_name == 'push' || steps.swift-cache.outputs.cache-matched-key == '') }}
+          && github.event_name != 'pull_request' }}
         run: |
           rm -rf "$RUNNER_TEMP/spm-scratch/repositories" "$RUNNER_TEMP/DerivedData/SourcePackages/repositories" "$RUNNER_TEMP/DerivedData/Logs"
           du -sh "$RUNNER_TEMP/spm-scratch" "$RUNNER_TEMP/DerivedData" || true
@@ -236,4 +294,5 @@ jobs:
           path: |
             ${{ runner.temp }}/spm-scratch
             ${{ runner.temp }}/DerivedData
+            ~/Library/Caches/org.swift.swiftpm/manifests
           key: ${{ steps.swift-cache.outputs.cache-primary-key }}

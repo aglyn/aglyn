@@ -22,14 +22,27 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AiProvider, AiProviderRequest, AiResult } from '../providers/contract'
-import { aiDevCacheTtl, aiDevReplayMode, aiIsDeployedRuntime, aiLiveBatchWanted } from './ai-dev-env'
+import { estimateAiProviderCostUsd } from '../providers/catalog'
+import { AiBatchUnfinishedError, type AiProvider, type AiProviderRequest, type AiResult } from '../providers/contract'
+import {
+  AI_LIVE_BATCH_DEFAULT_WAIT_MS,
+  AI_LIVE_BATCH_TIMEOUT_MS,
+  aiDevCacheTtl,
+  aiDevEffortFor,
+  aiDevReplayMode,
+  aiIsDeployedRuntime,
+  aiLiveBatchWaitMs,
+  aiLiveBatchWanted,
+  aiLiveTimeoutMs,
+  aiRequestCacheTtl,
+} from './ai-dev-env'
 import {
   aiCachedPrefixKey,
   aiCanonicalJson,
   aiDevReplayKey,
   aiDevReplayStats,
   aiDevWarmPrefixFirst,
+  aiLiveRunLedger,
   resetAiDevReplayStats,
   resetAiDevWarmPrefixes,
 } from './ai-dev-replay'
@@ -67,6 +80,66 @@ describe('which development layers a process runs', () => {
     expect(aiDevReplayMode({ ...LAUNCHER, AGLYN_AI_REPLAY: 'refresh' })).toBe('refresh')
     expect(aiDevCacheTtl({ ...LAUNCHER, AGLYN_AI_CACHE_TTL: '5m' })).toBeUndefined()
     expect(aiDevReplayMode({ AGLYN_AI_REPLAY: '1' })).toBe('replay')
+  })
+
+  it('runs every layer in any live run, the launcher’s or a live spec’s, each one off by its own variable (AGL-3781)', () => {
+    for (const live of [LAUNCHER, { AGLYN_LIVE_AI: '1' }]) {
+      const env = { NODE_ENV: 'test', ...live }
+      expect([live, aiDevReplayMode(env), aiDevCacheTtl(env), aiLiveBatchWanted(env)]).toEqual([live, 'replay', '1h', true])
+      expect(aiDevReplayMode({ ...env, AGLYN_AI_REPLAY: 'off' })).toBe('off')
+      expect(aiDevCacheTtl({ ...env, AGLYN_AI_CACHE_TTL: '5m' })).toBeUndefined()
+      expect(aiLiveBatchWanted({ ...env, AGLYN_LIVE_AI_BATCH: '0' })).toBe(false)
+    }
+    // `AGLYN_LIVE_AI` set to anything else is not a live run.
+    expect(aiLiveBatchWanted({ AGLYN_LIVE_AI: '0' })).toBe(false)
+  })
+
+  it('sends the hour a route asked for in a deployed server, and nothing it did not (AGL-3830)', () => {
+    for (const deployed of [{ NODE_ENV: 'production' }, { VERCEL_ENV: 'preview' }, { K_SERVICE: 'console' }]) {
+      expect(aiRequestCacheTtl('1h', deployed)).toBe('1h')
+      expect(aiRequestCacheTtl(undefined, deployed)).toBeUndefined()
+      // The development variable never reaches a deployed request, either way.
+      expect(aiRequestCacheTtl('1h', { ...deployed, AGLYN_AI_CACHE_TTL: '5m' })).toBe('1h')
+      expect(aiRequestCacheTtl(undefined, { ...deployed, AGLYN_AI_CACHE_TTL: '1h' })).toBeUndefined()
+    }
+  })
+
+  it('keeps a route’s hour in development, unless AGLYN_AI_CACHE_TTL=5m turns every request back (AGL-3830)', () => {
+    expect(aiRequestCacheTtl('1h', { NODE_ENV: 'development' })).toBe('1h')
+    expect(aiRequestCacheTtl(undefined, { NODE_ENV: 'development' })).toBeUndefined()
+    expect(aiRequestCacheTtl(undefined, { NODE_ENV: 'test', ...LAUNCHER })).toBe('1h')
+    expect(aiRequestCacheTtl('1h', { NODE_ENV: 'test', ...LAUNCHER, AGLYN_AI_CACHE_TTL: '5m' })).toBeUndefined()
+    expect(aiRequestCacheTtl('1h', { NODE_ENV: 'development', AGLYN_AI_CACHE_TTL: '5m' })).toBeUndefined()
+  })
+
+  it('gives a batched live spec the time its batches can take, and leaves an unbatched one its own', () => {
+    expect(aiLiveTimeoutMs(10 * 60_000, { AGLYN_LIVE_AI: '1' })).toBe(AI_LIVE_BATCH_TIMEOUT_MS)
+    expect(aiLiveTimeoutMs(10 * 60_000, { AGLYN_LIVE_AI: '1', AGLYN_LIVE_AI_BATCH: '0' })).toBe(10 * 60_000)
+    expect(aiLiveTimeoutMs(10 * 60_000, {})).toBe(10 * 60_000)
+    // A wait longer than the default stretches the bound with it.
+    const long = { AGLYN_LIVE_AI: '1', AGLYN_LIVE_AI_BATCH_WAIT_MS: String(3 * 60 * 60_000) }
+    expect(aiLiveTimeoutMs(10 * 60_000, long)).toBeGreaterThan(4 * 3 * 60 * 60_000)
+  })
+
+  it('waits half an hour on a batch unless the run names its own wait (AGL-3781)', () => {
+    expect(aiLiveBatchWaitMs({})).toBe(AI_LIVE_BATCH_DEFAULT_WAIT_MS)
+    expect(AI_LIVE_BATCH_DEFAULT_WAIT_MS).toBe(30 * 60_000)
+    expect(aiLiveBatchWaitMs({ AGLYN_LIVE_AI_BATCH_WAIT_MS: '90000' })).toBe(90_000)
+    expect(aiLiveBatchWaitMs({ AGLYN_LIVE_AI_BATCH_WAIT_MS: '0' })).toBe(0)
+    for (const bad of ['', ' ', 'soon', '-5']) {
+      expect(aiLiveBatchWaitMs({ AGLYN_LIVE_AI_BATCH_WAIT_MS: bad })).toBe(AI_LIVE_BATCH_DEFAULT_WAIT_MS)
+    }
+  })
+
+  it('reads an effort A/B arm per step kind, a wildcard after, and never in a deployed server (AGL-3781)', () => {
+    const env = { AGLYN_AI_EFFORT: 'job.form:low, *:medium, job.plan:bogus' }
+    expect(aiDevEffortFor('job.form', env)).toBe('low')
+    expect(aiDevEffortFor('job.page', env)).toBe('medium')
+    // A level the contract does not name is not an arm.
+    expect(aiDevEffortFor('job.plan', env)).toBe('medium')
+    expect(aiDevEffortFor('job.form', { AGLYN_AI_EFFORT: 'job.page:low' })).toBeUndefined()
+    expect(aiDevEffortFor('job.form', {})).toBeUndefined()
+    expect(aiDevEffortFor('job.form', { ...env, NODE_ENV: 'production' })).toBeUndefined()
   })
 })
 
@@ -140,6 +213,9 @@ describe('a request through the runtime in a development process', () => {
   let dir: string
   let calls: AiProviderRequest[]
   let batches: number
+  let waits: Array<number | undefined>
+  /** Prompts the fake batch leaves unanswered, as a batch canceled past its wait does. */
+  let unanswered: Set<string>
 
   const answer = (text: string): AiResult => ({
     kind: 'completion',
@@ -164,9 +240,11 @@ describe('a request through the runtime in a development process', () => {
     stream: async () => {
       throw new Error('not streamed here')
     },
-    completeBatch: async (requests) => {
+    completeBatch: async (requests, options) => {
       batches += 1
+      waits.push(options?.timeoutMs)
       return requests.map((request) => {
+        if (unanswered.has(String(request.messages[0]?.content))) return new AiBatchUnfinishedError('b1', 'canceled')
         calls.push(request)
         return answer(`batched ${calls.length}`)
       })
@@ -176,7 +254,8 @@ describe('a request through the runtime in a development process', () => {
   const ask = (content: string) =>
     runAiRequest({
       provider,
-      model: 'claude-sonnet-5',
+      // A current model: a live run refuses a retired one by name (AGL-3781).
+      model: 'claude-sonnet-5-5',
       system: [{ text: 'rules', cacheBreakpoint: true }],
       messages: [{ role: 'user', content }],
       maxTokens: 50,
@@ -187,6 +266,8 @@ describe('a request through the runtime in a development process', () => {
     dir = mkdtempSync(join(tmpdir(), 'ai-replay-'))
     calls = []
     batches = 0
+    waits = []
+    unanswered = new Set()
     process.env = { ...saved, NODE_ENV: 'test', AGLYN_AI_REPLAY_DIR: dir }
     delete process.env['AI_EVAL_LIVE_LAUNCHER']
     delete process.env['AGLYN_AI_REPLAY']
@@ -246,6 +327,21 @@ describe('a request through the runtime in a development process', () => {
     expect(calls[0].cacheTtl).toBe('1h')
   })
 
+  it('sends a request’s own hour to the provider in a deployed server (AGL-3830)', async () => {
+    ;(process.env as Record<string, string>)['NODE_ENV'] = 'production'
+    await runAiRequest({
+      provider,
+      model: 'claude-sonnet-5-5',
+      system: [{ text: 'rules', cacheBreakpoint: true }],
+      messages: [{ role: 'user', content: 'a bakery' }],
+      maxTokens: 50,
+      stream: false,
+      cacheTtl: '1h',
+    })
+    await ask('a florist')
+    expect(calls.map((call) => call.cacheTtl ?? null)).toEqual(['1h', null])
+  })
+
   it('gathers the requests of a round into one batch, and a re-ask into the next', async () => {
     process.env['AGLYN_LIVE_AI_BATCH'] = '1'
     process.env['AGLYN_LIVE_AI_BATCH_WINDOW_MS'] = '5'
@@ -253,7 +349,28 @@ describe('a request through the runtime in a development process', () => {
     expect(round.map((result) => result.text)).toEqual(['batched 1', 'batched 2', 'batched 3'])
     await ask('the re-ask')
     expect(batches).toBe(2)
-    expect(aiLiveBatchStats()).toEqual({ batches: 2, requests: 4 })
+    expect(aiLiveBatchStats()).toEqual({ batches: 2, requests: 4, fallbacks: 0 })
     expect(aiDevReplayStats().live).toBe(4)
+    expect(waits).toEqual([AI_LIVE_BATCH_DEFAULT_WAIT_MS, AI_LIVE_BATCH_DEFAULT_WAIT_MS])
+  })
+
+  it('asks what a batch left unanswered on its own, at full price, and says so once (AGL-3781)', async () => {
+    process.env['AGLYN_LIVE_AI_BATCH'] = '1'
+    process.env['AGLYN_LIVE_AI_BATCH_WINDOW_MS'] = '5'
+    process.env['AGLYN_LIVE_AI_BATCH_WAIT_MS'] = '1234'
+    unanswered = new Set(['two', 'three'])
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const round = await Promise.all([ask('one'), ask('two'), ask('three')])
+    // The batch's answer is kept; the first one left goes alone, so the cached prefix it writes is read by the next.
+    expect(round.map((result) => result.text)).toEqual(['batched 1', 'live 2', 'live 3'])
+    expect(waits).toEqual([1234])
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0][0])).toContain('2 of 3 requests unanswered after 1234 ms')
+    expect(aiLiveBatchStats()).toEqual({ batches: 1, requests: 1, fallbacks: 2 })
+    const one = estimateAiProviderCostUsd(round[0].usage, 'claude-sonnet-5-5')
+    expect(aiLiveRunLedger()).toMatchObject({ live: 3, batches: 1, batchedRequests: 1, batchFallbacks: 2 })
+    // One at a batch's half, two at full.
+    expect(aiLiveRunLedger().liveProviderUsd).toBeCloseTo(one * 2.5, 6)
+    warn.mockRestore()
   })
 })

@@ -201,6 +201,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/custom-domains/connect-a-domain',
     title: 'Connect a domain',
   },
+  connectAttentive: {
+    path: '/marketing-and-automation/email-campaigns/connect-attentive',
+    title: 'Connect Attentive',
+  },
   connectConversionsApi: {
     path: '/marketing-and-automation/analytics/connect-conversions-api',
     title: 'Server-side ad conversions',
@@ -421,6 +425,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/marketing-and-automation/analytics/google-analytics',
     title: 'Google Analytics events',
   },
+  helpDesks: {
+    path: '/commerce-and-bookings/commerce/help-desks',
+    title: 'Help desks (Gorgias, Re:amaze, Kustomer, Gladly and Richpanel)',
+  },
   howAglynAiBuilds: {
     path: '/ai/how-aglyn-ai-builds',
     title: 'How Aglyn AI builds',
@@ -452,6 +460,10 @@ export const DOCS_HELP_TOPICS = {
   interactions: {
     path: '/building-sites/besigner/interactions-and-custom-html',
     title: 'Interactions & custom HTML',
+  },
+  inventoryAndErpSync: {
+    path: '/commerce-and-bookings/commerce/inventory-and-erp-sync',
+    title: 'Inventory and ERP sync (Cin7 Core, inFlow, Brightpearl, Ordoro)',
   },
   inviteTeammates: {
     path: '/workspace-and-billing/teams-and-roles/invite-teammates',
@@ -753,6 +765,14 @@ export const DOCS_HELP_TOPICS = {
     path: '/commerce-and-bookings/commerce/shipping',
     title: 'Shipping',
   },
+  shippingLabelsAndLiveRates: {
+    path: '/commerce-and-bookings/commerce/shipping-labels-and-live-rates',
+    title: 'Shipping labels and live carrier rates',
+  },
+  shipWithYourOwnEasyshipSendcloudOrShipperhq: {
+    path: '/commerce-and-bookings/commerce/ship-with-your-own-easyship-sendcloud-or-shipperhq',
+    title: 'Ship with your own Easyship, Sendcloud or ShipperHQ',
+  },
   siteBackupAndPackages: {
     path: '/building-sites/site-backup-and-packages',
     title: 'Site backup and packages',
@@ -923,7 +943,7 @@ export const DOCS_HELP_ANCHORS = {
   aiMonitoring: ['#the-ai-card', '#compensating-credits', '#ai-conversations', '#where-else', '#one-account', '#the-spend-leaderboard', '#alerts', '#related'],
   aiPrivacy: ['#what-is-sent', '#who-processes-it', '#what-is-never-sent', '#how-long-it-is-kept', '#turn-ai-off', '#legal-pages', '#related'],
   analytics: ['#pageview-tracking', '#visitors-approximate', '#traffic-card', '#traffic-delta', '#insights', '#campaign-tracking-utm', '#per-screen-traffic', '#dwell-time', '#google-analytics', '#tracking-card', '#ga-measurement-id', '#gtm-container', '#meta-pixel', '#google-ads-tag', '#linkedin-insight-tag', '#ask-aglyn-ai', '#related'],
-  animations: ['#add-an-animation', '#presets', '#plays', '#duration-and-delay', '#easing', '#stagger-children', '#replay-each-time', '#animations-do-not-play-on-the-canvas', '#accessibility', '#speed-and-layout', '#if-a-visitor-has-javascript-turned-off'],
+  animations: ['#add-an-animation', '#presets', '#plays', '#duration-and-delay', '#easing', '#stagger-children', '#replay-each-time', '#pages-that-already-move', '#ask-assist', '#animations-do-not-play-on-the-canvas', '#accessibility', '#speed-and-layout', '#if-a-visitor-has-javascript-turned-off'],
   architectureMultiTenancy: ['#the-model-in-one-sentence', '#data-model', '#authorization-one-read-per-request', '#membership-lifecycle', '#workspace-subdomains', '#which-hostnames-may-serve-the-console', '#attaching-a-workspaces-subdomain', '#billing--cost-attribution', '#related'],
   assistBuilds: ['#ask-or-build', '#what-it-can-build', '#the-plan-card', '#confirm-the-plan', '#one-job-many-parts', '#a-store', '#what-it-costs', '#who-can-use-it', '#related'],
   assistSignals: ['#the-workflow-this-board-exists-for', '#fleet', '#the-cache-read-rate-and-what-a-bad-number-looks-like', '#where-the-money-goes', '#tokens-by-kind', '#docs-gaps', '#questions-the-docs-could-not-answer', '#what-people-actually-asked', '#what-assist-costs-by-workspace', '#reading-the-sample-honestly', '#related'],
@@ -947,6 +967,7 @@ export const DOCS_HELP_ANCHORS = {
   companies: ['#the-companies-list', '#create-a-company', '#the-lists-behind-the-choices', '#a-companys-page', '#contacts-at-a-company', '#linked-on-capture', '#import', '#export', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
   components: ['#promote', '#insert-instances', '#properties', '#declare-them', '#make-a-property-conditional', '#use-them', '#save-then-publish', '#fill-them-in-per-page', '#restyle-one-instance', '#override-an-attribute-on-one-instance', '#retrofit-duplicated-sections', '#detach', '#nesting', '#used-by', '#manage', '#component-details-card', '#duplicate', '#reusable-email-blocks', '#make-a-header-or-footer', '#add-one-to-an-email', '#change-a-block-in-one-email', '#emails-you-have-not-designed', '#email-theme-colors', '#copy--paste-vs-reusable-components', '#tips', '#related'],
   connectADomain: ['#steps', '#after-it-connects', '#your-aglyn-subdomain-afterwards', '#registrar-quick-reference', '#one-domain-per-site', '#disconnect', '#related'],
+  connectAttentive: ['#before-you-start', '#connect', '#what-is-sent', '#who-is-sent', '#unsubscribes-stay-in-attentive', '#settings', '#sync-log', '#troubleshooting', '#disconnect'],
   connectConversionsApi: ['#conversions-api', '#meta-conversions-api', '#tiktok-events-api', '#pinterest-conversions-api', '#how-it-works', '#test-events', '#related'],
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],
   consoleSearch: ['#what-it-searches', '#searching-from-the-organization', '#how-matching-works', '#what-it-does-not-search', '#why-a-group-sometimes-says-it-was-only-partly-searched'],
@@ -989,7 +1010,7 @@ export const DOCS_HELP_ANCHORS = {
   firstPartySurfaces: ['#register', '#include', '#what-the-capture-does-so-you-can-check-it', '#on-a-self-hosted-install'],
   firstPlugin: ['#1-scaffold', '#2-write-the-entry', '#3-develop-against-a-live-workspace', '#4-verify', '#5-publish', '#6-install-enable-load', '#7-uninstall', '#troubleshooting'],
   forms: ['#reading-submissions-from-code', '#build-a-form', '#place-a-saved-form', '#saved-forms-per-site', '#monthly-allowance-per-plan', '#spam-and-abuse-protection', '#the-per-site-monthly-ceiling', '#field-types', '#labels-and-placeholders', '#example-a-quick-survey', '#style-a-field', '#after-submit', '#example-grow-an-email-list-from-a-signup-form', '#consent-group-disclosure', '#where-submissions-go', '#the-inbox', '#filter-the-inbox', '#who-a-submission-is-from', '#what-it-links-to', '#where-this-one-went', '#replying-to-a-submission', '#inbox-card', '#every-sites-inbox-at-once', '#one-forms-own-page', '#form-details', '#form-crm-routing', '#form-versions', '#form-collected', '#form-submissions', '#form-saves-to-contact-fields', '#export-submissions', '#find-a-form', '#duplicate-a-form', '#switch-forms-off-for-one-site', '#related'],
-  fulfillmentNetworks: ['#connect-a-network', '#shipmonk-connect-with-your-api-key', '#settings', '#how-orders-are-sent', '#stock-counts', '#shipments-and-tracking', '#canceling-and-refunds', '#activity'],
+  fulfillmentNetworks: ['#connect-a-network', '#shipmonk-connect-with-your-api-key', '#flexport-connect-with-your-api-token', '#settings', '#how-orders-are-sent', '#stock-counts', '#shipments-and-tracking', '#canceling-and-refunds', '#activity'],
   funnels: ['#step-types', '#how-it-counts', '#what-is-a-visit', '#identified-visitors', '#create', '#create-with-ai', '#drafts', '#act-on-drop-off', '#ask-ai'],
   generateAComponentWithAglynAi: ['#from-a-brief', '#what-the-job-builds', '#optional-parts', '#defaults', '#where-it-lands', '#from-a-section-on-your-page', '#related'],
   generateAForm: ['#describe-the-form', '#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],
@@ -1000,6 +1021,7 @@ export const DOCS_HELP_ANCHORS = {
   gettingStarted: ['#create-your-first-site', '#what-a-site-contains', '#site-details', '#basic-details', '#display-name', '#subdomain', '#site-logo', '#site-emails', '#site-admin', '#who-can-open-site-admin', '#switching-between-sites', '#next'],
   glossary: ['#the-hierarchy', '#organization-org', '#workspace', '#tenant', '#tenant-vs-host--not-the-same-thing', '#quick-reference'],
   googleAnalytics: ['#setup', '#consent', '#automatic', '#engagement', '#commerce', '#web-vitals', '#authored-events', '#never-sent', '#related'],
+  helpDesks: ['#before-you-start', '#connect', '#credentials', '#what-agents-see', '#contact-form-tickets', '#settings', '#sync-log', '#disconnect', '#related'],
   howAglynAiBuilds: ['#where-to-describe-a-build', '#the-plan-comes-first', '#finding-your-ai-jobs', '#the-building-rules', '#when-an-answer-breaks-a-rule', '#who-can-use-it', '#related'],
   import: ['#the-site-an-import-files-under', '#the-steps', '#what-a-file-may-not-do', '#what-each-contact-field-reads', '#what-each-company-field-reads', '#where-new-records-go', '#undo', '#files-from-other-products', '#related'],
   importAndExport: ['#what-a-person-sees', '#open-it', '#show-only-what-the-person-may-do', '#one-instance-at-a-time', '#add-a-step-of-your-own', '#warn-about-what-only-you-can-see', '#lock-a-rule', '#resolve-a-column-that-names-another-record', '#offer-another-products-layout', '#when-a-record-is-several-rows', '#a-resource-that-only-exports', '#a-resource-that-is-only-exported', '#what-an-export-asks-of-your-server-half', '#move-things-a-person-builds-as-a-package', '#columns-that-follow-the-records', '#flag-rows-with-your-own-rules', '#match-on-two-fields-at-once', '#try-it-without-a-server'],
@@ -1008,6 +1030,7 @@ export const DOCS_HELP_ANCHORS = {
   insights: ['#asking-a-question', '#how-an-answer-is-made', '#asking-about-datasets', '#weekly-insights', '#privacy'],
   installYourFirstPlugin: ['#before-you-start', '#step-1-open', '#step-2-browse', '#step-3-reviews', '#step-4-targeting', '#step-5-install', '#step-6-use', '#step-7-off', '#manage-plugins', '#find-plugins', '#built-in-plugins', '#a-plugins-page', '#where-a-plugin-runs', '#permissions-and-data', '#site-plugins', '#plugin-on-one-site', '#what-to-do-next', '#related'],
   interactions: ['#fluent-interactions', '#interactions-belong-to-the-page-they-are-on', '#plan-availability', '#pick-the-target-by-clicking', '#interaction-cookbook', '#scroll-to-element-step', '#play-video-step', '#open-a-lightbox', '#analytics-event-step', '#analytics-event-name', '#analytics-event-parameters', '#analytics-event-delivery', '#custom-html-block', '#related'],
+  inventoryAndErpSync: ['#connect-a-system', '#stock-counts', '#products', '#orders', '#canceling-and-refunds', '#activity'],
   inviteTeammates: ['#invite-someone', '#pending-invites', '#who-gets-told', '#accepting-an-invite', '#declining-an-invite', '#an-ordinary-invitation-never-changes-who-owns-the-workspace', '#owner-handoff', '#aglyn-staff', '#how-team-members-act', '#you-are-a-site-collaborators-support-channel', '#member-page', '#member-access', '#member-activity', '#member-changes', '#help-a-teammate-who-is-locked-out', '#why-you-cant-always-set-a-password', '#activity-log', '#site-activity-log', '#ai-actions', '#ai-usage', '#ai-allotment', '#tips', '#related'],
   languageSwitcher: ['#steps', '#tips', '#related'],
   layouts: ['#what-a-layout-is', '#find-a-layout', '#nested-layouts', '#layout-properties', '#restyle-the-layout-on-one-page', '#duplicate', '#generate-a-layout-with-aglyn-ai', '#used-by', '#layouts-vs-reusable-components', '#related'],
@@ -1020,7 +1043,7 @@ export const DOCS_HELP_ANCHORS = {
   longFormMarkdown: ['#the-markdown-element', '#what-the-markdown-supports', '#links-that-survive-a-rename', '#the-table-of-contents-element', '#how-it-finds-the-markdown', '#heading-links', '#related'],
   maintenance: ['#maintenance-page', '#is-the-job-still-running', '#running-a-job-by-hand', '#the-jobs', '#audit-archive', '#plugin-artifact-reaper', '#plugin-verdict-re-verification', '#jobs-that-live-elsewhere', '#related'],
   maintenanceMode: ['#turn-it-on', '#tips', '#related'],
-  manageAccount: ['#account-tabs', '#account', '#sign-in-methods', '#email-addresses', '#what-each-address-does', '#removing-an-address', '#if-your-organization-uses-single-sign-on', '#product-updates', '#profile-image', '#basic-info', '#contact-details', '#security', '#related'],
+  manageAccount: ['#account-tabs', '#account', '#sign-in-methods', '#email-addresses', '#what-each-address-does', '#removing-an-address', '#if-your-organization-uses-single-sign-on', '#product-updates', '#profile-image', '#basic-info', '#contact-details', '#security', '#close-account', '#close-account-steps', '#close-account-in-the-apps', '#close-account-deleted', '#close-account-kept', '#close-account-help', '#delete-your-data', '#related'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#contributes--where-the-plugin-loads', '#config--settings-without-writing-a-settings-screen', '#listing--version-documents', '#review--trust-lifecycle', '#review-queue', '#verification-requests', '#listed-plugins', '#submission-status', '#review-overview', '#review-checklist', '#review-verdict', '#review-versions', '#take-down', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#with-ai', '#variables-in-copy', '#engagement-stats', '#across-your-sites', '#org-marketing-overview', '#org-overlays', '#related'],
   marketingWithAi: ['#write-overlay-copy', '#create-an-overlay', '#create-a-campaign', '#ask-about-these-numbers', '#what-is-sent', '#who-can-use-it', '#related'],
@@ -1074,7 +1097,7 @@ export const DOCS_HELP_ANCHORS = {
   screensAndLayouts: ['#which-one-do-you-want', '#related'],
   securityAndCompliance: ['#what-it-covers', '#contract-documents', '#legal-reacceptance', '#why-the-gaps-are-listed-first', '#reporting-a-vulnerability'],
   selfHosting: ['#the-short-version', '#the-full-runbook', '#who-runs-this-install', '#your-dmca-position-is-your-own', '#addresses', '#tenant-domain', '#tenant-host-cname', '#console-url', '#console-host', '#aglyn-standalone', '#reverse-proxy', '#platform-brand', '#optional-keys', '#scheduled-jobs', '#issue-reports', '#request-geo', '#bucket-cors', '#docs-build', '#maintenance-scripts', '#dataset-filter-terms', '#honest-limits', '#related'],
-  selfHostingEnvironment: ['#build-vs-runtime', '#firebase', '#firebase-client', '#firebase-admin', '#firebase-unused', '#firestore-storage', '#addresses', '#proxy', '#xff', '#geo', '#secrets', '#sso', '#auth-settings', '#stripe', '#stripe-webhook-events', '#stripe-prices', '#billing-switches', '#email', '#email-provider', '#sequences', '#sequences-microsoft', '#sequences-link-domains', '#sms', '#shipping', '#accounting', '#tax-engines', '#review-platforms', '#ad-conversions', '#marketing-platforms', '#zapier', '#fulfillment-networks', '#couriers', '#inventory-sync', '#marketplaces', '#print-on-demand', '#delivery-apps', '#mobile', '#analytics', '#ad-audience-sync', '#first-touch', '#assist', '#video-delivery', '#cron', '#plugins', '#plugin-loader', '#sales-channels', '#operator', '#brand', '#tax', '#tax-collection', '#tax-filing', '#tax-what-to-do', '#caching', '#domains', '#domains-wildcard', '#domains-webhook', '#domains-vercel', '#domains-custom', '#vercel', '#docs-build', '#image-set', '#build-stamp', '#internal', '#related'],
+  selfHostingEnvironment: ['#build-vs-runtime', '#firebase', '#firebase-client', '#firebase-admin', '#firebase-unused', '#firestore-storage', '#addresses', '#proxy', '#xff', '#geo', '#secrets', '#sso', '#auth-settings', '#stripe', '#stripe-webhook-events', '#stripe-prices', '#billing-switches', '#email', '#email-provider', '#sequences', '#sequences-microsoft', '#sequences-link-domains', '#sms', '#shipping', '#accounting', '#tax-engines', '#review-platforms', '#ad-conversions', '#marketing-platforms', '#help-desks', '#zapier', '#fulfillment-networks', '#couriers', '#inventory-sync', '#marketplaces', '#print-on-demand', '#delivery-apps', '#mobile', '#analytics', '#ad-audience-sync', '#first-touch', '#assist', '#video-delivery', '#cron', '#plugins', '#plugin-loader', '#sales-channels', '#operator', '#brand', '#tax', '#tax-collection', '#tax-filing', '#tax-what-to-do', '#caching', '#domains', '#domains-wildcard', '#domains-webhook', '#domains-vercel', '#domains-custom', '#vercel', '#docs-build', '#image-set', '#build-stamp', '#internal', '#related'],
   seo: ['#per-screen-seo', '#how-a-page-title-is-built', '#variables-so-a-title-is-not-a-copy-of-your-site-name', '#site-wide-defaults', '#site-description', '#title-separator', '#title-pattern', '#favicon', '#app-icon', '#site-social-image', '#every-icon-size-is-generated-for-you', '#your-sites-install-details-the-web-app-manifest', '#what-language-your-site-says-it-is-in', '#seo-check', '#target-keywords', '#check-one-page', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#verify-your-site-with-google-search-console', '#sitemap--robots', '#one-index-one-file-per-section', '#social-cards', '#what-each-kind-of-page-emits', '#structured-data', '#entity-card', '#entity-type', '#entity-name', '#entity-description', '#entity-website', '#entity-contact', '#entity-logo', '#address-card', '#local-businesses', '#ai-agents', '#markdown-for-any-page', '#llmstxt', '#ai-agents-card', '#openapijson', '#well-knownapi-catalog', '#crawler-access', '#analytics-integration', '#related'],
   seoByAi: ['#write-a-pages-listing', '#write-a-products-listing', '#fix-what-the-seo-check-finds', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
   sequences: ['#what-it-is-for', '#sent-from-your-own-mailbox', '#where-it-lives', '#self-hosted', '#connect-a-mailbox', '#send-as', '#daily-cap', '#mailbox-status', '#auto-pause', '#mailbox-actions', '#link-domains', '#compliance-settings', '#allowed-countries', '#do-not-contact-domains', '#import-export-do-not-contact', '#sequences', '#build-a-sequence', '#sequence-sending-settings', '#count-opens', '#send-a-test', '#sequence-status', '#enroll', '#start-at-step', '#mail-gateways', '#cold-contacts', '#enrollments', '#person-history', '#person-activity', '#person-details', '#curate', '#sending', '#what-stops-a-sequence', '#unsubscribe', '#related'],
@@ -1082,7 +1105,9 @@ export const DOCS_HELP_ANCHORS = {
   serviceAndLocationPagesFromADataset: ['#1-model-the-data', '#2-design-the-template', '#3-make-it-the-record-template', '#4-link-to-the-pages', '#what-visitors-and-search-engines-get', '#when-records-go-away', '#locations-team-members-portfolio', '#related'],
   settings: ['#companies', '#create-companies-from-work-email-domains', '#default-owner', '#assignment-rules', '#round-robin', '#email-templates', '#email-capture', '#your-sending-addresses', '#recipes', '#related'],
   sharing: ['#what-a-shared-record-looks-like', '#sharing-card', '#share-a-record-by-hand', '#several-records-at-once', '#sharing-rules', '#access-read-only-or-read-and-edit', '#sharing-is-not-consent', '#who-can-do-this', '#related'],
-  shipping: ['#zones-and-rates', '#ask-aglyn-ai', '#where-parcels-ship-from'],
+  shipping: ['#zones-and-rates', '#ask-aglyn-ai', '#where-parcels-ship-from', '#labels-and-live-carrier-rates'],
+  shippingLabelsAndLiveRates: ['#before-you-start', '#shipping-labels-settings', '#ship-from', '#boxes', '#label-options', '#checkout-services', '#paying-for-labels', '#carrier-accounts', '#product-shipping-fields', '#carrier-rates-at-checkout', '#address-checks', '#buy-a-label', '#void-a-label', '#batch-labels', '#return-labels', '#tracking', '#label-spend', '#troubleshooting', '#related'],
+  shipWithYourOwnEasyshipSendcloudOrShipperhq: ['#before-you-start', '#connect-an-account', '#easyship', '#sendcloud', '#shipperhq', '#tracking-webhooks', '#what-changes', '#disconnect', '#troubleshooting', '#related'],
   siteBackupAndPackages: ['#backup-and-restore-card', '#what-a-package-carries', '#download-a-backup', '#export-items', '#import-a-package', '#1-upload', '#2-items', '#3-missing-items', '#4-changes', '#5-review', '#6-import', '#undo-an-import', '#moving-a-site-to-another-of-your-sites'],
   siteLooks: ['#choose-a-style', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
@@ -1785,7 +1810,6 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#sequences': 'Sequences',
   },
   shipping: {
-    '#where-parcels-ship-from': 'Where parcels ship from',
     '#zones-and-rates': 'Zones and rates',
   },
   siteBackupAndPackages: {

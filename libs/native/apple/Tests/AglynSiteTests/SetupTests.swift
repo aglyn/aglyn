@@ -4,6 +4,7 @@
 import AglynContracts
 import AglynCore
 import AglynPluginHost
+import SwiftUI
 import XCTest
 
 @testable import AglynSite
@@ -121,8 +122,30 @@ final class SetupTests: XCTestCase {
     XCTAssertEqual(
       businessOriginLine("audience", stored: stored, resolved: resolved, fallback: "x"), "Suggested by Aglyn AI. Edit it and it becomes yours.")
     XCTAssertEqual(businessOriginLine("services", stored: stored, resolved: resolved, fallback: "One per line"), "One per line")
-    XCTAssertEqual(SetupSection.allCases.map(\.rawValue), ["details", "business", "seo", "tracking", "theme", "emails"])
+    XCTAssertEqual(SetupSection.allCases.map(\.rawValue), ["details", "business", "seo", "tracking", "theme", "emails", "integrations"])
     XCTAssertEqual(SetupSection.of("business"), .business)
+  }
+
+  func testIntegrationsOfferTheCardsOfPluginsRunningOnTheSite() {
+    let registry = NativePluginRegistry()
+    let entries = ["live-chat", "marketing-platforms", "zapier"].map { id in
+      NativePluginManifestEntry(id: id, contributes: NativeContributionDeclaration(widgets: ["\(id).card"])) { registrar in
+        registrar.widget("\(id).card", title: id, order: 1, slot: integrationsSlot) { _ in EmptyView() }
+      }
+    }
+    XCTAssertEqual(NativePluginLoader.load(entries, into: registry).failed, [])
+    let cards = registry.widgets(for: .aglyn, slot: integrationsSlot)
+    func shown(_ org: [String: Any]?, _ host: [String: Any]?) -> [String] {
+      integrationWidgets(cards, running: runningPlugins(org: org, host: host)).map(\.pluginID).sorted()
+    }
+    // Live chat is off for a site until the site turns it on; Zapier has no switch, so its card is always offered.
+    XCTAssertEqual(shown(nil, [:]), ["marketing-platforms", "zapier"])
+    XCTAssertEqual(shown(nil, ["enabledPlugins": ["live-chat"]]), ["live-chat", "marketing-platforms", "zapier"])
+    // A site that turned the email platforms off loses that card.
+    XCTAssertEqual(
+      shown(["enabledPlugins": ["live-chat"]], ["enabledPlugins": ["live-chat"], "disabledPlugins": ["marketing-platforms"]]),
+      ["live-chat", "zapier"])
+    XCTAssertEqual(shown(nil, ["disabledPlugins": ["marketing-platforms"]]), ["zapier"])
   }
 
   func testReadsTheStyleComponentsCatalogAndSendsOnlyTheLooksThatChanged() throws {
@@ -186,6 +209,30 @@ final class SetupTests: XCTestCase {
     XCTAssertEqual(presets.last?.name, "themes.bare")
     XCTAssertTrue(themePresets(of: nil).isEmpty)
     XCTAssertEqual(themeSelection(of: ["themeSelection": ["kind": "preset", "id": "themes.bootstrap", "name": "Bootstrap"]]).kind, "preset")
+  }
+
+  func testReadsWhatTheSiteChangedOnTopOfItsTheme() {
+    let long = String(repeating: "a", count: 70)
+    let changes = themeChanges(
+      of: .array([
+        .object([
+          "path": "colorSchemes.dark.primary.main", "label": "Color · dark · primary", "scheme": "dark", "themeValue": "#90caf9",
+          "overrideValue": "#00e5ff",
+        ]),
+        .object(["path": "spacing", "label": "Spacing", "themeValue": 8, "overrideValue": 4]),
+        .object(["path": "fonts", "label": "Fonts", "themeValue": .null, "overrideValue": ["heading": [.string(long)]]]),
+        .object(["label": "No path"]),
+      ]))
+    XCTAssertEqual(changes.map(\.path), ["colorSchemes.dark.primary.main", "spacing", "fonts"])
+    XCTAssertEqual(changes[0].scheme, "dark")
+    XCTAssertTrue(changes[0].isColor)
+    XCTAssertEqual(changes[1].themeValue, "8")
+    XCTAssertFalse(changes[1].isColor)
+    XCTAssertNil(changes[2].themeValue)
+    // A structure is shown compact and cut at sixty characters.
+    XCTAssertEqual(changes[2].overrideValue?.count, 58)
+    XCTAssertTrue(changes[2].overrideValue?.hasSuffix("…") == true)
+    XCTAssertTrue(themeChanges(of: nil).isEmpty)
   }
 
   func testFiltersTheFontCatalogByWordAndCategory() {

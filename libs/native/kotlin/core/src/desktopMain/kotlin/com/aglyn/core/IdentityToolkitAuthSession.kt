@@ -8,6 +8,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.Parameters
 import io.ktor.http.contentType
+import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -36,6 +37,8 @@ class IdentityToolkitAuthSession(
   private val now: () -> Long = ::nowMillis,
   private val credentials: CredentialStore = InMemoryCredentialStore(),
   private val credentialKey: String = "Aglyn",
+  /** How a support session signs in: over REST, keeping nothing. */
+  private val support: SupportSessions = SupportSessions(RestSupportBackend(http, apiKey, emulatorHost, now)),
 ) : AuthSession {
   private val identityBase = emulatorHost?.let { "http://$it/identitytoolkit.googleapis.com" } ?: "https://identitytoolkit.googleapis.com"
   private val tokenBase = emulatorHost?.let { "http://$it/securetoken.googleapis.com" } ?: "https://securetoken.googleapis.com"
@@ -47,7 +50,16 @@ class IdentityToolkitAuthSession(
   )
   override val state: StateFlow<AuthState> = mutable
   private val lock = Mutex()
-  private var tokens: Tokens? = null
+  @Volatile private var tokens: Tokens? = null
+
+  /**
+   * The signed-in person's current ID token, never refreshed and without waiting on a refresh in flight: for a caller that a
+   * refresh itself goes through ([ConsoleMintedAppCheck]). Null when signed out, in a support session, or when it has expired.
+   */
+  fun currentIdToken(): String? {
+    if (support.active) return null
+    return tokens?.takeIf { it.expiresAt > now() }?.idToken
+  }
 
   private fun storedRefreshToken(): String? = runCatching { credentials.read(credentialKey) }.getOrNull()?.ifEmpty { null }
 
@@ -80,7 +92,7 @@ class IdentityToolkitAuthSession(
       return
     }
     val user = runCatching { lookup(restored.idToken) }.getOrNull()
-    mutable.value = AuthState.SignedIn(user ?: AuthUser(restored.uid, null, null))
+    mutable.value = AuthState.SignedIn(user ?: AuthUser(restored.uid, null, null, TokenClaims.fromIdToken(restored.idToken).emailVerified))
   }
 
   /** The account behind [idToken]: `accounts:lookup`. */
@@ -96,6 +108,7 @@ class IdentityToolkitAuthSession(
       uid = user.getValue("localId").jsonPrimitive.content,
       email = user["email"]?.jsonPrimitive?.content,
       displayName = user["displayName"]?.jsonPrimitive?.content?.ifEmpty { null },
+      emailVerified = user["emailVerified"]?.jsonPrimitive?.content == "true",
     )
   }
 
@@ -120,7 +133,32 @@ class IdentityToolkitAuthSession(
     return refreshed
   }
 
-  override suspend fun idToken(forceRefresh: Boolean): String? = lock.withLock {
+  override val impersonation: StateFlow<Impersonation?> = support.impersonation
+
+  /** Signs in as a customer with the custom token a staff route minted; the staff member's own tokens stay as they are. */
+  override suspend fun beginImpersonation(customToken: String, tenantId: String?) {
+    // A support session already on ends first, so the state it set aside is back before the next one starts.
+    if (support.active) endImpersonation()
+    val customer = support.begin(customToken, tenantId, mutable.value)
+    mutable.value = AuthState.SignedIn(customer)
+  }
+
+  /** Ends the support session and returns to the staff member's own sign-in, which was never signed out. */
+  override suspend fun endImpersonation() {
+    mutable.value = support.end() ?: return
+  }
+
+  override suspend fun idToken(forceRefresh: Boolean): String? {
+    if (support.active) {
+      val token = support.idToken(forceRefresh)
+      // A refresh the server refuses (the support session was revoked) ends it, and the staff session returns.
+      if (token == null) endImpersonation()
+      return token
+    }
+    return staffIdToken(forceRefresh)
+  }
+
+  private suspend fun staffIdToken(forceRefresh: Boolean): String? = lock.withLock {
     val current = tokens ?: return@withLock null
     // Refresh a minute early, so a token never expires in flight.
     if (!forceRefresh && current.expiresAt - 60_000 > now()) return@withLock current.idToken
@@ -130,19 +168,105 @@ class IdentityToolkitAuthSession(
   }
 
   override suspend fun signInWithEmail(email: String, password: String) {
+    val body = call("accounts:signInWithPassword", ::authErrorMessage) {
+      put("email", email.trim()); put("password", password); put("returnSecureToken", true)
+    }
+    accept(body)
+  }
+
+  override suspend fun signUpWithEmail(email: String, password: String): AuthUser {
+    val body = call("accounts:signUp", { signUpErrorMessage(it) }) {
+      put("email", email.trim()); put("password", password); put("returnSecureToken", true)
+    }
+    return accept(body)
+  }
+
+  override suspend fun signInWithGoogle(googleIdToken: String): Boolean {
+    val body = call("accounts:signInWithIdp", { signUpErrorMessage(it) }) {
+      put("postBody", "id_token=${googleIdToken.encodeURLParameter()}&providerId=google.com")
+      put("requestUri", "http://localhost")
+      put("returnSecureToken", true)
+      put("returnIdpCredential", true)
+    }
+    if (body["idToken"] == null) throw AuthError(signUpErrorMessage("NEED_CONFIRMATION"), code = "NEED_CONFIRMATION")
+    accept(body)
+    return body["isNewUser"]?.jsonPrimitive?.content == "true"
+  }
+
+  override suspend fun signInWithCustomToken(token: String) = signInWithCustomToken(token, null)
+
+  /** A custom token (the console hand-off's, a passkey's) in the pool [tenantId] names; the person is read off the ID token. */
+  override suspend fun signInWithCustomToken(token: String, tenantId: String?) {
+    val body = call("accounts:signInWithCustomToken", ::authErrorMessage) {
+      put("token", token)
+      put("returnSecureToken", true)
+      if (!tenantId.isNullOrEmpty()) put("tenantId", tenantId)
+    }
+    val claims = TokenClaims.fromIdToken(body["idToken"]?.jsonPrimitive?.content)
+    val uid = (claims.values["user_id"] as? JsonPrimitive)?.content ?: (claims.values["sub"] as? JsonPrimitive)?.content
+      ?: throw AuthError(authErrorMessage(null))
+    val email = (claims.values["email"] as? JsonPrimitive)?.content
+    val name = (claims.values["name"] as? JsonPrimitive)?.content
+    accept(
+      JsonObject(
+        body + mapOf("localId" to JsonPrimitive(uid)) +
+          listOfNotNull(email?.let { "email" to JsonPrimitive(it) }, name?.let { "displayName" to JsonPrimitive(it) }),
+      ),
+    )
+  }
+
+  override suspend fun reload() {
+    val signedIn = (mutable.value as? AuthState.SignedIn)?.user ?: return
+    if (support.active) return
+    val idToken = runCatching { staffIdToken(forceRefresh = true) }.getOrNull() ?: return
+    val fresh = runCatching { lookup(idToken) }.getOrNull()
+    mutable.value = AuthState.SignedIn(fresh ?: signedIn.copy(emailVerified = TokenClaims.fromIdToken(idToken).emailVerified))
+  }
+
+  override suspend fun applyActionCode(code: String) {
+    call("accounts:update", { signUpErrorMessage(it) }) { put("oobCode", code) }
+    reload()
+  }
+
+  override suspend fun verifyPasswordResetCode(code: String): String =
+    call("accounts:resetPassword", { signUpErrorMessage(it) }) { put("oobCode", code) }["email"]?.jsonPrimitive?.content.orEmpty()
+
+  override suspend fun confirmPasswordReset(code: String, newPassword: String) {
+    call("accounts:resetPassword", { signUpErrorMessage(it) }) { put("oobCode", code); put("newPassword", newPassword) }
+  }
+
+  override suspend fun providerIds(): List<String> {
+    val idToken = lock.withLock { tokens?.idToken } ?: return emptyList()
+    val body = runCatching { call("accounts:lookup", ::authErrorMessage) { put("idToken", idToken) } }.getOrNull() ?: return emptyList()
+    val user = (body["users"] as? JsonArray)?.firstOrNull() as? JsonObject ?: return emptyList()
+    return (user["providerUserInfo"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.get("providerId")?.jsonPrimitive?.content }
+  }
+
+  /** One Identity Toolkit call; a refusal throws [AuthError] in [message]'s words, carrying its code. */
+  private suspend fun call(
+    method: String,
+    message: (String?) -> String,
+    body: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit,
+  ): JsonObject {
     val response = try {
-      http.post("$identityBase/v1/accounts:signInWithPassword?key=$apiKey") {
+      http.post("$identityBase/v1/$method?key=$apiKey") {
         contentType(ContentType.Application.Json)
-        setBody(buildJsonObject { put("email", email.trim()); put("password", password); put("returnSecureToken", true) }.toString())
+        setBody(buildJsonObject(body).toString())
       }
     } catch (error: Exception) {
-      throw AuthError(authErrorMessage(null), error)
+      throw AuthError(message("NETWORK"), error, "NETWORK")
     }
-    val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
-    if (response.status.value !in 200..299 || body == null) {
-      val code = (body?.get("error") as? JsonObject)?.get("message")?.jsonPrimitive?.content
-      throw AuthError(authErrorMessage(code))
+    val parsed = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }.getOrNull()
+    if (response.status.value !in 200..299 || parsed == null) {
+      val text = (parsed?.get("error") as? JsonObject)?.get("message")?.jsonPrimitive?.content
+      val code = if (isAppCheckRefusalText(text)) APP_CHECK_REFUSED else text?.substringBefore(' ')
+      throw AuthError(message(code), code = code)
     }
+    return parsed
+  }
+
+  /** Keeps a sign-in's tokens and signs the person in; whether the address is confirmed is read off the ID token. */
+  private suspend fun accept(body: JsonObject): AuthUser {
     lock.withLock {
       tokens = Tokens(
         idToken = body.getValue("idToken").jsonPrimitive.content,
@@ -152,13 +276,14 @@ class IdentityToolkitAuthSession(
       )
       keep(tokens!!.refreshToken)
     }
-    mutable.value = AuthState.SignedIn(
-      AuthUser(
-        uid = body.getValue("localId").jsonPrimitive.content,
-        email = body["email"]?.jsonPrimitive?.content,
-        displayName = body["displayName"]?.jsonPrimitive?.content?.ifEmpty { null },
-      ),
+    val user = AuthUser(
+      uid = body.getValue("localId").jsonPrimitive.content,
+      email = body["email"]?.jsonPrimitive?.content,
+      displayName = body["displayName"]?.jsonPrimitive?.content?.ifEmpty { null },
+      emailVerified = TokenClaims.fromIdToken(body["idToken"]?.jsonPrimitive?.content).emailVerified,
     )
+    mutable.value = AuthState.SignedIn(user)
+    return user
   }
 
   /** `accounts:update` with the current ID token; the new tokens replace the old, which a password change revokes. */
@@ -240,7 +365,11 @@ class IdentityToolkitAuthSession(
     mutable.value = AuthState.SignedIn(signedIn.copy(displayName = name.ifEmpty { null }))
   }
 
-  override suspend fun signOut() = lock.withLock { signOutLocked() }
+  override suspend fun signOut() {
+    // Leaving the app from a support session ends it, and then signs the staff member out as well.
+    endImpersonation()
+    lock.withLock { signOutLocked() }
+  }
 
   private fun signOutLocked() {
     tokens = null

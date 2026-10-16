@@ -26,6 +26,13 @@
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
+      <!-- Single sign-on: the console page hands its one-time code back here (AGL-3816). -->
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="aglyn-pos" android:host="auth" android:path="/handoff" />
+      </intent-filter>
     </activity>
     <service
       android:name=".MessagingService"

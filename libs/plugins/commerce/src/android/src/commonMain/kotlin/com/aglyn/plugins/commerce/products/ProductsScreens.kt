@@ -229,6 +229,14 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
               Icon(AglynIcons.named("tune"), contentDescription = null)
               Text("Edit product", Modifier.padding(start = space(1f)))
             }
+            // The address, supplier, tags, categories, tax, billing and search listing: a spec screen on the shared renderer.
+            OutlinedButton(onClick = { context.navigate("commerce.productDetails", mapOf("productId" to productId)) }, Modifier.testTag("product-details")) {
+              Text("Details")
+            }
+            // The pictures, and a digital product's downloads and members videos.
+            OutlinedButton(onClick = { context.navigate(COMMERCE_PRODUCT_MEDIA_SCREEN, mapOf("productId" to productId)) }, Modifier.testTag("product-media-link")) {
+              Text("Images and files")
+            }
           }
         }
         SectionCard(if (product.variants.orEmpty().size > 1) "Variants" else "Price and stock") {

@@ -21,6 +21,18 @@ struct SetupScreen: View {
   @State private var selection: SetupSection?
   @State private var pushed: SetupSection?
   @State private var opened = false
+  @State private var host = LiveDocument()
+  @State private var org = LiveDocument()
+
+  /// The cards plugins running on this site put in the `hostSettings` zone: the Integrations section exists while there is one.
+  private var integrations: [NativeWidget] {
+    guard case .ready(let hostDoc?) = host.state, case .ready(let orgDoc?) = org.state else { return [] }
+    return integrationWidgets(context.slotWidgets(integrationsSlot), running: runningPlugins(org: orgDoc.data, host: hostDoc.data))
+  }
+
+  private var sections: [SetupSection] {
+    SetupSection.allCases.filter { $0 != .integrations || !integrations.isEmpty }
+  }
 
   var body: some View {
     WideLayoutReader { wide in
@@ -29,7 +41,7 @@ struct SetupScreen: View {
       } else if wide {
         HStack(spacing: 0) {
           List(selection: $selection) {
-            ForEach(SetupSection.allCases) { section in
+            ForEach(sections) { section in
               AglynRow(section.title, subtitle: section.supporting, systemImage: section.systemImage)
                 .tag(section)
                 .aglynListRow()
@@ -41,7 +53,7 @@ struct SetupScreen: View {
           Divider()
           Group {
             if let selection {
-              SetupDetail(context: context, section: selection).id(selection)
+              SetupDetail(context: context, section: selection, integrations: integrations).id(selection)
             } else {
               AglynEmptyState("Pick a section to set it up", systemImage: "gearshape")
             }
@@ -51,7 +63,7 @@ struct SetupScreen: View {
         .onAppear { if selection == nil { selection = SetupSection.of(initialSection ?? "details") } }
       } else {
         List {
-          ForEach(SetupSection.allCases) { section in
+          ForEach(sections) { section in
             Button {
               pushed = section
             } label: {
@@ -66,12 +78,14 @@ struct SetupScreen: View {
         }
         .aglynListBackground()
         .navigationDestination(item: $pushed) { section in
-          SetupDetail(context: context, section: section).navigationTitle(section.title)
+          SetupDetail(context: context, section: section, integrations: integrations).navigationTitle(section.title)
         }
         .onAppear { if pushed == nil, !opened, let initialSection { pushed = SetupSection.of(initialSection); opened = true } }
       }
     }
     .navigationTitle("Setup")
+    .task(id: context.hostID) { if let id = context.hostID { await host.bind(context.firestore, ["hosts", id]) } }
+    .task(id: context.orgID) { if let id = context.orgID { await org.bind(context.firestore, ["orgs", id]) } }
   }
 }
 
@@ -79,6 +93,8 @@ struct SetupScreen: View {
 struct SetupDetail: View {
   let context: NativePluginContext
   let section: SetupSection
+  /// The `hostSettings` cards of plugins running on the site, for the Integrations section.
+  var integrations: [NativeWidget] = []
   @State private var host = LiveDocument()
 
   var body: some View {
@@ -113,6 +129,7 @@ struct SetupDetail: View {
       case .tracking: TrackingSection(host: doc.data, api: api, canEdit: canEdit)
       case .theme: ThemeSection(context: context, hostID: hostID, doc: doc, api: api, canEdit: canEdit)
       case .emails: EmailsSection(context: context, hostID: hostID, api: api, canEdit: canEdit)
+      case .integrations: IntegrationsSection(context: context, widgets: integrations)
       }
     }
     .formStyle(.grouped)
@@ -137,6 +154,8 @@ private struct HostTextCard<Content: View>: View {
   var clearable: Set<String> = []
   var validate: ([String: String]) -> Bool = { _ in true }
   var transform: ([String: String]) -> [String: Any] = { $0 }
+  /// Values a plugin's widget proposed for this page's form, staged over the stored ones.
+  var draft: FormDraft?
   @ViewBuilder let content: (_ field: @escaping (String) -> Binding<String>) -> Content
   @State private var fields: [String: String] = [:]
   @State private var runner = newRunner()
@@ -156,6 +175,10 @@ private struct HostTextCard<Content: View>: View {
       content { path in Binding(get: { fields[path] ?? "" }, set: { fields[path] = $0 }) }
     }
     .onChange(of: stored, initial: true) { _, next in fields = next }
+    .onChange(of: draft?.version) { _, _ in
+      guard let draft else { return }
+      for path in paths { if let value = draft.values[path] { fields[path] = value } }
+    }
   }
 }
 
@@ -376,15 +399,24 @@ private struct SeoSection: View {
   let api: HostSettingsAPI
   let canEdit: Bool
   private let contracts = ContractValues.shared
+  @State private var draft = FormDraft()
+  @State private var checkedKeywords = ""
 
   var body: some View {
     // What is wrong with the site's pages and metadata comes first, as the console's SEO section lists it.
-    SeoCheckCard(context: context, hostID: hostID, host: host)
+    SeoCheckCard(context: context, hostID: hostID, host: host, onChecked: { checkedKeywords = $0 })
+    // The `hostSeo` zone: what a plugin adds under the check, and may propose values for the forms below.
+    SlotCards(context: context, slot: "hostSeo")
+      .environment(
+        \.seoZone, SeoZone(
+          seo: host["seo"] as? [String: Any], keywords: checkedKeywords,
+          proposeDraft: { [draft] values, key in draft.propose(values, key: key) }))
     HostTextCard(
       title: "Search appearance", host: host, paths: ["seo.title", "seo.description", "seo.separator", "seo.titlePattern"],
       api: api, canEdit: canEdit, message: "How your site reads in search results and link previews.",
       clearable: ["seo.titlePattern"],
-      validate: { f in ["seo.title", "seo.description", "seo.separator"].allSatisfy { !(f[$0] ?? "").trimmed.isEmpty } }
+      validate: { f in ["seo.title", "seo.description", "seo.separator"].allSatisfy { !(f[$0] ?? "").trimmed.isEmpty } },
+      draft: draft
     ) { f in
       AglynCountedField("Title", text: f("seo.title"), max: SeoLimits.title, required: true, enabled: canEdit)
       AglynCountedField("Description", text: f("seo.description"), max: SeoLimits.description, required: true, multiline: true, enabled: canEdit)
@@ -409,7 +441,7 @@ private struct SeoSection: View {
       paths: [
         "seo.entity.type", "seo.entity.name", "seo.entity.description", "seo.entity.url", "seo.entity.email",
         "seo.entity.telephone", "seo.entity.contactType", "seo.entity.logo",
-      ], api: api, canEdit: canEdit, message: "Who runs the site, as search engines read it."
+      ], api: api, canEdit: canEdit, message: "Who runs the site, as search engines read it.", draft: draft
     ) { f in
       Picker("This site is run by", selection: f("seo.entity.type")) {
         Text("Not set").tag("")
@@ -434,7 +466,7 @@ private struct SeoSection: View {
     LocalBusinessCard(host: host, api: api, canEdit: canEdit)
     HostTextCard(
       title: "AI agents", host: host, paths: ["seo.agent.whenToUse", "seo.agent.howToUse"], api: api, canEdit: canEdit,
-      message: "What AI assistants read about when and how to send people to your site (llms.txt)."
+      message: "What AI assistants read about when and how to send people to your site (llms.txt).", draft: draft
     ) { f in
       AglynCountedField("When to use this site", text: f("seo.agent.whenToUse"), max: SeoLimits.agent, multiline: true, enabled: canEdit)
       AglynCountedField("How to use this site", text: f("seo.agent.howToUse"), max: SeoLimits.agent, multiline: true, enabled: canEdit)
@@ -623,6 +655,9 @@ private struct ThemeLoaded: Equatable {
   var catalog: ThemeCatalog
   var stored: ThemeValues
   var presets: [ThemePreset]
+  var changes: [ThemeChange] = []
+  var stale = false
+  var themeName: String?
 }
 
 private struct ThemeSection: View {
@@ -647,12 +682,20 @@ private struct ThemeSection: View {
           load = .ready(loaded)
         }
       })
+    if let loaded = load.value, themeSelection(of: doc.data).kind == "installed" || !loaded.changes.isEmpty {
+      ThemeChangesCard(
+        changes: loaded.changes, stale: loaded.stale, themeName: loaded.themeName ?? "its theme", api: api, canEdit: canEdit,
+        changed: { attempt += 1 })
+    }
   }
 
   private func reload() async {
     do {
-      let (catalog, stored, presets) = try await api.themeEditor()
-      load = .ready(ThemeLoaded(catalog: catalog, stored: stored, presets: presets))
+      let answer = try await api.themeEditor()
+      load = .ready(
+        ThemeLoaded(
+          catalog: answer.catalog, stored: answer.values, presets: answer.presets, changes: answer.changes, stale: answer.stale,
+          themeName: answer.themeName))
     } catch is CancellationError {
     } catch {
       load = .failed((error as? ConsoleAPIError)?.message ?? "The theme could not be loaded.")
@@ -661,6 +704,59 @@ private struct ThemeSection: View {
 
   /// What reloads the editor: the site document changing under it.
   private var reloadKey: String { "\(attempt)-\(doc.date("updatedAt")?.timeIntervalSince1970 ?? 0)-\(hasThemeEdits(doc.data))" }
+}
+
+/// "What you have changed": every value this site set on top of its theme, the
+/// theme's own beside it, and a Reset for each. Shown once the site has a change,
+/// and always for a theme installed from the marketplace.
+private struct ThemeChangesCard: View {
+  let changes: [ThemeChange]
+  let stale: Bool
+  let themeName: String
+  let api: HostSettingsAPI
+  let canEdit: Bool
+  /// Asks the section to read the theme editor again once a change is reset.
+  let changed: () -> Void
+  @State private var runner = ActionRunner()
+
+  var body: some View {
+    Section {
+      if stale {
+        AglynNotice(
+          "These changes were made against a different theme. They still apply, because a brand color usually still means the same thing, but a component style written for another theme often does not. Check them, or clear them all with Undo all edits.",
+          tone: .warning)
+      }
+      if let error = runner.error { AglynNotice(error, tone: .error) { runner.clear() } }
+      if changes.isEmpty {
+        Text("Nothing: this site is running \(themeName) exactly as its publisher shipped it. Anything you change is stored as your change on top.")
+          .foregroundStyle(.secondary)
+      } else {
+        Text("\(changes.count) value\(changes.count == 1 ? "" : "s") \(changes.count == 1 ? "differs" : "differ") from \(themeName).")
+          .foregroundStyle(.secondary)
+        ForEach(changes) { change in
+          HStack {
+            VStack(alignment: .leading, spacing: 2) {
+              HStack {
+                Text(change.label)
+                if let scheme = change.scheme { StatusChip(scheme) }
+              }
+              Text("Theme: \(change.themeValue ?? "not set")").font(AglynFont.caption).foregroundStyle(.secondary)
+              Text("Yours: \(change.overrideValue ?? "not set")").font(AglynFont.caption)
+            }
+            Spacer()
+            Button("Reset") {
+              runner.run(onDone: changed) { try await api.resetThemeChange(change.path) }
+            }
+            .buttonStyle(.borderless)
+            .disabled(!canEdit || runner.busy)
+          }
+          .accessibilityIdentifier("theme-change-\(change.path)")
+        }
+      }
+    } header: {
+      Text("What you have changed").accessibilityAddTraits(.isHeader)
+    }
+  }
 }
 
 private struct ThemeLibraryCard: View {
@@ -1061,6 +1157,25 @@ private struct ThemeNumberField: View {
     )
     .onChange(of: value, initial: true) { _, next in
       if parseThemeNumber(text, in: range).value != next { text = formatThemeNumber(next) }
+    }
+  }
+}
+
+// MARK: - Integrations
+
+/// The tools this site connects to (AGL-3711): a card for each plugin running on the site that has one in the `hostSettings`
+/// zone, which opens the plugin's own settings screen. The page never names the plugins.
+private struct IntegrationsSection: View {
+  let context: NativePluginContext
+  let widgets: [NativeWidget]
+
+  var body: some View {
+    Section {
+      Text("Connect this site to the tools you already use.").font(AglynFont.subheadline).foregroundStyle(.secondary)
+      if widgets.isEmpty { AglynNotice("Nothing to connect for this site yet.", tone: .info) }
+    }
+    ForEach(widgets, id: \.id) { widget in
+      Section { widget.make(context).accessibilityIdentifier("zone-widget-\(widget.id)") }
     }
   }
 }

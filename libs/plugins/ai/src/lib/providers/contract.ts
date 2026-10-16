@@ -355,11 +355,23 @@ export interface AiRequestBase {
   /**
    * How long a cache entry the breakpoints write should live, where the
    * provider offers a choice: the provider's default (five minutes on the
-   * Messages API) when absent. Only a development run asks for `1h`
-   * (`runtime/ai-dev-replay.ts`); it changes no answer, only what a second
-   * request within the hour pays for the prefix.
+   * Messages API) when absent. A step a site job runs asks for `1h` through
+   * its routing row (`AiRoutingRow.cacheTtl`, AGL-3830), in production too,
+   * and a development live run asks for it on every request
+   * (`runtime/ai-dev-env.ts`). It changes no answer, only what a request
+   * within the hour pays for the prefix, so a replay key does not read it.
    */
   cacheTtl?: '1h'
+  /**
+   * Cache the conversation through its last message as well as the system
+   * blocks (AGL-3809), for a request the door expects to continue: a
+   * generation that looks the site up or is asked again re-sends its whole
+   * first turn, which without this is billed at the full input rate on every
+   * continuation. One more breakpoint, on the last message, counted against
+   * the same limit as the system's; a provider without a cache ignores it.
+   * It changes no answer, so a replay key does not read it.
+   */
+  cacheConversation?: boolean
 }
 
 /** The request an adapter receives: the runtime has already validated it. */
@@ -377,6 +389,17 @@ export interface AiUsage {
   outputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
+  /**
+   * How many of `cacheWriteTokens` went to an hour-long cache entry
+   * (AGL-3830), where the provider breaks the writes down; absent where none
+   * did or the provider does not say.
+   *
+   * Inside `cacheWriteTokens`, never beside it, like `thinkingTokens` below.
+   * An hour-long write is billed at twice the input price where a rate
+   * table's `cacheWritePerToken` is the five-minute 1.25 times, so a price
+   * reads this to add the difference (`aiCacheWriteHourSurchargeUsd`).
+   */
+  cacheWriteHourTokens?: number
   /**
    * How many of `outputTokens` the model spent thinking, where the provider
    * reports it; absent where it does not (AGL-3143).
@@ -662,8 +685,30 @@ export interface AiProvider {
 export interface AiBatchOptions {
   /** Between two looks at a batch still processing; 10 s when absent. */
   pollMs?: number
-  /** The most a batch is waited for before every request in it fails; an hour when absent. */
+  /**
+   * The most a batch is waited for; an hour when absent. Past it the batch
+   * is canceled, which keeps every answer it already has, and each request
+   * it did not answer comes back as an `AiBatchUnfinishedError` (AGL-3781).
+   */
   timeoutMs?: number
+  /** How long a canceled batch is given to end, so its answers can be read; 10 minutes when absent. */
+  cancelGraceMs?: number
+}
+
+/**
+ * A request a batch did not answer (AGL-3781): canceled when its wait ran
+ * out, expired, errored, or missing from the results. Not the request's own
+ * failure — the caller answers it with a request of its own rather than
+ * losing it, and a failure that request meets is the real one.
+ */
+export class AiBatchUnfinishedError extends Error {
+  override readonly name = 'AiBatchUnfinishedError'
+  constructor(
+    readonly batchId: string,
+    readonly reason: string,
+  ) {
+    super(`batch ${batchId} did not answer this request (${reason})`)
+  }
 }
 
 /** A count off the wire: finite, non-negative, whole; anything else is 0. */

@@ -44,6 +44,7 @@ const connection = (overrides: Partial<NetworkConnectionView> = {}): NetworkConn
   marketplaces: [],
   storeId: null,
   webhookSecretSet: false,
+  webhooksRegistered: false,
   syncInventory: false,
   inventory: { syncedAtMs: 1, skus: 12, updated: 0, unchanged: 0, unknown: 0, untracked: 0, perLocation: 0 },
   lastError: null,
@@ -153,6 +154,28 @@ describe('the fulfillment networks card (AGL-3634)', () => {
     await waitFor(() => expect(routes.rotateWebhookSecret).toHaveBeenCalledWith('shipmonk'))
     expect(mockConfirm).toHaveBeenCalledWith(expect.objectContaining({ title: 'New ShipMonk webhook secret?' }))
     expect(await screen.findByDisplayValue('whsec-new')).toBeTruthy()
+  })
+
+  it('connects Flexport with an API token alone, and offers no webhook secret (AGL-3822)', async () => {
+    const flexport = connection({ id: 'h_flexport', provider: 'flexport', accountName: null, webhooksRegistered: true })
+    const routes = api({
+      list: jest.fn(async () => ({ offered: [{ id: 'flexport' as const, sandbox: false }], connections: [] })),
+      connectKey: jest.fn(async () => ({ connection: flexport, webhook: null })),
+    })
+    render(<FulfillmentNetworksCard hostId="h" api={routes} />)
+    expect(await screen.findByText(/API token from your own Flexport account/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Connect Flexport' }))
+    expect(screen.getByText(/Settings, then API Tokens/)).toBeTruthy()
+    expect(screen.queryByLabelText('Store id')).toBeNull()
+    const submit = screen.getByRole('button', { name: 'Connect' }) as HTMLButtonElement
+    expect(submit.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('API token'), { target: { value: 'fx-live-token-1234' } })
+    fireEvent.click(submit)
+    await waitFor(() => expect(routes.connectKey).toHaveBeenCalledWith('flexport', { apiKey: 'fx-live-token-1234', storeId: '' }))
+    expect(await screen.findByLabelText('Ship method')).toBeTruthy()
+    expect(screen.getByText(/Flexport tells us when an order ships or arrives/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /webhook/i })).toBeNull()
+    expect(screen.queryByDisplayValue('fx-live-token-1234')).toBeNull()
   })
 
   it('asks to connect again when the grant was refused', async () => {

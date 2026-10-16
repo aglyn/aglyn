@@ -31,13 +31,14 @@ import {
 } from '@aglyn/aglyn/plugin-manager/stock-photo-provider'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import {
+  AI_LAYOUT_NO_PHOTO,
   aiLayoutSeedNumber,
   type AiLayoutPicturePhoto,
   type AiLayoutPictureSlot,
   type AiLayoutPictureSource,
 } from '../layout-language/ai-layout-pictures'
 import { aiStorefrontSays } from '../layout-language/ai-layout-storefront'
-import { aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
+import { aiLayoutLabel, aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
 import type { AiBuildPlan } from '../model/ai-build-plan'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { aiStockBusinessNoun } from './ai-stock-business-nouns'
@@ -141,11 +142,16 @@ import { aiStockBusinessNoun } from './ai-stock-business-nouns'
  *    its kin shuns (a pump for a bar) unless it names it; "bath" in a bath
  *    gift set is what the set is for; a size is never the product.
  *
- * A slot nothing acceptable answered — the library down, refusing, or out
- * of time — is left `null` for the starter photos. A named object is never
- * given one while the library answers anything of the site's world: the
- * broad searches come first. Nothing here throws, and none of it is an AI
- * model call: photos cost no AI credits.
+ * A slot the library could not fill because it never answered — down, or
+ * out of time before its first answer — or because the site's library
+ * refused to store, is left `null` for the starter photos. A slot the
+ * library answered and nothing acceptable came back for is answered
+ * {@link AI_LAYOUT_NO_PHOTO} and keeps its no-photo treatment: the beta.257
+ * Copper Kettle Catering hero, held to "caterer" while catering photos are
+ * tagged "catering", took the starters' pottery workbench (AGL-3831). A
+ * named object is never given one while the library answers anything of the
+ * site's world: the broad searches come first. Nothing here throws, and none
+ * of it is an AI model call: photos cost no AI credits.
  */
 
 /** Wall clock the whole page's photos may take, inside the step's own signal. */
@@ -864,6 +870,48 @@ const CRAFT_KIN: ReadonlyArray<{
     ],
     broad: ['coffee shop', 'coffee'],
     making: ['barista making coffee'],
+  },
+  {
+    // A caterer is named "caterer" and its photos "catering", "buffet",
+    // "food": the beta.257 Copper Kettle Catering hero, held to "caterer"
+    // alone, accepted none of forty hits (AGL-3831).
+    match: ['caterer', 'catering', 'cater'],
+    kin: [
+      'catering',
+      'caterer',
+      'cater',
+      'buffet',
+      'banquet',
+      'platter',
+      'food',
+      'meal',
+      'cuisine',
+    ],
+    broad: ['caterer', 'catering buffet'],
+    making: ['chef cooking', 'catering chef'],
+    // An airline's meal cart is catering too, never a caterer's: the same
+    // start's search answered a plane at Düsseldorf tagged "catering" first.
+    rivals: {
+      words: ['airport', 'airplane', 'plane', 'aircraft', 'aviation', 'airline', 'airfield'],
+      core: [],
+    },
+  },
+  {
+    match: ['barbecue', 'barbeque', 'bbq', 'smokehouse', 'pitmaster'],
+    kin: [
+      'barbecue',
+      'barbeque',
+      'bbq',
+      'grill',
+      'grilled',
+      'brisket',
+      'smoked',
+      'smoker',
+      'ribs',
+      'meat',
+    ],
+    broad: ['barbecue', 'bbq meat'],
+    making: ['pitmaster', 'grilling meat'],
   },
   {
     match: ['florist', 'flower', 'floral'],
@@ -1861,6 +1909,54 @@ export function aiStockForgetJobPhotos(): void {
   JOB_PHOTOS.clear()
 }
 
+/** The longest description of a photo written from the library's own words. */
+const AI_STOCK_ALT_MAX = 160
+
+/**
+ * THE WORDS A PLACED STOCK PHOTO IS DESCRIBED BY (AGL-3805).
+ *
+ * A slot's alt text is the model's, written for the picture the page asked
+ * for before any photo was found, and a slot is filled by whatever the
+ * library answers for its search: a hero searched by the business, a gallery
+ * picture by its subject, a site in another language by English words alone.
+ * Kept as written, it described a photo the page does not show: the beta.253
+ * Panadería La Concha Dorada start (job eg4maZMGtN) captioned a round cake
+ * dusted "HOME MADE" on a cloth "Conchas recién horneadas sobre una charola en
+ * el mostrador de la panadería", and none of its nine photos showed what its
+ * words said: a birthday cake with candles was "the family kneading pan
+ * dulce", a plate of macarons the shop's display case.
+ *
+ * So the photo placed answers for its own words. `null` keeps the slot's: on
+ * an English site whose words name what the photo is OF — a word of their
+ * subject (`aiStockSubjectWords`: the noun phrase they open with, before any
+ * setting) among the hit's first tags or its page's address, so "conchas on
+ * a tray at the bakery counter" is never kept for a loaf tagged "bakery".
+ * Otherwise the photo is described by the
+ * library's own words: its description where it writes one (a Pexels hit's
+ * `alt`), else its first tags, the things it shows. The libraries write in
+ * English, and no model translates them, so a site in another language takes
+ * the platform's own words for an illustrative photo in its language
+ * (`aiLayoutLabel`), true of any photo, as does a hit with no words at all.
+ */
+export function aiStockPhotoAlt(
+  photo: Pick<StockPhoto, 'tags' | 'alt' | 'pageUrl'>,
+  slot: Pick<AiLayoutPictureSlot, 'alt' | 'product'>,
+  input: { language?: string; sectionName?: string } = {},
+): string | null {
+  if (aiLayoutSpeaksOtherThanEnglish(input.language)) return aiLayoutLabel('illustrativePhoto', input.language)
+  const { lead } = hitWords(photo)
+  const named = [slot.alt, ...(slot.product?.subjects ?? [])].flatMap((words) =>
+    stemList(aiStockSubjectWords(words, input.sectionName ?? '')),
+  )
+  if (named.some((word) => lead.has(word))) return null
+  const own = (photo.alt ?? '').replace(/\s+/g, ' ').trim()
+  if (own) return own.length > AI_STOCK_ALT_MAX ? `${own.slice(0, AI_STOCK_ALT_MAX).replace(/\s+\S*$/, '')}…` : own
+  const tags = [...new Set((photo.tags ?? []).map((tag) => tag.replace(/\s+/g, ' ').trim().toLowerCase()).filter(Boolean))].slice(0, 3)
+  if (!tags.length) return aiLayoutLabel('illustrativePhoto', input.language)
+  const said = tags.join(', ')
+  return `${said.charAt(0).toUpperCase()}${said.slice(1)}`
+}
+
 const EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -2042,6 +2138,8 @@ export function aiLayoutStockPhotoSource(
     const answers = new Map<string, Promise<StockPhoto[] | null>>()
     let searches = 0
     let storing = true
+    /** Whether the library answered any search of this page: a slot left empty then found nothing fitting. */
+    let answered = false
     const remember = (sourceKey: string, src: string) => {
       placedSrcs.add(src)
       job?.set(sourceKey, scope)
@@ -2071,11 +2169,20 @@ export function aiLayoutStockPhotoSource(
       searches += 1
       const asked = provider
         .search(request, { signal })
-        .then((found) => found?.photos ?? [])
+        .then((found) => {
+          if (found) answered = true
+          return found?.photos ?? []
+        })
         .catch(() => [] as StockPhoto[])
       answers.set(key, asked)
       return asked
     }
+    /** The photo's own words where the slot's do not describe it ({@link aiStockPhotoAlt}). */
+    const altFor = (photo: StockPhoto, slot: AiLayoutPictureSlot) =>
+      aiStockPhotoAlt(photo, slot, {
+        ...(input.language ? { language: input.language } : {}),
+        sectionName: input.sectionNames[slot.sectionIndex] ?? '',
+      })
     /** The photo placed in the site's library, a copy it holds or a new one; `null` when it cannot be placed. */
     const keep = async (
       photo: StockPhoto,
@@ -2084,6 +2191,8 @@ export function aiLayoutStockPhotoSource(
       repeat = false,
     ): Promise<AiLayoutPicturePhoto | null> => {
       const sourceKey = stockPhotoSourceKey(photo)
+      const alt = altFor(photo, slot)
+      const described = alt === null ? {} : { alt }
       try {
         const kept = await ingest.findStockPhoto({
           hostId: input.hostId,
@@ -2098,6 +2207,7 @@ export function aiLayoutStockPhotoSource(
             src: kept.src,
             width: kept.width ?? photo.width,
             height: kept.height ?? photo.height,
+            ...described,
           }
         }
         // A refusal to store (the storage band, a lockdown) holds for the
@@ -2115,7 +2225,7 @@ export function aiLayoutStockPhotoSource(
           fileName: `${photo.provider}-${photo.id}.${EXTENSIONS[bytes.contentType] ?? 'jpg'}`,
           contentType: bytes.contentType,
           bytes: bytes.bytes,
-          alt: slot.alt,
+          alt: alt ?? slot.alt,
           description: credit.text,
           stockPhoto: {
             key: sourceKey,
@@ -2139,6 +2249,7 @@ export function aiLayoutStockPhotoSource(
             src: stored.src,
             width: stored.width ?? photo.width,
             height: stored.height ?? photo.height,
+            ...described,
           }
         }
         storing = false
@@ -2322,8 +2433,12 @@ export function aiLayoutStockPhotoSource(
         if (signal.aborted) return
         const key = stockPhotoSourceKey(candidate)
         if (choice.repeat) {
-          const placed =
-            placedByKey.get(key) ?? (await keep(candidate, slot, choice.query, true))
+          // Placed for another slot, it is described for this one.
+          const shown = placedByKey.get(key)
+          const alt = shown ? altFor(candidate, slot) : null
+          const placed = shown
+            ? { src: shown.src, width: shown.width, height: shown.height, ...(alt === null ? {} : { alt }) }
+            : await keep(candidate, slot, choice.query, true)
           if (placed) {
             photos[index] = placed
             return
@@ -2361,6 +2476,11 @@ export function aiLayoutStockPhotoSource(
     )
     for (const [index, choice] of choices.entries())
       if (choice?.repeat) await fill(index)
-    return photos
+    // The library answered and nothing in it fits: no photo rather than a
+    // starter that shows another business (AGL-3831). A library that never
+    // answered, or a site that refused to store, leaves the starters.
+    return answered && storing
+      ? photos.map((photo) => photo ?? AI_LAYOUT_NO_PHOTO)
+      : photos
   }
 }

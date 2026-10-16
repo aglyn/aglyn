@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -54,6 +55,11 @@ import {
  * list over `hosts` is gated per document, and a verdict that flips mid-query
  * can tombstone a site in the local cache for every other reader.
  */
+const liveDomainOf = (subdomain: unknown, cname: unknown, attachmentPending: boolean): string | null => {
+  if (typeof cname === 'string' && cname && !attachmentPending) return cname
+  return typeof subdomain === 'string' && subdomain ? `${subdomain}.${TENANT_APEX}` : null
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -156,6 +162,11 @@ async function handler(request: Request): Promise<Response> {
         subdomain: docSnap.get('subdomain') ?? null,
         cname: docSnap.get('cname') ?? null,
         cnameAttachmentPending: docSnap.get('cnameAttachmentPending') === true,
+        // The address the site answers at: its custom domain once that
+        // serves, else the platform subdomain. A domain still attaching does
+        // not serve yet, so it is not where a link to the site should go
+        // (`staffSiteLiveUrl`). The app builds its links from this one value.
+        liveDomain: liveDomainOf(docSnap.get('subdomain'), docSnap.get('cname'), docSnap.get('cnameAttachmentPending') === true),
         orgId,
         org,
         owner: owner

@@ -70,6 +70,7 @@ import {
   isLockableDomain,
   isLockdownEnforcement,
   isLockdownFeatureKey,
+  PLATFORM_LOCK_CONFIRM_PHRASE,
   isLockdownMode,
   isLockdownReasonCode,
   LOCKDOWN_ENFORCEMENTS,
@@ -101,6 +102,7 @@ import {
   readSignupsCreationTriggerStatus,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { lockLogLines, resendLogLines } from '../../../../utils/lockdown-log-lines'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   applyHostLockdown,
@@ -172,7 +174,7 @@ function featureTargetIds(body: any): string[] {
  * mishap or replayed request can take the whole platform down with a
  * one-field body.
  */
-const PLATFORM_CONFIRM_PHRASE = 'LOCK PLATFORM'
+const PLATFORM_CONFIRM_PHRASE = PLATFORM_LOCK_CONFIRM_PHRASE
 
 /**
  * The lock's shape as the audit trail has to remember it (AGL-1572).
@@ -2043,4 +2045,25 @@ async function handler(request: Request): Promise<Response> {
   }
 }
 
-export { handler as GET, handler as POST }
+/**
+ * A lock, lift or resend answers with the lines the page keeps under "Actions taken in this session"
+ * (`logLines`), so the staff apps keep the same ones without working them out of the answer themselves
+ * (`utils/lockdown-log-lines.ts`, which the page builds them with too).
+ */
+async function post(request: Request): Promise<Response> {
+  const body = (await request.clone().json().catch(() => null)) as Record<string, unknown> | null
+  const response = await handler(request)
+  const action = body?.['action']
+  if (response.status !== 200 || !body || !['lock', 'unlock', 'resend-notice'].includes(String(action))) {
+    return response
+  }
+  const payload = (await response.clone().json().catch(() => null)) as Record<string, any> | null
+  if (!payload || typeof payload !== 'object') return response
+  const logLines =
+    action === 'resend-notice'
+      ? resendLogLines(payload, (ms) => `${new Date(ms).toLocaleString('en-US', { timeZone: 'UTC' })} UTC`)
+      : lockLogLines(body, payload)
+  return Response.json({ ...payload, logLines }, { status: 200, headers: response.headers })
+}
+
+export { handler as GET, post as POST }

@@ -9,6 +9,9 @@ import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.FcmPushRegistrar
 import com.aglyn.core.FirebaseAuthSession
 import com.aglyn.core.FirebaseFirestoreReader
+import com.aglyn.core.FirebaseSupportBackend
+import com.aglyn.core.SwitchingFirestoreReader
+import com.aglyn.core.SwitchingFirestoreWriter
 import com.aglyn.core.SharedPreferencesStore
 import com.aglyn.core.WorkspaceStore
 import com.aglyn.core.defaultHttpClient
@@ -38,11 +41,14 @@ object AndroidShell {
     val config = AglynConfig.read(env, if (app == NativeApp.POS) AglynAppId.POS else AglynAppId.AGLYN)
     config.problems().forEach { android.util.Log.w("Aglyn", it) }
     val firebase = AndroidFirebase.init(context, config)
-    val auth = FirebaseAuthSession(firebase.auth)
-    val firestore = FirebaseFirestoreReader(firebase.firestore)
+    val prefs = SharedPreferencesStore(context)
+    // A support session (a staff member signed in as a customer) has a Firebase app of its own: its own sign-in and Firestore.
+    val support = FirebaseSupportBackend(context, firebase, prefs)
+    val auth = FirebaseAuthSession(firebase.auth, support)
+    val supporting = { auth.impersonation.value != null }
+    val firestore = SwitchingFirestoreReader(FirebaseFirestoreReader(firebase.firestore), { FirebaseFirestoreReader(support.firestore()) }, supporting)
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val api = ConsoleApiClient(config.consoleOrigin, defaultHttpClient(), auth::idToken, config.brandName)
-    val prefs = SharedPreferencesStore(context)
     val registry = NativePluginRegistry()
     registry.load(PLATFORM_ENTRIES + manifest).failed.forEach { android.util.Log.e("Aglyn", "plugin ${it.pluginId}: ${it.error}") }
     return ShellServices(
@@ -58,12 +64,22 @@ object AndroidShell {
       debugSignIn = debugSignIn,
       peripherals = peripherals,
       push = com.aglyn.core.FcmPushRegistrar(firebase, prefs, config.app, appVersion),
-      writer = com.aglyn.core.FirebaseFirestoreWriter(firebase.firestore),
-      openHostedPage = { url ->
-        val intent = androidx.browser.customtabs.CustomTabsIntent.Builder().setShowTitle(true).build()
-        intent.intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-        intent.launchUrl(context, android.net.Uri.parse(url))
+      writer = SwitchingFirestoreWriter(
+        com.aglyn.core.FirebaseFirestoreWriter(firebase.firestore), { com.aglyn.core.FirebaseFirestoreWriter(support.firestore()) }, supporting,
+      ),
+      openHostedPage = { url -> openCustomTab(context, url) },
+      // Single sign-on runs on the console in a Custom Tab, whose page hands the code back to this app's own scheme; the
+      // activity hears it and finishes the sign-in (`finishConsoleHandoff`).
+      consoleHandoff = com.aglyn.core.ConsoleHandoffTransport { page ->
+        openCustomTab(context, page(com.aglyn.core.ConsoleHandoff.appRedirectUri(config.app)))
+        null
       },
     )
+  }
+
+  private fun openCustomTab(context: Context, url: String) {
+    val intent = androidx.browser.customtabs.CustomTabsIntent.Builder().setShowTitle(true).build()
+    intent.intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    intent.launchUrl(context, android.net.Uri.parse(url))
   }
 }

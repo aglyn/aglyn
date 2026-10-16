@@ -109,9 +109,13 @@ import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import { createAiJobPlanStep } from './ai-job-plan-step'
 import { aiStockPhotoWordsOf, aiStockPhotoWordsSubject, aiStockSourceTerms } from './ai-layout-stock-photos'
+import { aiLiveTimeoutMs } from '../runtime/ai-dev-env'
 
 const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHROPIC_API_KEY'])
-const NOW = new Date()
+// A fixed day (AGL-3781): a build's or an events plan's prompt states today's
+// date, and a date that moved every run gave each run new request bytes, so
+// the replay cache answered none of them.
+const NOW = new Date('2026-10-14T12:00:00Z')
 /**
  * The workspace the plans are made on: Free, as a guided start makes most of
  * them, or a paid one with `AGLYN_LIVE_AI_ORG_PLAN=business` (AGL-3660) — a
@@ -141,6 +145,9 @@ const BRIEFS: ReadonlyArray<{ businessName: string; businessType: string; audien
   { businessName: 'Ledgerly Books', businessType: 'a freelance bookkeeper', audience: 'small business owners behind on their books', starter: 'business' },
   { businessName: 'Gleam Mobile Detailing', businessType: 'a mobile car detailing service', audience: 'busy commuters', starter: 'landing' },
   { businessName: 'Fretwork Lessons', businessType: 'a guitar teacher', audience: 'adults who always wanted to learn', starter: 'business' },
+  // A Free blog writes its first post since AGL-3798: its plan is told the
+  // blog is written and linked, so no page may stand in for it.
+  { businessName: 'Slow Roads', businessType: 'a personal travel blog about long train journeys through Europe, written by one person', audience: 'readers planning a slow trip by rail', starter: 'business', siteKind: 'blog' },
 ]
 
 /**
@@ -253,7 +260,7 @@ const describeLive = LIVE && !LANGUAGES ? describe : describe.skip
 const describeLanguages = LIVE && LANGUAGES ? describe : describe.skip
 
 describeLanguages("a guided start's plan in another language, from the real model (AGL-3779)", () => {
-  jest.setTimeout(10 * 60_000)
+  jest.setTimeout(aiLiveTimeoutMs(10 * 60_000))
 
   it(`says its language and gives English photo words of its business, on a ${ORG_PLAN} workspace’s provisioned site`, async () => {
     const capabilities = aiPlanCapabilitiesFrom(ORG, {
@@ -325,7 +332,7 @@ describeLanguages("a guided start's plan in another language, from the real mode
 })
 
 describeLive("a guided start's plan from the real model", () => {
-  jest.setTimeout(10 * 60_000)
+  jest.setTimeout(aiLiveTimeoutMs(10 * 60_000))
 
   it(`keeps the plan rules for every brief, on a ${ORG_PLAN} workspace’s provisioned site`, async () => {
     const capabilities = aiPlanCapabilitiesFrom(ORG, {
@@ -366,6 +373,10 @@ describeLive("a guided start's plan from the real model", () => {
                   (screen) => `${screen.slug}: ${screen.sections.map((section) => section.name).join(' | ')}`,
                 ),
               }
+            : {}),
+          // Reported, not held: a blog's pages, where none may stand in for the written blog (AGL-3798).
+          ...(brief.siteKind === 'blog'
+            ? { pages: ((outcome['plan'] as AiJobPlan | undefined)?.screens ?? []).map((screen) => `${screen.slug}: ${screen.title}`) }
             : {}),
           // Every answer the step read: its home's sections and what the step's checks found.
           answers: [...mockAnswers.entries()].find(([turn]) => turn.includes(brief.businessType))?.[1] ?? [],

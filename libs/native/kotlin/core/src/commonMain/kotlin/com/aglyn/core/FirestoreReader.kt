@@ -81,6 +81,13 @@ interface FirestoreReader {
    * Null where this reader cannot count.
    */
   suspend fun count(query: FirestoreQuery): Long? = null
+
+  /**
+   * The total of numeric [field] over every document [query] matches, as the server adds it (the web SDK's
+   * `getAggregateFromServer` with `sum`): the figure a balance or a liability reads, never the total of a capped
+   * list. [FirestoreQuery.limit] is ignored. Null where this reader cannot sum.
+   */
+  suspend fun sum(query: FirestoreQuery, field: String): Double? = null
 }
 
 /** The order-field values of [doc] for a [FirestoreQuery.startAfter] cursor. */

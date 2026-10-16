@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v14'
+export const LEGAL_DOCUMENT_VERSION = 'v16'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -696,9 +696,10 @@ export interface LegalDocumentManifestEntry {
  *     a change-log entry; it is not acceptance-pinned. The DPA, the Terms and
  *     the Cookie Policy are unchanged.
  *
- * Privacy, Subprocessors and their `/legal` index cards move "Last updated"
- * to October 8, 2026, published just after midnight Central. The wording is
- * recorded in `Platform Docs/Legal/Proposed/2026-10-08-vertex-ai-images/PROPOSAL.md`.
+ * Privacy, Subprocessors and their `/legal` index cards move "Last updated" to
+ * October 8, 2026, published just after midnight Central. The wording is
+ * recorded in `Platform
+ * Docs/Legal/Proposed/2026-10-08-vertex-ai-images/PROPOSAL.md`.
  *
  * Publication-first: the Google Doc masters were edited and verified through
  * the Docs API, the pages were published, the live pages confirmed serving the
@@ -711,77 +712,146 @@ export interface LegalDocumentManifestEntry {
  * v13 (2026-10-09): staff review of AI requests, and audio-rights
  * confirmations (AGL-3716).
  *
- *   - Privacy §1.1 "Content & data you submit" says that an audio upload asks
- *     the uploader to confirm they own the audio or have a license to use it
- *     on their site, and that the confirmation is stored with the file: the
- *     statement confirmed, who confirmed it (the user identifier, or the API
- *     key used), and when. That is exactly `rightsConfirmation { uid, atMs,
- *     statement }` in `utils/media-audio-rights.ts`.
- *   - Privacy §2 "Aglyn Assist conversations" lists five purposes instead of
- *     three, adding support and the investigation of abuse, security
- *     incidents and violations of our terms; "AI generation jobs" says the
- *     record serves the same two uses, and that authorized Aglyn staff may
- *     review an account's or Organization's AI requests for them, each review
- *     recorded in the staff access log.
- *   - The Terms, AUP, DMCA, DPA, Cookie Policy and Subprocessors are unchanged.
+ * - Privacy §1.1 "Content & data you submit" says that an audio upload asks
+ * the uploader to confirm they own the audio or have a license to use it
+ * on their site, and that the confirmation is stored with the file: the
+ * statement confirmed, who confirmed it (the user identifier, or the API
+ * key used), and when. That is exactly `rightsConfirmation { uid, atMs,
+ * statement }` in `utils/media-audio-rights.ts`.   - Privacy §2 "Aglyn Assist
+ * conversations" lists five purposes instead of     three, adding support and
+ * the investigation of abuse, security     incidents and violations of our
+ * terms; "AI generation jobs" says the     record serves the same two uses,
+ * and that authorized Aglyn staff may     review an account's or
+ * Organization's AI requests for them, each review     recorded in the staff
+ * access log.   - The Terms, AUP, DMCA, DPA, Cookie Policy and Subprocessors
+ * are unchanged.
  *
  * Privacy and its `/legal` index card move "Last updated" to October 9, 2026,
  * published at 21:39 Central that day. Zach approved publishing v13 with
- * re-acceptance on 2026-10-09; the wording is recorded in
- * `Platform Docs/Legal/Proposed/2026-10-09-staff-ai-review/PROPOSAL.md`.
+ * re-acceptance on 2026-10-09; the wording is recorded in `Platform
+ * Docs/Legal/Proposed/2026-10-09-staff-ai-review/PROPOSAL.md`.
  *
  * Publication-first: the Google Doc master was edited and verified through the
  * Docs API, the pages were published, the live pages confirmed serving the new
  * text, and only then was privacy captured: 26874 bytes (`a88960…`), identical
  * across two requests and a cache-busting query, in two rounds (the first
  * served stale-while-revalidate, the second fresh). The Terms did not change,
- * so they were the control: the live terms page reproduced its `v9` pin
- * (44131 bytes / `c48915…`) byte for byte before and after publication, and
- * keeps that pin.
+ * so they were the control: the live terms page reproduced its `v9` pin (44131
+ * bytes / `c48915…`) byte for byte before and after publication, and keeps
+ * that pin.
  *
  * v14 (2026-10-10): audio and music (AGL-3716).
  *
- *   - Terms §8.8 "Audio and Music" (new): music and other recordings are
- *     usually owned by others, and buying, downloading or streaming a track
- *     does not give the right to publish it. The person uploading an audio
- *     file, in the console or through the API, confirms they own it or have a
- *     license to use it on the site; each confirmation (by the customer, an
- *     Authorized User, or one of its API keys) is a §8.3 representation and
- *     warranty for that file, covering both the musical work and the sound
- *     recording. We store the confirmation and may rely on it, and do not
- *     verify it; we may remove or disable audio under §8.5 or the DMCA
- *     Policy; a disabled file shows as unavailable in the player, and one
- *     disabled on an upheld copyright notice counts toward the
- *     repeat-infringer policy; the player has no download control, but we do
- *     not warrant that published audio cannot be copied.
- *   - AUP: content may not be music or other audio the customer does not own
- *     and is not licensed to publish (commercial recordings, tracks ripped
- *     from streaming services, video sites, radio or broadcasts, recordings
- *     bought for personal listening); no knowingly false rights
- *     confirmations; no extracting, recording or downloading audio someone
- *     else publishes, including by working around a player with no download
- *     control, to copy or redistribute it without permission.
- *   - DMCA: "Audio and music." says what a notice about a track should
- *     identify (each page where it plays, the track title as the player
- *     shows it, the work, and whether the claim is to the sound recording,
- *     the composition, or both); "Our Response" says a disabled audio file
- *     stops playing everywhere, shows as unavailable in the player and as
- *     taken down in the owner's media library, and plays again if restored.
- *   - Privacy, the DPA, Cookie Policy and Subprocessors are unchanged.
+ * - Terms §8.8 "Audio and Music" (new): music and other recordings are
+ * usually owned by others, and buying, downloading or streaming a track
+ * does not give the right to publish it. The person uploading an audio
+ * file, in the console or through the API, confirms they own it or have a
+ * license to use it on the site; each confirmation (by the customer, an
+ * Authorized User, or one of its API keys) is a §8.3 representation and
+ * warranty for that file, covering both the musical work and the sound
+ * recording. We store the confirmation and may rely on it, and do not
+ * verify it; we may remove or disable audio under §8.5 or the DMCA     Policy;
+ * a disabled file shows as unavailable in the player, and one     disabled on
+ * an upheld copyright notice counts toward the     repeat-infringer policy;
+ * the player has no download control, but we do     not warrant that published
+ * audio cannot be copied.   - AUP: content may not be music or other audio the
+ * customer does not own     and is not licensed to publish (commercial
+ * recordings, tracks ripped     from streaming services, video sites, radio or
+ * broadcasts, recordings     bought for personal listening); no knowingly
+ * false rights     confirmations; no extracting, recording or downloading
+ * audio someone     else publishes, including by working around a player with
+ * no download     control, to copy or redistribute it without permission.   -
+ * DMCA: "Audio and music." says what a notice about a track should
+ * identify (each page where it plays, the track title as the player     shows
+ * it, the work, and whether the claim is to the sound recording,     the
+ * composition, or both); "Our Response" says a disabled audio file     stops
+ * playing everywhere, shows as unavailable in the player and as     taken down
+ * in the owner's media library, and plays again if restored.   - Privacy, the
+ * DPA, Cookie Policy and Subprocessors are unchanged.
  *
- * The Terms, AUP and DMCA, and their `/legal` index cards, move "Last
- * updated" to October 10, 2026 (the Terms keep "Effective date: August 5,
- * 2026"), published at 00:51 Central that day. Zach approved the wording,
- * and publishing v14 with re-acceptance, on 2026-10-10.
+ * The Terms, AUP and DMCA, and their `/legal` index cards, move "Last updated"
+ * to October 10, 2026 (the Terms keep "Effective date: August 5, 2026"),
+ * published at 00:51 Central that day. Zach approved the wording, and
+ * publishing v14 with re-acceptance, on 2026-10-10.
  *
  * Publication-first: the Google Doc masters were edited and verified through
  * the Docs API, the pages were published, the live pages confirmed serving the
  * new text, and only then were the terms captured: 45676 bytes (`c2e6ef…`),
  * identical across two requests and a cache-busting query in two rounds, and
  * archived in `Acceptance-Snapshots/v14`. The Privacy Policy did not change,
- * so it was the control: the live privacy page reproduced its `v13` pin
- * (26874 bytes / `a88960…`) byte for byte before and after publication, and
- * keeps that pin. The AUP and DMCA are not acceptance-pinned.
+ * so it was the control: the live privacy page reproduced its `v13` pin (26874
+ * bytes / `a88960…`) byte for byte before and after publication, and keeps
+ * that pin. The AUP and DMCA are not acceptance-pinned.
+ *
+ * v15 (2026-10-14): hashed email matching for Aglyn's own ads (AGL-3780).
+ *
+ * - Privacy §3 "Sale"/"sharing" says that for account holders in the
+ * United States we send Google, Meta and LinkedIn a hashed (one-way
+ * scrambled) copy of the email address on the account, which each     platform
+ * matches against its own users and uses only to show or exclude     Aglyn
+ * ads, discarding addresses it cannot match; the categories shared     add
+ * "for account holders, that hashed email address"; and opting out of     it
+ * is by email to privacy@aglyn.com, which also removes the address from
+ * the lists already sent. That is the nightly audience sync AGL-3780 adds,
+ * which stays behind its release flag until this text is live.   -
+ * Subprocessors (not acceptance-pinned, so no hash here): the Meta Pixel,
+ * LinkedIn Insight Tag and Google Ads rows add the same matching to their
+ * purpose and the hashed email address to their data, with a change-log
+ * entry for October 14, 2026.   - The Terms, AUP, DMCA, DPA and Cookie Policy
+ * are unchanged.
+ *
+ * Privacy, Subprocessors and their `/legal` index cards move "Last updated" to
+ * October 14, 2026. The versions were first made live by script at 07:45
+ * Central, but the live pages kept serving the cached v13 text (the script
+ * calls no revalidate endpoint), so they were pointed back and re-published
+ * from the console's Publish now, which revalidates, at 09:37 Central. Zach
+ * approved the wording on 2026-10-13 and publishing it on 2026-10-14; the
+ * record is `Platform Docs/Legal/Proposed/2026-10-14-hashed-email-ad-matching/`.
+ *
+ * Publication-first: the Google Doc master was edited and verified through the
+ * Docs API, the pages were published, the live pages confirmed serving the new
+ * text, and only then was privacy captured: 27475 bytes (`0eb10f…`), identical
+ * across two requests and a cache-busting query in two rounds, and archived in
+ * `Acceptance-Snapshots/v15` beside an unchanged copy of the terms. The Terms
+ * did not change, so they were the control: the live terms page reproduced its
+ * `v14` pin (45676 bytes / `c2e6ef…`) byte for byte before and after
+ * publication, and keeps that pin.
+ *
+ * v16 (2026-10-14): ad conversion reporting on sites built with Aglyn
+ * (AGL-3799, disclosing AGL-3694).
+ *
+ *   - Privacy gains a paragraph after §1.4: when a site owner connects their
+ *     own Meta, TikTok or Pinterest ad account, Aglyn reports that site's
+ *     purchases and form submissions to it with the owner's own access token
+ *     (`libs/plugins/ad-conversions`). Only for visitors whose cookie choices
+ *     on that site allow advertising (where the law requires asking first,
+ *     only after they accept; elsewhere, unless they turned it off: an
+ *     `implied` record grants advertising, see `advertisingGrantedByStatus`)
+ *     and whose browser sends no Global Privacy Control signal. A purchase
+ *     carries the order id, value excluding tax, currency and items; a form
+ *     only that it was submitted. Email, phone, name, city, state, postal code
+ *     and country go as SHA-256 hashes; IP address, user agent, the page
+ *     address without its query string and the platform's own browser ids go
+ *     unhashed. No payment details; the consent and event records expire
+ *     after 14 days (Firestore TTL on `expiresAt`).
+ *   - Subprocessors (not acceptance-pinned): the merchant-connected sentence
+ *     adds live chat, website translation, review and local courier services.
+ *     The Terms, AUP, DMCA, DPA and Cookie Policy are unchanged.
+ *
+ * "Last updated" stays October 14, 2026, which v15 already set the same
+ * Central day, so no `/legal` index card moved. Published from the console's
+ * Publish now at 19:17 Central. The wording and the re-acceptance
+ * were approved on 2026-10-14; the record is
+ * `Platform Docs/Legal/Proposed/2026-10-14-ad-conversions-merchant-sites/`.
+ *
+ * Publication-first: the Google Doc master was edited and verified through the
+ * Docs API, the page was published, the live page confirmed serving the new
+ * text, and only then was privacy captured: 28594 bytes (`d3d51f…`),
+ * identical across two requests and a cache-busting query, and archived in
+ * `Acceptance-Snapshots/v16` beside an unchanged copy of the terms. The Terms
+ * did not change, so they were the control: the live terms page reproduced its
+ * `v14` pin (45676 bytes / `c2e6ef…`) byte for byte before and after
+ * publication, and keeps that pin.
  *
  * ## ONE snapshot in the tree, and why that is enough
  *
@@ -849,7 +919,7 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      'a88960fa9d4ebd92003a96c0f2aa8b5beb82fc751cd3c6189f8fa1bc3f468469',
-    bytes: 26874,
+      'd3d51f7304e8c45fe8696824ccd592bc3f824414ed7390f3e95ab4d1a976c587',
+    bytes: 28594,
   },
 ]

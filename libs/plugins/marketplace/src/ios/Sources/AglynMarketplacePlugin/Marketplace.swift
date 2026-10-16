@@ -25,6 +25,7 @@ let marketplaceInstalledScreen = "marketplace.installed"
 let marketplaceLicencesScreen = "marketplace.licenses"
 /// Publishing to the marketplace is a spec screen (marketplace.screens.json): what this site and the workspace can publish.
 let marketplacePublishScreen = "marketplace.publish"
+let marketplacePluginSettingsScreen = "marketplace.plugin-settings"
 
 /// Workspace roles with `plugins.install` (`installPlugins`): the admin tier and editors.
 let installRoles: Set<String> = ["owner", "admin", "editor"]
@@ -335,6 +336,15 @@ struct MarketplaceAPI {
       marketplaceLandingMessage(listing.artifactType, listing.name)
       ?? ((upgraded ? "Updated \"\(listing.name)\"" : "Installed \"\(listing.name)\"") + (version.map { " (v\($0))" } ?? "") + ".")
     return InstallOutcome(message: message, warning: answer?["hostAbiWarning"]?.stringValue)
+  }
+
+  /// Installs (or moves to the newest approved version) a plugin's pin: on `hostID` (`scope` host), or for the whole
+  /// workspace through that site (`scope` org). The console's plugin pages send no version; the route picks the newest.
+  func installPlugin(listingID: String, hostID: String, scope: InstallTarget) async throws -> InstallOutcome {
+    var body: [String: Any?] = ["listingId": listingID, "hostId": hostID]
+    if scope == .org { body["scope"] = "org" }
+    let answer = try await api.request("/api/marketplace/install-plugin", method: .post, body: JSONValue.from(body))
+    return InstallOutcome(message: "", warning: answer?["hostAbiWarning"]?.stringValue)
   }
 
   /// Removes a plugin's pin from `hostID`, or from the workspace with `scope` org.

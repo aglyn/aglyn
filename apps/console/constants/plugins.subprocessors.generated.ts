@@ -436,6 +436,42 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'help-desks',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "gorgias.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Gorgias account a site's owner or admin connects on the site's Setup → Integrations page, at the account's own subdomain (`{domain}.gorgias.com`), reached only from the help-desks plugin's adapter (`libs/plugins/help-desks/src/lib/providers/gorgias.ts`) with the merchant's own credential, to keep the site's buyers and their orders in front of the merchant's support agents and to open contact form messages as tickets.",
+        dataReceived: "For each person who has ordered at the site: email address, name, and phone number when it is in E.164 form. For each of their paid orders: number, date, status, total, refunded amount, currency, line items (product id, name, SKU, quantity and price) and a link to the order in the console. No payment details, and no person who never ordered. Also the merchant's own API key or token, which authenticates each call. Where the merchant switched on sending contact form messages: each message submitted through the site's forms, with every answer given, the sender's email address and name, the form's name and the page it was sent from.",
+      },
+      {
+        host: "reamaze.io",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Re:amaze account a site's owner or admin connects on the site's Setup → Integrations page, at the brand's own subdomain (`{brand}.reamaze.io`), reached only from the help-desks plugin's adapter (`libs/plugins/help-desks/src/lib/providers/reamaze.ts`) with the merchant's own credential, to keep the site's buyers and their orders in front of the merchant's support agents and to open contact form messages as tickets.",
+        dataReceived: "For each person who has ordered at the site: email address, name, and phone number when it is in E.164 form. For each of their paid orders: number, date, status, total, refunded amount, currency, line items (product id, name, SKU, quantity and price) and a link to the order in the console. No payment details, and no person who never ordered. Also the merchant's own API key or token, which authenticates each call. Where the merchant switched on sending contact form messages: each message submitted through the site's forms, with every answer given, the sender's email address and name, the form's name and the page it was sent from.",
+      },
+      {
+        host: "api.kustomerapp.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Kustomer account a site's owner or admin connects on the site's Setup → Integrations page, reached only from the help-desks plugin's adapter (`libs/plugins/help-desks/src/lib/providers/kustomer.ts`) with the merchant's own credential, to keep the site's buyers and their orders in front of the merchant's support agents and to open contact form messages as tickets.",
+        dataReceived: "For each person who has ordered at the site: email address, name, and phone number when it is in E.164 form. For each of their paid orders: number, date, status, total, refunded amount, currency, line items (product id, name, SKU, quantity and price) and a link to the order in the console. No payment details, and no person who never ordered. Also the merchant's own API key or token, which authenticates each call. Where the merchant switched on sending contact form messages: each message submitted through the site's forms, with every answer given, the sender's email address and name, the form's name and the page it was sent from.",
+      },
+      {
+        host: "gladly.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Gladly account a site's owner or admin connects on the site's Setup → Integrations page, at the organization's own subdomain (`{organization}.gladly.com`), reached only from the help-desks plugin's adapter (`libs/plugins/help-desks/src/lib/providers/gladly.ts`) with the merchant's own credential, to keep the site's buyers and their orders in front of the merchant's support agents and to open contact form messages as tickets.",
+        dataReceived: "For each person who has ordered at the site: email address, name, and phone number when it is in E.164 form. For each of their paid orders: number, date, status, total, refunded amount, currency, line items (product id, name, SKU, quantity and price) and a link to the order in the console. No payment details, and no person who never ordered. Also the merchant's own API key or token, which authenticates each call. Where the merchant switched on sending contact form messages: each message submitted through the site's forms, with every answer given, the sender's email address and name, the form's name and the page it was sent from.",
+      },
+      {
+        host: "api.richpanel.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Richpanel account a site's owner or admin connects on the site's Setup → Integrations page, reached only from the help-desks plugin's adapter (`libs/plugins/help-desks/src/lib/providers/richpanel.ts`) with the merchant's own credential, to keep the site's buyers and their orders in front of the merchant's support agents and to open contact form messages as tickets.",
+        dataReceived: "For each person who has ordered at the site: email address, name, and phone number when it is in E.164 form. For each of their paid orders: number, date, status, total, refunded amount, currency, line items (product id, name, SKU, quantity and price) and a link to the order in the console. No payment details, and no person who never ordered. Also the merchant's own API key or token, which authenticates each call. Where the merchant switched on sending contact form messages: each message submitted through the site's forms, with every answer given, the sender's email address and name, the form's name and the page it was sent from.",
+      },
+    ],
+  },
+  {
     pluginId: 'ad-conversions',
     subprocessors: [],
     hosts: [
@@ -571,6 +607,12 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         disposition: "not-a-subprocessor",
         reason: "Customer-chosen destination. The ShipMonk sandbox API of the store whose own API key a site's admin pastes, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/shipmonk.ts`. Used only by a deployment pointed at the sandbox (`SHIPMONK_ENVIRONMENT=sandbox`), where nothing real ships.",
         dataReceived: "For each paid order the merchant's store sends to the network: the order's number and date, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), and the items the network ships (SKU, name, quantity and unit price). Read back: the network's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each SKU it holds. Also the API key the merchant pasted, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "logistics-api.flexport.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The Flexport Logistics API of the account whose own API token a site's admin pastes in the store's settings, reached only from `libs/plugins/fulfillment-networks/src/lib/providers/flexport.ts` with that token, to send the orders the merchant routes to it, read their shipments and stock back, and register the webhooks that tell the store when an order ships. Flexport's sandbox is a separate account at the same address, chosen by the token.",
+        dataReceived: "For each paid order the merchant's store sends to Flexport: an opaque order reference, the shipping address (name, street, city, state, postal code, country, and the phone number and email address when the order has them), the ship method, and the items Flexport ships (Flexport's own product id, quantity and unit value for customs). Read back: the merchant's Flexport product list (SKU and Flexport's product id), Flexport's order and shipment records for those orders (status, carrier, tracking number and link, which items each parcel held) and its count of each product it holds. For each connection, the webhook address and a random token Flexport sends back with each event. Also the API token the merchant pasted, which authenticates each call. No payment details are sent.",
       },
     ],
   },
@@ -816,6 +858,12 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
         disposition: "not-a-subprocessor",
         reason: "Customer-chosen destination. Brightpearl's OAuth host, for a deployment that registered a Brightpearl app: its consent page, which the merchant's own browser opens to grant access to their own Brightpearl account, and its token endpoint, for the code exchange and each refresh (`libs/plugins/inventory-sync/src/lib/server/oauth.ts`). The grant names the account's own datacenter (a `brightpearl.com` or `brightpearlconnect.com` host), where every API call of `libs/plugins/inventory-sync/src/lib/providers/brightpearl.ts` then goes, with the same data as Cin7 Core and inFlow receive.",
         dataReceived: "At this host: the deployment's app reference (and client secret, for an app with confidential OAuth), the merchant's account code, and the authorization code or refresh token Brightpearl itself issued — credentials, never orders. At the account's datacenter: For each paid order the store sends to the system: its number and our reference, its date, the buyer's name and email address, the shipping address (name, street, city, state, postal code, country and phone), its items (SKU, name, quantity and unit price), shipping, discount, tax and total, under the customer the merchant chose. For stock kept in step from the store: each SKU's count adjustment at the merchant's chosen location. For products made in the system from the store: SKU, name, description, price, weight and barcode. Read back: the system's products (id, SKU, name, description, price, weight, barcode, status), its count of each SKU, its locations and customers, and the orders it recorded under our references. Also the merchant's own API key or access token, which authenticates each call. No payment details are sent.",
+      },
+      {
+        host: "api.ordoro.com",
+        disposition: "not-a-subprocessor",
+        reason: "Customer-chosen destination. The API of the merchant's own Ordoro account, reached with the Client ID and Client Secret of an API key the merchant made there and pasted into the store's settings (`libs/plugins/inventory-sync/src/lib/providers/ordoro.ts`), to read its warehouses, stock and products and to record the merchant's paid orders, count adjustments and products in it.",
+        dataReceived: "For each paid order the store sends to the system: its number and our reference, its date, the buyer's name and email address, the shipping address (name, street, city, state, postal code, country and phone), its items (SKU, name, quantity and unit price), shipping, discount, tax and total, under the customer the merchant chose. For stock kept in step from the store: each SKU's count adjustment at the merchant's chosen location. For products made in the system from the store: SKU, name, description, price, weight and barcode. Read back: the system's products (id, SKU, name, description, price, weight, barcode, status), its count of each SKU, its locations and customers, and the orders it recorded under our references. Also the merchant's own API key or access token, which authenticates each call. No payment details are sent.",
       },
     ],
   },

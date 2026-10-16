@@ -1,0 +1,129 @@
+{
+  "$comment": "The Zapier plugin's native screen, in the site's plugin settings: the Zaps that take this site's records (what each takes, the API key it connected with, how its last delivery went) and the way to disconnect one. Routes: GET and POST /api/zapier/hooks. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "zapier.connections",
+      "title": "Zapier",
+      "label": "Zapier",
+      "subtitle": "The Zaps that take this site’s records",
+      "icon": "bolt|bolt",
+      "scope": "site",
+      "order": 60,
+      "zones": [
+        "sitePluginSettings"
+      ],
+      "cardSlot": "hostSettings",
+      "requires": "params.pluginId == zapier",
+      "load": {
+        "hooks": "/api/zapier/hooks?hostId={site.id}"
+      },
+      "constants": {
+        "events": [
+          {
+            "id": "order.paid",
+            "label": "Order paid"
+          },
+          {
+            "id": "order.fulfilled",
+            "label": "Order shipped"
+          },
+          {
+            "id": "order.delivered",
+            "label": "Order delivered"
+          },
+          {
+            "id": "order.refunded",
+            "label": "Order refunded"
+          },
+          {
+            "id": "order.cancelled",
+            "label": "Order canceled"
+          },
+          {
+            "id": "booking.created",
+            "label": "Booking confirmed"
+          },
+          {
+            "id": "booking.rescheduled",
+            "label": "Booking rescheduled"
+          },
+          {
+            "id": "booking.canceled",
+            "label": "Booking canceled"
+          },
+          {
+            "id": "contact.created",
+            "label": "New contact"
+          },
+          {
+            "id": "form.submitted",
+            "label": "Form submitted"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "!data.hooks.configured",
+          "text": "Zapier is not available on this deployment yet."
+        },
+        {
+          "type": "actions",
+          "id": "open",
+          "when": "data.hooks.configured && data.hooks.appUrl",
+          "items": [
+            {
+              "id": "zapier",
+              "label": "Open in Zapier",
+              "icon": "arrow.up.right.square|open_in_new",
+              "link": "{data.hooks.appUrl}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "hooks",
+          "title": "Connected Zaps",
+          "when": "data.hooks.configured",
+          "items": "data.hooks.hooks",
+          "primary": "{const.events[id=item.events.0].label|item.events.0}",
+          "secondary": "Last sent {item.lastDeliveryAt:datetime}",
+          "tertiary": "{item.keyName}",
+          "icon": "bolt|bolt",
+          "badges": [
+            {
+              "text": "Delivering",
+              "tone": "success",
+              "when": "item.lastDeliveryStatus == delivered"
+            },
+            {
+              "text": "Last delivery failed",
+              "tone": "warning",
+              "when": "item.lastDeliveryStatus == failed"
+            }
+          ],
+          "empty": "No Zaps take this site’s records yet.",
+          "footer": "Connect with an API key from your organization’s settings, holding the scopes your Zaps read: orders, bookings, contacts or form submissions.",
+          "actions": [
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "when": "data.hooks.canManage",
+              "confirm": "Disconnect this Zap? It stops receiving this site’s records. Turn the Zap on again in Zapier to reconnect it.",
+              "url": "/api/zapier/hooks",
+              "body": {
+                "hostId": "{site.id}",
+                "hookId": "{item.id}"
+              },
+              "success": "The Zap is disconnected."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

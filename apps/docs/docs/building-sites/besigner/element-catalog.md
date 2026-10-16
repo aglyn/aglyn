@@ -458,10 +458,11 @@ so every piece can be selected and styled with the **Styles** panel on its own:
 | **Radio Group** / **Radio** | A set of choices of which one may be picked. |
 | **Choice Label** | The words beside a Checkbox or Radio placed inside it. |
 | **Rating** | Stars a visitor picks. |
+| **Date Picker** / **Time Picker** | A date picked from a calendar, or a time picked from a clock. |
 
 The group's presets put these together: **Text field**, **Email field**, **Message
-field**, **Dropdown field**, **Radio choice field**, **Checkbox**, **Rating field** and
-**Helper Text**, plus **Contact Form**, **Contact Section** and **Marketing consent**.
+field**, **Dropdown field**, **Radio choice field**, **Checkbox**, **Rating field**, **Date
+field**, **Time field** and **Helper Text**, plus **Contact Form**, **Contact Section** and **Marketing consent**.
 Every setting is described under
 [Field types](../../content-and-data/forms/overview.md#field-types); to design the button
 yourself, see [Style a field](../../content-and-data/forms/overview.md#style-a-field).

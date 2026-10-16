@@ -17,8 +17,8 @@
  */
 
 /**
- * The native apps' theme tokens, compiled from the console's own MUI theme
- * (AGL-3620, AGL-3651).
+ * The native apps' theme tokens, and the docs site's link and button colors,
+ * compiled from the console's own MUI theme (AGL-3620, AGL-3651).
  *
  *   node tools/scripts/generate-mobile-theme-tokens.mjs           # write
  *   node tools/scripts/generate-mobile-theme-tokens.mjs --check   # drift guard
@@ -44,6 +44,7 @@ import {
   SWIFT_TOKENS_FILE,
   swiftTokensContent,
 } from './lib/native-theme.mjs'
+import { DOCS_TOKENS_FILE, docsTokensContent } from './lib/docs-theme.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const THEME_SOURCE = 'libs/shared/ui/theme/src/lib/console.theme.ts'
@@ -59,6 +60,8 @@ async function main() {
   const outputs = [
     { file: SWIFT_TOKENS_FILE, content: swiftTokensContent(native) },
     { file: KOTLIN_TOKENS_FILE, content: kotlinTokensContent(native) },
+    // The docs site's link and button colors, from the same resolved theme.
+    { file: DOCS_TOKENS_FILE, content: docsTokensContent(light, dark, await jiti.import('@mui/material/styles')) },
   ]
   if (process.argv.includes('--check')) {
     const drifted = outputs.filter(({ file, content }) => {

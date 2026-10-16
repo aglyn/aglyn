@@ -137,4 +137,69 @@ final class ScreenPasskeyTests: XCTestCase {
     XCTAssertEqual(canAdd(ScreenSession(claims: company, passkeyRelyingParty: "aglyn.com")), false)  // a company login
     XCTAssertEqual(ScreenSession(passkeyRelyingParty: "aglyn.com").context(nil, params: [:])["app"]?["passkeyRp"], "aglyn.com")
   }
+
+  func testSigningInWithAPasskeyAsksTheRoutesWithoutASessionAndReturnsTheCustomToken() async throws {
+    let transport = RecordingTransport(responses: [
+      (200, #"{"challengeId":"c9","options":{"rpId":"aglyn.com","challenge":"Y2hhbGxlbmdl"}}"#), (200, #"{"token":"custom-1"}"#),
+    ])
+    let signed = Self.registration(origin: "android:apk-key-hash:AbC")
+    var offered: JSONValue?
+    let token = try await PasskeySignIn.token(api: api(transport), relyingParty: "aglyn.com") { options in
+      offered = options
+      return signed
+    }
+    XCTAssertEqual(token, "custom-1")
+    XCTAssertEqual(offered?["challenge"], "Y2hhbGxlbmdl")
+    XCTAssertEqual(transport.requests.map { $0.url?.path }, ["/api/auth/passkeys/signin/options", "/api/auth/passkeys/signin/verify"])
+    // Nobody is signed in yet: neither request carries a token, and the routes read the ceremony's origin.
+    XCTAssertNil(transport.requests[0].value(forHTTPHeaderField: "Authorization"))
+    XCTAssertNil(transport.requests[1].value(forHTTPHeaderField: "Authorization"))
+    XCTAssertEqual(transport.requests[0].value(forHTTPHeaderField: "Origin"), "https://aglyn.com")
+    XCTAssertEqual(transport.requests[1].value(forHTTPHeaderField: "Origin"), "android:apk-key-hash:AbC")
+    XCTAssertEqual(try XCTUnwrap(transport.requests[1].httpBody.flatMap(JSONValue.decode))["challengeId"], "c9")
+    XCTAssertEqual(try XCTUnwrap(transport.requests[1].httpBody.flatMap(JSONValue.decode))["response"], signed)
+  }
+
+  func testAFailedPasskeySignInSaysWhatTheConsoleSays() async throws {
+    XCTAssertEqual(PasskeySignIn.message(for: PasskeyCancelled()), "No passkey was used to sign in.")
+    let refused = RecordingTransport(responses: [
+      (200, #"{"challengeId":"c9","options":{}}"#), (401, #"{"error":"passkey-signin-failed"}"#),
+    ])
+    do {
+      _ = try await PasskeySignIn.token(api: api(refused), relyingParty: "aglyn.com") { _ in Self.registration(origin: "https://aglyn.com") }
+      XCTFail("expected a refusal")
+    } catch {
+      XCTAssertTrue(PasskeySignIn.failed(error))
+      XCTAssertEqual(
+        PasskeySignIn.message(for: error),
+        "That passkey could not be used to sign in. Try another sign-in method, then re-add the passkey from Manage account → Security.")
+    }
+    for (reason, words) in [
+      ("rate-limited", "Too many passkey attempts from this network. Wait a few minutes and try again."),
+      ("bad-origin", "Passkey sign-in is not available on this address."), ("something-else", "Passkey sign-in failed."),
+    ] {
+      let error = ConsoleAPIError(status: 400, message: reason, body: ["error": .string(reason)])
+      XCTAssertEqual(PasskeySignIn.message(for: error), words)
+    }
+    // A closed prompt asks nothing further, and a Firebase refusal after the token keeps the sign-in words.
+    let closed = RecordingTransport(responses: [(200, #"{"challengeId":"c9","options":{}}"#)])
+    do {
+      _ = try await PasskeySignIn.token(api: api(closed), relyingParty: "aglyn.com") { _ in throw PasskeyCancelled() }
+      XCTFail("expected the prompt to be closed")
+    } catch {
+      XCTAssertTrue(error is PasskeyCancelled)
+      XCTAssertEqual(closed.requests.count, 1)
+    }
+    XCTAssertFalse(PasskeySignIn.failed(IdentityToolkitError(code: "USER_DISABLED", status: 400)))
+  }
+
+  func testTheSystemsSignInRequestAndAssertionAreWhatTheServerVerifies() throws {
+    let request = try SystemPasskeys.request(forAssertion: ["rpId": "aglyn.com", "challenge": "Y2hhbGxlbmdl", "userVerification": "required"])
+    XCTAssertEqual(request.relyingPartyIdentifier, "aglyn.com")
+    XCTAssertEqual(request.challenge, Data("challenge".utf8))
+    XCTAssertEqual(request.userVerificationPreference, .required)
+    XCTAssertThrowsError(try SystemPasskeys.request(forAssertion: ["challenge": "Y2hhbGxlbmdl"])) {
+      XCTAssertEqual($0 as? SystemPasskeys.OptionsError, SystemPasskeys.OptionsError(field: "rpId"))
+    }
+  }
 }

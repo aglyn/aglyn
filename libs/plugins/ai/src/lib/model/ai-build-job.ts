@@ -623,6 +623,19 @@ export function aiBuildDegradation(
       result.notes.push(`Its submissions arrive in the Inbox only: the dataset “${dep.label}” could not be created.`)
       continue
     }
+    // An item that links pages this build makes (a menu's entries, AGL-3728)
+    // is built with the ones it made and without the ones it could not
+    // (AGL-3832), and skipped only when it made none of them.
+    const madeAPage = unit.deps.some((one) => {
+      const made = rows.get(one)
+      return !!bySlot.get(one)?.screen && !!made && aiBuildItemDelivered(made)
+    })
+    if (!unit.screen && dep.screen && madeAPage) {
+      result.degradedBy.push(slot)
+      result.dropped.add(dep.label.toLowerCase())
+      result.notes.push(`Built without the ${noun} “${dep.label}”: it could not be created.`)
+      continue
+    }
     if (!unit.screen && degrade === 'omit') {
       result.skip = `Not built: the ${noun} “${dep.label}” it needs could not be created.`
       result.degradedBy.push(slot)

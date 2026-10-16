@@ -17,6 +17,7 @@
 
 import { DEFAULT_SITE_IMAGES } from '@aglyn/aglyn/app-utils/default-site'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
+import { aiLayoutLabel, aiLayoutSpeaksOtherThanEnglish } from './ai-layout-labels'
 
 /**
  * THE PICTURES OF A LANGUAGE PAGE (AGL-3660).
@@ -32,13 +33,26 @@ import type { NodesMap } from '@aglyn/aglyn/types/nodes'
  * 1. A stock photo searched for by the slot's own description and copied into
  *    the site's media library (`jobs/ai-layout-stock-photos.ts`), when the
  *    deployment has a stock-photo key.
- * 2. Otherwise, or when the search finds nothing fitting, one of the STARTER
- *    PHOTOS every new site is born with (`DEFAULT_SITE_IMAGES`, served at
- *    `/_static/starter/` by the tenant and the console alike, credited in the
- *    CREDITS file beside them). They are the platform's own files, so a
- *    visitor's browser asks no other host for them.
+ * 2. Where the library cannot be asked at all — no stock-photo key, the
+ *    library down, refusing or out of time before it answered — one of the
+ *    STARTER PHOTOS every new site is born with (`DEFAULT_SITE_IMAGES`,
+ *    served at `/_static/starter/` by the tenant and the console alike,
+ *    credited in the CREDITS file beside them). They are the platform's own
+ *    files, so a visitor's browser asks no other host for them, and a
+ *    starter reads better than no picture when there is no library.
  *
- * The slot keeps the alt text the model wrote whichever source fills it.
+ * Where the library answered and nothing in it fits a slot
+ * ({@link AI_LAYOUT_NO_PHOTO}), the slot keeps the compiler's no-photo
+ * treatment — its frame with its icon, or its section's own band behind a
+ * cover — and never a starter: the beta.257 Copper Kettle Catering start
+ * (2026-10-15) opened a barbecue caterer's home page on the starters'
+ * pottery workbench (AGL-3831). An empty picture draws nothing on the
+ * published page, and the Besigner shows the owner where to choose one.
+ *
+ * A slot keeps the alt text the model wrote only when it describes the photo
+ * placed: a stock photo that is not what it says is described by what it is
+ * (`aiStockPhotoAlt`), and a starter photo always by its own words, since
+ * the model never wrote for it (AGL-3831).
  */
 
 /** What a picture slot is for, read from where it sits and what it says. */
@@ -72,6 +86,12 @@ export interface AiLayoutPicturePhoto {
   src: string
   width: number
   height: number
+  /**
+   * What the photo shows, where the slot's own alt text does not say it: the
+   * slot takes it in place of the words the model wrote before the photo was
+   * found. Absent, the slot's words describe it.
+   */
+  alt?: string
 }
 
 /** Words that say a picture shows people, or a section is about them. */
@@ -178,8 +198,17 @@ export function aiLayoutPictureSlots(
   return slots
 }
 
-/** The starter photos, by name. */
+/** The starter photos, by name, each with the words that describe it. */
 export const AI_LAYOUT_STARTER_PHOTOS = DEFAULT_SITE_IMAGES
+
+/**
+ * A source's answer for a slot the library answered and nothing in it fits
+ * (AGL-3831): the slot keeps its no-photo treatment rather than take a
+ * starter. Its source is empty, so a caller reading `src` to fill something
+ * that must hold a photo (a product's, a record's) falls back as it would on
+ * `null`.
+ */
+export const AI_LAYOUT_NO_PHOTO: Readonly<AiLayoutPicturePhoto> = Object.freeze({ src: '', width: 0, height: 0 })
 
 type StarterName = keyof typeof AI_LAYOUT_STARTER_PHOTOS
 
@@ -261,7 +290,7 @@ export function aiLayoutStarterPhotos(
   })
   return names.map((name) => {
     const photo = AI_LAYOUT_STARTER_PHOTOS[name as StarterName]
-    return { src: photo.src, width: photo.width, height: photo.height }
+    return { src: photo.src, width: photo.width, height: photo.height, alt: photo.alt }
   })
 }
 
@@ -269,8 +298,8 @@ export function aiLayoutStarterPhotos(
  * The page with each slot filled by its photo: the `image` given its source,
  * its intrinsic size and how it loads (the hero eagerly, as the starter home
  * page loads its own), and the placeholder icon taken out of the frame. The
- * alt text is kept as the model wrote it. A slot given no photo is left as
- * the compiler wrote it.
+ * alt text is kept as the model wrote it unless the photo brings its own
+ * words. A slot given no photo is left as the compiler wrote it.
  */
 export function aiLayoutPlacePictures(
   nodes: NodesMap,
@@ -296,6 +325,7 @@ export function aiLayoutPlacePictures(
         src: photo.src,
         intrinsicWidth: photo.width,
         intrinsicHeight: photo.height,
+        ...(photo.alt?.trim() ? { alt: photo.alt.trim() } : {}),
         ...(index === lead && slot.role === 'hero' ? { loading: 'eager' } : {}),
       },
     }
@@ -313,8 +343,11 @@ export function aiLayoutPlacePictures(
 
 /**
  * A source of photos found for the slots themselves — a stock search copied
- * into the site's library — answering one photo or `null` per slot, in order.
- * It may throw; a slot it leaves unfilled takes a starter photo.
+ * into the site's library — answering per slot, in order: a photo; or
+ * {@link AI_LAYOUT_NO_PHOTO} where the library answered and nothing fits,
+ * which leaves the slot without a photo; or `null` where the library could
+ * not be asked, which takes a starter photo. It may throw, and then every
+ * slot takes a starter.
  */
 export type AiLayoutPictureSource = (
   slots: readonly AiLayoutPictureSlot[],
@@ -322,9 +355,10 @@ export type AiLayoutPictureSource = (
 
 /**
  * Fills a stored page's empty picture slots (AGL-3660): from `source` where
- * one is given and it answers, else from the starter photos. Never throws,
- * and never leaves a page worse than it came: a picture is decoration, and a
- * job never fails over one.
+ * one is given and it answers; a slot it answers with nothing fitting stays
+ * without a photo; every other slot takes a starter photo, described by its
+ * own words (AGL-3831). Never throws, and never leaves a page worse than it
+ * came: a picture is decoration, and a job never fails over one.
  */
 export async function aiResolveLayoutPictures(
   nodes: NodesMap,
@@ -335,6 +369,8 @@ export async function aiResolveLayoutPictures(
     /** A per-job word, so two sites do not open with the same photo. */
     seed: string
     source?: AiLayoutPictureSource | null
+    /** The site's language (AGL-3750); a starter photo's English words are not its own. */
+    language?: string
   },
 ): Promise<NodesMap> {
   try {
@@ -352,11 +388,20 @@ export async function aiResolveLayoutPictures(
         found = []
       }
     }
-    const starters = aiLayoutStarterPhotos(slots, input.seed)
+    // The starters' words are English; a site in another language says it
+    // shows an illustrative photo, true of any photo, as a stock photo's does.
+    const otherLanguage = aiLayoutSpeaksOtherThanEnglish(input.language)
+    const starters = aiLayoutStarterPhotos(slots, input.seed).map((photo) =>
+      otherLanguage ? { ...photo, alt: aiLayoutLabel('illustrativePhoto', input.language) } : photo,
+    )
     return aiLayoutPlacePictures(
       nodes,
       slots,
-      slots.map((_slot, index) => found[index] ?? starters[index]),
+      slots.map((_slot, index) => {
+        const answer = found[index]
+        if (answer) return answer.src ? answer : null
+        return starters[index] ?? null
+      }),
     )
   } catch (error) {
     console.error('ai layout pictures: the page keeps its empty picture slots', { error })

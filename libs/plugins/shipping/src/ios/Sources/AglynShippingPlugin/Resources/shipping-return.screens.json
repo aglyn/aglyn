@@ -1,0 +1,202 @@
+{
+  "$comment": "A return's prepaid label, in the return's services: buy the label from a rate and attach it to the return. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "shipping.returnLabel",
+      "title": "Return label",
+      "label": "Return label",
+      "icon": "printer|print",
+      "scope": "site",
+      "zones": [
+        "returnDetail"
+      ],
+      "order": 50,
+      "constants": {
+        "cheapest": "cheapest"
+      },
+      "load": {
+        "ret": {
+          "doc": "hosts/{site.id}/returns/{params.returnId}"
+        },
+        "order": {
+          "orderZone": "{params.orderId}"
+        },
+        "avail": {
+          "optional": true,
+          "url": "/api/shipping/availability?hostId={site.id}"
+        },
+        "settings": {
+          "optional": true,
+          "url": "/api/shipping/settings?hostId={site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "off",
+          "tone": "info",
+          "when": "data.avail.available == false",
+          "text": "Shipping labels are not set up on this site."
+        },
+        {
+          "type": "notice",
+          "id": "done",
+          "tone": "info",
+          "when": "data.ret.returnLabel",
+          "text": "A return label is already attached: {data.ret.returnLabel.carrier} {data.ret.returnLabel.trackingNumber}."
+        },
+        {
+          "type": "notice",
+          "id": "hint",
+          "tone": "info",
+          "when": "!data.ret.returnLabel && data.ret.status == requested,approved",
+          "text": "Buy a prepaid label for the buyer to send these items back."
+        },
+        {
+          "type": "actions",
+          "id": "buy",
+          "when": "!data.ret.returnLabel && data.ret.status == requested,approved",
+          "items": [
+            {
+              "id": "buy",
+              "label": "Buy return label",
+              "icon": "printer|print",
+              "when": "data.avail.available != false && data.order.shippingAddress",
+              "prompt": [
+                {
+                  "fieldsFrom": {
+                    "items": "data.ret.lines",
+                    "each": [
+                      {
+                        "key": "qty_{item.lineItemId}",
+                        "label": "{item.name} (of {item.quantity})",
+                        "kind": "number",
+                        "integer": true,
+                        "min": 0,
+                        "max": "{item.quantity}",
+                        "initial": "{item.quantity}"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "presetId",
+                  "label": "Box",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "{data.settings.settings.defaultPackageId|data.settings.settings.packages.0.id}",
+                  "options": [
+                    {
+                      "value": "custom",
+                      "label": "Another size"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.settings.settings.packages",
+                    "value": "{item.id}",
+                    "label": "{item.name} ({item.lengthCm} × {item.widthCm} × {item.heightCm} cm)"
+                  }
+                },
+                {
+                  "key": "lengthCm",
+                  "label": "Length (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "widthCm",
+                  "label": "Width (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "heightCm",
+                  "label": "Height (cm)",
+                  "kind": "number",
+                  "min": 0.1,
+                  "when": "form.presetId == custom"
+                },
+                {
+                  "key": "weight",
+                  "label": "Weight (g)",
+                  "kind": "number",
+                  "min": 1,
+                  "help": "Summed from the products; change it to the scale’s reading."
+                }
+              ],
+              "url": "/api/shipping/rates",
+              "body": {
+                "hostId": "{site.id}",
+                "recordId": "{params.orderId}",
+                "kind": "return",
+                "lines": {
+                  "$gather": {
+                    "from": "{form}",
+                    "prefix": "qty_",
+                    "key": "lineIndex",
+                    "value": "quantity",
+                    "skipEmpty": true
+                  }
+                },
+                "package": {
+                  "presetId": "{form.presetId}",
+                  "lengthCm": "{form.lengthCm}",
+                  "widthCm": "{form.widthCm}",
+                  "heightCm": "{form.heightCm}",
+                  "weightGrams": "{form.weight}"
+                }
+              },
+              "then": {
+                "label": "Buy return label",
+                "prompt": [
+                  {
+                    "key": "rateId",
+                    "label": "Service",
+                    "kind": "select",
+                    "required": true,
+                    "initial": "{response.rates[badges~=const.cheapest].rateId|response.rates.0.rateId}",
+                    "options": [],
+                    "optionsFrom": {
+                      "items": "response.rates",
+                      "value": "{item.rateId}",
+                      "label": "{item.label} · {item.amountCents:cents/item.currency} {item.estimatedDays:plural/day} {item.badges}"
+                    },
+                    "help": "{response.messages.0}"
+                  }
+                ],
+                "url": "/api/shipping/labels/buy",
+                "body": {
+                  "hostId": "{site.id}",
+                  "recordId": "{params.orderId}",
+                  "shipmentId": "{response.shipmentId}",
+                  "rateId": "{form.rateId}",
+                  "attemptKey": "{response.shipmentId}-{form.rateId}"
+                },
+                "open": "label.labelUrl",
+                "success": "Label bought",
+                "then": {
+                  "label": "Attach the label",
+                  "url": "/api/commerce/returns",
+                  "body": {
+                    "hostId": "{site.id}",
+                    "returnId": "{params.returnId}",
+                    "action": "attach-label",
+                    "label": {
+                      "carrier": "{response.label.carrier}",
+                      "trackingNumber": "{response.label.trackingNumber}",
+                      "labelUrl": "{response.label.labelUrl}",
+                      "trackingUrl": "{response.label.trackingUrl}"
+                    }
+                  },
+                  "success": "Return label bought and attached"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

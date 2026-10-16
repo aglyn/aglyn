@@ -80,6 +80,7 @@ export function describe(status: PlatformMarketingConsentStatus): string {
 /** Why a bounce-class hold is in place, as the person would say it. */
 const PAUSED_BECAUSE: Record<string, string> = {
   bounce: 'an earlier email to this address could not be delivered',
+  soft_bounce: 'an earlier email to this address could not be delivered',
   complaint: 'an earlier email was reported as spam',
   erasure: 'you asked for this address to be erased from the mailing list',
 }

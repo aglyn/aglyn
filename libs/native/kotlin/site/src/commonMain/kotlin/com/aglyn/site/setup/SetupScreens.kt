@@ -28,6 +28,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -56,7 +57,10 @@ import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.Live
 import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.ConsoleScope
+import com.aglyn.pluginhost.LocalSeoZone
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.NativeWidget
+import com.aglyn.pluginhost.SeoZone
 import com.aglyn.site.media.MediaImageField
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
@@ -106,12 +110,18 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
   val hostId = context.hostId ?: return
   val host by remember(hostId, context.firestore) { context.firestore.observeDoc("hosts/$hostId") }.collectAsState(Live.Loading)
   val api = remember(hostId, context.api, context.writer) { HostSettingsApi(context.api, context.writer, hostId) }
+  val org by remember(context.orgId, context.firestore) { context.firestore.observeDoc("orgs/${context.orgId}") }.collectAsState(Live.Loading)
+  // The cards plugins running on this site put in the `hostSettings` zone: the Integrations section exists while there is one.
+  val running = ((host as? Live.Ready)?.value?.data)?.let { hostData ->
+    (org as? Live.Ready)?.let { runningPlugins(it.value?.data, hostData) }
+  }
+  val integrations = running?.let { integrationWidgets(context.slotWidgets(INTEGRATIONS_SLOT), it) }.orEmpty()
   AglynListDetail(
     initialSelected = initialSection?.let { SetupSection.of(it).id },
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ListHeader("Setup")
-        SetupSection.entries.forEach { section ->
+        SetupSection.entries.filter { it != SetupSection.INTEGRATIONS || integrations.isNotEmpty() }.forEach { section ->
           AglynListItem(
             title = section.title,
             supporting = section.supporting,
@@ -147,6 +157,7 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
                 SetupSection.TRACKING -> TrackingSection(doc.data, api, canEdit)
                 SetupSection.THEME -> ThemeSection(context, hostId, doc.data, api, canEdit)
                 SetupSection.EMAILS -> EmailsSection(context, hostId, api, canEdit)
+                SetupSection.INTEGRATIONS -> IntegrationsSection(context, integrations)
               }
             }
           }
@@ -181,11 +192,16 @@ private fun HostTextCard(
   clearable: Set<String> = emptySet(),
   validate: (Map<String, String>) -> Boolean = { true },
   transform: (Map<String, String>) -> Map<String, Any?> = { it },
+  /** Values a plugin's widget proposed for this page's form, staged over the stored ones. */
+  draft: FormDraft? = null,
   content: @Composable (SnapshotStateMap<String, String>) -> Unit,
 ) {
   val stored = remember(host) { paths.associateWith { host.text(it) } }
   val fields = rememberFields(stored)
   val runner = rememberRunner()
+  if (draft != null) {
+    LaunchedEffect(draft.version) { paths.forEach { path -> draft.values[path]?.let { fields[path] = it } } }
+  }
   FormCard(
     title = title,
     description = description,
@@ -327,7 +343,13 @@ private fun LanguagesCard(host: Map<String, Any?>, api: HostSettingsApi, canEdit
 private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<String, Any?>, api: HostSettingsApi, canEdit: Boolean) {
   val c = Contracts
   // What is wrong with the site's pages and metadata comes first, as the console's SEO section lists it.
-  SeoCheckCard(context, hostId, host)
+  var checkedKeywords by remember { mutableStateOf("") }
+  SeoCheckCard(context, hostId, host, onChecked = { checkedKeywords = it })
+  // The `hostSeo` zone: what a plugin adds under the check, and may propose values for the forms below.
+  val draft = remember { FormDraft() }
+  @Suppress("UNCHECKED_CAST")
+  val zone = remember(host, draft, checkedKeywords) { SeoZone(host.at("seo") as? Map<String, Any?>, checkedKeywords, draft::propose) }
+  CompositionLocalProvider(LocalSeoZone provides zone) { SlotCards(context, "hostSeo") }
   HostTextCard(
     "Search appearance",
     host,
@@ -337,6 +359,7 @@ private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<S
     description = "How your site reads in search results and link previews.",
     clearable = setOf("seo.titlePattern"),
     validate = { f -> listOf("seo.title", "seo.description", "seo.separator").all { !f[it].isNullOrBlank() } },
+    draft = draft,
   ) { f ->
     CountedTextField("Title", f["seo.title"].orEmpty(), { f["seo.title"] = it }, max = SeoLimits.TITLE, required = true, enabled = canEdit)
     CountedTextField("Description", f["seo.description"].orEmpty(), { f["seo.description"] = it }, max = SeoLimits.DESCRIPTION, required = true, multiline = true, minLines = 2, enabled = canEdit)
@@ -365,7 +388,7 @@ private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<S
     CountedTextField("Image description", f["seo.imageAlt"].orEmpty(), { f["seo.imageAlt"] = it }, max = SeoLimits.IMAGE_ALT, enabled = canEdit, supporting = "What the social image shows, for screen readers")
   }
   val entityPaths = listOf("seo.entity.type", "seo.entity.name", "seo.entity.description", "seo.entity.url", "seo.entity.email", "seo.entity.telephone", "seo.entity.contactType", "seo.entity.logo")
-  HostTextCard("Business profile", host, entityPaths, api, canEdit, description = "Who runs the site, as search engines read it.") { f ->
+  HostTextCard("Business profile", host, entityPaths, api, canEdit, description = "Who runs the site, as search engines read it.", draft = draft) { f ->
     SelectField("This site is run by", ENTITY_TYPES.map { SelectOption(it.first, it.second) }, f["seo.entity.type"]?.ifEmpty { null }, { f["seo.entity.type"] = it.orEmpty() }, enabled = canEdit, noneLabel = "Not set")
     CountedTextField("Name", f["seo.entity.name"].orEmpty(), { f["seo.entity.name"] = it }, enabled = canEdit)
     CountedTextField("Description", f["seo.entity.description"].orEmpty(), { f["seo.entity.description"] = it }, max = SeoLimits.ENTITY_DESCRIPTION, multiline = true, enabled = canEdit)
@@ -390,6 +413,7 @@ private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<S
     api,
     canEdit,
     description = "What AI assistants read about when and how to send people to your site (llms.txt).",
+    draft = draft,
   ) { f ->
     CountedTextField("When to use this site", f["seo.agent.whenToUse"].orEmpty(), { f["seo.agent.whenToUse"] = it }, max = SeoLimits.AGENT, multiline = true, enabled = canEdit)
     CountedTextField("How to use this site", f["seo.agent.howToUse"].orEmpty(), { f["seo.agent.howToUse"] = it }, max = SeoLimits.AGENT, multiline = true, enabled = canEdit)
@@ -566,7 +590,53 @@ private fun ThemeSection(context: NativePluginContext, hostId: String, host: Map
   }
   ThemeLibraryCard(context, hostId, host, api, (load as? Load.Ready)?.value?.presets.orEmpty(), context.siteRole in THEME_LIBRARY_ROLES)
   ThemeEditorCard(load, onRetry = { attempt++ }, api, canEdit)
+  ThemeChangesCard(load, installed = themeSelectionOf(host).kind == "installed", api, canEdit)
   FontInstallerCard(context, hostId, canEdit)
+}
+
+/**
+ * "What you have changed": every value this site set on top of its theme, the
+ * theme's own beside it, and a Reset for each. Shown once the site has a change,
+ * and always for a theme installed from the marketplace.
+ */
+@Composable
+private fun ThemeChangesCard(load: Load<ThemeEditorLoad>, installed: Boolean, api: HostSettingsApi, canEdit: Boolean) {
+  val ready = (load as? Load.Ready)?.value ?: return
+  if (!installed && ready.changes.isEmpty()) return
+  val runner = rememberRunner()
+  val theme = ready.themeName ?: "its theme"
+  SectionCard("What you have changed") {
+    if (ready.stale) {
+      NoticeBanner(
+        "These changes were made against a different theme. They still apply, because a brand color usually still means the same thing, but a component style written for another theme often does not. Check them, or clear them all with Undo all edits.",
+        StatusTone.WARNING,
+      )
+    }
+    runner.error?.let { NoticeBanner(it, StatusTone.ERROR) }
+    if (ready.changes.isEmpty()) {
+      Text("Nothing: this site is running $theme exactly as its publisher shipped it. Anything you change is stored as your change on top.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else {
+      Text(
+        "${ready.changes.size} value${if (ready.changes.size == 1) "" else "s"} ${if (ready.changes.size == 1) "differs" else "differ"} from $theme.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      ready.changes.forEachIndexed { index, change ->
+        if (index > 0) HorizontalDivider()
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f)), modifier = Modifier.testTag("theme-change-${change.path}")) {
+          Column(Modifier.weight(1f)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
+              Text(change.label, style = MaterialTheme.typography.bodyLarge)
+              change.scheme?.let { StatusChip(it, StatusTone.NEUTRAL) }
+            }
+            Text("Theme: ${change.themeValue ?: "not set"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Yours: ${change.overrideValue ?: "not set"}", style = MaterialTheme.typography.bodySmall)
+          }
+          TextButton(onClick = { runner.run { api.resetThemeChange(change.path) } }, enabled = canEdit && !runner.busy) { Text("Reset") }
+        }
+      }
+    }
+  }
 }
 
 @Composable
@@ -847,6 +917,25 @@ private fun NumberField(range: ThemeRange, value: Double?, enabled: Boolean, onV
     supporting = "${range.min}–${range.max}; empty uses the theme's own",
     keyboardType = KeyboardType.Number,
   )
+}
+
+// --- Integrations ---------------------------------------------------------
+
+/**
+ * The tools this site connects to (AGL-3711): a card for each plugin running on the site that has one in the
+ * `hostSettings` zone, which opens the plugin's own settings screen. The page never names the plugins.
+ */
+@Composable
+private fun IntegrationsSection(context: NativePluginContext, widgets: List<NativeWidget>) {
+  Text(
+    "Connect this site to the tools you already use.",
+    style = MaterialTheme.typography.bodyMedium,
+    color = MaterialTheme.colorScheme.onSurfaceVariant,
+  )
+  if (widgets.isEmpty()) NoticeBanner("Nothing to connect for this site yet.", StatusTone.INFO)
+  widgets.forEach { widget ->
+    Box(Modifier.fillMaxWidth().testTag("zone-widget-${widget.id}")) { widget.content(context) }
+  }
 }
 
 // --- Emails ---------------------------------------------------------------

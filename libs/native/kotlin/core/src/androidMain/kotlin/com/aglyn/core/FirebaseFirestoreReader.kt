@@ -1,6 +1,7 @@
 package com.aglyn.core
 
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.AggregateField
 import com.google.firebase.firestore.AggregateSource
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
@@ -28,6 +29,11 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
 
   override suspend fun count(query: FirestoreQuery): Long? =
     build(query.copy(limit = null, startAfter = null)).count().get(AggregateSource.SERVER).await().count
+
+  override suspend fun sum(query: FirestoreQuery, field: String): Double? {
+    val total = AggregateField.sum(field)
+    return build(query.copy(limit = null, startAfter = null)).aggregate(total).get(AggregateSource.SERVER).await().getDouble(total)
+  }
 
   override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> = callbackFlow {
     trySend(Live.Loading)
@@ -115,6 +121,8 @@ internal fun DocumentSnapshot.toDoc(): FirestoreDoc? {
 
 private fun plain(value: Any?): Any? = when (value) {
   is Timestamp -> FirestoreTimestamp(value.seconds, value.nanoseconds)
+  // Bytes (a stored node tree) arrive as base64 text, as the desktop readers hand them over.
+  is com.google.firebase.firestore.Blob -> android.util.Base64.encodeToString(value.toBytes(), android.util.Base64.NO_WRAP)
   is Map<*, *> -> value.entries.associate { it.key.toString() to plain(it.value) }
   is List<*> -> value.map(::plain)
   is Int -> value.toLong()

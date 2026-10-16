@@ -84,7 +84,9 @@ import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiJobUsesLayoutLan
 import { aiJobPublishesSite, aiMergeSitePublish, aiPublishGuidedSite, aiRestoreGuidedBlogEntry } from './ai-site-publish'
 import {
   AI_SITE_CONTENT_INPUT,
+  AI_SITE_FREE_POSTS,
   AI_SITE_POST_BUDGET,
+  AI_SITE_POST_LABEL,
   AI_SITE_POSTS,
   AI_SITE_POSTS_LABEL,
   AI_SITE_PRODUCTS_LABEL,
@@ -245,6 +247,8 @@ export interface AiSiteUnit {
   creation?: AiBuildPlanCreate
   /** The event an event unit drafts (AGL-3755). */
   item?: AiBuildItem
+  /** How many first posts a posts unit writes: `AI_SITE_POSTS`, or a Free blog's `AI_SITE_FREE_POSTS`. */
+  posts?: number
   /** What the unit is, for the derived job's brief. */
   label: string
 }
@@ -343,7 +347,7 @@ export const AI_SITE_MAX_PASSES =
  */
 export function aiSiteJobUnits(
   plan: Pick<AiJobPlan, 'create' | 'screens'> & Partial<Pick<AiJobPlan, 'items'>>,
-  options: { welcomeEmail?: boolean; content?: 'posts' | 'products' | null } = {},
+  options: { welcomeEmail?: boolean; content?: 'posts' | 'products' | null; posts?: number } = {},
 ): AiSiteUnit[] {
   // The site's look is designed first, on every scaffold (AGL-3660): the
   // header, the footer and every page render in it from their first draft.
@@ -370,9 +374,10 @@ export function aiSiteJobUnits(
       label: creation.name,
     })
   }
-  // A paid blog's first posts and a paid store's first products (AGL-3676).
+  // A blog's first posts — one on the Free taste — and a paid store's first products (AGL-3676).
   if (options.content === 'posts') {
-    units.push({ kind: 'posts', ...UNIT_KINDS.posts, slot: 'posts', label: AI_SITE_POSTS_LABEL })
+    const posts = options.posts ?? AI_SITE_POSTS
+    units.push({ kind: 'posts', ...UNIT_KINDS.posts, slot: 'posts', posts, label: posts === 1 ? AI_SITE_POST_LABEL : AI_SITE_POSTS_LABEL })
   } else if (options.content === 'products') {
     units.push({ kind: 'products', ...UNIT_KINDS.products, slot: 'products', label: AI_SITE_PRODUCTS_LABEL })
   }
@@ -441,7 +446,7 @@ export function aiSiteSeoOutputs(job: AiJob): AiJobOutput[] {
   if (outputs.some((output) => output.resource === 'seo' && output.id === AI_SITE_SEO_OUTPUT_ID)) {
     return []
   }
-  const proposal = aiSiteSeoProposalForInputs(job.inputs)
+  const proposal = aiSiteSeoProposalForInputs(job.inputs, job.plan?.language)
   if (!proposal) return []
   return [
     {
@@ -799,7 +804,7 @@ export function aiSiteUnitJob(
       written: (job.outputs ?? [])
         .filter((output) => output.resource === 'entry')
         .map((output) => ({ id: output.id, title: output.label })),
-      total: AI_SITE_POSTS,
+      total: unit.posts ?? AI_SITE_POSTS,
       // A page standing in for the blog is merged into it, so its address is the blog's to take.
       avoidSlugs: aiSitePlanWithoutBlogStandIns(plan.screens)
         .screens.map((screen) => screen.slug.replace(/^\/+/, '').split('/')[0])
@@ -917,7 +922,8 @@ export function createAiSiteJobAdmission(
       if (credits && credits.left <= 0) {
         return { status: 429, error: aiFreeCreditsNoneLeftText(credits.resetsOn) }
       }
-      const prompt = aiFreeSitePrompt(credits, inputs.pages)
+      // A Free blog's one first post is part of what it costs (AGL-3798).
+      const prompt = aiFreeSitePrompt(credits, inputs.pages, { siteKind: aiSiteKindOfInputs(context.inputs)?.id ?? null })
       if (prompt) {
         if (!context.creditsConfirmed) {
           return { status: 409, error: aiCreditsPromptText(prompt, 'site'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt }
@@ -1147,16 +1153,18 @@ function aiSiteOwedUnits(
   runnerFor: typeof aiJobStepRunnerFor,
 ): AiSiteUnit[] {
   // A start whose ledger was written before the store pages existed (AGL-3676)
-  // is not owed them: its ledger has no row for them to settle.
-  const ledgered = !job.items?.length || job.items.some((row) => row.slot === 'store')
+  // is not owed them: its ledger has no row for them to settle. Nor is a Free
+  // blog's ledger written before it was owed its one post (AGL-3798).
+  const ledgered = (slot: string) => !job.items?.length || job.items.some((row) => row.slot === slot)
   return aiSiteJobUnits(plan, {
     welcomeEmail: aiSiteWelcomeEmail(inputs, freeTaste),
     content: aiSiteContentPart(job.inputs, freeTaste),
+    posts: freeTaste ? AI_SITE_FREE_POSTS : AI_SITE_POSTS,
   }).filter(
     (unit) =>
-      (unit.kind === 'store' && ledgered) ||
+      (unit.kind === 'store' && ledgered('store')) ||
       unit.kind === 'theme' ||
-      unit.kind === 'posts' ||
+      (unit.kind === 'posts' && ledgered('posts')) ||
       unit.kind === 'dataset' ||
       unit.kind === 'event' ||
       (unit.kind !== 'store' && runnerFor(unit.jobKind)),

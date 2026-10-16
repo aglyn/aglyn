@@ -216,3 +216,30 @@ class CardCollectorTest {
     assertNull(CardReaderSetupCode.of("other"))
   }
 }
+
+class SystemPrinterTest {
+  @Test
+  fun cutsTheReceiptIntoPagesOfTheLinesThatFit() {
+    assertEquals(listOf(listOf("a", "b"), listOf("c")), printPages("a\nb\nc\n", 2))
+    assertEquals(listOf(listOf("a")), printPages("a", 50))
+    assertEquals(listOf(listOf("a"), listOf("b")), printPages("a\nb", 0), "a page holds at least a line")
+    assertEquals(listOf(listOf("")), printPages("", 5))
+  }
+
+  @Test
+  fun fitsTheColumnsAcrossThePageWithinAReadableRange() {
+    // 80 mm roll: 72 mm of paper is about 204 points; 48 columns at 0.6 em each.
+    assertEquals(204f / (48 * 0.6f), printFontSize(204f, 48), 0.001f)
+    assertEquals(10f, printFontSize(612f, 48), "a letter page does not blow the receipt up past 10 points")
+    assertEquals(5f, printFontSize(60f, 48), "and a sliver does not shrink it below 5")
+  }
+
+  @Test
+  fun aRegisterHasNoPrintSheetUntilThePlatformBindsOne() {
+    assertEquals(null, NoPeripherals.systemPrinter)
+    val printer = object : SystemPrinter {
+      override suspend fun printText(text: String, jobName: String) = SystemPrintResult.Printed
+    }
+    assertEquals(printer, StaticPeripherals(systemPrinter = printer).systemPrinter)
+  }
+}

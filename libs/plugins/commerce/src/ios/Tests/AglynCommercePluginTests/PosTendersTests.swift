@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynHardware
 import AglynUI
 import CoreImage
 import Foundation
@@ -332,6 +333,137 @@ final class ReceiptPrintTests: XCTestCase {
     XCTAssertFalse(checkout.printed)
     XCTAssertEqual(checkout.notice?.message, "The receipt printer did not answer.")
     XCTAssertEqual(checkout.notice?.tone, .error)
+  }
+}
+
+private final class NoListening: FirestoreListening, @unchecked Sendable {
+  func remove() {}
+}
+
+/// A reader that hands the paid order to whoever listens for it.
+@MainActor
+private final class OrderReader: FirestoreReader, @unchecked Sendable {
+  var orders: [String: [String: Any]] = [:]
+
+  func listen(_ query: FirestoreQuery, _ onChange: @escaping @MainActor (Result<[FirestoreDocument], Error>) -> Void) -> FirestoreListening {
+    onChange(.success([]))
+    return NoListening()
+  }
+
+  func listenDocument(_ path: [String], _ onChange: @escaping @MainActor (Result<FirestoreDocument?, Error>) -> Void) -> FirestoreListening {
+    let id = path.last ?? ""
+    onChange(.success(orders[id].map { FirestoreDocument(id: id, data: $0) }))
+    return NoListening()
+  }
+
+  func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws {}
+  func deleteDocument(_ path: [String]) async throws {}
+}
+
+@MainActor
+final class DeviceReceiptPrintTests: XCTestCase {
+  private let order: [String: Any] = [
+    "number": 12, "createdAtMs": 1_791_317_040_000, "currency": "usd", "channel": "pos",
+    "lineItems": [["name": "Latte", "quantity": 2, "unitAmountCents": 450]],
+    "totals": ["itemsCents": 900, "taxCents": 0, "totalCents": 900],
+    "payments": [["method": "cash", "status": "succeeded", "amountCents": 900, "cashTenderedCents": 1000, "changeCents": 100]],
+  ]
+
+  private func register(settings: String = "{}") -> RegisterModel {
+    let reader = OrderReader()
+    reader.orders["o1"] = order
+    let body = #"{"settings":\#(settings),"terminal":{"available":false,"testMode":false},"readers":[]}"#
+    let api = ConsoleAPIClient(
+      origin: "https://console.test", getIDToken: { _ in "token" }, transport: Recorder(body), sleep: { _ in }, maxAttempts: 1)
+    let model = RegisterModel(
+      hostID: "h1", reader: reader, api: api, collector: nil, defaults: UserDefaults(suiteName: "device-print-\(UUID().uuidString)")!)
+    model.selectRegister(PosRegister(id: "r1", name: "Front", locationID: nil))
+    return model
+  }
+
+  private func paid(_ api: ScriptedSaleAPI = ScriptedSaleAPI()) -> Checkout {
+    Checkout(api: api, opened: sale, settings: PosRegisterSettings(), sleep: { _ in })
+  }
+
+  func testWithNoCloudPrinterTheReceiptGoesToThisDevicesPrintSheet() async {
+    let model = register()
+    var sent: [(String, String)] = []
+    model.systemPrint = { text, job in
+      sent.append((text, job))
+      return .printed
+    }
+    model.watchReceipt(orderID: "o1")
+    let api = ScriptedSaleAPI()
+    api.answers = [.success(tenderAnswer(due: 0, [], completed: true))]
+    let checkout = paid(api)
+    let result = await model.printReceipt(checkout)
+    XCTAssertEqual(result, .printed)
+    XCTAssertEqual(sent.count, 1)
+    XCTAssertEqual(sent.first?.1, "Receipt 12")
+    XCTAssertTrue(sent.first?.0.contains("2 x Latte") == true)
+    XCTAssertTrue(sent.first?.0.contains("Order #12") == true)
+    XCTAssertTrue(checkout.printed, "the server is told the receipt was printed here")
+    XCTAssertEqual(api.steps.map { $0.0.action }, ["receipt"])
+  }
+
+  func testAGiftReceiptDropsEveryPriceAndIsNotThePrintedReceipt() async {
+    let model = register()
+    var text = ""
+    model.systemPrint = { printed, _ in
+      text = printed
+      return .printed
+    }
+    model.watchReceipt(orderID: "o1")
+    let checkout = paid()
+    let result = await model.printReceipt(checkout, gift: true)
+    XCTAssertEqual(result, .printed)
+    XCTAssertTrue(text.contains("2 x Latte"))
+    XCTAssertFalse(text.contains("$"))
+    XCTAssertFalse(checkout.printed, "a gift copy is not the customer's receipt")
+  }
+
+  func testClosingThePrintSheetIsNotAFailureAndTheReceiptIsNotCalledPrinted() async {
+    let model = register()
+    model.systemPrint = { _, _ in .canceled }
+    model.watchReceipt(orderID: "o1")
+    let checkout = paid()
+    let result = await model.printReceipt(checkout)
+    XCTAssertEqual(result, .canceled)
+    XCTAssertFalse(checkout.printed)
+  }
+
+  func testAReceiptStillBeingReadCannotBePrintedYet() async {
+    let model = register()
+    model.systemPrint = { _, _ in XCTFail("nothing to print yet"); return .printed }
+    let result = await model.printReceipt(paid())
+    XCTAssertEqual(result, .failed("The receipt is still loading. Try again in a moment."))
+  }
+
+  func testAStoreThatAlwaysPrintsPrintsOnceAsSoonAsTheSaleIsPaid() async {
+    let model = register(settings: #"{"receiptDefault":"print"}"#)
+    await model.loadContext()
+    var printed = 0
+    model.systemPrint = { _, _ in
+      printed += 1
+      return .printed
+    }
+    let api = ScriptedSaleAPI()
+    api.answers = [.success(tenderAnswer(due: 0, [], completed: true))]
+    let checkout = paid(api)
+    await model.printReceiptByDefault(checkout)
+    XCTAssertEqual(printed, 0, "it waits for the stored sale to be read")
+    model.watchReceipt(orderID: "o1")
+    await model.printReceiptByDefault(checkout)
+    await model.printReceiptByDefault(checkout)
+    XCTAssertEqual(printed, 1, "once, not on every look")
+  }
+
+  func testAStoreThatDoesNotAlwaysPrintPrintsNothingUnasked() async {
+    let model = register(settings: #"{"receiptDefault":"ask"}"#)
+    await model.loadContext()
+    model.systemPrint = { _, _ in XCTFail("nobody asked"); return .printed }
+    model.watchReceipt(orderID: "o1")
+    await model.printReceiptByDefault(paid())
   }
 }
 

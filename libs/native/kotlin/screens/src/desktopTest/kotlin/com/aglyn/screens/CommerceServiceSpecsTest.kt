@@ -12,8 +12,11 @@ import com.aglyn.pluginhost.NativeParams
 import com.aglyn.pluginhost.NativePluginContext
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.respondError
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.serialization.json.Json
@@ -214,5 +217,944 @@ class CommerceServiceSpecsTest {
       spec.blocks.first { it.id == "aftershipStatus" }.raw.jsonObject["rows"]!!.jsonArray.last().jsonObject["value"]!!.let { (it as JsonPrimitive).content }, some.context))
     val none = screen(spec, emptyMap(), """{"settings":{"settings":$settings,"vendors":[]}}""")
     assertEquals(listOf("unavailable"), none.shown())
+  }
+
+  // ---- email platforms ---------------------------------------------------------------------------------------------
+
+  private fun marketing(provider: String, status: String, extra: String = "") =
+    """{"id":"h1_$provider","provider":"$provider","hostId":"h1","status":"$status","authKind":"api-key","accountName":"Acme","listId":"L1",
+       "lists":[{"id":"L1","name":"Everyone"},{"id":"L2","name":"VIP"}],"tag":"aglyn","syncContacts":true,"syncEvents":false,"backfillDone":true,
+       "lastRunAtMs":1,"lastSuccessAtMs":1,"nextRunAtMs":2,"lastError":null,"consecutiveFailures":0,
+       "totals":{"contactsPushed":5,"consentPulled":1,"eventsSent":0},"connectedAtMs":1$extra}"""
+
+  private fun platform(provider: String, connections: String, available: String = """[{"id":"mailchimp","apiKey":true,"oauth":true},{"id":"klaviyo","apiKey":true,"oauth":false},{"id":"attentive","apiKey":false,"oauth":true}]""") =
+    screen(spec("marketing-platforms", "marketing-platforms.platform"), mapOf("provider" to provider), """{"conn":{"available":$available,"connections":$connections},"log":{"entries":[]}}""")
+
+  @Test
+  fun emailPlatformsListsWhatIsOfferedOrConnected() {
+    val spec = spec("marketing-platforms", "marketing-platforms.service")
+    val model = screen(spec, emptyMap(), """{"conn":{"available":[{"id":"klaviyo","apiKey":true,"oauth":false}],"connections":[${marketing("omnisend", "reconnect")}]}}""")
+    assertEquals(listOf("platforms"), model.shown())
+    val block = spec.blocks.first { it.id == "platforms" }
+    val filter = block.string("filter")!!
+    fun shown(id: String) = ScreenValues.condition(filter, ScreenContext.with(model.context, "item", json("""{"id":"$id"}""")))
+    assertTrue(shown("klaviyo"), "an offered platform is a row")
+    assertTrue(shown("omnisend"), "a connected platform stays a row so it can be disconnected")
+    assertFalse(shown("mailchimp") || shown("attentive"), "a platform neither offered nor connected is hidden")
+  }
+
+  @Test
+  fun anEmailPlatformOffersTheConnectItsDeploymentAllowsAndTheActionsItsStatusAllows() {
+    assertEquals(listOf("connectKey", "connectOAuth"), platform("mailchimp", "[]").actionsShown("manage"))
+    assertEquals(listOf("connectKey"), platform("klaviyo", "[]").actionsShown("manage"))
+    assertEquals(listOf("connectOAuth"), platform("attentive", "[]").actionsShown("manage"), "Attentive has no key")
+    val active = platform("mailchimp", "[${marketing("mailchimp", "active")}]")
+    assertEquals(listOf("sync", "pause", "disconnect"), active.actionsShown("manage"))
+    assertEquals(listOf("status", "list", "settings", "log"), active.shown().filter { it in setOf("status", "list", "settings", "log") })
+    assertEquals(listOf("resume", "disconnect"), platform("mailchimp", "[${marketing("mailchimp", "paused")}]").actionsShown("manage"))
+    assertEquals(listOf("sync", "disconnect"), platform("mailchimp", "[${marketing("mailchimp", "error")}]").actionsShown("manage").filter { it != "pause" })
+    val reconnect = platform("mailchimp", "[${marketing("mailchimp", "reconnect", ",\"lastError\":\"x\"")}]")
+    assertEquals(listOf("reconnectKey", "reconnectOAuth", "disconnect"), reconnect.actionsShown("manage"))
+    assertTrue("list" !in reconnect.shown() && "settings" !in reconnect.shown(), "a refused credential offers no settings")
+
+    val key = platform("mailchimp", "[]").action("manage", "connectKey")
+    assertEquals("/api/marketing-platforms/connections", key.url)
+    assertEquals(json("""{"hostId":"h1","provider":"mailchimp","apiKey":"k-us21"}"""), platform("mailchimp", "[]").body(key, """{"apiKey":"k-us21"}"""))
+    val oauth = platform("mailchimp", "[]").action("manage", "connectOAuth")
+    assertEquals("url", oauth.openUrl)
+    assertEquals(json("""{"hostId":"h1","provider":"mailchimp","returnTo":"/"}"""), platform("mailchimp", "[]").body(oauth))
+    assertEquals("PATCH", active.action("manage", "pause").method.name)
+    assertEquals(json("""{"hostId":"h1","provider":"mailchimp","paused":true}"""), active.body(active.action("manage", "pause")))
+    assertEquals("DELETE", active.action("manage", "disconnect").method.name)
+  }
+
+  @Test
+  fun anEmailPlatformSavesItsListTagAndSwitches() {
+    val klaviyo = platform("klaviyo", "[${marketing("klaviyo", "active")}]")
+    assertEquals("Everyone", FieldSpec.parse(klaviyo.spec.blocks.first { it.id == "list" }.raw.jsonObject["fields"]!!.jsonArray[0])!!.choices(klaviyo.context).first { it.first == "L1" }.second)
+    assertEquals("List contacts go into", ScreenValues.render(klaviyo.spec.blocks.first { it.id == "list" }.title!!, klaviyo.context))
+    assertEquals(json("""{"hostId":"h1","provider":"klaviyo","listId":"L2"}"""), klaviyo.body(klaviyo.form("list"), """{"listId":"L2"}"""))
+    assertEquals(
+      json("""{"hostId":"h1","provider":"klaviyo","tag":"vip","syncContacts":true,"syncEvents":true}"""),
+      klaviyo.body(klaviyo.form("settings"), """{"tag":"vip","syncContacts":true,"syncEvents":true}"""),
+    )
+    val settingsFields = klaviyo.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+    assertTrue(settingsFields.first { it.key == "syncEvents" }.let { ScreenValues.condition(it.whenCondition, klaviyo.context) }, "Klaviyo sends events")
+    val mailchimp = platform("mailchimp", "[${marketing("mailchimp", "active")}]")
+    assertFalse(mailchimp.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }.first { it.key == "syncEvents" }.let { ScreenValues.condition(it.whenCondition, mailchimp.context) }, "Mailchimp has no events")
+    assertTrue("list" in mailchimp.shown())
+    assertTrue("list" !in platform("omnisend", "[${marketing("omnisend", "active")}]").shown(), "Omnisend has no list to pick")
+  }
+
+  // ---- sales channels ----------------------------------------------------------------------------------------------
+
+  private fun channelState(sells: Boolean = true, google: String = "false", extra: String = "") =
+    """{"state":{"sells":$sells,"store":{"name":"Acme","origin":"https://shop.test","currency":"usd","productPagesServed":true,"carrierPricedCountries":[]},
+       "channels":[{"id":"google","enabled":$google,"url":${if (google == "true") "\"https://shop.test/feed/google/t.xml\"" else "null"},"createdAtMs":1,"rotatedAtMs":null,"lastFetchAtMs":${if (google == "true") "5" else "null"},"lastFetchAgent":null},
+                   {"id":"meta","enabled":false,"url":null,"createdAtMs":null,"rotatedAtMs":null,"lastFetchAtMs":null,"lastFetchAgent":null}],
+       "legacy":{"url":"https://shop.test/api/commerce/feed","active":${google == "true"}},
+       "settings":{"defaultBrand":"","defaultCondition":"new","defaultGoogleCategory":""}$extra}}"""
+
+  @Test
+  fun salesChannelsShowTheStoreStateTheDefaultsAndAChannelSwitch() {
+    val spec = spec("sales-channels", "sales-channels.service")
+    val model = screen(spec, emptyMap(), channelState())
+    assertEquals(listOf("check", "defaults", "channels"), model.shown())
+    assertEquals(listOf("notSelling", "defaults", "channels"), screen(spec, emptyMap(), channelState(sells = false)).shown().filter { it != "check" })
+    assertEquals(
+      json("""{"hostId":"h1","settings":{"defaultBrand":"Acme","defaultCondition":"used","defaultGoogleCategory":"2271"}}"""),
+      model.body(model.form("defaults"), """{"defaultBrand":"Acme","defaultCondition":"used","defaultGoogleCategory":"2271"}"""),
+    )
+    val toggle = spec.blocks.first { it.id == "channels" }.raw.jsonObject["toggle"]!!.jsonObject
+    val item = ScreenContext.with(model.context, "item", json("""{"id":"meta","label":"Meta"}"""))
+    assertEquals("false", ScreenValues.render(toggle["value"]!!.let { (it as JsonPrimitive).content }, item))
+    val on = ActionSpec.parse(toggle["on"])!!
+    assertEquals("/api/sales-channels/channel", on.url)
+    assertEquals(json("""{"hostId":"h1","channel":"meta","enabled":true}"""), ScreenValues.resolveBody(on.body!!, item))
+    val off = ActionSpec.parse(toggle["off"])!!
+    assertEquals(json("""{"hostId":"h1","channel":"meta","enabled":false}"""), ScreenValues.resolveBody(off.body!!, item))
+    val noSelling = screen(spec, emptyMap(), channelState(sells = false))
+    val disabled = toggle["disabled"]!!.let { (it as JsonPrimitive).content }
+    assertTrue(ScreenValues.condition(disabled, ScreenContext.with(noSelling.context, "item", json("""{"id":"meta"}"""))), "a feed cannot be turned on without commerce")
+    assertFalse(ScreenValues.condition(disabled, ScreenContext.with(model.context, "item", json("""{"id":"meta"}"""))))
+  }
+
+  @Test
+  fun aSalesChannelOffersItsFeedActionsAndTheConnectionWhenTheDeploymentHasOne() {
+    val spec = spec("sales-channels", "sales-channels.channel")
+    fun channel(id: String, state: String) = screen(spec, mapOf("channel" to id), state)
+    val off = channel("google", channelState())
+    assertEquals(listOf("on"), off.actionsShown("manage"))
+    assertEquals(json("""{"hostId":"h1","channel":"google","enabled":true}"""), off.body(off.action("manage", "on")))
+    val on = channel("google", channelState(google = "true"))
+    assertEquals(listOf("copy", "rotate", "off"), on.actionsShown("manage"))
+    assertEquals("https://shop.test/feed/google/t.xml", ScreenValues.render(on.action("manage", "copy").copy!!, on.context))
+    assertEquals("/api/sales-channels/rotate", on.action("manage", "rotate").url)
+    assertTrue("legacy" in on.shown() && "legacyOff" in on.shown(), "the earlier Merchant Center address can be turned off")
+    assertTrue("legacy" !in channel("meta", channelState(google = "true")).shown(), "only Google had an earlier address")
+    assertEquals(listOf("steps", "help"), off.shown().filter { it == "steps" || it == "help" })
+    assertTrue("connection" !in on.shown() && "sync" !in on.shown(), "no connection block on a deployment without the channel API")
+
+    val connected = channel(
+      "google",
+      channelState(google = "true", extra = ""","connect":{"providers":[{"provider":"google","connection":{"provider":"google","targetId":"t1","targetName":"Acme MC","targets":[{"id":"t1","name":"Acme MC"},{"id":"t2","name":"Other"}],"connectedAtMs":1,"lastSyncAtMs":2,"lastSyncResult":{"sent":9,"failed":1,"errors":["Bad price","No image"]}}}]}"""),
+    )
+    assertEquals(listOf("target", "syncNow", "disconnect"), connected.actionsShown("sync"), "no reconnect while the grant has more than a week left")
+    fun withExpiry(msFromNow: Long) = channel(
+      "google",
+      channelState(google = "true", extra = ""","connect":{"providers":[{"provider":"google","connection":{"provider":"google","targetId":"t1","targetName":"Acme MC","targets":[{"id":"t1","name":"Acme MC"}],"connectedAtMs":1,"tokenExpiresAtMs":${System.currentTimeMillis() + msFromNow}}}]}"""),
+    )
+    val week = 7L * 24 * 60 * 60 * 1000
+    assertEquals(listOf("target", "syncNow", "disconnect"), withExpiry(week + 3_600_000).actionsShown("sync"))
+    assertEquals(listOf("target", "syncNow", "reconnect", "disconnect"), withExpiry(week - 3_600_000).actionsShown("sync"), "inside the console's seven days")
+    assertEquals(listOf("target", "syncNow", "reconnect", "disconnect"), withExpiry(-3_600_000).actionsShown("sync"), "an expired grant too")
+    assertTrue("expiring" in withExpiry(week - 3_600_000).shown() && "expiring" !in withExpiry(week + 3_600_000).shown())
+    assertEquals("Acme MC", ScreenValues.render("{data.state.connect.providers[provider=params.channel].connection.targetName}", connected.context))
+    assertEquals("Bad price, No image", ScreenValues.render("{data.state.connect.providers[provider=params.channel].connection.lastSyncResult.errors}", connected.context))
+    assertEquals(json("""{"hostId":"h1","provider":"google","targetId":"t2"}"""), connected.body(connected.action("sync", "target"), """{"targetId":"t2"}"""))
+    val fresh = channel("google", channelState(extra = ""","connect":{"providers":[{"provider":"google","connection":null}]}"""))
+    assertEquals(listOf("connect"), fresh.actionsShown("sync"))
+    assertEquals("authorizeUrl", fresh.action("sync", "connect").openUrl)
+    assertEquals(json("""{"hostId":"h1","provider":"google","returnTo":"/"}"""), fresh.body(fresh.action("sync", "connect")))
+    assertEquals("Google Merchant Center", ScreenValues.render("{const.channels[id=params.channel].service}", fresh.context))
+    assertTrue("connection" !in channel("meta", channelState(extra = ""","connect":{"providers":[{"provider":"google","connection":null}]}""")).shown(), "Meta has no connection entry here")
+  }
+
+  @Test
+  fun theCatalogCheckListsEachChannelAndItsProductsIssues() {
+    val diag = """{"diag":{"offers":12,"partial":false,"store":["No address."],"channels":[
+      {"channel":"google","listed":10,"excluded":2,"warned":1,"truncated":false,"products":[{"productId":"p1","productName":"Mug","offers":1,"excludedOffers":1,"issues":[{"field":"gtin","severity":"error","message":"Barcode missing"},{"field":"image","severity":"warning","message":"Image small"}]}]},
+      {"channel":"meta","listed":12,"excluded":0,"warned":0,"truncated":false,"products":[]}]}}"""
+    val overview = screen(spec("sales-channels", "sales-channels.diagnostics"), emptyMap(), diag)
+    assertEquals(listOf("summary", "store", "channels"), overview.shown())
+    val detail = screen(spec("sales-channels", "sales-channels.diagnosticsChannel"), mapOf("channel" to "google"), diag)
+    assertEquals(listOf("summary", "products"), detail.shown())
+    val row = ScreenContext.with(detail.context, "item", detail.context.jsonObject["data"]!!.jsonObject["diag"]!!.jsonObject["channels"]!!.jsonArray[0].jsonObject["products"]!!.jsonArray[0])
+    assertEquals("Barcode missing, Image small", ScreenValues.render(detail.spec.blocks.first { it.id == "products" }.string("secondary")!!, row))
+    assertEquals("Google", ScreenValues.render(detail.spec.title, detail.context))
+    assertEquals("1", ScreenValues.render("{data.diag.channels[channel=params.channel].excluded:number}".replace("excluded", "warned"), detail.context))
+  }
+
+  // ---- marketplaces ------------------------------------------------------------------------------------------------
+
+  private fun marketplaceConn(id: String, status: String, mode: String = "link", extra: String = "") =
+    """{"id":"h1_$id","marketplace":"$id","hostId":"h1","status":"$status","sandbox":false,"accountName":"Acme Store",
+       "settings":{"listingMode":"$mode","syncPrices":true,"priceAdjustPercent":5,"stockBuffer":2,"untrackedQuantity":10,"importOrders":true,"confirmShipments":true,"marketplaceId":"ATVPDKIKX0DER"},
+       "sites":[{"id":"ATVPDKIKX0DER","name":"Amazon.com","currency":"USD"},{"id":"A2EUQ1WTGCTBG2","name":"Amazon.ca","currency":"CAD"}],
+       "listings":{"syncedAtMs":1,"offers":8,"updated":3,"created":1,"unchanged":3,"notListed":1,"failed":0},
+       "orders":{"imported":4,"skipped":0,"lastImportedAtMs":1},"shipments":{"confirmed":3,"failed":0},"lastError":null,"connectedAtMs":1$extra}"""
+
+  private fun marketplace(id: String, connections: String) =
+    screen(spec("marketplaces", "marketplaces.marketplace"), mapOf("marketplace" to id),
+      """{"conn":{"offered":[{"id":"amazon","sandbox":true},{"id":"faire","sandbox":false}],"connections":$connections},"activity":{"entries":[{"id":"1","atMs":1,"kind":"order_imported","message":"Order 1"}],"problems":[{"offerId":"o1","sku":"MUG","title":"Mug","outcome":"failed","message":"Bad price","atMs":1}]}}""")
+
+  @Test
+  fun marketplacesListWhatIsOfferedOrConnected() {
+    val spec = spec("marketplaces", "marketplaces.service")
+    val model = screen(spec, emptyMap(), """{"conn":{"offered":[{"id":"amazon","sandbox":false}],"connections":[${marketplaceConn("etsy", "paused")}]}}""")
+    val filter = spec.blocks.first { it.id == "marketplaces" }.string("filter")!!
+    fun shown(id: String) = ScreenValues.condition(filter, ScreenContext.with(model.context, "item", json("""{"id":"$id"}""")))
+    assertTrue(shown("amazon") && shown("etsy"))
+    assertFalse(shown("ebay") || shown("faire"))
+  }
+
+  @Test
+  fun aMarketplaceOffersTheActionsItsStatusAllowsAndTheSettingsItsListingModeNeeds() {
+    assertEquals(listOf("connect"), marketplace("amazon", "[]").actionsShown("manage"))
+    assertEquals(listOf("hint", "sandbox", "manage"), marketplace("amazon", "[]").shown())
+    assertEquals(listOf("hint", "manage"), marketplace("faire", "[]").shown())
+    val active = marketplace("amazon", "[${marketplaceConn("amazon", "active")}]")
+    assertEquals(listOf("sync", "pause", "disconnect"), active.actionsShown("manage"))
+    assertTrue(listOf("status", "settings", "problems", "activity").all { it in active.shown() })
+    assertEquals(listOf("resume", "disconnect"), marketplace("amazon", "[${marketplaceConn("amazon", "paused")}]").actionsShown("manage"))
+    val reconnect = marketplace("amazon", "[${marketplaceConn("amazon", "reconnect", extra = ",\"lastError\":\"Refused\"")}]")
+    assertEquals(listOf("reconnect", "disconnect"), reconnect.actionsShown("manage"))
+    assertTrue("settings" !in reconnect.shown() && "failing" in reconnect.shown())
+    assertEquals(json("""{"hostId":"h1","marketplace":"amazon","paused":true}"""), active.body(active.action("manage", "pause")))
+    assertEquals("PATCH", active.action("manage", "pause").method.name)
+    assertEquals("DELETE", active.action("manage", "disconnect").method.name)
+    assertEquals(json("""{"hostId":"h1","marketplace":"amazon","returnTo":"/"}"""), marketplace("amazon", "[]").body(marketplace("amazon", "[]").action("manage", "connect")))
+    assertEquals("url", marketplace("amazon", "[]").action("manage", "connect").openUrl)
+
+    // The settings form: Amazon picks its marketplace and may publish; Faire can do neither, and sends no prices.
+    fun fieldsShown(model: ScreenModel) = model.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+      .filter { ScreenValues.condition(it.whenCondition, model.context) }.map { it.key }
+    assertEquals(
+      listOf("marketplaceId", "importOrders", "confirmShipments", "listingMode", "stockBuffer", "untrackedQuantity", "syncPrices", "priceAdjustPercent"),
+      fieldsShown(active),
+    )
+    val faire = marketplace("faire", "[${marketplaceConn("faire", "active")}]")
+    assertEquals(listOf("importOrders", "confirmShipments", "listingMode", "stockBuffer", "untrackedQuantity"), fieldsShown(faire))
+    assertTrue("faire" in faire.shown(), "Faire says only stock is sent")
+    val off = marketplace("amazon", "[${marketplaceConn("amazon", "active", mode = "off")}]")
+    assertEquals(listOf("marketplaceId", "importOrders", "confirmShipments", "listingMode"), fieldsShown(off))
+    assertEquals(
+      json("""{"hostId":"h1","marketplace":"amazon","marketplaceId":"A2EUQ1WTGCTBG2","importOrders":true,"confirmShipments":false,"listingMode":"publish","stockBuffer":3,"untrackedQuantity":10,"syncPrices":true,"priceAdjustPercent":-5}"""),
+      active.body(active.form("settings"), """{"marketplaceId":"A2EUQ1WTGCTBG2","importOrders":true,"confirmShipments":false,"listingMode":"publish","stockBuffer":3,"untrackedQuantity":10,"syncPrices":true,"priceAdjustPercent":-5}"""),
+    )
+    assertEquals(
+      json("""{"hostId":"h1","marketplace":"faire","importOrders":true,"confirmShipments":true,"listingMode":"link","stockBuffer":1}"""),
+      faire.body(faire.form("settings"), """{"importOrders":true,"confirmShipments":true,"listingMode":"link","stockBuffer":1}"""),
+    )
+    val modes = FieldSpec.parse(active.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.first { it.jsonObject["key"]!!.let { k -> (k as JsonPrimitive).content } == "listingMode" })!!
+    assertEquals(listOf("off", "link", "publish"), modes.choices(active.context).map { it.first })
+    assertEquals(listOf("ATVPDKIKX0DER", "A2EUQ1WTGCTBG2"), FieldSpec.parse(active.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray[0])!!.choices(active.context).map { it.first })
+  }
+
+  // ---- print on demand ---------------------------------------------------------------------------------------------
+
+  private val podProviders = """[{"id":"printful","label":"Printful","tokenHelp":{"label":"token","url":"https://x","steps":"Make a token."}},{"id":"printify","label":"Printify","tokenHelp":{"label":"token","url":"https://y","steps":"Make a Printify token."}}]"""
+  private fun podConnection(provider: String, currency: String = "USD", extra: String = "") =
+    """{"provider":"$provider","providerLabel":"${provider.replaceFirstChar { it.uppercase() }}","storeId":"1","storeName":"Acme","currency":"$currency","submitMode":"review","syncPrices":false,
+       "webhooks":"polling","webhookDetail":null,"lastError":null,"connectedAtMs":1760000000000,"updatedAtMs":1$extra}"""
+  private fun pod(connections: String, available: Boolean = true) =
+    screen(spec("print-on-demand", "print-on-demand.service"), emptyMap(), """{"conn":{"available":$available,"storeCurrency":"USD","providers":$podProviders,"connections":$connections}}""")
+
+  @Test
+  fun printOnDemandOffersToConnectOnlyTheServicesNotYetConnected() {
+    assertEquals(listOf("unavailable"), pod("[]", available = false).shown())
+    val bare = pod("[]")
+    assertEquals(listOf("intro", "connect"), bare.shown())
+    assertEquals(listOf("connectPrintful", "connectPrintify"), bare.actionsShown("connect"))
+    val connect = bare.action("connect", "connectPrintful")
+    assertEquals("/api/print-on-demand/connect", connect.url)
+    assertEquals(json("""{"hostId":"h1","provider":"printful","token":"tok"}"""), bare.body(connect, """{"token":"tok"}"""))
+    assertEquals(409, connect.elseStatus)
+    assertEquals("Make a token. Kept encrypted and used only for this site; Aglyn never asks for your Printful password.", ScreenValues.render(connect.prompt.first().help!!, bare.context))
+    val one = pod("[${podConnection("printful")}]")
+    assertEquals(listOf("connections", "connect", "lists"), one.shown())
+    assertEquals(listOf("connectPrintify"), one.actionsShown("connect"))
+  }
+
+  @Test
+  fun aTokenThatReachesSeveralStoresListsThemAndConnectsToThePickedOne() {
+    val calls = mutableListOf<String>()
+    val api = ConsoleApiClient(
+      "http://localhost",
+      HttpClient(
+        MockEngine { request ->
+          calls += request.method.value + " " + request.url.encodedPath + " " + (request.body as? io.ktor.http.content.TextContent)?.text.orEmpty()
+          when {
+            request.url.encodedPath.endsWith("/stores") -> respond("""{"stores":[{"id":"11","name":"Main"},{"id":"22","name":"Spare"}]}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+            calls.count { it.contains("/connect") } == 1 && request.url.encodedPath.endsWith("/connect") ->
+              respond("""{"error":"Choose which Printful store to connect."}""", HttpStatusCode.Conflict, headersOf(HttpHeaders.ContentType, "application/json"))
+            else -> respond("""{"connection":{}}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+          }
+        },
+      ),
+      { "t" },
+    )
+    val spec = spec("print-on-demand", "print-on-demand.service")
+    val session = ScreenSession(orgName = "Acme", orgRole = "owner", siteName = "Shop", origin = "https://console.test")
+    val model = ScreenModel(spec, session.context(Site(), emptyMap()), api)
+    model.seed(Json.parseToJsonElement("""{"conn":{"available":true,"storeCurrency":"USD","providers":$podProviders,"connections":[]}}"""))
+    val connect = model.action("connect", "connectPrintful")
+    val typed = ScreenContext.with(model.context, "form", json("""{"token":"tok"}"""))
+    val outcome = kotlinx.coroutines.runBlocking { model.run(connect, typed) }
+    assertTrue(outcome is ActionOutcome.Done, "the 409 is not an error: the stores are listed instead")
+    val follow = model.followUp!!
+    assertEquals("Connect Printful", follow.action.label)
+    assertEquals("tok", ScreenValues.text(ScreenValues.lookup("previous.token", follow.scope)))
+    val pick = follow.action.inputs(follow.scope).single()
+    assertEquals(listOf("11" to "Main", "22" to "Spare"), pick.choices(follow.scope))
+    val chosen = ScreenContext.with(follow.scope, "form", json("""{"storeId":"22"}"""))
+    kotlinx.coroutines.runBlocking { model.run(follow.action, chosen) }
+    assertEquals(
+      listOf(
+        "POST /api/print-on-demand/connect {\"hostId\":\"h1\",\"provider\":\"printful\",\"token\":\"tok\"}",
+        "POST /api/print-on-demand/stores {\"hostId\":\"h1\",\"provider\":\"printful\",\"token\":\"tok\"}",
+        "POST /api/print-on-demand/connect {\"hostId\":\"h1\",\"provider\":\"printful\",\"token\":\"tok\",\"storeId\":\"22\"}",
+      ),
+      calls,
+    )
+  }
+
+  @Test
+  fun aPrintOnDemandConnectionSavesItsSettingsAndWarnsOnACurrencyMismatch() {
+    val spec = spec("print-on-demand", "print-on-demand.connection")
+    fun connection(currency: String) = screen(spec, mapOf("provider" to "printful"), """{"conn":{"available":true,"storeCurrency":"USD","providers":$podProviders,"connections":[${podConnection("printful", currency)}]}}""")
+    assertEquals(listOf("status", "import", "settings", "manage"), connection("USD").shown())
+    assertEquals(listOf("currency", "status", "import", "settings", "manage"), connection("EUR").shown())
+    val model = connection("USD")
+    assertEquals(json("""{"hostId":"h1","provider":"printful","submitMode":"automatic","syncPrices":true}"""), model.body(model.form("settings"), """{"submitMode":"automatic","syncPrices":true}"""))
+    assertTrue(model.action("manage", "disconnect").back)
+    assertEquals("Printful — Acme", ScreenValues.render(model.spec.blocks.first { it.id == "status" }.title!!, model.context))
+  }
+
+  @Test
+  fun theCatalogImportsOneProductAtATimeAndPagesByCursor() {
+    val spec = spec("print-on-demand", "print-on-demand.catalog")
+    val load = spec.loads.first { it.key == "catalog" }
+    assertEquals("nextCursor", load.cursor)
+    assertEquals("products", load.items)
+    val model = screen(spec, mapOf("provider" to "printify"), """{"catalog":{"products":[{"id":"p1","name":"Mug","thumbnailUrl":null,"variantCount":3,"importedProductId":null}],"nextCursor":"c2"},"conn":{"storeCurrency":"USD","connections":[{"provider":"printify","currency":"USD"}]}}""")
+    assertEquals(listOf("intro", "products"), model.shown())
+    assertEquals("/api/print-on-demand/catalog?hostId=h1&provider=printify", ScreenValues.renderUrl(load.url, model.context))
+    val list = model.spec.blocks.first { it.id == "products" }
+    val action = list.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    val item = ScreenContext.with(ScreenContext.with(model.context, "item", json("""{"id":"p1","name":"Mug"}""")), "form", json("""{"status":"active","content":false}"""))
+    assertEquals(json("""{"hostId":"h1","provider":"printify","productIds":["p1"],"status":"active","content":false}"""), ScreenValues.resolveBody(action.body!!, item))
+    val mismatch = screen(spec, mapOf("provider" to "printify"), """{"catalog":{"products":[]},"conn":{"storeCurrency":"USD","connections":[{"provider":"printify","currency":"EUR"}]}}""")
+    assertTrue("currency" in mismatch.shown())
+  }
+
+  @Test
+  fun importedProductsAndSentOrdersPageByTheAfterCursor() {
+    val imported = spec("print-on-demand", "print-on-demand.imported")
+    val load = imported.loads.first { it.key == "links" }
+    assertEquals("after", load.cursorParam)
+    assertEquals("next", load.cursor)
+    val model = screen(imported, emptyMap(), """{"links":{"links":[{"id":"printful__p1","provider":"printful","providerLabel":"Printful","sourceProductId":"s1","name":"Mug","variants":[{},{}],"syncedAtMs":1760000000000,"lastError":null}],"next":null}}""")
+    val row = ScreenContext.with(model.context, "item", model.context.jsonObject["data"]!!.jsonObject["links"]!!.jsonObject["links"]!!.jsonArray[0])
+    assertEquals("2 variants · updated Oct 9, 2025", ScreenValues.render(imported.blocks.first { it.id == "links" }.string("secondary")!!, row))
+    val unlink = imported.blocks.first { it.id == "links" }.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first { it.id == "unlink" }
+    assertEquals(json("""{"hostId":"h1","linkId":"printful__p1"}"""), ScreenValues.resolveBody(unlink.body!!, row))
+    val resync = imported.blocks.first { it.id == "links" }.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first { it.id == "resync" }
+    assertEquals(json("""{"hostId":"h1","provider":"printful","productIds":["s1"],"content":true}"""), ScreenValues.resolveBody(resync.body!!, row))
+
+    val orders = spec("print-on-demand", "print-on-demand.orders")
+    val order = screen(orders, emptyMap(), """{"parts":{"parts":[{"id":"o1","orderRef":"#1042","providerLabel":"Printify","status":"in_production","testMode":true,"lines":[{"name":"Mug","quantity":2}],"retailMinor":4000,"retailCurrency":"USD","lastError":null,"createdAtMs":1760000000000}],"next":"n"}}""")
+    val part = ScreenContext.with(order.context, "item", order.context.jsonObject["data"]!!.jsonObject["parts"]!!.jsonObject["parts"]!!.jsonArray[0])
+    assertEquals("Order #1042 · Printify", ScreenValues.render(orders.blocks.first { it.id == "parts" }.string("primary")!!, part))
+    assertEquals("Mug", ScreenValues.render(orders.blocks.first { it.id == "parts" }.string("secondary")!!, part))
+    assertEquals("In production", ScreenValues.render("{const.statuses[id=item.status].label}", part))
+  }
+
+  // ---- delivery apps -----------------------------------------------------------------------------------------------
+
+  private fun deliveryStore(service: String) =
+    """{"service":"$service","externalStoreId":"ST-9","settings":{"autoAccept":true,"prepMinutes":20},"connectedAtMs":1760000000000,"menu":{"publishedAtMs":1760000000000,"items":12,"error":null},"unmatched":2}"""
+
+  private fun delivery(service: String, stores: String, items: String = "[]") =
+    screen(spec("delivery-apps", "delivery-apps.store"), mapOf("service" to service),
+      """{"stores":{"offered":[{"id":"doordash","sandbox":true},{"id":"grubhub","sandbox":false}],"stores":$stores},"items":{"items":$items}}""")
+
+  @Test
+  fun deliveryAppsListEachOfferedServiceWithItsState() {
+    val spec = spec("delivery-apps", "delivery-apps.service")
+    val model = screen(spec, emptyMap(), """{"stores":{"offered":[{"id":"doordash","sandbox":true}],"stores":[${deliveryStore("doordash")}]}}""")
+    assertEquals(listOf("services"), model.shown())
+    val item = ScreenContext.with(model.context, "item", json("""{"id":"doordash","sandbox":true}"""))
+    assertEquals("DoorDash", ScreenValues.render(spec.blocks.first { it.id == "services" }.string("primary")!!, item))
+    assertTrue(ScreenValues.condition("data.stores.stores[service=item.id]", item))
+    assertEquals(listOf("none"), screen(spec, emptyMap(), """{"stores":{"offered":[],"stores":[]}}""").shown())
+  }
+
+  @Test
+  fun aDeliveryAppConnectsWithAStoreIdThenSavesItsOrderSettingsAndSendsItsMenu() {
+    val bare = delivery("doordash", "[]")
+    assertEquals(listOf("hint", "sandbox", "manage"), bare.shown())
+    assertEquals(listOf("connect"), bare.actionsShown("manage"))
+    val connect = bare.action("manage", "connect")
+    assertEquals(json("""{"hostId":"h1","service":"doordash","externalStoreId":"S1","settings":{"autoAccept":false,"prepMinutes":15}}"""), bare.body(connect, """{"externalStoreId":"S1"}"""))
+    assertEquals("Your DoorDash store ID. The store ID in your DoorDash Merchant Portal, or the location ID DoorDash set up for this integration.", ScreenValues.render(connect.prompt.first().help!!, bare.context))
+    assertTrue("sandbox" !in delivery("grubhub", "[]").shown(), "Grubhub is not a sandbox here")
+
+    val connected = delivery("doordash", "[${deliveryStore("doordash")}]", """[{"externalItemId":"i1","name":"Latte","productId":null,"variantId":null,"title":null,"lastSeenAtMs":1},{"externalItemId":"i2","name":"Mocha","productId":"p2","variantId":"v2","title":"Mocha (12 oz)","lastSeenAtMs":1}]""")
+    assertEquals(listOf("menu", "disconnect"), connected.actionsShown("manage"))
+    assertEquals(listOf("status", "manage", "settings", "items"), connected.shown())
+    assertEquals(json("""{"hostId":"h1","service":"doordash","settings":{"autoAccept":false,"prepMinutes":25}}"""), connected.body(connected.form("settings"), """{"autoAccept":false,"prepMinutes":25}"""))
+    assertEquals("Menu sent to DoorDash: 12 items.", ScreenValues.render(connected.action("manage", "menu").success!!, ScreenContext.with(connected.context, "response", json("""{"items":12}"""))))
+    assertEquals("DELETE", connected.action("manage", "disconnect").method.name)
+    val items = connected.spec.blocks.first { it.id == "items" }
+    fun row(index: Int) = ScreenContext.with(connected.context, "item", connected.context.jsonObject["data"]!!.jsonObject["items"]!!.jsonObject["items"]!!.jsonArray[index])
+    assertEquals("Mocha (12 oz)", ScreenValues.render(items.string("secondary")!!, row(1)))
+    assertEquals("i1", ScreenValues.render(items.string("secondary")!!, row(0)))
+    val clear = items.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    assertTrue(ScreenValues.condition(clear.whenCondition, row(1)) && !ScreenValues.condition(clear.whenCondition, row(0)))
+    assertEquals(json("""{"hostId":"h1","service":"doordash","externalItemId":"i2","name":"Mocha","clear":true}"""), ScreenValues.resolveBody(clear.body!!, row(1)))
+    assertTrue(ScreenValues.condition(items.raw.jsonObject["open"]!!.jsonObject["when"]!!.let { (it as JsonPrimitive).content }, row(0)))
+  }
+
+  @Test
+  fun matchingAnItemSearchesTheCatalogByQAndPostsTheChoice() {
+    val spec = spec("delivery-apps", "delivery-apps.match")
+    val load = spec.loads.first()
+    assertEquals("q", load.searchParam)
+    val model = screen(spec, mapOf("service" to "doordash", "externalItemId" to "i1", "name" to "Latte"), """{"options":{"options":[{"productId":"p9","variantId":"v9","title":"Latte (12 oz)","sku":"LAT-12"}]}}""")
+    assertEquals("Match Latte", ScreenValues.render(spec.title, model.context))
+    val action = spec.blocks.first { it.id == "options" }.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    val row = ScreenContext.with(model.context, "item", json("""{"productId":"p9","variantId":"v9","title":"Latte (12 oz)","sku":"LAT-12"}"""))
+    assertEquals(
+      json("""{"hostId":"h1","service":"doordash","externalItemId":"i1","name":"Latte","productId":"p9","variantId":"v9","title":"Latte (12 oz)"}"""),
+      ScreenValues.resolveBody(action.body!!, row),
+    )
+    assertTrue(action.back)
+  }
+
+  // ---- inventory and ERP -------------------------------------------------------------------------------------------
+
+  private fun inventoryConnection(provider: String, status: String = "active", source: String = "system", sync: String = "import", extra: String = "") =
+    """{"hostId":"h1","provider":"$provider","status":"$status","accountName":"Acme Co","stockSource":"$source","productSync":"$sync","sendOrders":true,"locationId":"L1",
+       "orderCustomer":"Web","taxRule":"","stock":{"syncedAtMs":1760000000000,"direction":"$source","skus":40,"updated":3,"unchanged":37,"unknown":1,"untracked":0,"perLocation":0,"failed":0},
+       "products":{"syncedAtMs":1760000000000,"created":2,"updated":1,"unchanged":5,"failed":0,"more":false},"lastError":null,"connectedAtMs":1,"totals":{"ordersSent":9,"ordersFailed":1}$extra}"""
+
+  private fun inventory(connection: String?, importProducts: Boolean = true) =
+    screen(spec("inventory-sync", "inventory-sync.service"), emptyMap(),
+      """{"conn":{"offered":[{"id":"cin7-core"},{"id":"inflow"},{"id":"brightpearl"}],"connection":${connection ?: "null"},"capabilities":{"importProducts":$importProducts}},
+         "locations":{"locations":[{"id":"L1","name":"Main"},{"id":"L2","name":"Spare"}]},"attn":{"orders":[{"recordId":"r1","displayRef":"#1042","note":"Customer not found"}]},"log":{"entries":[{"id":"1","atMs":1,"kind":"order","message":"Order #1 sent"}]}}""")
+
+  @Test
+  fun inventorySyncOffersEachSystemItsOwnWayToConnectUntilOneIsConnected() {
+    val bare = inventory(null)
+    assertEquals(listOf("intro", "connect"), bare.shown())
+    assertEquals(listOf("connectCin7", "connectInflow", "connectBrightpearl"), bare.actionsShown("connect"))
+    assertEquals(
+      json("""{"hostId":"h1","provider":"cin7-core","accountId":"a1","apiKey":"k"}"""),
+      bare.body(bare.action("connect", "connectCin7"), """{"accountId":"a1","apiKey":"k"}"""),
+    )
+    assertEquals(
+      json("""{"hostId":"h1","provider":"inflow","companyId":"c1","apiKey":"k"}"""),
+      bare.body(bare.action("connect", "connectInflow"), """{"companyId":"c1","apiKey":"k"}"""),
+    )
+    val bright = bare.action("connect", "connectBrightpearl")
+    assertEquals("url", bright.openUrl)
+    assertEquals(json("""{"hostId":"h1","accountCode":"acme","returnTo":"/"}"""), bare.body(bright, """{"accountCode":"acme"}"""))
+  }
+
+  @Test
+  fun aConnectedSystemShowsItsSettingsOrdersNotSentAndActivity() {
+    val cin7 = inventory(inventoryConnection("cin7-core"))
+    assertEquals(listOf("status", "manage", "settings", "attention", "activity"), cin7.shown())
+    assertEquals(listOf("sync", "pause", "disconnect"), cin7.actionsShown("manage"))
+    assertEquals("Cin7 Core", ScreenValues.render(cin7.spec.blocks.first { it.id == "status" }.title!!, cin7.context))
+    assertEquals(listOf("resume", "disconnect"), inventory(inventoryConnection("cin7-core", status = "paused")).actionsShown("manage"))
+    val reconnect = inventory(inventoryConnection("inflow", status = "reconnect", extra = ",\"lastError\":\"Keys refused\""))
+    assertEquals(listOf("reconnectInflow", "disconnect"), reconnect.actionsShown("manage"))
+    assertTrue("settings" !in reconnect.shown() && "failing" in reconnect.shown())
+
+    fun fields(model: ScreenModel) = model.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+      .filter { ScreenValues.condition(it.whenCondition, model.context) }.map { it.key }
+    assertEquals(listOf("stockSource", "locationId", "productSync", "sendOrders", "orderCustomer", "taxRule"), fields(cin7))
+    assertEquals(listOf("stockSource", "locationId", "productSync", "sendOrders", "orderCustomer"), fields(inventory(inventoryConnection("brightpearl"))))
+    assertEquals(listOf("stockSource", "locationId", "productSync", "sendOrders", "orderCustomer"), fields(inventory(inventoryConnection("inflow"), importProducts = false)))
+    assertEquals(listOf("stockSource", "locationId", "productSync", "sendOrders", "orderCustomer"), fields(inventory(inventoryConnection("brightpearl"), importProducts = false)))
+    fun productChoices(model: ScreenModel) = model.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+      .filter { it.key == "productSync" && ScreenValues.condition(it.whenCondition, model.context) }.single().choices(model.context).map { it.first }
+    assertEquals(listOf("import", "export", "off"), productChoices(cin7), "Cin7 imports, exports or matches by SKU")
+    assertEquals(listOf("import", "off"), productChoices(inventory(inventoryConnection("brightpearl"))), "Brightpearl cannot make products")
+    assertEquals(listOf("export", "off"), productChoices(inventory(inventoryConnection("inflow"), importProducts = false)), "no import where the deployment cannot")
+    assertEquals(listOf("off"), productChoices(inventory(inventoryConnection("brightpearl"), importProducts = false)))
+    val location = FieldSpec.parse(cin7.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray[1])!!
+    assertEquals(listOf("", "L1", "L2"), location.choices(cin7.context).map { it.first })
+    assertEquals(
+      json("""{"hostId":"h1","stockSource":"store","locationId":"","productSync":"export","sendOrders":false,"orderCustomer":"Web","taxRule":"GST"}"""),
+      cin7.body(cin7.form("settings"), """{"stockSource":"store","locationId":"","productSync":"export","sendOrders":false,"orderCustomer":"Web","taxRule":"GST"}"""),
+    )
+    assertEquals(
+      json("""{"hostId":"h1","stockSource":"off","locationId":"L2","productSync":"off","sendOrders":true,"orderCustomer":"123"}"""),
+      inventory(inventoryConnection("brightpearl")).let { it.body(it.form("settings"), """{"stockSource":"off","locationId":"L2","productSync":"off","sendOrders":true,"orderCustomer":"123"}""") },
+    )
+    assertEquals("PATCH", cin7.form("settings").method.name)
+    assertEquals("DELETE", cin7.action("manage", "disconnect").method.name)
+    val again = cin7.spec.blocks.first { it.id == "attention" }.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    val row = ScreenContext.with(cin7.context, "item", json("""{"recordId":"r1","displayRef":"#1042"}"""))
+    assertEquals(json("""{"hostId":"h1","recordId":"r1"}"""), ScreenValues.resolveBody(again.body!!, row))
+    assertEquals("Customer not found", ScreenValues.render(cin7.spec.blocks.first { it.id == "attention" }.string("secondary")!!, ScreenContext.with(cin7.context, "item", json("""{"note":"Customer not found"}"""))))
+    assertEquals("Customer for web orders: The name of a Cin7 Core customer that store orders are recorded under.", ScreenValues.render(FieldSpec.parse(cin7.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.first { (it.jsonObject["key"] as JsonPrimitive).content == "orderCustomer" })!!.help!!, cin7.context))
+  }
+
+  // ---- couriers ----------------------------------------------------------------------------------------------------
+
+  private fun couriers(connection: String?, available: Boolean = true) =
+    screen(spec("couriers", "couriers.service"), emptyMap(), """{"conn":{"available":$available,"providers":[{"id":"doordash","label":"DoorDash","product":"DoorDash Drive","portal":"https://developer.doordash.com/portal"}],"connection":${connection ?: "null"}}}""")
+
+  private fun courierKeys(configured: Boolean, ok: Boolean = true, error: String? = null) =
+    """{"configured":$configured,"developerId":"d","keyId":"k","lastTestOk":$ok,"lastTestAtMs":1,"lastError":${error?.let { "\"$it\"" } ?: "null"}}"""
+
+  private fun courierConnection(live: String, test: String, tokenSet: Boolean = false) =
+    """{"provider":"doordash","providerLabel":"DoorDash","live":$live,"test":$test,"pickupPhone":"+15125550100","pickupNote":"Ask at the counter","webhookUrl":"https://console.test/api/couriers/webhook?hostId=h1","webhookTokenSet":$tokenSet,"updatedAtMs":1}"""
+
+  @Test
+  fun couriersAskForKeysUntilOneIsConnected() {
+    assertEquals(listOf("unavailable"), couriers(null, available = false).shown())
+    val bare = couriers(null)
+    assertEquals(listOf("money", "intro", "connect"), bare.shown())
+    assertEquals(listOf("connectLive", "connectTest", "portal"), bare.actionsShown("connect"))
+    assertEquals(
+      json("""{"hostId":"h1","provider":"doordash","live":{"developerId":"d","keyId":"k","signingSecret":"s"}}"""),
+      bare.body(bare.action("connect", "connectLive"), """{"developerId":"d","keyId":"k","signingSecret":"s"}"""),
+    )
+    assertEquals(
+      json("""{"hostId":"h1","provider":"doordash","test":{"developerId":"d","keyId":"k","signingSecret":"s"}}"""),
+      bare.body(bare.action("connect", "connectTest"), """{"developerId":"d","keyId":"k","signingSecret":"s"}"""),
+    )
+    assertEquals("https://developer.doordash.com/portal", bare.action("connect", "portal").link)
+  }
+
+  @Test
+  fun aConnectedCourierShowsEachKeysStateAndOffersTheMatchingKeyActions() {
+    val both = couriers(courierConnection(courierKeys(true), courierKeys(true, ok = false, error = "Bad secret"), tokenSet = true))
+    assertEquals(listOf("money", "status", "testError", "manage", "store"), both.shown())
+    assertEquals(listOf("test", "liveKey", "testKey", "copyWebhook", "webhookToken", "disconnect"), both.actionsShown("manage"))
+    val onlyTest = couriers(courierConnection(courierKeys(false), courierKeys(true)))
+    assertEquals(listOf("test", "addLiveKey", "testKey", "copyWebhook", "createWebhookToken", "disconnect"), onlyTest.actionsShown("manage"))
+    assertEquals(
+      json("""{"hostId":"h1","provider":"doordash","live":{"developerId":"d2","keyId":"k2","signingSecret":"s2"}}"""),
+      onlyTest.body(onlyTest.action("manage", "addLiveKey"), """{"developerId":"d2","keyId":"k2","signingSecret":"s2"}"""),
+    )
+    assertEquals("webhookToken", both.action("manage", "webhookToken").reveal)
+    assertEquals(json("""{"hostId":"h1","provider":"doordash"}"""), both.body(both.action("manage", "test")))
+    assertEquals(
+      json("""{"hostId":"h1","provider":"doordash","pickupPhone":"+15125550111","pickupNote":"Side door"}"""),
+      both.body(both.form("store"), """{"pickupPhone":"+15125550111","pickupNote":"Side door"}"""),
+    )
+    assertEquals("DoorDash", ScreenValues.render(both.spec.blocks.first { it.id == "status" }.title!!, both.context))
+    val rows = both.spec.blocks.first { it.id == "status" }.raw.jsonObject["rows"]!!.jsonArray
+    val shown = rows.filter { ScreenValues.condition(it.jsonObject["when"]?.let { w -> (w as JsonPrimitive).content }, both.context) }
+      .map { (it.jsonObject["label"] as JsonPrimitive).content + "=" + (it.jsonObject["value"] as JsonPrimitive).content }
+    assertEquals(listOf("Live key=Connected", "Test key=Refused"), shown.take(2))
+  }
+
+  // ---- plugin settings cards (the site's plugin settings zone) -------------------------------------------------------
+
+  @Test
+  fun theHostSettingsCardsSitInTheirOwnPluginsSettingsAndNobodyElses() {
+    for ((plugin, id) in listOf("live-chat" to "live-chat.settings", "zapier" to "zapier.connections", "ad-conversions" to "ad-conversions.service", "marketing-platforms" to "marketing-platforms.service")) {
+      val spec = spec(plugin, id)
+      assertEquals(listOf("sitePluginSettings"), spec.zones, id)
+      val mine = screen(spec, mapOf("pluginId" to plugin), "{}")
+      val other = screen(spec, mapOf("pluginId" to "commerce"), "{}")
+      assertTrue(ScreenValues.condition(spec.requires, mine.context), "$id shows in $plugin's settings")
+      assertFalse(ScreenValues.condition(spec.requires, other.context), "$id is not in another plugin's settings")
+    }
+  }
+
+  private fun liveChat(settings: String, canManage: Boolean = true) =
+    screen(spec("live-chat", "live-chat.settings"), emptyMap(), """{"cfg":{"canManage":$canManage,"settings":$settings}}""")
+
+  @Test
+  fun liveChatSavesTheMerchantsKeyAndPagesAsTheConsoleDoes() {
+    val settings = """{"enabled":true,"provider":"tidio","publicKey":"abcdefghijklmnopqrstu","pages":"only","paths":["/contact","/shop/*"],"position":"right","loadWithPage":false}"""
+    val admin = liveChat(settings)
+    assertEquals(listOf("status", "settings"), admin.shown())
+    assertEquals(listOf("admin", "status"), liveChat(settings, canManage = false).shown())
+    fun fields(model: ScreenModel, form: String) = model.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+      .filter { ScreenValues.condition(it.whenCondition, ScreenContext.with(model.context, "form", json(form))) }.map { it.key }
+    assertTrue("paths" in fields(admin, """{"pages":"only"}""") && "paths" in fields(admin, """{"pages":"except"}"""))
+    assertFalse("paths" in fields(admin, """{"pages":"all"}"""))
+    assertEquals(
+      json("""{"hostId":"h1","settings":{"enabled":true,"provider":"livechat","publicKey":"1234567","pages":"except","paths":["/a","/b/*","/c"],"position":"left","loadWithPage":true}}"""),
+      admin.body(admin.form("settings"), """{"enabled":true,"provider":"livechat","publicKey":"1234567","pages":"except","paths":"/a\n/b/*, /c","position":"left","loadWithPage":true}"""),
+    )
+    assertEquals("/contact, /shop/*", ScreenValues.render("{data.cfg.settings.paths}", admin.context))
+  }
+
+  private fun zapier(configured: Boolean, hooks: String = "[]") =
+    screen(spec("zapier", "zapier.connections"), emptyMap(), """{"hooks":{"configured":$configured,"appUrl":"https://zapier.com/apps/aglyn","canManage":true,"hooks":$hooks}}""")
+
+  @Test
+  fun zapierListsTheZapsAndDisconnectsOne() {
+    assertEquals(listOf("unavailable"), zapier(false).shown())
+    val model = zapier(true, """[{"id":"hk1","object":"hook","siteId":"h1","events":["order.paid"],"target":"hooks.zapier.com","keyName":"Zapier","created":"2026-10-01T00:00:00Z","lastDeliveryAt":"2026-10-12T10:00:00Z","lastDeliveryStatus":"delivered"}]""")
+    assertEquals(listOf("open", "hooks"), model.shown())
+    assertEquals("https://zapier.com/apps/aglyn", ScreenValues.render(model.action("open", "zapier").link!!, model.context))
+    val block = model.spec.blocks.first { it.id == "hooks" }
+    val row = ScreenContext.with(model.context, "item", model.context.jsonObject["data"]!!.jsonObject["hooks"]!!.jsonObject["hooks"]!!.jsonArray[0])
+    assertEquals("Order paid", ScreenValues.render(block.string("primary")!!, row))
+    assertEquals("Zapier", ScreenValues.render(block.string("tertiary")!!, row))
+    val disconnect = block.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    assertEquals(json("""{"hostId":"h1","hookId":"hk1"}"""), ScreenValues.resolveBody(disconnect.body!!, row))
+    assertTrue(ScreenValues.condition(disconnect.whenCondition, model.context))
+  }
+
+  private fun adConnection(provider: String, status: String = "active", extra: String = "") =
+    """{"id":"h1_$provider","provider":"$provider","hostId":"h1","status":"$status","adAccountId":null,"testEventCode":"TEST1","lastSentAtMs":1760000000000,"lastSentEvent":"Purchase","lastSentTest":false,"lastFailedAtMs":null,"lastError":null,"totals":{"sent":7,"failed":0},"connectedAtMs":1$extra}"""
+
+  private fun ads(provider: String, connections: String = "[]", tagIds: String = """{"meta":"123","tiktok":null,"pinterest":null}""", available: Boolean = true) =
+    screen(spec("ad-conversions", "ad-conversions.provider"), mapOf("provider" to provider),
+      """{"conn":{"available":$available,"setup":{"tagIds":$tagIds,"asksAboutAdvertising":true},"connections":$connections}}""")
+
+  @Test
+  fun adConversionsNeedThePixelIdFirstThenConnectWithATokenAndTheRightExtraField() {
+    assertEquals(listOf("needsTag", "hint", "manage"), ads("tiktok").shown())
+    assertTrue("needsTag" in ads("tiktok").shown() && "needsTag" !in ads("meta").shown())
+    assertEquals(emptyList(), ads("tiktok").actionsShown("manage"), "no pixel id yet: nothing to connect to")
+    assertEquals(listOf("connect"), ads("meta").actionsShown("manage"))
+    assertEquals(listOf("connect"), ads("pinterest").actionsShown("manage"), "Pinterest sends to an ad account, so it needs no pixel id")
+    val meta = ads("meta")
+    val connect = meta.action("manage", "connect")
+    assertEquals(listOf("accessToken", "testEventCode"), connect.prompt.filter { ScreenValues.condition(it.whenCondition, meta.context) }.map { it.key })
+    assertEquals(listOf("accessToken", "adAccountId"), ads("pinterest").let { p -> p.action("manage", "connect").prompt.filter { ScreenValues.condition(it.whenCondition, p.context) }.map { it.key } })
+    assertEquals(
+      json("""{"hostId":"h1","provider":"meta","accessToken":"tok","testEventCode":"TEST9"}"""),
+      meta.body(connect, """{"accessToken":"tok","testEventCode":"TEST9"}"""),
+    )
+    assertEquals(
+      json("""{"hostId":"h1","provider":"pinterest","accessToken":"tok","adAccountId":"1234567"}"""),
+      ads("pinterest").let { it.body(it.action("manage", "connect"), """{"accessToken":"tok","adAccountId":"1234567"}""") },
+    )
+    assertEquals(emptyList(), ads("meta", available = false).actionsShown("manage"))
+  }
+
+  @Test
+  fun aConnectedAdConversionOffersTheActionsItsStatusAllowsAndSavesTheTestCode() {
+    val active = ads("meta", "[${adConnection("meta")}]")
+    assertEquals(listOf("replace", "pause", "test", "disconnect"), active.actionsShown("manage"))
+    assertEquals(listOf("status", "manage", "testCode"), active.shown())
+    assertEquals(listOf("resume", "replace", "disconnect").sorted(), ads("meta", "[${adConnection("meta", "paused")}]").actionsShown("manage").sorted())
+    val reconnect = ads("meta", "[${adConnection("meta", "reconnect", ",\"lastError\":\"Token expired\"")}]")
+    assertEquals(listOf("reconnect", "disconnect"), reconnect.actionsShown("manage"))
+    assertTrue("failing" in reconnect.shown())
+    assertEquals(json("""{"hostId":"h1","provider":"meta","paused":true}"""), active.body(active.action("manage", "pause")))
+    assertEquals("Meta Conversions API", ScreenValues.render(active.spec.title, active.context))
+    assertEquals(json("""{"hostId":"h1","provider":"meta","testEventCode":"TEST2"}"""), active.body(active.form("testCode"), """{"testEventCode":"TEST2"}"""))
+    val pinterest = ads("pinterest", "[${adConnection("pinterest")}]")
+    assertEquals(listOf("status", "manage", "flag"), pinterest.shown())
+    assertEquals("DELETE", active.action("manage", "disconnect").method.name)
+  }
+
+  // ---- review platforms --------------------------------------------------------------------------------------------
+
+  private fun reviews(mode: String = "off", apiAvailable: Boolean = true, yotpoConnected: Boolean = false, apiConnected: Boolean = false) =
+    screen(spec("review-platforms", "review-platforms.service"), emptyMap(),
+      """{"settings":{"settings":{"apiAvailable":$apiAvailable,"trustpilot":{"mode":"$mode","sendOn":"shipped","bccAddress":"shop+1@invite.trustpilot.com","apiConnected":$apiConnected,"businessUnitId":null,"businessUserId":null,"locale":null,"templateId":null},
+         "yotpo":{"enabled":false,"connected":$yotpoConnected,"appKey":"abc"}}}}""")
+
+  @Test
+  fun reviewPlatformsShowTrustpilotAlwaysAndYotpoWhereTheDeploymentCanKeepAKey() {
+    assertEquals(listOf("trustpilotStatus", "trustpilot", "yotpoStatus", "yotpo"), reviews().shown())
+    assertEquals(listOf("trustpilotStatus", "trustpilot"), reviews(apiAvailable = false).shown())
+    assertEquals(listOf("trustpilotStatus", "trustpilot", "trustpilotManage", "yotpoStatus", "yotpo", "yotpoManage"), reviews(apiConnected = true, yotpoConnected = true).shown())
+    val model = reviews("bcc")
+    fun shown(model: ScreenModel, form: String) = model.spec.blocks.first { it.id == "trustpilot" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+      .filter { ScreenValues.condition(it.whenCondition, ScreenContext.with(model.context, "form", json(form))) }.map { it.key }
+    assertEquals(listOf("mode"), shown(model, """{"mode":"off"}"""))
+    assertEquals(listOf("mode", "sendOn", "bccAddress"), shown(model, """{"mode":"bcc"}"""))
+    assertEquals(listOf("mode", "sendOn", "apiKey", "apiSecret", "businessUnitId", "businessUserId", "locale", "templateId"), shown(model, """{"mode":"api"}"""))
+    val modes = model.spec.blocks.first { it.id == "trustpilot" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }.first { it.key == "mode" && ScreenValues.condition(it.whenCondition, model.context) }
+    assertEquals(listOf("off", "bcc", "api"), modes.choices(model.context).map { it.first })
+    val basic = reviews("bcc", apiAvailable = false)
+    val basicModes = basic.spec.blocks.first { it.id == "trustpilot" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }.first { it.key == "mode" && ScreenValues.condition(it.whenCondition, basic.context) }
+    assertEquals(listOf("off", "bcc"), basicModes.choices(basic.context).map { it.first })
+    assertEquals(
+      json("""{"hostId":"h1","change":{"platform":"trustpilot","mode":"bcc","sendOn":"delivered","bccAddress":"shop+9@invite.trustpilot.com"}}"""),
+      model.body(model.form("trustpilot"), """{"mode":"bcc","sendOn":"delivered","bccAddress":"shop+9@invite.trustpilot.com"}"""),
+    )
+    assertEquals(
+      json("""{"hostId":"h1","change":{"platform":"yotpo","appKey":"abc","secretKey":"s","enabled":true}}"""),
+      model.body(model.form("yotpo"), """{"appKey":"abc","secretKey":"s","enabled":true}"""),
+    )
+    val manage = reviews(apiConnected = true, yotpoConnected = true)
+    assertEquals(json("""{"hostId":"h1","change":{"platform":"trustpilot","disconnect":true}}"""), manage.body(manage.action("trustpilotManage", "trustpilotDisconnect")))
+    assertEquals(json("""{"hostId":"h1","change":{"platform":"yotpo","disconnect":true}}"""), manage.body(manage.action("yotpoManage", "yotpoDisconnect")))
+  }
+
+  @Test
+  fun aFieldTheFormHidesIsNeverSent() {
+    // Etsy has no marketplace menu: its form still holds an empty marketplaceId, which the route would refuse.
+    val etsy = marketplace("etsy", "[${marketplaceConn("etsy", "active")}]")
+    val fields = etsy.spec.blocks.first { it.id == "settings" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+    val everything = ScreenContext.with(etsy.context, "form", json("""{"marketplaceId":"","importOrders":true,"confirmShipments":true,"listingMode":"link","stockBuffer":2,"untrackedQuantity":10,"syncPrices":true,"priceAdjustPercent":5}"""))
+    val sent = visibleOnly(everything, fields)
+    assertEquals(
+      json("""{"hostId":"h1","marketplace":"etsy","importOrders":true,"confirmShipments":true,"listingMode":"link","stockBuffer":2,"untrackedQuantity":10,"syncPrices":true,"priceAdjustPercent":5}"""),
+      ScreenValues.resolveBody(ActionSpec.parse(etsy.spec.blocks.first { it.id == "settings" }.raw.jsonObject["submit"])!!.body!!, sent),
+    )
+    val ads = ads("meta")
+    val prompt = ads.action("manage", "connect").prompt
+    val typed = ScreenContext.with(ads.context, "form", json("""{"accessToken":"tok","adAccountId":"","testEventCode":"TEST1"}"""))
+    assertEquals(
+      json("""{"hostId":"h1","provider":"meta","accessToken":"tok","testEventCode":"TEST1"}"""),
+      ScreenValues.resolveBody(ads.action("manage", "connect").body!!, visibleOnly(typed, prompt)),
+      "Meta has no ad account, so an empty one is not sent",
+    )
+  }
+
+  // ---- accounting --------------------------------------------------------------------------------------------------
+
+  private val ledgerOptions = """{"accounts":[
+    {"id":"a1","code":"4000","name":"Sales","type":"Income","classification":"income","currency":null},
+    {"id":"a2","code":null,"name":"Stripe clearing","type":"Bank","classification":"bank","currency":null},
+    {"id":"a3","code":null,"name":"Main bank","type":"Bank","classification":"bank","currency":null},
+    {"id":"a4","code":"6100","name":"Fees","type":"Expense","classification":"expense","currency":null},
+    {"id":"a5","code":null,"name":"Sales tax","type":"Liability","classification":"liability","currency":null}],
+    "taxCodes":[{"id":"t1","name":"Texas 8.25%","ratePercent":8.25},{"id":"t2","name":"Exempt","ratePercent":null}]}"""
+
+  private fun ledgerConnection(provider: String, status: String, extra: String = "") =
+    """{"provider":"$provider","status":"$status","tenantId":"x","tenantName":"Acme Books","homeCurrency":"USD","multiCurrency":false,"environment":"sandbox","connectedAtMs":1760000000000,"connectedByEmail":"owner@example.com",
+       "mapping":{"accounts":{"income":"a1","clearing":"a2"},"taxCodes":{"taxed":"t1","rate9":"t2"},"syncMode":"per-order","startDate":null,"timeZone":"America/Chicago"},
+       "missingRoles":["feeExpense","payoutBank"],"lastSyncAtMs":null,"lastError":null$extra}"""
+
+  private fun books(connection: String?, providers: String = """{"quickbooks":true,"xero":true,"codat":false}""", options: String = ledgerOptions, seen: String = """["taxed","untaxed","rate9"]""") =
+    screen(spec("accounting", "accounting.books"), emptyMap(),
+      """{"status":{"providers":$providers,"connection":${connection ?: "null"},"counts":{"pending":2,"synced":10,"needsAttention":1},"seenTaxKeys":$seen},"options":$options}""")
+
+  @Test
+  fun accountingOffersOnlyTheLedgersTheDeploymentHasCredentialsFor() {
+    val bare = books(null)
+    assertEquals(listOf("intro", "connect"), bare.shown())
+    assertEquals(listOf("connectQuickbooks", "connectXero"), bare.actionsShown("connect"))
+    val connect = bare.action("connect", "connectXero")
+    assertEquals("url", connect.openUrl)
+    assertEquals(json("""{"orgId":"o1","provider":"xero"}"""), bare.body(connect))
+    assertEquals(listOf("unavailable", "connect"), books(null, providers = """{"quickbooks":false,"xero":false,"codat":false}""").shown())
+  }
+
+  @Test
+  fun aConnectedLedgerShowsItsStateAndFiltersTheAccountChoicesByKind() {
+    val model = books(ledgerConnection("quickbooks", "connected"))
+    assertEquals(listOf("status", "missing", "manage", "mapping", "taxKeys", "logs"), model.shown())
+    assertEquals("Acme Books", ScreenValues.render(model.spec.blocks.first { it.id == "status" }.title!!, model.context))
+    val fields = model.spec.blocks.first { it.id == "mapping" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+    fun choices(key: String) = fields.first { it.key == key }.choices(model.context).map { it.first }
+    assertEquals(listOf("", "a1"), choices("income"))
+    assertEquals(listOf("", "a1"), choices("shippingIncome"))
+    assertEquals(listOf("a2", "a3"), choices("clearing").filter { it.isNotEmpty() })
+    assertEquals(listOf("a4"), choices("feeExpense").filter { it.isNotEmpty() })
+    assertEquals(listOf("a5"), choices("taxLiability").filter { it.isNotEmpty() })
+    assertEquals(listOf("", "t1", "t2"), choices("taxed"))
+    val perOrder = fields.filter { ScreenValues.condition(it.whenCondition, ScreenContext.with(model.context, "form", json("""{"syncMode":"per-order"}"""))) }.map { it.key }
+    assertFalse("taxLiability" in perOrder)
+    assertTrue("taxLiability" in fields.filter { ScreenValues.condition(it.whenCondition, ScreenContext.with(model.context, "form", json("""{"syncMode":"daily-summary"}"""))) }.map { it.key })
+    // The form keeps the finer tax rates it does not show and sets the two it does.
+    assertEquals(
+      json("""{"orgId":"o1","mapping":{"accounts":{"income":"a1","shippingIncome":"","clearing":"a2","feeExpense":"a4","payoutBank":"a3"},"taxCodes":{"taxed":"t2","rate9":"t2"},"syncMode":"per-order","startDate":"2026-01-01","timeZone":"America/Chicago"}}"""),
+      model.body(model.form("mapping"), """{"syncMode":"per-order","income":"a1","shippingIncome":"","clearing":"a2","feeExpense":"a4","payoutBank":"a3","taxed":"t2","untaxed":"","startDate":"2026-01-01","timeZone":"America/Chicago"}"""),
+    )
+    val other = model.spec.blocks.first { it.id == "taxKeys" }
+    fun keyRow(key: String) = ScreenContext.with(model.context, "item", JsonPrimitive(key))
+    assertTrue(!ScreenValues.condition(other.string("filter"), keyRow("taxed")) && ScreenValues.condition(other.string("filter"), keyRow("rate9")))
+    assertEquals("t2", ScreenValues.render("{data.status.connection.mapping.taxCodes[@item]}", keyRow("rate9")))
+    val setTax = other.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    assertEquals(
+      json("""{"orgId":"o1","mapping":{"accounts":{"income":"a1","clearing":"a2"},"taxCodes":{"taxed":"t1","rate9":"t1"},"syncMode":"per-order","timeZone":"America/Chicago"}}"""),
+      ScreenValues.resolveBody(setTax.body!!, ScreenContext.with(keyRow("rate9"), "form", json("""{"code":"t1"}"""))),
+    )
+  }
+
+  @Test
+  fun aXeroGrantReachingSeveralOrganizationsAsksForOneAndAReconnectOpensTheConsentPage() {
+    val choose = books(ledgerConnection("xero", "choose-tenant", ",\"tenants\":[{\"id\":\"o-1\",\"name\":\"Acme Ltd\"},{\"id\":\"o-2\",\"name\":\"Acme Pty\"}]"))
+    assertTrue("tenants" in choose.shown() && "mapping" !in choose.shown())
+    val pick = choose.spec.blocks.first { it.id == "tenants" }.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    val row = ScreenContext.with(choose.context, "item", json("""{"id":"o-2","name":"Acme Pty"}"""))
+    assertEquals(json("""{"orgId":"o1","tenantId":"o-2"}"""), ScreenValues.resolveBody(pick.body!!, row))
+    val reconnect = books(ledgerConnection("xero", "reconnect-required"))
+    assertEquals(listOf("reconnect", "disconnect"), reconnect.actionsShown("manage"))
+    assertEquals(json("""{"orgId":"o1","provider":"xero"}"""), reconnect.body(reconnect.action("manage", "reconnect")))
+    assertEquals("Reconnect Xero", ScreenValues.render(reconnect.action("manage", "reconnect").label, reconnect.context))
+    assertTrue("reconnectNotice" in reconnect.shown() && "mapping" !in reconnect.shown())
+    assertEquals(listOf("disconnect"), books(ledgerConnection("quickbooks", "connected")).actionsShown("manage"))
+  }
+
+  @Test
+  fun theSyncLogPagesByBeforeAndRetriesOneItemOrAll() {
+    val attention = spec("accounting", "accounting.attention")
+    val load = attention.loads.first()
+    assertEquals("before", load.cursorParam)
+    assertEquals("nextBefore", load.cursor)
+    assertEquals("/api/accounting/log?orgId=o1&filter=attention", ScreenValues.renderUrl(load.url, screen(attention, emptyMap(), """{"log":{"items":[]}}""").context))
+    assertEquals("/api/accounting/log?orgId=o1&filter=all", ScreenValues.renderUrl(spec("accounting", "accounting.activity").loads.first().url, screen(attention, emptyMap(), """{"log":{"items":[]}}""").context))
+    val model = screen(attention, emptyMap(), """{"log":{"items":[{"id":"i1","kind":"sale","label":"Order #1042","externalId":"INV-9","status":"needs_attention","lastError":"Account closed","amountCents":12345,"currency":"usd","occurredAtMs":1760000000000}],"nextBefore":99}}""")
+    val block = attention.blocks.first()
+    val row = ScreenContext.with(model.context, "item", model.context.jsonObject["data"]!!.jsonObject["log"]!!.jsonObject["items"]!!.jsonArray[0])
+    assertEquals("Account closed", ScreenValues.render(block.string("secondary")!!, row))
+    assertEquals("$123.45", ScreenValues.render(block.string("trailing")!!, row))
+    val retry = block.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
+    assertEquals(json("""{"orgId":"o1","itemId":"i1"}"""), ScreenValues.resolveBody(retry.body!!, row))
+    assertEquals(json("""{"orgId":"o1","all":true}"""), ScreenValues.resolveBody(attention.actions.first().body!!, model.context))
+    assertTrue(spec("accounting", "accounting.activity").actions.isEmpty(), "retry all belongs to the attention list")
+  }
+
+  // ---- shipping ----------------------------------------------------------------------------------------------------
+
+  private val shippingSettings = """{"settings":{"packages":[{"id":"default","name":"Medium box","lengthCm":30,"widthCm":23,"heightCm":15,"emptyWeightGrams":200},{"id":"box_2","name":"Mailer","lengthCm":25,"widthCm":20,"heightCm":5,"emptyWeightGrams":50}],
+    "shipFromId":"loc1","labelFormat":"pdf_4x6","insurance":"none","signature":"none","checkoutServices":["usps:priority"],"customsSigner":"Ada"},
+    "places":[{"id":"loc1","name":"Warehouse","address":{"country":"US"}}],"shipFromResolved":true,
+    "services":[{"serviceKey":"usps:priority","label":"USPS Priority"},{"serviceKey":"ups:ground","label":"UPS Ground"}],"provider":"Shippo","testMode":false}"""
+
+  private fun ship(id: String, extra: String = "", params: Map<String, String> = emptyMap()) =
+    screen(spec("shipping", id), params, """{"s":$shippingSettings,"avail":{"available":true,"provider":"Shippo","testMode":false,"ownAccount":false,"ownAccounts":true,"platform":true}$extra}""")
+
+  private fun settingsOf(vararg overrides: Pair<String, String>): JsonObject {
+    val base = mutableMapOf(
+      "packages" to """[{"id":"default","name":"Medium box","lengthCm":30,"widthCm":23,"heightCm":15,"emptyWeightGrams":200},{"id":"box_2","name":"Mailer","lengthCm":25,"widthCm":20,"heightCm":5,"emptyWeightGrams":50}]""",
+      "shipFromId" to "\"loc1\"", "labelFormat" to "\"pdf_4x6\"", "insurance" to "\"none\"", "signature" to "\"none\"",
+      "checkoutServices" to """["usps:priority"]""", "customsSigner" to "\"Ada\"",
+    )
+    overrides.forEach { (k, v) -> base[k] = v }
+    return json("""{"hostId":"h1","settings":{${base.entries.joinToString(",") { "\"${it.key}\":${it.value}" }}}}""")
+  }
+
+  @Test
+  fun shippingLinksToItsSectionsAndWarnsWhenThereIsNoShipFromAddress() {
+    val model = ship("shipping.service")
+    assertEquals(listOf("sections"), model.shown())
+    val links = model.spec.blocks.first { it.id == "sections" }.raw.jsonObject["items"]!!.jsonArray
+    val shown = links.filter { ScreenValues.condition(it.jsonObject["when"]?.let { w -> (w as JsonPrimitive).content }, model.context) }.map { (it.jsonObject["screen"] as JsonPrimitive).content }
+    assertEquals(listOf("shipping.shipFrom", "shipping.boxes", "shipping.labels", "shipping.services", "shipping.billing", "shipping.carriers", "shipping.own"), shown)
+    val unavailable = screen(spec("shipping", "shipping.service"), emptyMap(), """{"s":{"shipFromResolved":false},"avail":{"available":false}}""")
+    assertEquals(listOf("unavailable"), unavailable.shown())
+    val unresolved = screen(spec("shipping", "shipping.service"), emptyMap(), """{"s":{"shipFromResolved":false},"avail":{"available":true,"ownAccount":true}}""")
+    assertEquals(listOf("unresolved", "sections"), unresolved.shown())
+  }
+
+  @Test
+  fun everyShippingSaveSendsTheWholeSettingsWithOnlyItsOwnChangeOnTop() {
+    val boxes = ship("shipping.boxes")
+    val list = boxes.spec.blocks.first { it.id == "boxes" }
+    fun box(index: Int) = ScreenContext.with(boxes.context, "item", boxes.context.jsonObject["data"]!!.jsonObject["s"]!!.jsonObject["settings"]!!.jsonObject["packages"]!!.jsonArray[index])
+    val actions = list.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.associateBy { it.id }
+    assertEquals(settingsOf("defaultPackageId" to "\"box_2\""), ScreenValues.resolveBody(actions.getValue("makeDefault").body!!, box(1)))
+    assertEquals(
+      settingsOf("packages" to """[{"id":"default","name":"Medium box","lengthCm":30,"widthCm":23,"heightCm":15,"emptyWeightGrams":200}]"""),
+      ScreenValues.resolveBody(actions.getValue("remove").body!!, box(1)),
+    )
+    val edited = ScreenValues.resolveBody(actions.getValue("edit").body!!, ScreenContext.with(box(1), "form", json("""{"name":"Big mailer","lengthCm":30,"widthCm":25,"heightCm":8,"emptyWeightGrams":60}""")))
+    assertEquals(
+      settingsOf("packages" to """[{"id":"default","name":"Medium box","lengthCm":30,"widthCm":23,"heightCm":15,"emptyWeightGrams":200},{"id":"box_2","name":"Big mailer","lengthCm":30,"widthCm":25,"heightCm":8,"emptyWeightGrams":60}]"""),
+      edited,
+    )
+    assertEquals(listOf("name", "lengthCm", "widthCm", "heightCm", "emptyWeightGrams"), actions.getValue("edit").prompt.map { it.key })
+    assertEquals("{item.name}", actions.getValue("edit").prompt.first().initial)
+    val add = boxes.action("add", "addBox")
+    val added = ScreenValues.resolveBody(add.body!!, ScreenContext.with(boxes.context, "form", json("""{"name":"Tube","lengthCm":60,"widthCm":8,"heightCm":8,"emptyWeightGrams":90}""")))
+    val packages = added.jsonObject["settings"]!!.jsonObject["packages"]!!.jsonArray
+    assertEquals(3, packages.size)
+    assertTrue(Regex("box_[0-9a-f]{8}").matches((packages[2].jsonObject["id"] as JsonPrimitive).content), "a fresh id for the new box")
+    assertEquals("Tube", (packages[2].jsonObject["name"] as JsonPrimitive).content)
+    // The default box badge: the stored default, else the first box.
+    val badges = list.raw.jsonObject["badges"]!!.jsonArray.map { (it.jsonObject["when"] as JsonPrimitive).content }
+    assertTrue(ScreenValues.condition(badges[1], box(0)) && !ScreenValues.condition(badges[1], box(1)))
+  }
+
+  @Test
+  fun theShipFromLocationHidesTheAddressFieldsAndLabelsSaveTheirChoices() {
+    val from = ship("shipping.shipFrom")
+    val fields = from.spec.blocks.first { it.id == "shipFrom" }.raw.jsonObject["fields"]!!.jsonArray.mapNotNull { FieldSpec.parse(it) }
+    fun shown(form: String) = fields.filter { ScreenValues.condition(it.whenCondition, ScreenContext.with(from.context, "form", json(form))) }.map { it.key }
+    assertEquals(listOf("shipFromId"), shown("""{"shipFromId":"loc1"}"""))
+    assertEquals(listOf("shipFromId", "name", "company", "line1", "line2", "city", "state", "postalCode", "country", "phone"), shown("""{"shipFromId":""}"""))
+    assertEquals(listOf("", "loc1"), fields.first().choices(from.context).map { it.first })
+    val labels = ship("shipping.labels")
+    assertEquals(
+      settingsOf("labelFormat" to "\"zpl\"", "signature" to "\"adult\"", "insurance" to "\"order_value\"", "customsSigner" to "\"Grace\""),
+      labels.body(labels.form("labels"), """{"labelFormat":"zpl","signature":"adult","insurance":"order_value","customsSigner":"Grace"}"""),
+    )
+  }
+
+  @Test
+  fun checkoutServicesAreSwitchedOnAndOffByTheirKey() {
+    val model = ship("shipping.services")
+    val block = model.spec.blocks.first { it.id == "services" }
+    val toggle = block.raw.jsonObject["toggle"]!!.jsonObject
+    fun row(key: String) = ScreenContext.with(model.context, "item", json("""{"serviceKey":"$key","label":"x"}"""))
+    assertEquals("usps:priority", ScreenValues.render((toggle["value"] as JsonPrimitive).content, row("usps:priority")))
+    assertEquals("", ScreenValues.render((toggle["value"] as JsonPrimitive).content, row("ups:ground")), "a service not in the list reads as off")
+    assertEquals(settingsOf("checkoutServices" to """["usps:priority","ups:ground"]"""), ScreenValues.resolveBody(ActionSpec.parse(toggle["on"])!!.body!!, row("ups:ground")))
+    assertEquals(settingsOf("checkoutServices" to "[]"), ScreenValues.resolveBody(ActionSpec.parse(toggle["off"])!!.body!!, row("usps:priority")))
+  }
+
+  @Test
+  fun carrierAccountsSwitchOnAndOffAndConnectByTheCarriersOwnFields() {
+    val carriers = """{"accounts":[{"id":"ca1","carrierName":"UPS","accountNumber":"A1","active":true,"platformOwned":false,"authorization":"connected"}],"canConnect":true,"canToggle":true,
+      "connectable":[{"carrier":"ups","label":"UPS","flow":"contact","fields":[]},{"carrier":"dhl_express","label":"DHL Express","flow":"credentials","fields":[{"key":"account_number","label":"Account number","secret":false},{"key":"password","label":"Password","secret":true},{"key":"is_test","label":"Test account","secret":false,"checkbox":true}]}]}"""
+    val list = screen(spec("shipping", "shipping.carriers"), emptyMap(), """{"carriers":$carriers}""")
+    assertEquals(listOf("hint", "accounts", "connectable"), list.shown())
+    val toggle = list.spec.blocks.first { it.id == "accounts" }.raw.jsonObject["toggle"]!!.jsonObject
+    val item = ScreenContext.with(list.context, "item", json("""{"id":"ca1","active":true,"carrierName":"UPS"}"""))
+    assertEquals(json("""{"hostId":"h1","carrierAccountId":"ca1","active":false}"""), ScreenValues.resolveBody(ActionSpec.parse(toggle["off"])!!.body!!, item))
+
+    val dhl = screen(spec("shipping", "shipping.connectCarrier"), mapOf("carrier" to "dhl_express"), """{"carriers":$carriers}""")
+    assertEquals(listOf("credentials"), dhl.shown())
+    val dynamic = FieldSpec.parseAll(dhl.spec.blocks.first { it.id == "credentials" }.raw.jsonObject["fields"]!!.jsonArray, dhl.context)
+    assertEquals(listOf("account_number", "password", "is_test"), dynamic.map { it.key })
+    assertEquals(listOf("text", "password", "select"), dynamic.map { it.kind })
+    assertEquals(listOf("" to "No", "true" to "Yes"), dynamic.last().choices(dhl.context))
+    assertEquals(
+      json("""{"hostId":"h1","carrier":"dhl_express","credentials":{"account_number":"123","password":"pw","is_test":""}}"""),
+      ScreenValues.resolveBody(dhl.spec.blocks.first { it.id == "credentials" }.raw.jsonObject["submit"]!!.jsonObject["body"]!!, ScreenContext.with(dhl.context, "form", json("""{"account_number":"123","password":"pw","is_test":""}"""))),
+    )
+    val ups = screen(spec("shipping", "shipping.connectCarrier"), mapOf("carrier" to "ups"), """{"carriers":$carriers}""")
+    assertEquals(listOf("ups", "account"), ups.shown())
+    assertEquals("authorizeUrl", ActionSpec.parse(ups.spec.blocks.first { it.id == "account" }.raw.jsonObject["submit"])!!.openUrl)
+  }
+
+  @Test
+  fun anOwnShippingAccountConnectsByItsServicesFieldsAndDisconnects() {
+    val own = """{"services":[
+      {"kind":"easyship","label":"Easyship","summary":"Buy labels from Easyship.","role":"labels","fields":[{"key":"apiKey","label":"API access token","helper":"In Easyship.","secret":true,"required":true},{"key":"weightUnit","label":"Weight unit","helper":"","options":[{"value":"kg","label":"Kilograms"},{"value":"lb","label":"Pounds"}]}]},
+      {"kind":"sendcloud","label":"Sendcloud","summary":"Sendcloud labels.","role":"labels","fields":[]}],
+      "connections":[{"kind":"sendcloud","label":"Sendcloud","role":"labels","accountName":"Acme","testMode":false,"connectedAtMs":1,"followsParcels":false,"webhookUrl":"https://console.test/hook","settings":{}}]}"""
+    val list = screen(spec("shipping", "shipping.own"), emptyMap(), """{"own":$own}""")
+    val connectable = list.spec.blocks.first { it.id == "connectable" }
+    fun shown(kind: String) = ScreenValues.condition(connectable.string("filter"), ScreenContext.with(list.context, "item", json("""{"kind":"$kind"}""")))
+    assertTrue(shown("easyship") && !shown("sendcloud"), "a connected service is not offered again")
+    val connected = list.spec.blocks.first { it.id == "connections" }
+    val row = ScreenContext.with(list.context, "item", list.context.jsonObject["data"]!!.jsonObject["own"]!!.jsonObject["connections"]!!.jsonArray[0])
+    val actions = connected.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }
+    assertEquals(json("""{"hostId":"h1","kind":"sendcloud"}"""), ScreenValues.resolveBody(actions.first { it.id == "disconnect" }.body!!, row))
+    assertTrue(ScreenValues.condition(connected.raw.jsonObject["badges"]!!.jsonArray.last().jsonObject["when"].let { (it as JsonPrimitive).content }, row), "tracking is not set up")
+
+    val connect = screen(spec("shipping", "shipping.connectOwn"), mapOf("kind" to "easyship"), """{"own":$own}""")
+    val fields = FieldSpec.parseAll(connect.spec.blocks.first { it.id == "connect" }.raw.jsonObject["fields"]!!.jsonArray, connect.context)
+    assertEquals(listOf("apiKey", "weightUnit"), fields.map { it.key })
+    assertEquals(listOf("password", "select"), fields.map { it.kind })
+    assertTrue(fields[0].required && !fields[1].required)
+    assertEquals(listOf("kg" to "Kilograms", "lb" to "Pounds"), fields[1].choices(connect.context))
+    assertEquals("kg", fields[1].initial, "a pick starts on its first option")
+    assertEquals(
+      json("""{"hostId":"h1","kind":"easyship","values":{"apiKey":"tok","weightUnit":"lb"}}"""),
+      ScreenValues.resolveBody(connect.spec.blocks.first { it.id == "connect" }.raw.jsonObject["submit"]!!.jsonObject["body"]!!, ScreenContext.with(connect.context, "form", json("""{"apiKey":"tok","weightUnit":"lb"}"""))),
+    )
+  }
+
+  @Test
+  fun payingForLabelsAsksForConsentAndTheSpendIsOnBilling() {
+    fun billing(acct: String) = screen(spec("shipping", "shipping.billing"), emptyMap(), """{"acct":$acct}""")
+    val open = billing("""{"opened":true,"ownAccount":false,"provider":"Shippo","consent":null,"consentText":"I agree labels are debited.","markupPct":5}""")
+    assertEquals(listOf("markup", "terms", "consent", "manage"), open.shown())
+    assertEquals(listOf("accept"), open.actionsShown("manage"))
+    assertEquals(json("""{"hostId":"h1","accepted":true}"""), open.body(open.action("manage", "accept")))
+    assertEquals(listOf("withdraw"), billing("""{"ownAccount":false,"consent":{"acceptedAtMs":1},"consentText":"x","markupPct":0}""").actionsShown("manage"))
+    assertEquals(listOf("own"), billing("""{"ownAccount":true,"provider":"Easyship"}""").shown())
+    val spend = spec("shipping", "shipping.spend")
+    assertEquals(listOf("orgBillingUsage"), spend.zones)
+    val model = screen(spend, emptyMap(), """{"spend":{"available":true,"markupPct":0,"months":[{"month":"2026-10","labels":3,"chargedCents":1500,"creditedCents":200,"debitedCents":1000,"invoicedCents":500}]}}""")
+    assertEquals(listOf("noMarkup", "months"), model.shown())
+    val row = ScreenContext.with(model.context, "item", model.context.jsonObject["data"]!!.jsonObject["spend"]!!.jsonObject["months"]!!.jsonArray[0])
+    assertEquals("3 labels · $10.00 from Stripe balance · $5.00 on invoice", ScreenValues.render(spend.blocks.first { it.id == "months" }.string("secondary")!!, row))
+    assertEquals("/api/shipping/spend?orgId=o1", ScreenValues.renderUrl(spend.loads.first().url, model.context))
   }
 }

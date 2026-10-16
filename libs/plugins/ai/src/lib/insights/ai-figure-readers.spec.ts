@@ -172,4 +172,24 @@ describe('forms', () => {
     ])
     expect(table.period).toEqual({ from: '2026-09-01', to: '2026-09-16', days: 16 })
   })
+
+  it('reads a form with no submissions as 0, never a blank (AGL-3834)', async () => {
+    const docs = {
+      // Copper Kettle Catering, 2026-10-15: viewed twice, never submitted.
+      'hosts/host-1/forms/inquiry': {
+        displayName: 'Catering inquiry form',
+        routing: { lead: true },
+        stats: { periods: { '2026-09': { views: 2 } } },
+      },
+      'hosts/host-1/forms/fresh': { displayName: 'New form' },
+    }
+    const table = await tableOf(docs, 'forms.performance')
+    expect(table.rows).toEqual([
+      { form: 'Catering inquiry form', views: 2, submissions: 0, completion: 0, leads: 0 },
+      // Nothing recorded at all: still 0 submissions; no views to rate, and
+      // no leads measured on a form that does not route them.
+      { form: 'New form', views: null, submissions: 0, completion: null, leads: null },
+    ])
+    expect(table.notes).toContain('A blank Leads figure means the form does not add its submissions to Leads.')
+  })
 })

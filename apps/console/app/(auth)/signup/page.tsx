@@ -206,6 +206,57 @@ async function persistSignUpProfile(
 }
 
 /**
+ * How long a sign-up waits on its best-effort Firestore writes (AGL-3806).
+ *
+ * A write from the tab that holds the Firestore primary lease is acknowledged
+ * in well under a second, so this deadline only matters when another tab
+ * holds the lease (see below).
+ */
+const SIGN_UP_WRITES_DEADLINE_MS = 4_000
+
+/**
+ * Wait for the sign-up's `users/{uid}` writes, but never longer than
+ * {@link SIGN_UP_WRITES_DEADLINE_MS} (AGL-3806).
+ *
+ * The writes are issued together and all land on one document. Each one
+ * already swallows its own failure, and each sits under the page's loading
+ * overlay, which `/verify-email` waits out before it sends the verification
+ * mail.
+ *
+ * On a durable origin the console's Firestore runs
+ * `persistentMultipleTabManager`: only the tab holding the primary lease talks
+ * to the server, so a write from any other tab is acknowledged when THAT tab's
+ * event loop gets to it. A console tab left in the background is throttled by
+ * the browser, down to roughly one wake-up a minute. A sign-up made with one
+ * open measured about a minute between the account and its verification
+ * mail, all of it under the overlay.
+ *
+ * Stopping the wait does not stop the write. On a durable origin a write is
+ * in the IndexedDB mutation queue before its acknowledgement is awaited, and
+ * the lease holder sends it whether or not this page is still here. A
+ * memory-cache origin has one tab per cache, so its writes are acknowledged
+ * well inside the deadline.
+ */
+async function settleSignUpWrites(
+  writes: readonly (Promise<unknown> | null)[],
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<'late'>((resolve) => {
+    timer = setTimeout(() => resolve('late'), SIGN_UP_WRITES_DEADLINE_MS)
+  })
+  const outcome = await Promise.race([
+    Promise.allSettled(writes).then(() => 'settled' as const),
+    late,
+  ])
+  clearTimeout(timer)
+  if (outcome === 'late') {
+    console.warn(
+      `[signup] Firestore writes still unacknowledged after ${SIGN_UP_WRITES_DEADLINE_MS}ms; continuing`,
+    )
+  }
+}
+
+/**
  * Provision the workspace, for a door whose account can already use one
  * (AGL-1115 / AGL-1117).
  *
@@ -323,10 +374,12 @@ async function provisionAndLandSignUp(
   nameWasTyped: boolean,
 ): Promise<void> {
   if (!credential.user.emailVerified) {
-    await rememberPendingSignUpWorkspace(firestore, credential.user.uid, {
-      name: orgName,
-      nameWasTyped,
-    })
+    await settleSignUpWrites([
+      rememberPendingSignUpWorkspace(firestore, credential.user.uid, {
+        name: orgName,
+        nameWasTyped,
+      }),
+    ])
     return
   }
   const slug = await provisionSignUpOrg(credential, orgName)
@@ -463,15 +516,14 @@ function SignUp() {
       // Same reason the popup path remembers it (AGL-1535): the intent has to
       // outlive this page, and awaiting matters because the provision below
       // can end in a hard navigation that tears the write down mid-flight.
-      await rememberOnboardingPlanIntent(
-        firestore,
-        credential.user.uid,
-        planIntent,
-      )
-      // The redirect door is the MAJORITY door — most sign-ups are on a
-      // phone — so leaving it out would attribute the minority of them
-      // (AGL-1731/AGL-1942).
-      await rememberSignUpCampaign(firestore, credential.user.uid, campaign)
+      //
+      // The campaign too: the redirect door is the MAJORITY door — most
+      // sign-ups are on a phone — so leaving it out would attribute the
+      // minority of them (AGL-1731/AGL-1942).
+      await settleSignUpWrites([
+        rememberOnboardingPlanIntent(firestore, credential.user.uid, planIntent),
+        rememberSignUpCampaign(firestore, credential.user.uid, campaign),
+      ])
       await provisionAndLandSignUp(
         firestore,
         credential,
@@ -675,24 +727,27 @@ function SignUp() {
           // Awaited for the same reason the acceptance above is: both branches
           // below can end in `window.location.assign`, which tears this page
           // down mid-write. Best-effort inside — a failed remember must not
-          // read as a failed sign-up.
-          await rememberOnboardingPlanIntent(
-            firestore,
-            credential.user.uid,
-            planIntent,
-          )
+          // read as a failed sign-up — and bounded, see `settleSignUpWrites`.
+          //
           // And where the account came FROM (AGL-1731), on the same document
           // and for the same reason: the hit that just fired answers "how
           // many signups did the campaign produce", and nothing else in the
           // system can answer "how much revenue did it produce" — that
           // arrives weeks later from a Stripe webhook with no browser and no
-          // memory of a URL. Awaited alongside the intent because the
-          // provision below can end in a hard navigation.
-          await rememberSignUpCampaign(firestore, credential.user.uid, campaign)
+          // memory of a URL.
+          //
           // Only the email/password branch has form values to keep; the
           // Google branches carry their name on the token, and the session
           // route seeds from that (AGL-1127).
-          if (values) await persistSignUpProfile(firestore, credential, values)
+          await settleSignUpWrites([
+            rememberOnboardingPlanIntent(
+              firestore,
+              credential.user.uid,
+              planIntent,
+            ),
+            rememberSignUpCampaign(firestore, credential.user.uid, campaign),
+            values ? persistSignUpProfile(firestore, credential, values) : null,
+          ])
           // The product-updates opt-in, when it was given (AGL-3185). After
           // the profile write, so the record can carry the name the form
           // collected; before the provision below, which can end in a hard

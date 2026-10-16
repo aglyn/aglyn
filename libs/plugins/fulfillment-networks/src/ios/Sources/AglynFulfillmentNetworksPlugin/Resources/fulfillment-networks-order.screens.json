@@ -1,0 +1,181 @@
+{
+  "$comment": "A fulfillment network's hand-off of one order, in the order's services: sending, where it stands, and cancelling at the network. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "fulfillment-networks.order",
+      "title": "Fulfillment networks",
+      "label": "Fulfillment networks",
+      "icon": "shippingbox|inventory_2",
+      "scope": "site",
+      "zones": [
+        "orderDetail"
+      ],
+      "order": 50,
+      "constants": {
+        "providers": [
+          {
+            "id": "shipbob",
+            "label": "ShipBob",
+            "short": "ShipBob"
+          },
+          {
+            "id": "amazon-mcf",
+            "label": "Amazon Multi-Channel Fulfillment",
+            "short": "Amazon"
+          },
+          {
+            "id": "shipmonk",
+            "label": "ShipMonk",
+            "short": "ShipMonk"
+          },
+          {
+            "id": "flexport",
+            "label": "Flexport",
+            "short": "Flexport"
+          }
+        ],
+        "statuses": [
+          {
+            "id": "queued",
+            "label": "Waiting to send"
+          },
+          {
+            "id": "accepted",
+            "label": "With the network"
+          },
+          {
+            "id": "partially_shipped",
+            "label": "Partly shipped"
+          },
+          {
+            "id": "shipped",
+            "label": "Shipped"
+          },
+          {
+            "id": "canceled",
+            "label": "Canceled"
+          },
+          {
+            "id": "failed",
+            "label": "Not sent"
+          },
+          {
+            "id": "skipped",
+            "label": "Not sent"
+          }
+        ],
+        "tracking": [
+          {
+            "id": "pre_transit",
+            "label": "Label created"
+          },
+          {
+            "id": "in_transit",
+            "label": "In transit"
+          },
+          {
+            "id": "out_for_delivery",
+            "label": "Out for delivery"
+          },
+          {
+            "id": "delivered",
+            "label": "Delivered"
+          },
+          {
+            "id": "exception",
+            "label": "Delivery problem"
+          },
+          {
+            "id": "returned",
+            "label": "Returned to sender"
+          }
+        ]
+      },
+      "load": {
+        "order": {
+          "orderZone": "{params.orderId}"
+        },
+        "view": {
+          "url": "/api/fulfillment-networks/order?hostId={site.id}&recordId={params.orderId}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "none",
+          "tone": "info",
+          "when": "!data.view.connections.0 && !data.view.routings.0",
+          "text": "No fulfillment network is connected. Connect one in Commerce settings."
+        },
+        {
+          "type": "list",
+          "id": "send",
+          "title": "Send",
+          "when": "data.view.connections.0",
+          "items": "data.view.connections",
+          "icon": "send|send",
+          "primary": "{const.providers[id=item.provider].label}",
+          "actions": [
+            {
+              "id": "send",
+              "label": "Send to {const.providers[id=item.provider].short}",
+              "icon": "send|send",
+              "when": "item.status != reconnect && data.order.shippable && data.order.status == paid,partially_fulfilled && !data.view.routings[provider=item.provider] || item.status != reconnect && data.order.shippable && data.order.status == paid,partially_fulfilled && data.view.routings[provider=item.provider].status == canceled,failed,skipped",
+              "url": "/api/fulfillment-networks/order/send",
+              "body": {
+                "hostId": "{site.id}",
+                "recordId": "{params.orderId}",
+                "provider": "{item.provider}"
+              },
+              "success": "Sent to {const.providers[id=item.provider].label}."
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "routings",
+          "title": "Fulfillment networks",
+          "items": "data.view.routings",
+          "empty": "Not sent to a network yet.",
+          "icon": "shippingbox|inventory_2",
+          "primary": "{const.providers[id=item.provider].label} {item.reference}",
+          "secondary": "{item.lines.*.name}",
+          "tertiary": "{item.shipments.*.trackingNumber}",
+          "badges": [
+            {
+              "text": "{const.statuses[id=item.status].label}",
+              "tone": "neutral"
+            },
+            {
+              "text": "Cancel requested",
+              "tone": "warning",
+              "when": "item.cancelRequested"
+            },
+            {
+              "text": "{item.note}",
+              "tone": "warning",
+              "when": "item.note"
+            }
+          ],
+          "actions": [
+            {
+              "id": "cancel",
+              "label": "Cancel at {const.providers[id=item.provider].short}",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "when": "item.status == queued,accepted,partially_shipped && !item.cancelRequested",
+              "confirm": "Cancel at {const.providers[id=item.provider].label}? {const.providers[id=item.provider].label} is asked to stop this order. If it has already started packing it may be too late, and anything that ships still comes back to the order.",
+              "url": "/api/fulfillment-networks/order/cancel",
+              "body": {
+                "hostId": "{site.id}",
+                "recordId": "{params.orderId}",
+                "provider": "{item.provider}"
+              },
+              "success": "Asked {const.providers[id=item.provider].label} to cancel."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

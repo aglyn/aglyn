@@ -703,6 +703,36 @@
         "SEO_MAX_KEYWORDS",
         "SEO_KEYWORD_LINES_MAX_CHARS"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/time-zone-choices.ts": {
+      "values": [
+        "TIME_ZONE_CHOICES",
+        "TIME_ZONE_DEFAULT_LABEL"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/image-edit.ts": {
+      "values": [
+        "IMAGE_EDIT_ASPECTS_JSON",
+        "IMAGE_EDIT_PREVIEW_MAX",
+        "IMAGE_EDIT_JPEG_QUALITY"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/screen-slug.ts": {
+      "values": [
+        "RESERVED_SCREEN_ROUTE_SEGMENTS",
+        "SCREEN_SLUG_PATH_SEPARATOR_MESSAGE",
+        "SCREEN_ROOT_PATH"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/reusable-component-keys.ts": {
+      "values": [
+        "COMPONENT_PROP_TOKEN_PREFIX"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/email-block-starters.ts": {
+      "values": [
+        "EMAIL_BLOCK_STARTER_TREES_JSON"
+      ]
     }
   },
   "ints": [
@@ -17353,6 +17383,6167 @@
             "state": "loaded",
             "chargesEnabled": "true",
             "accountLivemode": "x"
+          }
+        ]
+      ]
+    },
+    "aiProductsImportJob": {
+      "module": "libs/plugins/ai/src/lib/model/ai-products-bulk.ts",
+      "args": [
+        [
+          [
+            {
+              "outcome": "created",
+              "recordId": "p1"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "outcome": "created",
+              "recordId": "p1"
+            },
+            {
+              "outcome": "updated",
+              "recordId": "p9"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p2"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p1"
+            },
+            {
+              "outcome": "skipped",
+              "recordId": "p3"
+            },
+            {
+              "outcome": "created"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p3"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "outcome": "created",
+              "recordId": "has space"
+            },
+            {
+              "outcome": "created",
+              "recordId": "ok_2"
+            },
+            {
+              "outcome": "created",
+              "recordId": "ok_2"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "outcome": "created",
+              "recordId": "p0"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p1"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p2"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p3"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p4"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p5"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p6"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p7"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p8"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p9"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p10"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p11"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p12"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p13"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p14"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p15"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p16"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p17"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p18"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p19"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p20"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p21"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p22"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p23"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p24"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p25"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p26"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p27"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p28"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p29"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p30"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p31"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p32"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p33"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p34"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p35"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p36"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p37"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p38"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p39"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p40"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p41"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p42"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p43"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p44"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p45"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p46"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p47"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p48"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p49"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p50"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p51"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p52"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p53"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p54"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p55"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p56"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p57"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p58"
+            },
+            {
+              "outcome": "created",
+              "recordId": "p59"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "outcome": "updated",
+              "recordId": "p1"
+            },
+            {
+              "outcome": "failed",
+              "recordId": "p2"
+            }
+          ]
+        ],
+        [
+          []
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "ssoEnforcementAccounts": {
+      "module": "libs/aglyn/src/lib/app-utils/sso-enforcement.ts",
+      "args": [
+        [
+          [],
+          "saml.acme",
+          []
+        ],
+        [
+          null,
+          null,
+          null
+        ],
+        [
+          [
+            {
+              "uid": "u1",
+              "email": "a@acme.com",
+              "unlinked": [
+                "password"
+              ],
+              "kept": [
+                "saml.acme"
+              ]
+            }
+          ],
+          "saml.acme",
+          []
+        ],
+        [
+          [
+            {
+              "uid": "u1",
+              "email": "a@acme.com",
+              "unlinked": [
+                "password"
+              ],
+              "kept": [
+                "saml.acme"
+              ]
+            },
+            {
+              "uid": "u2",
+              "email": null,
+              "unlinked": [],
+              "kept": [
+                "saml.acme"
+              ],
+              "skipped": "no-other-way-in"
+            },
+            {
+              "uid": "u3",
+              "email": "c@acme.com",
+              "unlinked": [],
+              "kept": [
+                "password"
+              ],
+              "skipped": "break-glass"
+            }
+          ],
+          "saml.acme",
+          [
+            "u3"
+          ]
+        ],
+        [
+          [
+            {
+              "uid": "u4",
+              "email": "d@acme.com",
+              "unlinked": [
+                "password",
+                "google.com"
+              ],
+              "kept": []
+            },
+            {
+              "uid": "u5",
+              "email": "e@acme.com",
+              "unlinked": [
+                "saml.acme"
+              ],
+              "kept": [
+                "saml.acme"
+              ]
+            }
+          ],
+          "saml.acme",
+          [
+            "u4",
+            "gone"
+          ]
+        ],
+        [
+          [
+            {
+              "uid": "u6",
+              "email": "f@acme.com",
+              "unlinked": [],
+              "kept": []
+            }
+          ],
+          "other",
+          null
+        ],
+        [
+          [
+            {
+              "uid": "u7",
+              "email": "g@acme.com",
+              "unlinked": [
+                "google.com"
+              ],
+              "kept": [
+                "google.com",
+                "saml.acme"
+              ]
+            }
+          ],
+          null,
+          [
+            "u7"
+          ]
+        ]
+      ]
+    },
+    "timeZoneChoices": {
+      "module": "libs/aglyn/src/lib/app-utils/time-zone-choices.ts",
+      "args": [
+        []
+      ]
+    },
+    "compareArtifactVersions": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "1.0.0",
+          "1.0.0"
+        ],
+        [
+          "1.0.0",
+          "1.0.1"
+        ],
+        [
+          "1.10.0",
+          "1.9.0"
+        ],
+        [
+          "10",
+          "9"
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          "1.0.0-beta",
+          "1.0.0"
+        ],
+        [
+          null,
+          "1"
+        ],
+        [
+          "1",
+          null
+        ],
+        [
+          "",
+          "1"
+        ],
+        [
+          "1",
+          "1.0"
+        ],
+        [
+          "1.0",
+          "1"
+        ],
+        [
+          "1.2",
+          "1.10"
+        ],
+        [
+          "abc",
+          "abd"
+        ],
+        [
+          "2.0.0",
+          "2.0.0.1"
+        ],
+        [
+          1,
+          1
+        ]
+      ]
+    },
+    "updateStateLabel": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "state": "update-available",
+            "installedVersion": "1.0.0",
+            "availableVersion": "1.1.0"
+          }
+        ],
+        [
+          {
+            "state": "current",
+            "installedVersion": "2.3.0",
+            "availableVersion": "2.3.0"
+          }
+        ],
+        [
+          {
+            "state": "ahead",
+            "installedVersion": "3.0.0",
+            "availableVersion": "2.0.0"
+          }
+        ],
+        [
+          {
+            "state": "unknown",
+            "installedVersion": null,
+            "availableVersion": null,
+            "unknownReason": "no-provenance"
+          }
+        ],
+        [
+          {
+            "state": "unknown",
+            "installedVersion": "1.0.0",
+            "availableVersion": null,
+            "unknownReason": "nothing-published"
+          }
+        ],
+        [
+          {
+            "state": "unknown",
+            "installedVersion": "1.0.0-beta",
+            "availableVersion": "1.0.0",
+            "unknownReason": "incomparable"
+          }
+        ],
+        [
+          {
+            "state": "unknown",
+            "installedVersion": null,
+            "availableVersion": null
+          }
+        ]
+      ]
+    },
+    "pluginOfferedVersion": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "1.2.0",
+          null
+        ],
+        [
+          "1.2.0",
+          []
+        ],
+        [
+          "1.2.0",
+          [
+            "1.1.0"
+          ]
+        ],
+        [
+          "1.2.0",
+          [
+            "1.2.0"
+          ]
+        ],
+        [
+          "1.2.0",
+          "all"
+        ],
+        [
+          null,
+          null
+        ],
+        [
+          "",
+          [
+            "1.0.0"
+          ]
+        ],
+        [
+          3,
+          [
+            "3"
+          ]
+        ],
+        [
+          3,
+          [
+            "2"
+          ]
+        ]
+      ]
+    },
+    "pluginUpdateStatus": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          null,
+          "1.0.0"
+        ],
+        [
+          {},
+          "1.0.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
+          "1.2.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "2.0.0"
+          },
+          "1.2.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
+          null
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
+          ""
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0-beta"
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": 4
+          },
+          "4"
+        ],
+        [
+          {
+            "listingId": "l1"
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "version": "1.0.0"
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "installedFrom": {
+              "listingId": "l1",
+              "version": "1.1.0"
+            },
+            "version": "0.1"
+          },
+          "1.2.0"
+        ],
+        [
+          {
+            "marketplace": {
+              "listingId": "l1",
+              "version": "1.0.0"
+            }
+          },
+          "1.0.0"
+        ],
+        [
+          {
+            "source": {
+              "listingId": "l1",
+              "version": "1.0.0"
+            }
+          },
+          "1.5.0"
+        ]
+      ]
+    },
+    "resolveOrgInstallSummary": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {},
+          null
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {},
+          {
+            "version": "1.0.0"
+          }
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h1": {
+              "version": "1.2.0"
+            }
+          },
+          null
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h1": {
+              "version": "1.2.0"
+            },
+            "h3": {
+              "version": "1.1.0"
+            }
+          },
+          null
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h2": {
+              "version": "2.0.0"
+            }
+          },
+          {
+            "version": "1.0.0"
+          }
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h1": null,
+            "h2": null
+          },
+          null
+        ],
+        [
+          [],
+          {},
+          {
+            "version": "3"
+          }
+        ],
+        [
+          [
+            {
+              "id": "h1",
+              "label": "Main site"
+            },
+            {
+              "id": "h2",
+              "label": "Blog"
+            },
+            {
+              "id": "h3",
+              "label": "Shop"
+            }
+          ],
+          {
+            "h1": {
+              "version": 7
+            }
+          },
+          null
+        ]
+      ]
+    },
+    "resolveUninstallTargets": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          "org"
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          "host",
+          "h1"
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "2.0.0",
+                "pinnedBy": "host",
+                "shadowed": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h2"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          "org"
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "2.0.0",
+                "pinnedBy": "host",
+                "shadowed": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h2"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          "host",
+          "h2"
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          "host",
+          "h1"
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          "host",
+          "h2"
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          "org"
+        ]
+      ]
+    },
+    "staleSites": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.1.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.3.0"
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.1.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.2.0"
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.1.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.1.0"
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h2",
+              "label": "Blog",
+              "version": "2.0.0",
+              "pinnedBy": "host",
+              "shadowed": true
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            }
+          ],
+          "2.0.0"
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h2",
+              "label": "Blog",
+              "version": "2.0.0",
+              "pinnedBy": "host",
+              "shadowed": true
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            }
+          ],
+          null
+        ],
+        [
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h2",
+              "label": "Blog",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            }
+          ],
+          "1.0.1"
+        ]
+      ]
+    },
+    "pluginSiteSetSummary": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "2.0.0",
+                "pinnedBy": "host",
+                "shadowed": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h2"
+            ],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          3
+        ],
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "5",
+            "sites": [],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          0
+        ]
+      ]
+    },
+    "pluginUpdatePrompt": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "name": "Counter",
+            "latestVersion": "1.2.0",
+            "label": "Blog",
+            "singleSite": true
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "latestVersion": "1.2.0",
+            "label": "2 sites",
+            "singleSite": false
+          }
+        ],
+        [
+          {
+            "name": "This plugin",
+            "latestVersion": "2.0.0",
+            "label": "every site in this organization",
+            "singleSite": false
+          }
+        ]
+      ]
+    },
+    "pluginUpdateAll": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "orgWide": true,
+            "orgVersion": "1.0.0",
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.0.0",
+                "pinnedBy": "org",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [],
+            "availableHostIds": [],
+            "installedAnywhere": true
+          },
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h2",
+              "label": "Blog",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.0.0",
+              "pinnedBy": "org",
+              "shadowed": false
+            }
+          ],
+          "1.1.0"
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            },
+            {
+              "hostId": "h3",
+              "label": "Shop",
+              "version": "1.1.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.3.0"
+        ],
+        [
+          {
+            "orgWide": false,
+            "orgVersion": null,
+            "sites": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "version": "1.2.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "version": "1.1.0",
+                "pinnedBy": "host",
+                "shadowed": false
+              }
+            ],
+            "hostPinnedIds": [
+              "h1",
+              "h3"
+            ],
+            "availableHostIds": [
+              "h2"
+            ],
+            "installedAnywhere": true
+          },
+          [
+            {
+              "hostId": "h1",
+              "label": "Main site",
+              "version": "1.2.0",
+              "pinnedBy": "host",
+              "shadowed": false
+            }
+          ],
+          "1.3.0"
+        ]
+      ]
+    },
+    "uninstallImpactView": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": null,
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "stillCovered": false,
+                  "placements": [
+                    {
+                      "type": "screen",
+                      "id": "s1",
+                      "name": "Home",
+                      "count": 2
+                    },
+                    {
+                      "type": "layout",
+                      "id": "l1",
+                      "name": "Header",
+                      "count": 1
+                    },
+                    {
+                      "type": "component",
+                      "id": "c1",
+                      "name": "Counter",
+                      "count": 1
+                    }
+                  ],
+                  "affectedScreens": 3,
+                  "truncated": false
+                }
+              ],
+              "losingSites": 1,
+              "placements": 3,
+              "affectedScreens": 3,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": true
+              },
+              {
+                "hostId": "h3",
+                "label": "Shop",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "stillCovered": false,
+                  "placements": [
+                    {
+                      "type": "screen",
+                      "id": "s0",
+                      "name": "Page 0",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s1",
+                      "name": "Page 1",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s2",
+                      "name": "Page 2",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s3",
+                      "name": "Page 3",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s4",
+                      "name": "Page 4",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s5",
+                      "name": "Page 5",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s6",
+                      "name": "Page 6",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s7",
+                      "name": "Page 7",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s8",
+                      "name": "Page 8",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s9",
+                      "name": "Page 9",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s10",
+                      "name": "Page 10",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s11",
+                      "name": "Page 11",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s12",
+                      "name": "Page 12",
+                      "count": 1
+                    },
+                    {
+                      "type": "screen",
+                      "id": "s13",
+                      "name": "Page 13",
+                      "count": 1
+                    }
+                  ],
+                  "affectedScreens": 14,
+                  "truncated": true
+                },
+                {
+                  "hostId": "h2",
+                  "label": "Blog",
+                  "stillCovered": true,
+                  "placements": [
+                    {
+                      "type": "screen",
+                      "id": "x",
+                      "name": "Elsewhere",
+                      "count": 1
+                    }
+                  ],
+                  "affectedScreens": 1,
+                  "truncated": false
+                },
+                {
+                  "hostId": "h3",
+                  "label": "Shop",
+                  "stillCovered": false,
+                  "placements": [],
+                  "affectedScreens": 0,
+                  "truncated": false
+                }
+              ],
+              "losingSites": 2,
+              "placements": 15,
+              "affectedScreens": 15,
+              "truncated": true,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [],
+              "losingSites": 2,
+              "placements": 0,
+              "affectedScreens": 0,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": null,
+            "failed": true
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": null,
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "host",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": true
+              }
+            ],
+            "impact": null,
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "host",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [],
+              "losingSites": 2,
+              "placements": 0,
+              "affectedScreens": 0,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": true
+              }
+            ],
+            "impact": null,
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": true
+              },
+              {
+                "hostId": "h2",
+                "label": "Blog",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [],
+              "losingSites": 2,
+              "placements": 0,
+              "affectedScreens": 0,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "scope": "host",
+            "pluginId": "counter",
+            "targets": [
+              {
+                "hostId": "h1",
+                "label": "Main site",
+                "stillCovered": false
+              }
+            ],
+            "impact": {
+              "sites": [
+                {
+                  "hostId": "h1",
+                  "label": "Main site",
+                  "stillCovered": false,
+                  "placements": [
+                    {
+                      "type": "screen",
+                      "id": "s1",
+                      "name": "Home",
+                      "count": 1
+                    }
+                  ],
+                  "affectedScreens": 1,
+                  "truncated": false
+                }
+              ],
+              "losingSites": 1,
+              "placements": 1,
+              "affectedScreens": 1,
+              "truncated": false,
+              "dataSurvives": true
+            },
+            "failed": false
+          }
+        ],
+        [
+          {
+            "name": "this plugin",
+            "scope": "org",
+            "pluginId": "counter",
+            "targets": [],
+            "impact": null,
+            "failed": false
+          }
+        ]
+      ]
+    },
+    "installPlanOutcome": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 3,
+            "errors": [],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": true,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 2,
+            "errors": [],
+            "orgWide": false,
+            "updating": true,
+            "version": "1.2.0"
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": true,
+            "updating": true,
+            "version": "1.2.0"
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": false,
+            "updating": false,
+            "saved": true
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 2,
+            "errors": [
+              "Quota exceeded"
+            ],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 0,
+            "errors": [
+              "No approved version"
+            ],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 0,
+            "errors": [],
+            "orgWide": false,
+            "updating": false
+          }
+        ],
+        [
+          {
+            "name": "Counter",
+            "installed": 1,
+            "errors": [],
+            "orgWide": false,
+            "updating": true,
+            "version": null
+          }
+        ]
+      ]
+    },
+    "installedPluginCaption": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          {
+            "version": "1.2.0",
+            "orgWide": true,
+            "siteLabels": []
+          }
+        ],
+        [
+          {
+            "version": "1.0.0",
+            "orgWide": false,
+            "siteLabels": [
+              "Blog"
+            ]
+          }
+        ],
+        [
+          {
+            "version": 3,
+            "orgWide": false,
+            "siteLabels": [
+              "A",
+              "B"
+            ]
+          }
+        ]
+      ]
+    },
+    "manifestSettingsScreen": {
+      "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
+      "args": [
+        [
+          "counter",
+          "Counter",
+          null
+        ],
+        [
+          "counter",
+          "Counter",
+          {}
+        ],
+        [
+          "counter",
+          "Counter",
+          {
+            "config": {
+              "fields": []
+            }
+          }
+        ],
+        [
+          "",
+          "Counter",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": "banner",
+                  "label": "Banner text",
+                  "type": "string"
+                },
+                {
+                  "key": "on",
+                  "label": "Show it",
+                  "type": "boolean"
+                }
+              ],
+              "defaults": {
+                "banner": "Welcome",
+                "on": true
+              }
+            }
+          }
+        ],
+        [
+          "counter",
+          "Counter",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": "banner",
+                  "label": "Banner text",
+                  "type": "string"
+                },
+                {
+                  "key": "on",
+                  "label": "Show it",
+                  "type": "boolean"
+                }
+              ],
+              "defaults": {
+                "banner": "Welcome",
+                "on": true
+              }
+            }
+          }
+        ],
+        [
+          "counter",
+          "Counter",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": " greeting ",
+                  "label": "  Greeting ",
+                  "type": "string",
+                  "description": "Shown above the counter."
+                },
+                {
+                  "key": "limit",
+                  "type": "number",
+                  "min": 1,
+                  "max": 10
+                },
+                {
+                  "key": "limit",
+                  "type": "number"
+                },
+                {
+                  "key": "live",
+                  "label": "Live",
+                  "type": "boolean"
+                },
+                {
+                  "key": "mode",
+                  "label": "Mode",
+                  "type": "select",
+                  "options": [
+                    {
+                      "value": "a",
+                      "label": "A"
+                    },
+                    {
+                      "value": 3,
+                      "label": "Three"
+                    },
+                    {
+                      "value": "b",
+                      "label": "B"
+                    }
+                  ]
+                },
+                {
+                  "key": "empty",
+                  "type": "select",
+                  "options": []
+                },
+                {
+                  "key": "bad",
+                  "type": "colour"
+                },
+                {
+                  "key": "",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "key": "plain"
+                },
+                {
+                  "key": "rate",
+                  "label": "Rate",
+                  "type": "number",
+                  "min": 0.5,
+                  "description": "Per hour."
+                },
+                {
+                  "key": "cap",
+                  "type": "number",
+                  "max": 20
+                }
+              ],
+              "defaults": {
+                "greeting": "Hello",
+                "limit": 99,
+                "live": "yes",
+                "mode": "b",
+                "plain": 4,
+                "rate": 0.25,
+                "cap": 7
+              }
+            }
+          }
+        ],
+        [
+          "counter",
+          "Counter",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": "f0",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f1",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f2",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f3",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f4",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f5",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f6",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f7",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f8",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f9",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f10",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f11",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f12",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f13",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f14",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f15",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f16",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f17",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f18",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f19",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f20",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f21",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f22",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f23",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f24",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f25",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f26",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f27",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f28",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f29",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f30",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f31",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f32",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f33",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f34",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f35",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f36",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f37",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f38",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f39",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f40",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f41",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f42",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f43",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f44",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f45",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f46",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f47",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f48",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f49",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f50",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f51",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f52",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f53",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f54",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f55",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f56",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f57",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f58",
+                  "type": "number",
+                  "max": 5
+                },
+                {
+                  "key": "f59",
+                  "type": "number",
+                  "max": 5
+                }
+              ],
+              "defaults": {
+                "f0": 3
+              }
+            }
+          }
+        ],
+        [
+          "x",
+          "X",
+          {
+            "config": {
+              "fields": [
+                {
+                  "key": "k",
+                  "type": "select",
+                  "options": [
+                    {
+                      "value": "only",
+                      "label": "Only"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      ]
+    },
+    "mediaPosterSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "args": [
+        [
+          "media:h1/m1"
+        ],
+        [
+          "media:h1/m1",
+          {
+            "hostId": "h9"
+          }
+        ],
+        [
+          "media:org:o1/m2",
+          {
+            "hostId": "h9",
+            "width": 640
+          }
+        ],
+        [
+          "media:org:o1/m2",
+          {
+            "width": 320.4
+          }
+        ],
+        [
+          "media:h1/m1",
+          {
+            "width": 0
+          }
+        ],
+        [
+          "media:h1/m1",
+          {
+            "width": -5
+          }
+        ],
+        [
+          "/api/media/cdn/h1/m1?x=1"
+        ],
+        [
+          "/api/media/cdn/h1/m1"
+        ],
+        [
+          "https://example.com/v.mp4"
+        ],
+        [
+          "https://firebasestorage.googleapis.com/v0/b/aglyn-media.appspot.com/o/hosts%2Fh1%2Fmedia%2Fm5?alt=media"
+        ],
+        [
+          "media:bad scope/m1"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "imageEditWorkedSize": {
+      "module": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "args": [
+        [
+          400,
+          300,
+          0
+        ],
+        [
+          400,
+          300,
+          90
+        ],
+        [
+          400,
+          300,
+          180
+        ],
+        [
+          400,
+          300,
+          270
+        ],
+        [
+          300,
+          400,
+          0
+        ],
+        [
+          300,
+          400,
+          90
+        ],
+        [
+          300,
+          400,
+          180
+        ],
+        [
+          300,
+          400,
+          270
+        ],
+        [
+          1,
+          1,
+          0
+        ],
+        [
+          1,
+          1,
+          90
+        ],
+        [
+          1,
+          1,
+          180
+        ],
+        [
+          1,
+          1,
+          270
+        ],
+        [
+          4000,
+          3000,
+          0
+        ],
+        [
+          4000,
+          3000,
+          90
+        ],
+        [
+          4000,
+          3000,
+          180
+        ],
+        [
+          4000,
+          3000,
+          270
+        ]
+      ]
+    },
+    "imageEditPreviewScale": {
+      "module": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "args": [
+        [
+          960,
+          480
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          480,
+          480
+        ],
+        [
+          481,
+          100
+        ],
+        [
+          4000,
+          3000
+        ],
+        [
+          3000,
+          4000
+        ],
+        [
+          1,
+          1
+        ]
+      ]
+    },
+    "imageEditCropFromDrag": {
+      "module": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "args": [
+        [
+          {
+            "x": 10,
+            "y": 20
+          },
+          {
+            "x": 110,
+            "y": 90
+          },
+          null,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 110,
+            "y": 90
+          },
+          {
+            "x": 10,
+            "y": 20
+          },
+          null,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 400,
+            "y": 250
+          },
+          {
+            "x": 600,
+            "y": 400
+          },
+          null,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 160,
+            "y": 10
+          },
+          1.7777777777777777,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 100,
+            "y": 10
+          },
+          1,
+          480,
+          60
+        ],
+        [
+          {
+            "x": 50,
+            "y": 50
+          },
+          {
+            "x": 150,
+            "y": 50
+          },
+          1.3333333333333333,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 200,
+            "y": 100
+          },
+          {
+            "x": 100,
+            "y": 300
+          },
+          1.5,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          null,
+          480,
+          300
+        ],
+        [
+          {
+            "x": 470,
+            "y": 10
+          },
+          {
+            "x": 480,
+            "y": 20
+          },
+          1,
+          480,
+          300
+        ]
+      ]
+    },
+    "imageEditOutput": {
+      "module": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "args": [
+        [
+          {
+            "w": 960,
+            "h": 480
+          },
+          null,
+          0.5,
+          0
+        ],
+        [
+          {
+            "w": 960,
+            "h": 480
+          },
+          {
+            "x": 10,
+            "y": 20,
+            "w": 100,
+            "h": 50
+          },
+          0.5,
+          0
+        ],
+        [
+          {
+            "w": 960,
+            "h": 480
+          },
+          {
+            "x": 10,
+            "y": 20,
+            "w": 100,
+            "h": 50
+          },
+          0.5,
+          100
+        ],
+        [
+          {
+            "w": 960,
+            "h": 480
+          },
+          null,
+          0.5,
+          960
+        ],
+        [
+          {
+            "w": 960,
+            "h": 480
+          },
+          null,
+          0.5,
+          5000
+        ],
+        [
+          {
+            "w": 1000,
+            "h": 667
+          },
+          null,
+          1,
+          333
+        ],
+        [
+          {
+            "w": 960,
+            "h": 480
+          },
+          {
+            "x": 0,
+            "y": 0,
+            "w": 0,
+            "h": 0
+          },
+          0.5,
+          0
+        ],
+        [
+          {
+            "w": 4000,
+            "h": 3000
+          },
+          {
+            "x": 12.5,
+            "y": 7.5,
+            "w": 99.5,
+            "h": 80.25
+          },
+          0.12,
+          1200
+        ],
+        [
+          {
+            "w": 300,
+            "h": 400
+          },
+          {
+            "x": 0,
+            "y": 0,
+            "w": 360,
+            "h": 480
+          },
+          1.0,
+          -5
+        ]
+      ]
+    },
+    "imageEditCopyName": {
+      "module": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "args": [
+        [
+          "photo.png"
+        ],
+        [
+          "a.b.jpeg"
+        ],
+        [
+          "photo"
+        ],
+        [
+          ".hidden"
+        ],
+        [
+          "Team Photo.JPG"
+        ],
+        [
+          "x.tar.gz"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "imageEditContentType": {
+      "module": "libs/aglyn/src/lib/app-utils/image-edit.ts",
+      "args": [
+        [
+          "Logo.PNG"
+        ],
+        [
+          "photo.webp"
+        ],
+        [
+          "a.png.jpg"
+        ],
+        [
+          "noext"
+        ],
+        [
+          "x.png"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "mediaOriginalSrc": {
+      "module": "libs/aglyn/src/lib/app-utils/media-ref.ts",
+      "args": [
+        [
+          "https://aglyn.com/api/media/cdn/h1/m1"
+        ],
+        [
+          "/api/media/cdn/h1/m1"
+        ],
+        [
+          "/api/media/cdn/h1/m1?w=320"
+        ],
+        [
+          "/api/media/cdn/h1/m1?download=1"
+        ],
+        [
+          "/api/media/cdn/h1/m1?w=320&download=1"
+        ],
+        [
+          "/api/media/cdn/h1/m1?download=10"
+        ],
+        [
+          "https://example.com/photo.png"
+        ],
+        [
+          "https://firebasestorage.googleapis.com/v0/b/x/o/a.png?alt=media"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "summarizeShippingCoverage": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-shipping.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "North America",
+                "countries": [
+                  "US",
+                  "CA"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  " us ",
+                  "ca"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "World",
+                "countries": [
+                  "*"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 1500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              },
+              {
+                "id": "z2",
+                "name": "World",
+                "countries": [
+                  "*"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Domestic",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r2",
+                "zoneId": "z2",
+                "name": "International",
+                "kind": "flat",
+                "amountCents": 2500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              },
+              {
+                "id": "z2",
+                "name": "Europe",
+                "countries": [
+                  "GB",
+                  "DE",
+                  "FR"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Domestic",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r2",
+                "zoneId": "z2",
+                "name": "Europe",
+                "kind": "flat",
+                "amountCents": 1800
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "localPickup": true
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ],
+            "localPickup": true
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": []
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "gone",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Free shipping",
+                "kind": "free_over",
+                "amountCents": 700,
+                "freeOverCents": 5000
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US",
+                  "CA"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "By price",
+                "kind": "price_tiers",
+                "tiers": [
+                  {
+                    "upTo": 5000,
+                    "amountCents": 800
+                  },
+                  {
+                    "upTo": 20000,
+                    "amountCents": 400
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "By weight",
+                "kind": "weight_tiers",
+                "tiers": [
+                  {
+                    "upTo": 2000,
+                    "amountCents": 900
+                  },
+                  {
+                    "upTo": 500,
+                    "amountCents": 400
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "By weight",
+                "kind": "weight_tiers",
+                "tiers": []
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Carrier rates",
+                "kind": "carrier",
+                "carrier": {
+                  "markupPct": 10
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Carrier rates",
+                "kind": "carrier"
+              },
+              {
+                "id": "r2",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 600
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              },
+              {
+                "id": "z2",
+                "name": "CA",
+                "countries": [
+                  "CA"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r1",
+                "zoneId": "z2",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 900
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Rate 1",
+                "kind": "flat",
+                "amountCents": 100
+              },
+              {
+                "id": "r2",
+                "zoneId": "z1",
+                "name": "Rate 2",
+                "kind": "flat",
+                "amountCents": 200
+              },
+              {
+                "id": "r3",
+                "zoneId": "z1",
+                "name": "Rate 3",
+                "kind": "flat",
+                "amountCents": 300
+              },
+              {
+                "id": "r4",
+                "zoneId": "z1",
+                "name": "Rate 4",
+                "kind": "flat",
+                "amountCents": 400
+              },
+              {
+                "id": "r5",
+                "zoneId": "z1",
+                "name": "Rate 5",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r6",
+                "zoneId": "z1",
+                "name": "Rate 6",
+                "kind": "flat",
+                "amountCents": 600
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 549.6
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": -300
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "World",
+                "countries": [
+                  "*"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 1000
+              }
+            ],
+            "localPickup": true
+          }
+        ],
+        [
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "Nowhere",
+                "countries": []
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "describeShippingCoverage": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-shipping.ts",
+      "args": [
+        [
+          {
+            "served": [
+              "US"
+            ],
+            "unserved": [
+              "CA",
+              "GB",
+              "AU",
+              "DE",
+              "FR"
+            ],
+            "shipsNowhere": false,
+            "asksDestination": true,
+            "offersLocalPickup": false,
+            "hasRestOfWorldZone": false
+          }
+        ],
+        [
+          {
+            "served": [
+              "US"
+            ],
+            "unserved": [
+              "CA",
+              "GB",
+              "AU",
+              "DE",
+              "FR"
+            ],
+            "shipsNowhere": false,
+            "asksDestination": true,
+            "offersLocalPickup": true,
+            "hasRestOfWorldZone": false
+          }
+        ],
+        [
+          {
+            "served": [
+              "US",
+              "CA"
+            ],
+            "unserved": [
+              "GB",
+              "AU",
+              "DE",
+              "FR"
+            ],
+            "shipsNowhere": false,
+            "asksDestination": true,
+            "offersLocalPickup": true,
+            "hasRestOfWorldZone": true
+          }
+        ],
+        [
+          {
+            "served": [
+              "US"
+            ],
+            "unserved": [
+              "CA"
+            ],
+            "shipsNowhere": false,
+            "asksDestination": true,
+            "offersLocalPickup": false,
+            "hasRestOfWorldZone": true
+          }
+        ],
+        [
+          {
+            "served": [
+              "US",
+              "CA",
+              "GB",
+              "AU",
+              "DE",
+              "FR"
+            ],
+            "unserved": [],
+            "shipsNowhere": false,
+            "asksDestination": false,
+            "offersLocalPickup": false,
+            "hasRestOfWorldZone": true
+          }
+        ],
+        [
+          {
+            "served": [
+              "US",
+              "CA",
+              "GB",
+              "AU",
+              "DE",
+              "FR"
+            ],
+            "unserved": [],
+            "shipsNowhere": false,
+            "asksDestination": true,
+            "offersLocalPickup": true,
+            "hasRestOfWorldZone": true
+          }
+        ],
+        [
+          {
+            "served": [],
+            "unserved": [],
+            "shipsNowhere": true,
+            "asksDestination": false,
+            "offersLocalPickup": false,
+            "hasRestOfWorldZone": false
+          }
+        ],
+        [
+          {
+            "served": [],
+            "unserved": [],
+            "shipsNowhere": true,
+            "asksDestination": false,
+            "offersLocalPickup": true,
+            "hasRestOfWorldZone": false
+          }
+        ]
+      ]
+    },
+    "resolveCheckoutShippingOptions": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-shipping.ts",
+      "argsProduct": [
+        [
+          null,
+          {},
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "North America",
+                "countries": [
+                  "US",
+                  "CA"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  " us ",
+                  "ca"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "World",
+                "countries": [
+                  "*"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 1500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              },
+              {
+                "id": "z2",
+                "name": "World",
+                "countries": [
+                  "*"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Domestic",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r2",
+                "zoneId": "z2",
+                "name": "International",
+                "kind": "flat",
+                "amountCents": 2500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              },
+              {
+                "id": "z2",
+                "name": "Europe",
+                "countries": [
+                  "GB",
+                  "DE",
+                  "FR"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Domestic",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r2",
+                "zoneId": "z2",
+                "name": "Europe",
+                "kind": "flat",
+                "amountCents": 1800
+              }
+            ]
+          },
+          {
+            "localPickup": true
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ],
+            "localPickup": true
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": []
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "gone",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Free shipping",
+                "kind": "free_over",
+                "amountCents": 700,
+                "freeOverCents": 5000
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US",
+                  "CA"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "By price",
+                "kind": "price_tiers",
+                "tiers": [
+                  {
+                    "upTo": 5000,
+                    "amountCents": 800
+                  },
+                  {
+                    "upTo": 20000,
+                    "amountCents": 400
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "By weight",
+                "kind": "weight_tiers",
+                "tiers": [
+                  {
+                    "upTo": 2000,
+                    "amountCents": 900
+                  },
+                  {
+                    "upTo": 500,
+                    "amountCents": 400
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "By weight",
+                "kind": "weight_tiers",
+                "tiers": []
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Carrier rates",
+                "kind": "carrier",
+                "carrier": {
+                  "markupPct": 10
+                }
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Carrier rates",
+                "kind": "carrier"
+              },
+              {
+                "id": "r2",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 600
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              },
+              {
+                "id": "z2",
+                "name": "CA",
+                "countries": [
+                  "CA"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r1",
+                "zoneId": "z2",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 900
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Rate 1",
+                "kind": "flat",
+                "amountCents": 100
+              },
+              {
+                "id": "r2",
+                "zoneId": "z1",
+                "name": "Rate 2",
+                "kind": "flat",
+                "amountCents": 200
+              },
+              {
+                "id": "r3",
+                "zoneId": "z1",
+                "name": "Rate 3",
+                "kind": "flat",
+                "amountCents": 300
+              },
+              {
+                "id": "r4",
+                "zoneId": "z1",
+                "name": "Rate 4",
+                "kind": "flat",
+                "amountCents": 400
+              },
+              {
+                "id": "r5",
+                "zoneId": "z1",
+                "name": "Rate 5",
+                "kind": "flat",
+                "amountCents": 500
+              },
+              {
+                "id": "r6",
+                "zoneId": "z1",
+                "name": "Rate 6",
+                "kind": "flat",
+                "amountCents": 600
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 549.6
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "US",
+                "countries": [
+                  "US"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": -300
+              }
+            ]
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "World",
+                "countries": [
+                  "*"
+                ]
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 1000
+              }
+            ],
+            "localPickup": true
+          },
+          {
+            "zones": [
+              {
+                "id": "z1",
+                "name": "Nowhere",
+                "countries": []
+              }
+            ],
+            "rates": [
+              {
+                "id": "r1",
+                "zoneId": "z1",
+                "name": "Standard",
+                "kind": "flat",
+                "amountCents": 500
+              }
+            ]
+          }
+        ],
+        [
+          [
+            "US"
+          ],
+          [
+            "CA"
+          ],
+          [
+            "GB"
+          ],
+          [
+            "AU"
+          ],
+          [
+            "DE"
+          ],
+          [
+            "FR"
+          ],
+          [
+            "US",
+            "CA",
+            "GB",
+            "AU",
+            "DE",
+            "FR"
+          ]
+        ],
+        [
+          {
+            "subtotalCents": 0,
+            "totalGrams": 0
+          },
+          {
+            "subtotalCents": 30000,
+            "totalGrams": 9000
+          }
+        ]
+      ]
+    },
+    "compress": {
+      "module": "libs/aglyn/src/lib/app-utils/compress.ts",
+      "args": [
+        [
+          {
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            },
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "children": "Hello, {{name}}",
+                "size": 16,
+                "bold": true,
+                "ratio": 1.5,
+                "neg": -7,
+                "big": 4294967296,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "empty": ""
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "src": "media:h1/m1",
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "width": 160
+              }
+            }
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          []
+        ],
+        [
+          null
+        ],
+        [
+          true
+        ],
+        [
+          false
+        ],
+        [
+          ""
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ],
+        [
+          "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+        ],
+        [
+          [
+            0,
+            1,
+            127,
+            128,
+            255,
+            256,
+            65535,
+            65536,
+            4294967295,
+            4294967296,
+            9007199254740991,
+            -1,
+            -32,
+            -33,
+            -128,
+            -129,
+            -32768,
+            -32769,
+            -2147483648,
+            -2147483649,
+            -9007199254740991
+          ]
+        ],
+        [
+          [
+            0.1,
+            -2.5,
+            3.14159265358979,
+            1e+21,
+            -1e-07,
+            123456.789
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ]
+        ],
+        [
+          [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ]
+        ],
+        [
+          {
+            "k00": 0,
+            "k01": 1,
+            "k02": 2,
+            "k03": 3,
+            "k04": 4,
+            "k05": 5,
+            "k06": 6,
+            "k07": 7,
+            "k08": 8,
+            "k09": 9,
+            "k10": 10,
+            "k11": 11,
+            "k12": 12,
+            "k13": 13,
+            "k14": 14,
+            "k15": 15,
+            "k16": 16,
+            "k17": 17,
+            "k18": 18,
+            "k19": 19
+          }
+        ],
+        [
+          {
+            "a": {
+              "b": {
+                "c": {
+                  "d": [
+                    {
+                      "e": "deep"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        [
+          {
+            "mixed": [
+              null,
+              true,
+              false,
+              0,
+              -1,
+              1.25,
+              "s",
+              [],
+              {}
+            ]
+          }
+        ]
+      ]
+    },
+    "resolveNamedTokens": {
+      "module": "libs/aglyn/src/lib/app-utils/resolve-named-tokens.ts",
+      "args": [
+        [
+          {
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            },
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "children": "Hello, {{name}}",
+                "size": 16,
+                "bold": true,
+                "ratio": 1.5,
+                "neg": -7,
+                "big": 4294967296,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "empty": ""
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "src": "media:h1/m1",
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "width": 160
+              }
+            }
+          },
+          {
+            "name": "Ada"
+          }
+        ],
+        [
+          {
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            },
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "children": "Hello, {{name}}",
+                "size": 16,
+                "bold": true,
+                "ratio": 1.5,
+                "neg": -7,
+                "big": 4294967296,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "empty": ""
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "src": "media:h1/m1",
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "width": 160
+              }
+            }
+          },
+          {
+            "name": "A.d{a}"
+          }
+        ],
+        [
+          {
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            },
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "children": "Hello, {{name}}",
+                "size": 16,
+                "bold": true,
+                "ratio": 1.5,
+                "neg": -7,
+                "big": 4294967296,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "empty": ""
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "src": "media:h1/m1",
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "width": 160
+              }
+            }
+          },
+          {}
+        ],
+        [
+          {
+            "root": {
+              "$id": "root",
+              "componentId": "div",
+              "nodes": [
+                "n1",
+                "n2"
+              ]
+            },
+            "n1": {
+              "$id": "n1",
+              "componentId": "text",
+              "pluginId": "mui",
+              "props": {
+                "children": "Hello, {{name}}",
+                "size": 16,
+                "bold": true,
+                "ratio": 1.5,
+                "neg": -7,
+                "big": 4294967296,
+                "nested": {
+                  "a": [
+                    1,
+                    2,
+                    {
+                      "b": null
+                    }
+                  ]
+                },
+                "empty": ""
+              }
+            },
+            "n2": {
+              "$id": "n2",
+              "componentId": "image",
+              "props": {
+                "src": "media:h1/m1",
+                "alt": "Café ☕ — naïve 日本語 🙂",
+                "width": 160
+              }
+            }
+          },
+          null
+        ],
+        [
+          {
+            "n": {
+              "$id": "n",
+              "componentId": "text",
+              "props": {
+                "children": "{{ name }} and {{other}} and {{ name}}",
+                "list": [
+                  "{{name}}",
+                  {
+                    "deep": "x {{name}} y"
+                  }
+                ],
+                "count": 3
+              }
+            }
+          },
+          {
+            "name": "Zed",
+            "other": "Q"
+          }
+        ],
+        [
+          {
+            "n": {
+              "$id": "n",
+              "componentId": "text",
+              "props": {
+                "children": "Hi {{who}}"
+              }
+            }
+          },
+          {
+            "name": "Ada"
+          }
+        ],
+        [
+          {
+            "n": {
+              "$id": "n",
+              "componentId": "div"
+            }
+          },
+          {
+            "name": "Ada"
+          }
+        ],
+        [
+          {
+            "n": {
+              "$id": "n",
+              "componentId": "text",
+              "props": {
+                "children": "{{a.b}} {{a}}"
+              }
+            }
+          },
+          {
+            "a.b": "dot",
+            "a": "plain"
+          }
+        ]
+      ]
+    },
+    "normalizeScreenSlug": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "args": [
+        [
+          "About us"
+        ],
+        [
+          "  /about/  "
+        ],
+        [
+          "/"
+        ],
+        [
+          ""
+        ],
+        [
+          "###"
+        ],
+        [
+          "Hello World!"
+        ],
+        [
+          "a_b-c"
+        ],
+        [
+          "/Team/"
+        ],
+        [
+          "alt/webflow"
+        ],
+        [
+          "search"
+        ],
+        [
+          "404"
+        ],
+        [
+          "Café Menu"
+        ],
+        [
+          "UPPER"
+        ],
+        [
+          "--x--"
+        ],
+        [
+          "a  b"
+        ],
+        [
+          "10%"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "reservedScreenRouteSegment": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "args": [
+        [
+          "search"
+        ],
+        [
+          "404"
+        ],
+        [
+          "api/docs"
+        ],
+        [
+          "/_next"
+        ],
+        [
+          "about"
+        ],
+        [
+          "/"
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          "aglyn-preview/x"
+        ],
+        [
+          "_aglyn/leaving"
+        ],
+        [
+          "company/search"
+        ]
+      ]
+    },
+    "reservedScreenRouteMessage": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "args": [
+        [
+          "search"
+        ],
+        [
+          "404"
+        ],
+        [
+          "_aglyn"
+        ]
+      ]
+    },
+    "screenSlugHasPathSeparator": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
+      "args": [
+        [
+          "alternatives/webflow"
+        ],
+        [
+          "/about/"
+        ],
+        [
+          "/"
+        ],
+        [
+          "about"
+        ],
+        [
+          "a/b/c"
+        ],
+        [
+          "  "
+        ],
+        [
+          ""
+        ],
+        [
+          null
+        ],
+        [
+          " /x/y "
+        ]
+      ]
+    },
+    "templateScreenAddressRefusal": {
+      "module": "libs/aglyn/src/lib/app-utils/template-slug.ts",
+      "args": [
+        [
+          {
+            "slug": "alt/webflow"
+          }
+        ],
+        [
+          {
+            "slug": "search",
+            "displayName": "Search"
+          }
+        ],
+        [
+          {
+            "slug": "###",
+            "displayName": "Search"
+          }
+        ],
+        [
+          {
+            "displayName": "API"
+          }
+        ],
+        [
+          {
+            "slug": "/",
+            "displayName": "Home"
+          }
+        ],
+        [
+          {
+            "slug": "",
+            "displayName": "Pricing"
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "slug": "404"
+          }
+        ]
+      ]
+    },
+    "resolveTemplateSlugAmong": {
+      "module": "libs/aglyn/src/lib/app-utils/template-slug.ts",
+      "args": [
+        [
+          {
+            "slug": "about",
+            "displayName": "About",
+            "taken": []
+          }
+        ],
+        [
+          {
+            "slug": "about",
+            "displayName": "About",
+            "taken": [
+              "about"
+            ]
+          }
+        ],
+        [
+          {
+            "slug": "about",
+            "displayName": "About",
+            "taken": [
+              "about",
+              "about-2"
+            ]
+          }
+        ],
+        [
+          {
+            "slug": "/",
+            "displayName": "Home",
+            "taken": []
+          }
+        ],
+        [
+          {
+            "slug": "/",
+            "displayName": "Home",
+            "taken": [
+              "/"
+            ]
+          }
+        ],
+        [
+          {
+            "slug": "/",
+            "displayName": "Home",
+            "taken": [
+              "/",
+              "home"
+            ]
+          }
+        ],
+        [
+          {
+            "slug": "###",
+            "displayName": "Our Team",
+            "taken": []
+          }
+        ],
+        [
+          {
+            "displayName": "",
+            "taken": []
+          }
+        ],
+        [
+          {
+            "slug": "Contact Us",
+            "displayName": "x",
+            "taken": [
+              "contact-us"
+            ]
+          }
+        ]
+      ]
+    },
+    "withBundleRootScreen": {
+      "module": "libs/aglyn/src/lib/app-utils/template-slug.ts",
+      "args": [
+        [
+          [
+            {
+              "displayName": "A",
+              "slug": "a"
+            },
+            {
+              "displayName": "B",
+              "slug": "b"
+            }
+          ],
+          []
+        ],
+        [
+          [
+            {
+              "displayName": "A",
+              "slug": "a"
+            },
+            {
+              "displayName": "B",
+              "slug": "b"
+            }
+          ],
+          [
+            "/"
+          ]
+        ],
+        [
+          [
+            {
+              "displayName": "A",
+              "slug": "a"
+            },
+            {
+              "displayName": "B",
+              "slug": "b"
+            }
+          ],
+          [
+            "about"
+          ]
+        ],
+        [
+          [
+            {
+              "displayName": "A",
+              "slug": "a"
+            },
+            {
+              "displayName": "H",
+              "slug": "/"
+            }
+          ],
+          []
+        ],
+        [
+          [],
+          []
+        ],
+        [
+          [
+            {
+              "displayName": "A"
+            }
+          ],
+          [
+            "x"
+          ]
+        ]
+      ]
+    },
+    "detectTemplatePlaceholders": {
+      "module": "libs/aglyn/src/lib/app-utils/detect-template-placeholders.ts",
+      "args": [
+        [
+          {
+            "n": {
+              "props": {
+                "children": "Hello {{name}} and {{ company }}"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "n": {
+              "props": {
+                "a": "{{var:abc}} {{fn:xyz}} {{prop.title}} {{real}}"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "n": {
+              "props": {
+                "a": [
+                  "{{zeta}}",
+                  {
+                    "b": "{{alpha}} {{alpha}}"
+                  }
+                ]
+              }
+            },
+            "m": {
+              "props": {
+                "x": "{{beta.gamma}} {{a-b}} {{a_b}}"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "n": {
+              "props": {
+                "a": "{{1bad}} {{ }} {{}} {{x y}}"
+              }
+            }
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "n": {
+              "props": {
+                "count": 3,
+                "flag": true,
+                "nothing": null
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "paidMediaScopeBody": {
+      "module": "libs/plugins/commerce/src/lib/model/paid-media.ts",
+      "args": [
+        [
+          "host-1"
+        ],
+        [
+          "org:acme"
+        ],
+        [
+          "org:acme:host-1"
+        ],
+        [
+          "org:"
+        ]
+      ]
+    },
+    "usesBesideProduct": {
+      "module": "libs/plugins/commerce/src/lib/model/paid-media.ts",
+      "args": [
+        [
+          [
+            {
+              "kind": "plugin",
+              "id": "p1",
+              "name": "Training program",
+              "hostId": "host-1",
+              "collectionId": "products"
+            },
+            {
+              "kind": "page",
+              "id": "pg1",
+              "name": "Home",
+              "hostId": "host-1"
+            },
+            {
+              "kind": "plugin",
+              "id": "p2",
+              "name": "Another product",
+              "hostId": "host-1",
+              "collectionId": "products"
+            },
+            {
+              "kind": "plugin",
+              "id": "p1",
+              "name": "Training program",
+              "hostId": "host-2",
+              "collectionId": "products"
+            }
+          ],
+          {
+            "hostId": "host-1",
+            "productId": "p1"
+          }
+        ],
+        [
+          [
+            {
+              "kind": "plugin",
+              "id": "p1",
+              "name": "Training program",
+              "hostId": "host-1",
+              "collectionId": "products"
+            }
+          ],
+          {
+            "hostId": "host-1"
+          }
+        ],
+        [
+          [],
+          {
+            "hostId": "host-1",
+            "productId": "p1"
+          }
+        ],
+        [
+          [
+            {
+              "kind": "plugin",
+              "id": "p1",
+              "name": "Training program",
+              "hostId": "host-1",
+              "collectionId": "products"
+            },
+            {
+              "kind": "plugin",
+              "id": "p1",
+              "name": "Training program",
+              "hostId": "host-1",
+              "collectionId": "products"
+            }
+          ],
+          {
+            "hostId": "host-1",
+            "productId": "p1"
+          }
+        ]
+      ]
+    },
+    "paidMediaConfirmation": {
+      "module": "libs/plugins/commerce/src/lib/model/paid-media.ts",
+      "args": [
+        [
+          {
+            "others": [],
+            "checked": "full"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "partial"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "failed"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "full"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "partial"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "failed"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "full"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "partial"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "failed"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "full"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "partial"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "failed"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "full",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "partial",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "failed",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "full",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "partial",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "failed",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "full",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "partial",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "failed",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "full",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "partial",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "failed",
+            "kind": "video"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "full",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "partial",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [],
+            "checked": "failed",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "full",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "partial",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "failed",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "full",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "partial",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "pg1",
+                "name": "Home",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "plugin",
+                "id": "p2",
+                "name": "Another product",
+                "hostId": "host-1",
+                "collectionId": "products"
+              }
+            ],
+            "checked": "failed",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "full",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "partial",
+            "kind": "download"
+          }
+        ],
+        [
+          {
+            "others": [
+              {
+                "kind": "page",
+                "id": "a",
+                "name": "About",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "b",
+                "name": "Pricing",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "c",
+                "name": "Contact",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "d",
+                "name": "Blog",
+                "hostId": "host-1"
+              },
+              {
+                "kind": "page",
+                "id": "e",
+                "name": "Team",
+                "hostId": "host-1"
+              }
+            ],
+            "checked": "failed",
+            "kind": "download"
           }
         ]
       ]

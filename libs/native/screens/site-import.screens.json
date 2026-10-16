@@ -996,7 +996,9 @@
           "compute": "packageItemChanges",
           "args": [
             "data.cmp.items.0.existing.content",
-            "data.cmp.items.0.incoming"
+            "data.cmp.items.0.incoming",
+            "200",
+            "1000000"
           ]
         },
         "keys": {
@@ -1034,19 +1036,14 @@
           "tertiary": "File: {item.after:json}",
           "trailing": "{const.recordStatus[@item.status]}",
           "icon": "list.bullet.rectangle|view_agenda",
-          "footer": "{data.diff.records.summary}"
+          "footer": "{data.diff.records.summary}",
+          "page": 50
         },
         {
           "type": "notice",
           "tone": "info",
           "text": "{data.diff.records.summary}. Every record in the file matches this site’s.",
           "when": "data.diff.records && !data.diff.records.changes"
-        },
-        {
-          "type": "notice",
-          "tone": "warning",
-          "text": "{data.diff.records.more} more record values differ and are not shown.",
-          "when": "data.diff.records.more"
         },
         {
           "type": "list",
@@ -1057,12 +1054,13 @@
           "primary": "{item.label}",
           "secondary": "Now: {item.before:json}",
           "tertiary": "File: {item.after:json}",
-          "icon": "arrow.left.arrow.right|swap_horiz"
+          "icon": "arrow.left.arrow.right|swap_horiz",
+          "page": 50
         },
         {
           "type": "notice",
           "tone": "warning",
-          "text": "{data.diff.more} more values change and are not shown.",
+          "text": "And {data.diff.more} more values that differ.",
           "when": "data.diff.more && stash.decisions[@params.key] != merge"
         },
         {

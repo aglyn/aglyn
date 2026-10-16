@@ -48,6 +48,7 @@ import {
   rankAssistSpend,
   type AssistSpendRow,
 } from '../usage/assist-signal-mining'
+import { assistSignalsView } from '../usage/assist-signals-view'
 
 /**
  * The Assist docs-gap and cost mining view (AGL-1860, AGL-2252), served at
@@ -390,20 +391,22 @@ async function handler(request: Request): Promise<Response> {
       return undefined
     })
 
-    return Response.json(
-      {
-        ...report,
-        freeSpend,
-        orgs: report.orgs.map((row) => ({
-          ...row,
-          orgLabel: orgLabel(row.orgId),
-        })),
-        prose: prose.map((row) => ({ ...row, orgLabel: orgLabel(row.orgId) })),
-        spend,
-        ceiling: SCAN_CEILING,
-      },
-      { status: 200 },
-    )
+    const answer = {
+      ...report,
+      freeSpend,
+      orgs: report.orgs.map((row) => ({
+        ...row,
+        orgLabel: orgLabel(row.orgId),
+      })),
+      prose: prose.map((row) => ({ ...row, orgLabel: orgLabel(row.orgId) })),
+      spend,
+      ceiling: SCAN_CEILING,
+    }
+    // The board as the page prints it, for a client that draws no tables (the staff apps).
+    if (String(query.view ?? '') === 'prepared') {
+      return Response.json(assistSignalsView(answer as never), { status: 200 })
+    }
+    return Response.json(answer, { status: 200 })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours
     // (AGL-1993). Null for anything else, so a real failure keeps its 500.

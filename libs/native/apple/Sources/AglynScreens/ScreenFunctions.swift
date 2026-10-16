@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import Foundation
 
@@ -17,7 +18,16 @@ public enum ScreenFunctions {
       return mergeKeys(args.first ?? nil, args.count > 1 ? args[1] : nil)
     case "packageItemChanges":
       let limit = args.count > 2 ? args[2]?.numberValue.map { Int($0) } : nil
-      return itemChanges(args.first ?? nil, args.count > 1 ? args[1] : nil, limit: limit ?? 200)
+      // A fourth argument lets the records run past the values' limit (the screen pages through them).
+      let recordLimit = args.count > 3 ? args[3]?.numberValue.map { Int($0) } : nil
+      return itemChanges(args.first ?? nil, args.count > 1 ? args[1] : nil, limit: limit ?? 200, recordLimit: recordLimit)
+    case "aiProductsImportJob":
+      return aiProductsImportJob(args.first ?? nil)
+    case "timeZoneChoices":
+      return timeZoneChoices()
+    case "ssoEnforcementAccounts":
+      return ssoEnforcementAccounts(
+        args.first ?? nil, args.count > 1 ? args[1]?.stringValue : nil, args.count > 2 ? args[2] : nil)
     default:
       return nil
     }
@@ -107,8 +117,9 @@ public enum ScreenFunctions {
 
   /// What importing an item changes (the console's `packageItemChanges`): the leaf-by-leaf diff of everything
   /// but its records and, for an item that holds records, a row per value of a record that differs (a whole
-  /// record for one only a side holds). At most `limit` rows of each; `more` counts the rest.
-  static func itemChanges(_ before: JSONValue?, _ incoming: JSONValue?, limit: Int) -> JSONValue {
+  /// record for one only a side holds). At most `limit` rows of each (`recordLimit` for the records, when
+  /// it differs); `more` counts the rest.
+  static func itemChanges(_ before: JSONValue?, _ incoming: JSONValue?, limit: Int, recordLimit: Int? = nil) -> JSONValue {
     var existing = before
     if existing == nil || existing == .null { existing = .object([:]) }
     let field = recordField([existing, incoming])
@@ -162,7 +173,7 @@ public enum ScreenFunctions {
     var changes: [JSONValue] = []
     var more = 0
     func add(_ change: [String: JSONValue]) {
-      if changes.count >= limit { more += 1 } else { changes.append(.object(change)) }
+      if changes.count >= (recordLimit ?? limit) { more += 1 } else { changes.append(.object(change)) }
     }
     for row in rows {
       if row.status == "changed" {
@@ -189,5 +200,69 @@ public enum ScreenFunctions {
     result["recordField"] = .string(field)
     result["records"] = ["summary": .string(summary), "changes": .array(changes), "more": .number(Double(more))]
     return .object(result)
+  }
+
+  /// The time zone picker's choices (the console's `timeZoneChoices`): the default first, an empty value the route stores as
+  /// no zone, then every zone of the console's list with its underscores read as spaces.
+  static func timeZoneChoices() -> JSONValue {
+    let values = ContractValues.shared
+    let first: JSONValue = ["value": "", "label": .string(values.timeZoneDefaultLabel)]
+    return .array(
+      [first]
+        + values.timeZoneChoices.map { zone in
+          JSONValue.object(["value": .string(zone), "label": .string(zone.replacingOccurrences(of: "_", with: " "))])
+        })
+  }
+
+  /// The single sign-on rehearsal's rows, one per account (the console's `ssoEnforcementAccounts`): the address, what
+  /// enforcing would remove from it, what it keeps, whether it can be designated break-glass (it holds a way in that is
+  /// not the identity provider) and whether it is designated now.
+  static func ssoEnforcementAccounts(_ accounts: JSONValue?, _ providerID: String?, _ designated: JSONValue?) -> JSONValue {
+    let chosen = Set(designated.array.compactMap(\.stringValue))
+    let dash = "\u{2014}"
+    func methods(_ value: JSONValue?) -> [String] { value.array.compactMap(\.stringValue) }
+    return .array(
+      accounts.array.compactMap { (account: JSONValue) -> JSONValue? in
+        guard let uid = account["uid"]?.stringValue else { return nil }
+        let unlinked = methods(account["unlinked"])
+        let kept = methods(account["kept"])
+        let skipped = account["skipped"]?.stringValue
+        let wouldLose: String
+        if skipped == "break-glass" {
+          wouldLose = "Nothing \(dash) designated break-glass"
+        } else if let skipped, !skipped.isEmpty {
+          wouldLose = "Nothing \(dash) it would be left with no way in"
+        } else {
+          wouldLose = unlinked.isEmpty ? dash : unlinked.joined(separator: ", ")
+        }
+        return [
+          "uid": .string(uid),
+          "label": .string(account["email"]?.stringValue ?? uid),
+          "wouldLose": .string(wouldLose),
+          "keeps": .string(kept.isEmpty ? dash : kept.joined(separator: ", ")),
+          "eligible": .bool((unlinked + kept).contains { $0 != providerID }),
+          "designated": .bool(chosen.contains(uid)),
+        ]
+      })
+  }
+
+  /// The copy job a landed product import starts (the AI plugin's `aiProductsImportJob`): the brief and the `inputs`
+  /// the jobs route takes, for the first 50 products the import created; null when it created none.
+  static func aiProductsImportJob(_ rows: JSONValue?) -> JSONValue {
+    var ids: [String] = []
+    for row in rows.array {
+      guard row["outcome"]?.stringValue == "created", let id = row["recordId"]?.stringValue, !id.isEmpty, !ids.contains(id) else { continue }
+      ids.append(id)
+    }
+    ids = Array(ids.prefix(50))
+    guard !ids.isEmpty else { return .null }
+    var seen = Set<String>()
+    let readable = ids.filter { id in
+      id.range(of: "^[A-Za-z0-9_-]{1,64}$", options: .regularExpression) != nil && seen.insert(id).inserted
+    }
+    return [
+      "brief": .string("Write storefront copy for \(ids.count) \(ids.count == 1 ? "product" : "products")"),
+      "inputs": ["target": "bulk", "productIds": .string(readable.joined(separator: ","))],
+    ]
   }
 }

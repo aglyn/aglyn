@@ -170,7 +170,10 @@ synchronized groups, so adding a Swift file never edits `project.pbxproj`, and
 merges stay quiet. Local Swift packages are referenced by relative path:
 `libs/native/apple`, `apps/ios/PluginManifest`, and through it every plugin's
 `src/ios`. External packages come in through SPM: `firebase-ios-sdk` (Auth,
-Firestore, Messaging) and `stripe-terminal-ios` (iOS only).
+Firestore, Messaging), and, for the AglynPOS target only and filtered to
+iOS, `stripe-ios-spm` (`StripePaymentSheet`) and `stripe-terminal-ios`
+(`StripeTerminal`). Both are referenced by `Aglyn.xcodeproj` itself, never
+by a plugin package, because both app targets link the one plugin manifest.
 
 `#if os(iOS)` appears only where an API is iOS-only: Tap to Pay, Bluetooth
 readers, the camera barcode scanner, and the `UIApplication` push
@@ -252,6 +255,14 @@ public func registerRedirectsNative(_ r: NativePluginRegistrar) {
 // libs/plugins/redirects/src/android/src/commonMain/kotlin/com/aglyn/plugins/redirects/Register.kt
 fun registerRedirectsNative(r: NativePluginRegistrar) { … same ids … }
 ```
+
+A widget may name a `slot` (`r.widget(…, slot: "hostSeo")`) and then renders in a core
+page's zone instead of Home: the native twin of the console's `PluginWidgetSlot`. A core page that hosts a zone draws
+`context.slotWidgets(slot)` and never names the plugins that contribute. Site setup hosts three (AGL-3668):
+`hostBusinessProfile` (what Aglyn AI learned from the site's edits), `hostSeo` under the SEO check (the listing the
+guided start proposed), and `hostSettings`, which Setup's Integrations section draws for the plugins running on the site (a plugin's settings screen gets its card from its spec's `cardSlot`, so email platforms, Zapier, live chat and ad conversions each need no Kotlin or Swift of their own). The SEO page also hands its widgets a `SeoZone` (Kotlin
+`LocalSeoZone`, Apple the `seoZone` environment value): the stored `seo` settings, and `proposeDraft(values, key)`,
+which puts values in the form below as unsaved edits (the same key twice applies once; the form's Save is the write).
 
 A screen gets a `NativePluginContext`, the twin of `MobilePluginContext`:
 
@@ -388,11 +399,94 @@ How this shapes the code:
   `CredDeleteW` on `Advapi32`, a generic credential per app and Firebase
   project), restored with `securetoken` and `accounts:lookup` at launch. A
   macOS or Linux development run of the JVM build keeps it in memory.
-- **App Check enforcement on Firestore must wait** until a desktop custom
-  provider exists, because Windows has no built-in attestation. Turning it
-  on earlier would lock Windows out.
+- **App Check is enforced in production** on Authentication and Firestore,
+  so every Firebase call carries a token (next section). Windows has no
+  built-in attestation, so its sign-in goes through a console hand-off and
+  its tokens are minted by the console for that session (next section).
+  Measured against aglyn-main on 2026-10-15 with no token: Identity
+  Toolkit's `accounts:signInWithCustomToken` answers 401 "Firebase App Check
+  token is invalid." before reading the token, while the Secure Token refresh
+  and `accounts:lookup` reach their own validation. So the hand-off's custom
+  token cannot be exchanged without a token (the first one rides the
+  redemption), and an ID token refreshes without one (the mint route needs
+  only that). The order: redeem (code, verifier) → custom token and App
+  Check token → `signInWithCustomToken` with that token → later tokens from
+  `/api/auth/native-app-check`.
+- **The console hand-off** (AGL-3816) is how an app signs in where the
+  console has to run the sign-in itself: workspace single sign-on on every
+  app, and every sign-in and sign-up on the Windows build against a project
+  that enforces App Check. The app makes a PKCE pair and opens
+  `/auth/native?start=signin|signup|sso&challenge=…&redirect_uri=…&state=…`
+  (`ASWebAuthenticationSession` on Apple, a Custom Tab on Android, the system
+  browser on the desktop). The page sends a signed-out visitor through the
+  console's own `/signin`, `/signup` or `/sso`, then shows who is signed in
+  and asks before continuing (AGL-1415). Continuing calls
+  `POST /api/auth/native-handoff/authorize` (bearer ID token; verified
+  address, no support session, the lockdown verdict), which stores a
+  one-time code as its SHA-256 in the server-only `nativeHandoffs`
+  collection, bound to the uid, the identity pool, the challenge and the
+  return address, for 120 seconds. The page goes to the return address
+  (`aglyn://auth/handoff`, `aglyn-pos://auth/handoff`, or
+  `http://127.0.0.1:<port>/handoff` on the desktop) with the code and
+  `state`. The app posts the code, its verifier and the same return address
+  to `POST /api/auth/native-handoff/redeem`, which consumes the record in one
+  transaction and mints a custom token in the account's own pool, and signs
+  in with it in that pool. A sign-in on an address whose domain has workspace
+  SSO (`/api/auth/sso-lookup`) goes this way from the email field, so an SSO
+  account signs in as its tenant uid rather than as a project-pool account.
+  On Android the SDK aims its one instance at the tenant
+  (`setTenantId`), which it cannot undo, so after a single sign-on in one
+  process the other doors ask for the app to be reopened.
 - **The macOS app is the SwiftUI build,** so the JVM desktop target ships
   only for Windows (and Linux, which is not committed).
+
+### App Check (AGL-3818)
+
+Production (`aglyn-main`) enforces App Check on Authentication and Firestore:
+a call without a valid `X-Firebase-AppCheck` token is refused before any rule
+runs (`401 "Firebase App Check token is invalid."` from Identity Toolkit, a
+permission error from Firestore). The emulator stack does not enforce it, so
+`AGLYN_APP_CHECK` (on in Release, off in the emulator configs, and off by
+default whenever an emulator or a local console is set) turns it on or off.
+
+| platform | provider | how |
+| -- | -- | -- |
+| iPhone, iPad | **App Attest** (`DCAppAttestService`) | Firebase's `AppAttestProvider` from `FirebaseAppCheck`, a product of the firebase-ios-sdk the kit already links (its `app-check` dependency was already resolved). It generates the key, attests it once, keeps the key id and artifact in the Keychain, then sends an assertion over a fresh challenge; `DCError.invalidKey` resets the key and re-attests. Entitlement `com.apple.developer.devicecheck.appattest-environment = production` (TestFlight and the App Store use production regardless). |
+| Mac | **DeviceCheck** (`DCDevice`) | `DCAppAttestService.isSupported` is false on every Mac, so `DeviceCheckProvider` (`exchangeDeviceCheckToken`). The App Attest entitlement does not exist on macOS. |
+| Simulator | none | Neither is supported; the app sends no token, which only the emulator stack accepts. |
+| Android phone, tablet | **Play Integrity** (`com.google.android.play:integrity`, approved 2026-10-15) | `firebase-appcheck-playintegrity` (BoM 34.19.0): `generatePlayIntegrityChallenge`, a classic Play Integrity request with that challenge as the nonce and the project number, then `exchangePlayIntegrityToken`. Installed on every Firebase app, including a support session's named app. |
+| Windows (Compose Desktop) | **console-minted** (Zach, 2026-10-15) | `ConsoleMintedAppCheck`: there is no attestation on Windows, so the console mints the tokens (Admin `createToken`, one hour) for a session it signed in. The first rides the hand-off's redemption (`appCheckToken`); after that `POST /api/auth/native-app-check` with the app's current ID token (revoked tokens, disabled accounts and support sessions refused; rate limited per account and install; audited as `user.nativeAppCheck`). Cached, replaced at half-life, one mint at a time, re-minted when Firebase refuses it (`withAppCheck` retries a 401 once with a fresh token), dropped on sign-out. Weaker than App Attest or Play Integrity: it attests a live console session, not a genuine binary. |
+
+The SDKs (Auth and Firestore on Apple and Android) read the token through
+`FirebaseAppCheck` on their own, which is why the official providers are used
+rather than a hand-written REST client: the SDKs accept a token only through
+that interop. Their core caches the token for its TTL, refreshes it before it
+lapses and shares one in-flight exchange among concurrent callers. The kit's
+REST and gRPC clients (Identity Toolkit and Secure Token for the unsigned Mac
+build and support sessions, Firestore REST, the Google link's
+`signInWithIdp`) take the same token through `AppCheckTokenProvider`:
+`AppCheckTransport` in Swift (adds the header to Firebase hosts only, and
+resends once with a forced refresh on an App Check refusal) and
+`HttpClient.withAppCheck` in Kotlin. Console API routes are not App Check
+gated; they take the Firebase ID token as before. A refusal reads "This copy
+of the app could not be verified. Update the app or try again." instead of the
+generic sign-in failure.
+
+Done (2026-10-15): the App Attest capability on `com.aglyn.app` and
+`com.aglyn.pos`; App Attest registered in Firebase App Check for both Apple
+apps (team R3B7G75SWA, 1 h TTL); Play Integrity registered for both Android
+apps, with the Play app-signing SHA-256 on each Firebase Android app and both
+Play apps linked to Cloud project `aglyn-main` (543499566626). Still owed:
+DeviceCheck registration (a DeviceCheck `.p8` key and its Key ID) for both
+Apple apps in Firebase App Check, which the Mac builds need; until then a Mac
+build against production cannot sign in.
+
+Sources: [App Check REST reference](https://firebase.google.com/docs/reference/appcheck/rest),
+[App Attest provider](https://firebase.google.com/docs/app-check/ios/app-attest-provider),
+[DeviceCheck provider](https://firebase.google.com/docs/app-check/ios/devicecheck-provider),
+[Play Integrity provider](https://firebase.google.com/docs/app-check/android/play-integrity-provider),
+[App Attest environment entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.devicecheck.appattest-environment),
+[`DCAppAttestService.isSupported`](https://developer.apple.com/documentation/devicecheck/dcappattestservice/issupported).
 
 Sources:
 
@@ -720,6 +814,13 @@ With React Native gone, the guard's TypeScript rules for `libs/mobile` and
 plugin `src/mobile` go with it. `mobile-pure-modules.json` stays: it is now
 the list of pure modules the native generators (§5) may read.
 
+Two SDKs are placed by the same guard: Stripe's card-entry SDK (PaymentSheet)
+and the Stripe Terminal SDK may be linked, imported or declared only by Aglyn
+POS (`apps/ios/AglynPOS`, the AglynPOS Xcode target, `apps/android/pos`, and
+the version catalog lines that pin them). A kit, a plugin (its Swift package,
+its Gradle build or its sources), the plugin manifest, the Aglyn app target or
+`:app` that names either is red (§10).
+
 The only sanctioned crossings are the generated files of §3 and §5–§7. Their
 generators read the pure modules. Native code reads only their outputs. Specs
 for each rule live in `tools/scripts/lib/mobile-isolation.test.mjs`.
@@ -739,14 +840,50 @@ the RN POS lane (AGL-3618, `reference/rn-pos-mobile-agl3618`). The native POS re
   another plugin keeps (`credits` in the context, found by `credit-lookup`),
   a room charge to a checked-in stay (`reservations` asked for by status), and
   the QR payment page (`card-link`), drawn as a QR code on the device and never
-  sent anywhere. A split pays part of the balance; a declined reader payment
-  can be retried and, in test mode, tapped with a test card. The one console
-  tender the apps do not take is the typed card: it needs Stripe's card-entry
-  SDK, which neither app carries.
+  sent anywhere, and the typed card ("Type card", `card-keyed`). A split pays
+  part of the balance; a declined reader payment can be retried and, in test
+  mode, tapped with a test card.
+- **Typed card:** the console loads Stripe's Payment Element on the
+  PaymentIntent the server made (`card-keyed`), then reads the payment back
+  (`status`); closing it without paying runs `cancel`. The apps do the same
+  with Stripe's own card form (PaymentSheet) on that intent: the number is typed
+  into Stripe's fields and goes to Stripe, never through our code, so our PCI
+  scope does not change. The intent, its metadata, the idempotency key and the
+  receipt are the server's, exactly as for the console; the device only shows
+  the form and reports how it closed (`KeyedCardEntry` in the hardware kit:
+  confirmed, canceled or failed), and the server re-reads Stripe before it
+  records anything. The button shows when the register's context carries the
+  site's publishable key (as the console's does) and the app has the form.
+  That is **Aglyn POS on iPhone, iPad and Android only**: Stripe has no card
+  SDK for native macOS (the iOS SDK is UIKit, and Aglyn POS is not a Mac
+  Catalyst app) or for the JVM, so the Mac and desktop registers take cards on
+  smart readers and the QR payment page, and do not offer "Type card".
+- **The card SDK stays in Aglyn POS.** On Apple it is the `StripePaymentSheet`
+  product of `stripe-ios-spm`, pinned exact in `Aglyn.xcodeproj` and linked to
+  the AglynPOS target only, filtered to iOS; on Android it is
+  `com.stripe:paymentsheet`, pinned in the version catalog and used by `:pos`
+  only. The shared kits and every plugin see only the `KeyedCardEntry` seam, and
+  `check-mobile-isolation` fails if the Aglyn app target, a kit, a plugin or a
+  web tree names the SDK. Tests for the tender run against a fake form.
+- **The reader SDK stays in Aglyn POS too.** Stripe Terminal is linked the
+  same way (the `StripeTerminal` product of `stripe-terminal-ios` on the
+  AglynPOS target, filtered to iOS; `com.stripe:stripeterminal` in `:pos`),
+  behind `CardCollector`, which Aglyn POS publishes as `DeviceCardReaders`
+  at launch. The same guard holds it.
 - **Tips** and **receipts by email or text**, through the routes the web
-  register uses; **Print receipt** goes to the register's cloud printer (and
-  on Kotlin its direct printer), and a store whose receipt default is print
-  prints it as soon as the sale is paid.
+  register uses. **Print receipt** goes where the console's does: the
+  register's cloud printer when it has one (the server queue the printer
+  polls), else the device's own print sheet, which is what the console's
+  `window.print()` is (AirPrint on an iPhone or iPad, the print panel on a Mac,
+  Android's print service, the desktop's dialog). The console has no path that
+  talks to a printer's own address, so neither do the apps; a Kotlin desktop
+  register can also name a network printer in its build settings. A **gift
+  receipt** prints on the sheet with no prices. A store whose receipt default
+  is print prints as soon as the sale is paid.
+- **Delivery-app orders:** the delivery-apps plugin's own native package puts
+  the console's queue (accept or reject, ready, picked up) in the register's
+  `posOrders` zone, which the commerce plugin hosts and fills by registry, never
+  by name.
 - **Booking payments:** the bookings plugin contributes a `.pos` screen.
 
 Card readers by platform:
@@ -776,19 +913,27 @@ on `main`, because it is server code with nothing RN in it.
 - The collect sequence (retrieve, collect, confirm), the reader prompts and
   the error words are in `AglynHardware/DeviceReader.swift`, the twin of the
   Kotlin `DeviceReader.kt`, tested with a fake `TerminalPaymentPort`.
-  `StripeTerminalCollector` (iOS only) binds the SDK to it. It connects the
+  `StripeTerminalCollector` (`apps/ios/AglynPOS`, iOS only) binds the SDK to
+  it, and Aglyn POS publishes it as `DeviceCardReaders.shared` at launch; the
+  commerce plugin's register, readers screen and kiosk, and a booking paid at
+  the counter, see only `CardCollector`. It connects the
   first reader discovery finds (this iPhone for Tap to Pay, the nearest
   Bluetooth reader), with the SDK's simulated readers whenever the
   connection token says test mode. Card-present payments settle on the
   platform account, so the connection never sets `onBehalfOf`.
-- The Stripe Terminal iOS SDK comes through SPM, pinned `exact: 6.0.0`, as a
-  dependency of the plugin package only, conditional on iOS, so the Mac
-  builds never see it. Both iOS apps link the one plugin manifest, so the
-  Aglyn app carries the framework too, although only `.pos` screens ever
-  construct a reader. Before the first App Store submission the manifest must
-  split per app (or the Aglyn app must declare the same usage strings), since
-  App Review reads the linked frameworks. Aglyn POS declares
+- The Stripe Terminal iOS SDK comes through SPM, pinned `exact: 6.0.0` in
+  `Aglyn.xcodeproj`, and only the AglynPOS target links its `StripeTerminal`
+  product, filtered to iOS, so the Mac builds never see it. The plugin
+  package does not depend on it: both iOS apps link the one plugin manifest,
+  so a plugin-level dependency put the framework, and its location and
+  Bluetooth API references, in the Aglyn app too, and App Store Connect
+  rejected that build for the missing purpose strings (ITMS-90683). The Aglyn
+  app declares none and carries no reader; its booking screens say to take
+  the payment in Aglyn POS. Aglyn POS declares
   `NSBluetoothAlwaysUsageDescription` and `NSLocationWhenInUseUsageDescription`.
+  On Android the SDK (`com.stripe:stripeterminal`, `stripeterminal-taptopay`)
+  is a dependency of `:pos` only, so `:app`'s runtime classpath and merged
+  manifest carry neither it nor its location and Bluetooth permissions.
   Tap to Pay on a real iPhone also needs Apple's Tap to Pay entitlement (§12).
 
 Peripherals live in the `AglynHardware` / `hardware` module:
@@ -904,18 +1049,22 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `requires` | a condition the session must meet (`org.manager`, `staff.is`, `staff.super`) |
 | `links` | console paths (after `/{org}/hosts/{host}`) that open it; `:param` segments become params |
 | `zones` | (plugins) the core screens' zones it contributes to: `orgMember`, `orgBillingUsage`, `siteTemplate` (Backup & restore: a plugin that can publish the site as a template), `transferStep` (the import wizard's review: a step a plugin adds for its resource), `staffOrg`, `staffUser`, `staffSite`, `staffPage` |
-| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional }`, or `{ doc }` / `{ query: { collection, where, orderBy, limit } }` for a Firestore read, or `{ switchboard: org \| site }` for the plugin switchboard's rows; each lands at `data.<key>` |
+| `cardSlot` | (plugins) a core page's widget slot (`hostSettings`) the screen also puts a one-row card in, named `<screen id>.card` and declared under `widgets`; the card opens the screen with `pluginId` set, so a `requires` of `params.pluginId == <plugin>` holds from either door |
+| `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional, accept }` (`accept`: statuses whose body is the answer, a health probe's 503; `filters`: `{ field, op, value }` clauses for a staff list route, each kept when its value template is not empty), or `{ doc }` / `{ query: { collection, where, orderBy, limit, aggregate }, more }` for a Firestore read (below: `aggregate: { count: true }` answers `{ count }`, the server's tally, as the console's `getCountFromServer` does), `late: true` on any load to run it after the others, with their answers under `data` (a read keyed by something another read found), `each: <rows>` to run it once per row of an earlier load, `{ compute, args }` for a pure function over what has loaded, or `{ switchboard: org \| site }` for the plugin switchboard's rows, or `{ entitlement: feature }` for a plan feature's gate; each lands at `data.<key>` |
 | `actions` | the screen's toolbar actions |
-| `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
+| `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`, `image`, `html`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action |
 | `constants` | fixed rows, read as `const` |
 
 An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, destructive, prompt,
-reason, success, instead, check, open, navigate, back, reload, when, link, copy,
-reveal, else, then, write }`: `prompt` asks for inputs first (`form.*`); `reason: true`
+reason, success, instead, check, open, navigate, back, reload, when, link, copy, export,
+overlay, reveal, else, then, write, route }`: `prompt` asks for inputs first (`form.*`); `reason: true`
 adds the required reason the staff routes record; `open` names the response
 field holding a URL that opens in the platform's secure browser sheet
 (Stripe Checkout and the Customer Portal, `ASWebAuthenticationSession` and
-Custom Tabs); `else` runs on a 404 (add a member, else invite them); `then`
+Custom Tabs); `route` is a console path a route answered (a hold's `href`,
+`/acme/billing/settings`) followed the way a notification's link is, by the
+plugin context's `openLink`: the native screen that claims it, else a Besigner
+page, else a note that the page does not open in the app; `else` runs on a 404 (add a member, else invite them); `then`
 follows a success; `write` merges a document the person writes directly, as
 the console does (their own profile, the site document), under the rules.
 `confirm` is a template, or a list of `{ when, text }` segments joined in order
@@ -928,21 +1077,173 @@ that matches wins) shown in place of `success` when the route's answer meets
 A route that answers `reauth-required` gets a password sheet, a fresh sign-in
 and one retry.
 
+`overlay` names a Firestore document (a template) that is read when the action runs and put in the body as `overlay`, without
+its timestamps, for a route that replaces the whole document: `{"$overlay": {"base": "{overlay}", "set": {...}}}` is the base
+with each key of `set` put on top and any whose value is null taken off (a product's details are saved this way).
+
+`export` is `{ resource, title, fileStem, scope, filter }`: it makes no request of its own but opens the export
+sheet (`TransferExportSheet`, `TransferExportDialog`) on a transfer resource such as `commerce.products`, which asks for
+the columns and the file type and hands the file to the device. `scope` is `{ "kind": "all" }` unless it names a
+filter; `title`, `fileStem` and `filter` are templates. The site's roles and plan are the server's to enforce.
+`report` is a list of lines (`{ text, when, each }`, or a plain string) appended to `success`, one per
+line (a `when` on an `each` line is read for each row, with `item` that row); `file` (`{ name, type, from }`) hands text to the device as a file, its name a template and `from` the path of the
+text over the screen and the route's `response` (Save, or the share sheet: the working papers' CSV); `failure` is the same list for a refusal, appended to the route's own words and read over the route's
+answer as `response` (the workspaces that still need an owner); `each` repeats a line for every row or map entry as `item`. `loop` (`{ cursor, param, until, max }`)
+sends a route that works in pages again, with the cursor it answered, until it says it is done, and
+answers the totals: numbers add up (a map of counts too), `pages` counts the requests and `bounded` says
+the last page was not reached. Formats `facts` (an object's plain values as `words: value`) and `duration`
+(milliseconds as "12 min", "3h 5m") read the health probes and the stuck claims.
+
 `headers` names request headers, each a template. `{attempt}` there is one key per
 (action, route, resolved body): sending the same request again, a retry or a second tap,
 reuses it, and a changed body gets a new one. A route that provisions something
 (enterprise billing) takes it as `Idempotency-Key`, and a write that carries one is retried
-like a read.
+like a read. `{press}` is a key for one press alone: its retries share it, and the next tap gets
+its own, for a route that must see two deliberate, identical changes (a rewards adjustment) as two.
+A route that wants the key in its body (the AI credit give-back's `idempotencyKey`)
+writes `{attempt}` there; the key is found with `{attempt}` and `{press}` blank, so carrying it does not
+change the request it identifies.
+
+A screen keeps a little state while it is open, read as `session`: `session.log` is what the person has done on it,
+newest first (`{ at, text, confirmed }`, at most 25), and `session.armed.<key>` is a flag. An action's `log` is a list of
+lines like `report`'s (`{ text, when, each, confirmed }`, `confirmed` a condition that defaults to true) appended when it
+succeeds, the lines of one act with the last listed on top: the console's "Actions taken in this session", which the
+lockdown and quarantine routes feed with `logLines`. `arm: "<key>"` sets `session.armed.<key>` when the action succeeds
+and clears it when it fails, and `disarm: "<key>"` clears it when it succeeds: a preview that has been read, which a
+guarded run waits for through its `when`. A block `{ "type": "html", "source": "{…}" }` draws a message's HTML as styled
+text through the platform's own HTML reader (`NSAttributedString` on Apple, `AnnotatedString.fromHtml` on Android, the
+JDK's HTML parser on desktop) after taking out scripts, styles, frames, forms, images (their alternative text stays) and
+every attribute but a link's address; a link opens only when it is http, https, mailto or tel, in the system handler. The
+shared cases both apps replay are `libs/native/screens/email-html-cases.json`, generated from the console's renderer
+(`generate:native-email-html-cases`). A prompt field of kind `country` is a picker over the platform's region list,
+named in the person's language and sorted by name, storing the two-letter code.
+
+A `list` block's `columns` are the facts a row can show and the orders it can take, as the console's grid has a column
+picker and sortable headers: `{ id, label, value, show, always, sort: { route | page, type, first } }`. `value` is the cell's
+template over the row; the picked columns read as one line under the row (`Plan Pro · Site limit 5`), and a `Columns` menu on
+the list turns each on and off (`show: false` starts it off; `always` is the row's own name, shown and not offered). A `Sort` menu
+lists every column with a `sort`: a tap asks for its first order (`first`, `asc` unless `desc`), a second tap for the other, a third
+for the default again, as a header click cycles. A `route` sort is the staff route's own order over every row (`sort=<path>:<dir>`;
+the list's load names the parameter with `sortParam` and the order it answers with none asked as `sortDefault`), so choosing it reads
+the route again from the first page; a `page` sort orders the rows already loaded by a path over the row, as the console does for the
+columns no query can order by (`type` is `text`, `number` or `date`; a row without the value goes last in both directions). A list with
+`columnsZone: "<zone>"` also takes the columns plugins contribute: a plugin spec with `zones: ["<zone>"]` and a `column` of the same
+shape plus `load: { url, ids, max }` (`{ids}` in the url is the ids of the rows on the screen, `ids` the template for each, `max` the
+most a request may name) is read for the rows on the screen in batches and answers under `column.<id>`, which its `value` and `sort`
+read. A column that cannot be read leaves its cells blank.
+
+A staff support session is an action with `impersonate: { token, tenantId }`: the paths in the route's answer of the custom token it
+minted and the identity pool it belongs to (`/api/admin/impersonate`, which takes `{ uid, reason }` and refuses a reason under its
+minimum). The token goes to the app's auth session and is shown, logged and kept nowhere. The session signs the customer in over
+REST in that pool, in memory only, and the staff member's own session is set aside untouched: Apple uses a second
+`IdentityToolkitAuth` with a memory credential store and a Firestore reader that switches to the customer's, desktop does the same
+through `SupportSessions` with a REST backend, and Android signs in on a second Firebase app named `support` (a flag in
+SharedPreferences signs out anything left over at launch). While it lasts the shell wears the console's band (`You are
+impersonating {email} (staff: {staff email}). Actions are audited.`) with **Exit impersonation**, navigation starts again from home
+on entering and leaving, device push registration is skipped for the customer, a refresh the server refuses (the session was
+revoked) ends it and returns to the staff member's, and signing out ends it first. A second session replaces the first without
+losing the staff member's.
+
+A prompt field of kind `lookup` searches records and fills the form: `groups` is a list of `{ id, label, url, items, title,
+subtitle, fill, fillWhenSet }`. Opening it lists the first rows of every group and typing asks each group's `url` again with
+`search=<words>`. Picking a row writes `fill` (a map of form field keys to templates over `item`) into the fields the form has,
+whatever they come out as, and `fillWhenSet` only when a template comes out non-blank (a person's address, as the recipient). The
+system email test's "Populate from" uses it; its fills are generated from the console's `system-email-sample-sources.ts`.
 
 Templates are `{path|fallback|'literal':format}` over the context `org`,
 `site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,
 `response` and `const`. A path takes `rows[field=other.path]` (the first row
-whose field matches) and `map[key.with.dots]`. Formats: `date`, `datetime`,
+whose field matches) and `map[key.with.dots]`. `now` has `year`, `month`, `prevMonth`, `day`, `quarter`, `ms` and `months` (the last twelve, newest first). A list block's `flatten: "a.b"` walks down into the lists inside its rows (each row found carries `$parent`, the row it came out of). A prompt field with `each: "<list path>"` is one field for every row of that list (key, label, help and initial are templates over `item`, so an email's test asks for each variable it takes, and `{"$collect": {"prefix": "token."}}` gathers what was typed). A prompt field with `generate: { length, alphabet }` offers a Generate button that fills it from the
+platform's secure generator (the console's password generator). Formats: `pairs` (a map's entries as
+`key: value`, the keys untouched, where `facts` splits them into words), `labeled/<path>` (each id through the map at
+`<path>`), `before/-` and `after/-` (either side of the first separator), `date`, `datetime`,
 `cents` (`cents/<currency path>`), `dollars`, `bytes`, `number`, `percent`,
 `count`, `yesno`, `title`, `upper`, `json`. A `when` is clauses joined by
 `&&` or `||`: `path`, `!path`, `path == a,b`, `path != a`. A body is resolved
-in place; `{"$pick": {...}}` makes the list of keys whose values are truthy,
+in place; `{"$if": "<when>", "then": X, "else": Y}` is one of two values (or nothing, which leaves the member out; `"$null"` sends null) and
+`{"$afterHours": "{form.hours}"}` is that many hours from `now.ms` in epoch milliseconds (nothing when blank); `{"$pick": {...}}` makes the list of keys whose values are truthy,
 and `{"$append"|"$without": {list, item}}` edits a list.
+
+Three small forms serve the cards that list data they cannot shape: a path
+`rows.*.field` reads that field of every row as a list (so `{item.issues.*.message}`
+prints them joined); a select's `optionsFrom` takes `filter`, a condition on the
+row (`item.classification == bank`); and a comparison's right side may be another
+path (`a != @b.c`). A load names the query parameter its route searches by with
+`searchParam` (the catalog route reads `q`, the default is `search`).
+
+A field of kind `hours` is a week of opening hours chosen by touch, as the console's weekly hours picker is: a switch
+for each day and, for an open day, a From and a To time from a menu, with another interval on request. It reads and
+writes the stored text lines (`Mo-Fr 09:00-17:00`), so nobody types them; its `hours` option is `{ noun, sameDay, start,
+end }` (what an interval is called, whether it must end the day it starts, and the times a newly opened day gets, in minutes).
+The picker and the conversion are the contracts' and the plugin host's (`WeeklyHours` in AglynContracts, `OpeningHoursPicker` in
+AglynPluginHost and the UI kit), one model and one picker for every screen that picks hours; the contracts' generated function
+cases hold the conversions to the console's own.
+
+A form or prompt can list fields from the data: an entry
+`{ "fieldsFrom": { items, key, label, help, required, options, kinds } }` becomes one
+field per row (a carrier that names its own credential fields), `kinds` mapping a
+row flag to a kind (`password`, or `yesno` for a No/Yes pick that sends "" or
+"true"). Body operations grow `{"$replace": {list, key, match, value}}` (the row
+whose key matches, replaced) and `{"$uuid": "box_"}` (a fresh id with that prefix), and
+`{form}` reads the whole form as an object. `{"$map": {list, where, fields}}` is one object of `fields` for each row of the
+list that meets `where` (all of them with none), each read with `item` set to the row: the items a batch purchase sends, from
+the rows a rate request answered.
+
+A condition may compare numbers and times: `path < @now.ms+7d` (also `<=`, `>`, `>=`), the
+right side a number or `@path` with an optional offset in ms, s, m, h or d; a missing
+left side is false. An action's `else` runs on the status named by `elseStatus` (404
+unless set, 409 for "this needs one more answer"), and an action's `then` that has a
+`prompt` is asked of the person next, with the earlier answer as `response` and the
+earlier form as `previous` (print on demand lists the stores a token reaches, then
+connects the one picked).
+
+Cards that write the store's own documents, as the console's client does, use the rest of
+the grammar. A `write` is `{ doc, fields }` (merge a document), `{ add, fields }` (a new
+document in a collection, with an id of its own), `{ delete }`, `{ steps: [...] }` (several
+in order) or `{ each: { items, filter }, doc, fields }` (one per row of the data that passes
+the filter, with `item` set to the row); `siteWide: true` also drops the site's cached
+pages, as the console's `writeSiteWideChange` does. `{ stay: { resource, checkIn, checkOut, guestName } }` is the front desk's walk-in: it prices the
+stay and checks the dates against the resource's live reservations and blocks (ports of the console's reservation functions,
+replayed from `stays-cases.json`), then adds a confirmed reservation, or says in words why it cannot. A field value is resolved like a
+body, and these operations shape it: `{"$timestamp": true}` (the server's time),
+`{"$orNull": v}` (null when empty, which a merge write turns into a cleared field; a
+template that found nothing is otherwise left out), `{"$cents": "{form.amount}"}` (typed
+dollars as whole cents, and `-5.50` as -550 where a change may take money away), `{"$dateMs": {value, time, local}}` (a date and a time of day as
+epoch milliseconds, UTC unless `local` asks for the device's clock), `{"$slug": v}`,
+`{"$split": v}` (lines or commas to a list) and `{"$gather": {from, prefix, key, value}}`
+(the entries of `{form}` whose names start with `prefix`, as `{ key, value }` rows).
+
+More formats: `amount` (whole cents as `12.50`, what a money field starts with), `code`
+(a coupon code as stored; `code/40` cuts it at 40), `token` (the search token of typed
+words), `sum` and `sumcents` (a list of numbers added up), `ahead` (how many of a list of
+times are still to come), `percentof/other.path` (this as a percentage of the number at the path, to one decimal, `0` where
+there is nothing to divide by). `{?a == b}` is a condition as true or false, and `a ?? b` takes the
+first value that is present at all (`false` and `0` count). A path `rows.*.field` also
+reads an object's values in key order, and a comparison against a list holds when any of
+its values does (`item.holds.*.expiresAtMs > @now.ms`). `rows[?item.rate && !item.own]` keeps the rows its condition holds for
+(`item` is the row), so a count, a sum or a list can be taken over just those. A screen that sits in a zone may name a `showWhen`
+condition over its own loads: the zone reads those loads and lists the row only while it holds, as a console widget that draws
+nothing for a store it has nothing to say to. A number field takes `min` and
+`max`, and a field a screen hid by its `when` is not sent.
+
+A Firestore `query` load takes the console's filters, `where: [[field, op, value]]` with
+`op` any of `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `not-in`, `array-contains` and
+`array-contains-any`, a number or flag in the spec compared as itself. A list block that names its query load (`"load": "key"`) offers "Load more" whenever the window came
+back full: a query has no cursor to continue from, so it reads a bigger window (the load's `more: <rows>`, else the spec's
+`limit` again) and replaces its rows, until a read comes back short, and a reload after an action keeps the window the person
+grew. A fourth `where` entry is a condition: the clause counts only while it holds (a filter the person has not picked, or a value
+that is empty, is left off).
+With
+`aggregate: { count: true, sum: "field" }` the server counts and adds every matching document
+and no row is read: the answer is `data.<key>.count` and `.sum`, left out where the reader
+cannot ask (show "Unavailable", never a zero). `{ "entitlement": "giftCards" }` reads the
+workspace document and answers `data.<key>.carried` and `.label`, the plan that includes the
+feature, so a card the console locks behind a plan shows its notice instead of failing
+(the features are the generated `NATIVE_PLAN_FEATURES`). A load that is not read from anywhere but worked out from the others once they answer is
+`{ "derive": "shippingCoverage", "from": "store.shipping" }`: the `from` path (under `data`) finds the shipping settings, and
+`data.<key>` holds what the console's Coverage block says of them (`served`, `unserved`, `headline`, `detail`, `note`, `asks`, …), a port
+of the console's resolver replayed from the contracts' `function-cases.generated.json` (`summarizeShippingCoverage`,
+`describeShippingCoverage`, `resolveCheckoutShippingOptions`).
 
 The context also carries `now` (UTC): `now.month` (`2026-10`), `now.prevMonth`,
 `now.day` (`2026-10-13`) and `now.year`, the keys the console's monthly
@@ -952,9 +1253,9 @@ list. `{a + b - c}` sums numbers (paths, literals, or a list, which adds up);
 a term that is missing makes the sum missing, and `x?` counts as zero where it
 is missing. `a ?? 'text'` keeps a real 0 or false.
 
-A Firestore `query` load takes `where` as `[field, op, value]` (any operator,
-a value may be `{"$date": ISO}`) and `count: true`, which answers
-`{ "count": N }` from the server's count (the web SDK's `getCountFromServer`).
+A Firestore `query` load's `where` value may also be `{"$date": ISO}` (a timestamp), and
+`aggregate: { count: true, rows: 1000 }` counts on the server as above and, where the reader
+cannot count, reads the rows up to that ceiling and counts them (the usage meters).
 A load with `each: "data.sites.sites"` runs once per row of an earlier load,
 with the row as `item`, and its key holds the list of answers (a failed one is
 null); at most 50 rows.
@@ -979,15 +1280,32 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   `a.*.b.*.c` flattens lists it meets, so `resources.*.items.*.key` is every
   resource's item keys. `path ~= @other.path` asks whether a list holds, or a text
   contains, what the other path reads.
-- `export: { resource, title, hostId }` opens the platform's export sheet for a records
-  resource (its fields, the format, then the file saved or shared), the sheet every list
-  uses; the Imports and exports hub's lists open it per resource.
+- `export: { resource, title, hostId, fileStem, scope, filter }` opens the platform's export sheet for a
+  transfer resource (`hostId` the site a site's resource is read for, none for the workspace's; `scope`
+  `{ kind: all }` unless it names a filter; `fileStem` the resource key unless given), the sheet every list uses (the Imports and exports hub's lists open it per
+  resource). It is the console's export dialog: a preset (Everything, Re-importable, Minimal,
+  the resource's own, the ones the person saved, or a hand-picked list), the fields searched,
+  grouped, picked and put in order (the catalog, search, presets and reorder are ports of
+  `field-catalog.ts`, replayed from `libs/native/contracts/transfer-catalog-cases.json`),
+  which records (the list's selection or filter, or all), the format the resource takes and
+  a byte-order mark for a CSV, then the file saved or shared. The last choice and the saved
+  presets are kept in the person's own `users/{uid}/transferPrefs/{resource}`, where the
+  console keeps them, and a resource preset for another product writes that product's
+  column names.
 - A path can chain bracket groups (`stash.choices[@field][@value]`), take a quoted literal in a
   selector (`rows[id='crm']`), and read an `@path` after `*` against the whole context
   (`samples.*.[@index]` is one column of every sample row).
 - `libs/native/screens/transfer-resources.screens.json` is generated from the plugins'
   `transferResources` (`generate-native-contracts.mjs`): the hub lists every resource whose
   plugin runs (the `switchboard` load) and whose plan feature the entitlements carry.
+- A field of `kind: "upload"` is the import's Upload step (`maxBytes`, `maxRows` and `formats`
+  are templates over the loaded resource): a chosen file or pasted rows, read on the device to
+  show how they read, with the format, the encoding (a file's bytes can be read again under
+  another), the separator and whether the first row names the columns guessed and changeable,
+  the first five rows, and the file refused before anything is sent when it is larger, or
+  longer, than the import takes. The reading is a port of `transfer-file.ts`, replayed from
+  `libs/native/contracts/transfer-file-cases.json`. Its value is `{ fileName, text, bytes,
+  format, delimiter?, headerRow? }` (`form.<key>.text`, ...), empty until nothing blocks it.
 - `chunk: { field, bytes, idFrom, idKey, firstOnly, until }` sends the file text in `field` of
   the body in parts that each fit `bytes` once JSON-encoded (never cutting a character), each
   with `part` and `parts`, the job the first answer names (`idFrom`) sent back as `idKey`, the
@@ -1012,6 +1330,47 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   the same plan again with its answer added, `{"$merge": ["{stash.importPlanBody}", {"extras": {"$put": …}}]}`, and keeps
   the answers as `stash.importExtras` (the plan's `extras`, by step id), so the steps after it add to them. Today the
   gift card import's Confirm step (commerce) and the email list's two steps (email) use it.
+- A contributed screen may carry a `hook: { when, load, action }`, and an action may name `afterZone: { zone, stash }`:
+  once that action has succeeded (the import's apply), the hook of every screen contributed to `zone` whose `requires`
+  and `when` hold is run, in order: its `load` is read into `data`, then its `action` runs over it (its `when` is checked
+  once the data is there). A hook never fails the action; what each says is kept as `stash.<stash>` for the screen that
+  follows (the import's done screen shows it). The AI plugin's After import step for a products import uses it: the
+  step stores the choice for this import, and the hook reads the created ids from the import's results, works the
+  job out with `aiProductsImportJob` (the console's `aiProductsBulkBrief` and bulk inputs), and starts it on
+  `/api/ai/jobs`, which is where the credits are reserved, as the console's products hub starts it.
+- `ssoEnforcementAccounts(accounts, providerId, designated)` is a `compute` function over a single sign-on rehearsal
+  (the console's `ssoEnforcementAccounts`, `sso-enforcement.ts`): one row per account with the address, what enforcing
+  would remove, what it keeps, whether it can be break-glass and whether it is. The enforcement screen keeps the
+  rehearsal in `stash.ssoPreview` and draws the rows, the lockout alerts and the break-glass choice from it.
+- A field of `kind: "media"` is a file chosen from the workspace's media library, never typed (the console's
+  `MediaUrlField` for a logo or a favicon): the Setup pickers' `MediaPickField` over the workspace's library alone
+  (`workspaceOnly`), whichever site is picked. Its value is what the console stores, the file's `cdnPath` else its address.
+- `timeZoneChoices` is a `compute` function with nothing to ask: the time zone picker's rows, `[{ value, label }]`, the
+  default (an empty value, which the route stores as no zone) first and then the console's list with its underscores read
+  as spaces. The list is `TIME_ZONE_CHOICES` (`time-zone-choices.ts`), a snapshot of `Intl.supportedValuesOf('timeZone')`
+  that the console's route accepts every name of; a `select` over it is `optionsFrom` the load, a site's adds its own first
+  row (`options`) and filters the default one out (`filter: "item.value"`).
+- A screen may name `start: { "action": id }`: once its data has loaded it runs that one of its own `actions` as if it had
+  been chosen, when the action's `when` holds. A link's query (`?notice=<id>`) reaches the screen as `params.notice`, so
+  the holds screen opens that notice's review request, as the console's holds card does.
+- A `zone` block may carry `params`; a plugin's slot widget (`r.widget(…, slot: …)`) reads them (`aglynSlotParams` on
+  Apple, `LocalSlotParams` on Android), as the console's `PluginWidgetSlot` hands its widget props. The workspace's
+  Plugins pages use two: `orgPluginInstalls`, and `pluginInstallation` with the plugin's id, both filled by the
+  Marketplace: the plugins installed from it (every site's pins, a chip where a newer version is on offer), and one
+  plugin's page (current or behind, where it runs, update, add, split, promote and remove with the uninstall impact
+  check, its settings from its manifest, and what it may do). The rules are `marketplace-catalog.ts`'s, replayed from
+  the cases; a marketplace plugin's settings screen is built at run time by `manifestSettingsScreen`, the very screen the
+  generator makes for a built-in plugin's schema (`native-plugin-settings.test.mjs` holds them equal).
+- A field with `mustMatch` is unfinished until the typed text equals it; `mustMatchAs: "dollars"` reads both sides as a
+  dollar amount instead (`60`, `$60.00`, `1,250 USD` all mean 6000 cents, as the gift card Confirm step reads a typed
+  total), and `mismatch` is what is said under the field while something typed does not match.
+- `gate: { when, screen }` on an action: when the route refuses with a body that meets `when` (read as `error`), `screen`
+  opens over this one, and when an action there that carries `resume: true` finishes, the very same action is sent again,
+  once. The Marketplace publish uses it for the Publisher Agreement: the route's structured `agreement` refusal opens the
+  agreement, and accepting sends the publish, as the console's gate does.
+- A list with `page: N` shows N rows and a Show more row for the next N (a list the screen already holds whole, such as
+  a diff). `packageItemChanges` takes a fourth argument, the most record rows to hold, so the records of a dataset are
+  all there to page through.
 - `after` chains: an action's `after` may carry an `after` of its own, each step reading the stash
   the one before made (the site package import works its decisions out, then who is still waiting,
   so every change to a default or a choice shares the two steps).
@@ -1042,6 +1401,14 @@ client data (`https://aglyn.com` on Apple, `android:apk-key-hash:...` on Android
 hashes it lists). `errors` maps a route's reason to words, `otherwise` words any other failure, and closing the
 system prompt is not a failure. The action shows where `user.canAddPasskey` holds: the build has a relying party
 (`app.passkeyRp`), the device a creator, the account no company login and a verified email.
+
+The sign-in page offers the same passkeys, so the shell's sign-in screen does too (a "Sign in with a passkey" button where the
+build has a relying party and the device an asserter): `PasskeySignIn` (Apple, `AglynScreens`) and `PasskeySignIn` (Kotlin,
+`:native-screens`) ask `/api/auth/passkeys/signin/options` with no session and the relying party's own `Origin`, have the
+platform sign the challenge with a discoverable passkey (`PasskeyAsserter`: `ASAuthorizationPlatformPublicKeyCredentialProvider`
+on Apple, the Credential Manager on Android), send the assertion to `/api/auth/passkeys/signin/verify` with the origin the
+platform signed into the credential, and sign in with the Firebase custom token it answers (`AuthSession.signIn(customToken:)`,
+`signInWithCustomToken`). A route's reason becomes the console's sentence; closing the system prompt says no passkey was used.
 
 ### The plugin switchboard
 

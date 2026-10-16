@@ -693,6 +693,58 @@ export function summarizeShippingCoverage(
 }
 
 /**
+ * What the Shipping card says about a store's coverage, in words (AGL-1791): the warning's headline and body when checkout
+ * turns destinations away, otherwise the one line that says what it covers, and the line that says checkout asks where the
+ * parcel is going. The console card and the native apps both read these, so the same store reads the same everywhere.
+ */
+export interface ShippingCoverageWords {
+  /** Set when destinations are turned away: the warning's title. */
+  headline: string
+  /** The warning's body; empty when nothing is turned away. */
+  detail: string
+  /** The caption shown when nothing is turned away; empty when something is. */
+  note: string
+  /** Shown when rates differ by destination; empty otherwise. */
+  asks: string
+}
+
+const coverageCountryNames = (codes: readonly string[]) =>
+  codes.map((code) => CHECKOUT_SHIPPING_COUNTRY_NAMES[code] ?? code).join(', ')
+
+export function describeShippingCoverage(
+  coverage: ShippingCoverage,
+): ShippingCoverageWords {
+  const asks = coverage.asksDestination
+    ? 'Rates differ by destination, so checkout asks the shopper where the parcel is going before it can price one.'
+    : ''
+  if (coverage.unserved.length > 0) {
+    return {
+      headline: `Checkout turns away ${coverage.unserved.length} of the ${CHECKOUT_SHIPPING_COUNTRIES.length} destinations it collects addresses for`,
+      detail:
+        `No rate reaches ${coverageCountryNames(coverage.unserved)}, so an order shipping there is refused rather than posted for free. ` +
+        (coverage.offersLocalPickup
+          ? 'Local pickup does not cover them: it is a collection choice, not a rate, so it is offered where checkout completes and closes no gap here. '
+          : '') +
+        (coverage.hasRestOfWorldZone
+          ? 'A rest-of-world zone is already saved, so what those destinations are missing is a rate on the zone that covers them.'
+          : 'Give them a zone with a rate, or add a rest-of-world zone and price one on it.'),
+      note: '',
+      asks,
+    }
+  }
+  return {
+    headline: '',
+    detail: '',
+    note: coverage.shipsNowhere
+      ? coverage.offersLocalPickup
+        ? 'No rate reaches any destination, so local pickup is the only delivery choice checkout offers. Nobody is turned away and no shipping is charged.'
+        : 'No rate reaches any destination, so checkout charges no shipping and turns nobody away.'
+      : `Checkout can price shipping to every destination it collects an address for: ${coverageCountryNames(coverage.served)}.`,
+    asks,
+  }
+}
+
+/**
  * Emit `shipping_address_collection[allowed_countries][n]` onto a session's
  * form body. Stripe will not apply a `shipping_options` rate without an
  * address to ship to, so the two always travel together — and the countries

@@ -1012,6 +1012,53 @@
     {
       "caseId": "page-meet-the-crew",
       "of": "control 1",
+      "answer": "eb674f82149a3a46",
+      "devices": [
+        {
+          "device": "XS",
+          "width": 390,
+          "overflow": []
+        },
+        {
+          "device": "SM",
+          "width": 600,
+          "overflow": []
+        },
+        {
+          "device": "MD",
+          "width": 900,
+          "overflow": []
+        },
+        {
+          "device": "LG",
+          "width": 1200,
+          "overflow": []
+        },
+        {
+          "device": "XL",
+          "width": 1536,
+          "overflow": []
+        }
+      ],
+      "rows": [
+        {
+          "node": "words-row",
+          "component": "muiGrid",
+          "grid": true,
+          "content": 2,
+          "columns": {
+            "XS": 1,
+            "SM": 1,
+            "MD": 2,
+            "LG": 2,
+            "XL": 2
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "page-meet-the-crew",
+      "of": "control 3",
       "answer": "7db8742afe7e8c05",
       "devices": [
         {
@@ -1044,7 +1091,7 @@
     },
     {
       "caseId": "page-meet-the-crew",
-      "of": "control 2",
+      "of": "control 4",
       "answer": "1d247d259ecee366",
       "devices": [
         {

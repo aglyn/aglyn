@@ -22,13 +22,13 @@
  * here holds or names a credential.
  */
 
-export type InventoryProviderId = 'cin7-core' | 'inflow' | 'brightpearl'
+export type InventoryProviderId = 'cin7-core' | 'inflow' | 'brightpearl' | 'ordoro'
 
-export const INVENTORY_PROVIDER_IDS: readonly InventoryProviderId[] = ['cin7-core', 'inflow', 'brightpearl']
+export const INVENTORY_PROVIDER_IDS: readonly InventoryProviderId[] = ['cin7-core', 'inflow', 'brightpearl', 'ordoro']
 
 /** A field the merchant pastes from their own account to connect it. */
 export interface InventoryKeyField {
-  name: 'accountId' | 'apiKey' | 'companyId'
+  name: 'accountId' | 'apiKey' | 'companyId' | 'clientId' | 'clientSecret'
   label: string
   helper: string
   secret: boolean
@@ -118,10 +118,35 @@ export const INVENTORY_PROVIDERS: Readonly<Record<InventoryProviderId, Inventory
     cancelsOrders: false,
     exportsProducts: false,
   },
+  ordoro: {
+    id: 'ordoro',
+    label: 'Ordoro',
+    summary: 'Stock and products from Ordoro, with paid orders sent to it for fulfillment.',
+    auth: 'keys',
+    keyFields: [
+      {
+        name: 'clientId',
+        label: 'Client ID',
+        helper: 'In Ordoro under Account Settings → API Keys: add a key, then Edit it.',
+        secret: false,
+      },
+      {
+        name: 'clientSecret',
+        label: 'Client secret',
+        helper: 'From the same key. Ordoro’s API needs its Premium plan or above.',
+        secret: true,
+      },
+    ],
+    locationLabel: 'Warehouse',
+    customerLabel: 'Sales channel for web orders',
+    customerHelper: 'The name of an Ordoro sales channel that store orders are recorded under.',
+    cancelsOrders: true,
+    exportsProducts: true,
+  },
 }
 
 export function isInventoryProviderId(value: unknown): value is InventoryProviderId {
-  return value === 'cin7-core' || value === 'inflow' || value === 'brightpearl'
+  return value === 'cin7-core' || value === 'inflow' || value === 'brightpearl' || value === 'ordoro'
 }
 
 /** A site's connection, as the document id spells it: one per site. */
@@ -168,7 +193,7 @@ export interface InventoryConnectionSettings {
   productSync?: InventoryProductSync
   /** Whether paid orders are sent to the system. */
   sendOrders?: boolean
-  /** The location (or Brightpearl warehouse) stock is counted at and orders ship from; `null` for all. */
+  /** The location (or Brightpearl or Ordoro warehouse) stock is counted at and orders ship from; `null` for all. */
   locationId?: string | null
   /** Who orders are recorded under in the system; see {@link InventoryProviderInfo.customerLabel}. */
   orderCustomer?: string

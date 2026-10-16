@@ -58,6 +58,41 @@ match. Without webhooks, Aglyn still reads each order back from ShipMonk
 every 15 minutes. **New webhook secret** makes a new secret and ends the old
 one at once.
 
+### Flexport: connect with your API token
+
+:::note Rolling out
+Flexport appears on the **Fulfillment networks** card only once it is
+available on the platform you use. Until then, the card has no **Flexport**
+section, and the other networks work as usual.
+:::
+
+Flexport connects with an **API token** from your own Flexport account. You
+need a Flexport account with billing set up, since Flexport ships orders only
+for accounts that can be billed, and you must be an **Administrator** of your
+Flexport organization to create a token.
+
+1. In Flexport's Seller Portal, open **Settings**, then **API Tokens**, and
+   select **Create Token**.
+2. Give the token these permissions: **read and write orders**, **read
+   products**, and **read and write webhooks**. Copy the token.
+3. On **Products → Shipping & delivery**, select **Connect Flexport**, paste
+   the token and select **Connect**.
+
+Aglyn checks the token with Flexport before keeping it, keeps it encrypted,
+and never shows it again. It also asks Flexport to tell it the moment an
+order ships, is delivered, is held or is canceled; nothing needs setting up in
+Flexport for that. Orders are read back from Flexport every 15 minutes as
+well.
+
+- Flexport tokens expire after a year, and an administrator can revoke one at
+  any time. When a token stops working, the card asks you to **Connect
+  again**: create a new token in Flexport and paste it.
+- An item is sent to Flexport when its **SKU** in your store matches the
+  **SKU** of a product in your Flexport catalog.
+- Use a token from your **production** Flexport account. Aglyn sends paid
+  orders to whichever account the token belongs to, and Flexport's sandbox
+  accounts ship nothing.
+
 - **ShipBob** creates a channel for Aglyn in your ShipBob account. Orders
   appear under it.
 - **Amazon** asks you to choose the **marketplace** whose FBA inventory ships
@@ -70,6 +105,7 @@ one at once.
 | **Sending** | **Automatic** sends every paid order with a shipping address. **Manual** sends an order only when you select **Send to** it on the order. |
 | **Ship option** (ShipBob) | The ShipBob ship option orders ask for, as named in your ShipBob account. Standard unless you change it. |
 | **Shipping service** (ShipMonk) | The shipping service orders ask for. It must match a shipping mapping in your ShipMonk account. Standard unless you change it. |
+| **Ship method** (Flexport) | The ship method orders ask for, such as Standard or UPS Ground. Flexport sets each order's delivery speed from it. Standard unless you change it. |
 | **Shipping speed** (Amazon) | Standard, Expedited or Priority. Amazon bills you for the speed you choose. |
 | **Marketplace** (Amazon) | The marketplace whose inventory ships. |
 | **Keep stock counts in step** | Sets your store's count of each SKU to what the network can ship. Off until you turn it on. |
@@ -144,6 +180,9 @@ carrier and tracking number. When every item has shipped, the order is
   order it split, and where the order is. Aglyn follows it until it is
   delivered, for up to 30 days. If ShipMonk holds an order, for example on
   backorder or because it needs an address fixed, the order says so.
+- **Flexport** reports each package of an order and tells Aglyn when it is
+  delivered. If Flexport holds an order or cannot fulfill it, for example
+  because it cannot ship to the address, the order shows Flexport's reason.
 
 ## Canceling and refunds
 

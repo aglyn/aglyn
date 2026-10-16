@@ -66,7 +66,7 @@ public enum AglynTokens {
     primary: AglynIntent(
       main: Color(.sRGB, red: 0 / 255, green: 176 / 255, blue: 255 / 255, opacity: 1),
       contrastText: Color(.sRGB, red: 255 / 255, green: 255 / 255, blue: 255 / 255, opacity: 1),
-      text: Color(.sRGB, red: 0 / 255, green: 115 / 255, blue: 168 / 255, opacity: 1),
+      text: Color(.sRGB, red: 0 / 255, green: 119 / 255, blue: 173 / 255, opacity: 1),
       pressed: Color(.sRGB, red: 0 / 255, green: 119 / 255, blue: 173 / 255, opacity: 1)
     ),
     secondary: AglynIntent(
@@ -148,7 +148,7 @@ public enum AglynTokens {
     error: AglynIntent(
       main: Color(.sRGB, red: 227 / 255, green: 44 / 255, blue: 39 / 255, opacity: 1),
       contrastText: Color(.sRGB, red: 255 / 255, green: 255 / 255, blue: 255 / 255, opacity: 1),
-      text: Color(.sRGB, red: 238 / 255, green: 124 / 255, blue: 123 / 255, opacity: 1),
+      text: Color(.sRGB, red: 237 / 255, green: 120 / 255, blue: 118 / 255, opacity: 1),
       pressed: Color(.sRGB, red: 158 / 255, green: 30 / 255, blue: 27 / 255, opacity: 1)
     ),
     warning: AglynIntent(
@@ -166,7 +166,7 @@ public enum AglynTokens {
     info: AglynIntent(
       main: Color(.sRGB, red: 24 / 255, green: 120 / 255, blue: 205 / 255, opacity: 1),
       contrastText: Color(.sRGB, red: 255 / 255, green: 255 / 255, blue: 255 / 255, opacity: 1),
-      text: Color(.sRGB, red: 101 / 255, green: 166 / 255, blue: 222 / 255, opacity: 1),
+      text: Color(.sRGB, red: 93 / 255, green: 161 / 255, blue: 220 / 255, opacity: 1),
       pressed: Color(.sRGB, red: 16 / 255, green: 84 / 255, blue: 143 / 255, opacity: 1)
     ),
     background: (default: Color(.sRGB, red: 22 / 255, green: 28 / 255, blue: 33 / 255, opacity: 1), paper: Color(.sRGB, red: 42 / 255, green: 52 / 255, blue: 64 / 255, opacity: 1)),

@@ -1,0 +1,614 @@
+{
+  "$comment": "The Inventory and ERP plugin's native screen: connecting the site's Cin7 Core or inFlow Inventory with the merchant's own keys, or Brightpearl by signing in, which stock counts are right, the location, product sync, sending paid orders, the orders not sent and recent activity. Routes: GET /api/inventory-sync/connection, locations, orders and log, POST connect/keys, connect/oauth, sync-now and order/send, PATCH and DELETE settings. Signing in opens Brightpearl's consent page in the secure browser; the server finishes the connection when it sends the person back. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "inventory-sync.service",
+      "title": "Inventory and ERP",
+      "label": "Inventory and ERP",
+      "subtitle": "Cin7 Core, inFlow Inventory and Brightpearl",
+      "icon": "shippingbox|inventory_2",
+      "scope": "site",
+      "order": 90,
+      "zones": [
+        "commerceSettings"
+      ],
+      "load": {
+        "conn": "/api/inventory-sync/connection?hostId={site.id}",
+        "locations": {
+          "url": "/api/inventory-sync/locations?hostId={site.id}",
+          "optional": true
+        },
+        "attn": {
+          "url": "/api/inventory-sync/orders?hostId={site.id}&filter=attention",
+          "optional": true
+        },
+        "log": {
+          "url": "/api/inventory-sync/log?hostId={site.id}",
+          "optional": true
+        }
+      },
+      "constants": {
+        "ids": {
+          "cin7": "cin7-core",
+          "inflow": "inflow",
+          "brightpearl": "brightpearl"
+        },
+        "providers": [
+          {
+            "id": "cin7-core",
+            "label": "Cin7 Core",
+            "summary": "Stock and products from Cin7 Core (formerly DEAR Inventory), with paid orders sent to it as sales.",
+            "locationLabel": "Location",
+            "customerLabel": "Customer for web orders",
+            "customerHelper": "The name of a Cin7 Core customer that store orders are recorded under."
+          },
+          {
+            "id": "inflow",
+            "label": "inFlow Inventory",
+            "summary": "Stock and products from inFlow Inventory, with paid orders sent to it as sales orders.",
+            "locationLabel": "Location",
+            "customerLabel": "Customer for web orders",
+            "customerHelper": "The name of an inFlow customer that store orders are recorded under."
+          },
+          {
+            "id": "brightpearl",
+            "label": "Brightpearl",
+            "summary": "Stock and products from Brightpearl, with paid orders sent to it as sales orders.",
+            "locationLabel": "Warehouse",
+            "customerLabel": "Customer contact ID",
+            "customerHelper": "The ID of the Brightpearl contact that store orders are recorded under."
+          },
+          {
+            "id": "ordoro",
+            "label": "Ordoro",
+            "summary": "Stock and products from Ordoro, with paid orders sent to it for fulfillment.",
+            "locationLabel": "Warehouse",
+            "customerLabel": "Sales channel for web orders",
+            "customerHelper": "The name of an Ordoro sales channel that store orders are recorded under."
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "none",
+          "tone": "info",
+          "when": "!data.conn.offered && !data.conn.connection",
+          "text": "No inventory system is available for this site yet."
+        },
+        {
+          "type": "notice",
+          "id": "intro",
+          "tone": "info",
+          "when": "data.conn.offered && !data.conn.connection",
+          "text": "Connect your own Cin7 Core, inFlow Inventory or Brightpearl account to keep stock, products and orders in step. Keys are stored encrypted and never shown again."
+        },
+        {
+          "type": "actions",
+          "id": "connect",
+          "title": "Connect a system",
+          "when": "!data.conn.connection && data.conn.offered",
+          "items": [
+            {
+              "id": "connectCin7",
+              "label": "Connect Cin7 Core",
+              "icon": "link|link",
+              "when": "data.conn.offered[id=const.ids.cin7]",
+              "url": "/api/inventory-sync/connect/keys",
+              "prompt": [
+                {
+                  "key": "accountId",
+                  "label": "Account ID",
+                  "kind": "text",
+                  "required": true,
+                  "help": "In Cin7 Core under Integrations, API."
+                },
+                {
+                  "key": "apiKey",
+                  "label": "Application key",
+                  "kind": "password",
+                  "required": true,
+                  "help": "The key of the API application you made for this store. Stored encrypted and never shown again."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "cin7-core",
+                "accountId": "{form.accountId}",
+                "apiKey": "{form.apiKey}"
+              },
+              "success": "Cin7 Core is connected. Choose what to sync."
+            },
+            {
+              "id": "connectInflow",
+              "label": "Connect inFlow Inventory",
+              "icon": "link|link",
+              "when": "data.conn.offered[id=const.ids.inflow]",
+              "url": "/api/inventory-sync/connect/keys",
+              "prompt": [
+                {
+                  "key": "companyId",
+                  "label": "Company ID",
+                  "kind": "text",
+                  "required": true,
+                  "help": "In inFlow under Options, Integrations, beside your API key."
+                },
+                {
+                  "key": "apiKey",
+                  "label": "API key",
+                  "kind": "password",
+                  "required": true,
+                  "help": "An API key from the same page. It needs inFlow’s API access add-on. Stored encrypted and never shown again."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "inflow",
+                "companyId": "{form.companyId}",
+                "apiKey": "{form.apiKey}"
+              },
+              "success": "inFlow Inventory is connected. Choose what to sync."
+            },
+            {
+              "id": "connectBrightpearl",
+              "label": "Connect Brightpearl",
+              "icon": "link|link",
+              "when": "data.conn.offered[id=const.ids.brightpearl]",
+              "url": "/api/inventory-sync/connect/oauth",
+              "prompt": [
+                {
+                  "key": "accountCode",
+                  "label": "Account code",
+                  "kind": "text",
+                  "required": true,
+                  "help": "The name in your Brightpearl address. You sign in to Brightpearl next to allow access; Aglyn never sees your password."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "accountCode": "{form.accountCode}",
+                "returnTo": "/"
+              },
+              "open": "url",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "failing",
+          "tone": "error",
+          "when": "data.conn.connection.lastError && data.conn.connection.status == reconnect",
+          "text": "{data.conn.connection.lastError}"
+        },
+        {
+          "type": "notice",
+          "id": "warning",
+          "tone": "warning",
+          "when": "data.conn.connection.lastError && data.conn.connection.status != reconnect",
+          "text": "{data.conn.connection.lastError}"
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "title": "{const.providers[id=data.conn.connection.provider].label}",
+          "when": "data.conn.connection",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{data.conn.connection.status:title}",
+              "chip": true,
+              "tones": {
+                "Active": "success",
+                "Paused": "neutral",
+                "Reconnect": "warning",
+                "*": "neutral"
+              }
+            },
+            {
+              "label": "Account",
+              "value": "{data.conn.connection.accountName}",
+              "when": "data.conn.connection.accountName"
+            },
+            {
+              "label": "Stock counts",
+              "value": "{data.conn.connection.stock.skus:number} SKUs, synced {data.conn.connection.stock.syncedAtMs:datetime}",
+              "when": "data.conn.connection.stock.syncedAtMs"
+            },
+            {
+              "label": "Stock counts",
+              "value": "Not synced yet",
+              "when": "!data.conn.connection.stock.syncedAtMs"
+            },
+            {
+              "label": "Count changes",
+              "value": "{data.conn.connection.stock.updated:number} changed · {data.conn.connection.stock.unknown:number} not matched",
+              "when": "data.conn.connection.stock.syncedAtMs && data.conn.connection.stock.direction != off"
+            },
+            {
+              "label": "Stock failures",
+              "value": "{data.conn.connection.stock.failed:number}",
+              "when": "data.conn.connection.stock.failed"
+            },
+            {
+              "label": "Products",
+              "value": "Synced {data.conn.connection.products.syncedAtMs:datetime} · {data.conn.connection.products.created:number} made · {data.conn.connection.products.updated:number} updated",
+              "when": "data.conn.connection.products.syncedAtMs && data.conn.connection.productSync != off"
+            },
+            {
+              "label": "Product failures",
+              "value": "{data.conn.connection.products.failed:number}",
+              "when": "data.conn.connection.products.failed"
+            },
+            {
+              "label": "Orders sent",
+              "value": "{data.conn.connection.totals.ordersSent:number}"
+            },
+            {
+              "label": "Orders not sent",
+              "value": "{data.conn.connection.totals.ordersFailed:number}",
+              "when": "data.conn.connection.totals.ordersFailed"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "title": "Manage",
+          "when": "data.conn.connection",
+          "items": [
+            {
+              "id": "reconnectCin7",
+              "label": "Connect Cin7 Core",
+              "icon": "link|link",
+              "when": "data.conn.offered[id=const.ids.cin7] && data.conn.connection.status == reconnect && data.conn.connection.provider == cin7-core",
+              "url": "/api/inventory-sync/connect/keys",
+              "prompt": [
+                {
+                  "key": "accountId",
+                  "label": "Account ID",
+                  "kind": "text",
+                  "required": true,
+                  "help": "In Cin7 Core under Integrations, API."
+                },
+                {
+                  "key": "apiKey",
+                  "label": "Application key",
+                  "kind": "password",
+                  "required": true,
+                  "help": "The key of the API application you made for this store. Stored encrypted and never shown again."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "cin7-core",
+                "accountId": "{form.accountId}",
+                "apiKey": "{form.apiKey}"
+              },
+              "success": "Cin7 Core is connected. Choose what to sync."
+            },
+            {
+              "id": "reconnectInflow",
+              "label": "Connect inFlow Inventory",
+              "icon": "link|link",
+              "when": "data.conn.offered[id=const.ids.inflow] && data.conn.connection.status == reconnect && data.conn.connection.provider == inflow",
+              "url": "/api/inventory-sync/connect/keys",
+              "prompt": [
+                {
+                  "key": "companyId",
+                  "label": "Company ID",
+                  "kind": "text",
+                  "required": true,
+                  "help": "In inFlow under Options, Integrations, beside your API key."
+                },
+                {
+                  "key": "apiKey",
+                  "label": "API key",
+                  "kind": "password",
+                  "required": true,
+                  "help": "An API key from the same page. It needs inFlow’s API access add-on. Stored encrypted and never shown again."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "inflow",
+                "companyId": "{form.companyId}",
+                "apiKey": "{form.apiKey}"
+              },
+              "success": "inFlow Inventory is connected. Choose what to sync."
+            },
+            {
+              "id": "reconnectBrightpearl",
+              "label": "Connect Brightpearl",
+              "icon": "link|link",
+              "when": "data.conn.offered[id=const.ids.brightpearl] && data.conn.connection.status == reconnect && data.conn.connection.provider == brightpearl",
+              "url": "/api/inventory-sync/connect/oauth",
+              "prompt": [
+                {
+                  "key": "accountCode",
+                  "label": "Account code",
+                  "kind": "text",
+                  "required": true,
+                  "help": "The name in your Brightpearl address. You sign in to Brightpearl next to allow access; Aglyn never sees your password."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "accountCode": "{form.accountCode}",
+                "returnTo": "/"
+              },
+              "open": "url",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            },
+            {
+              "id": "sync",
+              "label": "Sync now",
+              "icon": "arrow.triangle.2.circlepath|sync",
+              "when": "data.conn.connection.status == active",
+              "url": "/api/inventory-sync/sync-now",
+              "body": {
+                "hostId": "{site.id}"
+              },
+              "success": "Synced."
+            },
+            {
+              "id": "pause",
+              "label": "Pause",
+              "icon": "pause.circle|pause_circle",
+              "when": "data.conn.connection.status == active",
+              "method": "PATCH",
+              "url": "/api/inventory-sync/settings",
+              "body": {
+                "hostId": "{site.id}",
+                "paused": true
+              },
+              "success": "Paused."
+            },
+            {
+              "id": "resume",
+              "label": "Resume",
+              "icon": "play.circle|play_circle",
+              "when": "data.conn.connection.status == paused",
+              "method": "PATCH",
+              "url": "/api/inventory-sync/settings",
+              "body": {
+                "hostId": "{site.id}",
+                "paused": false
+              },
+              "success": "Resumed."
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "confirm": "Disconnect {const.providers[id=data.conn.connection.provider].label}? Nothing more is synced, orders not yet sent stay unsent, and the stored keys and activity are deleted. What {const.providers[id=data.conn.connection.provider].label} already has stays there, and so do the store's products and counts.",
+              "method": "DELETE",
+              "url": "/api/inventory-sync/settings",
+              "body": {
+                "hostId": "{site.id}"
+              },
+              "success": "Disconnected."
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "settings",
+          "title": "What to sync",
+          "when": "data.conn.connection && data.conn.connection.status != reconnect",
+          "fields": [
+            {
+              "key": "stockSource",
+              "label": "Which stock counts are right",
+              "kind": "select",
+              "initial": "{data.conn.connection.stockSource}",
+              "options": [
+                {
+                  "value": "system",
+                  "label": "The connected system"
+                },
+                {
+                  "value": "store",
+                  "label": "The store"
+                },
+                {
+                  "value": "off",
+                  "label": "Don’t sync counts"
+                }
+              ],
+              "help": "The connected system’s: the store’s counts follow it. The store’s: its counts are adjusted to the store’s. Or leave counts alone on both sides."
+            },
+            {
+              "key": "locationId",
+              "label": "Location or warehouse",
+              "kind": "select",
+              "initial": "{data.conn.connection.locationId}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "All locations"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.locations.locations",
+                "value": "{item.id}",
+                "label": "{item.name}"
+              },
+              "help": "Where stock is counted and orders ship from."
+            },
+            {
+              "key": "productSync",
+              "label": "Products",
+              "kind": "select",
+              "initial": "{data.conn.connection.productSync}",
+              "when": "data.conn.capabilities.importProducts && data.conn.connection.provider != brightpearl",
+              "options": [
+                {
+                  "value": "import",
+                  "label": "Import from the system"
+                },
+                {
+                  "value": "export",
+                  "label": "Make store products in the system"
+                },
+                {
+                  "value": "off",
+                  "label": "Match by SKU only"
+                }
+              ]
+            },
+            {
+              "key": "productSync",
+              "label": "Products",
+              "kind": "select",
+              "initial": "{data.conn.connection.productSync}",
+              "when": "data.conn.capabilities.importProducts && data.conn.connection.provider == brightpearl",
+              "options": [
+                {
+                  "value": "import",
+                  "label": "Import from the system"
+                },
+                {
+                  "value": "off",
+                  "label": "Match by SKU only"
+                }
+              ]
+            },
+            {
+              "key": "productSync",
+              "label": "Products",
+              "kind": "select",
+              "initial": "{data.conn.connection.productSync}",
+              "when": "!data.conn.capabilities.importProducts && data.conn.connection.provider != brightpearl",
+              "options": [
+                {
+                  "value": "export",
+                  "label": "Make store products in the system"
+                },
+                {
+                  "value": "off",
+                  "label": "Match by SKU only"
+                }
+              ]
+            },
+            {
+              "key": "productSync",
+              "label": "Products",
+              "kind": "select",
+              "initial": "{data.conn.connection.productSync}",
+              "when": "!data.conn.capabilities.importProducts && data.conn.connection.provider == brightpearl",
+              "options": [
+                {
+                  "value": "off",
+                  "label": "Match by SKU only"
+                }
+              ]
+            },
+            {
+              "key": "sendOrders",
+              "label": "Send paid orders to the system",
+              "kind": "toggle",
+              "initial": "{data.conn.connection.sendOrders}"
+            },
+            {
+              "key": "orderCustomer",
+              "label": "Customer for web orders",
+              "kind": "text",
+              "initial": "{data.conn.connection.orderCustomer}",
+              "help": "{const.providers[id=data.conn.connection.provider].customerLabel}: {const.providers[id=data.conn.connection.provider].customerHelper}"
+            },
+            {
+              "key": "taxRule",
+              "label": "Tax rule",
+              "kind": "text",
+              "initial": "{data.conn.connection.taxRule}",
+              "when": "data.conn.connection.provider == cin7-core",
+              "help": "Optional. As named in Cin7 Core; empty uses the customer’s."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "method": "PATCH",
+            "url": "/api/inventory-sync/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "stockSource": "{form.stockSource}",
+              "locationId": "{form.locationId}",
+              "productSync": "{form.productSync}",
+              "sendOrders": "{form.sendOrders}",
+              "orderCustomer": "{form.orderCustomer}",
+              "taxRule": "{form.taxRule}"
+            },
+            "success": "Saved."
+          }
+        },
+        {
+          "type": "list",
+          "id": "attention",
+          "title": "Orders not sent",
+          "when": "data.conn.connection && data.attn.orders",
+          "items": "data.attn.orders",
+          "primary": "{item.displayRef}",
+          "secondary": "{item.note|'Not sent.'}",
+          "icon": "exclamationmark.triangle|warning",
+          "actions": [
+            {
+              "id": "sendAgain",
+              "label": "Send again",
+              "icon": "paperplane|send",
+              "url": "/api/inventory-sync/order/send",
+              "body": {
+                "hostId": "{site.id}",
+                "recordId": "{item.recordId}"
+              },
+              "success": "{item.displayRef} sent."
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "activity",
+          "title": "Activity",
+          "when": "data.conn.connection",
+          "items": "data.log.entries",
+          "primary": "{item.message}",
+          "secondary": "{item.atMs:datetime}",
+          "badges": [
+            {
+              "text": "Connected",
+              "tone": "info",
+              "when": "item.kind == connected"
+            },
+            {
+              "text": "Order",
+              "tone": "success",
+              "when": "item.kind == order"
+            },
+            {
+              "text": "Stock",
+              "tone": "info",
+              "when": "item.kind == stock"
+            },
+            {
+              "text": "Products",
+              "tone": "info",
+              "when": "item.kind == products"
+            },
+            {
+              "text": "Canceled",
+              "tone": "neutral",
+              "when": "item.kind == canceled"
+            },
+            {
+              "text": "Error",
+              "tone": "error",
+              "when": "item.kind == error"
+            }
+          ],
+          "empty": "Nothing has happened yet."
+        }
+      ]
+    }
+  ]
+}

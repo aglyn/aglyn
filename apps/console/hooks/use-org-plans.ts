@@ -19,7 +19,7 @@
 import { isEnterpriseOrg, resolveEffectivePlan } from '@aglyn/aglyn'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { doc, getDoc } from 'firebase/firestore'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 /**
  * The billing plan/tier for each of the user's orgs, read on demand (AGL-631).
@@ -54,8 +54,36 @@ export function useOrgPlans(
   orgIds: string[],
   enabled = true,
 ): Record<string, string> {
+  const rows = useOrgRows(orgIds, enabled)
+  return useMemo(
+    () =>
+      Object.fromEntries(Object.entries(rows).map(([id, row]) => [id, row.plan])),
+    [rows],
+  )
+}
+
+/** What one read of an org doc tells a row about that workspace. */
+export interface OrgRow {
+  /** The plan the workspace gets, as `useOrgPlans` reports it. */
+  plan: string
+  /** The org's logo (AGL-363), when it set one. */
+  logoUrl?: string
+  /** The org's dark-mode logo, when it set one. */
+  logoDarkUrl?: string
+}
+
+/**
+ * Each org's plan and logos from the SAME per-doc read `useOrgPlans` makes,
+ * so a row that shows a workspace's logo costs nothing more than its badge.
+ * The membership mirror carries no logo, so without this only the workspace
+ * the reader is in (whose doc `useCurrentOrg` holds) could show its own.
+ */
+export function useOrgRows(
+  orgIds: string[],
+  enabled = true,
+): Record<string, OrgRow> {
   const firestore = useFirestore()
-  const [plans, setPlans] = useState<Record<string, string>>({})
+  const [plans, setPlans] = useState<Record<string, OrgRow>>({})
   // What has been asked for already — answered or in flight. A ref, not
   // derived from `plans`, so an id whose read is still in flight is not
   // re-requested by the next render.
@@ -91,10 +119,19 @@ export function useOrgPlans(
       wanted.map(async (id) => {
         try {
           const snap = await getDoc(doc(firestore, 'orgs', id))
+          const data = (snap.data() ?? {}) as Record<string, unknown>
+          const logos = {
+            ...(typeof data.logoUrl === 'string' && data.logoUrl
+              ? { logoUrl: data.logoUrl }
+              : {}),
+            ...(typeof data.logoDarkUrl === 'string' && data.logoDarkUrl
+              ? { logoDarkUrl: data.logoDarkUrl }
+              : {}),
+          }
           // A custom-priced enterprise deal reads as "enterprise" regardless of
           // its base plan (AGL-1110).
-          if (isEnterpriseOrg(snap.data() as never)) {
-            return [id, 'enterprise'] as const
+          if (isEnterpriseOrg(data as never)) {
+            return [id, { plan: 'enterprise', ...logos }] as const
           }
           // An org on the free tier has no `plan` field at all — the webhook
           // only writes one for a paid subscription. A successful read with
@@ -107,7 +144,7 @@ export function useOrgPlans(
           // Free. The resolver answers `free` for the missing field too.
           return [
             id,
-            resolveEffectivePlan((snap.data() ?? {}) as never) as string,
+            { plan: resolveEffectivePlan(data as never) as string, ...logos },
           ] as const
         } catch {
           // Not an answer — let the next open ask again.
@@ -121,7 +158,7 @@ export function useOrgPlans(
       // an in-flight answer there would leave the id marked requested and
       // permanently unanswerable. Only an unmounted hook stops caring.
       if (!mounted.current) return
-      const resolved = entries.filter((entry): entry is [string, string] =>
+      const resolved = entries.filter((entry): entry is [string, OrgRow] =>
         Boolean(entry[1]),
       )
       if (resolved.length === 0) return

@@ -28,16 +28,11 @@ import {
   TextField,
 } from '@mui/material'
 import { type Auth } from 'firebase/auth'
+import { IMPERSONATION_MIN_REASON_LENGTH } from '../utils/impersonation-reason'
 import { signInWithPooledCustomToken } from '../utils/pooled-custom-token'
 import { useCallback, useState, type ReactNode } from 'react'
 
-/**
- * Minimum the route enforces (`app/api/admin/impersonate/route.ts`). Duplicated
- * rather than imported because that module is server-only; the mismatch this
- * risks is covered by `staff-impersonation-dialog.spec.tsx`, which asserts the
- * two numbers agree.
- */
-export const IMPERSONATION_MIN_REASON_LENGTH = 8
+export { IMPERSONATION_MIN_REASON_LENGTH }
 
 /**
  * The reason gate on staff impersonation (AGL-2125).

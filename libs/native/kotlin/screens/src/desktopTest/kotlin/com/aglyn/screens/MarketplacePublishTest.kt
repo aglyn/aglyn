@@ -242,4 +242,33 @@ class MarketplacePublishTest {
       paths,
     )
   }
+
+  @Test
+  fun aPublishRefusedForTheAgreementOpensItAndAcceptingIsWhatSendsThePublishAgain() = runTest {
+    val publish = spec("marketplace.publishTemplate")
+    val submit = ActionSpec.parse(publish.blocks.first { it.type == "form" }["submit"])!!
+    val refusal = """{"error":"Accept the Marketplace Publisher Agreement before publishing.","agreement":{"required":"2026-08-24.1","accepted":null,"state":"none","orgId":"o1"}}"""
+    val sent = mutableListOf<HttpRequestData>()
+    val model = ScreenModel(
+      publish, JsonObject(emptyMap()),
+      client(412 to refusal, 412 to """{"error":"Set up your publisher profile first."}""", 200 to """{"ok":true,"version":2}""", sent = sent),
+    )
+    val scope = json("""{"site":{"id":"h1"},"form":{"name":"Studio"}}""")
+    // The route's structured refusal (not its prose) names the screen that settles it.
+    assertEquals(
+      ActionOutcome.Gated("marketplace.publisherAgreement", "Accept the Marketplace Publisher Agreement before publishing."),
+      model.run(submit, scope),
+    )
+    // Any other refusal is a failure, as it was.
+    assertEquals(ActionOutcome.Failed("Set up your publisher profile first."), model.run(submit, scope))
+    // Sent again after the agreement is accepted, it is the same request.
+    model.run(submit, scope)
+    assertEquals(body(sent, 0), body(sent, 2))
+
+    val agreement = spec("marketplace.publisherAgreement")
+    val block = agreement.blocks.first { it.whenCondition == "is.canAccept" }
+    val accepts = (block.raw.obj("items") as JsonArray).mapNotNull { ActionSpec.parse(it) }
+    assertEquals(listOf("accept", "acceptCurrent"), accepts.map { it.id })
+    assertTrue(accepts.all { it.resume && it.back })
+  }
 }

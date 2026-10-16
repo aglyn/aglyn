@@ -257,6 +257,98 @@
           "footer": "Whichever you choose, people who unsubscribed, bounced, marked a message as spam or said no are never added, and an import never sends a confirmation email."
         }
       ]
+    },
+    {
+      "id": "email.list.transfer",
+      "title": "Import and export",
+      "subtitle": "{params.name}",
+      "icon": "arrow.up.arrow.down|sync",
+      "scope": "site",
+      "requires": "org.manager",
+      "load": {
+        "unfinished": {
+          "url": "/api/transfer/jobs",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "unfinished": true
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Import people into this list from a file. Each address is checked against consent and suppressions before anything is added, and an import can be undone for seven days."
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "import",
+              "label": "Import",
+              "icon": "square.and.arrow.down|upload",
+              "navigate": {
+                "screen": "core.settings.data.import",
+                "params": {
+                  "resource": "{params.resource}",
+                  "hostId": "{site.id}",
+                  "title": "Import into {params.name}"
+                }
+              }
+            },
+            {
+              "id": "export",
+              "label": "Export",
+              "icon": "square.and.arrow.up|download",
+              "export": {
+                "resource": "{params.resource}",
+                "title": "Export {params.name}",
+                "hostId": "{site.id}"
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Resume import",
+          "when": "data.unfinished.unfinished",
+          "items": "data.unfinished.unfinished",
+          "filter": "item.resource == @params.resource",
+          "count": true,
+          "primary": "{item.fileName|item.label}",
+          "secondary": "Left {item.updatedAt:datetime}",
+          "icon": "tray.and.arrow.down|inbox",
+          "actions": [
+            {
+              "id": "resume",
+              "label": "Resume",
+              "icon": "play|play_arrow",
+              "navigate": {
+                "screen": "core.settings.data.import.open",
+                "params": {
+                  "jobId": "{item.jobId}"
+                }
+              }
+            },
+            {
+              "id": "discard",
+              "label": "Discard",
+              "icon": "trash|delete",
+              "destructive": true,
+              "confirm": "Throw this import away? Nothing was written, so nothing changes.",
+              "url": "/api/transfer/jobs",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "discard",
+                "jobId": "{item.jobId}"
+              },
+              "success": "Discarded"
+            }
+          ]
+        }
+      ]
     }
   ]
 }

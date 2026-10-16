@@ -137,6 +137,12 @@ export interface AiFreeSiteWorstCase {
   retry: number
   /** A page's listing. */
   listing: number
+  /**
+   * A Free blog's one first post (`AI_SITE_FREE_POSTS`): its answer at the
+   * `copy.blog` ceiling writing its cached prefix, and its one re-ask reading
+   * it, on the fast tier a Free site's post is written on.
+   */
+  post: number
 }
 
 /**
@@ -148,14 +154,20 @@ export interface AiFreeSiteWorstCase {
  * moves and this does not.
  */
 export const AI_FREE_SITE_WORST_CASE_CREDITS: Readonly<AiFreeSiteWorstCase> = {
-  plan: 36,
-  look: 7,
+  // The plan, the look and a listing run on the fast tier, billed at the
+  // platform's markup on Claude Haiku 5.5 since AGL-3781 (36, 7 and 3 credits
+  // at Haiku 4.5's cost before).
+  plan: 5,
+  look: 2,
   layout: 23,
   form: 29,
   page: 43,
   section: 4,
   retry: 64,
-  listing: 3,
+  listing: 1,
+  // On Claude Haiku 5.5 at the platform's markup; the same post on the
+  // balanced tier the `copy.blog` row routes to would be 68.
+  post: 4,
 }
 
 /**
@@ -172,6 +184,16 @@ export interface AiFreeSiteCreations {
   pages: number
   /** The saved forms it makes; a guided start makes one where it places a form. */
   forms: number
+  /** The first posts it writes: a Free blog's one (`AI_SITE_FREE_POSTS`), else none. */
+  posts?: number
+}
+
+/** How many first posts a Free blog start writes, on its provider's fast tier. */
+export const AI_SITE_FREE_POSTS = 1
+
+/** The first posts a Free start of this kind writes: a blog's one, and none for any other kind. */
+export function aiFreeSitePosts(siteKind: string | null | undefined): number {
+  return aiSiteStartContent(siteKind) === 'posts' ? AI_SITE_FREE_POSTS : 0
 }
 
 /** A Free site start's credits at its worst for this many sections, its room for one retried page included. */
@@ -188,7 +210,8 @@ export function aiFreeSiteWorstCaseCredits(
     creations.forms * credits.form +
     pages * (credits.page + credits.listing) +
     sections * credits.section +
-    credits.retry
+    credits.retry +
+    Math.max(0, Math.floor(creations.posts ?? 0)) * credits.post
   )
 }
 
@@ -215,10 +238,10 @@ export function aiFreeSiteSectionsWithin(
 /**
  * What a Free site start of this many pages can cost at its worst, in
  * credits (AGL-3660): `aiFreeSiteWorstCaseCredits` for an empty site — the
- * plan, its look, the layout and form a guided start builds, each page's
- * answer and listing, the sections its plan is held to
- * (`aiFreeSiteSectionsWithin` at the month's whole taste, which is what the
- * plan step allows) and the room for one retried page.
+ * plan, its look, the layout and form a guided start builds, a blog's one
+ * first post, each page's answer and listing, the sections its plan is held
+ * to (`aiFreeSiteSectionsWithin` at the month's whole taste, which is what
+ * the plan step allows) and the room for one retried page.
  *
  * The CEILING a start is quoted with ("up to 283"), no longer the figure it
  * is admitted on (AGL-3722): that is the measured p90
@@ -228,9 +251,15 @@ export function aiFreeSiteSectionsWithin(
  */
 export function aiFreeSiteCreditEstimate(
   pages: number,
+  options: { siteKind?: string | null } = {},
   credits: Readonly<AiFreeSiteWorstCase> = AI_FREE_SITE_WORST_CASE_CREDITS,
 ): number {
-  const creations: AiFreeSiteCreations = { layouts: 1, forms: 1, pages: Math.max(1, Math.floor(pages)) }
+  const creations: AiFreeSiteCreations = {
+    layouts: 1,
+    forms: 1,
+    pages: Math.max(1, Math.floor(pages)),
+    posts: aiFreeSitePosts(options.siteKind),
+  }
   const sections = aiFreeSiteSectionsWithin(creations, FREE_AI_TASTE_CREDITS_PER_MONTH, credits)
   return aiFreeSiteWorstCaseCredits(creations, sections, credits)
 }
@@ -281,14 +310,18 @@ export function aiFreeCreditsResetLabel(resetsOn: string): string {
  * look, the layout and form a guided start builds, and each page at the
  * nominal section count, at what each MEASURED in production
  * (`AI_MEASURED_UNIT_CREDITS`); the ceiling is the whole worst case the wall
- * is proven with (`aiFreeSiteCreditEstimate`). Two pages: about 137
- * (p90 213, up to 283).
+ * is proven with (`aiFreeSiteCreditEstimate`). Two pages: about 113
+ * (p90 203, up to 243). A blog's one first post has no measurement of its
+ * own yet, so it is counted at its worst case in all three.
  */
-export function aiFreeSiteCreditRange(pages: number): AiCreditRange {
+export function aiFreeSiteCreditRange(pages: number, options: { siteKind?: string | null } = {}): AiCreditRange {
   const count = Math.max(1, Math.floor(pages))
+  const { likely, p90 } = aiSiteStartMeasured(count)
+  const posts = aiFreeSitePosts(options.siteKind) * AI_FREE_SITE_WORST_CASE_CREDITS.post
   return aiCreditRangeOrdered({
-    ...aiSiteStartMeasured(count),
-    ceiling: aiFreeSiteCreditEstimate(count),
+    likely: likely + posts,
+    p90: p90 + posts,
+    ceiling: aiFreeSiteCreditEstimate(count, options),
   })
 }
 
@@ -315,12 +348,13 @@ export const AI_SITE_HOME_FIRST_LABEL = 'Build the home page first'
 export function aiFreeSitePrompt(
   credits: Pick<AiFreeCreditsLeft, 'left' | 'resetsOn'> | null | undefined,
   pages: number,
+  options: { siteKind?: string | null } = {},
 ): AiCreditsPrompt | null {
   if (!credits || !Number.isFinite(credits.left)) return null
   const count = Math.max(1, Math.floor(pages))
-  const home = aiFreeSiteCreditRange(1)
+  const home = aiFreeSiteCreditRange(1, options)
   return aiCreditsPromptFor(
-    aiFreeSiteCreditRange(count),
+    aiFreeSiteCreditRange(count, options),
     credits,
     count > 1 ? { label: AI_SITE_HOME_FIRST_LABEL, ...home } : null,
   )
@@ -356,7 +390,7 @@ export const AI_SITE_MAX_SECTIONS = 8
 export const AI_SITE_HOME_MIN_SECTIONS = 5
 
 /**
- * The blog a paid guided start writes its first posts into (AGL-3676), and
+ * The blog a guided start writes its first posts into (AGL-3676), and
  * the addresses it may answer at, in order of preference: the first one no
  * planned page takes.
  */
@@ -1054,13 +1088,14 @@ export function aiSiteCreditEstimate(
   return passes * AI_SITE_PASS_CREDITS
 }
 
-/** How many first posts a paid blog start writes, one pass each (`AI_SITE_POSTS`, held equal by `ai-site-job.spec.ts`). */
+/** How many first posts a paid blog start writes, one pass each (`AI_SITE_POSTS`, held equal by `ai-site-job.spec.ts`); a Free one writes `AI_SITE_FREE_POSTS`. */
 export const AI_SITE_START_POSTS = 3
 
 /**
  * The first content a paid start of this kind writes (AGL-3676): a store's
  * first products, a blog's first posts, or nothing. `aiSiteContentPart`'s
- * answer for a paid start, by the kind's id.
+ * answer for a paid start, by the kind's id; a Free start writes a blog its
+ * one first post (`aiFreeSitePosts`) and a store nothing.
  */
 export function aiSiteStartContent(siteKind: string | null | undefined): 'posts' | 'products' | null {
   if (siteKind === 'store') return 'products'

@@ -217,10 +217,7 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
    * commit it, not after.
    */
   const coverage = CommerceModel.summarizeShippingCoverage(current)
-  const countryNames = (codes: readonly string[]) =>
-    codes
-      .map((code) => CommerceModel.CHECKOUT_SHIPPING_COUNTRY_NAMES[code] ?? code)
-      .join(', ')
+  const words = CommerceModel.describeShippingCoverage(coverage)
   /**
    * The one-click half of the fix: a zone claiming everywhere the merchant
    * has not named. It adds the ZONE only — a rate on it prices the parcel,
@@ -543,31 +540,17 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
               )
             }
           >
-            <AlertTitle>
-              {`Checkout turns away ${coverage.unserved.length} of the ${CommerceModel.CHECKOUT_SHIPPING_COUNTRIES.length} destinations it collects addresses for`}
-            </AlertTitle>
-            {`No rate reaches ${countryNames(coverage.unserved)}, so an order shipping there is refused rather than posted for free. `}
-            {coverage.offersLocalPickup
-              ? 'Local pickup does not cover them: it is a collection choice, not a rate, so it is offered where checkout completes and closes no gap here. '
-              : ''}
-            {coverage.hasRestOfWorldZone
-              ? 'A rest-of-world zone is already saved, so what those destinations are missing is a rate on the zone that covers them.'
-              : 'Give them a zone with a rate, or add a rest-of-world zone and price one on it.'}
+            <AlertTitle>{words.headline}</AlertTitle>
+            {words.detail}
           </Alert>
         ) : (
           <Typography variant="caption" color="text.secondary">
-            {coverage.shipsNowhere
-              ? coverage.offersLocalPickup
-                ? 'No rate reaches any destination, so local pickup is the only delivery choice checkout offers. Nobody is turned away and no shipping is charged.'
-                : 'No rate reaches any destination, so checkout charges no shipping and turns nobody away.'
-              : `Checkout can price shipping to every destination it collects an address for: ${countryNames(coverage.served)}.`}
+            {words.note}
           </Typography>
         )}
-        {coverage.asksDestination ? (
+        {words.asks ? (
           <Typography variant="caption" color="text.secondary">
-            {
-              'Rates differ by destination, so checkout asks the shopper where the parcel is going before it can price one.'
-            }
+            {words.asks}
           </Typography>
         ) : null}
 

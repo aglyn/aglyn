@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
+import com.aglyn.shell.handleConsoleHandoffReturn
 import com.aglyn.core.AuthState
 import com.aglyn.shell.AglynMessagingService
 import com.aglyn.shell.EXTRA_LINK
@@ -35,7 +36,8 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     val services = (application as AglynApplication).services
-    pendingLink = linkOf(intent)
+    // Single sign-on's console page handing the code back finishes the sign-in here; anything else opens in the shell.
+    pendingLink = linkOf(intent)?.takeUnless { services.handleConsoleHandoffReturn(it, lifecycleScope) }
     // Debug builds only: `adb shell am start … --ez autoSignIn true` signs the seeded member in.
     val autoSignIn = BuildConfig.DEBUG && intent.getBooleanExtra("autoSignIn", false)
     AglynMessagingService.ensureChannel(this)
@@ -52,6 +54,8 @@ class MainActivity : ComponentActivity() {
         com.aglyn.ui.LocalFileExporter provides com.aglyn.shell.rememberAndroidFileExporter(),
         // Passkeys: the Credential Manager.
         com.aglyn.screens.LocalPasskeyCreator provides com.aglyn.shell.rememberAndroidPasskeyCreator(),
+        // Signing in with a passkey: the same Credential Manager.
+        com.aglyn.screens.LocalPasskeyAsserter provides com.aglyn.shell.rememberAndroidPasskeyAsserter(),
         // "Connect Google": the Credential Manager's Google ID token.
         com.aglyn.screens.LocalGoogleCredentialSource provides com.aglyn.shell.rememberAndroidGoogleCredentialSource(BuildConfig.GOOGLE_WEB_CLIENT_ID),
       ) {
@@ -62,7 +66,8 @@ class MainActivity : ComponentActivity() {
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
-    linkOf(intent)?.let { pendingLink = it }
+    val services = (application as AglynApplication).services
+    linkOf(intent)?.takeUnless { services.handleConsoleHandoffReturn(it, lifecycleScope) }?.let { pendingLink = it }
   }
 
   private fun linkOf(intent: Intent?): String? = intent?.getStringExtra(EXTRA_LINK) ?: intent?.dataString

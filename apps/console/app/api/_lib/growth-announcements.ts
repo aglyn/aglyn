@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
 import {
   isSignupCanaryEmail,
   isSignupCanaryOrgSlug,
@@ -148,6 +149,11 @@ export interface NewSiteAnnouncement {
  * and the workspace, and the one that says somebody actually started
  * building — so it is told to staff in the same category, switchable with
  * them.
+ *
+ * The body carries the site's live address as well as the staff page the
+ * button opens, so whoever reads it can look at what was built in one click.
+ * A site seconds old has no custom domain yet, so that address is always its
+ * platform subdomain. The email's text blocks are linkified when rendered.
  */
 export async function announceNewSite(site: NewSiteAnnouncement): Promise<void> {
   const { hostId, displayName, subdomain, orgSlug, createdBy } = site
@@ -156,7 +162,9 @@ export async function announceNewSite(site: NewSiteAnnouncement): Promise<void> 
     await notifyStaff({
       type: 'staff.siteCreated',
       title: `New site: ${displayName}`,
-      body: `${createdBy ?? 'An account'} created ${displayName} (${subdomain}).`,
+      body:
+        `${createdBy ?? 'An account'} created ${displayName} (${subdomain}).\n` +
+        `Live site: https://${subdomain}.${TENANT_APEX}`,
       link: buildRoute(Route.ADMIN_SITE_DETAIL, { hostId }),
     })
   } catch (staffError) {

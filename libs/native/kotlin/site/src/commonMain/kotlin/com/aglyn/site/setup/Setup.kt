@@ -1,5 +1,7 @@
 package com.aglyn.site.setup
 
+import com.aglyn.contracts.PluginCatalog
+import com.aglyn.contracts.resolveHostEnabledPlugins
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.FirestoreDelete
@@ -8,11 +10,13 @@ import com.aglyn.core.FirestoreTimestamp
 import com.aglyn.core.FirestoreWriter
 import com.aglyn.core.firestoreNow
 import com.aglyn.core.jsonValue
+import com.aglyn.pluginhost.NativeWidget
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 
@@ -33,6 +37,9 @@ enum class SetupSection(val id: String, val title: String, val supporting: Strin
   TRACKING("tracking", "Tracking", "Analytics, ad tags and the consent banner", "analytics"),
   THEME("theme", "Theme", "Colors, font, shape and your saved themes", "palette"),
   EMAILS("emails", "Emails", "The emails your site sends to customers", "mail"),
+
+  /** The `hostSettings` zone (AGL-3711): offered only while a plugin running on the site has a card in it. */
+  INTEGRATIONS("integrations", "Integrations", "Email platforms, Zapier, live chat and the other tools your site connects to", "extension"),
   ;
 
   companion object {
@@ -45,6 +52,26 @@ enum class SetupSection(val id: String, val title: String, val supporting: Strin
     }
   }
 }
+
+/** The id of a setup page's zone the Integrations section fills. */
+const val INTEGRATIONS_SLOT = "hostSettings"
+
+/**
+ * The plugins that run on a site: the workspace's list less what the site turned off, plus the default-off ones it opted
+ * into (`resolveHostEnabledPlugins`, as the console's switchboard resolves them). A list the document does not hold reads
+ * as the defaults.
+ */
+fun runningPlugins(org: Map<String, Any?>?, host: Map<String, Any?>?): List<String> {
+  fun ids(doc: Map<String, Any?>?, key: String) = (doc?.get(key) as? List<*>)?.filterIsInstance<String>()
+  return resolveHostEnabledPlugins(ids(org, "enabledPlugins"), ids(host, "disabledPlugins"), ids(host, "enabledPlugins"))
+}
+
+/**
+ * The cards the Integrations section draws: those of plugins running on the site. A plugin the catalog has no switch for
+ * (Zapier is infrastructure) is not switchable, so its card is always offered.
+ */
+fun integrationWidgets(widgets: List<NativeWidget>, running: List<String>): List<NativeWidget> =
+  widgets.filter { PluginCatalog.plugin(it.pluginId) == null || it.pluginId in running }
 
 /** The value at a dotted [path] of a document's fields. */
 fun Map<String, Any?>?.at(path: String): Any? {
@@ -253,7 +280,40 @@ fun themePresetsOf(json: JsonElement?): List<ThemePreset> = (json as? JsonArray)
 }
 
 /** What the theme page loads once: the editor's controls, what they show, and the built-in themes. */
-data class ThemeEditorLoad(val catalog: ThemeCatalog, val values: ThemeValues, val presets: List<ThemePreset>)
+data class ThemeEditorLoad(
+  val catalog: ThemeCatalog,
+  val values: ThemeValues,
+  val presets: List<ThemePreset>,
+  /** What the site changed on top of its theme ("What you have changed"). */
+  val changes: List<ThemeChange> = emptyList(),
+  /** The changes were made against a different theme than the one picked now. */
+  val stale: Boolean = false,
+  val themeName: String? = null,
+)
+
+/** One value the site set on top of its theme: what it is, the theme's own and the site's, as the console's card lists them. */
+data class ThemeChange(val path: String, val label: String, val scheme: String?, val themeValue: String?, val overrideValue: String?) {
+  /** Whether the site's value is a color, for a swatch beside it. */
+  val isColor: Boolean get() = overrideValue?.let { Regex("^(#|rgb|hsl)", RegexOption.IGNORE_CASE).containsMatchIn(it.trim()) } == true
+}
+
+/** A value in words: text and numbers as they are, anything else compact and cut at 60 characters. */
+fun themeChangeValue(element: JsonElement?): String? = when {
+  element == null || element is JsonNull -> null
+  element is JsonPrimitive -> element.content
+  else -> element.toString().let { if (it.length > 60) it.take(57) + "…" else it }
+}
+
+fun themeChangesOf(json: JsonElement?): List<ThemeChange> = ((json as? JsonArray).orEmpty()).mapNotNull { entry ->
+  val obj = entry as? JsonObject ?: return@mapNotNull null
+  ThemeChange(
+    path = obj.str("path") ?: return@mapNotNull null,
+    label = obj.str("label") ?: obj.str("path").orEmpty(),
+    scheme = obj.str("scheme"),
+    themeValue = themeChangeValue(obj["themeValue"]),
+    overrideValue = themeChangeValue(obj["overrideValue"]),
+  )
+}
 
 /** The font categories the browser filters by, in the order the console lists them (`HostThemeFontCategory`). */
 val FONT_CATEGORIES: List<Pair<String, String>> = listOf(
@@ -392,7 +452,14 @@ class HostSettingsApi(private val api: ConsoleApiClient, private val writer: Fir
   /** The editor's controls, what they show now and the built-in themes on offer. */
   suspend fun themeEditor(): ThemeEditorLoad {
     val answer = theme(mapOf("action" to "values")) as? JsonObject
-    return ThemeEditorLoad(themeCatalogOf(answer?.get("catalog")), themeValuesOf(answer?.get("values")), themePresetsOf(answer?.get("presets")))
+    return ThemeEditorLoad(
+      themeCatalogOf(answer?.get("catalog")),
+      themeValuesOf(answer?.get("values")),
+      themePresetsOf(answer?.get("presets")),
+      changes = themeChangesOf(answer?.get("changes")),
+      stale = (answer?.get("stale") as? JsonPrimitive)?.booleanOrNull == true,
+      themeName = answer.str("themeName"),
+    )
   }
 
   /** Saves the changed controls as the site's theme edits; answers what they show now. */
@@ -413,6 +480,11 @@ class HostSettingsApi(private val api: ConsoleApiClient, private val writer: Fir
   /** Writes the edits into the saved theme the site is on (`update`). */
   suspend fun updateSavedTheme() {
     theme(mapOf("action" to "update"))
+  }
+
+  /** Puts one change back at the theme's own value and keeps the rest (`reset`, the Reset beside a change). */
+  suspend fun resetThemeChange(path: String) {
+    theme(mapOf("action" to "reset", "path" to path))
   }
 
   /** Drops the edits, back to the picked theme as it was (`restore`). */

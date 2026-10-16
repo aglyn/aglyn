@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynPluginHost
 import AglynScreens
 import XCTest
 
@@ -121,5 +122,207 @@ final class MarketplaceTests: XCTestCase {
     XCTAssertEqual(specs.first { $0.id == "marketplace.publishTemplate" }?.zones, ["siteTemplate"])
     let declared = SpecScreens.declaration(specs).screens
     XCTAssertEqual(declared.sorted(), ids)
+  }
+
+  // MARK: What a plugin's page says about its installs (marketplace-catalog.ts, replayed)
+
+  private func object(_ value: Any?) -> [String: Any] { value as? [String: Any] ?? [:] }
+
+  private func summary(_ value: Any) -> OrgInstallSummary {
+    let json = object(value)
+    let sites = (json["sites"] as? [[String: Any]] ?? []).map(site)
+    return OrgInstallSummary(
+      orgWide: json["orgWide"] as? Bool == true, orgVersion: string(json["orgVersion"]), sites: sites,
+      hostPinnedIDs: json["hostPinnedIds"] as? [String] ?? [], availableHostIDs: json["availableHostIds"] as? [String] ?? [],
+      installedAnywhere: json["installedAnywhere"] as? Bool == true)
+  }
+
+  private func site(_ json: [String: Any]) -> OrgInstallSite {
+    OrgInstallSite(
+      hostID: json["hostId"] as? String ?? "", label: json["label"] as? String ?? "", version: string(json["version"]),
+      pinnedBy: InstallTarget(rawValue: json["pinnedBy"] as? String ?? "") ?? .org, shadowed: json["shadowed"] as? Bool == true)
+  }
+
+  private func siteJSON(_ site: OrgInstallSite) -> [String: Any?] {
+    ["hostId": site.hostID, "label": site.label, "version": site.version, "pinnedBy": site.pinnedBy.rawValue, "shadowed": site.shadowed]
+  }
+
+  private func statusJSON(_ status: UpdateStatus) -> [String: Any?] {
+    var out: [String: Any?] = ["state": status.state.rawValue, "installedVersion": status.installedVersion, "availableVersion": status.availableVersion]
+    if let reason = status.unknownReason { out["unknownReason"] = reason.rawValue }
+    return out
+  }
+
+  private func same(_ lhs: [String: Any?], _ rhs: Any?, _ message: String, file: StaticString = #filePath, line: UInt = #line) {
+    let expected = object(rhs)
+    XCTAssertEqual(Set(lhs.keys), Set(expected.keys), message, file: file, line: line)
+    for (key, value) in lhs {
+      let want = expected[key]
+      if value == nil { XCTAssertTrue(want == nil || want is NSNull, "\(message) \(key)", file: file, line: line) } else {
+        XCTAssertEqual(String(describing: value!), String(describing: want ?? "nil"), "\(message) \(key)", file: file, line: line)
+      }
+    }
+  }
+
+  func testVersionsAreOrderedAsTheConsoleOrdersThem() throws {
+    for item in try functionCases("compareArtifactVersions") {
+      func text(_ value: Any) -> String? { versionText(value) }
+      let order = compareArtifactVersions(text(item.args[0]), text(item.args[1]))
+      XCTAssertEqual(order.map { NSNumber(value: $0) }, item.result as? NSNumber, "\(item.args)")
+    }
+  }
+
+  func testUpdateStatesAreWordedAsTheConsoleWordsThem() throws {
+    for item in try functionCases("updateStateLabel") {
+      let json = object(item.args[0])
+      let status = UpdateStatus(
+        state: UpdateState(rawValue: json["state"] as? String ?? "") ?? .unknown, installedVersion: string(json["installedVersion"]),
+        availableVersion: string(json["availableVersion"]), unknownReason: (json["unknownReason"] as? String).flatMap(UnknownReason.init))
+      XCTAssertEqual(updateStateLabel(status), item.result as? String, "\(item.args)")
+    }
+  }
+
+  func testWhatAListingOffersAndWhetherAnInstallIsBehindIt() throws {
+    for item in try functionCases("pluginOfferedVersion") {
+      let revoked: Revoked? =
+        item.args[1] is NSNull ? nil : (item.args[1] as? String == "all" ? .all : .versions(item.args[1] as? [String] ?? []))
+      XCTAssertEqual(pluginOfferedVersion(latestApprovedVersion: versionText(item.args[0]), revoked: revoked), string(item.result), "\(item.args)")
+    }
+    for item in try functionCases("pluginUpdateStatus") {
+      let pin: UpdateComparablePin? = item.args[0] is NSNull ? nil : UpdateComparablePin(object(item.args[0]))
+      same(statusJSON(pluginUpdateStatus(pin: pin, offered: string(item.args[1]))), item.result, "\(item.args)")
+    }
+  }
+
+  func testTheWorkspacesPicturePicksUpEverySitesPin() throws {
+    for item in try functionCases("resolveOrgInstallSummary") {
+      let hosts = (item.args[0] as? [[String: Any]] ?? []).map { SiteChoice(id: $0["id"] as? String ?? "", label: $0["label"] as? String ?? "") }
+      var pins: [String: PinVersion] = [:]
+      for (key, value) in object(item.args[1]) where !(value is NSNull) { pins[key] = PinVersion(version: versionText(object(value)["version"])) }
+      let org: PinVersion? = item.args[2] is NSNull ? nil : PinVersion(version: versionText(object(item.args[2])["version"]))
+      let result = resolveOrgInstallSummary(hosts: hosts, hostPins: pins, orgPin: org)
+      let expected = object(item.result)
+      XCTAssertEqual(result.orgWide, expected["orgWide"] as? Bool, "\(item.args)")
+      XCTAssertEqual(result.orgVersion, string(expected["orgVersion"]), "\(item.args)")
+      XCTAssertEqual(result.hostPinnedIDs, expected["hostPinnedIds"] as? [String], "\(item.args)")
+      XCTAssertEqual(result.availableHostIDs, expected["availableHostIds"] as? [String], "\(item.args)")
+      XCTAssertEqual(result.installedAnywhere, expected["installedAnywhere"] as? Bool, "\(item.args)")
+      XCTAssertEqual(result.sites, (expected["sites"] as? [[String: Any]] ?? []).map(site), "\(item.args)")
+    }
+  }
+
+  func testAnUninstallTouchesTheSitesTheConsoleSaysItTouches() throws {
+    for item in try functionCases("resolveUninstallTargets") {
+      let targets = resolveUninstallTargets(summary(item.args[0]), scope: InstallTarget(rawValue: item.args[1] as? String ?? "") ?? .host, hostID: item.args.count > 2 ? string(item.args[2]) : nil)
+      let expected = (item.result as? [[String: Any]] ?? []).map {
+        UninstallTarget(hostID: $0["hostId"] as? String ?? "", label: $0["label"] as? String ?? "", stillCovered: $0["stillCovered"] as? Bool == true)
+      }
+      XCTAssertEqual(targets, expected, "\(item.args)")
+    }
+    for item in try functionCases("staleSites") {
+      let sites = (item.args[0] as? [[String: Any]] ?? []).map(site)
+      let stale = staleSites(sites, latestVersion: versionText(item.args[1]))
+      XCTAssertEqual(stale, (item.result as? [[String: Any]] ?? []).map(site), "\(item.args)")
+    }
+  }
+
+  func testThePageSaysWhatTheConsoleSays() throws {
+    for item in try functionCases("pluginSiteSetSummary") {
+      XCTAssertEqual(pluginSiteSetSummary(summary(item.args[0]), siteCount: (item.args[1] as? NSNumber)?.intValue ?? 0), item.result as? String, "\(item.args)")
+    }
+    for item in try functionCases("pluginUpdatePrompt") {
+      let input = object(item.args[0])
+      let prompt = pluginUpdatePrompt(
+        name: input["name"] as? String ?? "", latestVersion: input["latestVersion"] as? String ?? "", label: input["label"] as? String ?? "",
+        singleSite: input["singleSite"] as? Bool == true)
+      let expected = object(item.result)
+      XCTAssertEqual(prompt.title, expected["title"] as? String)
+      XCTAssertEqual(prompt.body, expected["body"] as? String)
+      XCTAssertEqual(prompt.others, string(expected["others"]))
+      XCTAssertEqual(prompt.note, expected["note"] as? String)
+    }
+    for item in try functionCases("pluginUpdateAll") {
+      let all = pluginUpdateAll(summary(item.args[0]), stale: (item.args[1] as? [[String: Any]] ?? []).map(site), latestVersion: item.args[2] as? String ?? "")
+      let expected = object(item.result)
+      XCTAssertEqual(all.label, expected["label"] as? String)
+      XCTAssertEqual(all.target, expected["target"] as? String)
+      XCTAssertEqual(all.hostIDs, expected["hostIds"] as? [String], "\(item.args)")
+    }
+    for item in try functionCases("installedPluginCaption") {
+      let input = object(item.args[0])
+      XCTAssertEqual(
+        installedPluginCaption(version: versionText(input["version"]), orgWide: input["orgWide"] as? Bool == true, siteLabels: input["siteLabels"] as? [String] ?? []),
+        item.result as? String, "\(item.args)")
+    }
+    for item in try functionCases("installPlanOutcome") {
+      let input = object(item.args[0])
+      let outcome = installPlanOutcome(
+        name: input["name"] as? String ?? "", installed: (input["installed"] as? NSNumber)?.intValue ?? 0, errors: input["errors"] as? [String] ?? [],
+        orgWide: input["orgWide"] as? Bool == true, updating: input["updating"] as? Bool == true, version: string(input["version"]),
+        saved: input["saved"] as? Bool == true)
+      let expected = object(item.result)
+      XCTAssertEqual(outcome.tone, expected["tone"] as? String, "\(item.args)")
+      XCTAssertEqual(outcome.text, expected["text"] as? String, "\(item.args)")
+    }
+    XCTAssertEqual(pluginOrgWideUpdateNote.count > 40, true)
+  }
+
+  func testTheUninstallDialogSaysWhatTheConsoleSaysAndAsksForTheWordWhereItShould() throws {
+    for item in try functionCases("uninstallImpactView") {
+      let input = object(item.args[0])
+      let targets = (input["targets"] as? [[String: Any]] ?? []).map {
+        UninstallTarget(hostID: $0["hostId"] as? String ?? "", label: $0["label"] as? String ?? "", stillCovered: $0["stillCovered"] as? Bool == true)
+      }
+      let impactJSON = input["impact"].flatMap { $0 is NSNull ? nil : $0 }
+      let impact = try impactJSON.map { try XCTUnwrap(UninstallImpact(JSONValue.decode(JSONSerialization.data(withJSONObject: $0)))) }
+      let view = uninstallImpactView(
+        name: input["name"] as? String ?? "", scope: InstallTarget(rawValue: input["scope"] as? String ?? "") ?? .host,
+        pluginID: input["pluginId"] as? String ?? "", targets: targets, impact: impact, failed: input["failed"] as? Bool == true)
+      let expected = object(item.result)
+      XCTAssertEqual(view.title, expected["title"] as? String, "\(item.args)")
+      XCTAssertEqual(view.confirmLabel, expected["confirmLabel"] as? String, "\(item.args)")
+      XCTAssertEqual(view.scanning, expected["scanning"] as? Bool, "\(item.args)")
+      XCTAssertEqual(view.needsAcknowledgement, expected["needsAcknowledgement"] as? Bool, "\(item.args)")
+      XCTAssertEqual(view.note, string(expected["note"]), "\(item.args)")
+      XCTAssertEqual(view.alerts.map { [$0.tone, $0.text] }, (expected["alerts"] as? [[String: Any]] ?? []).map { [$0["tone"] as? String ?? "", $0["text"] as? String ?? ""] }, "\(item.args)")
+      XCTAssertEqual(
+        view.sites.map { [$0.label, $0.pages, $0.chips.joined(separator: "|")] },
+        (expected["sites"] as? [[String: Any]] ?? []).map { [$0["label"] as? String ?? "", $0["pages"] as? String ?? "", ($0["chips"] as? [String] ?? []).joined(separator: "|")] },
+        "\(item.args)")
+    }
+  }
+
+  func testAPluginsSettingsAreDrawnFromItsManifestAsTheConsoleDrawsThem() throws {
+    for item in try functionCases("manifestSettingsScreen") {
+      let manifest: JSONValue? = item.args[2] is NSNull ? nil : manifestJSON(item.args[2])
+      let screen = manifestSettingsScreen(pluginID: item.args[0] as? String ?? "", label: item.args[1] as? String ?? "", manifest: manifest)
+      if item.result is NSNull {
+        XCTAssertNil(screen, "\(item.args)")
+      } else {
+        let expected = JSONValue.decode(try JSONSerialization.data(withJSONObject: item.result))
+        XCTAssertEqual(screen, expected, "\(item.args)")
+        // And it is a screen the renderer takes.
+        XCTAssertNotNil(screen.flatMap(ScreenSpec.init))
+      }
+    }
+  }
+
+  /// The slots the workspace's plugin pages hand the marketplace are the ones the console fills.
+  @MainActor
+  func testItFillsTheTwoSlotsOfThePluginPages() {
+    let registry = NativePluginRegistry()
+    let declared = NativeContributionDeclaration(
+      screens: [
+        "marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.publishTemplate",
+        "marketplace.publisherAgreement",
+      ],
+      widgets: ["marketplace.org-installs", "marketplace.plugin-installation"], quickActions: ["marketplace.open"],
+      deepLinks: ["marketplace.listing-page", "marketplace.page"])
+    let result = NativePluginLoader.load(
+      [NativePluginManifestEntry(id: "marketplace", contributes: declared, register: registerMarketplaceNative)], into: registry)
+    XCTAssertEqual(result.loaded, ["marketplace"])
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: "orgPluginInstalls").map(\.id), ["marketplace.org-installs"])
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: "pluginInstallation").map(\.id), ["marketplace.plugin-installation"])
+    XCTAssertEqual(registry.widgets(for: .aglyn).filter { $0.pluginID == "marketplace" }.map(\.id), [], "never on Home")
   }
 }

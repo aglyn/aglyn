@@ -242,6 +242,27 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Commerce events still owed to a connected marketing platform (AGL-3639): checkout started, order paid, fulfilled, refunded or cancelled, with the shopper’s email, the order, its items and value, and the tracking number. A SHOPPER’s data held for the merchant as controller, so disclosed to the ORG only, for the reason `supplierDeliveries` gives; a row is deleted once delivered.',
   },
   {
+    collection: 'helpDeskConnections',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'EXISTENCE ONLY for the credential — each site’s connection to the merchant’s own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account (AGL-3824): provider, status, the account’s subdomain and name, the Richpanel support address, the chosen channel, inbox or custom object, the sync switches, cursors and run timing. The sealed API key, login and app client id, sealed together, and the id of the key that sealed them carry `token` in their names and are redacted (see redactSecrets); the document id is the site id and the provider.',
+  },
+  {
+    collection: 'helpDeskOutbox',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Orders and contact form messages still owed to a connected help desk (AGL-3824): a buyer’s email and name with the order’s number, items and totals, or a message’s sender, subject and text. A SHOPPER’s or a visitor’s data held for the merchant as controller, so disclosed to the ORG only, for the reason `supplierDeliveries` gives; a row is deleted once delivered.',
+  },
+  {
+    collection: 'helpDeskCustomers',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'What each help desk connection knows of a buyer (AGL-3824): their email and name, the help desk’s id for them and their ten latest orders, so each order sent carries the recent ones. A SHOPPER’s data held for the merchant as controller, so disclosed to the ORG only, for the reason `supplierDeliveries` gives. The document id carries a truncated SHA-256 of the email — a lookup key, not a credential.',
+  },
+  {
     collection: 'adConversionConnections',
     keyedBy: 'field',
     subjects: ['org'],
@@ -267,7 +288,7 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     keyedBy: 'field',
     subjects: ['org'],
     exported: true,
-    note: 'EXISTENCE ONLY for the grant — each site’s connection to the merchant’s own ShipBob, ShipMonk or Amazon Multi-Channel Fulfillment account (AGL-3634, AGL-3697): network, status, account name, ShipBob channel, ShipMonk store id, Amazon marketplaces, routing and stock settings, the last stock count by SKU and totals. The sealed access and refresh tokens (for ShipMonk, the merchant’s own API key, sealed as the access token), the webhook token’s hash and the id of the key that sealed them carry `token` in their names, and ShipMonk’s sealed webhook signing secret carries `secret` in its name; all are redacted (see redactSecrets). The document id is the site id and the network.',
+    note: 'EXISTENCE ONLY for the grant — each site’s connection to the merchant’s own ShipBob, ShipMonk, Flexport or Amazon Multi-Channel Fulfillment account (AGL-3634, AGL-3697, AGL-3822): network, status, account name, ShipBob channel, ShipMonk store id, Amazon marketplaces, routing and stock settings, the last stock count by SKU and totals. The sealed access and refresh tokens (for ShipMonk and Flexport, the merchant’s own API key or token, sealed as the access token), the webhook token’s hash and the id of the key that sealed them carry `token` in their names, and ShipMonk’s sealed webhook signing secret carries `secret` in its name; all are redacted (see redactSecrets). The document id is the site id and the network.',
   },
   {
     collection: 'fulfillmentNetworkOrders',
@@ -309,7 +330,7 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     keyedBy: 'field',
     subjects: ['org'],
     exported: true,
-    note: 'EXISTENCE ONLY for the keys — each site’s connection to the merchant’s own Cin7 Core, inFlow or Brightpearl account (AGL-3642): system, status, account name, the stock, product and order settings (location, the customer orders are recorded under, the tax rule), the last count by SKU, the last syncs’ counts, cursors and totals. The sealed API keys or grant and the id of the key that sealed them carry `credential` in their names and are redacted (see redactSecrets); Brightpearl’s account code and datacenter are disclosed as stored. The document id is the site id. Its `log` subcollection is not read by this export.',
+    note: 'EXISTENCE ONLY for the keys — each site’s connection to the merchant’s own Cin7 Core, inFlow, Brightpearl or Ordoro account (AGL-3642): system, status, account name, the stock, product and order settings (location, the customer or Ordoro sales channel orders are recorded under, the tax rule), the last count by SKU, the last syncs’ counts, cursors and totals. The sealed API keys or grant and the id of the key that sealed them carry `credential` in their names and are redacted (see redactSecrets); Brightpearl’s account code and datacenter are disclosed as stored. The document id is the site id. Its `log` subcollection is not read by this export.',
   },
   {
     collection: 'inventorySyncOrders',
@@ -1164,8 +1185,8 @@ export async function exportOrgData(
   // Where each short tracking link the org's sequences sent points (AGL-3297).
   data['outreachLinks'] = await readByField(db, 'outreachLinks', 'orgId', orgId)
 
-  // Shipping (AGL-3612), tax services (AGL-3631) and marketing platforms
-  // (AGL-3639): top-level and keyed by `orgId`, the bound their
+  // Shipping (AGL-3612), tax services (AGL-3631), marketing platforms
+  // (AGL-3639) and help desks (AGL-3824): top-level and keyed by `orgId`, the bound their
   // `orgKeyedCollections` erasure sweeps by. The sealed credentials are
   // withheld by `redactSecrets` on their names.
   for (const collection of [
@@ -1177,6 +1198,9 @@ export async function exportOrgData(
     'taxEngineTransactions',
     'marketingPlatformConnections',
     'marketingPlatformEvents',
+    'helpDeskConnections',
+    'helpDeskOutbox',
+    'helpDeskCustomers',
     'adConversionConnections',
     'adConversionConsents',
     'adConversionEvents',

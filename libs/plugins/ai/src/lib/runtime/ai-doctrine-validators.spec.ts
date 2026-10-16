@@ -1354,7 +1354,7 @@ describe('rule 14 — a line cut short (AGL-3072)', () => {
         'Serving [city] families, from',
         'Plain answers — about',
         'Plain answers - for',
-      ].map(aiDanglingWord),
+      ].map((line) => aiDanglingWord(line)),
     ).toEqual(['with', 'and', 'the', 'a', '&', 'from', 'about', 'for'])
   })
 
@@ -1372,8 +1372,131 @@ describe('rule 14 — a line cut short (AGL-3072)', () => {
         'Hi {{contact.firstName}}',
         'Estate planning and wills',
         '',
-      ].map(aiDanglingWord),
+      ].map((line) => aiDanglingWord(line)),
     ).toEqual([null, null, null, null, null, null, null, null, null, null, null])
+  })
+
+  it('reads a word with accented letters as one word, in every language (AGL-3791)', () => {
+    // A live Spanish page stored "Galería de la panaderí": read as ASCII, the
+    // "a" after the "í" was a word of its own, the article "a".
+    expect(
+      [
+        'Galería de la panadería',
+        'Menú completo por categoría',
+        'Conchas del día',
+        '3. Mediodía',
+        'Panadería en la montaña',
+        'Pregunta al señor',
+        'Lo que ofrecían',
+        'Pâtisserie',
+        'Le café',
+        'Pão fresco da padaria',
+        'A melhor confeitaria',
+        'Bäckerei Müller',
+        'Galería de la panadería',
+        'Suite 4a',
+      ].map((line) => aiDanglingWord(line)),
+    ).toEqual(Array(14).fill(null))
+  })
+
+  it('still reads an English line cut short when its words around the end carry accents (AGL-3791)', () => {
+    expect(
+      ['Café pastries and', 'Crème brûlée for the', 'Our pâtisserie, with', 'Señor Frog’s and'].map((line) => aiDanglingWord(line)),
+    ).toEqual(['and', 'the', 'with', 'and'])
+  })
+
+  describe('in the site’s language (AGL-3828)', () => {
+    // [line, the word it dangles on, or null where it is finished]
+    const cases: Record<string, ReadonlyArray<readonly [string, string | null]>> = {
+      es: [
+        ['Pan dulce y', 'y'],
+        ['Pasteles de tres leches para la', 'la'],
+        ['Pasteles de tres leches para', 'para'],
+        ['Conchas, bolillos e', 'e'],
+        ['Café o', 'o'],
+        ['Siete u', 'u'],
+        ['Visítenos en', 'en'],
+        ['Hecho con', 'con'],
+        ['Pan del', 'del'],
+        ['Galletas sin', 'sin'],
+        ['Algo entre', 'entre'],
+        ['Para sus', 'sus'],
+        ['Tortas, pan &', '&'],
+        ['Pan Dulce Para La', 'La'],
+        ['Generación Y', null],
+        ['Galería de la panadería', null],
+        ['Vitamina E', null],
+        ['Plan A', null],
+        ['Todo en uno', null],
+        ['Pan dulce y conchas.', null],
+        ['Él', null],
+      ],
+      pt: [
+        ['Pão fresco da', 'da'],
+        ['Bolos e', 'e'],
+        ['Entregamos às', 'às'],
+        ['Feito com', 'com'],
+        ['Siga-nos', null],
+        ['Tudo em um', null],
+        ['Remoção de pelos', null],
+        ['A escolha é sua', null],
+        ['Pão fresco da padaria', null],
+      ],
+      fr: [
+        ['Pain de l’', 'l’'],
+        ["Le goût d'", "d'"],
+        ['Plus qu’', 'qu’'],
+        ['Croissants et', 'et'],
+        ['Fait à', 'à'],
+        ['Pâtisseries pour', 'pour'],
+        ['Profitez-en', null],
+        ['Allez-y', null],
+        ['Tout en un', null],
+        ['Lumière et son', null],
+        ['Le café', null],
+        ['Aujourd’hui', null],
+      ],
+      it: [
+        ['Il sapore dell’', 'dell’'],
+        ['Pane e', 'e'],
+        ['Dolci della', 'della'],
+        ['Fatto con', 'con'],
+        ['Torna su', null],
+        ['Tutto in uno', null],
+        ['Caffè e cornetto', null],
+        ['Vitamina E', null],
+      ],
+      de: [
+        ['Brot und', 'und'],
+        ['Kuchen für', 'für'],
+        ['Frisch vom', 'vom'],
+        ['Rufen Sie uns an', null],
+        ['Bäckerei Müller', null],
+      ],
+    }
+    it.each(Object.entries(cases))('reads a %s line by its own dangling words', (language, rows) => {
+      expect(rows.map(([line]) => aiDanglingWord(line, language))).toEqual(rows.map(([, word]) => word))
+    })
+
+    it('reads a decomposed accent as the word it spells', () => {
+      expect(aiDanglingWord('Entregamos às', 'pt')).toBe('às')
+      expect(aiDanglingWord('Fait à', 'fr')).toBe('à')
+    })
+
+    it('reads a regional tag by its language, and an unknown or absent language as English', () => {
+      expect(aiDanglingWord('Pan dulce y', 'es-MX')).toBe('y')
+      expect(aiDanglingWord('Pão fresco da', 'pt_BR')).toBe('da')
+      expect(aiDanglingWord('Pan dulce y', 'nl')).toBeNull()
+      expect(aiDanglingWord('Fresh bread and', 'nl')).toBe('and')
+      expect(aiDanglingWord('Fresh bread and', 'en-US')).toBe('and')
+      expect(aiDanglingWord('Fresh bread and', null)).toBe('and')
+      expect(aiDanglingWord('Pan dulce y')).toBeNull()
+    })
+
+    it('holds a line in a listed language to its own words, not English’s', () => {
+      expect(aiDanglingWord('Pan dulce and', 'es')).toBeNull()
+      expect(aiDanglingWord('Hecho con amor, with', 'es')).toBeNull()
+    })
   })
 
   it('refuses a heading, a subhead or a body line cut short, naming each node and quoting the first line’s end', () => {

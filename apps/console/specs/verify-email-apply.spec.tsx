@@ -148,6 +148,16 @@ const setLocation = (search: string) => {
   window.history.replaceState(null, '', `/verify-email${search}`)
 }
 
+/**
+ * Render the page and, when the link carries a code, press "Confirm" the way
+ * a person does. Opening the link alone redeems nothing (AGL-3786).
+ */
+const openLink = () => {
+  render(<VerifyEmail />)
+  const confirm = screen.queryByText('Confirm my email')
+  if (confirm) fireEvent.click(confirm)
+}
+
 beforeEach(() => {
   jest.clearAllMocks()
   mockCurrentUser = null
@@ -161,6 +171,45 @@ beforeEach(() => {
     status: 200,
     json: async () => ({ ok: true }),
   })) as unknown as typeof fetch
+})
+
+describe('AGL-3786 · opening the link redeems nothing until a person confirms', () => {
+  it('a mail scanner rendering the link does not verify the address', async () => {
+    mockCurrentUser = null
+    mockSigninCheck = { status: 'success', data: { signedIn: false, user: null } }
+    mockApplyActionCode.mockResolvedValue(undefined)
+
+    render(<VerifyEmail />)
+    await flush()
+
+    expect(mockApplyActionCode).not.toHaveBeenCalled()
+    expect(mockReplace).not.toHaveBeenCalled()
+    expect(mockAssign).not.toHaveBeenCalled()
+    expect(screen.getByText('Confirm my email')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Confirm my email'))
+    await flush()
+    expect(mockApplyActionCode).toHaveBeenCalledWith(
+      expect.anything(),
+      'CODE123',
+    )
+    expect(screen.getByText('Email verified')).toBeTruthy()
+  })
+
+  it('a signed-in unverified tab on the confirm screen sends no new link', async () => {
+    const sessionUser = makeUser(false)
+    mockCurrentUser = sessionUser
+    mockSigninCheck = {
+      status: 'success',
+      data: { signedIn: true, user: sessionUser },
+    }
+
+    render(<VerifyEmail />)
+    await flush()
+
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(mockApplyActionCode).not.toHaveBeenCalled()
+  })
 })
 
 describe('AGL-1524 · the apply owns the page while a code is present', () => {
@@ -179,7 +228,7 @@ describe('AGL-1524 · the apply owns the page while a code is present', () => {
       () => new Promise<void>((resolve) => (resolveApply = resolve)),
     )
 
-    render(<VerifyEmail />)
+    openLink()
     await flush()
 
     // The code is still being redeemed: the "already verified" bounce and
@@ -212,7 +261,7 @@ describe('AGL-1524 · the apply owns the page while a code is present', () => {
       Object.assign(new Error('expired'), { code: 'auth/expired-action-code' }),
     )
 
-    render(<VerifyEmail />)
+    openLink()
     await flush()
 
     // Red before the fix: the page redirected to /signin the moment the
@@ -236,7 +285,7 @@ describe('AGL-1524 · the apply owns the page while a code is present', () => {
       Object.assign(new Error('invalid'), { code: 'auth/invalid-action-code' }),
     )
 
-    render(<VerifyEmail />)
+    openLink()
     await flush()
 
     expect(mockAssign).not.toHaveBeenCalled()
@@ -262,7 +311,7 @@ describe('AGL-1524 · the apply owns the page while a code is present', () => {
     }
     mockApplyActionCode.mockResolvedValue(undefined)
 
-    render(<VerifyEmail />)
+    openLink()
     await flush()
 
     expect(mockApplyActionCode).toHaveBeenCalledWith(
@@ -284,7 +333,7 @@ describe('AGL-1524 · the apply owns the page while a code is present', () => {
     mockSigninCheck = { status: 'success', data: { signedIn: false, user: null } }
     mockApplyActionCode.mockResolvedValue(undefined)
 
-    render(<VerifyEmail />)
+    openLink()
     await flush()
 
     // Before: a bare /signin that said nothing about the verification — the
@@ -314,7 +363,7 @@ describe('AGL-1524 · the apply owns the page while a code is present', () => {
       })
       mockApplyActionCode.mockResolvedValue(undefined)
 
-      render(<VerifyEmail />)
+      openLink()
       await flush()
       await act(async () => {
         jest.advanceTimersByTime(20_000)
@@ -379,7 +428,7 @@ describe('AGL-3384 · the tab the person signed up in carries on by itself', () 
 
   it('a redeemed link in another tab moves the waiting tab into the app at once', async () => {
     waitingTab()
-    render(<VerifyEmail />)
+    openLink()
     await flush()
     expect(mockAssign).not.toHaveBeenCalled()
 
@@ -394,7 +443,7 @@ describe('AGL-3384 · the tab the person signed up in carries on by itself', () 
 
   it('returning to the tab re-checks at once instead of waiting for a poll tick', async () => {
     waitingTab()
-    render(<VerifyEmail />)
+    openLink()
     await flush()
     expect(mockAssign).not.toHaveBeenCalled()
 
@@ -416,7 +465,7 @@ describe('AGL-3384 · the tab the person signed up in carries on by itself', () 
     mockSigninCheck = { status: 'success', data: { signedIn: false, user: null } }
     mockApplyActionCode.mockResolvedValue(undefined)
 
-    render(<VerifyEmail />)
+    openLink()
     await flush()
 
     expect(heard).toHaveBeenCalledTimes(1)
@@ -439,7 +488,7 @@ describe('AGL-1730 · a verified account lands where it was sent from', () => {
     signedInUnverified()
     mockApplyActionCode.mockResolvedValue(undefined)
 
-    render(<VerifyEmail />)
+    openLink()
     await flush()
     fireEvent.click(screen.getByText(/Continue to/))
     await flush()
@@ -454,7 +503,7 @@ describe('AGL-1730 · a verified account lands where it was sent from', () => {
     signedInUnverified()
     mockApplyActionCode.mockResolvedValue(undefined)
 
-    render(<VerifyEmail />)
+    openLink()
     await flush()
     fireEvent.click(screen.getByText(/Continue to/))
     await flush()
@@ -469,7 +518,7 @@ describe('AGL-1730 · a verified account lands where it was sent from', () => {
     signedInUnverified()
     mockApplyActionCode.mockResolvedValue(undefined)
 
-    render(<VerifyEmail />)
+    openLink()
     await flush()
     fireEvent.click(screen.getByText(/Continue to/))
     await flush()
@@ -487,7 +536,7 @@ describe('AGL-1730 · a verified account lands where it was sent from', () => {
       return undefined
     })
 
-    render(<VerifyEmail />)
+    openLink()
     await flush()
 
     fireEvent.click(screen.getByText(/I’ve verified/))
@@ -506,7 +555,7 @@ describe('AGL-1730 · a verified account lands where it was sent from', () => {
       json: async () => ({ alreadyVerified: true }),
     })) as unknown as typeof fetch
 
-    render(<VerifyEmail />)
+    openLink()
     await flush()
 
     expect(mockAssign).toHaveBeenCalledWith('/acme/billing')
@@ -522,7 +571,7 @@ describe('AGL-1730 · a verified account lands where it was sent from', () => {
       data: { signedIn: true, user: sessionUser },
     }
 
-    render(<VerifyEmail />)
+    openLink()
     await flush()
 
     expect(mockAssign).toHaveBeenCalledWith('/acme/billing')
@@ -541,7 +590,7 @@ describe('AGL-1730 · a verified account lands where it was sent from', () => {
       () => new Promise<void>((resolve) => (resolveApply = resolve)),
     )
 
-    render(<VerifyEmail />)
+    openLink()
     await flush()
 
     expect(mockAssign).not.toHaveBeenCalled()

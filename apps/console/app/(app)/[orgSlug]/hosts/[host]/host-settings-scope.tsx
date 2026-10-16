@@ -40,6 +40,7 @@ import {
 } from '@aglyn/aglyn/app-utils/search-engine-verification'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import {
+  FIELD_MAP_WEEKLY_HOURS,
   FieldComponentType,
   FieldValidatorType,
   FormRenderer,
@@ -1134,6 +1135,35 @@ const verificationFields = (fields: any) => {
 
 
 /**
+ * Every form this hub renders through `HostSettingsForm`, in one list so the
+ * field-owner map below and the mapper check in
+ * `specs/host-settings-component-mapper.spec.ts` walk the same schemas.
+ */
+export const HOST_SETTINGS_SCHEMAS: readonly FormSchema[] = [
+  buildBasicSchema(''),
+  seoSchema,
+  seoEntitySchema,
+  seoAddressSchema,
+  seoLocalBusinessSchema,
+  seoAgentSchema,
+  seoVerificationSchema,
+  trackingSchema,
+]
+
+/**
+ * The field types those forms may name: the simple set plus the weekly hours
+ * picker the Local business card's Hours field uses.
+ *
+ * A type a schema names and this map lacks is not a missing field; the
+ * renderer refuses the WHOLE card with "invalid form schema", which is how
+ * Setup → SEO lost its Local business card when Hours became a picker.
+ */
+export const hostSettingsComponentMapper = {
+  ...simpleComponentMapper,
+  [FieldComponentType.WEEKLY_HOURS]: FIELD_MAP_WEEKLY_HOURS,
+}
+
+/**
  * Which form owns each field name (AGL-3258).
  *
  * A plugin zone proposes values by FIELD NAME — `seo.entity.name`,
@@ -1162,16 +1192,7 @@ const fieldOwner = (() => {
       else if (entry?.name) owner.set(entry.name, schemaId)
     }
   }
-  for (const schema of [
-    buildBasicSchema(''),
-    seoSchema,
-    seoEntitySchema,
-    seoAddressSchema,
-    seoLocalBusinessSchema,
-    seoAgentSchema,
-    seoVerificationSchema,
-    trackingSchema,
-  ]) {
+  for (const schema of HOST_SETTINGS_SCHEMAS) {
     walk(schema.id as string, schema.fields as readonly unknown[])
   }
   return owner
@@ -1310,7 +1331,7 @@ export function HostSettingsForm({ schemaId }: { schemaId: string }) {
         console does with them.
       */
       FormTemplate={CardDisplayFormTemplate}
-      componentMapper={simpleComponentMapper}
+      componentMapper={hostSettingsComponentMapper}
       onSubmit={onSubmit}
       schema={schema}
       initialValues={initialValues}

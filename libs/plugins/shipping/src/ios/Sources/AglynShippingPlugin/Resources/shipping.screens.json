@@ -1,0 +1,1158 @@
+{
+  "$comment": "The Shipping plugin's native screens: where parcels ship from, the boxes a label is bought in, label format, signature and insurance, which carrier services checkout offers, how label costs are paid, the carrier accounts (switching them on and off, connecting one of the merchant's own, UPS by signing in at UPS), the merchant's own Easyship, Sendcloud or ShipperHQ account, and the workspace's label spend on Billing. Routes: GET and POST /api/shipping/settings, account, carrier-accounts, carrier-accounts/connect and /active, own-accounts, own-accounts/connect and /disconnect, GET availability and spend. Buying a label on an order is the order screen's. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "shipping.service",
+      "title": "Shipping labels",
+      "label": "Shipping labels",
+      "subtitle": "Where parcels ship from, boxes, labels and carriers",
+      "icon": "shippingbox.and.arrow.backward|local_shipping",
+      "scope": "site",
+      "order": 35,
+      "zones": [
+        "commerceSettings"
+      ],
+      "load": {
+        "s": "/api/shipping/settings?hostId={site.id}",
+        "avail": "/api/shipping/availability?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "!data.avail.available",
+          "text": "Shipping labels are not available for this site. They need a plan that sells and a deployment with a carrier platform."
+        },
+        {
+          "type": "notice",
+          "id": "testMode",
+          "tone": "info",
+          "when": "data.avail.testMode",
+          "text": "Test mode: labels and rates are samples, and nothing is charged."
+        },
+        {
+          "type": "notice",
+          "id": "unresolved",
+          "tone": "warning",
+          "when": "data.avail.available && !data.s.shipFromResolved",
+          "text": "Labels and carrier rates need a complete address to ship from: street, city, postal code and country."
+        },
+        {
+          "type": "links",
+          "id": "sections",
+          "when": "data.avail.available",
+          "items": [
+            {
+              "title": "Ship from",
+              "subtitle": "The location or address parcels leave from",
+              "icon": "mappin.and.ellipse|location_on",
+              "screen": "shipping.shipFrom"
+            },
+            {
+              "title": "Boxes",
+              "subtitle": "The boxes a label is bought in",
+              "icon": "shippingbox|inventory_2",
+              "screen": "shipping.boxes"
+            },
+            {
+              "title": "Labels",
+              "subtitle": "Format, signature, insurance and customs",
+              "icon": "doc.text|description",
+              "screen": "shipping.labels"
+            },
+            {
+              "title": "Services offered at checkout",
+              "subtitle": "Which carrier services checkout may offer",
+              "icon": "checklist|task",
+              "screen": "shipping.services"
+            },
+            {
+              "title": "Paying for labels",
+              "subtitle": "How label costs are paid",
+              "icon": "creditcard|credit_card",
+              "screen": "shipping.billing"
+            },
+            {
+              "title": "Carrier accounts",
+              "subtitle": "The carrier accounts labels and rates come from",
+              "icon": "building.2|business",
+              "screen": "shipping.carriers",
+              "when": "!data.avail.ownAccount"
+            },
+            {
+              "title": "Your shipping accounts",
+              "subtitle": "Easyship, Sendcloud or ShipperHQ of your own",
+              "icon": "person.badge.key|key",
+              "screen": "shipping.own",
+              "when": "data.avail.ownAccounts"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shipping.shipFrom",
+      "title": "Ship from",
+      "label": "Ship from",
+      "icon": "mappin.and.ellipse|location_on",
+      "scope": "site",
+      "load": {
+        "s": "/api/shipping/settings?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unresolved",
+          "tone": "warning",
+          "when": "!data.s.shipFromResolved",
+          "text": "Labels and carrier rates need a complete address to ship from: street, city, postal code and country."
+        },
+        {
+          "type": "form",
+          "id": "shipFrom",
+          "title": "Where parcels leave from",
+          "footer": "Pick one of your store locations, or enter an address of its own.",
+          "fields": [
+            {
+              "key": "shipFromId",
+              "label": "Location",
+              "kind": "select",
+              "initial": "{data.s.settings.shipFromId}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "An address of its own"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.s.places",
+                "value": "{item.id}",
+                "label": "{item.name}"
+              }
+            },
+            {
+              "key": "name",
+              "label": "Name",
+              "kind": "text",
+              "initial": "{data.s.settings.shipFromAddress.name}",
+              "when": "!form.shipFromId"
+            },
+            {
+              "key": "company",
+              "label": "Company",
+              "kind": "text",
+              "initial": "{data.s.settings.shipFromAddress.company}",
+              "when": "!form.shipFromId"
+            },
+            {
+              "key": "line1",
+              "label": "Street address",
+              "kind": "text",
+              "initial": "{data.s.settings.shipFromAddress.line1}",
+              "when": "!form.shipFromId"
+            },
+            {
+              "key": "line2",
+              "label": "Apartment, suite (optional)",
+              "kind": "text",
+              "initial": "{data.s.settings.shipFromAddress.line2}",
+              "when": "!form.shipFromId"
+            },
+            {
+              "key": "city",
+              "label": "City",
+              "kind": "text",
+              "initial": "{data.s.settings.shipFromAddress.city}",
+              "when": "!form.shipFromId"
+            },
+            {
+              "key": "state",
+              "label": "State or region",
+              "kind": "text",
+              "initial": "{data.s.settings.shipFromAddress.state}",
+              "when": "!form.shipFromId"
+            },
+            {
+              "key": "postalCode",
+              "label": "Postal code",
+              "kind": "text",
+              "initial": "{data.s.settings.shipFromAddress.postalCode}",
+              "when": "!form.shipFromId"
+            },
+            {
+              "key": "country",
+              "label": "Country",
+              "kind": "text",
+              "initial": "{data.s.settings.shipFromAddress.country|'US'}",
+              "when": "!form.shipFromId",
+              "help": "Two letters, like US."
+            },
+            {
+              "key": "phone",
+              "label": "Phone",
+              "kind": "text",
+              "initial": "{data.s.settings.shipFromAddress.phone}",
+              "when": "!form.shipFromId"
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/shipping/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "settings": {
+                "packages": "{data.s.settings.packages}",
+                "defaultPackageId": "{data.s.settings.defaultPackageId}",
+                "shipFromId": "{form.shipFromId}",
+                "shipFromAddress": {
+                  "name": "{form.name}",
+                  "company": "{form.company}",
+                  "line1": "{form.line1}",
+                  "line2": "{form.line2}",
+                  "city": "{form.city}",
+                  "state": "{form.state}",
+                  "postalCode": "{form.postalCode}",
+                  "country": "{form.country}",
+                  "phone": "{form.phone}"
+                },
+                "labelFormat": "{data.s.settings.labelFormat}",
+                "insurance": "{data.s.settings.insurance}",
+                "signature": "{data.s.settings.signature}",
+                "checkoutServices": "{data.s.settings.checkoutServices}",
+                "customsSigner": "{data.s.settings.customsSigner}"
+              }
+            },
+            "success": "Shipping settings saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "shipping.boxes",
+      "title": "Boxes",
+      "label": "Boxes",
+      "icon": "shippingbox|inventory_2",
+      "scope": "site",
+      "load": {
+        "s": "/api/shipping/settings?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "boxes",
+          "title": "Boxes",
+          "items": "data.s.settings.packages",
+          "primary": "{item.name}",
+          "secondary": "{item.lengthCm} × {item.widthCm} × {item.heightCm} cm · {item.emptyWeightGrams} g empty",
+          "icon": "shippingbox|inventory_2",
+          "badges": [
+            {
+              "text": "Default",
+              "tone": "info",
+              "when": "item.id == @data.s.settings.defaultPackageId"
+            },
+            {
+              "text": "Default",
+              "tone": "info",
+              "when": "!data.s.settings.defaultPackageId && item.id == @data.s.settings.packages.0.id"
+            }
+          ],
+          "empty": "No boxes yet.",
+          "footer": "A label starts with the default box. Keep at least one.",
+          "actions": [
+            {
+              "id": "edit",
+              "label": "Edit",
+              "icon": "pencil|edit",
+              "url": "/api/shipping/settings",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true,
+                  "initial": "{item.name}"
+                },
+                {
+                  "key": "lengthCm",
+                  "label": "Length (cm)",
+                  "kind": "number",
+                  "required": true,
+                  "initial": "{item.lengthCm}"
+                },
+                {
+                  "key": "widthCm",
+                  "label": "Width (cm)",
+                  "kind": "number",
+                  "required": true,
+                  "initial": "{item.widthCm}"
+                },
+                {
+                  "key": "heightCm",
+                  "label": "Height (cm)",
+                  "kind": "number",
+                  "required": true,
+                  "initial": "{item.heightCm}"
+                },
+                {
+                  "key": "emptyWeightGrams",
+                  "label": "Empty weight (g)",
+                  "kind": "number",
+                  "required": true,
+                  "initial": "{item.emptyWeightGrams}"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "settings": {
+                  "packages": {
+                    "$replace": {
+                      "list": "{data.s.settings.packages}",
+                      "key": "id",
+                      "match": "{item.id}",
+                      "value": {
+                        "id": "{item.id}",
+                        "name": "{form.name}",
+                        "lengthCm": "{form.lengthCm}",
+                        "widthCm": "{form.widthCm}",
+                        "heightCm": "{form.heightCm}",
+                        "emptyWeightGrams": "{form.emptyWeightGrams}"
+                      }
+                    }
+                  },
+                  "defaultPackageId": "{data.s.settings.defaultPackageId}",
+                  "shipFromId": "{data.s.settings.shipFromId}",
+                  "shipFromAddress": "{data.s.settings.shipFromAddress}",
+                  "labelFormat": "{data.s.settings.labelFormat}",
+                  "insurance": "{data.s.settings.insurance}",
+                  "signature": "{data.s.settings.signature}",
+                  "checkoutServices": "{data.s.settings.checkoutServices}",
+                  "customsSigner": "{data.s.settings.customsSigner}"
+                }
+              },
+              "success": "Saved"
+            },
+            {
+              "id": "makeDefault",
+              "label": "Make default",
+              "icon": "checkmark.circle|check_circle",
+              "url": "/api/shipping/settings",
+              "body": {
+                "hostId": "{site.id}",
+                "settings": {
+                  "packages": "{data.s.settings.packages}",
+                  "defaultPackageId": "{item.id}",
+                  "shipFromId": "{data.s.settings.shipFromId}",
+                  "shipFromAddress": "{data.s.settings.shipFromAddress}",
+                  "labelFormat": "{data.s.settings.labelFormat}",
+                  "insurance": "{data.s.settings.insurance}",
+                  "signature": "{data.s.settings.signature}",
+                  "checkoutServices": "{data.s.settings.checkoutServices}",
+                  "customsSigner": "{data.s.settings.customsSigner}"
+                }
+              },
+              "success": "Default box saved"
+            },
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "url": "/api/shipping/settings",
+              "confirm": "Remove {item.name}?",
+              "body": {
+                "hostId": "{site.id}",
+                "settings": {
+                  "packages": {
+                    "$without": {
+                      "list": "{data.s.settings.packages}",
+                      "item": "{item}"
+                    }
+                  },
+                  "defaultPackageId": "{data.s.settings.defaultPackageId}",
+                  "shipFromId": "{data.s.settings.shipFromId}",
+                  "shipFromAddress": "{data.s.settings.shipFromAddress}",
+                  "labelFormat": "{data.s.settings.labelFormat}",
+                  "insurance": "{data.s.settings.insurance}",
+                  "signature": "{data.s.settings.signature}",
+                  "checkoutServices": "{data.s.settings.checkoutServices}",
+                  "customsSigner": "{data.s.settings.customsSigner}"
+                }
+              },
+              "success": "Removed"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "add",
+          "items": [
+            {
+              "id": "addBox",
+              "label": "Add a box",
+              "icon": "plus|add",
+              "url": "/api/shipping/settings",
+              "prompt": [
+                {
+                  "key": "name",
+                  "label": "Name",
+                  "kind": "text",
+                  "required": true
+                },
+                {
+                  "key": "lengthCm",
+                  "label": "Length (cm)",
+                  "kind": "number",
+                  "required": true
+                },
+                {
+                  "key": "widthCm",
+                  "label": "Width (cm)",
+                  "kind": "number",
+                  "required": true
+                },
+                {
+                  "key": "heightCm",
+                  "label": "Height (cm)",
+                  "kind": "number",
+                  "required": true
+                },
+                {
+                  "key": "emptyWeightGrams",
+                  "label": "Empty weight (g)",
+                  "kind": "number",
+                  "required": true
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "settings": {
+                  "packages": {
+                    "$append": {
+                      "list": "{data.s.settings.packages}",
+                      "item": {
+                        "id": {
+                          "$uuid": "box_"
+                        },
+                        "name": "{form.name}",
+                        "lengthCm": "{form.lengthCm}",
+                        "widthCm": "{form.widthCm}",
+                        "heightCm": "{form.heightCm}",
+                        "emptyWeightGrams": "{form.emptyWeightGrams}"
+                      }
+                    }
+                  },
+                  "defaultPackageId": "{data.s.settings.defaultPackageId}",
+                  "shipFromId": "{data.s.settings.shipFromId}",
+                  "shipFromAddress": "{data.s.settings.shipFromAddress}",
+                  "labelFormat": "{data.s.settings.labelFormat}",
+                  "insurance": "{data.s.settings.insurance}",
+                  "signature": "{data.s.settings.signature}",
+                  "checkoutServices": "{data.s.settings.checkoutServices}",
+                  "customsSigner": "{data.s.settings.customsSigner}"
+                }
+              },
+              "success": "Box added"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shipping.labels",
+      "title": "Labels",
+      "label": "Labels",
+      "icon": "doc.text|description",
+      "scope": "site",
+      "load": {
+        "s": "/api/shipping/settings?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "id": "labels",
+          "title": "Labels",
+          "fields": [
+            {
+              "key": "labelFormat",
+              "label": "Label format",
+              "kind": "select",
+              "initial": "{data.s.settings.labelFormat}",
+              "options": [
+                {
+                  "value": "pdf_4x6",
+                  "label": "PDF, 4 × 6 in (thermal)"
+                },
+                {
+                  "value": "pdf_letter",
+                  "label": "PDF, letter paper"
+                },
+                {
+                  "value": "zpl",
+                  "label": "ZPL, 4 × 6 in (Zebra printers)"
+                }
+              ]
+            },
+            {
+              "key": "signature",
+              "label": "Signature",
+              "kind": "select",
+              "initial": "{data.s.settings.signature}",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "No signature"
+                },
+                {
+                  "value": "standard",
+                  "label": "Signature required"
+                },
+                {
+                  "value": "adult",
+                  "label": "Adult signature required"
+                }
+              ]
+            },
+            {
+              "key": "insurance",
+              "label": "Insure each label for the value of what it carries",
+              "kind": "select",
+              "initial": "{data.s.settings.insurance}",
+              "options": [
+                {
+                  "value": "none",
+                  "label": "Do not insure"
+                },
+                {
+                  "value": "order_value",
+                  "label": "Insure for the value of what it carries"
+                }
+              ]
+            },
+            {
+              "key": "customsSigner",
+              "label": "Customs declarations signed by",
+              "kind": "text",
+              "initial": "{data.s.settings.customsSigner}",
+              "help": "Printed on customs forms for parcels that cross a border."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/shipping/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "settings": {
+                "packages": "{data.s.settings.packages}",
+                "defaultPackageId": "{data.s.settings.defaultPackageId}",
+                "shipFromId": "{data.s.settings.shipFromId}",
+                "shipFromAddress": "{data.s.settings.shipFromAddress}",
+                "labelFormat": "{form.labelFormat}",
+                "insurance": "{form.insurance}",
+                "signature": "{form.signature}",
+                "checkoutServices": "{data.s.settings.checkoutServices}",
+                "customsSigner": "{form.customsSigner}"
+              }
+            },
+            "success": "Shipping settings saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "shipping.services",
+      "title": "Services offered at checkout",
+      "label": "Checkout services",
+      "icon": "checklist|task",
+      "scope": "site",
+      "load": {
+        "s": "/api/shipping/settings?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "hint",
+          "tone": "info",
+          "text": "Carrier rates at checkout offer these services. Leave all off to offer every service the carrier quotes. Each shipping rate set to Carrier rates can narrow this further."
+        },
+        {
+          "type": "list",
+          "id": "services",
+          "title": "Services",
+          "items": "data.s.services",
+          "primary": "{item.label}",
+          "secondary": "{item.serviceKey}",
+          "count": false,
+          "toggle": {
+            "value": "{data.s.settings.checkoutServices[=item.serviceKey]}",
+            "label": "{item.label}",
+            "on": {
+              "label": "Offer",
+              "url": "/api/shipping/settings",
+              "body": {
+                "hostId": "{site.id}",
+                "settings": {
+                  "packages": "{data.s.settings.packages}",
+                  "defaultPackageId": "{data.s.settings.defaultPackageId}",
+                  "shipFromId": "{data.s.settings.shipFromId}",
+                  "shipFromAddress": "{data.s.settings.shipFromAddress}",
+                  "labelFormat": "{data.s.settings.labelFormat}",
+                  "insurance": "{data.s.settings.insurance}",
+                  "signature": "{data.s.settings.signature}",
+                  "checkoutServices": {
+                    "$append": {
+                      "list": "{data.s.settings.checkoutServices}",
+                      "item": "{item.serviceKey}"
+                    }
+                  },
+                  "customsSigner": "{data.s.settings.customsSigner}"
+                }
+              },
+              "success": "Saved"
+            },
+            "off": {
+              "label": "Stop offering",
+              "url": "/api/shipping/settings",
+              "body": {
+                "hostId": "{site.id}",
+                "settings": {
+                  "packages": "{data.s.settings.packages}",
+                  "defaultPackageId": "{data.s.settings.defaultPackageId}",
+                  "shipFromId": "{data.s.settings.shipFromId}",
+                  "shipFromAddress": "{data.s.settings.shipFromAddress}",
+                  "labelFormat": "{data.s.settings.labelFormat}",
+                  "insurance": "{data.s.settings.insurance}",
+                  "signature": "{data.s.settings.signature}",
+                  "checkoutServices": {
+                    "$without": {
+                      "list": "{data.s.settings.checkoutServices}",
+                      "item": "{item.serviceKey}"
+                    }
+                  },
+                  "customsSigner": "{data.s.settings.customsSigner}"
+                }
+              },
+              "success": "Saved"
+            }
+          },
+          "empty": "The carrier platform offers no services yet."
+        }
+      ]
+    },
+    {
+      "id": "shipping.billing",
+      "title": "Paying for labels",
+      "label": "Paying for labels",
+      "icon": "creditcard|credit_card",
+      "scope": "site",
+      "load": {
+        "acct": "/api/shipping/account?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "own",
+          "tone": "info",
+          "when": "data.acct.ownAccount",
+          "text": "Labels are bought on your own {data.acct.provider} account, which bills you for each one. Nothing is charged here."
+        },
+        {
+          "type": "notice",
+          "id": "markup",
+          "tone": "info",
+          "when": "!data.acct.ownAccount && data.acct.markupPct",
+          "text": "Labels are charged at the carrier’s price plus {data.acct.markupPct}%. Labels on a carrier account of your own are billed to you by that carrier instead."
+        },
+        {
+          "type": "notice",
+          "id": "noMarkup",
+          "tone": "info",
+          "when": "!data.acct.ownAccount && !data.acct.markupPct",
+          "text": "Labels are charged at the carrier’s price, with nothing added. Labels on a carrier account of your own are billed to you by that carrier instead."
+        },
+        {
+          "type": "notice",
+          "id": "terms",
+          "tone": "info",
+          "when": "!data.acct.ownAccount",
+          "text": "{data.acct.consentText}"
+        },
+        {
+          "type": "fields",
+          "id": "consent",
+          "title": "Consent",
+          "when": "!data.acct.ownAccount",
+          "rows": [
+            {
+              "label": "Agreed",
+              "value": "{data.acct.consent.acceptedAtMs:datetime}",
+              "when": "data.acct.consent"
+            },
+            {
+              "label": "Agreed",
+              "value": "Not yet",
+              "when": "!data.acct.consent"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "when": "!data.acct.ownAccount",
+          "items": [
+            {
+              "id": "accept",
+              "label": "I agree",
+              "icon": "checkmark|check",
+              "when": "!data.acct.consent",
+              "url": "/api/shipping/account",
+              "body": {
+                "hostId": "{site.id}",
+                "accepted": true
+              },
+              "success": "Saved"
+            },
+            {
+              "id": "withdraw",
+              "label": "Withdraw consent",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "when": "data.acct.consent",
+              "url": "/api/shipping/account",
+              "body": {
+                "hostId": "{site.id}",
+                "accepted": false
+              },
+              "success": "Saved"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shipping.carriers",
+      "title": "Carrier accounts",
+      "label": "Carrier accounts",
+      "icon": "building.2|business",
+      "scope": "site",
+      "load": {
+        "carriers": "/api/shipping/carrier-accounts?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "hint",
+          "tone": "info",
+          "text": "Every site in this workspace ships with these accounts. By default labels come from the platform’s discounted accounts; connect a carrier account of your own and labels on it are billed to you by the carrier."
+        },
+        {
+          "type": "list",
+          "id": "accounts",
+          "title": "Accounts",
+          "items": "data.carriers.accounts",
+          "primary": "{item.carrierName}",
+          "secondary": "{item.accountNumber}",
+          "icon": "building.2|business",
+          "count": false,
+          "badges": [
+            {
+              "text": "Discounted rates",
+              "tone": "neutral",
+              "when": "item.platformOwned"
+            },
+            {
+              "text": "Your account",
+              "tone": "info",
+              "when": "!item.platformOwned"
+            },
+            {
+              "text": "Sign-in needed",
+              "tone": "warning",
+              "when": "item.authorization == pending"
+            },
+            {
+              "text": "Reconnect needed",
+              "tone": "warning",
+              "when": "item.authorization != connected && item.authorization != pending"
+            }
+          ],
+          "toggle": {
+            "when": "data.carriers.canToggle",
+            "value": "{item.active}",
+            "label": "Use {item.carrierName}",
+            "on": {
+              "label": "Use",
+              "url": "/api/shipping/carrier-accounts/active",
+              "body": {
+                "hostId": "{site.id}",
+                "carrierAccountId": "{item.id}",
+                "active": true
+              },
+              "success": "Saved"
+            },
+            "off": {
+              "label": "Stop using",
+              "url": "/api/shipping/carrier-accounts/active",
+              "body": {
+                "hostId": "{site.id}",
+                "carrierAccountId": "{item.id}",
+                "active": false
+              },
+              "success": "Saved"
+            }
+          },
+          "empty": "No carrier accounts yet."
+        },
+        {
+          "type": "list",
+          "id": "connectable",
+          "title": "Connect your own account",
+          "when": "data.carriers.canConnect && data.carriers.connectable",
+          "items": "data.carriers.connectable",
+          "primary": "{item.label}",
+          "icon": "plus.circle|add",
+          "count": false,
+          "open": {
+            "screen": "shipping.connectCarrier",
+            "params": {
+              "carrier": "{item.carrier}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "shipping.connectCarrier",
+      "title": "{data.carriers.connectable[carrier=params.carrier].label|'Connect a carrier'}",
+      "label": "Connect a carrier",
+      "icon": "plus.circle|add",
+      "scope": "site",
+      "load": {
+        "carriers": "/api/shipping/carrier-accounts?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "ups",
+          "tone": "info",
+          "when": "params.carrier == ups",
+          "text": "UPS asks you to sign in at ups.com to finish connecting."
+        },
+        {
+          "type": "form",
+          "id": "credentials",
+          "title": "Connect your account",
+          "when": "data.carriers.connectable[carrier=params.carrier].flow == credentials",
+          "footer": "Sent to the carrier platform to connect the account; not kept here.",
+          "fields": [
+            {
+              "fieldsFrom": {
+                "items": "data.carriers.connectable[carrier=params.carrier].fields",
+                "key": "{item.key}",
+                "label": "{item.label}",
+                "kinds": {
+                  "secret": "password",
+                  "checkbox": "yesno"
+                }
+              }
+            }
+          ],
+          "submit": {
+            "label": "Connect",
+            "url": "/api/shipping/carrier-accounts/connect",
+            "body": {
+              "hostId": "{site.id}",
+              "carrier": "{params.carrier}",
+              "credentials": "{form}"
+            },
+            "success": "Carrier account connected"
+          }
+        },
+        {
+          "type": "form",
+          "id": "account",
+          "title": "Connect your account",
+          "when": "data.carriers.connectable[carrier=params.carrier].flow != credentials",
+          "fields": [
+            {
+              "key": "accountNumber",
+              "label": "Account number",
+              "kind": "text",
+              "required": true
+            },
+            {
+              "key": "name",
+              "label": "Account holder",
+              "kind": "text"
+            },
+            {
+              "key": "company",
+              "label": "Company",
+              "kind": "text"
+            },
+            {
+              "key": "email",
+              "label": "Email",
+              "kind": "email"
+            },
+            {
+              "key": "phone",
+              "label": "Phone",
+              "kind": "text"
+            },
+            {
+              "key": "line1",
+              "label": "Billing street address",
+              "kind": "text"
+            },
+            {
+              "key": "line2",
+              "label": "Apartment, suite (optional)",
+              "kind": "text"
+            },
+            {
+              "key": "city",
+              "label": "City",
+              "kind": "text"
+            },
+            {
+              "key": "state",
+              "label": "State or region",
+              "kind": "text"
+            },
+            {
+              "key": "postalCode",
+              "label": "Postal code",
+              "kind": "text"
+            },
+            {
+              "key": "country",
+              "label": "Country",
+              "kind": "text",
+              "initial": "US",
+              "help": "Two letters, like US."
+            }
+          ],
+          "submit": {
+            "label": "Connect",
+            "url": "/api/shipping/carrier-accounts/connect",
+            "open": "authorizeUrl",
+            "body": {
+              "hostId": "{site.id}",
+              "carrier": "{params.carrier}",
+              "accountNumber": "{form.accountNumber}",
+              "contact": {
+                "name": "{form.name}",
+                "company": "{form.company}",
+                "email": "{form.email}",
+                "phone": "{form.phone}"
+              },
+              "address": {
+                "line1": "{form.line1}",
+                "line2": "{form.line2}",
+                "city": "{form.city}",
+                "state": "{form.state}",
+                "postalCode": "{form.postalCode}",
+                "country": "{form.country}"
+              },
+              "returnTo": "/"
+            },
+            "success": "Carrier account connected"
+          }
+        }
+      ]
+    },
+    {
+      "id": "shipping.own",
+      "title": "Your shipping accounts",
+      "label": "Your shipping accounts",
+      "icon": "person.badge.key|key",
+      "scope": "site",
+      "load": {
+        "own": "/api/shipping/own-accounts?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "hint",
+          "tone": "info",
+          "text": "Ship through an account of your own. Every site in this workspace uses it. Credentials go in once and are never shown again."
+        },
+        {
+          "type": "list",
+          "id": "connections",
+          "title": "Connected",
+          "items": "data.own.connections",
+          "primary": "{item.label}",
+          "secondary": "{item.accountName}",
+          "icon": "person.badge.key|key",
+          "count": false,
+          "badges": [
+            {
+              "text": "Labels and rates",
+              "tone": "info",
+              "when": "item.role == labels"
+            },
+            {
+              "text": "Checkout rates",
+              "tone": "info",
+              "when": "item.role == checkout_rates"
+            },
+            {
+              "text": "Test",
+              "tone": "warning",
+              "when": "item.testMode"
+            },
+            {
+              "text": "Tracking not set up",
+              "tone": "warning",
+              "when": "item.webhookUrl && !item.followsParcels"
+            }
+          ],
+          "empty": "No accounts connected.",
+          "actions": [
+            {
+              "id": "copyWebhook",
+              "label": "Copy webhook address",
+              "icon": "doc.on.doc|content_copy",
+              "when": "item.webhookUrl",
+              "copy": "{item.webhookUrl}"
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "url": "/api/shipping/own-accounts/disconnect",
+              "confirm": "Disconnect {item.label}? Labels already bought stay on their orders, but they can only be voided in your account at the service.",
+              "body": {
+                "hostId": "{site.id}",
+                "kind": "{item.kind}"
+              },
+              "success": "{item.label} disconnected"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "connectable",
+          "title": "Connect an account",
+          "items": "data.own.services",
+          "primary": "{item.label}",
+          "secondary": "{item.summary}",
+          "icon": "plus.circle|add",
+          "count": false,
+          "filter": "!data.own.connections[kind=item.kind]",
+          "open": {
+            "screen": "shipping.connectOwn",
+            "params": {
+              "kind": "{item.kind}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "shipping.connectOwn",
+      "title": "Connect {data.own.services[kind=params.kind].label|'an account'}",
+      "label": "Connect an account",
+      "icon": "plus.circle|add",
+      "scope": "site",
+      "load": {
+        "own": "/api/shipping/own-accounts?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "summary",
+          "tone": "info",
+          "text": "{data.own.services[kind=params.kind].summary}"
+        },
+        {
+          "type": "form",
+          "id": "connect",
+          "title": "Credentials",
+          "footer": "Stored encrypted. Keys are never shown again.",
+          "fields": [
+            {
+              "fieldsFrom": {
+                "items": "data.own.services[kind=params.kind].fields",
+                "key": "{item.key}",
+                "label": "{item.label}",
+                "help": "{item.helper}",
+                "required": "required",
+                "options": "options",
+                "kinds": {
+                  "secret": "password"
+                }
+              }
+            }
+          ],
+          "submit": {
+            "label": "Check and connect",
+            "url": "/api/shipping/own-accounts/connect",
+            "body": {
+              "hostId": "{site.id}",
+              "kind": "{params.kind}",
+              "values": "{form}"
+            },
+            "back": true,
+            "success": "Connected"
+          }
+        }
+      ]
+    },
+    {
+      "id": "shipping.spend",
+      "title": "Shipping labels",
+      "label": "Shipping labels",
+      "subtitle": "What labels cost this workspace each month",
+      "icon": "shippingbox|local_shipping",
+      "scope": "org",
+      "order": 30,
+      "zones": [
+        "orgBillingUsage"
+      ],
+      "load": {
+        "spend": "/api/shipping/spend?orgId={org.id}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "!data.spend.available",
+          "text": "Shipping labels are not available here."
+        },
+        {
+          "type": "notice",
+          "id": "markup",
+          "tone": "info",
+          "when": "data.spend.available && data.spend.markupPct",
+          "text": "Labels are charged at the carrier’s price plus {data.spend.markupPct}%."
+        },
+        {
+          "type": "notice",
+          "id": "noMarkup",
+          "tone": "info",
+          "when": "data.spend.available && !data.spend.markupPct",
+          "text": "Labels are charged at the carrier’s price, with nothing added."
+        },
+        {
+          "type": "list",
+          "id": "months",
+          "title": "By month",
+          "when": "data.spend.available",
+          "items": "data.spend.months",
+          "primary": "{item.month}",
+          "secondary": "{item.labels:number} labels · {item.debitedCents:cents} from Stripe balance · {item.invoicedCents:cents} on invoice",
+          "tertiary": "{item.creditedCents:cents} voided, returned",
+          "icon": "calendar|calendar_month",
+          "count": false,
+          "empty": "No labels bought yet."
+        }
+      ]
+    }
+  ]
+}

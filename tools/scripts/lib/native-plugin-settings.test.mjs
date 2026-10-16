@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 
 import { pluginSettingsScreen } from './native-plugin-settings.mjs'
 
@@ -28,4 +31,25 @@ test('a schema becomes one form that writes every field under the plugin', () =>
   assert.deepEqual(screen.constants.defaults, schema.defaults)
   assert.equal(form.submit.write.doc, 'orgs/{org.id}/pluginSettings/demo')
   assert.deepEqual(Object.keys(form.submit.write.fields), ['on', 'days', 'mode', 'path', 'updatedBy'])
+})
+
+/**
+ * A marketplace plugin's settings are drawn at run time from its manifest by `manifestSettingsScreen`
+ * (marketplace-catalog.ts, which the apps replay). It is the very screen the generator makes for a built-in plugin's
+ * schema, under an id of its own.
+ */
+test('a manifest of the same fields draws the screen a built-in plugin gets', async () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+  const { createJiti } = createRequire(join(root, 'package.json'))('jiti')
+  const jiti = createJiti(join(root, 'package.json'), { interopDefault: true, fsCache: false })
+  const { manifestSettingsScreen } = await jiti.import(join(root, 'libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts'))
+  const { AI_CONFIG_SCHEMA } = await jiti.import(join(root, 'libs/plugins/ai/src/lib/plugin-config.ts'))
+  for (const [candidate, label] of [[schema, 'Demo'], [AI_CONFIG_SCHEMA, 'AI']]) {
+    const manifest = { config: { fields: candidate.fields, defaults: candidate.defaults } }
+    const drawn = manifestSettingsScreen(candidate.pluginId, label, manifest)
+    const generated = pluginSettingsScreen({ schema: candidate, label })
+    assert.deepEqual({ ...drawn, id: generated.id }, generated, candidate.pluginId)
+    assert.equal(drawn.id, `marketplace.pluginSettings.${candidate.pluginId}`)
+  }
+  assert.equal(manifestSettingsScreen('demo', 'Demo', {}), null)
 })

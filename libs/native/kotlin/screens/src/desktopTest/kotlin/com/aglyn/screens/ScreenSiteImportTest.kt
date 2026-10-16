@@ -339,6 +339,21 @@ class ScreenSiteImportTest {
   }
 
   @Test
+  fun everyRecordThatDiffersIsHeldAndTheListShowsThemAPageAtATime() = runTest {
+    ScreenStash.set(json("""{"package":{"manifest":{"items":[]}},"decisions":{"dataset/d":"replace"}}"""))
+    val before = (0 until 320).joinToString(",") { """{"${'$'}id":"r$it","name":"A"}""" }
+    val after = (0 until 320).joinToString(",") { """{"${'$'}id":"r$it","name":"B"}""" }
+    val compare = """{"items":[{"key":"dataset/d","kind":"dataset","id":"d","incoming":{"records":[$after]},"existing":{"id":"d","content":{"records":[$before]}}}]}"""
+    val item = spec("core.site.import.item")
+    val model = ScreenModel(item, json("""{"site":{"id":"h1"},"params":{"key":"dataset/d"}}"""), client(200 to compare, sent = mutableListOf()))
+    model.load()
+    // The console pages through every record; nothing past the values' limit of 200 is dropped.
+    assertEquals(320, (ScreenValues.lookup("data.diff.records.changes", model.context) as JsonArray).size)
+    assertEquals(JsonPrimitive(0), ScreenValues.lookup("data.diff.records.more", model.context))
+    assertEquals(JsonPrimitive(50), item.blocks.first { it.title == "Records" }["page"])
+  }
+
+  @Test
   fun thePickListHoldsOnlyTheSiteItemsOfTheMissingItemsKind() = runTest {
     val catalog = """{"manifest":{"items":[{"${'$'}id":"lay1","kind":"layout","name":"Main"},{"${'$'}id":"p1","kind":"page","name":"Home"},{"${'$'}id":"lay2","kind":"layout","slug":"wide"}]},"kinds":[]}"""
     val model = ScreenModel(

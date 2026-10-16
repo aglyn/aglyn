@@ -15,8 +15,10 @@
  * limitations under the License.
  */
 
-import { aiModelIdsForProvider, estimateAiBilledUsd, aiCatalogEntry } from './catalog'
+import { aiBilledRatesForModel, aiCatalogEntry, aiModelIdsForProvider, estimateAiBilledUsd } from './catalog'
+import { aiCacheWriteHourSurchargeUsd } from './cache-write-hour'
 import {
+  AiBatchUnfinishedError,
   AiUpstreamError,
   type AiAccountProblem,
   type AiBatchOptions,
@@ -142,13 +144,28 @@ export function anthropicUsageFrom(usage: unknown): AiUsage {
     details && typeof details === 'object'
       ? (details as Record<string, unknown>)['thinking_tokens']
       : undefined
+  // The writes split by lifetime (AGL-3830). Only an hour-long write is kept,
+  // because it is the one billed above the rate table's write rate, and only
+  // where there was one, so every five-minute exchange keeps its shape.
+  const creation = record['cache_creation']
+  const hour =
+    creation && typeof creation === 'object'
+      ? aiTokenCount((creation as Record<string, unknown>)['ephemeral_1h_input_tokens'])
+      : 0
   return {
     inputTokens: aiTokenCount(record['input_tokens']),
     outputTokens: aiTokenCount(record['output_tokens']),
     cacheReadTokens: aiTokenCount(record['cache_read_input_tokens']),
     cacheWriteTokens: aiTokenCount(record['cache_creation_input_tokens']),
+    ...(hour > 0 ? { cacheWriteHourTokens: hour } : {}),
     ...(thinking === undefined ? {} : { thinkingTokens: aiTokenCount(thinking) }),
   }
+}
+
+/** What an exchange draws, its hour-long cache writes included (AGL-3830). */
+function anthropicBilledUsd(usage: AiUsage, model: string): number {
+  const usd = estimateAiBilledUsd(usage, model) + aiCacheWriteHourSurchargeUsd(usage, aiBilledRatesForModel(model))
+  return Math.round(usd * 1_000_000) / 1_000_000
 }
 
 /**
@@ -182,10 +199,11 @@ const ANTHROPIC_DEFAULT_EFFORT: Readonly<Record<string, AiEffort>> = {
 export function buildAnthropicRequestBody(
   input: Omit<AiProviderRequest, 'apiKey' | 'signal'> & { stream: boolean },
 ): Record<string, unknown> {
-  const breakpoints = input.system.filter((block) => block.cacheBreakpoint)
-  if (breakpoints.length > ANTHROPIC_MAX_CACHE_BREAKPOINTS) {
+  const conversation = Boolean(input.cacheConversation) && input.messages.length > 0
+  const breakpoints = input.system.filter((block) => block.cacheBreakpoint).length + (conversation ? 1 : 0)
+  if (breakpoints > ANTHROPIC_MAX_CACHE_BREAKPOINTS) {
     throw new Error(
-      `${breakpoints.length} cache breakpoints; the Messages API allows ${ANTHROPIC_MAX_CACHE_BREAKPOINTS}`,
+      `${breakpoints} cache breakpoints; the Messages API allows ${ANTHROPIC_MAX_CACHE_BREAKPOINTS}`,
     )
   }
   // One lifetime for every breakpoint: the API refuses a longer-lived entry
@@ -222,9 +240,11 @@ export function buildAnthropicRequestBody(
         : {}),
     ...(effort ? { output_config: { effort } } : {}),
     ...(system.length ? { system } : {}),
-    messages: input.messages.map((message) => ({
+    messages: input.messages.map((message, index) => ({
       role: message.role,
-      content: anthropicContentOf(message),
+      content: conversation
+        ? anthropicBlocksOf(message, index === input.messages.length - 1 ? cacheControl : null)
+        : anthropicContentOf(message),
     })),
     ...(tools?.length ? { tools, tool_choice: { type: 'auto' } } : {}),
   }
@@ -242,6 +262,24 @@ function anthropicContentOf(message: AiMessage): string | Array<Record<string, u
       ? { type: 'image', source: { type: 'base64', media_type: part.mediaType, data: part.data } }
       : { type: 'text', text: part.text },
   )
+}
+
+/**
+ * A turn as content blocks whatever its shape, the last block carrying the
+ * conversation's breakpoint when it is the request's last turn (AGL-3809).
+ * Every turn of a request that caches its conversation is sent as blocks, so
+ * a turn reads the same on the call that marked it and on every call after,
+ * where it is no longer last.
+ */
+function anthropicBlocksOf(
+  message: AiMessage,
+  cacheControl: Record<string, unknown> | null,
+): Array<Record<string, unknown>> {
+  const content = anthropicContentOf(message)
+  const blocks = typeof content === 'string' ? [{ type: 'text', text: content }] : content
+  if (!cacheControl || !blocks.length) return blocks
+  const last = blocks.length - 1
+  return blocks.map((block, index) => (index === last ? { ...block, cache_control: cacheControl } : block))
 }
 
 /** The provider's request id, when it sent one — the log's join key. */
@@ -314,7 +352,7 @@ export function anthropicResultFrom(raw: unknown, model: string, priceFactor = 1
       input: aiToolInputOf(block['input']),
     }))
   const usage = anthropicUsageFrom(payload?.usage)
-  const estCostUsd = Math.round(estimateAiBilledUsd(usage, model) * priceFactor * 1_000_000) / 1_000_000
+  const estCostUsd = Math.round(anthropicBilledUsd(usage, model) * priceFactor * 1_000_000) / 1_000_000
   const stopReason =
     typeof payload?.stop_reason === 'string' && payload.stop_reason
       ? payload.stop_reason
@@ -403,6 +441,7 @@ async function* streamEvents(
             usage.inputTokens = start.inputTokens
             usage.cacheReadTokens = start.cacheReadTokens
             usage.cacheWriteTokens = start.cacheWriteTokens
+            if (start.cacheWriteHourTokens) usage.cacheWriteHourTokens = start.cacheWriteHourTokens
             break
           }
           case 'content_block_start': {
@@ -484,7 +523,7 @@ async function* streamEvents(
   yield {
     type: 'done',
     usage,
-    estCostUsd: estimateAiBilledUsd(usage, model),
+    estCostUsd: anthropicBilledUsd(usage, model),
     stopReason,
     // What the model emitted into its tool calls, for a stream its ceiling
     // cut off (AGL-3143): the `tool` events carry only what parsed out.
@@ -524,12 +563,29 @@ async function batchFailure(response: Response, model: string): Promise<AiUpstre
   )
 }
 
+/** The batch as its create and poll calls describe it. */
+interface AnthropicBatch {
+  id: string
+  processing_status?: string
+  results_url?: string | null
+}
+
+/** Results a batch can end a request with that answer nothing yet: asked again, not failed (AGL-3781). */
+const ANTHROPIC_BATCH_UNFINISHED = new Set(['canceled', 'expired'])
+
 /**
  * Many requests through the Message Batches API (AGL-3660): created as one
  * batch, polled until it has ended, its results read by `custom_id` — they
  * come back in any order — and each turned into the result `complete` would
  * have returned, at half the price. Development only: the live evals' batch
  * mode is the one caller, and no door waits minutes for an answer.
+ *
+ * A batch still processing when its wait runs out is canceled, and read once
+ * the cancel has ended it (AGL-3781): a cancel keeps every answer the batch
+ * already has, so those come back as results, and only the requests it never
+ * reached come back as `AiBatchUnfinishedError`, for the caller to ask on
+ * their own. Throwing away a round's paid-for answers because one batch was
+ * slow is how a whole golden run lost its grades.
  */
 async function completeBatch(
   requests: readonly AiProviderRequest[],
@@ -540,6 +596,8 @@ async function completeBatch(
   const model = requests[0].model
   const pollMs = options.pollMs ?? 10_000
   const timeoutMs = options.timeoutMs ?? 60 * 60_000
+  const cancelGraceMs = options.cancelGraceMs ?? 10 * 60_000
+  const unfinished = (id: string, reason: string) => requests.map(() => new AiBatchUnfinishedError(id, reason))
   const created = await fetch(ANTHROPIC_BATCHES_URL, {
     method: 'POST',
     headers: batchHeaders(apiKey),
@@ -551,21 +609,28 @@ async function completeBatch(
     }),
   })
   if (!created.ok) throw await batchFailure(created, model)
-  let batch = (await created.json()) as { id: string; processing_status?: string; results_url?: string | null }
+  let batch = (await created.json()) as AnthropicBatch
   const deadline = Date.now() + timeoutMs
+  let cancelDeadline: number | null = null
   while (batch.processing_status !== 'ended') {
-    if (Date.now() > deadline) {
+    if (cancelDeadline === null && Date.now() >= deadline) {
+      console.warn(`[ai] batch ${batch.id} has not ended after ${timeoutMs} ms; canceling it to read what it answered`)
       await fetch(`${ANTHROPIC_BATCHES_URL}/${batch.id}/cancel`, { method: 'POST', headers: batchHeaders(apiKey) }).catch(
         () => undefined,
       )
-      throw new Error(`batch ${batch.id} did not end within ${timeoutMs} ms; it was canceled`)
+      cancelDeadline = Date.now() + cancelGraceMs
     }
+    // A cancel that never ends leaves no results to read; every request goes back unanswered.
+    if (cancelDeadline !== null && Date.now() >= cancelDeadline) return unfinished(batch.id, 'cancel did not end')
     await new Promise((resolve) => setTimeout(resolve, pollMs))
     const polled = await fetch(`${ANTHROPIC_BATCHES_URL}/${batch.id}`, { headers: batchHeaders(apiKey) })
     if (!polled.ok) throw await batchFailure(polled, model)
-    batch = (await polled.json()) as typeof batch
+    batch = (await polled.json()) as AnthropicBatch
   }
-  if (!batch.results_url) throw new Error(`batch ${batch.id} ended with no results`)
+  if (!batch.results_url) {
+    if (cancelDeadline !== null) return unfinished(batch.id, 'canceled with no results')
+    throw new Error(`batch ${batch.id} ended with no results`)
+  }
   const results = await fetch(batch.results_url, { headers: batchHeaders(apiKey) })
   if (!results.ok) throw await batchFailure(results, model)
   const byId = new Map<string, { type?: string; message?: unknown; error?: unknown }>()
@@ -579,14 +644,16 @@ async function completeBatch(
     if (result?.type === 'succeeded') {
       return anthropicResultFrom(result.message, request.model, ANTHROPIC_BATCH_PRICE_FACTOR)
     }
+    const type = result?.type ?? 'missing'
+    if (ANTHROPIC_BATCH_UNFINISHED.has(type) || type === 'missing') return new AiBatchUnfinishedError(batch.id, type)
     console.error('ai batch request not answered', {
       provider: ANTHROPIC_PROVIDER_ID,
       batchId: batch.id,
       customId: `r${index}`,
-      result: result?.type ?? 'missing',
+      result: type,
       error: result?.error ?? null,
     })
-    return new AiUpstreamError(null, result?.type === 'expired' || result?.type === 'errored', batch.id, null)
+    return new AiUpstreamError(null, type === 'errored', batch.id, null)
   })
 }
 

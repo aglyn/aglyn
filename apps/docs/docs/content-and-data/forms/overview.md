@@ -189,6 +189,8 @@ in the element picker's **Forms** group:
 | **Radio** | One choice in a Radio Group. | **Value**, **Required?** |
 | **Choice Label** | The words beside a Checkbox or Radio placed inside it. Clicking the words ticks the box. | **Text** |
 | **Rating** | Stars a visitor picks. | **Field name**, **Maps to schema field**, **Stars** (how many to show) |
+| **Date Picker** | A date a visitor picks from a calendar, or types. | **Field name**, **Maps to schema field**, **Required?**, **No past dates?**, **No future dates?**, **Earliest date**, **Latest date**, **Start on today?**, **Size**, **Full width?**, **Accessible label** |
+| **Time Picker** | A time of day a visitor picks from a clock, or types. | **Field name**, **Maps to schema field**, **Required?**, **Minutes in steps of** (1, 5, 10, 15 or 30), **Earliest time**, **Latest time**, **Clock** (Automatic, 12-hour or 24-hour), **Size**, **Full width?**, **Accessible label** |
 
 What each one sends:
 
@@ -199,6 +201,8 @@ What each one sends:
 | **Radio Group** | The chosen Radio's **Value** |
 | **Checkbox** | Its **Value** when ticked, nothing when not |
 | **Rating** | The number of stars (e.g. `4`) |
+| **Date Picker** | The day as year-month-day (e.g. `2026-10-15`), whatever language the visitor reads it in |
+| **Time Picker** | The time in 24-hour form (e.g. `14:30`), even when the visitor sees 2:30 PM |
 
 The **Field name** is the key the answer is stored under, so two inputs in one form need
 two names. The exception is a multi-choice question: give several Checkboxes the **same
@@ -371,9 +375,11 @@ row actions.
   derived from the name, so one sender keeps one color on every machine.
 - Unread submissions are **bold with a dot** at the left of the row. There is no "New"
   chip — bold text and a chip saying *New* are the same fact twice. Site managers also
-  get an in-app notification per submission, and an email too for anyone who switched
-  that on. It names the form, the page and the campaign, and opens **that submission**
+  get an in-app notification per submission, and an email too unless they switched
+  that off. It names the form, the page and the campaign, and opens **that submission**
   rather than the list — see [What an open submission links to](#what-it-links-to).
+  The email also lists every answer under the field's label, so you can read an
+  inquiry without opening the console; the in-app notification leaves the answers out.
 - The row's **⋮** menu holds **Open contact in CRM** — the person this submission
   updated, found by the address they gave — beside **Mark read** and **Delete**. A
   submission that carried no email address updated no contact, and the item says so.

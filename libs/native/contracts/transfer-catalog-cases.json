@@ -1,0 +1,754 @@
+{
+  "$comment": "Replayed by apps/console/specs/native-transfer-catalog-matches-the-console.spec.ts against the console, and by the Swift and Kotlin ports (AglynCoreTests, native-core desktopTest).",
+  "fields": [
+    {
+      "id": "name",
+      "label": "Name",
+      "group": "contact",
+      "type": "text",
+      "required": true,
+      "matchKey": true,
+      "aliases": [
+        "full name"
+      ]
+    },
+    {
+      "id": "email",
+      "label": "Email",
+      "group": "contact",
+      "type": "email",
+      "matchKey": true,
+      "aliases": [
+        "e-mail",
+        "mail"
+      ]
+    },
+    {
+      "id": "phone",
+      "label": "Phone",
+      "group": "contact",
+      "type": "text"
+    },
+    {
+      "id": "notes",
+      "label": "Notes",
+      "group": "details",
+      "type": "text"
+    },
+    {
+      "id": "score",
+      "label": "Lead score",
+      "group": "details",
+      "type": "number",
+      "readOnly": true
+    },
+    {
+      "id": "ageDays",
+      "label": "Days since created",
+      "group": "details",
+      "type": "number",
+      "derived": true
+    },
+    {
+      "id": "custom:vip",
+      "label": "VIP",
+      "group": "custom",
+      "type": "boolean",
+      "custom": true,
+      "aliases": [
+        "vip"
+      ]
+    },
+    {
+      "id": "createdAt",
+      "label": "Created",
+      "group": "system",
+      "type": "datetime",
+      "system": true,
+      "readOnly": true
+    },
+    {
+      "id": "orphan",
+      "label": "Stray",
+      "group": "gone",
+      "type": "text"
+    },
+    {
+      "id": "tail",
+      "label": "Tail",
+      "type": "text"
+    }
+  ],
+  "groups": [
+    {
+      "id": "contact",
+      "label": "Contact"
+    },
+    {
+      "id": "details",
+      "label": "Details"
+    }
+  ],
+  "catalog": {
+    "fieldIds": [
+      "name",
+      "email",
+      "phone",
+      "notes",
+      "score",
+      "ageDays",
+      "orphan",
+      "custom:vip",
+      "createdAt",
+      "id",
+      "tail"
+    ],
+    "groups": [
+      {
+        "id": "contact",
+        "label": "Contact"
+      },
+      {
+        "id": "details",
+        "label": "Details"
+      },
+      {
+        "id": "gone",
+        "label": "gone"
+      },
+      {
+        "id": "custom",
+        "label": "Custom fields"
+      },
+      {
+        "id": "system",
+        "label": "System"
+      },
+      {
+        "id": "other",
+        "label": "Other"
+      }
+    ]
+  },
+  "withoutId": {
+    "fieldIds": [
+      "name",
+      "email",
+      "phone",
+      "notes",
+      "score",
+      "ageDays",
+      "orphan",
+      "custom:vip",
+      "createdAt",
+      "id",
+      "tail"
+    ]
+  },
+  "withId": {
+    "standard": [
+      {
+        "id": "id",
+        "label": "Record ID",
+        "group": "contact",
+        "type": "text",
+        "system": true,
+        "readOnly": true,
+        "matchKey": true
+      },
+      {
+        "id": "name",
+        "label": "Name",
+        "group": "contact",
+        "type": "text",
+        "required": true,
+        "matchKey": true,
+        "aliases": [
+          "full name"
+        ]
+      },
+      {
+        "id": "email",
+        "label": "Email",
+        "group": "contact",
+        "type": "email",
+        "matchKey": true,
+        "aliases": [
+          "e-mail",
+          "mail"
+        ]
+      },
+      {
+        "id": "phone",
+        "label": "Phone",
+        "group": "contact",
+        "type": "text"
+      },
+      {
+        "id": "notes",
+        "label": "Notes",
+        "group": "details",
+        "type": "text"
+      },
+      {
+        "id": "score",
+        "label": "Lead score",
+        "group": "details",
+        "type": "number",
+        "readOnly": true
+      },
+      {
+        "id": "ageDays",
+        "label": "Days since created",
+        "group": "details",
+        "type": "number",
+        "derived": true
+      },
+      {
+        "id": "custom:vip",
+        "label": "VIP",
+        "group": "custom",
+        "type": "boolean",
+        "custom": true,
+        "aliases": [
+          "vip"
+        ]
+      },
+      {
+        "id": "createdAt",
+        "label": "Created",
+        "group": "system",
+        "type": "datetime",
+        "system": true,
+        "readOnly": true
+      },
+      {
+        "id": "orphan",
+        "label": "Stray",
+        "group": "gone",
+        "type": "text"
+      },
+      {
+        "id": "tail",
+        "label": "Tail",
+        "type": "text"
+      }
+    ],
+    "fieldIds": [
+      "id",
+      "name",
+      "email",
+      "phone",
+      "notes",
+      "score",
+      "ageDays",
+      "orphan",
+      "custom:vip",
+      "createdAt",
+      "tail"
+    ],
+    "groups": [
+      {
+        "id": "contact",
+        "label": "Contact"
+      },
+      {
+        "id": "details",
+        "label": "Details"
+      },
+      {
+        "id": "gone",
+        "label": "gone"
+      },
+      {
+        "id": "custom",
+        "label": "Custom fields"
+      },
+      {
+        "id": "system",
+        "label": "System"
+      },
+      {
+        "id": "other",
+        "label": "Other"
+      }
+    ]
+  },
+  "search": [
+    {
+      "query": "",
+      "ids": [
+        "name",
+        "email",
+        "phone",
+        "notes",
+        "score",
+        "ageDays",
+        "orphan",
+        "custom:vip",
+        "createdAt",
+        "id",
+        "tail"
+      ]
+    },
+    {
+      "query": "name",
+      "ids": [
+        "name"
+      ]
+    },
+    {
+      "query": "mail",
+      "ids": [
+        "email"
+      ]
+    },
+    {
+      "query": "E-MAIL",
+      "ids": [
+        "email"
+      ]
+    },
+    {
+      "query": "full name",
+      "ids": [
+        "name"
+      ]
+    },
+    {
+      "query": "days since",
+      "ids": [
+        "ageDays"
+      ]
+    },
+    {
+      "query": "custom:",
+      "ids": [
+        "custom:vip"
+      ]
+    },
+    {
+      "query": "created  ",
+      "ids": [
+        "ageDays",
+        "createdAt"
+      ]
+    },
+    {
+      "query": "zzz",
+      "ids": []
+    },
+    {
+      "query": "lead score",
+      "ids": [
+        "score"
+      ]
+    }
+  ],
+  "group": [
+    {
+      "fieldIds": null,
+      "groups": [
+        {
+          "group": {
+            "id": "contact",
+            "label": "Contact"
+          },
+          "ids": [
+            "name",
+            "email",
+            "phone"
+          ]
+        },
+        {
+          "group": {
+            "id": "details",
+            "label": "Details"
+          },
+          "ids": [
+            "notes",
+            "score",
+            "ageDays"
+          ]
+        },
+        {
+          "group": {
+            "id": "gone",
+            "label": "gone"
+          },
+          "ids": [
+            "orphan"
+          ]
+        },
+        {
+          "group": {
+            "id": "custom",
+            "label": "Custom fields"
+          },
+          "ids": [
+            "custom:vip"
+          ]
+        },
+        {
+          "group": {
+            "id": "system",
+            "label": "System"
+          },
+          "ids": [
+            "createdAt",
+            "id"
+          ]
+        },
+        {
+          "group": {
+            "id": "other",
+            "label": "Other"
+          },
+          "ids": [
+            "tail"
+          ]
+        }
+      ]
+    },
+    {
+      "fieldIds": [
+        "phone",
+        "orphan",
+        "createdAt"
+      ],
+      "groups": [
+        {
+          "group": {
+            "id": "contact",
+            "label": "Contact"
+          },
+          "ids": [
+            "phone"
+          ]
+        },
+        {
+          "group": {
+            "id": "gone",
+            "label": "gone"
+          },
+          "ids": [
+            "orphan"
+          ]
+        },
+        {
+          "group": {
+            "id": "system",
+            "label": "System"
+          },
+          "ids": [
+            "createdAt"
+          ]
+        }
+      ]
+    },
+    {
+      "fieldIds": [
+        "tail"
+      ],
+      "groups": [
+        {
+          "group": {
+            "id": "other",
+            "label": "Other"
+          },
+          "ids": [
+            "tail"
+          ]
+        }
+      ]
+    },
+    {
+      "fieldIds": [],
+      "groups": []
+    }
+  ],
+  "selection": [
+    {
+      "selected": [
+        "phone",
+        "email",
+        "phone",
+        "gone-1",
+        "notes"
+      ],
+      "ensure": [],
+      "expect": {
+        "fieldIds": [
+          "phone",
+          "email",
+          "notes"
+        ],
+        "unknown": [
+          "gone-1"
+        ]
+      }
+    },
+    {
+      "selected": [
+        "notes",
+        "custom:vip"
+      ],
+      "ensure": [
+        "id",
+        "email"
+      ],
+      "expect": {
+        "fieldIds": [
+          "email",
+          "id",
+          "notes",
+          "custom:vip"
+        ],
+        "unknown": []
+      }
+    },
+    {
+      "selected": [],
+      "ensure": [
+        "id"
+      ],
+      "expect": {
+        "fieldIds": [
+          "id"
+        ],
+        "unknown": []
+      }
+    },
+    {
+      "selected": [
+        "nope"
+      ],
+      "ensure": [],
+      "expect": {
+        "fieldIds": [],
+        "unknown": [
+          "nope"
+        ]
+      }
+    }
+  ],
+  "preset": [
+    {
+      "preset": "everything",
+      "hints": {
+        "matchKeyFieldIds": [
+          "name",
+          "email"
+        ],
+        "minimalFieldIds": [
+          "phone",
+          "ghost"
+        ]
+      },
+      "expect": {
+        "fieldIds": [
+          "name",
+          "email",
+          "phone",
+          "notes",
+          "score",
+          "ageDays",
+          "orphan",
+          "custom:vip",
+          "createdAt",
+          "id",
+          "tail"
+        ],
+        "unknown": []
+      }
+    },
+    {
+      "preset": "reimportable",
+      "hints": {
+        "matchKeyFieldIds": [
+          "name",
+          "email"
+        ],
+        "minimalFieldIds": [
+          "phone",
+          "ghost"
+        ]
+      },
+      "expect": {
+        "fieldIds": [
+          "id",
+          "name",
+          "email",
+          "phone",
+          "notes",
+          "orphan",
+          "custom:vip",
+          "tail"
+        ],
+        "unknown": []
+      }
+    },
+    {
+      "preset": "reimportable",
+      "hints": {},
+      "expect": {
+        "fieldIds": [
+          "id",
+          "name",
+          "email",
+          "phone",
+          "notes",
+          "orphan",
+          "custom:vip",
+          "tail"
+        ],
+        "unknown": []
+      }
+    },
+    {
+      "preset": "minimal",
+      "hints": {
+        "matchKeyFieldIds": [
+          "name",
+          "email"
+        ],
+        "minimalFieldIds": [
+          "phone",
+          "ghost"
+        ]
+      },
+      "expect": {
+        "fieldIds": [
+          "id",
+          "name",
+          "email",
+          "phone"
+        ],
+        "unknown": [
+          "ghost"
+        ]
+      }
+    },
+    {
+      "preset": "minimal",
+      "hints": {},
+      "expect": {
+        "fieldIds": [
+          "id",
+          "name"
+        ],
+        "unknown": []
+      }
+    },
+    {
+      "saved": {
+        "id": "preset-1",
+        "label": "Mine",
+        "fieldIds": [
+          "createdAt",
+          "email",
+          "gone",
+          "name"
+        ]
+      },
+      "hints": {
+        "matchKeyFieldIds": [
+          "name",
+          "email"
+        ],
+        "minimalFieldIds": [
+          "phone",
+          "ghost"
+        ]
+      },
+      "expect": {
+        "fieldIds": [
+          "createdAt",
+          "email",
+          "name"
+        ],
+        "unknown": [
+          "gone"
+        ]
+      }
+    }
+  ],
+  "move": [
+    {
+      "ids": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "from": 0,
+      "to": 2,
+      "expect": [
+        "b",
+        "c",
+        "a",
+        "d"
+      ]
+    },
+    {
+      "ids": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "from": 3,
+      "to": 0,
+      "expect": [
+        "d",
+        "a",
+        "b",
+        "c"
+      ]
+    },
+    {
+      "ids": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "from": 1,
+      "to": 9,
+      "expect": [
+        "a",
+        "c",
+        "d",
+        "b"
+      ]
+    },
+    {
+      "ids": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "from": 1,
+      "to": -4,
+      "expect": [
+        "b",
+        "a",
+        "c",
+        "d"
+      ]
+    },
+    {
+      "ids": [
+        "a",
+        "b"
+      ],
+      "from": 5,
+      "to": 0,
+      "expect": [
+        "a",
+        "b"
+      ]
+    }
+  ]
+}

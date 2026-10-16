@@ -23,8 +23,17 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
-import { readAiEvalCase, type AiEvalCase } from './ai-eval'
-import { aiEvalCasesNamed, aiEvalLiveAllowed, recordAiEvalLive } from './ai-eval-live'
+import { readAiEvalCase, scoreAiEvalCandidate, type AiEvalCase } from './ai-eval'
+import {
+  aiEvalCasesNamed,
+  aiEvalEffortArm,
+  aiEvalLiveAllowed,
+  aiEvalRecordingBody,
+  aiEvalRecordingFileName,
+  aiEvalScoreLine,
+  recordAiEvalLive,
+} from './ai-eval-live'
+import { aiLiveTimeoutMs } from './ai-dev-env'
 import { aiLiveRunLedger } from './ai-dev-replay'
 import { aiActiveProvider, aiProviderReady } from './ai-runtime'
 
@@ -49,8 +58,9 @@ import { aiActiveProvider, aiProviderReady } from './ai-runtime'
  *      for the prompts you changed — read `run.live` in the table: 0 means
  *      nothing new was asked and the run proves nothing;
  *   4. the full live sweep, only before landing: `AGLYN_AI_REPLAY=refresh`
- *      asks every request again, and `AGLYN_LIVE_AI_BATCH=1` sends the round
- *      as one Message Batch at half price (minutes, not seconds).
+ *      asks every request again; the launcher sends the round as Message
+ *      Batches at half price (minutes, not seconds) unless
+ *      `AGLYN_LIVE_AI_BATCH=0` (AGL-3781).
  */
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
@@ -73,7 +83,14 @@ const files = (dir: string): string[] =>
 
 const live = aiEvalLiveAllowed(process.env)
 
+
 ;(live ? describe : describe.skip)('the live eval run', () => {
+  // The run's ledger prints however the run ended (AGL-3781): a run that
+  // threw before its table still spent what the ledger counts.
+  afterAll(() => {
+    console.log(`run: ${JSON.stringify(aiLiveRunLedger())}`)
+  })
+
   it(
     'records and grades an answer for every brief a recorder covers',
     async () => {
@@ -91,18 +108,33 @@ const live = aiEvalLiveAllowed(process.env)
         files(CASES_DIR).map((file) => readAiEvalCase(JSON.parse(readFileSync(file, 'utf8')), file)),
         process.env,
       )
+      // An effort A/B arm (AGL-3781) records beside the defaults' answers, not
+      // over them, under a short tag — the recording holds the arm's efforts —
+      // and its score lines pair with the defaults' by brief, so two runs compare.
+      const arm = aiEvalEffortArm(process.env)
+      if (arm) console.log(`arm ${arm.tag}: ${JSON.stringify(arm.efforts)}`)
       const report = await recordAiEvalLive(cases, { env: process.env, readFixture })
-      for (const { caseId, kind, candidate } of report.recorded) {
-        const dir = join(RECORDINGS_DIR, kind)
-        mkdirSync(dir, { recursive: true })
-        writeFileSync(
-          join(dir, `${caseId}.${candidate.model ?? 'unknown'}.json`),
-          `${JSON.stringify({ caseId, candidate }, null, 2)}\n`,
-        )
+      // One recording that cannot be written does not take the others with it.
+      const unwritten: string[] = []
+      for (const entry of report.recorded) {
+        const { caseId, kind, candidate } = entry
+        try {
+          const dir = join(RECORDINGS_DIR, kind)
+          mkdirSync(dir, { recursive: true })
+          writeFileSync(
+            join(dir, aiEvalRecordingFileName(caseId, candidate.model, arm)),
+            aiEvalRecordingBody(caseId, candidate, arm),
+          )
+        } catch (error) {
+          unwritten.push(`${caseId} (${kind}): ${error instanceof Error ? error.message : String(error)}`)
+        }
+        const evalCase = cases.find((brief) => brief.id === caseId)
+        const score = evalCase ? scoreAiEvalCandidate(evalCase, candidate) : null
+        console.log(aiEvalScoreLine(entry, score?.pass ?? null, arm))
       }
       // Live against replayed (AGL-3660): a recording whose request was
       // replayed is the answer an earlier run already got, not a new sample.
-      console.log(`run: ${JSON.stringify(aiLiveRunLedger())}`)
+      // The ledger itself prints after the run, in `afterAll`.
       console.log(
         `recorded ${report.recorded.length}; skipped ${report.skipped.length}: ${report.skipped
           .map((entry) => `${entry.caseId} (${entry.why})`)
@@ -124,9 +156,11 @@ const live = aiEvalLiveAllowed(process.env)
             .join('\n')}`,
         )
       }
+      if (unwritten.length) console.error(`unwritten ${unwritten.length}:\n  ${unwritten.join('\n  ')}`)
       expect(report.recorded.length).toBeGreaterThan(0)
       expect(report.failed).toEqual([])
+      expect(unwritten).toEqual([])
     },
-    30 * 60_000,
+    aiLiveTimeoutMs(30 * 60_000),
   )
 })

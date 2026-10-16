@@ -125,6 +125,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "AGL-1452. The upload-CORS reconcile. The literal is the PLATFORM's own console origin, held as the one entry the reconcile refuses to release on detach — a self-host operator's bucket needs their own origin, which is derived from their Vercel project, not this constant. Removing it would let a detach withdraw the platform's own permission to upload.",
   },
   {
+    file: 'tools/scripts/native-release.mjs',
+    count: 1,
+    reason:
+      "AGL-3800. Operator-only release tooling: it archives, signs and uploads Aglyn's own native apps to TestFlight and Play testing tracks from the operator's Mac, and ships in no app or server. The literal is the Android package name of Aglyn's store listing (`com.aglyn.app`), which names an application in Aglyn's Play developer account, not a host any deployment resolves. A self-hoster publishing their own apps changes the bundle ids in the apps' own build config and this table together.",
+  },
+  {
     file: 'tools/scripts/lib/upload-cors-drift.mjs',
     count: 1,
     reason:

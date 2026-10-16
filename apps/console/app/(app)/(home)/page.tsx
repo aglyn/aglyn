@@ -701,6 +701,7 @@ function OrgJump() {
                     <CardDisplay
                       contentGutterX
                       contentGutterY
+                      fullHeight
                       HeaderProps={{
                         avatar: (
                           <MdiIcon

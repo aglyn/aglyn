@@ -36,6 +36,7 @@ import {
   VERDICT_WORDS as ROW_VERDICT_WORDS,
   WARNING_CLASS_WORDS,
 } from '@aglyn/aglyn-transfer-ui'
+import { CSV_UPLOAD_MAX_CHARACTERS } from '@aglyn/aglyn/app-utils/csv-upload'
 import { FIRST_PARTY_PLUGINS } from '@aglyn/aglyn/plugin-manager/first-party-plugins.generated'
 import { listDeclaredTransferResources } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import {
@@ -191,11 +192,22 @@ describe('native imports and exports hub', () => {
     it('uploads in the parts, with the separators and the choices the routes take', () => {
       expect(importText).toContain(`"bytes": ${TRANSFER_UPLOAD_PART_MAX_BYTES}`)
       expect(TRANSFER_UPLOAD_MAX_BYTES).toBe(24_000_000)
-      expect(importText).toContain('24 MB')
-      const delimiters = (JSON.parse(importText) as { screens: Array<{ id: string; constants?: { delimiter?: Record<string, string> } }> }).screens.find(
+      // The upload field is told the resource's own limits, as the console's upload step is (`resource.limits.maxBytes ??
+      // CSV_UPLOAD_MAX_CHARACTERS`); the server holds every file to TRANSFER_UPLOAD_MAX_BYTES whatever a resource says.
+      expect(importText).toContain('"kind": "upload"')
+      expect(importText).toContain('"maxBytes": "{data.info.resource.limits.maxBytes}"')
+      expect(importText).toContain('"maxRows": "{data.info.resource.limits.maxRows}"')
+      expect(importText).toContain('"formats": "{data.info.resource.formats}"')
+      // Both platforms fall back to the console's own ceiling for a resource with none of its own.
+      for (const source of ['apple/Sources/AglynCore/TransferUploadDraft.swift', 'kotlin/core/src/commonMain/kotlin/com/aglyn/core/TransferUploadDraft.kt']) {
+        expect(readFileSync(join(__dirname, '../../../libs/native', source), 'utf8')).toContain(String(CSV_UPLOAD_MAX_CHARACTERS).replace(/(\d)(?=(\d{3})+$)/g, '$1_'))
+      }
+      // The separator is read from the file (or chosen on the upload field) and rides the first part only, as the console's client sends it.
+      const upload = (JSON.parse(importText) as { screens: Array<{ id: string; blocks: Array<{ id?: string; submit?: { chunk?: { firstOnly?: string[] } } }> }> }).screens.find(
         (screen) => screen.id === 'core.settings.data.import',
-      )?.constants?.delimiter
-      expect(Object.values(delimiters ?? {})).toEqual([...TRANSFER_CSV_DELIMITERS, '|'])
+      )?.blocks.find((block) => block.id === 'file')?.submit?.chunk
+      expect(upload?.firstOnly).toEqual(['delimiter', 'headerRow'])
+      expect(TRANSFER_CSV_DELIMITERS).toEqual([',', ';', '\t'])
       for (const route of ['fields', 'upload', 'analyze', 'plan', 'apply', 'status', 'undo'] as const) {
         expect(importText).toContain(`"${TRANSFER_API_ROUTES[route]}"`)
       }

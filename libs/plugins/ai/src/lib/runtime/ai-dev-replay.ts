@@ -18,7 +18,8 @@
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { estimateAiProviderCostUsd } from '../providers/catalog'
+import { aiProviderRatesForModel, estimateAiProviderCostUsd } from '../providers/catalog'
+import { aiCacheWriteHourSurchargeUsd } from '../providers/cache-write-hour'
 import type {
   AiProvider,
   AiProviderRequest,
@@ -232,7 +233,8 @@ function round(usd: number): number {
 }
 
 function usageCost(usage: AiResult['usage'], model: string): number {
-  return estimateAiProviderCostUsd(usage, model)
+  // A live run writes hour-long entries, billed above the rate table's write rate (AGL-3830).
+  return round(estimateAiProviderCostUsd(usage, model) + aiCacheWriteHourSurchargeUsd(usage, aiProviderRatesForModel(model)))
 }
 
 /** Counts one request a live path sent, at what the provider billed for it; `discount` is a batch's half. */
@@ -384,10 +386,14 @@ export function resetAiDevWarmPrefixes(): void {
  * the live ones cost at list, and how many batches carried them. A table
  * whose `live` is 0 proved nothing new — every prompt in it had been answered
  * before — and is not a live pass; `AGLYN_AI_REPLAY=refresh` asks again.
+ * `batchedRequests` are the ones a batch answered, at half price;
+ * `batchFallbacks` are the ones a batch left unanswered past its wait and
+ * that were asked on their own, at full price (AGL-3781). Both count in `live`.
  */
 export function aiLiveRunLedger(env: Env = process.env): AiDevReplayStats & {
   batches: number
   batchedRequests: number
+  batchFallbacks: number
   allReplayed: boolean
 } {
   const replay = aiDevReplayStats(env)
@@ -396,6 +402,7 @@ export function aiLiveRunLedger(env: Env = process.env): AiDevReplayStats & {
     ...replay,
     batches: batch.batches,
     batchedRequests: batch.requests,
+    batchFallbacks: batch.fallbacks,
     allReplayed: replay.live === 0 && replay.replayed > 0,
   }
 }

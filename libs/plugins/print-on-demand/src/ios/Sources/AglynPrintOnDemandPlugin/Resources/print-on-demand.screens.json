@@ -1,0 +1,816 @@
+{
+  "$comment": "The Print on demand plugin's native screens: the Printful and Printify connections a site can hold (with the merchant's own token), their settings, importing products from the service's catalog, the imported products and the orders sent. Routes: GET /api/print-on-demand/connections, catalog, imported and orders, POST connect, stores, settings, disconnect, import and unlink. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "print-on-demand.service",
+      "title": "Print on demand",
+      "label": "Print on demand",
+      "subtitle": "Printful and Printify make and ship your products",
+      "icon": "tshirt|brush",
+      "scope": "site",
+      "order": 80,
+      "zones": [
+        "commerceSettings"
+      ],
+      "load": {
+        "conn": "/api/print-on-demand/connections?hostId={site.id}"
+      },
+      "constants": {
+        "ids": {
+          "printful": "printful",
+          "printify": "printify"
+        },
+        "providers": [
+          {
+            "id": "printful",
+            "label": "Printful",
+            "store": "store"
+          },
+          {
+            "id": "printify",
+            "label": "Printify",
+            "store": "shop"
+          }
+        ],
+        "statuses": [
+          {
+            "id": "queued",
+            "label": "Sending",
+            "tone": "info"
+          },
+          {
+            "id": "draft",
+            "label": "Draft at the service",
+            "tone": "warning"
+          },
+          {
+            "id": "submitted",
+            "label": "Sent",
+            "tone": "info"
+          },
+          {
+            "id": "on_hold",
+            "label": "On hold",
+            "tone": "warning"
+          },
+          {
+            "id": "in_production",
+            "label": "In production",
+            "tone": "info"
+          },
+          {
+            "id": "partially_shipped",
+            "label": "Partly shipped",
+            "tone": "info"
+          },
+          {
+            "id": "shipped",
+            "label": "Shipped",
+            "tone": "success"
+          },
+          {
+            "id": "canceled",
+            "label": "Canceled",
+            "tone": "neutral"
+          },
+          {
+            "id": "failed",
+            "label": "Not sent",
+            "tone": "error"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "!data.conn.available",
+          "text": "Print on demand is not available for this site. It needs a plan that sells and a deployment that offers it."
+        },
+        {
+          "type": "notice",
+          "id": "intro",
+          "tone": "info",
+          "when": "data.conn.available && !data.conn.connections",
+          "text": "No print-on-demand service is connected. Connect your own Printful or Printify account with a token you make there. You pay the service directly for what it makes; nothing is added to its prices."
+        },
+        {
+          "type": "list",
+          "id": "connections",
+          "title": "Connections",
+          "when": "data.conn.available && data.conn.connections",
+          "items": "data.conn.connections",
+          "primary": "{item.providerLabel} — {item.storeName}",
+          "secondary": "Prices in {item.currency}. Connected {item.connectedAtMs:date}.",
+          "icon": "tshirt|brush",
+          "badges": [
+            {
+              "text": "Live updates",
+              "tone": "success",
+              "when": "item.webhooks == registered"
+            },
+            {
+              "text": "Checked every 15 min",
+              "tone": "info",
+              "when": "item.webhooks != registered"
+            },
+            {
+              "text": "Error",
+              "tone": "error",
+              "when": "item.lastError"
+            }
+          ],
+          "open": {
+            "screen": "print-on-demand.connection",
+            "params": {
+              "provider": "{item.provider}"
+            }
+          }
+        },
+        {
+          "type": "actions",
+          "id": "connect",
+          "title": "Connect a service",
+          "when": "data.conn.available",
+          "items": [
+            {
+              "id": "connectPrintful",
+              "label": "Connect Printful",
+              "icon": "link|link",
+              "when": "data.conn.providers[id=const.ids.printful] && !data.conn.connections[provider=const.ids.printful]",
+              "url": "/api/print-on-demand/connect",
+              "prompt": [
+                {
+                  "key": "token",
+                  "label": "Printful token",
+                  "kind": "password",
+                  "required": true,
+                  "help": "{data.conn.providers[id=const.ids.printful].tokenHelp.steps} Kept encrypted and used only for this site; Aglyn never asks for your Printful password."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "printful",
+                "token": "{form.token}"
+              },
+              "success": "Printful is connected. Import products to start selling them.",
+              "elseStatus": 409,
+              "else": {
+                "label": "Choose a store",
+                "url": "/api/print-on-demand/stores",
+                "body": {
+                  "hostId": "{site.id}",
+                  "provider": "printful",
+                  "token": "{form.token}"
+                },
+                "then": {
+                  "label": "Connect Printful",
+                  "icon": "link|link",
+                  "url": "/api/print-on-demand/connect",
+                  "prompt": [
+                    {
+                      "key": "storeId",
+                      "label": "Printful store",
+                      "kind": "select",
+                      "required": true,
+                      "optionsFrom": {
+                        "items": "response.stores",
+                        "value": "{item.id}",
+                        "label": "{item.name}"
+                      }
+                    }
+                  ],
+                  "body": {
+                    "hostId": "{site.id}",
+                    "provider": "printful",
+                    "token": "{previous.token}",
+                    "storeId": "{form.storeId}"
+                  },
+                  "success": "Printful is connected. Import products to start selling them."
+                }
+              }
+            },
+            {
+              "id": "connectPrintify",
+              "label": "Connect Printify",
+              "icon": "link|link",
+              "when": "data.conn.providers[id=const.ids.printify] && !data.conn.connections[provider=const.ids.printify]",
+              "url": "/api/print-on-demand/connect",
+              "prompt": [
+                {
+                  "key": "token",
+                  "label": "Printify token",
+                  "kind": "password",
+                  "required": true,
+                  "help": "{data.conn.providers[id=const.ids.printify].tokenHelp.steps} Kept encrypted and used only for this site; Aglyn never asks for your Printify password."
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "printify",
+                "token": "{form.token}"
+              },
+              "success": "Printify is connected. Import products to start selling them.",
+              "elseStatus": 409,
+              "else": {
+                "label": "Choose a shop",
+                "url": "/api/print-on-demand/stores",
+                "body": {
+                  "hostId": "{site.id}",
+                  "provider": "printify",
+                  "token": "{form.token}"
+                },
+                "then": {
+                  "label": "Connect Printify",
+                  "icon": "link|link",
+                  "url": "/api/print-on-demand/connect",
+                  "prompt": [
+                    {
+                      "key": "storeId",
+                      "label": "Printify shop",
+                      "kind": "select",
+                      "required": true,
+                      "optionsFrom": {
+                        "items": "response.stores",
+                        "value": "{item.id}",
+                        "label": "{item.name}"
+                      }
+                    }
+                  ],
+                  "body": {
+                    "hostId": "{site.id}",
+                    "provider": "printify",
+                    "token": "{previous.token}",
+                    "storeId": "{form.storeId}"
+                  },
+                  "success": "Printify is connected. Import products to start selling them."
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "lists",
+          "when": "data.conn.connections",
+          "items": [
+            {
+              "title": "Imported products",
+              "subtitle": "Products brought in from a service",
+              "icon": "shippingbox|inventory_2",
+              "screen": "print-on-demand.imported"
+            },
+            {
+              "title": "Orders sent to services",
+              "subtitle": "Where each order stands and what the service charged",
+              "icon": "doc.plaintext|receipt_long",
+              "screen": "print-on-demand.orders"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "print-on-demand.connection",
+      "title": "{data.conn.connections[provider=params.provider].providerLabel|const.providers[id=params.provider].label|'Print on demand'}",
+      "label": "Print-on-demand connection",
+      "icon": "tshirt|brush",
+      "scope": "site",
+      "load": {
+        "conn": "/api/print-on-demand/connections?hostId={site.id}"
+      },
+      "constants": {
+        "ids": {
+          "printful": "printful",
+          "printify": "printify"
+        },
+        "providers": [
+          {
+            "id": "printful",
+            "label": "Printful",
+            "store": "store"
+          },
+          {
+            "id": "printify",
+            "label": "Printify",
+            "store": "shop"
+          }
+        ],
+        "statuses": [
+          {
+            "id": "queued",
+            "label": "Sending",
+            "tone": "info"
+          },
+          {
+            "id": "draft",
+            "label": "Draft at the service",
+            "tone": "warning"
+          },
+          {
+            "id": "submitted",
+            "label": "Sent",
+            "tone": "info"
+          },
+          {
+            "id": "on_hold",
+            "label": "On hold",
+            "tone": "warning"
+          },
+          {
+            "id": "in_production",
+            "label": "In production",
+            "tone": "info"
+          },
+          {
+            "id": "partially_shipped",
+            "label": "Partly shipped",
+            "tone": "info"
+          },
+          {
+            "id": "shipped",
+            "label": "Shipped",
+            "tone": "success"
+          },
+          {
+            "id": "canceled",
+            "label": "Canceled",
+            "tone": "neutral"
+          },
+          {
+            "id": "failed",
+            "label": "Not sent",
+            "tone": "error"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "currency",
+          "tone": "warning",
+          "when": "data.conn.connections[provider=params.provider] && data.conn.connections[provider=params.provider].currency != @data.conn.storeCurrency",
+          "text": "{data.conn.connections[provider=params.provider].providerLabel} prices in {data.conn.connections[provider=params.provider].currency} and your store sells in {data.conn.storeCurrency}. Products cannot be imported until both use the same currency."
+        },
+        {
+          "type": "notice",
+          "id": "webhook",
+          "tone": "info",
+          "when": "data.conn.connections[provider=params.provider].webhookDetail",
+          "text": "{data.conn.connections[provider=params.provider].webhookDetail}"
+        },
+        {
+          "type": "notice",
+          "id": "failing",
+          "tone": "error",
+          "when": "data.conn.connections[provider=params.provider].lastError",
+          "text": "{data.conn.connections[provider=params.provider].lastError}"
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "title": "{data.conn.connections[provider=params.provider].providerLabel} — {data.conn.connections[provider=params.provider].storeName}",
+          "when": "data.conn.connections[provider=params.provider]",
+          "rows": [
+            {
+              "label": "Prices in",
+              "value": "{data.conn.connections[provider=params.provider].currency}"
+            },
+            {
+              "label": "Connected",
+              "value": "{data.conn.connections[provider=params.provider].connectedAtMs:date}"
+            },
+            {
+              "label": "Shipment updates",
+              "value": "Live updates",
+              "when": "data.conn.connections[provider=params.provider].webhooks == registered"
+            },
+            {
+              "label": "Shipment updates",
+              "value": "Checked every 15 minutes",
+              "when": "data.conn.connections[provider=params.provider].webhooks != registered"
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "import",
+          "when": "data.conn.connections[provider=params.provider]",
+          "items": [
+            {
+              "title": "Import products",
+              "subtitle": "Choose what to sell from {data.conn.connections[provider=params.provider].providerLabel}",
+              "icon": "square.and.arrow.down|download",
+              "screen": "print-on-demand.catalog",
+              "params": {
+                "provider": "{params.provider}"
+              }
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "settings",
+          "title": "Settings",
+          "when": "data.conn.connections[provider=params.provider]",
+          "fields": [
+            {
+              "key": "submitMode",
+              "label": "Paid orders",
+              "kind": "select",
+              "initial": "{data.conn.connections[provider=params.provider].submitMode}",
+              "options": [
+                {
+                  "value": "automatic",
+                  "label": "Sent for production automatically"
+                },
+                {
+                  "value": "review",
+                  "label": "Wait as a draft until I confirm"
+                }
+              ],
+              "help": "Automatic: the service starts making each order as soon as it is paid, and charges your account there. Draft: each paid order waits at the service until you confirm it on the order."
+            },
+            {
+              "key": "syncPrices",
+              "label": "Use the service’s retail prices when products update",
+              "kind": "toggle",
+              "initial": "{data.conn.connections[provider=params.provider].syncPrices}",
+              "help": "Off: your store keeps the prices you set; updates bring new variants, availability and costs only."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/print-on-demand/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "provider": "{params.provider}",
+              "submitMode": "{form.submitMode}",
+              "syncPrices": "{form.syncPrices}"
+            },
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "title": "Connection",
+          "when": "data.conn.connections[provider=params.provider]",
+          "items": [
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "confirm": "Disconnect {data.conn.connections[provider=params.provider].providerLabel}? New orders are no longer sent to it, and orders already sent stop being followed here. Imported products stay in your store; fill their orders yourself or connect it again.",
+              "url": "/api/print-on-demand/disconnect",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}"
+              },
+              "back": true,
+              "success": "Disconnected."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "print-on-demand.catalog",
+      "title": "Import from {const.providers[id=params.provider].label|'a service'}",
+      "label": "Import products",
+      "icon": "square.and.arrow.down|download",
+      "scope": "site",
+      "load": {
+        "catalog": {
+          "url": "/api/print-on-demand/catalog?hostId={site.id}&provider={params.provider}",
+          "cursor": "nextCursor",
+          "items": "products"
+        },
+        "conn": "/api/print-on-demand/connections?hostId={site.id}"
+      },
+      "constants": {
+        "ids": {
+          "printful": "printful",
+          "printify": "printify"
+        },
+        "providers": [
+          {
+            "id": "printful",
+            "label": "Printful",
+            "store": "store"
+          },
+          {
+            "id": "printify",
+            "label": "Printify",
+            "store": "shop"
+          }
+        ],
+        "statuses": [
+          {
+            "id": "queued",
+            "label": "Sending",
+            "tone": "info"
+          },
+          {
+            "id": "draft",
+            "label": "Draft at the service",
+            "tone": "warning"
+          },
+          {
+            "id": "submitted",
+            "label": "Sent",
+            "tone": "info"
+          },
+          {
+            "id": "on_hold",
+            "label": "On hold",
+            "tone": "warning"
+          },
+          {
+            "id": "in_production",
+            "label": "In production",
+            "tone": "info"
+          },
+          {
+            "id": "partially_shipped",
+            "label": "Partly shipped",
+            "tone": "info"
+          },
+          {
+            "id": "shipped",
+            "label": "Shipped",
+            "tone": "success"
+          },
+          {
+            "id": "canceled",
+            "label": "Canceled",
+            "tone": "neutral"
+          },
+          {
+            "id": "failed",
+            "label": "Not sent",
+            "tone": "error"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "intro",
+          "tone": "info",
+          "text": "Choose a product to import. It comes in with its variants, the retail prices you set at the service and its photos. Importing one you already imported updates it."
+        },
+        {
+          "type": "notice",
+          "id": "currency",
+          "tone": "warning",
+          "when": "data.conn.connections[provider=params.provider].currency != @data.conn.storeCurrency",
+          "text": "The service prices in a different currency than your store sells in, so products cannot be imported yet."
+        },
+        {
+          "type": "list",
+          "id": "products",
+          "title": "Products",
+          "items": "data.catalog.products",
+          "load": "catalog",
+          "primary": "{item.name}",
+          "secondary": "{item.variantCount:number} variants",
+          "icon": "tshirt|brush",
+          "badges": [
+            {
+              "text": "Imported",
+              "tone": "success",
+              "when": "item.importedProductId"
+            }
+          ],
+          "actions": [
+            {
+              "id": "import",
+              "label": "Import",
+              "icon": "square.and.arrow.down|download",
+              "url": "/api/print-on-demand/import",
+              "prompt": [
+                {
+                  "key": "status",
+                  "label": "New products",
+                  "kind": "select",
+                  "initial": "draft",
+                  "options": [
+                    {
+                      "value": "draft",
+                      "label": "Save as a draft"
+                    },
+                    {
+                      "value": "active",
+                      "label": "List in the store now"
+                    }
+                  ]
+                },
+                {
+                  "key": "content",
+                  "label": "Update names, descriptions and photos if already imported",
+                  "kind": "toggle"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "productIds": [
+                  "{item.id}"
+                ],
+                "status": "{form.status}",
+                "content": "{form.content}"
+              },
+              "success": "{item.name}: {response.results.0.outcome}. {response.results.0.message}"
+            }
+          ],
+          "empty": "No products at the service yet. Create a product there, then come back to import it."
+        }
+      ]
+    },
+    {
+      "id": "print-on-demand.imported",
+      "title": "Imported products",
+      "label": "Imported products",
+      "icon": "shippingbox|inventory_2",
+      "scope": "site",
+      "load": {
+        "links": {
+          "url": "/api/print-on-demand/imported?hostId={site.id}&pageSize=25",
+          "cursor": "next",
+          "cursorParam": "after",
+          "items": "links"
+        },
+        "conn": "/api/print-on-demand/connections?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "links",
+          "title": "Products",
+          "items": "data.links.links",
+          "load": "links",
+          "primary": "{item.name}",
+          "secondary": "{item.variants.length} variants · updated {item.syncedAtMs:date}",
+          "tertiary": "{item.lastError|item.providerLabel}",
+          "icon": "tshirt|brush",
+          "badges": [
+            {
+              "text": "Error",
+              "tone": "error",
+              "when": "item.lastError"
+            }
+          ],
+          "actions": [
+            {
+              "id": "resync",
+              "label": "Update from {item.providerLabel}",
+              "icon": "arrow.triangle.2.circlepath|sync",
+              "url": "/api/print-on-demand/import",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{item.provider}",
+                "productIds": [
+                  "{item.sourceProductId}"
+                ],
+                "content": true
+              },
+              "success": "{item.name}: {response.results.0.outcome}. {response.results.0.message}"
+            },
+            {
+              "id": "unlink",
+              "label": "Stop filling through {item.providerLabel}",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "confirm": "Stop filling {item.name} through {item.providerLabel}? The product stays in your store.",
+              "url": "/api/print-on-demand/unlink",
+              "body": {
+                "hostId": "{site.id}",
+                "linkId": "{item.id}"
+              },
+              "success": "{item.name} is no longer filled by {item.providerLabel}."
+            }
+          ],
+          "empty": "No products imported yet. Use Import products on a connection to choose what to sell."
+        }
+      ]
+    },
+    {
+      "id": "print-on-demand.orders",
+      "title": "Orders sent to services",
+      "label": "Orders sent to services",
+      "icon": "doc.plaintext|receipt_long",
+      "scope": "site",
+      "load": {
+        "parts": {
+          "url": "/api/print-on-demand/orders?hostId={site.id}&pageSize=25",
+          "cursor": "next",
+          "cursorParam": "after",
+          "items": "parts"
+        }
+      },
+      "constants": {
+        "ids": {
+          "printful": "printful",
+          "printify": "printify"
+        },
+        "providers": [
+          {
+            "id": "printful",
+            "label": "Printful",
+            "store": "store"
+          },
+          {
+            "id": "printify",
+            "label": "Printify",
+            "store": "shop"
+          }
+        ],
+        "statuses": [
+          {
+            "id": "queued",
+            "label": "Sending",
+            "tone": "info"
+          },
+          {
+            "id": "draft",
+            "label": "Draft at the service",
+            "tone": "warning"
+          },
+          {
+            "id": "submitted",
+            "label": "Sent",
+            "tone": "info"
+          },
+          {
+            "id": "on_hold",
+            "label": "On hold",
+            "tone": "warning"
+          },
+          {
+            "id": "in_production",
+            "label": "In production",
+            "tone": "info"
+          },
+          {
+            "id": "partially_shipped",
+            "label": "Partly shipped",
+            "tone": "info"
+          },
+          {
+            "id": "shipped",
+            "label": "Shipped",
+            "tone": "success"
+          },
+          {
+            "id": "canceled",
+            "label": "Canceled",
+            "tone": "neutral"
+          },
+          {
+            "id": "failed",
+            "label": "Not sent",
+            "tone": "error"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "parts",
+          "title": "Orders",
+          "items": "data.parts.parts",
+          "load": "parts",
+          "primary": "Order {item.orderRef} · {item.providerLabel}",
+          "secondary": "{item.lastError|item.lines.*.name}",
+          "tertiary": "Sold for {item.retailMinor:cents/item.retailCurrency} · {item.createdAtMs:date}",
+          "icon": "doc.plaintext|receipt_long",
+          "badges": [
+            {
+              "text": "{const.statuses[id=item.status].label}",
+              "tones": {
+                "Shipped": "success",
+                "Sent": "info",
+                "Sending": "info",
+                "Draft at the service": "warning",
+                "On hold": "warning",
+                "In production": "info",
+                "Partly shipped": "info",
+                "Not sent": "error",
+                "*": "neutral"
+              }
+            },
+            {
+              "text": "Test",
+              "tone": "warning",
+              "when": "item.testMode"
+            }
+          ],
+          "empty": "No orders sent yet. When an imported product sells, its order appears here."
+        }
+      ]
+    }
+  ]
+}

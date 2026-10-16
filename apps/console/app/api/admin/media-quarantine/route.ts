@@ -126,6 +126,7 @@ import {
   rotateDownloadTokenForObject,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { quarantineLogLines } from '../../../../utils/quarantine-log-lines'
 import {
   scheduleMediaDeliveryCopies,
   takeDownAssetDeliveryCopies,
@@ -486,6 +487,12 @@ async function handler(request: Request): Promise<Response> {
             quarantined: keys.some((key) => entries[key] != null),
             count: Object.keys(entries).length,
             maxEntries: MEDIA_QUARANTINE_MAX_ENTRIES,
+            // The page's "FULL" reading, said once: a full list refuses the next NEW takedown with a 409, so
+            // a file that is not already on it cannot be disabled until an entry is released.
+            full: Object.keys(entries).length >= MEDIA_QUARANTINE_MAX_ENTRIES,
+            takedownBlocked:
+              Object.keys(entries).length >= MEDIA_QUARANTINE_MAX_ENTRIES &&
+              !keys.some((key) => entries[key] != null),
             readAtMs: Date.now(),
           },
           { status: 200, headers: { 'Cache-Control': 'no-store' } },
@@ -513,6 +520,8 @@ async function handler(request: Request): Promise<Response> {
             {
               count: rows.length,
               maxEntries: MEDIA_QUARANTINE_MAX_ENTRIES,
+              // The page's "FULL" reading, said once.
+              full: rows.length >= MEDIA_QUARANTINE_MAX_ENTRIES,
               // Entries that refuse nothing right now and still hold a slot.
               clearable: rows.filter((row) => row.state !== 'active').length,
               readAtMs,
@@ -927,4 +936,17 @@ async function handler(request: Request): Promise<Response> {
   }
 }
 
-export { handler as GET, handler as POST }
+/**
+ * A disable or release answers with the line the page keeps under "Actions taken in this session" (`logLines`), so
+ * the staff apps keep the same one (`utils/quarantine-log-lines.ts`, which the page builds it with too).
+ */
+async function post(request: Request): Promise<Response> {
+  const body = (await request.clone().json().catch(() => null)) as Record<string, unknown> | null
+  const response = await handler(request)
+  if (response.status !== 200 || !body || !['quarantine', 'release'].includes(String(body['action']))) return response
+  const payload = (await response.clone().json().catch(() => null)) as Record<string, any> | null
+  if (!payload || typeof payload !== 'object') return response
+  return Response.json({ ...payload, logLines: quarantineLogLines(body, payload) }, { status: 200, headers: response.headers })
+}
+
+export { handler as GET, post as POST }

@@ -154,10 +154,10 @@ describe('the kinds', () => {
     expect(within(dialog).getByText(aiMediaCreditEstimate('illustration', 1))).toBeTruthy()
     const listbox = openKinds(dialog)
     expect(within(listbox).getAllByRole('option').map((option) => option.textContent)).toEqual([
-      'Illustrationabout 18 credits',
-      'Iconabout 18 credits',
-      'Patternabout 18 credits',
-      'Logo markabout 18 credits',
+      'Illustrationabout 4 credits',
+      'Iconabout 4 credits',
+      'Patternabout 4 credits',
+      'Logo markabout 4 credits',
     ])
     expect(within(listbox).queryByText('Vector')).toBeNull()
     expect(within(listbox).queryByText('Photo')).toBeNull()
@@ -182,7 +182,7 @@ describe('the kinds', () => {
     expect(options).toContain('Studio product shotabout 108 credits')
     expect(options).toContain('Watercolorabout 108 credits')
     expect(options).toContain('Mockupabout 108 credits')
-    expect(options).toContain('Iconabout 18 credits')
+    expect(options).toContain('Iconabout 4 credits')
   })
 
   it('hides the colors for a photo kind and says what may be declined', async () => {
@@ -208,15 +208,16 @@ describe('the kinds', () => {
     expect(within(dialog).getByText(aiMediaCreditEstimate('illustration', 1))).toBeTruthy()
   })
 
-  it('estimates a photo at about 108 credits and an illustration at about 18', () => {
+  it('estimates a photo at about 108 credits and an illustration at about 4', () => {
     expect(aiMediaCreditsPerPicture('photo')).toBe(108)
-    expect(aiMediaCreditsPerPicture('illustration')).toBe(18)
+    // On the fast tier at the platform's markup since AGL-3781 (18 at Haiku 4.5's cost).
+    expect(aiMediaCreditsPerPicture('illustration')).toBe(4)
     expect(aiMediaCreditEstimate('photo', 3)).toMatch(/^3 pictures uses about 324 AI credits \(about 108 each\)/)
   })
 
   it('estimates a Free workspace’s 512 px photo at about 75 credits', () => {
     expect(aiMediaCreditsPerPicture('photo', undefined, '512')).toBe(75)
-    expect(aiMediaCreditsPerPicture('illustration', undefined, '512')).toBe(18)
+    expect(aiMediaCreditsPerPicture('illustration', undefined, '512')).toBe(4)
     expect(aiMediaCreditEstimate('photo', 2, '512')).toMatch(/^2 pictures uses about 150 AI credits \(about 75 each\)/)
   })
 
@@ -285,7 +286,7 @@ describe('creating', () => {
     fireEvent.change(within(dialog).getByLabelText('Describe what to draw'), {
       target: { value: 'A delivery van' },
     })
-    mockFetch.mockResolvedValueOnce(json({ mediaIds: ['m1'], filtered: 0, failed: 0, credits: 18 }))
+    mockFetch.mockResolvedValueOnce(json({ mediaIds: ['m1'], filtered: 0, failed: 0, credits: 4 }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith(['m1']))
     expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toMatchObject({
@@ -301,7 +302,7 @@ describe('creating', () => {
     fireEvent.change(within(dialog).getByLabelText('Describe what to draw'), {
       target: { value: 'A leaf icon' },
     })
-    mockFetch.mockResolvedValueOnce(json({ mediaIds: ['m1'], filtered: 0, failed: 0, credits: 18 }))
+    mockFetch.mockResolvedValueOnce(json({ mediaIds: ['m1'], filtered: 0, failed: 0, credits: 4 }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(onCreated).toHaveBeenCalled())
     expect(JSON.parse(mockFetch.mock.calls[0][1].body).palette).toEqual({

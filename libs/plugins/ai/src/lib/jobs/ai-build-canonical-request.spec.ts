@@ -34,6 +34,12 @@
  *   the booking page built without its Booking block, and everything else
  *   delivered — the partial-success rule.
  *
+ * Its page runner and draft reader are stand-ins that always hold a page's
+ * planned sections, and its plan starts no page from a copy, so it cannot see
+ * the page step's copy branch against the written-page gate. A plan whose
+ * pages start from copies is built through the REAL page step in
+ * `ai-build-duplicate-page.spec.ts` (AGL-3832).
+ *
  * The live counterpart (`AGLYN_LIVE_AI=1`, the founder's go only) is listed
  * in docs/AI_JOBS.md with its cost.
  */

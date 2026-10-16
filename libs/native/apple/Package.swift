@@ -37,6 +37,8 @@ let package = Package(
       name: "AglynCore",
       dependencies: [
         "AglynContracts",
+        // App Check (AGL-3818): Firebase's App Attest and DeviceCheck providers, which Auth and Firestore read.
+        .product(name: "FirebaseAppCheck", package: "firebase-ios-sdk"),
         .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
         .product(name: "FirebaseFirestore", package: "firebase-ios-sdk"),
       ],
@@ -54,7 +56,7 @@ let package = Package(
     // core spec file in libs/native/screens.
     .target(
       name: "AglynScreens",
-      dependencies: ["AglynCore", "AglynContracts", "AglynUI", "AglynPluginHost"],
+      dependencies: ["AglynCore", "AglynContracts", "AglynUI", "AglynPluginHost", "AglynSite"],
       resources: screenSpecs.map { .copy("Resources/screens/\($0)") }
     ),
     .target(name: "AglynSite", dependencies: ["AglynContracts", "AglynCore", "AglynUI", "AglynPluginHost"]),

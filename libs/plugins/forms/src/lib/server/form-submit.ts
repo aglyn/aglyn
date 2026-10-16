@@ -305,6 +305,21 @@ function readDeclaredMarketingConsent(
  * wall means the customer's allowance is spent, the ceiling means the site is
  * being flooded. Only the ceiling refusal carries `code`.
  */
+/**
+ * A submission's answers as its notification email lists them: in the order
+ * the visitor's form posted them, each under the label the form declares for
+ * it, or under its field name when the form is unbound or declares none.
+ */
+function submissionEmailDetails(
+  fields: Readonly<Record<string, string>>,
+  declarations: readonly Aglyn.FormFieldDecl[],
+): Array<{ label: string; value: string }> {
+  return Object.entries(fields).map(([key, value]) => {
+    const label = declarations.find((entry) => entry?.fieldName === key)?.label
+    return { label: (typeof label === 'string' && label.trim()) || key, value }
+  })
+}
+
 /** The first of `keys` the visitor filled in, trimmed, or null. */
 function textField(fields: Record<string, unknown>, keys: readonly string[]): string | null {
   for (const key of keys) {
@@ -1025,18 +1040,31 @@ export async function POST(request: Request): Promise<Response> {
      * the site's address when it is followed, in the console and in the email
      * alike. A notification holds one link, so the lead and the campaign are
      * links inside the reader.
+     *
+     * The email also lists the answers, under the form's own labels, so a
+     * manager can act on an inquiry from the inbox it landed in. Email only:
+     * the console notification and the push keep to the sentence above.
+     *
+     * Started here, so it runs beside the work below, and awaited before the
+     * response: a serverless invocation is frozen once its response is sent,
+     * and the fan-out mails each manager in turn, so a route that returned
+     * without it reached only the managers it had got to by then.
      */
     const alertPath = typeof path === 'string' ? path.slice(0, 500) : ''
-    void notifyHostManagers(hostId, {
-      type: 'content.formSubmission',
-      title: `New form submission — ${resolvedFormName}`,
-      body: [
-        `Someone submitted “${resolvedFormName}” on {site}` +
-          (alertPath ? ` (page ${alertPath}).` : '.'),
-        ...conversionDescriptionSentences(await describing),
-      ].join(' '),
-      ...submissionsLink(hostId, submissionRef.id),
-    })
+    const notifyingManagers = notifyHostManagers(
+      hostId,
+      {
+        type: 'content.formSubmission',
+        title: `New form submission — ${resolvedFormName}`,
+        body: [
+          `Someone submitted “${resolvedFormName}” on {site}` +
+            (alertPath ? ` (page ${alertPath}).` : '.'),
+          ...conversionDescriptionSentences(await describing),
+        ].join(' '),
+        ...submissionsLink(hostId, submissionRef.id),
+      },
+      { emailDetails: submissionEmailDetails(sanitizedFields, formFieldDecls) },
+    )
     /*
      * THE LEAD, FOR THE SITE OWNER'S OWN AD ACCOUNTS (AGL-3694). Handed to
      * whichever plugin sends Conversions API events, with the consent the
@@ -1093,6 +1121,7 @@ export async function POST(request: Request): Promise<Response> {
           : {}),
       },
     )
+    await notifyingManagers
     return json({ received: true, alerts })
   } catch (error) {
     console.error(error)

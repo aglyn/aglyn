@@ -31,10 +31,12 @@ import {
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
 import type { AiStepKind } from '../providers/catalog'
+import { aiCacheWriteHourSum } from '../providers/cache-write-hour'
 import { aiCutOffFigures, aiStoppedAtCeiling, type AiProvider } from '../providers/contract'
 import { AI_ROUTING_TABLE, aiModelForStep, type AiPluginSettings } from '../providers/routing'
 import {
   AI_ACCEPTABLE_USE_BLOCK,
+  aiConversationCacheFits,
   runAiRequest,
   type AiCompletion,
   type AiEffort,
@@ -44,6 +46,7 @@ import {
   type AiTool,
   type AiUsage,
 } from './ai-runtime'
+import { aiDevEffortFor } from './ai-dev-env'
 import {
   AI_SIMILAR_PAGES_MIN,
   aiDoctrineViolationText,
@@ -58,7 +61,9 @@ import {
   aiSettlePlanGalleries,
   aiSettlePlanLayoutRegionSections,
   aiSettlePlanLayouts,
+  aiSettlePlanLayoutsInSections,
   aiSettlePlanRefs,
+  aiSettlePlanSeo,
   aiSettleWrittenGridItems,
   aiSettleWrittenMechanicalRules,
   validateAiBuildPlan,
@@ -705,21 +710,31 @@ export function aiDoctrinePlanCheck(
     // A plan past the datasets this job may make keeps the most useful
     // (AGL-3616), once a form's dataset is one it can write to and no page
     // lists it.
+    // A section that places its page's one layout has it taken out, and a
+    // page that names none is put in it (AGL-3807), right after the refs.
     // A page section that is a layout region (header, navigation, footer) is
-    // taken off the page (AGL-3750), first after the refs, so the wall
+    // taken off the page (AGL-3750), first after those, so the wall
     // counts what the page keeps. A site start's section that shows the work
     // with fewer pieces than its fewest is given that many (AGL-3754).
     // A Free plan a section or two past the wall is trimmed to fit (AGL-3737),
     // last, once every creation the wall counts is settled. The door's own
     // settling (a build's events page, AGL-3755) runs first, so every rule
-    // after it holds what it added.
+    // after it holds what it added. A search title or description a few words
+    // past its length is cut at a word right after it (AGL-3837), so a page
+    // the door added is held to the same lengths.
     const plan = aiSettlePlanFreeWall(
       aiSettlePlanForms(
         aiSettlePlanLayouts(
           aiSettlePlanDatasets(
             aiSettlePlanFormDatasets(
               aiSettlePlanGalleries(
-                aiSettlePlanLayoutRegionSections(aiSettlePlanRefs(settle ? settle(parsed.plan) : parsed.plan, inventory), inventory),
+                aiSettlePlanLayoutRegionSections(
+                  aiSettlePlanLayoutsInSections(
+                    aiSettlePlanRefs(aiSettlePlanSeo(settle ? settle(parsed.plan) : parsed.plan), inventory),
+                    inventory,
+                  ),
+                  inventory,
+                ),
                 inventory,
                 capabilities,
               ),
@@ -901,6 +916,17 @@ interface AiGenerationInputBase {
   signal?: AbortSignal
   /** A provider chosen ahead of every setting; specs use it. */
   provider?: AiProvider
+  /**
+   * Cache the conversation on every request too (AGL-3809), for a door whose
+   * generations usually continue: a lookup round or a re-ask re-sends the
+   * whole first turn and the site's inventory, which the conversation's
+   * breakpoint lets it read back at a cache read's price instead of the full
+   * input rate. The first request pays the cache write on its own tail, so a
+   * door turns it on only where most of its generations continue — the plan
+   * (docs/AI_CACHE_AUDIT_2026-10.md). Dropped where the system blocks already
+   * hold every breakpoint.
+   */
+  cacheConversation?: boolean
 }
 
 export interface AiTreeGenerationInput extends AiGenerationInputBase {
@@ -1097,13 +1123,19 @@ export async function runValidatedGeneration(
     input.maxTokens ??
     AI_GENERATION_MAX_TOKENS[kind as AiGenerationKind] ??
     AI_CUSTOM_GENERATION_MAX_TOKENS
+  // A development run's effort A/B arm (AGL-3781) asks its step at the arm's
+  // effort; everywhere else the door's own stands.
+  const effort = aiDevEffortFor(input.step) ?? input.effort
+  // The route's cache lifetime (AGL-3830): an hour on every step a site job
+  // runs, so the next job reads the prefix this one writes.
+  const cacheTtl = input.step ? AI_ROUTING_TABLE[input.step].cacheTtl : undefined
   const spend: AiGenerationSpend = {
     attempts: 0,
     usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
     estCostUsd: 0,
     model,
     stopReason: null,
-    effort: input.effort ?? null,
+    effort: effort ?? null,
   }
   // "More on request" (AGL-2937). A door that reads a site is offered the
   // lookup tool beside its own on EVERY request, whatever the site's size:
@@ -1113,6 +1145,7 @@ export async function runValidatedGeneration(
   // builds from no site structure — a theme, a listing — passes no inventory
   // and is offered nothing.
   const lookup = input.inventory === undefined ? null : aiInventoryLookupTool()
+  const cacheConversation = Boolean(input.cacheConversation) && aiConversationCacheFits(system)
   const tools = lookup ? [input.tool, lookup] : [input.tool]
   let messages: AiMessage[] = [...input.messages]
   let violations: AiDoctrineViolation[] = []
@@ -1150,7 +1183,9 @@ export async function runValidatedGeneration(
       maxTokens: Math.min(maxTokens, left),
       stream: false,
       ...(input.thinking ? { thinking: input.thinking } : {}),
-      ...(input.effort ? { effort: input.effort } : {}),
+      ...(effort ? { effort } : {}),
+      ...(cacheConversation ? { cacheConversation } : {}),
+      ...(cacheTtl ? { cacheTtl } : {}),
       ...(input.signal ? { signal: input.signal } : {}),
       ...(input.settings ? { settings: input.settings } : {}),
       ...(input.provider ? { provider: input.provider } : {}),
@@ -1167,6 +1202,7 @@ export async function runValidatedGeneration(
       outputTokens: spend.usage.outputTokens + result.usage.outputTokens,
       cacheReadTokens: spend.usage.cacheReadTokens + result.usage.cacheReadTokens,
       cacheWriteTokens: spend.usage.cacheWriteTokens + result.usage.cacheWriteTokens,
+      ...aiCacheWriteHourSum(spend.usage, result.usage),
       ...(thinking === undefined ? {} : { thinkingTokens: thinking }),
     }
     spend.estCostUsd = Math.round((spend.estCostUsd + result.estCostUsd) * 1_000_000) / 1_000_000

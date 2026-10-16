@@ -94,10 +94,10 @@ export async function seedInsights({ put, hostId, now: date }) {
     return at.getTime()
   }
   const more = [
-    ['b-9', 'Haircut', 's-cut', 'Mary Jackson', 'mary@example.com', later(1, 14), 45, { status: 'pendingPayment', expiresAtMs: now + 10 * 60_000 }],
-    ['b-10', 'Haircut', 's-cut', 'Dorothy Vaughan', 'dorothy@example.com', later(2, 10), 45, { status: 'pendingPayment', expiresAtMs: now - HOUR }],
-    ['b-11', 'Color consultation', 's-color', 'Margaret Hamilton', 'margaret@example.com', later(1, 16), 30, { rescheduledFromMs: later(0, 16), address: '12 Lake Rd, Austin TX' }],
-    ['b-12', 'Haircut', 's-cut', 'Ada Lovelace', 'ada@example.com', later(-6, 11), 45, { paidAmountCents: 4500, refundedCents: 4500, status: 'canceled' }],
+    ['b-9', 'Pastry class', 's-cut', 'Aaliyah Grant', 'aaliyah@example.com', later(1, 14), 45, { status: 'pendingPayment', expiresAtMs: now + 10 * 60_000 }],
+    ['b-10', 'Pastry class', 's-cut', 'Tyler Brooks', 'tyler@example.com', later(2, 10), 45, { status: 'pendingPayment', expiresAtMs: now - HOUR }],
+    ['b-11', 'Custom cake consultation', 's-color', 'Isabel Moreno', 'isabel@example.com', later(1, 16), 30, { rescheduledFromMs: later(0, 16), address: '12 Lake Rd, Austin TX' }],
+    ['b-12', 'Pastry class', 's-cut', 'Maya Rodriguez', 'maya@example.com', later(-6, 11), 45, { paidAmountCents: 4500, refundedCents: 4500, status: 'canceled' }],
   ]
   for (const [id, serviceName, serviceId, name, email, startsAtMs, minutes, extra] of more) {
     await put(`hosts/${hostId}/bookings/${id}`, {

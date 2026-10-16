@@ -1,0 +1,1020 @@
+{
+  "$comment": "The Commerce plugin's returns (RMA), natively: every return newest first or by status, one return (the decision, receiving and restocking, the refund, the note, the label and the timeline), starting a return on an order, and the return settings. Reads the store's own Firestore documents and posts to /api/commerce/returns, as the console does. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "commerce.returns",
+      "title": "Returns",
+      "label": "Returns",
+      "subtitle": "Every return on the store, newest first",
+      "icon": "arrow.uturn.backward.circle|undo",
+      "scope": "site",
+      "order": 44,
+      "load": {
+        "returns": {
+          "query": {
+            "collection": "hosts/{site.id}/returns",
+            "limit": 100,
+            "orderBy": "createdAtMs desc"
+          }
+        }
+      },
+      "constants": {
+        "types": {
+          "physical": "physical",
+          "digital": "digital",
+          "service": "service"
+        },
+        "statuses": [
+          {
+            "id": "requested",
+            "label": "Requested"
+          },
+          {
+            "id": "approved",
+            "label": "Approved"
+          },
+          {
+            "id": "declined",
+            "label": "Declined"
+          },
+          {
+            "id": "received",
+            "label": "Received"
+          },
+          {
+            "id": "refunded",
+            "label": "Refunded"
+          },
+          {
+            "id": "closed",
+            "label": "Closed"
+          }
+        ],
+        "reasons": [
+          {
+            "id": "damaged",
+            "label": "Arrived damaged"
+          },
+          {
+            "id": "wrong_item",
+            "label": "Wrong item"
+          },
+          {
+            "id": "not_as_described",
+            "label": "Not as described"
+          },
+          {
+            "id": "size_or_fit",
+            "label": "Size or fit"
+          },
+          {
+            "id": "no_longer_needed",
+            "label": "No longer needed"
+          },
+          {
+            "id": "other",
+            "label": "Other"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "links",
+          "id": "filters",
+          "items": [
+            {
+              "title": "Requested",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "screen": "commerce.returnsByStatus",
+              "params": {
+                "status": "requested"
+              }
+            },
+            {
+              "title": "Approved",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "screen": "commerce.returnsByStatus",
+              "params": {
+                "status": "approved"
+              }
+            },
+            {
+              "title": "Declined",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "screen": "commerce.returnsByStatus",
+              "params": {
+                "status": "declined"
+              }
+            },
+            {
+              "title": "Received",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "screen": "commerce.returnsByStatus",
+              "params": {
+                "status": "received"
+              }
+            },
+            {
+              "title": "Refunded",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "screen": "commerce.returnsByStatus",
+              "params": {
+                "status": "refunded"
+              }
+            },
+            {
+              "title": "Closed",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "screen": "commerce.returnsByStatus",
+              "params": {
+                "status": "closed"
+              }
+            },
+            {
+              "title": "Return settings",
+              "subtitle": "Online requests, the window and which products",
+              "icon": "gearshape|settings",
+              "screen": "commerce.returnSettings"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "returns",
+          "title": "All returns",
+          "items": "data.returns.items",
+          "primary": "{item.orderNumber} · {item.customerName|item.customerEmail|'Guest buyer'}",
+          "secondary": "{item.lines.*.name} · Requested {item.createdAtMs:date}",
+          "icon": "arrow.uturn.backward.circle|undo",
+          "badges": [
+            {
+              "text": "{const.statuses[id=item.status].label}",
+              "tones": {
+                "Requested": "warning",
+                "Approved": "info",
+                "Declined": "neutral",
+                "Received": "info",
+                "Refunded": "success",
+                "Closed": "neutral",
+                "*": "neutral"
+              }
+            }
+          ],
+          "empty": "No returns yet. When a buyer asks to send something back, or you start a return from an order, it appears here.",
+          "open": {
+            "screen": "commerce.return",
+            "params": {
+              "returnId": "{item.$id}"
+            }
+          },
+          "load": "returns"
+        }
+      ]
+    },
+    {
+      "id": "commerce.returnsByStatus",
+      "title": "{const.statuses[id=params.status].label|'Returns'} returns",
+      "label": "Returns by status",
+      "icon": "arrow.uturn.backward.circle|undo",
+      "scope": "site",
+      "load": {
+        "returns": {
+          "query": {
+            "collection": "hosts/{site.id}/returns",
+            "limit": 100,
+            "orderBy": "createdAtMs desc",
+            "where": [
+              [
+                "status",
+                "==",
+                "{params.status}"
+              ]
+            ]
+          }
+        }
+      },
+      "constants": {
+        "types": {
+          "physical": "physical",
+          "digital": "digital",
+          "service": "service"
+        },
+        "statuses": [
+          {
+            "id": "requested",
+            "label": "Requested"
+          },
+          {
+            "id": "approved",
+            "label": "Approved"
+          },
+          {
+            "id": "declined",
+            "label": "Declined"
+          },
+          {
+            "id": "received",
+            "label": "Received"
+          },
+          {
+            "id": "refunded",
+            "label": "Refunded"
+          },
+          {
+            "id": "closed",
+            "label": "Closed"
+          }
+        ],
+        "reasons": [
+          {
+            "id": "damaged",
+            "label": "Arrived damaged"
+          },
+          {
+            "id": "wrong_item",
+            "label": "Wrong item"
+          },
+          {
+            "id": "not_as_described",
+            "label": "Not as described"
+          },
+          {
+            "id": "size_or_fit",
+            "label": "Size or fit"
+          },
+          {
+            "id": "no_longer_needed",
+            "label": "No longer needed"
+          },
+          {
+            "id": "other",
+            "label": "Other"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "returns",
+          "title": "Returns",
+          "items": "data.returns.items",
+          "primary": "{item.orderNumber} · {item.customerName|item.customerEmail|'Guest buyer'}",
+          "secondary": "{item.lines.*.name} · Requested {item.createdAtMs:date}",
+          "icon": "arrow.uturn.backward.circle|undo",
+          "badges": [
+            {
+              "text": "{const.statuses[id=item.status].label}",
+              "tones": {
+                "Requested": "warning",
+                "Approved": "info",
+                "Declined": "neutral",
+                "Received": "info",
+                "Refunded": "success",
+                "Closed": "neutral",
+                "*": "neutral"
+              }
+            }
+          ],
+          "empty": "No returns yet. When a buyer asks to send something back, or you start a return from an order, it appears here.",
+          "open": {
+            "screen": "commerce.return",
+            "params": {
+              "returnId": "{item.$id}"
+            }
+          },
+          "load": "returns"
+        }
+      ]
+    },
+    {
+      "id": "commerce.return",
+      "title": "Return for order {data.ret.orderNumber|''}",
+      "label": "Return",
+      "icon": "arrow.uturn.backward.circle|undo",
+      "scope": "site",
+      "load": {
+        "ret": {
+          "doc": "hosts/{site.id}/returns/{params.returnId}"
+        },
+        "store": {
+          "doc": "hosts/{site.id}/settings/store",
+          "optional": true
+        },
+        "locations": {
+          "query": {
+            "collection": "hosts/{site.id}/locations",
+            "limit": 25,
+            "orderBy": "name asc"
+          }
+        }
+      },
+      "constants": {
+        "types": {
+          "physical": "physical",
+          "digital": "digital",
+          "service": "service"
+        },
+        "statuses": [
+          {
+            "id": "requested",
+            "label": "Requested"
+          },
+          {
+            "id": "approved",
+            "label": "Approved"
+          },
+          {
+            "id": "declined",
+            "label": "Declined"
+          },
+          {
+            "id": "received",
+            "label": "Received"
+          },
+          {
+            "id": "refunded",
+            "label": "Refunded"
+          },
+          {
+            "id": "closed",
+            "label": "Closed"
+          }
+        ],
+        "reasons": [
+          {
+            "id": "damaged",
+            "label": "Arrived damaged"
+          },
+          {
+            "id": "wrong_item",
+            "label": "Wrong item"
+          },
+          {
+            "id": "not_as_described",
+            "label": "Not as described"
+          },
+          {
+            "id": "size_or_fit",
+            "label": "Size or fit"
+          },
+          {
+            "id": "no_longer_needed",
+            "label": "No longer needed"
+          },
+          {
+            "id": "other",
+            "label": "Other"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "id": "summary",
+          "title": "Return",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{const.statuses[id=data.ret.status].label}",
+              "chip": true,
+              "tones": {
+                "Requested": "warning",
+                "Approved": "info",
+                "Declined": "neutral",
+                "Received": "info",
+                "Refunded": "success",
+                "Closed": "neutral",
+                "*": "neutral"
+              }
+            },
+            {
+              "label": "Customer",
+              "value": "{data.ret.customerName|data.ret.customerEmail|'Guest buyer'}"
+            },
+            {
+              "label": "Email",
+              "value": "{data.ret.customerEmail}",
+              "when": "data.ret.customerName && data.ret.customerEmail"
+            },
+            {
+              "label": "Opened by",
+              "value": "The store",
+              "when": "data.ret.requestedBy == merchant"
+            },
+            {
+              "label": "Requested",
+              "value": "{data.ret.createdAtMs:datetime}"
+            },
+            {
+              "label": "Customer note",
+              "value": "{data.ret.customerNote}",
+              "when": "data.ret.customerNote"
+            },
+            {
+              "label": "Merchant note",
+              "value": "{data.ret.merchantNote}",
+              "when": "data.ret.merchantNote"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "lines",
+          "title": "Coming back",
+          "items": "data.ret.lines",
+          "primary": "{item.quantity}× {item.name|'Item'}",
+          "secondary": "{const.reasons[id=item.reason].label|item.reason}",
+          "count": false,
+          "icon": "shippingbox|inventory_2"
+        },
+        {
+          "type": "fields",
+          "id": "label",
+          "title": "Return label",
+          "when": "data.ret.returnLabel",
+          "rows": [
+            {
+              "label": "Carrier",
+              "value": "{data.ret.returnLabel.carrier}"
+            },
+            {
+              "label": "Tracking",
+              "value": "{data.ret.returnLabel.trackingNumber}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "labelLinks",
+          "when": "data.ret.returnLabel",
+          "items": [
+            {
+              "id": "printLabel",
+              "label": "Print label",
+              "icon": "printer|print",
+              "link": "{data.ret.returnLabel.labelUrl}"
+            },
+            {
+              "id": "track",
+              "label": "Track parcel",
+              "icon": "location|location_on",
+              "when": "data.ret.returnLabel.trackingUrl",
+              "link": "{data.ret.returnLabel.trackingUrl}"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "restocked",
+          "title": "Restocked",
+          "when": "data.ret.restock",
+          "items": "data.ret.restock.lines",
+          "count": false,
+          "primary": "{item.quantity}× {data.ret.lines[lineItemId=item.lineItemId].name|'Item'}",
+          "secondary": "On {data.ret.restock.atMs:date}",
+          "icon": "tray.and.arrow.down|download",
+          "empty": "Nothing went back on the shelf."
+        },
+        {
+          "type": "fields",
+          "id": "refunded",
+          "title": "Refund",
+          "when": "data.ret.refundedAtMs",
+          "rows": [
+            {
+              "label": "Refunded",
+              "value": "{data.ret.refundCents:cents/data.store.currency}"
+            },
+            {
+              "label": "On",
+              "value": "{data.ret.refundedAtMs:date}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "decide",
+          "title": "Decision",
+          "when": "data.ret.status == requested",
+          "items": [
+            {
+              "id": "approve",
+              "label": "Approve",
+              "icon": "checkmark.circle|check_circle",
+              "url": "/api/commerce/returns",
+              "prompt": [
+                {
+                  "key": "merchantNote",
+                  "label": "Note to the customer (optional)",
+                  "kind": "multiline"
+                },
+                {
+                  "key": "notify",
+                  "label": "Notify customer",
+                  "kind": "toggle",
+                  "initial": "true"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "returnId": "{params.returnId}",
+                "action": "approve",
+                "merchantNote": "{form.merchantNote}",
+                "notify": "{form.notify}"
+              },
+              "success": "Return approved"
+            },
+            {
+              "id": "decline",
+              "label": "Decline",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "url": "/api/commerce/returns",
+              "prompt": [
+                {
+                  "key": "merchantNote",
+                  "label": "Note to the customer (optional)",
+                  "kind": "multiline"
+                },
+                {
+                  "key": "notify",
+                  "label": "Notify customer",
+                  "kind": "toggle",
+                  "initial": "true"
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "returnId": "{params.returnId}",
+                "action": "decline",
+                "merchantNote": "{form.merchantNote}",
+                "notify": "{form.notify}"
+              },
+              "success": "Return declined"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "progress",
+          "title": "Next",
+          "items": [
+            {
+              "id": "receive",
+              "label": "Mark received",
+              "icon": "tray.and.arrow.down|download",
+              "when": "data.ret.status == approved",
+              "url": "/api/commerce/returns",
+              "prompt": [
+                {
+                  "fieldsFrom": {
+                    "items": "data.ret.lines",
+                    "each": [
+                      {
+                        "key": "restock_{item.lineItemId}",
+                        "label": "Restock: {item.name|'Item'} (of {item.quantity})",
+                        "kind": "number",
+                        "initial": "{item.quantity}",
+                        "min": 0,
+                        "max": "{item.quantity}"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "locationId",
+                  "label": "Location",
+                  "kind": "select",
+                  "when": "data.locations.items",
+                  "initial": "{data.locations.items.0.$id}",
+                  "optionsFrom": {
+                    "items": "data.locations.items",
+                    "value": "{item.$id}",
+                    "label": "{item.name|item.$id}"
+                  }
+                }
+              ],
+              "body": {
+                "hostId": "{site.id}",
+                "returnId": "{params.returnId}",
+                "action": "receive",
+                "restock": {
+                  "$gather": {
+                    "from": "{form}",
+                    "prefix": "restock_",
+                    "key": "lineItemId",
+                    "value": "quantity"
+                  }
+                },
+                "locationId": "{form.locationId}"
+              },
+              "success": "Return received"
+            },
+            {
+              "id": "refund",
+              "label": "Refund",
+              "icon": "arrow.uturn.backward|undo",
+              "destructive": true,
+              "when": "data.ret.status == approved,received",
+              "url": "/api/commerce/returns",
+              "prompt": [
+                {
+                  "key": "amount",
+                  "label": "Refund amount",
+                  "kind": "text",
+                  "required": true,
+                  "help": "What the returned items were paid, shipping and tax left out, or more or less."
+                }
+              ],
+              "confirm": "Refund this return? The amount goes back to the buyer through Stripe, through the order’s own refund. The buyer is emailed.",
+              "body": {
+                "hostId": "{site.id}",
+                "returnId": "{params.returnId}",
+                "action": "refund",
+                "amountCents": {
+                  "$cents": "{form.amount}"
+                }
+              },
+              "success": "Refund issued"
+            },
+            {
+              "id": "close",
+              "label": "Close return",
+              "icon": "archivebox|archive",
+              "when": "data.ret.status != closed",
+              "url": "/api/commerce/returns",
+              "body": {
+                "hostId": "{site.id}",
+                "returnId": "{params.returnId}",
+                "action": "close"
+              },
+              "success": "Return closed"
+            },
+            {
+              "id": "order",
+              "label": "Open the order",
+              "icon": "bag|shopping_basket",
+              "navigate": {
+                "screen": "commerce.order",
+                "params": {
+                  "orderId": "{data.ret.orderId}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "note",
+          "title": "Merchant note",
+          "fields": [
+            {
+              "key": "merchantNote",
+              "label": "Merchant note",
+              "kind": "multiline",
+              "initial": "{data.ret.merchantNote}",
+              "help": "Up to 1000 characters. The customer does not see it."
+            }
+          ],
+          "submit": {
+            "label": "Save note",
+            "url": "/api/commerce/returns",
+            "body": {
+              "hostId": "{site.id}",
+              "returnId": "{params.returnId}",
+              "action": "note",
+              "merchantNote": "{form.merchantNote}"
+            },
+            "success": "Note saved"
+          }
+        },
+        {
+          "type": "list",
+          "id": "timeline",
+          "title": "Timeline",
+          "items": "data.ret.timeline",
+          "primary": "{item.event:title}",
+          "secondary": "{item.detail}",
+          "tertiary": "{item.atMs:datetime}",
+          "count": false,
+          "empty": "Nothing has happened on this return yet."
+        },
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "returnDetail",
+          "params": {
+            "returnId": "{params.returnId}",
+            "orderId": "{data.ret.orderId}"
+          },
+          "title": "Services"
+        }
+      ]
+    },
+    {
+      "id": "commerce.startReturn",
+      "title": "Start a return",
+      "label": "Start a return",
+      "icon": "arrow.uturn.backward.circle|undo",
+      "scope": "site",
+      "load": {
+        "order": {
+          "doc": "hosts/{site.id}/orders/{params.orderId}"
+        }
+      },
+      "constants": {
+        "types": {
+          "physical": "physical",
+          "digital": "digital",
+          "service": "service"
+        },
+        "statuses": [
+          {
+            "id": "requested",
+            "label": "Requested"
+          },
+          {
+            "id": "approved",
+            "label": "Approved"
+          },
+          {
+            "id": "declined",
+            "label": "Declined"
+          },
+          {
+            "id": "received",
+            "label": "Received"
+          },
+          {
+            "id": "refunded",
+            "label": "Refunded"
+          },
+          {
+            "id": "closed",
+            "label": "Closed"
+          }
+        ],
+        "reasons": [
+          {
+            "id": "damaged",
+            "label": "Arrived damaged"
+          },
+          {
+            "id": "wrong_item",
+            "label": "Wrong item"
+          },
+          {
+            "id": "not_as_described",
+            "label": "Not as described"
+          },
+          {
+            "id": "size_or_fit",
+            "label": "Size or fit"
+          },
+          {
+            "id": "no_longer_needed",
+            "label": "No longer needed"
+          },
+          {
+            "id": "other",
+            "label": "Other"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "hint",
+          "tone": "info",
+          "text": "Choose what is coming back, and how many. A return you start is approved at once; receive the parcel and refund it from the return. The store checks every quantity against what shipped and what is already coming back."
+        },
+        {
+          "type": "form",
+          "id": "start",
+          "title": "What is coming back",
+          "fields": [
+            {
+              "fieldsFrom": {
+                "items": "data.order.lineItems",
+                "each": [
+                  {
+                    "key": "qty_{index}",
+                    "label": "{item.name} {item.variantLabel} · ordered {item.quantity}",
+                    "kind": "number",
+                    "initial": "0",
+                    "min": 0,
+                    "max": "{item.quantity}"
+                  },
+                  {
+                    "key": "reason_{index}",
+                    "label": "Reason for {item.name}",
+                    "kind": "select",
+                    "initial": "other",
+                    "options": [
+                      {
+                        "value": "damaged",
+                        "label": "Arrived damaged"
+                      },
+                      {
+                        "value": "wrong_item",
+                        "label": "Wrong item"
+                      },
+                      {
+                        "value": "not_as_described",
+                        "label": "Not as described"
+                      },
+                      {
+                        "value": "size_or_fit",
+                        "label": "Size or fit"
+                      },
+                      {
+                        "value": "no_longer_needed",
+                        "label": "No longer needed"
+                      },
+                      {
+                        "value": "other",
+                        "label": "Other"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "key": "note",
+              "label": "Note (optional)",
+              "kind": "multiline"
+            },
+            {
+              "key": "notify",
+              "label": "Notify customer",
+              "kind": "toggle",
+              "initial": "true"
+            }
+          ],
+          "submit": {
+            "label": "Start return",
+            "url": "/api/commerce/returns",
+            "back": true,
+            "body": {
+              "hostId": "{site.id}",
+              "action": "create",
+              "orderId": "{params.orderId}",
+              "lines": {
+                "$gather": {
+                  "from": "{form}",
+                  "prefix": "qty_",
+                  "key": "lineItemId",
+                  "value": "quantity",
+                  "with": {
+                    "reason": "reason_"
+                  },
+                  "skipEmpty": true
+                }
+              },
+              "note": "{form.note}",
+              "notify": "{form.notify}"
+            },
+            "success": "Return started"
+          }
+        }
+      ]
+    },
+    {
+      "id": "commerce.returnSettings",
+      "title": "Return settings",
+      "label": "Return settings",
+      "icon": "gearshape|settings",
+      "scope": "site",
+      "load": {
+        "store": {
+          "doc": "hosts/{site.id}/settings/store"
+        }
+      },
+      "constants": {
+        "types": {
+          "physical": "physical",
+          "digital": "digital",
+          "service": "service"
+        },
+        "statuses": [
+          {
+            "id": "requested",
+            "label": "Requested"
+          },
+          {
+            "id": "approved",
+            "label": "Approved"
+          },
+          {
+            "id": "declined",
+            "label": "Declined"
+          },
+          {
+            "id": "received",
+            "label": "Received"
+          },
+          {
+            "id": "refunded",
+            "label": "Refunded"
+          },
+          {
+            "id": "closed",
+            "label": "Closed"
+          }
+        ],
+        "reasons": [
+          {
+            "id": "damaged",
+            "label": "Arrived damaged"
+          },
+          {
+            "id": "wrong_item",
+            "label": "Wrong item"
+          },
+          {
+            "id": "not_as_described",
+            "label": "Not as described"
+          },
+          {
+            "id": "size_or_fit",
+            "label": "Size or fit"
+          },
+          {
+            "id": "no_longer_needed",
+            "label": "No longer needed"
+          },
+          {
+            "id": "other",
+            "label": "Other"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "id": "settings",
+          "title": "Returns",
+          "footer": "Whether buyers may ask for a return online, for how many days after the order shipped (or was placed, when nothing ships), and which product types. A merchant may start a return on any order from the order.",
+          "fields": [
+            {
+              "key": "enabled",
+              "label": "Accept return requests online",
+              "kind": "toggle",
+              "initial": "{data.store.returns.enabled ?? 'true'}"
+            },
+            {
+              "key": "windowDays",
+              "label": "Return window in days",
+              "kind": "number",
+              "min": 0,
+              "max": 365,
+              "required": true,
+              "initial": "{data.store.returns.windowDays ?? '30'}",
+              "help": "0 to 365."
+            },
+            {
+              "key": "physical",
+              "label": "Physical products",
+              "kind": "toggle",
+              "initial": "{?data.store.returns.eligibleTypes[=const.types.physical] || !data.store.returns.eligibleTypes}"
+            },
+            {
+              "key": "digital",
+              "label": "Digital products",
+              "kind": "toggle",
+              "initial": "{?data.store.returns.eligibleTypes[=const.types.digital]}"
+            },
+            {
+              "key": "service",
+              "label": "Services",
+              "kind": "toggle",
+              "initial": "{?data.store.returns.eligibleTypes[=const.types.service]}"
+            }
+          ],
+          "submit": {
+            "label": "Save return settings",
+            "write": {
+              "doc": "hosts/{site.id}/settings/store",
+              "fields": {
+                "returns": {
+                  "enabled": "{form.enabled}",
+                  "windowDays": "{form.windowDays}",
+                  "eligibleTypes": {
+                    "$pick": {
+                      "physical": "{form.physical}",
+                      "digital": "{form.digital}",
+                      "service": "{form.service}"
+                    }
+                  }
+                }
+              }
+            },
+            "siteWide": true,
+            "success": "Return settings saved"
+          }
+        }
+      ]
+    }
+  ]
+}

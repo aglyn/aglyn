@@ -72,6 +72,7 @@ const val MARKETPLACE_BROWSE_SCREEN = "marketplace.browse"
 const val MARKETPLACE_LISTING_SCREEN = "marketplace.listing"
 const val MARKETPLACE_INSTALLED_SCREEN = "marketplace.installed"
 const val MARKETPLACE_LICENCES_SCREEN = "marketplace.licenses"
+const val MARKETPLACE_PLUGIN_SETTINGS_SCREEN = "marketplace.plugin-settings"
 
 /** Publishing to the marketplace is a spec screen (marketplace.screens.json): what this site and the workspace can publish. */
 const val MARKETPLACE_PUBLISH_SCREEN = "marketplace.publish"

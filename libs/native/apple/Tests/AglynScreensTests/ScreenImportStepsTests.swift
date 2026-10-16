@@ -51,8 +51,8 @@ final class ScreenImportStepsTests: XCTestCase {
   ]
 
   func testTheReviewDrawsTheStepsOfThePluginThisImportBelongsTo() throws {
-    let steps = try plugin("commerce/src/ios/Sources/AglynCommercePlugin/Resources/commerce-import.screens.json")
-      + plugin("email/src/ios/Sources/AglynEmailPlugin/Resources/email-import.screens.json")
+    let steps = try (plugin("commerce/src/ios/Sources/AglynCommercePlugin/Resources/commerce-import.screens.json")
+      + plugin("email/src/ios/Sources/AglynEmailPlugin/Resources/email-import.screens.json")).filter { !$0.zones.isEmpty }
     XCTAssertEqual(steps.map(\.zones), [["transferStep"], ["transferStep"], ["transferStep"]])
     let review = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.settings.data.import.review" })
     let zone = try XCTUnwrap(review.blocks.first { $0.type == "zone" })
@@ -66,6 +66,109 @@ final class ScreenImportStepsTests: XCTestCase {
     XCTAssertEqual(offered("email.list-members:abc123"), ["email.import.existing", "email.import.consent"])
     XCTAssertEqual(offered("data.dataset:xyz"), [])
     XCTAssertEqual(offered("crm.contacts"), [])
+  }
+
+  func testAProductImportCanAskForAiCopyOfTheProductsItCreatesAndTheJobStartsOnceTheyLand() async throws {
+    let step = try XCTUnwrap(
+      plugin("ai/src/ios/Sources/AglynAiPlugin/Resources/ai.screens.json").first { $0.id == "ai.import.productCopy" })
+    // The step belongs to a products import, in the zone the review draws; only a manager sees it.
+    XCTAssertEqual(step.zones, ["transferStep"])
+    func offered(_ resource: String, manager: Bool = true) -> Bool {
+      ScreenValues.condition(step.requires, in: ["stash": ["importResource": .string(resource)], "org": ["manager": .bool(manager)]])
+    }
+    XCTAssertTrue(offered("commerce.products"))
+    XCTAssertFalse(offered("commerce.gift-cards"))
+    XCTAssertFalse(offered("commerce.products", manager: false))
+    // The option is offered only where the AI feature is the workspace's (the jobs route answers), as the console's is.
+    let transport = RecordingTransport(responses: [(200, #"{"jobs":[]}"#), (404, #"{"error":"Not found"}"#)])
+    ScreenStash.set(["importPlan": ["summary": ["create": 80]]])
+    let model = ScreenModel(spec: step, context: ["org": ["id": "o1"]], api: api(transport))
+    await model.load()
+    XCTAssertEqual(transport.requests[0].url?.path, "/api/ai/jobs")
+    XCTAssertEqual(transport.requests[0].url?.query, "orgId=o1&limit=20")
+    let shown = step.blocks.filter { ScreenValues.condition($0.when, in: model.context) }
+    XCTAssertEqual(shown.map(\.type), ["notice", "form", "notice"])
+    XCTAssertEqual(
+      ScreenValues.render(try XCTUnwrap(shown.last?["text"]?.stringValue), in: model.context), "Copy is written for the first 50 of the 80 products.")
+    let hidden = ScreenModel(spec: step, context: ["org": ["id": "o1"]], api: api(transport))
+    await hidden.load()
+    XCTAssertEqual(step.blocks.filter { ScreenValues.condition($0.when, in: hidden.context) }.map(\.type), ["notice"])
+
+    // Saving the choice keeps it for this import only.
+    ScreenStash.clear()
+    let form = try XCTUnwrap(step.blocks.first { $0.id == "copy" })
+    let save = try XCTUnwrap(form["submit"].flatMap(ActionSpec.init))
+    ScreenStash.set(["importJob": "j1"])
+    _ = await model.run(save, in: ScreenContext.with(ScreenContext.with(model.context, "stash", .object(ScreenStash.values)), "form", ["write": true]))
+    XCTAssertEqual(ScreenStash.values["importAiCopy"], true)
+    XCTAssertEqual(ScreenStash.values["importAiCopyFor"], "j1")
+
+    // Applying the import runs the hook once it is done: the created ids are read from its results and the console's
+    // copy job is started for them (the first 50, one brief, the ids as `inputs`).
+    ScreenCatalog.shared.add([step])
+    let review = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.settings.data.import.review" })
+    let apply = try action(review, "applyNow")
+    XCTAssertEqual(apply.afterZone?["zone"], "transferStep")
+    let results = #"{"rows":[{"outcome":"created","recordId":"p1"},{"outcome":"updated","recordId":"p9"},{"outcome":"created","recordId":"p2"},{"outcome":"created","recordId":"p1"}]}"#
+    let run = RecordingTransport(responses: [(200, #"{"done":true,"progress":{"done":4}}"#), (200, results), (200, #"{"job":{"id":"a1"}}"#)])
+    let applying = ScreenModel(spec: review, context: ["org": ["id": "o1"]], api: api(run))
+    ScreenStash.set(["importResource": "commerce.products", "importHost": "h1"])
+    let outcome = await applying.run(apply, in: ["org": ["id": "o1", "manager": true], "stash": .object(ScreenStash.values)])
+    XCTAssertEqual(outcome, .done(message: nil, response: ["done": true, "progress": ["done": 4]]))
+    XCTAssertEqual(run.requests.map { $0.url?.path }, ["/api/transfer/apply", "/api/transfer/status", "/api/ai/jobs"])
+    XCTAssertEqual(try sent(run, 1), ["orgId": "o1", "jobId": "j1", "include": "results"])
+    XCTAssertEqual(
+      try sent(run, 2),
+      ["orgId": "o1", "hostId": "h1", "kind": "products", "brief": "Write storefront copy for 2 products",
+        "inputs": ["target": "bulk", "productIds": "p1,p2"]])
+    XCTAssertEqual(
+      ScreenStash.values["importAfter"],
+      "AI is writing descriptions, search listings and tags for the new products. You review them on the products page before any is saved.")
+
+    // An import that did not ask, or asked for another import, starts nothing.
+    ScreenStash.set(["importAiCopy": .null, "importAfter": .null])
+    let quiet = RecordingTransport(responses: [(200, #"{"done":true}"#)])
+    _ = await ScreenModel(spec: review, context: [:], api: api(quiet)).run(apply, in: ["org": ["id": "o1", "manager": true], "stash": .object(ScreenStash.values)])
+    XCTAssertEqual(quiet.requests.count, 1)
+    XCTAssertNil(ScreenStash.values["importAfter"])
+    // The done screen says what the hooks said.
+    let done = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.settings.data.import.done" })
+    XCTAssertTrue(done.blocks.contains { $0.when == "stash.importAfter" })
+  }
+
+  func testAnAudienceImportsAndExportsItsMembersAndResumesAnImportItLeft() async throws {
+    let transfer = try XCTUnwrap(
+      plugin("email/src/ios/Sources/AglynEmailPlugin/Resources/email-import.screens.json").first { $0.id == "email.list.transfer" })
+    let jobs = #"""
+      {"unfinished":[
+        {"jobId":"j1","resource":"email.list-members:abc","fileName":"spring.csv","label":"Members","status":"analyzed","updatedAt":1791385440000},
+        {"jobId":"j2","resource":"email.list-members:other","fileName":"other.csv","label":"Members","status":"draft","updatedAt":1791385440000}]}
+      """#
+    let transport = RecordingTransport(responses: [(200, jobs)])
+    let model = ScreenModel(
+      spec: transfer, context: ["org": ["id": "o1", "manager": true], "site": ["id": "h1"],
+        "params": ["list": "abc", "name": "Spring sale", "resource": "email.list-members:abc"]], api: api(transport))
+    await model.load()
+    XCTAssertEqual(try sent(transport, 0), ["orgId": "o1", "unfinished": true])
+    // Import runs the records wizard on this list, titled as the console titles it.
+    let scope = model.context
+    let start = try action(transfer, "import")
+    let navigate = try XCTUnwrap(start.navigate)
+    XCTAssertEqual(navigate.screen, "core.settings.data.import")
+    XCTAssertEqual(
+      navigate.params.mapValues { ScreenValues.render($0, in: scope) },
+      ["resource": "email.list-members:abc", "hostId": "h1", "title": "Import into Spring sale"])
+    // Export opens the shared export sheet on the same list.
+    let export = try XCTUnwrap(action(transfer, "export").exportRequest(in: scope))
+    XCTAssertEqual([export.resource, export.title, export.hostID], ["email.list-members:abc", "Export Spring sale", "h1"])
+    // Only this list's unfinished imports are offered to resume.
+    let list = try XCTUnwrap(transfer.blocks.first { $0.title == "Resume import" })
+    let rows = ScreenValues.scopes(items: list["items"]?.stringValue ?? "", within: nil, filter: list["filter"]?.stringValue, in: scope)
+    XCTAssertEqual(rows.map { ScreenValues.render(list["primary"]?.stringValue ?? "", in: $0) }, ["spring.csv"])
+    // The audience's own menu opens this screen; the wizard's title is a parameter.
+    let wizard = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.settings.data.import" })
+    XCTAssertEqual(ScreenValues.render(wizard.title, in: ["params": ["title": "Import into Spring sale"]]), "Import into Spring sale")
+    XCTAssertEqual(ScreenValues.render(wizard.title, in: ["params": [:]]), "Import records")
   }
 
   func testTheRulesStepKeepsThePlanItAskedForSoAStepCanAskAgain() async throws {
@@ -106,6 +209,16 @@ final class ScreenImportStepsTests: XCTestCase {
     XCTAssertFalse(typed.unmet("$60.00", in: model.context))
     XCTAssertTrue(typed.unmet("$59.00", in: model.context))
     XCTAssertTrue(typed.unmet("", in: model.context))
+    // A total is read as dollars, as the console reads it: the sign and the cents are optional.
+    for accepted in ["60", "$60", "60.00", "$60.00", " 60 ", "60 USD", "usd 60"] {
+      XCTAssertFalse(typed.unmet(.string(accepted), in: model.context), accepted)
+    }
+    for refused in ["59.99", "sixty", "$60.001", "-60"] {
+      XCTAssertTrue(typed.unmet(.string(refused), in: model.context), refused)
+    }
+    XCTAssertTrue(typed.mismatches("59", in: model.context))
+    XCTAssertFalse(typed.mismatches("60", in: model.context))
+    XCTAssertEqual(ScreenValues.render(try XCTUnwrap(typed.mismatch), in: model.context), "That is not the total. These cards add up to $60.00.")
     // Confirming asks the same plan again with the answer under the step's id, and keeps it for the steps after.
     let submit = try XCTUnwrap(confirm["submit"].flatMap(ActionSpec.init))
     var scope = ScreenContext.with(model.context, "form", ["typed": "$60.00", "email": true])

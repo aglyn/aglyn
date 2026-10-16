@@ -19,7 +19,9 @@ import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreOrder
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreReader
+import com.aglyn.core.PlanFeatureDefaults
 import com.aglyn.core.decode
+import com.aglyn.core.planFeatureCarried
 import com.aglyn.plugins.commerce.orders.ordersPath
 import kotlin.math.roundToLong
 
@@ -34,6 +36,21 @@ import kotlin.math.roundToLong
 const val SALES_ORDER_CEILING = 500
 
 private const val DAY_MS = 24L * 60 * 60 * 1000
+
+/** Whether the workspace's plan sells commerce analytics, and the plan that first includes it (what an upsell names). */
+data class SalesAccess(val carried: Boolean, val plan: String?)
+
+/**
+ * The console shows no sales figure to a plan without `commerceAnalytics`, and neither does the app: the numbers are read
+ * from orders the workspace may legitimately see, so the plan is checked here, on the workspace's own document.
+ */
+suspend fun salesAccess(firestore: FirestoreReader, orgId: String): SalesAccess =
+  SalesAccess(planFeatureCarried(firestore.get("orgs/$orgId")?.data, "commerceAnalytics"), PlanFeatureDefaults.grantedFrom["commerceAnalytics"])
+
+/** What a plan without analytics reads in place of the figures. */
+fun salesLockedText(plan: String?): String =
+  "Commerce analytics (revenue trend, orders, average order value, channel split and top products) is included from ${plan ?: "a higher plan"}. " +
+    "Every order is still being recorded, so the numbers are waiting the moment you upgrade."
 
 /** A stored order as the figures take it. */
 fun figureOrder(doc: FirestoreDoc): FigureOrder =

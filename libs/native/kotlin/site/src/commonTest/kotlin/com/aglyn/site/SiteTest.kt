@@ -202,6 +202,12 @@ class SiteTest {
     // A blank box asks nothing, and a megabyte box takes digits and one point.
     assertEquals(emptyList(), MediaFilters(tag = "  ", minMegabytes = " ").clauses(scoped = false))
     assertEquals("12.57", megabytesInput("1a2.5.7"))
+    // The day a file was uploaded and who uploaded it: a range on the creation time, and an equality.
+    val dated = mediaQuery(MediaScope.Site("h"), FolderPick.All, null, null, MediaSort.NEWEST, "", filters = MediaFilters(uploadedAfter = "2026-03-14", uploadedBefore = "2026-03-15", uploadedBy = "u1"))
+    assertEquals(3, MediaFilters(uploadedAfter = "2026-03-14", uploadedBefore = "2026-03-15", uploadedBy = "u1").count)
+    assertTrue(FirestoreFilter("uploadedBy", FilterOp.EQ, "u1") in dated.filters)
+    assertTrue(dated.filters.any { it.field == "createdAt" && it.op == FilterOp.GTE })
+    assertTrue(dated.filters.any { it.field == "createdAt" && it.op == FilterOp.LT })
     // A search and a tag are both array clauses, which one query cannot hold: the plan says which it left out.
     val notices = mediaPlanNotices(mediaPlan(FolderPick.All, null, null, MediaSort.NEWEST, "hero", MediaFilters(tag = "sunset")))
     assertTrue(notices.isNotEmpty(), notices.toString())
@@ -222,6 +228,9 @@ class SiteTest {
     // A film's measured length, in whole seconds.
     assertEquals(63L, file("m6", "video" to mapOf("durationMs" to 63_400L, "width" to 1920L, "height" to 1080L)).videoSeconds)
     assertNull(file("m7").videoSeconds)
+    // A film's captured poster frame is recorded on its document; without one, its poster address is no picture.
+    assertTrue(file("m8", "poster" to mapOf("width" to 640L)).hasPoster)
+    assertEquals(false, file("m9").hasPoster)
   }
 
   @Test
@@ -477,7 +486,30 @@ class SiteTest {
     )
     assertEquals("Suggested by Aglyn AI. Edit it and it becomes yours.", com.aglyn.site.setup.businessOriginLine("audience", stored, resolved, "x"))
     assertEquals("One per line", com.aglyn.site.setup.businessOriginLine("services", stored, resolved, "One per line"))
-    assertEquals(listOf("details", "business", "seo", "tracking", "theme", "emails"), com.aglyn.site.setup.SetupSection.entries.map { it.id })
+    assertEquals(listOf("details", "business", "seo", "tracking", "theme", "emails", "integrations"), com.aglyn.site.setup.SetupSection.entries.map { it.id })
+  }
+
+  @Test
+  fun integrationsOfferTheCardsOfPluginsRunningOnTheSite() {
+    val registry = com.aglyn.pluginhost.NativePluginRegistry()
+    val entries = listOf("live-chat", "marketing-platforms", "zapier").map { id ->
+      com.aglyn.pluginhost.NativePluginManifestEntry(id, mapOf("widgets" to listOf("$id.card"))) { registrar ->
+        registrar.widget("$id.card", id, order = 1, slot = com.aglyn.site.setup.INTEGRATIONS_SLOT) {}
+      }
+    }
+    assertEquals(emptyList(), registry.load(entries).failed)
+    val cards = registry.widgets(com.aglyn.pluginhost.NativeApp.AGLYN, com.aglyn.site.setup.INTEGRATIONS_SLOT)
+    fun shown(org: Map<String, Any?>?, host: Map<String, Any?>?) =
+      com.aglyn.site.setup.integrationWidgets(cards, com.aglyn.site.setup.runningPlugins(org, host)).map { it.pluginId }.sorted()
+    // Live chat is off for a site until the site turns it on; Zapier has no switch, so its card is always offered.
+    assertEquals(listOf("marketing-platforms", "zapier"), shown(null, emptyMap()))
+    assertEquals(listOf("live-chat", "marketing-platforms", "zapier"), shown(null, mapOf("enabledPlugins" to listOf("live-chat"))))
+    // A site that turned the email platforms off loses that card.
+    assertEquals(
+      listOf("live-chat", "zapier"),
+      shown(mapOf("enabledPlugins" to listOf("live-chat")), mapOf("enabledPlugins" to listOf("live-chat"), "disabledPlugins" to listOf("marketing-platforms"))),
+    )
+    assertEquals(listOf("zapier"), shown(null, mapOf("disabledPlugins" to listOf("marketing-platforms"))))
   }
 
   @Test
@@ -498,5 +530,56 @@ class SiteTest {
     assertEquals("audio/mpeg", bodies[0]["contentType"]?.jsonPrimitive?.content)
     assertNull(bodies[1]["rightsConfirmed"])
     assertEquals("I own this audio or have a license to use it on my site", com.aglyn.site.media.AUDIO_RIGHTS_STATEMENT)
+  }
+
+  @Test
+  fun aFilmIsReadOnTheDeviceAndItsPosterRidesTheUpload() = runTest {
+    val bodies = mutableListOf<kotlinx.serialization.json.JsonObject>()
+    val engine = MockEngine { request ->
+      val text = (request.body as? io.ktor.http.content.OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+      if (text.isNotEmpty()) bodies += Json.parseToJsonElement(text).jsonObject
+      respond("""{"mediaId":"m1"}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+    }
+    var probed = 0
+    val probe = com.aglyn.ui.VideoProbe { probed += 1; com.aglyn.ui.VideoProbeResult(2_500, 1920, 1080, byteArrayOf(9, 9, 9)) }
+    val client = ConsoleApiClient(origin = "https://console.test/", http = HttpClient(engine), getIdToken = { "t" }, sleep = {}, maxAttempts = 1)
+    val api = com.aglyn.site.media.MediaApi(client, MediaScope.Site("h1"), probe)
+    api.upload(PickedFile("film.mp4", "video/mp4", byteArrayOf(1, 2, 3)), null)
+    api.upload(PickedFile("a.png", "image/png", byteArrayOf(1)), null)
+    // Only a film is probed; the poster is base64 and the three numbers ride together.
+    assertEquals(1, probed)
+    val video = bodies[0].getValue("video").jsonObject
+    assertEquals(listOf("2500", "1920", "1080"), listOf("durationMs", "width", "height").map { video.getValue(it).jsonPrimitive.content })
+    assertEquals("CQkJ", bodies[0]["poster"]?.jsonPrimitive?.content)
+    assertNull(bodies[0]["posterError"])
+    assertNull(bodies[1]["video"])
+    assertNull(bodies[1]["poster"])
+  }
+
+  @Test
+  fun whatAProbeAddsIsBoundedAsTheServerBoundsIt() {
+    val ok = com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(1_000, 640, 360, byteArrayOf(1)))
+    assertEquals(setOf("video", "poster"), ok.keys)
+    // No poster: the reason goes instead, cut to two hundred characters; and a poster hides the reason.
+    val failed = com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(1_000, 640, 360, null, "x".repeat(300)))
+    assertEquals(setOf("video", "posterError"), failed.keys)
+    assertEquals(200, (failed["posterError"] as String).length)
+    assertEquals(setOf("video", "poster"), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(1_000, 640, 360, byteArrayOf(1), "ignored")).keys)
+    // Length and frame size are all or nothing, and bounded: a day, and 16384 a side.
+    assertEquals(emptySet(), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(1_000, null, 360)).keys)
+    assertEquals(emptySet(), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(0, 640, 360)).keys)
+    assertEquals(emptySet(), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(86_400_001, 640, 360)).keys)
+    assertEquals(emptySet(), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(1_000, 16_385, 360)).keys)
+    // Nothing found and nothing said adds nothing.
+    assertEquals(emptySet(), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult()).keys)
+    assertEquals(emptySet(), com.aglyn.site.media.videoProbeFields(com.aglyn.ui.VideoProbeResult(reason = "   ")).keys)
+  }
+
+  @Test
+  fun aPosterIsTakenATenthOfTheWayInButNeverPastTheFirstSecond() {
+    assertEquals(0.1, com.aglyn.site.media.posterTimeSeconds(0.0))
+    assertEquals(0.1, com.aglyn.site.media.posterTimeSeconds(Double.POSITIVE_INFINITY))
+    assertEquals(0.5, com.aglyn.site.media.posterTimeSeconds(5.0))
+    assertEquals(1.0, com.aglyn.site.media.posterTimeSeconds(600.0))
   }
 }

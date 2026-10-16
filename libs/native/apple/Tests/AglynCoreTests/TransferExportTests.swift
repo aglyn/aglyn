@@ -37,7 +37,8 @@ final class TransferExportTests: XCTestCase {
     let client = ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "tok" }, transport: transport)
     let transfer = TransferAPI(api: client, orgID: "o1")
     let file = try await transfer.export(
-      resource: "forms.submissions", hostID: "h1", fieldIDs: ["email"], scope: ["kind": "all"], format: .csv)
+      resource: "forms.submissions", hostID: "h1", fieldIDs: ["email"], scope: ["kind": "all"], format: .csv, bom: true,
+      headers: ["email": "Email Address"])
     XCTAssertEqual(file.name, "contact-submissions.csv")
     XCTAssertEqual(file.header("x-aglyn-export-rows"), "12")
     XCTAssertEqual(String(decoding: file.data, as: UTF8.self), "a,b\n")
@@ -46,6 +47,7 @@ final class TransferExportTests: XCTestCase {
     XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer tok")
     let body = try XCTUnwrap(JSONValue.decode(request.httpBody ?? Data()))
     XCTAssertEqual(body["bom"], true)
+    XCTAssertEqual(body["headers"], ["email": "Email Address"])
     XCTAssertEqual(body["format"], "csv")
     XCTAssertEqual(body["fieldIds"], ["email"])
     XCTAssertEqual(body["orgId"], "o1")
@@ -71,5 +73,17 @@ final class TransferExportTests: XCTestCase {
     XCTAssertEqual(DownloadedFile.fileName(fromDisposition: "attachment; filename*=UTF-8''r%C3%A9sum%C3%A9.json"), "résumé.json")
     XCTAssertNil(DownloadedFile.fileName(fromDisposition: "inline"))
     XCTAssertNil(DownloadedFile.fileName(fromDisposition: nil))
+  }
+
+  func testTheByteOrderMarkAndColumnNamesAreAskedForNotAssumed() {
+    let transfer = TransferAPI(api: ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "tok" }), orgID: "o1")
+    let plain = transfer.exportBody(resource: "r", hostID: nil, fieldIDs: ["a"], scope: ["kind": "all"], format: .csv)
+    XCTAssertEqual(plain["bom"], false)
+    XCTAssertNil(plain["headers"])
+    // Only a CSV has either: a JSON file has no byte-order mark and no columns to rename.
+    let json = transfer.exportBody(
+      resource: "r", hostID: nil, fieldIDs: ["a"], scope: ["kind": "all"], format: .json, bom: true, headers: ["a": "A"])
+    XCTAssertEqual(json["bom"], false)
+    XCTAssertNil(json["headers"])
   }
 }

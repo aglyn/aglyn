@@ -206,6 +206,8 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
     // own DoorDash Drive keys.
     // Ad conversions (AGL-3694): a site connects its own ad account, or nothing.
     // Music (AGL-3716): on for every workspace, and a site can turn it off.
+    // Help desks (AGL-3824): sold with commerce, hidden until the deployment
+    // can seal a merchant's own help desk credentials.
     expect(WORKSPACE_LOCKED).toEqual([
       'forms',
       'ai',
@@ -225,6 +227,7 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
       'couriers',
       'review-platforms',
       'music',
+      'help-desks',
       'ad-conversions',
     ])
   })

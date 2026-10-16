@@ -124,6 +124,8 @@ struct MediaLibrary: View {
   @State private var folderSheet: FolderSheet?
   @State private var filtersSheet = false
   @State private var deletingFolder: MediaFolder?
+  /// Files staff have disabled among those on screen (AGL-1612), asked of the console after each change of the page.
+  @State private var disabled: [String: MediaQuarantineNotice] = [:]
 
   private var api: MediaAPI { MediaAPI(api: context.api, scope: scope) }
 
@@ -177,7 +179,7 @@ struct MediaLibrary: View {
       }
     }
     .sheet(isPresented: $filtersSheet) {
-      MediaFiltersSheet(filters: model.filters, scoped: scopeTokens != nil) { model.filters = $0 } close: {
+      MediaFiltersSheet(context: context, filters: model.filters, scoped: scopeTokens != nil) { model.filters = $0 } close: {
         filtersSheet = false
       }
     }
@@ -428,6 +430,7 @@ struct MediaLibrary: View {
         }
       }
       .sensoryFeedback(.selection, trigger: selection)
+      .task(id: items.map(\.id)) { disabled = await api.quarantine(items.map(\.id)) }
     }
   }
 
@@ -435,7 +438,7 @@ struct MediaLibrary: View {
   private func tile(_ item: MediaItem, selectable: Bool) -> some View {
     let label = AglynMediaTile(
       item.fileName, imageURL: item.thumbnail(origin: context.api.origin).flatMap(URL.init(string:)),
-      systemImage: mediaKindSymbol(item.kind), badge: item.isPrivate ? (text: "Private", tone: AglynTone.warning) : nil,
+      systemImage: mediaKindSymbol(item.kind), badge: mediaTileBadge(private: item.isPrivate, disabled: disabled[item.id] != nil),
       selected: selectable && item.id == selection)
     Group {
       if selectable {
@@ -459,6 +462,12 @@ struct MediaLibrary: View {
     .buttonStyle(AglynPressableStyle())
     .accessibilityIdentifier("media-\(item.id)")
   }
+}
+
+/// The one badge a tile carries. A disabled file is not serving to anyone, so it outranks the Private advisory.
+func mediaTileBadge(private isPrivate: Bool, disabled: Bool) -> (text: String, tone: AglynTone)? {
+  if disabled { return (text: "Disabled", tone: .error) }
+  return isPrivate ? (text: "Private", tone: .warning) : nil
 }
 
 /// New folder and Rename folder.
@@ -565,7 +574,10 @@ struct MediaDetailBody: View {
   @State private var deleting = false
   @State private var replaceSource: PickSource?
   @State private var audioReplacement: PickedFile?
+  @State private var editingImage = false
   @State private var references: [MediaReference]?
+  /// Why staff disabled this file, when they did (AGL-1612).
+  @State private var disabled: MediaQuarantineNotice?
 
   private var origin: String { context.api.origin }
   private var altMax: Int { ContractValues.shared.mediaAltMaxLength }
@@ -608,6 +620,12 @@ struct MediaDetailBody: View {
 
   var body: some View {
     Form {
+      if let disabled {
+        Section {
+          AglynNotice("\(disabled.title). \(disabled.message)", tone: .error)
+            .accessibilityIdentifier("media-quarantine")
+        }
+      }
       Section {
         AglynRemoteImage(
           item.thumbnail(origin: origin, width: 640).flatMap(URL.init(string:)), systemImage: mediaKindSymbol(item.kind),
@@ -740,6 +758,7 @@ struct MediaDetailBody: View {
     .aglynListBackground()
     .accessibilityIdentifier("media-detail")
     .onChange(of: item, initial: true) { _, _ in reset() }
+    .task(id: item.id) { disabled = await api.quarantine([item.id])[item.id] }
     .aglynMediaPicker($replaceSource, multiple: false) { files in
       guard let file = files.first else { return }
       // An audio file needs its uploader's rights confirmation first (AGL-3716).
@@ -755,6 +774,7 @@ struct MediaDetailBody: View {
       }
     }
     .sheet(isPresented: $moving) { moveSheet }
+    .sheet(isPresented: $editingImage) { imageEditor }
     .confirmationDialog("Delete \(item.fileName)?", isPresented: $deleting, titleVisibility: .visible) {
       Button("Delete", role: .destructive) {
         let (id, name) = (item.id, item.fileName)
@@ -802,6 +822,45 @@ struct MediaDetailBody: View {
     .buttonStyle(.bordered)
     .disabled(!canEdit || runner.busy)
     .accessibilityIdentifier("media-replace")
+    // Rotate, flip, crop and shrink are for pictures only: there is nothing to crop in a PDF.
+    if item.contentType.hasPrefix("image/") {
+      Button {
+        runner.clear()
+        editingImage = true
+      } label: {
+        Label("Edit image", systemImage: "crop.rotate")
+      }
+      .buttonStyle(.bordered)
+      .disabled(!canEdit || runner.busy)
+      .accessibilityIdentifier("media-edit-image")
+    }
+  }
+
+  /// The image editor, over the file itself rather than the display copy the library shows, so "Replace original"
+  /// never saves a shrunken copy over it.
+  private var imageEditor: some View {
+    let (api, item, scope, origin) = (api, item, scope, origin)
+    return ImageEditorSheet(
+      fileName: item.fileName,
+      loadOriginal: {
+        let link: String?
+        if item.isPrivate && scope.isOrg { link = try? await api.signedLink(item.id) } else { link = item.src(origin: origin).map(mediaOriginalSrc) }
+        guard let link, let url = URL(string: link), let (data, response) = try? await URLSession.shared.data(from: url),
+          (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return data
+      },
+      busy: runner.busy, error: runner.error,
+      onCancel: { editingImage = false },
+      onSave: { file, asCopy in
+        if asCopy {
+          runner.run("Saved an edited copy.", onDone: { editingImage = false }) { _ = try await api.upload(file, folderID: item.folderID) }
+        } else {
+          runner.run("Image replaced. Everywhere it is used now shows the edited image.", onDone: { editingImage = false }) {
+            try await api.replace(item, with: file, rightsConfirmed: false)
+          }
+        }
+      })
   }
 
   private var moveSheet: some View {

@@ -3,6 +3,7 @@ package com.aglyn.plugins.commerce.pos
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.FilterOp
+import com.aglyn.core.InMemoryKeyValueStore
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -322,5 +323,104 @@ class ReceiptPrintTest {
     checkout.markPrinted()
     assertTrue(checkout.state.value.printed)
     assertEquals(listOf("receipt"), api.actions)
+  }
+}
+
+private class OrderReaderK(private val orders: Map<String, Map<String, Any?>>) : com.aglyn.core.FirestoreReader {
+  override suspend fun get(path: String): com.aglyn.core.FirestoreDoc? =
+    orders[path.substringAfterLast('/')]?.let { com.aglyn.core.FirestoreDoc(path.substringAfterLast('/'), path, it) }
+
+  override suspend fun page(query: com.aglyn.core.FirestoreQuery) = com.aglyn.core.FirestorePage(emptyList(), null)
+  override fun observeDoc(path: String): kotlinx.coroutines.flow.Flow<com.aglyn.core.Live<com.aglyn.core.FirestoreDoc?>> = kotlinx.coroutines.flow.emptyFlow()
+  override fun observe(query: com.aglyn.core.FirestoreQuery): kotlinx.coroutines.flow.Flow<com.aglyn.core.Live<List<com.aglyn.core.FirestoreDoc>>> = kotlinx.coroutines.flow.emptyFlow()
+}
+
+private class RecordingSheet(var answer: com.aglyn.hardware.SystemPrintResult = com.aglyn.hardware.SystemPrintResult.Printed) : com.aglyn.hardware.SystemPrinter {
+  val jobs = mutableListOf<Pair<String, String>>()
+  override suspend fun printText(text: String, jobName: String): com.aglyn.hardware.SystemPrintResult {
+    jobs += text to jobName
+    return answer
+  }
+}
+
+class DeviceReceiptPrintTest {
+  private val order = mapOf<String, Any?>(
+    "number" to 12L,
+    "createdAtMs" to 1791317040000L,
+    "currency" to "usd",
+    "channel" to "pos",
+    "lineItems" to listOf(mapOf("name" to "Latte", "quantity" to 2L, "unitAmountCents" to 450L)),
+    "totals" to mapOf("itemsCents" to 900L, "taxCents" to 0L, "totalCents" to 900L),
+    "payments" to listOf(mapOf("method" to "cash", "status" to "succeeded", "amountCents" to 900L, "cashTenderedCents" to 1000L, "changeCents" to 100L)),
+  )
+
+  private fun register(sheet: RecordingSheet?, scope: kotlinx.coroutines.CoroutineScope, api: ScriptedSaleApi = ScriptedSaleApi()) = RegisterModel(
+    hostId = "h1",
+    firestore = OrderReaderK(mapOf("o1" to order)),
+    api = api,
+    terminal = com.aglyn.hardware.CardReaderSessionSource { error("no card reader in this test") },
+    deviceStore = InMemoryKeyValueStore(),
+    peripherals = com.aglyn.hardware.StaticPeripherals(systemPrinter = sheet),
+    scope = scope,
+  ).also { it.selectRegister(PosRegister("r1", "Front", null)) }
+
+  private fun paid(api: ScriptedSaleApi = ScriptedSaleApi()) = Checkout(api, opened(900), PosRegisterSettings(), AttemptKeys { "key-1" }, noSleep)
+
+  @Test
+  fun withNoCloudPrinterTheReceiptGoesToThisDevicesPrintSheet() = runTest {
+    val sheet = RecordingSheet()
+    val api = ScriptedSaleApi()
+    val model = register(sheet, this, api)
+    model.loadReceipt("o1")
+    testScheduler.advanceUntilIdle()
+    val checkout = paid(api)
+    assertTrue(model.canPrintReceipt)
+    assertEquals(com.aglyn.hardware.SystemPrintResult.Printed, model.printReceipt(checkout))
+    assertEquals("Receipt 12", sheet.jobs.single().second)
+    assertTrue("2 x Latte" in sheet.jobs.single().first)
+    assertTrue("Order #12" in sheet.jobs.single().first)
+    assertTrue(checkout.state.value.printed, "the server is told the receipt was printed here")
+    assertEquals(listOf("receipt"), api.actions)
+  }
+
+  @Test
+  fun aGiftReceiptDropsEveryPriceAndIsNotThePrintedReceipt() = runTest {
+    val sheet = RecordingSheet()
+    val model = register(sheet, this)
+    model.loadReceipt("o1")
+    testScheduler.advanceUntilIdle()
+    val checkout = paid()
+    assertEquals(com.aglyn.hardware.SystemPrintResult.Printed, model.printReceipt(checkout, gift = true))
+    assertTrue("2 x Latte" in sheet.jobs.single().first)
+    assertFalse("$" in sheet.jobs.single().first)
+    assertEquals("Gift receipt 12", sheet.jobs.single().second)
+    assertFalse(checkout.state.value.printed, "a gift copy is not the customer's receipt")
+  }
+
+  @Test
+  fun closingThePrintSheetIsNotAFailureAndTheReceiptIsNotCalledPrinted() = runTest {
+    val sheet = RecordingSheet(com.aglyn.hardware.SystemPrintResult.Canceled)
+    val model = register(sheet, this)
+    model.loadReceipt("o1")
+    testScheduler.advanceUntilIdle()
+    val checkout = paid()
+    assertEquals(com.aglyn.hardware.SystemPrintResult.Canceled, model.printReceipt(checkout))
+    assertFalse(checkout.state.value.printed)
+  }
+
+  @Test
+  fun aReceiptStillBeingReadCannotBePrintedYet() = runTest {
+    val model = register(RecordingSheet(), this)
+    assertEquals(com.aglyn.hardware.SystemPrintResult.Failed("The receipt is still loading. Try again in a moment."), model.printReceipt(paid()))
+  }
+
+  @Test
+  fun aRegisterWithNoPrinterAtAllOnlyRecordsTheChoiceAndOffersNoGiftReceipt() = runTest {
+    val api = ScriptedSaleApi()
+    val model = register(null, this, api)
+    assertFalse(model.canPrintReceipt)
+    assertEquals(com.aglyn.hardware.SystemPrintResult.Printed, model.printReceipt(paid(api)))
+    assertEquals(listOf("receipt"), api.actions)
+    assertEquals(com.aglyn.hardware.SystemPrintResult.Failed("No printer is set up on this register."), model.printReceipt(paid(api), gift = true))
   }
 }

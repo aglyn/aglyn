@@ -16,6 +16,7 @@
  */
 
 import { liveCustomDomain, TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
+import { SCREEN_ROOT_PATH, screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
 import type { AiInsightTable } from './ai-insight'
 
 /**
@@ -47,10 +48,24 @@ const millis = (value: unknown): number | null => {
   return null
 }
 
+/** A routing-map path as the URL path a visitor opens, or `null` for an entry that names none. */
+function routeUrl(path: unknown): string | null {
+  if (typeof path !== 'string') return null
+  const slug = path.trim().replace(/^\/+|\/+$/g, '')
+  if (slug) return screenRoutePathToUrl(slug)
+  return path.trim() === SCREEN_ROOT_PATH ? SCREEN_ROOT_PATH : null
+}
+
 /**
  * `host.screens` is the routing map publishing writes — screen id to path —
  * so its entries are exactly the pages a visitor can reach. `screens`, when a
  * caller has the page documents, adds when the first one went live.
+ *
+ * The map holds routing paths, not URLs: `/` for the home page and `menu` or
+ * `services/pricing` for the rest. Each is read as the URL a visitor opens.
+ * Kept only when it already began with `/`, every page but the home was
+ * dropped, and a site publishing five pages was described as publishing
+ * only `/` (AGL-3834).
  */
 export function aiHostPublishContext(
   host: Record<string, unknown> | null | undefined,
@@ -59,9 +74,15 @@ export function aiHostPublishContext(
   const routes = host?.['screens']
   const paths =
     routes && typeof routes === 'object'
-      ? [...new Set(Object.values(routes as Record<string, unknown>).filter((path): path is string => typeof path === 'string' && path.startsWith('/')))]
+      ? [
+          ...new Set(
+            Object.values(routes as Record<string, unknown>)
+              .map(routeUrl)
+              .filter((path): path is string => path !== null),
+          ),
+        ]
       : []
-  paths.sort((a, b) => (a === '/' ? -1 : b === '/' ? 1 : a.localeCompare(b)))
+  paths.sort((a, b) => (a === SCREEN_ROOT_PATH ? -1 : b === SCREEN_ROOT_PATH ? 1 : a.localeCompare(b)))
   const domain = host ? liveCustomDomain(host as Parameters<typeof liveCustomDomain>[0]) : undefined
   const subdomain = typeof host?.['subdomain'] === 'string' ? (host['subdomain'] as string) : ''
   const liveUrl = domain ? `https://${domain}` : subdomain ? `https://${subdomain}.${TENANT_APEX}` : null

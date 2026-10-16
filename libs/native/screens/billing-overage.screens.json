@@ -122,21 +122,30 @@
         "contacts": {
           "query": {
             "collection": "orgs/{org.id}/contacts",
-            "count": true
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
           },
           "optional": true
         },
         "companies": {
           "query": {
             "collection": "orgs/{org.id}/companies",
-            "count": true
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
           },
           "optional": true
         },
         "deals": {
           "query": {
             "collection": "orgs/{org.id}/deals",
-            "count": true
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
           },
           "optional": true
         },

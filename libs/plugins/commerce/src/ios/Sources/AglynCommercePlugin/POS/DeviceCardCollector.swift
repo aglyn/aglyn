@@ -4,17 +4,15 @@
 import AglynHardware
 import Foundation
 
-/// This device's own card reader, when it has one: the Stripe Terminal SDK
-/// on iPhone and iPad (Tap to Pay on iPhone and Bluetooth readers), nothing
-/// on the Mac, whose register takes cards on smart readers only.
+/// This device's own card reader, when it has one: the one Aglyn POS
+/// publishes at launch as `DeviceCardReaders.shared` (its Stripe Terminal
+/// collector on iPhone and iPad: Tap to Pay on iPhone and Bluetooth readers).
+/// Nil on the Mac, whose register takes cards on smart readers only, and in
+/// the Aglyn app, which links no card reader SDK and takes no cards itself.
 @MainActor
 enum DeviceCardCollector {
   static func make() -> CardCollector? {
-    #if os(iOS)
-      return StripeTerminalCollector.shared
-    #else
-      return nil
-    #endif
+    DeviceCardReaders.shared
   }
 
   static func title(_ kind: CardCollectorKind) -> String {

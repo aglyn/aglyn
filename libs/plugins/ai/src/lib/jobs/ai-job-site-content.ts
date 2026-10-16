@@ -17,6 +17,7 @@
 
 import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
+import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import {
   publishContentEntries,
@@ -27,7 +28,7 @@ import { aiCatalogPrice, aiProductsProposalOf } from '../model/ai-products'
 import type { AiJob, AiJobOutput } from '../model/ai-jobs.types'
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { AI_SITE_BLOG_NAME, AI_SITE_BLOG_SLUGS, aiSiteWords } from '../model/ai-site-job'
-import { AI_STEP_TIERS } from '../providers/catalog'
+import { AI_STEP_TIERS, aiCatalogEntry, aiDefaultModelFor } from '../providers/catalog'
 import { aiModelForStep } from '../providers/routing'
 import {
   AI_BLOG_POST_MAX_TOKENS,
@@ -57,13 +58,14 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  *
  * A site of the kind "Blog & writing" or "Online store" got the right look
  * and pages, and nothing real in them: the writing page's cards and the
- * shop's grid named posts and products nobody had written. On a paid plan,
- * the scaffold now builds one more part for those two kinds, before the
- * pages, each its own row with its own timer and credits:
+ * shop's grid named posts and products nobody had written. The scaffold now
+ * builds one more part for those two kinds, before the pages, each its own
+ * row with its own timer and credits — a store's on a paid plan only:
  *
  *  - WRITING YOUR FIRST POSTS: a content collection "Blog" — the platform's
  *    own blog, served at `/{slug}` with an entry page per post — and
- *    `AI_SITE_POSTS` posts in it, one generation a pass. Each is written as a
+ *    `AI_SITE_POSTS` posts in it on a paid plan, `AI_SITE_FREE_POSTS` on the
+ *    Free taste, one generation a pass. Each is written as a
  *    draft through the same rules the console's routes hold
  *    (`content-entry-drafts.ts`), bylined with the business's name the person
  *    gave, and given a cover: a stock photo of its own title where the
@@ -89,19 +91,28 @@ import type { AiJobStepContext, AiJobStepOutcome, AiJobStepRunner } from './ai-j
  * sections that show them list the real records (`aiSiteListings`,
  * `ai-layout-listings.ts`): the shop's Product grid, the blog's posts.
  *
- * ── Not on the Free taste ────────────────────────────────────────────────
+ * ── On the Free taste ────────────────────────────────────────────────────
  *
- * A guided start's Free site, built on an empty site with its layout and
- * form, leaves 18 credits once its eight sections and its retried page's
- * room are held (`aiFreeSiteSectionsWithin`, AGL-3660), under the 23 one post
- * costs at its worst; and a Free plan includes neither
- * the `commerce` feature nor a product (`productsPerHost` is 0).
- * `ai-job-free-site.spec.ts` shows the arithmetic. Free sites keep the pages
- * their kind already describes; the owner adds posts and products after.
+ * A guided start's Free blog writes ONE first post (Zach, 2026-10-14,
+ * AGL-3798), and a Free store no products. Built on an empty site with its
+ * layout and form, a Free site leaves 57 credits once its eight sections and
+ * its retried page's room are held (`aiFreeSiteSectionsWithin`, AGL-3660).
+ * One post at its worst is 4 on the fast tier since AGL-3781 (Claude Haiku
+ * 5.5 at the platform's markup), so a Free blog's post is written there
+ * (`aiSitePostModel`): on the balanced tier `copy.blog` routes to, the same
+ * post is 68, past what the wall leaves. The wall counts it
+ * (`AI_FREE_SITE_WORST_CASE_CREDITS.post`), and its eight sections still fit
+ * beside it. A Free plan includes neither the `commerce` feature nor a
+ * product (`productsPerHost` is 0), so a Free store keeps the pages its kind
+ * describes and the owner adds products after.
+ * `ai-job-free-site.spec.ts` shows the arithmetic.
  */
 
 /** How many first posts a paid blog gets. */
 export const AI_SITE_POSTS = 3
+
+/** How many first posts a Free blog gets (`model/ai-site-job.ts`, which the Free wall reads). */
+export { AI_SITE_FREE_POSTS } from '../model/ai-site-job'
 
 /** How many first products a paid store gets: asked for, and the most written. */
 export const AI_SITE_PRODUCTS = { min: 3, max: 6 } as const
@@ -109,8 +120,9 @@ export const AI_SITE_PRODUCTS = { min: 3, max: 6 } as const
 /** What a products row says when none of what we made could be written: our failure, refunded. */
 export const AI_SITE_PRODUCTS_NOT_WRITTEN_COPY = 'Your first products could not be added this time.'
 
-/** What each part's row reads. */
+/** What each part's row reads; a Free blog's one post reads in the singular. */
 export const AI_SITE_POSTS_LABEL = 'Writing your first posts'
+export const AI_SITE_POST_LABEL = 'Writing your first post'
 export const AI_SITE_PRODUCTS_LABEL = 'Adding your first products'
 
 /** The blog the posts go in, and the addresses it may answer at (`model/ai-site-job.ts`). */
@@ -119,16 +131,30 @@ export { AI_SITE_BLOG_NAME, AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
 /** The input a site unit's own job carries what the part needs in. */
 export const AI_SITE_CONTENT_INPUT = 'siteContent'
 
-/** Which part a site of these answers gets; `null` for the Free taste and every other kind. */
+/** Which part a site of these answers gets: a blog's posts, a paid store's products, else `null`. */
 export function aiSiteContentPart(
   inputs: Readonly<Record<string, unknown>> | null | undefined,
   freeTaste: boolean,
 ): 'posts' | 'products' | null {
-  if (freeTaste) return null
   const kind = aiSiteKindOfInputs(inputs)?.id
   if (kind === 'blog') return 'posts'
-  if (kind === 'store') return 'products'
+  if (kind === 'store' && !freeTaste) return 'products'
   return null
+}
+
+/**
+ * The model a site's post is written on: the routed one, except that a Free
+ * blog's post is written on its provider's fast tier, as a Free site's plan
+ * and look are (`aiSitePlanModel`, `aiSiteLookModel`). On the balanced tier
+ * `copy.blog` routes to, one post at its worst is past what the Free wall
+ * leaves. A model the creator picked by name stays theirs.
+ */
+export function aiSitePostModel(job: Pick<AiJob, 'model'>, routed: string, freeTaste: boolean): string {
+  if (!freeTaste) return routed
+  const picked = typeof job.model === 'string' ? job.model.trim() : ''
+  if (picked && picked !== 'auto') return routed
+  const entry = aiCatalogEntry(routed)
+  return (entry ? aiDefaultModelFor(entry.provider, 'fast') : undefined) ?? routed
 }
 
 /**
@@ -282,7 +308,9 @@ export function createAiSitePostsRunner(deps: AiSitePostsRunnerDeps = {}): AiJob
   const coverFor = deps.cover ?? aiSitePostCover
   return async (context): Promise<AiJobStepOutcome> => {
     const { job, firestore, signal } = context
-    const model = context.modelFor?.(AI_BLOG_POST_STEP) ?? aiModelForStep(AI_BLOG_POST_STEP)
+    const freeTaste = Boolean(context.org) && resolveEffectivePlan(context.org as never) === 'free'
+    const routed = context.modelFor?.(AI_BLOG_POST_STEP) ?? aiModelForStep(AI_BLOG_POST_STEP)
+    const model = aiSitePostModel(job, routed, freeTaste)
     if (!job.hostId) return { ...aiUnspentOutcome(model), failure: 'Open the site before writing its posts.' }
     const input = postsInputOf(job)
     const index = input.written.length

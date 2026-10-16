@@ -248,7 +248,6 @@ export function expandAiRepeatedItems(input: unknown, options: AiRepeatedItemsOp
         ],
       }
     }
-    if (!marked.length) return unchanged
   }
   const ancestorsOf = (id: string): string[] => {
     const out: string[] = []
@@ -381,7 +380,11 @@ export function expandAiRepeatedItems(input: unknown, options: AiRepeatedItemsOp
     items.push({ id, parent: parentOf.get(id) as string, subtree, copies })
   }
 
-  // A placeholder in no repeated item has no copy to take a value from.
+  // A placeholder in no repeated item has no copy to take a value from, on
+  // every workspace: one that keeps reusable components is told the same
+  // placeholders for an item of instances (AGL-3024), and a live About page
+  // whose testimonials kept them and no "repeat" showed `{{1}}` and `{{2}}`
+  // to its visitors (AGL-3827).
   for (const id of order) {
     if (inItem.has(id)) continue
     const positions = nodePositions(nodeOf(id) as RawNode)

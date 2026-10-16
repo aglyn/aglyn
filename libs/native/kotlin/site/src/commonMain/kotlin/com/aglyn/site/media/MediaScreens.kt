@@ -41,6 +41,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -60,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.MediaSort
+import com.aglyn.contracts.mediaOriginalSrc
 import com.aglyn.core.FilterOp
 import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreQuery
@@ -78,9 +80,14 @@ import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.CountedTextField
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.FieldEditor
+import com.aglyn.ui.FieldKind
+import com.aglyn.ui.FieldSpec
 import com.aglyn.ui.ListHeader
+import com.aglyn.ui.LocalImageLoader
 import com.aglyn.ui.LoadContent
 import com.aglyn.ui.LocalMediaPicker
+import com.aglyn.ui.LocalVideoProbe
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OverflowMenu
@@ -166,7 +173,8 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   val coroutines = rememberCoroutineScope()
   val model = remember(scope, context.firestore) { MediaListModel(scope, context.firestore, coroutines) }
   LaunchedEffect(model, scopeTokens) { model.start(scopeTokens) }
-  val api = remember(scope, context.api) { MediaApi(context.api, scope) }
+  val videoProbe = LocalVideoProbe.current
+  val api = remember(scope, context.api, videoProbe) { MediaApi(context.api, scope, videoProbe) }
   val runner = remember(scope) { ActionRunner(coroutines) }
   val folders by remember(scope, scopeTokens, context.firestore) {
     context.firestore.observe(
@@ -185,6 +193,8 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   val picker = LocalMediaPicker.current
   var uploading by remember { mutableStateOf<String?>(null) }
   var undo by remember { mutableStateOf<Pair<String, String>?>(null) }
+  // Files staff have disabled among those on screen (AGL-1612), asked of the console after each change of the page.
+  var disabled by remember(scope) { mutableStateOf<Map<String, MediaQuarantineNotice>>(emptyMap()) }
 
   var audioBatch by remember { mutableStateOf<List<PickedFile>?>(null) }
 
@@ -259,6 +269,8 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
         }
         RefreshableBox(model.refreshing, model::refresh) {
           LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load the library", skeleton = { SkeletonGrid(tiles = 12) }) { rows ->
+            val shown = rows.map { it.id }
+            LaunchedEffect(shown) { disabled = api.quarantine(shown) }
             if (rows.isEmpty()) {
               EmptyState(
                 if (model.search.isBlank() && model.type == null && model.filters.count == 0) "No files here yet" else "No files match",
@@ -279,7 +291,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
                 horizontalArrangement = Arrangement.spacedBy(space(1f)),
                 verticalArrangement = Arrangement.spacedBy(space(1f)),
               ) {
-                items(rows, key = { it.id }) { item -> MediaTile(item, context.api.origin, item.id == selected) { onSelect(item.id) } }
+                items(rows, key = { it.id }) { item -> MediaTile(item, context.api.origin, item.id == selected, disabled = item.id in disabled) { onSelect(item.id) } }
                 if (model.hasMore) item(span = { GridItemSpan(maxLineSpan) }) { SkeletonList(rows = 1) }
               }
             }
@@ -298,7 +310,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
 
   MediaDialogs(dialog, api, runner, foldersById, onChanged = { model.refresh() }) { dialog = null }
   if (filtersOpen) {
-    MediaFiltersDialog(model.filters, scoped = scopeTokens != null, onApply = { model.filter(it); filtersOpen = false }, onDismiss = { filtersOpen = false })
+    MediaFiltersDialog(context, model.filters, scoped = scopeTokens != null, onApply = { model.filter(it); filtersOpen = false }, onDismiss = { filtersOpen = false })
   }
   audioBatch?.let { files ->
     AudioRightsDialog(files) { confirmed ->
@@ -348,8 +360,9 @@ private fun FiltersButton(count: Int, onClick: () -> Unit) {
  * scope holds the query's one array clause) and a size range in megabytes.
  */
 @Composable
-private fun MediaFiltersDialog(filters: MediaFilters, scoped: Boolean, onApply: (MediaFilters) -> Unit, onDismiss: () -> Unit) {
+private fun MediaFiltersDialog(context: NativePluginContext, filters: MediaFilters, scoped: Boolean, onApply: (MediaFilters) -> Unit, onDismiss: () -> Unit) {
   var draft by remember { mutableStateOf(filters) }
+  val uploaders by produceState(emptyList<UploaderOption>(), context.orgId) { value = context.orgId?.let { uploaderOptions(context.api, it) }.orEmpty() }
   ActionDialog(
     title = "Filters",
     icon = "filter_list",
@@ -386,6 +399,11 @@ private fun MediaFiltersDialog(filters: MediaFilters, scoped: Boolean, onApply: 
       CountedTextField("At least (MB)", draft.minMegabytes, { draft = draft.copy(minMegabytes = megabytesInput(it)) }, keyboardType = KeyboardType.Decimal, modifier = Modifier.weight(1f).testTag("media-filter-min"))
       CountedTextField("At most (MB)", draft.maxMegabytes, { draft = draft.copy(maxMegabytes = megabytesInput(it)) }, keyboardType = KeyboardType.Decimal, modifier = Modifier.weight(1f).testTag("media-filter-max"))
     }
+    FieldEditor(FieldSpec("uploadedAfter", "Uploaded on or after", FieldKind.DATE), draft.uploadedAfter, { draft = draft.copy(uploadedAfter = it) })
+    FieldEditor(FieldSpec("uploadedBefore", "Uploaded on or before", FieldKind.DATE), draft.uploadedBefore, { draft = draft.copy(uploadedBefore = it) })
+    // Anyone who uploaded something, from the workspace's members; a key's uploads and a former member's are kept as they were asked.
+    val choices = (uploaders.map { SelectOption(it.uid, it.label) } + listOfNotNull(draft.uploadedBy?.takeIf { id -> uploaders.none { it.uid == id } }?.let { SelectOption(it, if (it.startsWith("api:")) "API key" else it) }))
+    SelectField(Contracts.mediaFilterHeaders["uploadedBy"] ?: "Uploaded by", choices, draft.uploadedBy, { draft = draft.copy(uploadedBy = it) }, noneLabel = "Anyone")
     TextButton(onClick = { draft = MediaFilters() }, enabled = draft.count > 0) { Text("Clear all") }
   }
 }
@@ -461,7 +479,7 @@ private fun FolderPicker(folder: FolderPick, folders: List<MediaFolder>, byId: M
 }
 
 @Composable
-internal fun MediaTile(item: MediaItem, origin: String, selected: Boolean, onClick: () -> Unit) {
+internal fun MediaTile(item: MediaItem, origin: String, selected: Boolean, disabled: Boolean = false, onClick: () -> Unit) {
   Surface(
     Modifier.clip(MaterialTheme.shapes.medium).clickable(onClick = onClick).testTag("media-${item.id}"),
     shape = MaterialTheme.shapes.medium,
@@ -471,8 +489,12 @@ internal fun MediaTile(item: MediaItem, origin: String, selected: Boolean, onCli
     Column {
       Box {
         RemoteImage(item.thumbnail(origin), item.alt.ifBlank { item.fileName }, Modifier.fillMaxWidth().aspectRatio(1f), icon = mediaKindIcon(item.kind))
-        if (item.private) {
-          Box(Modifier.padding(space(0.5f))) { StatusChip("Private", StatusTone.WARNING) }
+        if (item.private || disabled) {
+          Column(Modifier.padding(space(0.5f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+            if (item.private) StatusChip("Private", StatusTone.WARNING)
+            // Not serving to anyone, so an error and not the Private advisory beside it.
+            if (disabled) StatusChip("Disabled", StatusTone.ERROR, Modifier.testTag("media-disabled-${item.id}"))
+          }
         }
       }
       Text(
@@ -588,7 +610,9 @@ private fun MediaDetailBody(
   val clipboard = LocalClipboardManager.current
   val uri = LocalUriHandler.current
   val picker = LocalMediaPicker.current
+  val imageLoader = LocalImageLoader.current
   val coroutines = rememberCoroutineScope()
+  var editingImage by remember(item.id) { mutableStateOf(false) }
   var fileName by remember(item.id, item.fileName) { mutableStateOf(item.fileName) }
   var alt by remember(item.id, item.alt) { mutableStateOf(item.alt) }
   var description by remember(item.id, item.description) { mutableStateOf(item.description) }
@@ -602,11 +626,13 @@ private fun MediaDetailBody(
     tags.split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() } != item.tags
   val now = remember(item.updatedAt) { nowMillis() }
   val orgWideEditor = scope !is MediaScope.Org || context.orgRole in setOf("owner", "admin")
+  val disabled by produceState<MediaQuarantineNotice?>(null, api, item.id) { value = api.quarantine(listOf(item.id))[item.id] }
 
   Column(
     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("media-detail"),
     verticalArrangement = Arrangement.spacedBy(space(2f)),
   ) {
+    disabled?.let { NoticeBanner("${it.title}. ${it.message}", StatusTone.ERROR, Modifier.testTag("media-quarantine")) }
     SectionCard(null) {
       RemoteImage(
         item.thumbnail(origin, 640),
@@ -664,6 +690,13 @@ private fun MediaDetailBody(
             modifier = Modifier.testTag("media-replace"),
           ) { Text("Replace file") }
         }
+        // Rotate, flip, crop and shrink are for pictures only: there is nothing to crop in a PDF.
+        if (item.contentType.startsWith("image/")) {
+          OutlinedButton(onClick = { runner.clear(); editingImage = true }, enabled = canEdit && !runner.busy, modifier = Modifier.testTag("media-edit-image")) {
+            Icon(AglynIcons.named("edit"), contentDescription = null)
+            Text("Edit image", Modifier.padding(start = space(1f)))
+          }
+        }
       }
       if (orgWideEditor) {
         SwitchRow(
@@ -675,6 +708,26 @@ private fun MediaDetailBody(
           modifier = Modifier.testTag("media-private"),
         )
       }
+    }
+    if (editingImage) {
+      ImageEditorDialog(
+        fileName = item.fileName,
+        // The file itself, not the display copy the library shows: "Replace original" must not save a shrunken copy over it.
+        loadOriginal = {
+          val url = if (item.private && scope is MediaScope.Org) api.signedLink(item.id) else item.src(origin)?.let(::mediaOriginalSrc)
+          url?.let { imageLoader?.load(it) }
+        },
+        busy = runner.busy,
+        error = runner.error,
+        onDismiss = { editingImage = false },
+        onSave = { file, asCopy ->
+          if (asCopy) {
+            runner.run("Saved an edited copy.", onDone = { editingImage = false; onChanged() }) { api.upload(file, item.folderId) }
+          } else {
+            runner.run("Image replaced. Everywhere it is used now shows the edited image.", onDone = { editingImage = false; onChanged() }) { api.replace(item, file) }
+          }
+        },
+      )
     }
     audioReplacement?.let { file ->
       AudioRightsDialog(listOf(file)) { confirmed ->

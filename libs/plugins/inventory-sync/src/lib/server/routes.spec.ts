@@ -113,7 +113,11 @@ describe('connecting (AGL-3642)', () => {
   it('lists what the deployment offers, and no connection yet', async () => {
     const { routes } = setup({ env: { INVENTORY_SYNC_TOKEN_KEY: KEY } })
     const answer = await (await routes.connection(request('GET', INVENTORY_SYNC_API_ROUTES.connection, { hostId: HOST }))).json()
-    expect(answer).toEqual({ offered: [{ id: 'cin7-core' }, { id: 'inflow' }], connection: null, capabilities: { importProducts: false } })
+    expect(answer).toEqual({
+      offered: [{ id: 'cin7-core' }, { id: 'inflow' }, { id: 'ordoro' }],
+      connection: null,
+      capabilities: { importProducts: false },
+    })
   })
 
   it('checks pasted keys with the system, seals them, and never answers them back', async () => {
@@ -158,6 +162,28 @@ describe('connecting (AGL-3642)', () => {
       request('POST', INVENTORY_SYNC_API_ROUTES.connectKeys, { hostId: HOST, provider: 'inflow', companyId: 'company-1', apiKey: 'inflow-key-1' }),
     )
     expect(second.status).toBe(409)
+  })
+
+  it('connects Ordoro with the API key’s client id and secret, sealed (AGL-3823)', async () => {
+    const { routes, store } = setup({ provider: system({ id: 'ordoro', account: async () => ({ accountName: 'Acme Goods' }) }) })
+    expect(readPastedKeys('ordoro', { clientId: 'client-1234', clientSecret: '' })).toMatchObject({ ok: false })
+    const response = await routes.connectKeys(
+      request('POST', INVENTORY_SYNC_API_ROUTES.connectKeys, {
+        hostId: HOST,
+        provider: 'ordoro',
+        clientId: 'client-1234',
+        clientSecret: 'ordoro-secret-1',
+      }),
+    )
+    expect(response.status).toBe(200)
+    expect(await response.text()).not.toContain('ordoro-secret-1')
+    const stored = store.connections.get(HOST)!
+    expect(stored.provider).toBe('ordoro')
+    expect(openCredential(stored.sealedCredential!, HOST, readInventorySyncConfig({ INVENTORY_SYNC_TOKEN_KEY: KEY }).keyring!).payload).toEqual({
+      provider: 'ordoro',
+      clientId: 'client-1234',
+      clientSecret: 'ordoro-secret-1',
+    })
   })
 
   it('answers nothing at all on a deployment without the token key', async () => {

@@ -44,6 +44,14 @@ import { resolveSeoTitle } from '@aglyn/aglyn/app-utils/seo-title'
  * platform, for the white-label reason `site-status-screen.component.tsx`
  * spells out: the fallback for a site that named itself nothing is the page
  * name alone.
+ *
+ * The page's name is in the site's language (AGL-3791), from the same table
+ * and by the same language the 404's heading is in: a Spanish site's 404
+ * said "No encontramos esa página" under a tab that read "Page not found".
+ * The table (`site-status-copy.ts`) is not imported here: this module is in
+ * the boundary's static graph, which every page response references, so
+ * each writer reads the table where it costs nothing — the server's head
+ * directly, the client from the status screen's own lazy chunk.
  */
 export const NOT_FOUND_PAGE_NAME = 'Page not found'
 
@@ -56,16 +64,22 @@ export interface NotFoundTitleOptions {
   separator?: string | null
   /** The host's `seo.titlePattern` — how it composes an untitled page. */
   pattern?: string | null
+  /**
+   * The page's name in the site's language, `siteStatusCopy(language).notFoundPageName`;
+   * {@link NOT_FOUND_PAGE_NAME} where absent.
+   */
+  pageName?: string | null
 }
 
 export function resolveNotFoundTitle(options: NotFoundTitleOptions): string {
+  const name = options.pageName || NOT_FOUND_PAGE_NAME
   return resolveSeoTitle({
     title: options.designedTitle,
-    name: NOT_FOUND_PAGE_NAME,
+    name,
     siteTitle: options.siteTitle,
     separator: options.separator,
     pattern: options.pattern,
-    fallback: NOT_FOUND_PAGE_NAME,
+    fallback: name,
   })
 }
 

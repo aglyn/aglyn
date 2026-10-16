@@ -1,0 +1,711 @@
+{
+  "$comment": "The Accounting plugin's native screens (a workspace page): connecting QuickBooks Online, Xero or other software through Codat (the provider's sign-in opens in the secure browser; the connection is finished on the console's own page), picking a Xero organization, the account and tax mapping, how sales post and from when, disconnecting, and the sync log with retry. Routes: GET /api/accounting/status, options and log; POST connect, connect/tenant, settings, retry and disconnect. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "accounting.books",
+      "title": "Accounting",
+      "label": "Accounting",
+      "subtitle": "Sales, refunds, fees and payouts posted to your books",
+      "icon": "book.closed|account_balance",
+      "scope": "org",
+      "order": 50,
+      "links": [
+        "/accounting",
+        "/accounting/connection"
+      ],
+      "load": {
+        "status": "/api/accounting/status?orgId={org.id}",
+        "options": {
+          "url": "/api/accounting/options?orgId={org.id}",
+          "optional": true
+        }
+      },
+      "constants": {
+        "providers": [
+          {
+            "id": "quickbooks",
+            "label": "QuickBooks Online",
+            "connect": "Connect QuickBooks Online",
+            "name": "QuickBooks Online"
+          },
+          {
+            "id": "xero",
+            "label": "Xero",
+            "connect": "Connect Xero",
+            "name": "Xero"
+          },
+          {
+            "id": "codat",
+            "label": "Accounting software",
+            "connect": "Connect other accounting software",
+            "name": "your accounting software"
+          }
+        ],
+        "ids": {
+          "quickbooks": "quickbooks",
+          "xero": "xero",
+          "codat": "codat"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "!data.status.connection && !data.status.providers.quickbooks && !data.status.providers.xero && !data.status.providers.codat",
+          "text": "Connecting accounting software is not available yet."
+        },
+        {
+          "type": "notice",
+          "id": "intro",
+          "tone": "info",
+          "when": "!data.status.connection && data.status.providers.quickbooks || !data.status.connection && data.status.providers.xero || !data.status.connection && data.status.providers.codat",
+          "text": "Post every sale, refund, fee and payout to your accounting software as it happens, so your books match Stripe without typing anything in. You choose the accounts each one is posted to."
+        },
+        {
+          "type": "actions",
+          "id": "connect",
+          "title": "Connect your books",
+          "when": "!data.status.connection",
+          "items": [
+            {
+              "id": "connectQuickbooks",
+              "label": "Connect QuickBooks Online",
+              "icon": "link|link",
+              "when": "!data.status.connection && data.status.providers.quickbooks",
+              "url": "/api/accounting/connect",
+              "body": {
+                "orgId": "{org.id}",
+                "provider": "quickbooks"
+              },
+              "open": "url",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            },
+            {
+              "id": "connectXero",
+              "label": "Connect Xero",
+              "icon": "link|link",
+              "when": "!data.status.connection && data.status.providers.xero",
+              "url": "/api/accounting/connect",
+              "body": {
+                "orgId": "{org.id}",
+                "provider": "xero"
+              },
+              "open": "url",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            },
+            {
+              "id": "connectCodat",
+              "label": "Connect other accounting software",
+              "icon": "link|link",
+              "when": "!data.status.connection && data.status.providers.codat",
+              "url": "/api/accounting/connect",
+              "body": {
+                "orgId": "{org.id}",
+                "provider": "codat"
+              },
+              "open": "url",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "title": "{data.status.connection.tenantName|const.providers[id=data.status.connection.provider].label}",
+          "when": "data.status.connection",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "Connected",
+              "chip": true,
+              "tones": {
+                "Connected": "success",
+                "Choose-tenant": "warning",
+                "Reconnect-required": "warning",
+                "*": "neutral"
+              },
+              "when": "data.status.connection.status == connected"
+            },
+            {
+              "label": "Status",
+              "value": "Choose an organization",
+              "chip": true,
+              "tones": {
+                "Connected": "success",
+                "Choose-tenant": "warning",
+                "Reconnect-required": "warning",
+                "*": "neutral"
+              },
+              "when": "data.status.connection.status == choose-tenant"
+            },
+            {
+              "label": "Status",
+              "value": "Reconnect required",
+              "chip": true,
+              "tones": {
+                "Connected": "success",
+                "Choose-tenant": "warning",
+                "Reconnect-required": "warning",
+                "*": "neutral"
+              },
+              "when": "data.status.connection.status == reconnect-required"
+            },
+            {
+              "label": "Software",
+              "value": "{const.providers[id=data.status.connection.provider].label}"
+            },
+            {
+              "label": "Company",
+              "value": "{data.status.connection.tenantName}",
+              "when": "data.status.connection.tenantName"
+            },
+            {
+              "label": "Sandbox company",
+              "value": "Yes",
+              "when": "data.status.connection.environment == sandbox"
+            },
+            {
+              "label": "Home currency",
+              "value": "{data.status.connection.homeCurrency}",
+              "when": "data.status.connection.homeCurrency"
+            },
+            {
+              "label": "Connected by",
+              "value": "{data.status.connection.connectedByEmail} on {data.status.connection.connectedAtMs:date}",
+              "when": "data.status.connection.connectedByEmail"
+            },
+            {
+              "label": "Last synced",
+              "value": "{data.status.connection.lastSyncAtMs:datetime}",
+              "when": "data.status.connection.lastSyncAtMs"
+            },
+            {
+              "label": "Waiting",
+              "value": "{data.status.counts.pending:number}"
+            },
+            {
+              "label": "Posted",
+              "value": "{data.status.counts.synced:number}"
+            },
+            {
+              "label": "Needs attention",
+              "value": "{data.status.counts.needsAttention:number}",
+              "when": "data.status.counts.needsAttention"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "reconnectNotice",
+          "tone": "warning",
+          "when": "data.status.connection.status == reconnect-required",
+          "text": "{const.providers[id=data.status.connection.provider].label} no longer accepts this connection. Nothing is posted until you reconnect; what is waiting will post then."
+        },
+        {
+          "type": "notice",
+          "id": "missing",
+          "tone": "info",
+          "when": "data.status.connection.status == connected && data.status.connection.missingRoles",
+          "text": "Choose your accounts below. Nothing is posted until they are set."
+        },
+        {
+          "type": "list",
+          "id": "tenants",
+          "title": "Choose which books to use",
+          "when": "data.status.connection.status == choose-tenant",
+          "items": "data.status.connection.tenants",
+          "primary": "{item.name|item.id}",
+          "icon": "building.2|business",
+          "actions": [
+            {
+              "id": "useTenant",
+              "label": "Use these books",
+              "icon": "checkmark|check",
+              "url": "/api/accounting/connect/tenant",
+              "body": {
+                "orgId": "{org.id}",
+                "tenantId": "{item.id}"
+              },
+              "success": "Using {item.name}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "title": "Manage",
+          "when": "data.status.connection",
+          "items": [
+            {
+              "id": "reconnect",
+              "label": "Reconnect {const.providers[id=data.status.connection.provider].name}",
+              "icon": "link|link",
+              "when": "data.status.connection.status == reconnect-required",
+              "url": "/api/accounting/connect",
+              "body": {
+                "orgId": "{org.id}",
+                "provider": "{data.status.connection.provider}"
+              },
+              "open": "url",
+              "success": "Finish connecting in the browser, then pull to refresh."
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "confirm": "Disconnect? Nothing more will be posted to those books; what was already posted stays in {const.providers[id=data.status.connection.provider].name}.",
+              "url": "/api/accounting/disconnect",
+              "body": {
+                "orgId": "{org.id}"
+              },
+              "success": "Disconnected. Nothing more will be posted to those books."
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "mapping",
+          "title": "Accounts and tax",
+          "when": "data.status.connection.status == connected && data.options.accounts",
+          "footer": "The accounts and tax codes sales, refunds, fees and payouts are posted to, how sales are posted, and the start date. Nothing is posted until the accounts are chosen.",
+          "fields": [
+            {
+              "key": "syncMode",
+              "label": "How sales are posted",
+              "kind": "select",
+              "initial": "{data.status.connection.mapping.syncMode}",
+              "options": [
+                {
+                  "value": "per-order",
+                  "label": "One sales receipt per order"
+                },
+                {
+                  "value": "daily-summary",
+                  "label": "One summary journal entry per day"
+                }
+              ]
+            },
+            {
+              "key": "income",
+              "label": "Sales income",
+              "kind": "select",
+              "initial": "{data.status.connection.mapping.accounts.income}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Choose an account"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.options.accounts",
+                "filter": "item.classification == income",
+                "value": "{item.id}",
+                "label": "{item.name}"
+              },
+              "help": "Where item sales are recorded."
+            },
+            {
+              "key": "shippingIncome",
+              "label": "Shipping income",
+              "kind": "select",
+              "initial": "{data.status.connection.mapping.accounts.shippingIncome}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Same as sales income"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.options.accounts",
+                "filter": "item.classification == income",
+                "value": "{item.id}",
+                "label": "{item.name}"
+              },
+              "help": "Where shipping you charge is recorded. Sales income when left empty."
+            },
+            {
+              "key": "clearing",
+              "label": "Stripe clearing account",
+              "kind": "select",
+              "initial": "{data.status.connection.mapping.accounts.clearing}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Choose an account"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.options.accounts",
+                "filter": "item.classification == bank",
+                "value": "{item.id}",
+                "label": "{item.name}"
+              },
+              "help": "A bank account that stands for your Stripe balance. Every sale is paid into it and every payout leaves it, so it returns to zero with each payout."
+            },
+            {
+              "key": "feeExpense",
+              "label": "Aglyn fee expense",
+              "kind": "select",
+              "initial": "{data.status.connection.mapping.accounts.feeExpense}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Choose an account"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.options.accounts",
+                "filter": "item.classification == expense",
+                "value": "{item.id}",
+                "label": "{item.name}"
+              },
+              "help": "Where the Aglyn fee on each sale is recorded as an expense."
+            },
+            {
+              "key": "payoutBank",
+              "label": "Payout bank account",
+              "kind": "select",
+              "initial": "{data.status.connection.mapping.accounts.payoutBank}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Choose an account"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.options.accounts",
+                "filter": "item.classification == bank",
+                "value": "{item.id}",
+                "label": "{item.name}"
+              },
+              "help": "The bank account Stripe pays out to."
+            },
+            {
+              "key": "taxLiability",
+              "label": "Sales tax liability",
+              "kind": "select",
+              "initial": "{data.status.connection.mapping.accounts.taxLiability}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Choose an account"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.options.accounts",
+                "filter": "item.classification == liability",
+                "value": "{item.id}",
+                "label": "{item.name}"
+              },
+              "help": "Where sales tax collected is recorded by the daily summary.",
+              "when": "form.syncMode == daily-summary"
+            },
+            {
+              "key": "taxed",
+              "label": "Orders with sales tax",
+              "kind": "select",
+              "initial": "{data.status.connection.mapping.taxCodes.taxed}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Your ledger’s default"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.options.taxCodes",
+                "value": "{item.id}",
+                "label": "{item.name}"
+              }
+            },
+            {
+              "key": "untaxed",
+              "label": "Orders without sales tax",
+              "kind": "select",
+              "initial": "{data.status.connection.mapping.taxCodes.untaxed}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Your ledger’s default"
+                }
+              ],
+              "optionsFrom": {
+                "items": "data.options.taxCodes",
+                "value": "{item.id}",
+                "label": "{item.name}"
+              }
+            },
+            {
+              "key": "startDate",
+              "label": "Start date",
+              "kind": "date",
+              "initial": "{data.status.connection.mapping.startDate}",
+              "help": "Sales and payouts from this day on are posted, including ones before you connected. Leave it empty to start from the day you connected."
+            },
+            {
+              "key": "timeZone",
+              "label": "Time zone",
+              "kind": "text",
+              "initial": "{data.status.connection.mapping.timeZone}",
+              "help": "The day each sale is dated in your books."
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/accounting/settings",
+            "body": {
+              "orgId": "{org.id}",
+              "mapping": {
+                "accounts": {
+                  "income": "{form.income}",
+                  "shippingIncome": "{form.shippingIncome}",
+                  "clearing": "{form.clearing}",
+                  "feeExpense": "{form.feeExpense}",
+                  "payoutBank": "{form.payoutBank}",
+                  "taxLiability": "{form.taxLiability}"
+                },
+                "taxCodes": {
+                  "$put": {
+                    "map": {
+                      "$put": {
+                        "map": "{data.status.connection.mapping.taxCodes}",
+                        "key": "taxed",
+                        "value": "{form.taxed}"
+                      }
+                    },
+                    "key": "untaxed",
+                    "value": "{form.untaxed}"
+                  }
+                },
+                "syncMode": "{form.syncMode}",
+                "startDate": "{form.startDate}",
+                "timeZone": "{form.timeZone}"
+              }
+            },
+            "success": "Saved. Sales from the start date on will be posted."
+          }
+        },
+        {
+          "type": "list",
+          "id": "taxKeys",
+          "title": "Other sales tax rates",
+          "when": "data.status.connection.status == connected && data.status.seenTaxKeys && data.options.taxCodes",
+          "items": "data.status.seenTaxKeys",
+          "filter": "item != taxed,untaxed",
+          "primary": "Tax rate {item}",
+          "secondary": "{data.status.connection.mapping.taxCodes[@item]|'Same as orders with sales tax'}",
+          "icon": "percent|percent",
+          "footer": "A rate with no code of its own is posted with the code for orders with sales tax.",
+          "actions": [
+            {
+              "id": "setTax",
+              "label": "Choose tax code",
+              "icon": "percent|percent",
+              "url": "/api/accounting/settings",
+              "prompt": [
+                {
+                  "key": "code",
+                  "label": "Tax code",
+                  "kind": "select",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "Same as orders with sales tax"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.options.taxCodes",
+                    "value": "{item.id}",
+                    "label": "{item.name}"
+                  }
+                }
+              ],
+              "body": {
+                "orgId": "{org.id}",
+                "mapping": {
+                  "accounts": "{data.status.connection.mapping.accounts}",
+                  "taxCodes": {
+                    "$put": {
+                      "map": "{data.status.connection.mapping.taxCodes}",
+                      "key": "{item}",
+                      "value": "{form.code}"
+                    }
+                  },
+                  "syncMode": "{data.status.connection.mapping.syncMode}",
+                  "startDate": "{data.status.connection.mapping.startDate}",
+                  "timeZone": "{data.status.connection.mapping.timeZone}"
+                }
+              },
+              "success": "Saved."
+            }
+          ]
+        },
+        {
+          "type": "links",
+          "id": "logs",
+          "when": "data.status.connection",
+          "items": [
+            {
+              "title": "Needs attention",
+              "subtitle": "What your books refused, with the reason",
+              "icon": "exclamationmark.triangle|warning",
+              "screen": "accounting.attention"
+            },
+            {
+              "title": "Sync activity",
+              "subtitle": "Everything posted, waiting or skipped",
+              "icon": "arrow.left.arrow.right|swap_horiz",
+              "screen": "accounting.activity"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "accounting.attention",
+      "title": "Needs attention",
+      "label": "Needs attention",
+      "icon": "arrow.left.arrow.right|swap_horiz",
+      "scope": "org",
+      "load": {
+        "log": {
+          "url": "/api/accounting/log?orgId={org.id}&filter=attention",
+          "cursor": "nextBefore",
+          "cursorParam": "before",
+          "items": "items"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "items",
+          "title": "Needs attention",
+          "items": "data.log.items",
+          "load": "log",
+          "primary": "{item.label}",
+          "secondary": "{item.lastError|item.externalId}",
+          "tertiary": "{item.occurredAtMs:date}",
+          "trailing": "{item.amountCents:cents/item.currency}",
+          "icon": "doc.plaintext|receipt_long",
+          "badges": [
+            {
+              "text": "Waiting",
+              "tone": "neutral",
+              "when": "item.status == pending"
+            },
+            {
+              "text": "Posted",
+              "tone": "success",
+              "when": "item.status == synced"
+            },
+            {
+              "text": "Needs attention",
+              "tone": "error",
+              "when": "item.status == needs_attention"
+            },
+            {
+              "text": "Skipped",
+              "tone": "warning",
+              "when": "item.status == skipped"
+            }
+          ],
+          "empty": "Nothing needs your attention.",
+          "actions": [
+            {
+              "id": "retry",
+              "label": "Retry",
+              "icon": "arrow.clockwise|refresh",
+              "when": "item.status == needs_attention",
+              "url": "/api/accounting/retry",
+              "body": {
+                "orgId": "{org.id}",
+                "itemId": "{item.id}"
+              },
+              "success": "{response.retried} will be posted again on the next sync."
+            }
+          ]
+        }
+      ],
+      "actions": [
+        {
+          "id": "retryAll",
+          "label": "Retry all",
+          "icon": "arrow.clockwise|refresh",
+          "url": "/api/accounting/retry",
+          "body": {
+            "orgId": "{org.id}",
+            "all": true
+          },
+          "success": "{response.retried} will be posted again on the next sync."
+        }
+      ]
+    },
+    {
+      "id": "accounting.activity",
+      "title": "Sync activity",
+      "label": "Sync activity",
+      "icon": "arrow.left.arrow.right|swap_horiz",
+      "scope": "org",
+      "load": {
+        "log": {
+          "url": "/api/accounting/log?orgId={org.id}&filter=all",
+          "cursor": "nextBefore",
+          "cursorParam": "before",
+          "items": "items"
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "id": "items",
+          "title": "Sync activity",
+          "items": "data.log.items",
+          "load": "log",
+          "primary": "{item.label}",
+          "secondary": "{item.lastError|item.externalId}",
+          "tertiary": "{item.occurredAtMs:date}",
+          "trailing": "{item.amountCents:cents/item.currency}",
+          "icon": "doc.plaintext|receipt_long",
+          "badges": [
+            {
+              "text": "Waiting",
+              "tone": "neutral",
+              "when": "item.status == pending"
+            },
+            {
+              "text": "Posted",
+              "tone": "success",
+              "when": "item.status == synced"
+            },
+            {
+              "text": "Needs attention",
+              "tone": "error",
+              "when": "item.status == needs_attention"
+            },
+            {
+              "text": "Skipped",
+              "tone": "warning",
+              "when": "item.status == skipped"
+            }
+          ],
+          "empty": "Nothing has been synced yet.",
+          "actions": [
+            {
+              "id": "retry",
+              "label": "Retry",
+              "icon": "arrow.clockwise|refresh",
+              "when": "item.status == needs_attention",
+              "url": "/api/accounting/retry",
+              "body": {
+                "orgId": "{org.id}",
+                "itemId": "{item.id}"
+              },
+              "success": "{response.retried} will be posted again on the next sync."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

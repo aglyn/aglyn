@@ -50,6 +50,7 @@ import {
   AI_FREE_SITE_WORST_CASE_CREDITS,
   AI_SITE_CREATE_KINDS,
   AI_SITE_FREE_PAGES,
+  AI_SITE_FREE_POSTS,
   AI_SITE_PLAN_MAX_TOKENS,
   AI_SITE_HOME_BANDS,
   aiFreeSiteSectionsWithin,
@@ -83,7 +84,7 @@ import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { ASSIST_RETURNED_USD_FIELD, assistSpendAfterReturnsUsd } from '../usage/assist-credit-returns'
 import { freeAccountUsageRef, freeAssistAccount, type AssistMeteredOrg } from '../usage/assist-free-taste'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
-import type { AiTool } from '../providers/contract'
+import type { AiEffort, AiTool } from '../providers/contract'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
 import { readAiSiteContext } from '../runtime/site-context'
@@ -306,8 +307,9 @@ export function aiPlanSiteLines(
   // The sections are a budget to use (AGL-3660): a prod start of 2026-10-08
   // read "at most 8" as leave to plan a home of two.
   lines.push(aiSiteFullPlanSentence({ pages: cap ?? 1, across: home.across, min: plansHome ? home.min : 0 }))
-  // A paid blog's first posts are written at /blog and linked from the
-  // header (AGL-3660, AGL-3676), so the plan plans no page standing in for it.
+  // A blog's first posts — a Free blog's one (AGL-3798) — are written at /blog
+  // and linked from the header (AGL-3660, AGL-3676), so the plan plans no
+  // page standing in for it.
   if (aiSiteContentPart(job.inputs ?? null, capabilities?.freeTaste === true) === 'posts') {
     lines.push(
       "This site's blog is written for it with its first posts at /blog, and the header links it. Plan no page that stands in for it (no Blog, Articles, Journal, Posts or Stories page); feature the posts in a section of the home page instead.",
@@ -387,7 +389,7 @@ export function aiSitePlanHomeRule(
   if (cap === undefined) return { min: aiSiteHomeMinSections({ pages: 1, across: null }), across: null }
   // Dear: a guided start that places a form makes one (AGL-3596).
   const across = aiFreeSiteSectionsWithin(
-    { layouts: (inventory?.layouts.length ?? 0) ? 0 : 1, pages: cap, forms: 1 },
+    { layouts: (inventory?.layouts.length ?? 0) ? 0 : 1, pages: cap, forms: 1, posts: capabilities?.freeSitePosts ?? 0 },
     FREE_AI_TASTE_CREDITS_PER_MONTH,
   )
   return { min: aiSiteHomeMinSections({ pages: cap, across }), across }
@@ -1132,8 +1134,18 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       // A scaffold plans an outline without thinking (AGL-3594): the thinking
       // was nearly all of the 13,491 tokens a Free site's plan spent.
       ...(site ? { thinking: 'off' as const } : route.thinking ? { thinking: route.thinking } : {}),
-      ...(route.effort ? { effort: route.effort } : {}),
+      // A paid site's outline asks the effort its live round held at (AGL-3781);
+      // a Free one's, on the fast tier, keeps the model's own.
+      ...(site && !freeTaste
+        ? { effort: AI_PAID_SITE_PLAN_EFFORT }
+        : route.effort
+          ? { effort: route.effort }
+          : {}),
       ...(signal ? { signal } : {}),
+      // Most plans continue — a lookup round, a re-ask — and each continuation
+      // re-sends the brief and the inventory, so the plan caches its
+      // conversation and the next request reads it back (AGL-3809).
+      cacheConversation: true,
       capabilities,
       // A build's events are listed on a page (AGL-3755): on the one it makes
       // about them, else on an Events page of its own where there is room.
@@ -1271,8 +1283,23 @@ export function aiSitePlanCapabilities(
     Number.isInteger(asked) && asked >= AI_SITE_FREE_PAGES.min
       ? Math.min(asked, AI_SITE_FREE_PAGES.max)
       : AI_SITE_FREE_PAGES.max
-  return { ...site, freeSitePages: pages }
+  // A Free blog writes one first post (AGL-3798), which the wall counts.
+  const posts = aiSiteContentPart(job.inputs ?? null, true) === 'posts' ? { freeSitePosts: AI_SITE_FREE_POSTS } : {}
+  return { ...site, freeSitePages: pages, ...posts }
 }
+
+/**
+ * The effort a paid site's plan asks (AGL-3781). The live round of 2026-10-14
+ * planned the paid site briefs (`ai-job-site-plan-live.spec.ts` with
+ * `AGLYN_LIVE_AI_ORG_PLAN=business`) at the model's default and at medium:
+ * both planned 11 of 11 with no refusal and no rule broken, and medium took
+ * 16 attempts to the default's 22, for $0.129 to $0.164. Scoped to a paid
+ * site's plan, which is all that arm planned: the `job.plan` row's effort,
+ * which every other plan asks, waits on the golden round, and a Free site's
+ * plan on the fast tier was measured at its model's default (every answer a
+ * tool_use, 31 of 31) and keeps it.
+ */
+export const AI_PAID_SITE_PLAN_EFFORT: AiEffort = 'medium'
 
 /**
  * The model a plan runs on (AGL-3594): the resolved one, except a Free site

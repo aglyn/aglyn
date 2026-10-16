@@ -66,7 +66,7 @@ export const OAUTH_ENDPOINTS: Readonly<Partial<Record<MarketingProviderId, OAuth
   attentive: {
     authorize: 'https://ui.attentivemobile.com/integrations/oauth-install',
     token: 'https://api.attentivemobile.com/v1/authorization-codes/tokens',
-    scope: 'subscriptions:write events:write ecommerce:write',
+    scope: 'subscriptions:read subscriptions:write events:write ecommerce:write',
     pkce: false,
   },
 }

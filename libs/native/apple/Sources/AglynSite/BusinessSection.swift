@@ -118,6 +118,8 @@ struct BusinessSection: View {
         profile.stop()
         workspace.stop()
       }
+    // The `hostBusinessProfile` zone: what a plugin adds to the profile (what Aglyn AI learned from the site's edits).
+    SlotCards(context: context, slot: "hostBusinessProfile")
   }
 
   private func save() {

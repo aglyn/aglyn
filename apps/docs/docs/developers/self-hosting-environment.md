@@ -939,6 +939,20 @@ merchant's credential.
 Register `https://<console>/api/marketing-platforms/oauth/callback` as the
 redirect URI in each app. The console builds it from `NEXT_PUBLIC_CONSOLE_URL`.
 
+### Help desks: Gorgias, Re:amaze, Kustomer, Gladly and Richpanel {#help-desks}
+
+A site can keep its buyers and their recent orders in the merchant's **own**
+Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and send contact form
+messages there as tickets. Each merchant connects with their own API
+credentials, so the deployment needs no vendor account: only the key those
+credentials are sealed under. Leave it unset and no Help desks card appears and
+nothing is sent to any of them. Set it on the **console only**: the sync runs
+there, and the tenant runtime never opens a merchant's credential.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `HELP_DESKS_TOKEN_KEY` | Feature | Runtime, console | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored help desk credential with AES-256-GCM. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a credential opened under an old key is sealed again under the new one on its next sync. **Losing the key loses every connection**: each merchant connects again. |
+
 ### Zapier {#zapier}
 
 The REST hooks Aglyn's Zapier app subscribes to (`/v1/sites/{siteId}/hooks`) are
@@ -979,6 +993,7 @@ never opens a grant.
 | `AMAZON_SP_API_DRAFT_APP` | Optional | Runtime, console | `true` while the app is a draft, so the consent page is asked for with `version=beta`. |
 | `SHIPMONK_ENABLED` | Optional | Runtime, console | `true` offers ShipMonk. It needs no app: each merchant pastes their own ShipMonk API key and store id, sealed with the token key. |
 | `SHIPMONK_ENVIRONMENT` | Optional | Runtime, console | `sandbox` sends everything to ShipMonk's sandbox (`sandbox.shipmonk.dev`), which takes test orders only and needs sandbox keys. Unset is production. |
+| `FLEXPORT_ENABLED` | Optional | Runtime, console | `true` offers Flexport. It needs no app: each merchant pastes an API token from their own Flexport Seller Portal, sealed with the token key. Flexport's production and sandbox accounts share one address (`logistics-api.flexport.com`); the token decides which one a call reaches, so a connection is always treated as production. |
 
 Register `https://<console>/api/fulfillment-networks/oauth/callback` as the
 redirect URI in both apps. ShipBob's webhooks are subscribed for each
@@ -987,7 +1002,10 @@ with a token of their own; nothing needs registering for them. ShipMonk's
 webhooks are set up by each merchant in their ShipMonk account, at the
 address and with the signing secret the card shows once, and are answered at
 `https://<console>/api/fulfillment-networks/webhooks/shipmonk`; each is
-verified by its HMAC-SHA512 `X-Sm-Signature`.
+verified by its HMAC-SHA512 `X-Sm-Signature`. Flexport's webhooks are
+registered through its API for each connection, at
+`https://<console>/api/fulfillment-networks/webhooks/flexport`, with a token
+of their own sent in a header; nothing needs registering for them.
 
 ### Couriers: DoorDash Drive {#couriers}
 
@@ -1008,13 +1026,13 @@ Each merchant registers the webhook in their own DoorDash developer portal, at
 `https://<console>/api/couriers/webhooks/doordash?site=<siteId>` with the token
 their Couriers card shows; the card gives them both.
 
-### Inventory sync: Cin7 Core, inFlow and Brightpearl {#inventory-sync}
+### Inventory sync: Cin7 Core, inFlow, Brightpearl and Ordoro {#inventory-sync}
 
 A store can keep its stock counts, products and paid orders in step with the
-merchant's **own** Cin7 Core, inFlow Inventory or Brightpearl account. Cin7
-Core and inFlow need nothing registered by the deployment: the merchant pastes
-API keys from their own account, and both are offered once the token key that
-seals those keys is set. Brightpearl needs a developer app the deployment
+merchant's **own** Cin7 Core, inFlow Inventory, Brightpearl or Ordoro account.
+Cin7 Core, inFlow and Ordoro need nothing registered by the deployment: the
+merchant pastes API keys from their own account, and all three are offered
+once the token key that seals those keys is set. Brightpearl needs a developer app the deployment
 registers with Brightpearl, and is offered only when its references **and** the
 token key are set. With no token key, no Inventory and ERP card appears and
 nothing is sent. Set these on the **console only**: the job runs there, and the
@@ -1168,6 +1186,15 @@ Passkeys set up from the Android app are checked against the app's signing certi
 | Variable | Need | When | Value |
 | --- | --- | --- | --- |
 | `PASSKEY_ANDROID_APK_KEY_HASHES` | Feature | Runtime, console | Comma-separated SHA-256 hashes of the signing certificates of your Android builds, each as base64url without padding (43 characters). An Android passkey is accepted only from an app whose hash is listed; unset, Android passkeys are refused and the web console's are unaffected. |
+
+The two files that link your apps to your domains are served from these, by both containers:
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `NATIVE_APPLE_APP_IDS` | Feature | Runtime, console and tenant | Comma-separated Apple app ids, `<team id>.<bundle id>`, the preferred app first. They become `/.well-known/apple-app-site-association`: on the console's own host with `webcredentials` and the console paths the apps open (`applinks`), and on the host of `NEXT_PUBLIC_PLATFORM_HOME_URL` with `webcredentials` only. Unset, the file answers 404. |
+| `NATIVE_ANDROID_APPS` | Feature | Runtime, console and tenant | `;`-separated `<package>=<sha256>,<sha256>` entries, each fingerprint the colon-separated SHA-256 of a signing certificate as Play Console prints it (list the Play app signing key and your upload key). They become `/.well-known/assetlinks.json` on the same two hosts, granting each package app links and passkeys. Unset, the file answers 404. |
+
+Every other host either container serves, a customer's site or a white-label console, answers 404 for both files.
 
 A person with no registered device is never sent a push. A push carries the notification's title and body, with the device push token, to Apple Push Notification service for an iPhone, iPad or Mac and to Firebase Cloud Messaging for an Android device. The server sends to APNs directly with the key above, and to FCM with the Firebase project credentials it already holds, so FCM needs no variable of its own. If you run your own build of the app, those are your vendors, and your own subprocessor list names them.
 

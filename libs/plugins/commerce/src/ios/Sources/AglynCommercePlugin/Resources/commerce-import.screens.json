@@ -86,7 +86,9 @@
               "kind": "text",
               "required": true,
               "mustMatch": "{data.cards.rows.rows.0.giftCard.totalCents:cents}",
-              "help": "Type {data.cards.rows.rows.0.giftCard.totalCents:cents}, with the dollar sign."
+              "help": "Type {data.cards.rows.rows.0.giftCard.totalCents:cents}.",
+              "mustMatchAs": "dollars",
+              "mismatch": "That is not the total. These cards add up to {data.cards.rows.rows.0.giftCard.totalCents:cents}."
             },
             {
               "key": "email",

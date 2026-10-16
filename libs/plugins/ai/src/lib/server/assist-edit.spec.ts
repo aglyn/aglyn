@@ -30,8 +30,16 @@ import {
 import { validateStreamedGeneration } from '../runtime/ai-doctrine'
 import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import {
+  ANIMATION_EASINGS,
+  ANIMATION_PRESETS,
+  ANIMATION_TRIGGERS,
+  NODE_ANIMATION_PROPS,
+} from '@aglyn/aglyn/app-utils/element-animation'
+import {
   ASSIST_EDIT_MAX_INSERT_NODES,
   ASSIST_EDIT_MAX_OPS,
+  ASSIST_EDIT_MOTION_LINE,
+  assistEditMotionPatch,
   assistEditTool,
   checkAssistEditAnswer,
   editCanvasBlock,
@@ -789,5 +797,93 @@ describe('adding an interaction to an element (AGL-3603)', () => {
       { name: 'Open bmenu/b', event: 'elementHoverEnter', steps: ['openMenu'], enabled: true },
     ])
     expect(editSelectionBlock(parsed as never)).toContain('"interactions":[{"name":"Open bmenu/b"')
+  })
+})
+
+describe('an element’s animation, set, changed or removed by updateProps (AGL-3838)', () => {
+  const motion = (props: Array<{ name: string; value: string }>, nodeId = 'hero') =>
+    resolve([op({ op: 'updateProps', nodeId, props })])
+
+  it('sets an entrance from the vocabulary, typed as the Animation section stores it', () => {
+    const { proposal, dropped } = motion([
+      { name: 'aglynAnimation', value: 'slide-up' },
+      { name: 'aglynAnimationTrigger', value: 'scroll' },
+      { name: 'aglynAnimationDuration', value: '700' },
+      { name: 'aglynAnimationDelay', value: '0' },
+      { name: 'aglynAnimationEase', value: 'overshoot' },
+      { name: 'aglynAnimationStagger', value: 'true' },
+      { name: 'aglynAnimationStaggerStep', value: '90' },
+    ])
+    expect(dropped).toEqual([])
+    expect(proposal?.ops).toEqual([
+      {
+        op: 'updateProps',
+        nodeId: 'hero',
+        componentId: 'muiStack',
+        props: {
+          aglynAnimation: 'slide-up',
+          aglynAnimationTrigger: 'scroll',
+          aglynAnimationDuration: 700,
+          aglynAnimationDelay: 0,
+          aglynAnimationEase: 'overshoot',
+          aglynAnimationStagger: true,
+          aglynAnimationStaggerStep: 90,
+        },
+      },
+    ])
+  })
+
+  it('removes one with none, and changes one beside the element’s own settings', () => {
+    expect(motion([{ name: 'aglynAnimation', value: 'none' }]).proposal?.ops[0]).toMatchObject({
+      props: { aglynAnimation: 'none' },
+    })
+    expect(
+      motion([{ name: 'children', value: 'Ship it' }, { name: 'aglynAnimation', value: 'fade' }], 'headline').proposal?.ops[0],
+    ).toMatchObject({ props: { children: 'Ship it', aglynAnimation: 'fade' } })
+  })
+
+  it('refuses a value outside the vocabulary or past a cap, and says which', () => {
+    for (const [name, value] of [
+      ['aglynAnimation', 'bounce'],
+      ['aglynAnimationTrigger', 'click'],
+      ['aglynAnimationEase', 'spring'],
+      ['aglynAnimationDuration', '10000'],
+      ['aglynAnimationDelay', '-5'],
+      ['aglynAnimationStaggerStep', '501'],
+      ['aglynAnimationDuration', '1.5s'],
+      ['aglynAnimationStagger', 'yes'],
+    ]) {
+      const { proposal, dropped } = motion([{ name, value }])
+      expect(proposal).toBeNull()
+      expect(dropped.join(' ')).toContain(name)
+    }
+  })
+
+  it('takes nothing of a change that carries one bad motion value', () => {
+    const { proposal } = motion([
+      { name: 'aglynAnimation', value: 'fade' },
+      { name: 'aglynAnimationDuration', value: '99999' },
+    ])
+    expect(proposal).toBeNull()
+  })
+
+  it('splits only the reserved names off a patch', () => {
+    expect(assistEditMotionPatch({ children: 'Hi', aglynAnimation: 'zoom-in', aglynAnimationRepeat: 'true' })).toEqual({
+      motion: { aglynAnimation: 'zoom-in', aglynAnimationRepeat: true },
+      rest: { children: 'Hi' },
+      refused: [],
+    })
+  })
+
+  it('is offered in the cached block with every value the vocabulary has, and nothing else', () => {
+    const block = editCanvasBlock('screen')
+    expect(block).toContain(ASSIST_EDIT_MOTION_LINE)
+    expect(editCanvasBlock('layout')).toContain(ASSIST_EDIT_MOTION_LINE)
+    for (const value of [...ANIMATION_PRESETS, ...ANIMATION_TRIGGERS, ...ANIMATION_EASINGS]) {
+      expect(ASSIST_EDIT_MOTION_LINE).toContain(value)
+    }
+    for (const prop of NODE_ANIMATION_PROPS.filter((prop) => prop !== 'aglynAnimationRepeat')) {
+      expect(ASSIST_EDIT_MOTION_LINE).toContain(prop)
+    }
   })
 })

@@ -19,6 +19,7 @@ import {
   renderEmailHtml,
   substituteMergeTokens,
 } from './email-render'
+import { PLATFORM_EMAIL_ACCENT } from './email-palette'
 
 const NODES = {
   root: { componentId: 'div', nodes: ['section'] },
@@ -598,7 +599,7 @@ describe('emailText copy a sender composed (AGL-3367)', () => {
     })
     expect(html).toContain(
       '<a href="https://app.test/a?x=1&amp;y=2" target="_blank" ' +
-        'style="color:#1a73e8;text-decoration:underline;word-break:break-word;">' +
+        `style="color:${PLATFORM_EMAIL_ACCENT.link};text-decoration:underline;word-break:break-word;">` +
         'https://app.test/a?x=1&amp;y=2</a>.',
     )
     // The text part is the words, never markup.
@@ -614,6 +615,38 @@ describe('emailText copy a sender composed (AGL-3367)', () => {
     expect(html).toContain('https://a.test/help</a>]')
     expect(html).toContain('(<a href="https://a.test/x_(y)" ')
     expect(html).toContain('https://a.test/x_(y)</a>)')
+  })
+
+  it('falls back to the platform accent, never a typed color, with no palette', () => {
+    const { html } = renderEmailHtml({
+      nodes: textNodes('See https://app.test/'),
+      sanitize: SANITIZE,
+    })
+    expect(html).not.toContain('#1a73e8')
+    expect(html).toContain(`color:${PLATFORM_EMAIL_ACCENT.link}`)
+  })
+
+  it('links a bare email address in the link color, and leaves the period to the prose', () => {
+    const { html } = renderEmailHtml({
+      nodes: textNodes('owner@example.com created it. Ask help@a.test.'),
+      sanitize: SANITIZE,
+    })
+    expect(html).toContain(
+      '<a href="mailto:owner@example.com" target="_blank" ' +
+        `style="color:${PLATFORM_EMAIL_ACCENT.link};text-decoration:underline;word-break:break-word;">` +
+        'owner@example.com</a> created it.',
+    )
+    expect(html).toContain('<a href="mailto:help@a.test" ')
+    expect(html).toContain('help@a.test</a>.')
+  })
+
+  it('keeps an address inside a URL part of that URL', () => {
+    const { html } = renderEmailHtml({
+      nodes: textNodes('https://app.test/u?email=a@b.test'),
+      sanitize: SANITIZE,
+    })
+    expect(html).toContain('<a href="https://app.test/u?email=a@b.test" ')
+    expect(html).not.toContain('mailto:')
   })
 
   it('still escapes the copy around a link, so a token cannot inject markup', () => {

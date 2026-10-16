@@ -288,6 +288,22 @@ final class ScreenSiteImportTests: XCTestCase {
     XCTAssertTrue(shown.contains("Records"))
   }
 
+  func testEveryRecordThatDiffersIsHeldAndTheListShowsThemAPageAtATime() async throws {
+    ScreenStash.set(["package": ["manifest": ["items": []]], "decisions": ["dataset/d": "replace"]])
+    let before = (0..<320).map { #"{"$id":"r\#($0)","name":"A"}"# }.joined(separator: ",")
+    let after = (0..<320).map { #"{"$id":"r\#($0)","name":"B"}"# }.joined(separator: ",")
+    let compare = #"{"items":[{"key":"dataset/d","kind":"dataset","id":"d","incoming":{"records":[\#(after)]},"existing":{"id":"d","content":{"records":[\#(before)]}}}]}"#
+    let item = try spec("core.site.import.item")
+    let model = ScreenModel(
+      spec: item, context: ["site": ["id": "h1"], "params": ["key": "dataset/d"]], api: api(RecordingTransport(responses: [(200, compare)])))
+    await model.load()
+    // The console pages through every record; nothing past the values' limit of 200 is dropped.
+    XCTAssertEqual(ScreenValues.lookup("data.diff.records.changes", in: model.context).array.count, 320)
+    XCTAssertEqual(ScreenValues.lookup("data.diff.records.more", in: model.context), 0)
+    let records = try XCTUnwrap(item.blocks.first { $0.title == "Records" })
+    XCTAssertEqual(records["page"], 50)
+  }
+
   func testThePickListHoldsOnlyTheSiteItemsOfTheMissingItemsKind() async throws {
     let catalog = #"{"manifest":{"items":[{"$id":"lay1","kind":"layout","name":"Main"},{"$id":"p1","kind":"page","name":"Home"},{"$id":"lay2","kind":"layout","slug":"wide"}]},"kinds":[]}"#
     let pick = try spec("core.site.import.pick")

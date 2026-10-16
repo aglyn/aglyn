@@ -358,6 +358,33 @@ vendor, and it does not move as a conversation grows.
   block stranded after the last breakpoint, and refuses a step that quotes
   cache reads in `AI_STEP_NOMINAL_USAGE` for a prefix its model will not cache.
 
+- **A generation that continues (AGL-3809).** A lookup round and a re-ask
+  re-send the first turn and the inventory. A door whose generations usually
+  continue passes `cacheConversation: true` to `runValidatedGeneration`, and
+  the last turn of each request is marked as well. That marker is one of the
+  four allowed and is dropped first where the system blocks hold all four.
+  On a single-call generation it costs a 0.25× write on the tail, so only a
+  door measured to continue may turn it on. Today that is the plan alone; the
+  cache spec lists the doors. The audit behind it, and the levers left as
+  proposals, are in `docs/AI_CACHE_AUDIT_2026-10.md`.
+- **A site job's routes cache for the hour, in production too (AGL-3830).**
+  Each step a site job runs (the plan, the look, the header and footer, the
+  pages and their listings, the creations, the first posts and products, the
+  welcome email) carries `cacheTtl: '1h'` on its routing row
+  (`AiRoutingRow.cacheTtl` in `providers/routing.ts`), and
+  `runValidatedGeneration` puts it on the request, so every breakpoint goes
+  out as `ttl: "1h"`. A guided start writes each route's prefix once and the
+  next one, minutes or an hour later, reads it instead of writing it again.
+  Every other row keeps the provider's five minutes. An hour-long write
+  costs 2× the input price, where a five-minute one costs 1.25×: the
+  Anthropic adapter reads the hour's share of the writes
+  (`cache_creation.ephemeral_1h_input_tokens`) into `cacheWriteHourTokens`,
+  and the adapter's figure, the meter's two dollar figures and a live run's
+  ledger add the difference (`aiCacheWriteHourSurchargeUsd`), so neither
+  the credits drawn nor the provider cost reads low. The cache spec's
+  *a site job's routes keep their prefix for the hour* section holds which
+  rows ask for it and that a deployed request sends it on every marker.
+
 Two consequences worth knowing before writing a prompt. A door on the fast
 tier has the HIGHEST minimum on the platform, so a step moved there to save
 per-token money can cost more per request; and on a door that cannot cache,
@@ -406,8 +433,13 @@ that forbids an invented name, contact detail, price or review.
 Nearly all of the provider bill is development, not customers (AGL-3660):
 in October 2026, $20.56 on the provider's console against about $1.05
 metered to workspaces. Most of it was live evals re-run whole on every
-iteration, on Free and on a paid workspace, at $0.35–0.80 a plan a run. So a
-change is verified on the cheapest rung that can see its mistake:
+iteration, on Free and on a paid workspace, at $0.35–0.80 a plan a run.
+Measured again for October 8–14 (AGL-3781): workspaces' own usage records
+account for about 3.3M of the console's 13.7M input tokens, and none of its
+2.8M on Claude Sonnet 5, which no deployed route served after AGL-3660 — that
+was development run from checkouts cut before it. So a change is verified on
+the cheapest rung that can see its mistake, from a checkout cut from
+`origin/main`:
 
 1. **Unit tests** (free). The step's own spec on golden answers, and
    `src/lib/runtime/ai-prompt-cache.spec.ts`, which holds every request's
@@ -423,42 +455,86 @@ change is verified on the cheapest rung that can see its mistake:
    at list. `live: 0` means nothing new was asked; it is not a live pass.
 4. **The full live sweep, only before landing**: `AGLYN_AI_REPLAY=refresh`
    asks every request again, and `AGLYN_LIVE_AI_BATCH=1` sends each round as
-   one Message Batch at half price.
+   one Message Batch at half price. `npm run eval:ai-live` batches by default
+   (AGL-3781; `AGLYN_LIVE_AI_BATCH=0` for one quick brief), and in batch mode
+   its briefs run side by side, so a round of answers is one batch, its
+   re-asks the next and its grades the one after.
 
 ### The development layers
 
-All three live in `runAiRequest` (`src/lib/runtime/ai-runtime.ts`), are read
+All of them live in `runAiRequest` (`src/lib/runtime/ai-runtime.ts`), are read
 from the environment by `src/lib/runtime/ai-dev-env.ts`, and are OFF in any
 deployed server — `NODE_ENV=production`, `VERCEL_ENV` of `production` or
-`preview`, or `K_SERVICE` — whatever the variables say.
+`preview`, or `K_SERVICE` — whatever the variables say. A LIVE RUN — the
+launcher's mark, or a live spec started with `AGLYN_LIVE_AI=1` — runs replay,
+the hour-long cache and batch mode by default, each turned off by its own
+variable (AGL-3781): a live spec started without the launcher's mark used to
+send every request again, at full price. Of the 74 live runs agents started
+from October 8 to 14, 14 ran with replay off that way, 12 refreshed every
+request and 16 batched.
 
 - **Replay** (`ai-dev-replay.ts`). A request's key is a SHA-256 of the
   provider, model, system text, tools, messages, ceiling, thinking and
   effort, as canonical JSON. `AGLYN_AI_REPLAY=1` replays and records,
   `refresh` sends every request and records over the old answer, `off`
-  does neither; unset, it is on under the launcher and off elsewhere.
+  does neither; unset, it is on in a live run and off elsewhere.
   `AGLYN_AI_REPLAY_DIR` moves the store. A replayed answer is one the same
   model gave to the same bytes, so a run that passes on replays has still
   had every changed prompt answered live. A prompt that carries something
-  per run — a fresh job id, a random seed — never replays; a spec that wants
-  replays builds its ids from its briefs.
-- **Batch** (`ai-live-batch.ts`). `AGLYN_LIVE_AI_BATCH=1` turns every
+  per run — a fresh job id, a random seed, today's date — never replays; a
+  spec that wants replays builds its ids from its briefs, and every live spec
+  runs on one fixed day, since a build plan and an events plan state the date.
+- **Batch** (`ai-live-batch.ts`). On by default in a live run, and `npm run
+  eval:ai-live`'s briefs then run side by side (AGL-3781); `AGLYN_LIVE_AI_BATCH=0`
+  is for the single quick run an iteration wants in seconds. A batched spec
+  waits `AI_LIVE_BATCH_TIMEOUT_MS` (`aiLiveTimeoutMs`), since a timed-out run
+  keeps none of the answers it paid for. Batch mode turns every
   non-streaming request into an entry of a Message Batch: requests that
   arrive within `AGLYN_LIVE_AI_BATCH_WINDOW_MS` (2 s) of each other — a
   `Promise.all` over the briefs — go as one batch, and the re-asks, asked
   only once their answers are read, gather into the next. Half price, in
-  minutes rather than seconds; the adapter waits up to an hour.
+  minutes rather than seconds.
+- **A slow batch costs part of the discount, never the round** (AGL-3781). A
+  batch is waited on for `AGLYN_LIVE_AI_BATCH_WAIT_MS` (half an hour by
+  default). One still processing then is canceled and read once the cancel
+  has ended it: what it already answered comes back at half price, and each
+  request it never reached is asked on its own, at full price, with the same
+  request and cache breakpoints, the first alone so the rest read the prefix
+  it writes. The run prints one line when it happens, and the ledger counts
+  those requests as `batchFallbacks` rather than `batchedRequests`. A golden
+  run's second batch once sat in progress for over an hour, was canceled
+  whole, and took every grade in it.
 - **The first request over a prefix goes alone.** A cache entry is readable
   only once the request writing it has started answering, so a `Promise.all`
   over N briefs on one prompt wrote the prefix N times and read it none.
   In a development run the first request over a cached prefix is sent
   alone and the others follow it. Production's beat runs one step at a
   time, so it never needed this and never gets it.
-- **The hour-long cache.** Under the launcher every breakpoint asks for
-  `ttl: "1h"` (`AGLYN_AI_CACHE_TTL=5m` turns it back), since an agent re-runs
-  an eval every ten to forty minutes, past the default five. Production
-  keeps five minutes: a job's steps run a beat apart, and a one-call step
-  with no re-ask would pay the hour's dearer write for nothing.
+- **The hour-long cache.** In a live run every breakpoint asks for
+  `ttl: "1h"`, since an agent re-runs an eval every ten to forty minutes,
+  past the default five. `AGLYN_AI_CACHE_TTL=5m` turns every request back to
+  five minutes, a site job's routes included, for a one-off sweep that will
+  not run again within the hour. Production asks for the hour only on a
+  site job's routes (above, AGL-3830); the variable never reaches it.
+- **A retired model is refused by name in a live run** (AGL-3781). Routing
+  serves a retired catalog row's successor wherever a setting or an override
+  names it, so a retired id that reaches the runtime in a live run was asked
+  for by name, and would bill a model production no longer serves.
+- **An effort A/B arm.** `AGLYN_AI_EFFORT=job.form:medium,job.text:low` (or
+  `*:medium`) asks those step kinds at that effort in a development run, and
+  `npm run eval:ai-live` records the arm's answers beside the defaults'
+  (`<case>.<model>.effort-<8 hex>.json`, a hash of the parsed arm; the
+  recording's `arm` holds the tag and every effort it named) and prints one
+  score line a brief, `score <case> (<kind>) <model> effort-<8 hex>: …`,
+  which pairs with the default run's line for the same brief. The file name
+  once spelled the whole list out and failed with ENAMETOOLONG. The run's
+  ledger prints after the run, however it ended. Production's efforts move
+  only once such a round shows the lower one holds.
+- **A live run is verbose.** Under an AI agent jest 30 reports through its
+  agent reporter, which prints only a failing file's console, so a passing
+  live run over two spec files printed nothing. `AGLYN_LIVE_AI=1` and the
+  launcher's mark turn jest's verbose mode on (`jest.config.ts`), which
+  writes each test's console straight out.
 
 ## Rules a kind can actually break
 
@@ -627,7 +703,7 @@ Every door reads its row rather than a constant of its own.
 - **The scores are recomputed.** `src/lib/runtime/ai-eval.spec.ts` recomputes
   each row's pass rate and mean score from the harness, and fails when they
   differ from the row, when a row falls under its floor, or when a fast-tier
-  row asks for thinking or effort.
+  row does not say `thinking: 'off'` (its ceiling holds the answer alone).
 - **The ceilings.** A ceiling is sized from the p95 output the *Tokens by
   kind* panel reports for the kind once production has served it. Until then
   `maxTokensBasis` names what it is sized from, and the same spec holds every
@@ -639,7 +715,10 @@ Every door reads its row rather than a constant of its own.
   row of `AI_MODEL_CATALOG` is the tier's default, so Free, "Auto" and every
   step on the balanced tier run on `claude-sonnet-5-5`; `claude-sonnet-5`
   stays listed so a workspace's earlier choice and every recording still
-  resolve. Both bill at the same rates. Sonnet 5.5 refuses
+  resolve. Both bill at the same rates. Since AGL-3781 `claude-sonnet-5` is
+  retired to it (`successor` on the catalog row): a setting, an override or a
+  pick that names it is served by Sonnet 5.5, so the tier's prefixes live in
+  one cache namespace. Sonnet 5.5 refuses
   `thinking: {type: "disabled"}`, so the adapter says a step's `thinking:
   'off'` to it as `{type: "between_tools"}` (accepted at effort high or below,
   every effort the contract names); Claude Opus 5.5 cannot turn thinking off,
@@ -647,6 +726,22 @@ Every door reads its row rather than a constant of its own.
   door forces a tool: every request sends `tool_choice: auto`. Its cache
   minimum is 512 tokens, so the insight, A/B test, overlay and copy-section
   prompts now cache where they did not on Sonnet 5's 1,024.
+- **The fast tier is Claude Haiku 5.5 (AGL-3781).** `claude-haiku-5-5` is
+  the first fast row, so every fast step, a Free site's plan and look, a
+  page's listing and a Media illustration run on it; `claude-haiku-4-5` is
+  retired to it and stays listed so its recorded usage keeps its price. The
+  provider list is $0.10 / $0.50 per million tokens (to a 100,000-token
+  prompt) against Haiku 4.5's $1 / $5; a customer is billed Haiku 4.5's rate
+  per token, so the fast tier's price per token did not move. Its cache
+  minimum is 512 tokens, against 4,096, so the listing, audit, CRM and
+  illustration prompts cache for the first time. It thinks unless told not
+  to, so every fast row says `thinking: 'off'` — each ceiling, and the CRM
+  door's inline budget, was sized for the answer alone — and the listing and
+  CRM rows ask `effort: 'low'`. It counts the same text as about 30% more
+  tokens, so a fast-tier request draws about that much more credit at the
+  same rate per token. It refuses sampling parameters, budgets and an
+  assistant prefill, none of which any door sends, and has no server-side
+  fallback, which no door asks for.
 - **A Free site's plan still runs on the fast tier** (`aiSitePlanModel`,
   AGL-3594). Moving it to the balanced default puts the plan's derived
   worst case at 105 credits rather than 35, and the Free site wall
@@ -655,14 +750,28 @@ Every door reads its row rather than a constant of its own.
   so every Free plan would be refused. The wall has to be re-derived for the
   layout language first.
 - **The layout language thinks.** A page's answer and a site's header and
-  footer are asked with adaptive thinking at `effort: medium`
-  (`AI_LAYOUT_LANGUAGE_THINKING`), and each ceiling carries room for it above
+  footer are asked with adaptive thinking at `effort: low`
+  (`AI_LAYOUT_LANGUAGE_THINKING`; medium until AGL-3781, whose live round of
+  2026-10-14 built 39 of 39 pages and 13 of 13 frames at low, 64 of 65 holding
+  their rules on the first ask and none cut off), and each ceiling carries room for it above
   the answer's own: 2,000 tokens on a page (5,000 in all; the live answers
   ran 683–1,745) and 4,000 on a frame (5,200). The page's room is bounded by
   time, not money: the answer, its re-ask and the follow-up must fit the
   least time a beat gives a step, and `aiJobStepBudget` lowers a ceiling that
-  does not — at 5,000 of room it cut the page ceiling to 879. The theme step already thought
-  adaptively, at the model's default effort, and is unchanged.
+  does not — at 5,000 of room it cut the page ceiling to 879. The room stays sized at
+  medium, and so do the figures priced or measured from it — the Free wall's page and
+  layout, and the measured tables in `ai-credit-estimate.ts` — so none moved: low draws
+  less, and a quote is never under what is drawn.
+- **Three more rows moved after the golden A/B of 2026-10-14** (AGL-3781;
+  arm B against the defaults, one brief a kind): the theme step thinks
+  adaptively at `effort: medium` (its brief passed with the default's scores
+  and half the output tokens; a site start's look keeps its own thinking-off
+  setting), a template asks `effort: medium` with thinking off (both briefs
+  passed, about a third fewer output tokens), and a text answer thinks at
+  `effort: low` (the tagline passed and scored higher). The arm also lowered
+  products, components, forms, email, workflows and logic, and lost
+  quality on the catalog, a component and a workflow, so those rows keep
+  their defaults.
 
 ## Planning, and a job that waits for a person
 
@@ -792,6 +901,27 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   is one the rule reads as a region and it places nothing, or only a layout. One that
   places a form or a component, and a page whose every section is a region, are
   re-asked as before; a home left under its fewest sections is the thin-home check's.
+- **A section that places the page's layout has it taken out (AGL-3807).** Rule 2's
+  `plan-layout-in-section` answers "name it as the page's layout, and take it out of the
+  section's uses", so `aiSettlePlanLayoutsInSections` does that, right after the refs are
+  settled and before every other rule reads the plan: the live Free dental start of
+  2026-10-15 put both pages in the site's `laySite` and named it again in each section
+  that placed no form, on both attempts. A layout is what the rule reads as one (a site
+  layout's id, or a `new:` layout the plan creates). Where the page already names that
+  layout, it only comes out of the sections; where the page names none, or a reference
+  that resolves to nothing, the page is put in it. A page in a different layout (or a
+  record of another kind), or whose sections name two layouts, is re-asked as before.
+- **A search title or description a few words too long is cut at a word (AGL-3837).** Rule
+  10's `plan-seo` refuses a page's `seoTitle` past `AI_SEO_TITLE_MAX` (70) or
+  `seoDescription` past `AI_SEO_DESCRIPTION_MAX` (170), and "shorter" has one answer, so
+  `aiSettlePlanSeo` cuts it right after the door's own settling and before every other
+  rule reads the plan: the live Free travel-blog start of 2026-10-15 wrote a home
+  description of 173 characters on both answers and stopped. The cut is the one the page
+  step stores a listing with (`aiClipAtWord`, AGL-3813): the last whole word inside the
+  limit, with no joining mark (" |", ",", ":", "–") and no word `aiDanglingWord` reads as
+  unfinished in the plan's language (AGL-3828) at its end. A missing or empty title or
+  description, and one whose cut would split a word or keep under half the limit, are
+  re-asked as before.
 - **A section that shows the work gets its fewest pieces (AGL-3754).** A site start's
   `plan-empty-gallery` names one answer, "plan it with 3 to 6 items", so
   `aiSettlePlanGalleries` raises a gallery, portfolio or selected-works section (by the
@@ -1443,8 +1573,9 @@ nothing itself.
   The scaffold asks no model anything.
 - **The units, in build order.** The site's LOOK first (AGL-3660, below), then
   the layout every page renders inside and the form
-  they place — a page binds both by id, so they must exist — then, on a paid
-  plan, a blog's first posts or a store's first products (AGL-3676, below),
+  they place — a page binds both by id, so they must exist — then a blog's
+  first posts (one on the Free taste, AGL-3798) or, on a paid plan, a store's
+  first products (AGL-3676, below),
   then the pages, then the welcome email. Each unit's derived job carries as its `$id` the id
   its plan entry recorded (the welcome email's is on the scaffold's own step),
   which is what a step that recorded no id of its own names its draft by, so a
@@ -1489,7 +1620,8 @@ nothing itself.
   `ai-job-site-content.ts`). A site whose kind is Blog & writing gets the row
   "Writing your first posts": a content collection "Blog" (the platform's own
   blog, served at `/{slug}` with a page per post, its slug clear of the planned
-  pages' addresses) and three posts, one `copy.blog` generation a pass through
+  pages' addresses) and three posts — on the Free taste one, on the fast tier,
+  under the row "Writing your first post" (AGL-3798) — one `copy.blog` generation a pass through
   the strict `write_blog_post` tool, each written as a draft by
   `@aglyn/tenant-data-admin/server/content-entry-drafts` — the console routes'
   allow-list, caps, slug claim and draft stamp — bylined with the business's
@@ -1876,9 +2008,15 @@ server canvas refuses exactly what the validator refuses. Inputs: `target`
   unit's is its item's id), so a pass run again finds it and spends nothing.
 - **What it cannot do server-side** — save a reusable component, or write a
   published page's search listing — is left out and named on the output.
+- **Animation (AGL-3838).** `updateProps` also sets an element's entrance
+  animation, in Assist's card and in this kind alike: the eight
+  `aglynAnimation*` settings, each held to the vocabulary's own values and
+  caps (`assistEditMotionPatch`). A value outside them refuses the change with
+  its reason; `none` takes an animation off. The protocol's one Animation line
+  is in the cached prefix.
 - **Routing.** `job.edit`, balanced tier, adaptive thinking, 6,144 tokens:
   the edit rung's tool-call ceiling with half as much again to think in. Its
-  cached prefix is 5,970 tokens for a page and 5,958 for a layout. Evals:
+  cached prefix is 6,169 tokens for a page and 6,157 for a layout. Evals:
   `tools/ai-eval/cases/edit`.
 
 | step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
@@ -2415,6 +2553,52 @@ Assist panel.
   and asks the same admission of the plan before it is kept, so such a plan is
   refused before a member is shown a Confirm (AGL-3030).
 
+### Motion on an AI-built page (AGL-3838)
+
+Every page an AI job builds moves, and the model decides none of it: no prompt
+names a preset, no answer carries one, and no credit is spent on it. The motion
+is the element animation props an author sets in the Besigner's Animation
+section (`aglynAnimation*`, `libs/aglyn/src/lib/app-utils/element-animation.ts`),
+written by code.
+
+- **The pass.** `applyElementMotion` (`libs/aglyn/src/lib/app-utils/element-motion.ts`)
+  plays the first section's secondary content — eyebrow, lede, buttons, a
+  small picture — on `load` as a short ladder (each block a step after the one
+  before, at most six steps). That section's main heading (the h1, else its
+  first heading) and its largest picture never move, nor does anything holding
+  them: they are the page's Largest Contentful Paint candidates (AGL-3581), so
+  they paint where they stand from the first frame. It slides every later section's
+  content in on `scroll`, and staggers a group of like items — a grid of cards,
+  a list, an FAQ, a dataset repeat — rather than moving it as one block. A
+  section's band, and a cover photo's backdrop, never move; nothing nests
+  inside a block that already moves. Forms and their fields, the header,
+  footer and navigation, anything pinned or laid over its band, anything
+  hidden, and anything already carrying an animation prop (`none` included)
+  are left alone, and a block that holds one is opened up so its other
+  children move instead. A page it already moved comes back as the same
+  object, so no write is made for it.
+- **The site's character.** `aiSiteMotion` (`src/lib/layout-language/ai-layout-motion.ts`)
+  maps the site's kind to a mood and turns it by the site's design seed, so
+  every page of one site moves alike and two sites of one kind differ: calm
+  (law and finance, health, yoga, beauty, blog) fades on a gentle curve,
+  650–800 ms; bold (studio, fitness, music, events) rises with overshoot and
+  zooms pictures in, 450–600 ms; gallery (portfolio, photography) zooms
+  pictures in one after another; standard (every other kind) rises smoothly,
+  500–700 ms. Items stagger 60–120 ms apart.
+- **Where it is written.** A layout-language page's check, once the page has
+  passed (`aiLayoutPageCheck`, so the one write carries it); the page step's
+  last pass, which settles a page built a section at a time the same way; and
+  the template step, before its draft is written. The header and footer (the
+  frame) and a reusable component are never given motion: a component's
+  instances sit inside a group that already staggers them.
+- **The starters.** The same pass runs on a new site's home
+  (`buildDefaultHomeScreen`) and on every starter page as it is seeded
+  (`buildStarterTemplateDocs`), in the default character. The starters
+  themselves carry none, because they are also the page examples a model is
+  shown.
+- **Afterwards.** It is the author's: the Besigner's Animation section shows
+  and edits every value, and Assist (below) sets, changes or removes one.
+
 ### Pictures on a layout-language page
 
 The layout language's compiler writes a picture as an empty slot: a frame at a
@@ -2465,6 +2649,18 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   provider caches each search 24 hours (`stockPhotoSearches`) and keeps the
   library's rate limit. No AI model is called, and the guided start's credit
   estimate is unchanged.
+- **Alt text that says what the photo shows (AGL-3805).** The slot's alt text is the model's,
+  written before any photo was found, so a stock photo placed in it answers for its own
+  words (`aiStockPhotoAlt`): the slot's words are kept on an English site when a word of
+  their subject is among the hit's first tags or its page's address; otherwise the photo
+  is described by the library's own description where it writes one (Pexels' `alt`),
+  else its first three tags ("Cake, homemade, dessert"). The libraries write in English
+  and no model translates them, so a site in another language takes the platform's own
+  phrase in its language (`illustrativePhoto` in `ai-layout-labels.ts`: "Foto
+  ilustrativa"), true of any photo. The library's asset keeps the same words. The
+  beta.253 Panadería La Concha Dorada start (job eg4maZMGtN) captioned a round cake
+  dusted "HOME MADE" as conchas on a tray, and none of its nine photos showed what its
+  words said. `ai-stock-photo-alt.spec.ts` replays its recorded "bakery" answer.
 - **The cap.** The compiler's per-page picture cap is unchanged; the resolver
   only fills the slots the compiler wrote.
 
@@ -2539,7 +2735,9 @@ wall and does not move, so the answer writes the item once (AGL-3053):
   document wrapper or the Section), `repeat-nested`, `repeat-shape` (not one list of
   values a copy), `repeat-count` (under 2 copies, or over `AI_REPEAT_MAX_COPIES`, 7,
   the most rule 8 leaves a typed list), `repeat-placeholder-without-value` (a copy
-  gives no value for a placeholder, `{{0}}`, or a placeholder in no repeated item),
+  gives no value for a placeholder, `{{0}}`, or a placeholder in no repeated item, on
+  every workspace: one that keeps components is told the same placeholders for an item
+  of instances, AGL-3827),
   `repeat-value-without-placeholder` (a value past the last placeholder, a gap in the
   numbering, or values with no numbered placeholder at all, such as `{{title}}`), and
   `repeat-id-collision` (a copy's id the answer already gives another node).
@@ -2677,6 +2875,16 @@ the same way, in a Grid with a row direction and no container.
   The platform reaches no section of another page by anchor (AGL-2867), so the link
   names the page. The layout language's page and layout checks and the page's last pass
   (which stores it) all repair.
+- **The form's page is not Home when another page places it (AGL-3805).** `aiLayoutFormPageOfPlan`
+  (`jobs/ai-job-page-language.ts`) names the page every such call to action goes to: the
+  first page of the plan placing the form that is not Home, and Home only when no other
+  page does. A plan lists Home first, and a home page that closes on "visit us or order"
+  places the form too, so the header's button and the footer's linked the home page on
+  every page, itself included: a Spanish bakery's "Pide tu pastel" and "Contáctanos"
+  (beta.253, job eg4maZMGtN) while /pasteles and /visitanos held the form, and eight of
+  the 21 newest AI-built sites the same way. A page that places the form itself still
+  scrolls to its own section. `ai-job-layout-form-page.spec.ts` holds the plan's choice,
+  the frame's buttons and a page's targets.
 - **The goldens are real rows.** `ai-page-briefs.ts` draws every row of cards as a Grid
   container (`"spacing": 3`) of items sized for the row (`span`): the ten briefs'
   component cards, the Free pages' inline cards written out and written once (the
@@ -2766,6 +2974,48 @@ model's own nodes and says what to write instead:
   for each of the four. The section eval case's call to action now links a path.
 - **What it costs.** No prompt line: a rule costs nothing until an answer breaks it, and
   then one re-ask. No credit figure the Free arithmetic quotes moves.
+
+### A placeholder never reaches a page
+
+The live golden check of 2026-10-15 built `page-meet-the-crew` with its two
+testimonials' quote and name left as `{{1}}` and `{{2}}` (AGL-3827): the customer-words
+pass placed one Testimonial instance with the repeated-item placeholders and no
+`repeat`, and on a workspace that keeps components `expandAiRepeatedItems` handed such
+an answer back as copy. Now it is refused there as everywhere else, and a placeholder
+that reaches a tree any other way is rule 14's:
+
+- **Rule 14, `placeholder-token`** (`detectPlaceholderTokens`, `detectPlaceholderCopy`,
+  `runtime/ai-placeholder-tokens.ts`). Every text prop a tree shows (a heading, a
+  paragraph, a button's words, an Image's alt, an accessible name) and the copy an
+  instance fills in, on every page, template, layout, component, form and email tree,
+  and a plan's page titles and search fields. A placeholder is a repeated item's slot
+  (`{{1}}`); anything else in double braces that the platform does not fill
+  (`{{name}}`, `{{Customer name}}`), leaving the platform's scoped bindings
+  (`{{item.title}}`, `{{entry.url}}`, `{{prop.heading}}`, `{{contact.firstName}}`) and
+  id tokens (`{{var:…}}`, `{{fn:…}}`) to the checks that own them; `[[Customer name]]`;
+  `${name}`; and words in angle brackets that are no HTML tag (`<Your business name>`,
+  `<placeholder>`), outside an HTML or CSS field. An email's step owns its bare merge
+  tokens. NOT a placeholder: a fact the brief never gave in single square brackets,
+  which is the honest marker [above](#what-a-draft-asks-the-member-to-fill), `[sic]`, a
+  Markdown link, a price, `Press <Enter>`, `x < y`. Lorem ipsum stays `filler-copy`'s.
+  The re-ask lists the placeholders and, for a slot, says where `{{1}}` is filled.
+- **One answer, settled in code** (`aiSettlePlaceholderItems`). An item of a list (the
+  nearest node, from the copy up, that sits beside another of its shape and of the
+  components it places) whose every placeholder-holding copy is ONLY placeholders, such
+  as a testimonial whose quote is `{{1}}`, is taken out where an item of its shape
+  beside it holds none. Nothing is invented and no word is lost. A list of only
+  placeholders, the only item, copy around a slot ("Thanks, {{name}}!") and a section
+  are never settled: each is the re-ask's. It runs in the page section check and on the
+  stored page at the last pass.
+- **The listing.** A search title or description the SEO step writes with a placeholder
+  keeps the plan's, which the plan's own check already held to the rule.
+- **The eval.** `meet-the-crew.json` holds the recorded live shape as a control that
+  fails `readable`, and a control of slots in other syntaxes that fails `rules`; the copy
+  and SEO checks read placeholders too, and the grader's copy criterion grades one a 1.
+  `jobs/ai-job-page-placeholder-tokens.spec.ts` replays the case through the real page
+  step: the recorded pass is re-asked and the saved page shows no placeholder.
+- **What it costs.** No prompt line: one re-ask when an answer breaks it. The grader's
+  cached prefix is up 44 estimated tokens.
 
 ### A link to a section of the same page
 
@@ -2936,8 +3186,7 @@ needs, and the machine does not start it with less.
   request's line is the same length either way, so no figure the Free page's
   arithmetic quotes moves.
 - **The ceiling does not move to make a section fit.** The balanced tier's
-  1,050 fits the Free page's wall with little to spare: past 1,058 tokens the
-  first section pass costs 45 credits, and the Free page that builds its layout
+  1,050 fits the Free page's wall with little to spare: past 1,077 tokens the first section pass costs 45 credits, and the Free page that builds its layout
   first leaves 45 of the 300 — no more than that pass, which is the room the
   arithmetic keeps for a re-asked section. That margin was 1,060 until the
   palette learned the layout elements' Color scheme (AGL-3284): 20 estimated
@@ -3034,7 +3283,7 @@ the document's one main) and no raw binding token; and every section fits the
 balanced tier's answer ceiling in real tokens, at the ratio measured live, under
 the element budget its request asks for.
 
-- **Credits per page: an estimate.** 48 credits per page: the median
+- **Credits per page: an estimate.** 46 credits per page: the median
   (the higher middle value) of the ten golden pages, each priced from the
   requests the step sent and the golden answers at four characters a token,
   at the catalog rates of the models the routing table picks, with the cached
@@ -3076,12 +3325,11 @@ the element budget its request asks for.
   its answer ceiling, the first writing the cache; and the listing at the SEO step's
   nominal usage. Characters are read four to a token and scaled by what the live
   run measured against the ledger's estimate, the higher of the plan's and the
-  layout's ratios. The four-section Free page comes to at most 190 credits of the
-  300, and a Free page fits 9 sections at every pass's ceiling. On a Free site with
+  layout's ratios. The four-section Free page comes to at most 188 credits of the 300, and a Free page fits 9 sections at every pass's ceiling. On a Free site with
   no layout yet, the page job builds the one layout the Free plan includes first
   (AGL-3031), at the layout generation measured live (1,709 input, 6,649 cache read,
   6,649 cache write and 2,057 output), grown with the layout request's cached prefix:
-  the same page that creates its layout first comes to at most 254 credits, and a
+  the same page that creates its layout first comes to at most 252 credits, and a
   Free page fits 6 sections with its layout. Those two counts are what the plan rules
   hold a Free plan to (AGL-3070): the spec computes them with the plan rules' own
   `aiFreePageSectionsWithin` and holds each exchange's figure to
@@ -3099,23 +3347,27 @@ the element budget its request asks for.
 - **A Free site fits the taste (AGL-3594).** A Free workspace's guided start builds one
   or two pages (`AI_SITE_FREE_PAGES`, a product decision), and its plan is an outline:
   a site plan runs with no thinking, at `AI_SITE_PLAN_MAX_TOKENS` (2,000 Free, 4,000
-  paid), and a Free site plans on its provider's fast tier (claude-haiku-4-5). The
+  paid), and a Free site plans on its provider's fast tier (claude-haiku-5-5 since
+  AGL-3781, claude-haiku-4-5 before). The
   site plan that failed on 2026-10-06 measured 2,201 input, 4,343 cache write, 4,343
   cache read and 13,491 output tokens on claude-sonnet-5 — 227 credits, the output
   nearly all thinking. `ai-job-free-site.spec.ts` replays a Free two-page site through
   the real plan step (a three-page answer re-asked to two) and prices both requests
   at their ceilings, never under the measured input, the first writing the cache and
-  the second paying for the prefix as plain input: a Free site's plan comes to at most
-  36 credits, its answer and its re-ask together (35 until its tool asked for the photo
-  words in English, AGL-3760). The site's look (AGL-3660) is one
-  fast-tier answer that is never re-asked: 4 credits in the live eval, 7 for the one that writes its cache, which is the figure the wall counts.
+  the second reading it, which the fast tier caches since AGL-3781: a Free site's plan
+  comes to at most 5 credits, its answer and its re-ask together, on Claude Haiku 5.5 at
+  the platform's markup (36 on Claude Haiku 4.5 at its cost; 35 until its tool asked for
+  the photo words in English, AGL-3760). The site's look (AGL-3660) is one fast-tier
+  answer that is never re-asked: 2 credits at its ceiling writing its cache, never under
+  the dearest production look of October 8–14 (4,870 input and 467 output tokens on
+  Haiku 4.5, about 30% more on Haiku 5.5), which is the figure the wall counts.
   The build is priced as the layout language builds it (re-derived in AGL-3660; the
   per-section passes it replaced no longer run on a site): a guided start creates its
   site EMPTY, so it builds its layout (23, the live guided start's layout step, above the
   frame's prefix and its largest live answer) and its saved form (29, the live form
   step) before its pages, and a Free start writes no welcome email. A page is ONE
   answer: 43 for its prefix written, its turn and the whole 2,000-token thinking room,
-  4 a section at the 250 tokens a section is written in at most, and 3 for its listing.
+  4 a section at the 250 tokens a section is written in at most, and 1 for its listing.
   The wall keeps room for one retried page — the dearest page asked again, reading its
   prefix, with its thinking room and a full page of eight sections: 64. Those figures
   price a page's thinking room and sections, not its whole 5,000-token ceiling, and the
@@ -3123,15 +3375,24 @@ the element budget its request asks for.
   ceilings; every answer at its full ceiling would come to more than the 300 for the
   layout, the form and two pages alone, which no section count changes. A Free site
   plans at most `AI_FREE_SITE_MAX_SECTIONS` sections, a product figure that keeps its
-  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 283 credits
-  of the 300, its layout and form built first. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the
+  expected spend near what it measured: a Free site fits 8 sections across its two pages, at most 243 credits of the 300, its layout and form built first. The spec holds `AI_FREE_SITE_WORST_CASE_CREDITS` to the
   figures it derives, and the Free wall holds a Free site's plan to that section count
-  and to its page cap. That leaves 18 credits, and one post at its worst on the fast
-  tier — its answer at the `copy.blog` ceiling and its re-ask — is 23, so a Free
-  blog writes no first posts (AGL-3676). On a paid workspace a site plan's one answer comes to at most 86 credits
+  and to its page cap. That leaves 57 credits, and one post at its worst on the fast
+  tier — its answer at the `copy.blog` ceiling and its re-ask — is 4, within the 57 the wall
+  leaves (68 on the balanced tier, which would not fit), so a Free blog writes one first post
+  there: at most 247 credits of the 300 (AGL-3798; Zach, 2026-10-14). The wall counts it
+  (`AI_FREE_SITE_WORST_CASE_CREDITS.post`; the plan's `freeSitePosts`) and still fits the eight
+  sections beside it, the quote and the Free door count it for a blog (`aiFreeSiteCreditRange`
+  with the site's kind), and the posts runner writes a Free blog's post on its provider's fast
+  tier (`aiSitePostModel`), as a Free site's plan and look are. A Free store still writes no
+  products: a Free plan has no `commerce` feature and `productsPerHost` is 0. On a paid workspace a site plan's one answer comes to at most 86 credits
   for five pages, where the routing table's ceiling with thinking spent 227. (84 before a paid plan could
   create datasets: the record-template plan tool and the dataset sentence, AGL-3616; 85 before a form could
-  write to one: the plan tool's `writesTo` and the form-dataset sentence.)
+  write to one: the plan tool's `writesTo` and the form-dataset sentence.) A paid site's plan
+  asks `effort: medium` (`AI_PAID_SITE_PLAN_EFFORT`, AGL-3781: the live round of 2026-10-14
+  planned 11 of 11 at medium in 16 attempts to the default's 22, $0.129 to $0.164); the 86
+  is priced at the ceiling, which effort does not move, so it stands. A Free site's plan
+  sends no effort and keeps its model's default.
 - **A site start's home reads as a full website (AGL-3660).** A plan is an outline, and
   the only section figure a site plan was told was the Free wall's ceiling, so a local
   Free yoga start (2026-10-07) planned its home with two sections. The site plan's turn
@@ -3881,8 +4142,9 @@ from the job, and the step writes no CRM record.
   request. Each hands its proposal to the zone's own door — `proposeTask`,
   `proposeStage`, `proposeDraft`, `proposeMapping` — and none writes. The
   customer page is `apps/docs/docs/ai/crm-by-ai.md` (`aiCrm`).
-- **Routing and time.** `job.crm` runs on the fast tier with no thinking and a
-  700-token ceiling: sixty columns matched to fields by number, or an email
+- **Routing and time.** `job.crm` runs on the fast tier with no thinking
+  (`thinking: 'off'`, since the fast tier's model thinks unless told not to),
+  `effort: 'low'` and a 700-token ceiling: sixty columns matched to fields by number, or an email
   draft at its limits, at three characters a token with room. It sends no site
   inventory and so makes no lookup; its own round trips — the facts read, a
   record's reuse lookup and the answer's write — are the declared 1.5 s,
@@ -3890,8 +4152,8 @@ from the job, and the step writes no CRM record.
   create door answers with the proposal. Its three generation kinds are
   scoped to the doctrine's field rules (`AI_DOCTRINE_KIND_SCOPE`), which send
   rule 13 and the acceptable-use block rather than the building rules; the
-  prompts come to 650 to 913 tokens, under the fast tier's minimum, and the
-  ledger records them as not caching.
+  prompts come to 650 to 913 tokens, over Claude Haiku 5.5's 512-token
+  minimum (AGL-3781), and the ledger records them as caching.
 
 | step | tier served | lookup rounds | ceiling asked: fast / balanced / deep | least time on the served tier |
 | --- | --- | --- | --- | --- |

@@ -80,6 +80,9 @@ struct PosContext: Equatable {
   var ops = PosOpsSettings()
   /// Store credit other plugins keep, taken as a tender.
   var credits: [PosCreditProvider] = []
+  /// The site's Stripe publishable key, which the card form is loaded with. Empty when the deployment has none:
+  /// the console offers "Type card" only with one.
+  var publishableKey = ""
 }
 
 struct PosSalePayment: Equatable, Identifiable {
@@ -200,7 +203,8 @@ func readPosContext(_ body: JSONValue?) -> PosContext {
       let credit = entry.objectValue
       guard let id = credit["providerId"].text else { return nil }
       return PosCreditProvider(providerID: id, label: credit["label"].text ?? "Store credit", lookup: credit["lookup"].flag)
-    })
+    },
+    publishableKey: record["publishableKey"].text ?? "")
 }
 
 func readSalePayment(_ element: JSONValue) -> PosSalePayment? {
@@ -260,6 +264,8 @@ enum SaleStep: Equatable {
   case folio(reservationID: String, amountCents: Int?)
   /// The QR payment page: the customer pays on their phone.
   case cardLink(amountCents: Int, tipCents: Int)
+  /// A card typed into Stripe's own card form (card not present); the server makes the intent and hands back its secret.
+  case cardKeyed(amountCents: Int, tipCents: Int)
   case status(paymentID: String)
   case cancel(paymentID: String)
   /// Tries a declined reader payment again on the same reader.
@@ -279,6 +285,7 @@ enum SaleStep: Equatable {
     case .credit: "credit"
     case .folio: "folio"
     case .cardLink: "card-link"
+    case .cardKeyed: "card-keyed"
     case .status: "status"
     case .cancel: "cancel"
     case .retry: "retry"
@@ -291,7 +298,7 @@ enum SaleStep: Equatable {
 
   var startsPayment: Bool {
     switch self {
-    case .cardPresentSDK, .cardPresent, .cash, .giftCard, .credit, .folio, .cardLink: true
+    case .cardPresentSDK, .cardPresent, .cash, .giftCard, .credit, .folio, .cardLink, .cardKeyed: true
     default: false
     }
   }
@@ -324,7 +331,7 @@ enum SaleStep: Equatable {
     case .folio(let reservationID, let amount):
       record["reservationId"] = .string(reservationID)
       if let amount, amount > 0 { put("amountCents", amount) }
-    case .cardLink(let amount, let tip):
+    case .cardLink(let amount, let tip), .cardKeyed(let amount, let tip):
       put("amountCents", amount)
       put("tipCents", tip)
     case .status(let id), .cancel(let id), .retry(let id), .simulate(let id): record["paymentId"] = .string(id)

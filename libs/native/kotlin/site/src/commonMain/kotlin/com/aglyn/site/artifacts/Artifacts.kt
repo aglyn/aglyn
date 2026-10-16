@@ -131,6 +131,8 @@ data class ArtifactRow(
   val libraryRow: Boolean,
   val updatedAt: FirestoreTimestamp?,
   val createdAt: FirestoreTimestamp?,
+  /** A component's icon (`ReusableComponentIcon`), drawn in the Besigner's drawers and its marketplace listing. */
+  val icon: ComponentIcon? = null,
 ) {
   val isStarterBundle: Boolean get() = starterId != null
 
@@ -153,6 +155,7 @@ data class ArtifactRow(
         libraryRow = doc.bool("libraryRow") == true,
         updatedAt = doc.data["updatedAt"] as? FirestoreTimestamp,
         createdAt = doc.data["createdAt"] as? FirestoreTimestamp,
+        icon = componentIconOf(doc),
       )
     }
   }
@@ -319,20 +322,25 @@ class ArtifactsApi(private val api: ConsoleApiClient, private val writer: Firest
    * first version with the slot; a template is born through the route, never
    * a client create.
    */
-  suspend fun create(name: String, description: String, subKind: String?): String {
+  suspend fun create(name: String, description: String, subKind: String?, starter: String? = null): String {
     val id = newDocumentId()
     val base = buildMap<String, Any?> {
       put("displayName", name.trim())
       put("description", description.trim())
     }
     when (kind) {
-      ArtifactKind.COMPONENT -> resources(
-        mapOf(
-          "resource" to kind.createResource,
-          "id" to id,
-          "data" to base + mapOf("rootId" to CANVAS_ROOT, "nodes" to blankCanvas()) + (if (subKind == "email") mapOf("kind" to "email") else emptyMap()),
-        ),
-      )
+      ArtifactKind.COMPONENT -> {
+        // An email block can start as the Header or Footer band the email plugin drops into an email, one tree wherever it starts.
+        val started = if (subKind == "email") emailBlockStarter(starter) else null
+        resources(
+          mapOf(
+            "resource" to kind.createResource,
+            "id" to id,
+            "data" to base + (if (started != null) mapOf("rootId" to started.first, "nodes" to started.second) else mapOf("rootId" to CANVAS_ROOT, "nodes" to blankCanvas())) +
+              (if (subKind == "email") mapOf("kind" to "email") else emptyMap()),
+          ),
+        )
+      }
       ArtifactKind.LAYOUT -> {
         val versionId = newDocumentId()
         resources(mapOf("resource" to kind.createResource, "id" to id, "data" to base + mapOf("versionId" to versionId)))
@@ -365,7 +373,15 @@ class ArtifactsApi(private val api: ConsoleApiClient, private val writer: Firest
   ).field("id")
 
   /** The details form's save: the name with its search keys, the description, and a layout's parent. */
-  suspend fun saveDetails(id: String, name: String, description: String, parentLayoutId: String? = null, setParent: Boolean = false) {
+  suspend fun saveDetails(
+    id: String,
+    name: String,
+    description: String,
+    parentLayoutId: String? = null,
+    setParent: Boolean = false,
+    /** A component's icon, written only when the dialog changed it; an empty map clears it, as the console's picker does. */
+    icon: Map<String, Any?>? = null,
+  ) {
     writer.update(
       path(id),
       buildMap {
@@ -373,6 +389,7 @@ class ArtifactsApi(private val api: ConsoleApiClient, private val writer: Firest
         putAll(displayNameSearchFields(name.trim()))
         put("description", description.trim())
         if (setParent) put("layoutId", parentLayoutId ?: com.aglyn.core.FirestoreDelete)
+        if (icon != null) put("icon", icon)
         put("updatedAt", firestoreNow())
       },
     )

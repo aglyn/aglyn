@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-inventory-sync",
-  "version": "1.0.0-beta.251",
+  "version": "1.0.0-beta.258",
   "private": true,
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
@@ -26,13 +26,13 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.251",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.251",
-    "@aglyn/shared-ui-snackstack": "1.0.0-beta.251",
-    "@aglyn/shared-util-http": "1.0.0-beta.251",
-    "@aglyn/shared-util-tools": "1.0.0-beta.251",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.251",
-    "@aglyn/tenant-feature-instance": "1.0.0-beta.251",
+    "@aglyn/aglyn": "1.0.0-beta.258",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.258",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.258",
+    "@aglyn/shared-util-http": "1.0.0-beta.258",
+    "@aglyn/shared-util-tools": "1.0.0-beta.258",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.258",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.258",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
@@ -40,5 +40,5 @@
     "react": "^19.2.8"
   },
   "sideEffects": false,
-  "description": "Inventory and ERP sync for Aglyn stores: stock levels, products and paid orders kept in step with the merchant's own Cin7 Core, inFlow or Brightpearl account."
+  "description": "Inventory and ERP sync for Aglyn stores: stock levels, products and paid orders kept in step with the merchant's own Cin7 Core, inFlow, Brightpearl or Ordoro account."
 }

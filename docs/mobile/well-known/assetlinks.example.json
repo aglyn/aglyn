@@ -1,10 +1,10 @@
 [
   {
-    "relation": ["delegate_permission/common.get_login_creds"],
+    "relation": ["delegate_permission/common.handle_all_urls", "delegate_permission/common.get_login_creds"],
     "target": {
       "namespace": "android_app",
       "package_name": "com.aglyn.app",
-      "sha256_cert_fingerprints": ["<ANDROID_SIGNING_CERTIFICATE_SHA256_FINGERPRINT>"]
+      "sha256_cert_fingerprints": ["<PLAY_APP_SIGNING_SHA256>", "<UPLOAD_KEY_SHA256>"]
     }
   }
 ]

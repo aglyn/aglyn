@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { createHash } from 'node:crypto'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { LAYOUT_SLOT_COMPONENT_ID } from '@aglyn/aglyn/app-utils/compose-layout-nodes'
 import { stampDocumentLandmark } from '@aglyn/aglyn/app-utils/document-landmark'
@@ -44,7 +45,7 @@ import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import { aiPlanCapabilitiesForJob, aiPlanCapabilityLines } from '../model/ai-plan-capabilities'
 import { aiProductsJobInputs, aiProductsProposalOf, type AiProductsProposal } from '../model/ai-products'
 import { aiDefaultModelFor, type AiStepKind } from '../providers/catalog'
-import type { AiImagePart, AiProvider, AiSystemBlock, AiTool, AiUsage } from '../providers/contract'
+import type { AiEffort, AiImagePart, AiProvider, AiSystemBlock, AiTool, AiUsage } from '../providers/contract'
 import { aiModelForStep, resolveAiProvider } from '../providers/routing'
 import { aiSiteInventoryBlock, runValidatedGeneration, type AiCustomGenerationInput } from './ai-doctrine'
 import {
@@ -60,6 +61,7 @@ import {
 } from './ai-eval'
 import { aiEvalMemoryFirestore, aiEvalMemoryInventory } from './ai-eval-memory-firestore'
 import { aiCategoriesPrompt, aiProductCopyPrompt } from './ai-products-generation'
+import { aiDevEffortArm, aiLiveBatchWanted } from './ai-dev-env'
 import { aiModelReadsImages } from './ai-runtime'
 
 /**
@@ -821,7 +823,8 @@ export const AI_EVAL_RUBRIC_TOOL: AiTool = {
       },
       copy: {
         type: 'integer',
-        description: 'From 1 to 5: the words fit the brief, the site and its audience, with no filler.',
+        description:
+          'From 1 to 5: the words fit the brief, the site and its audience, with no filler. A template placeholder left where words belong, such as {{1}}, [[name]] or <Your business name>, is a 1; a fact the brief did not give, in single square brackets, is not filler.',
       },
       reuse: {
         anyOf: [{ type: 'integer' }, { type: 'null' }],
@@ -1288,6 +1291,72 @@ export interface AiEvalLiveReport {
   failed: AiEvalLiveFailure[]
 }
 
+// ── An effort A/B arm's recordings ──────────────────────────────────────
+
+/** The effort A/B arm a live run records under (AGL-3781). */
+export interface AiEvalEffortArm {
+  /** `effort-` and 8 hex characters of a hash of `efforts`: the same arm always gets the same tag. */
+  tag: string
+  /** Each step kind the arm names, in kind order, with its effort; `*` for every other kind. */
+  efforts: Record<string, AiEffort>
+}
+
+/**
+ * The arm `AGLYN_AI_EFFORT` names, or null when it names none. A recording's
+ * filename carries only the tag, and the recording carries the map: the
+ * filename once spelled the whole list out, and a list of five kinds was
+ * longer than a filename may be (ENAMETOOLONG lost the round's recordings).
+ * The hash is of the parsed, sorted map, so the same efforts written in
+ * another order or spacing are the same arm.
+ */
+export function aiEvalEffortArm(env: Record<string, string | undefined>): AiEvalEffortArm | null {
+  const efforts = aiDevEffortArm(env)
+  if (!Object.keys(efforts).length) return null
+  const hash = createHash('sha256').update(JSON.stringify(efforts)).digest('hex').slice(0, 8)
+  return { tag: `effort-${hash}`, efforts }
+}
+
+/** A recording's file name: `<case>.<model>.json`, with the arm's tag before `.json` when one ran. */
+export function aiEvalRecordingFileName(
+  caseId: string,
+  model: string | null | undefined,
+  arm: AiEvalEffortArm | null,
+): string {
+  return `${caseId}.${model ?? 'unknown'}${arm ? `.${arm.tag}` : ''}.json`
+}
+
+/**
+ * What a recording holds: the brief, the answer, and under `arm` the arm's
+ * tag and every effort it named, when one ran — the candidate's own `effort`
+ * is the one its step was asked at.
+ */
+export function aiEvalRecordingBody(
+  caseId: string,
+  candidate: AiEvalCandidate,
+  arm: AiEvalEffortArm | null,
+): string {
+  return `${JSON.stringify({ caseId, ...(arm ? { arm } : {}), candidate }, null, 2)}\n`
+}
+
+/**
+ * One brief's score line. Everything before the colon is the pairing key —
+ * `score <case> (<kind>) <model>`, then the arm's tag when one ran — so a
+ * default run's line and an arm's line for the same brief sort side by side.
+ */
+export function aiEvalScoreLine(
+  entry: { caseId: string; kind: AiEvalKind; candidate: AiEvalCandidate },
+  pass: boolean | null,
+  arm: AiEvalEffortArm | null,
+): string {
+  const { caseId, kind, candidate } = entry
+  const rubric = candidate.rubric
+  return (
+    `score ${caseId} (${kind}) ${candidate.model ?? 'unknown'}${arm ? ` ${arm.tag}` : ''}: ` +
+    `${pass ? 'pass' : 'fail'}, structure ${rubric?.structure ?? '-'}, copy ${rubric?.copy ?? '-'}` +
+    `, reuse ${rubric?.reuse ?? '-'}, output ${candidate.usage?.outputTokens ?? '-'} tokens`
+  )
+}
+
 /** The vendor's request id off a thrown `UpstreamServiceError`, when it carried one. */
 function requestIdOfThrown(error: unknown): string | null {
   const id = (error as { requestId?: unknown } | null)?.requestId
@@ -1314,6 +1383,14 @@ function messageOfThrown(error: unknown): string {
  *
  * A brief whose GRADE threw is in both halves: recorded, with its grade
  * marked missing, and failed, naming what the grader threw.
+ *
+ * ONE BATCH A ROUND (AGL-3781). In batch mode (`AGLYN_LIVE_AI_BATCH`) the
+ * briefs run side by side: a batch gathers the requests that arrive within
+ * its window, so briefs asked one after another went as one batch each,
+ * minutes apart, while side by side every brief's answer goes in one batch,
+ * each re-ask in the next and every grade in the one after. Each brief still
+ * runs on its own and the report keeps the briefs' order. Outside batch mode
+ * they run one after another, as a live run's rate limits want.
  */
 export async function recordAiEvalLive(
   cases: readonly AiEvalCase[],
@@ -1326,12 +1403,12 @@ export async function recordAiEvalLive(
       `${unreadable.map((evalCase) => evalCase.id).join(', ')} name media, and this run was given no readFixture to read them with`,
     )
   }
-  const report: AiEvalLiveReport = { recorded: [], skipped: [], failed: [] }
-  for (const evalCase of cases) {
+  const runCase = async (evalCase: AiEvalCase): Promise<AiEvalLiveReport> => {
+    const report: AiEvalLiveReport = { recorded: [], skipped: [], failed: [] }
     const recorder = aiEvalRecorderFor(evalCase.kind)
     if (!recorder) {
       report.skipped.push({ caseId: evalCase.id, kind: evalCase.kind, why: aiEvalSkipReason(evalCase.kind) })
-      continue
+      return report
     }
     const failure = (step: AiEvalLiveStep, error: unknown): void => {
       report.failed.push({
@@ -1347,7 +1424,7 @@ export async function recordAiEvalLive(
       answer = await recorder(evalCase, options)
     } catch (error) {
       failure('record', error)
-      continue
+      return report
     }
     // A GRADER THAT THROWS DOES NOT TAKE THE ANSWER WITH IT (AGL-3143). The
     // brief is already paid for by here, and grading is a second request that
@@ -1362,6 +1439,19 @@ export async function recordAiEvalLive(
       report.recorded.push({ caseId: evalCase.id, kind: evalCase.kind, candidate: { ...answer, rubric: null } })
       failure('grade', error)
     }
+    return report
+  }
+  const reports: AiEvalLiveReport[] = []
+  if (aiLiveBatchWanted(options.env)) {
+    reports.push(...(await Promise.all(cases.map(runCase))))
+  } else {
+    for (const evalCase of cases) reports.push(await runCase(evalCase))
+  }
+  const report: AiEvalLiveReport = { recorded: [], skipped: [], failed: [] }
+  for (const one of reports) {
+    report.recorded.push(...one.recorded)
+    report.skipped.push(...one.skipped)
+    report.failed.push(...one.failed)
   }
   return report
 }

@@ -1,0 +1,196 @@
+{
+  "$comment": "The Live chat plugin's native screen, in the site's plugin settings: the merchant's own Tidio or LiveChat account on this site's pages (the key from the install code, which pages, the button side, loading with the page). Routes: GET and POST /api/live-chat/settings. Only a site admin changes it. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "live-chat.settings",
+      "title": "Live chat",
+      "label": "Live chat",
+      "subtitle": "Your own Tidio or LiveChat account on this site",
+      "icon": "bubble.left.and.bubble.right|forum",
+      "scope": "site",
+      "order": 50,
+      "zones": [
+        "sitePluginSettings"
+      ],
+      "cardSlot": "hostSettings",
+      "requires": "params.pluginId == live-chat",
+      "load": {
+        "cfg": "/api/live-chat/settings?hostId={site.id}"
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "admin",
+          "tone": "info",
+          "when": "!data.cfg.canManage",
+          "text": "Live chat is set up by a site admin."
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "title": "Chat",
+          "rows": [
+            {
+              "label": "Shown on this site",
+              "value": "Yes",
+              "when": "data.cfg.settings.enabled"
+            },
+            {
+              "label": "Shown on this site",
+              "value": "No",
+              "when": "!data.cfg.settings.enabled"
+            },
+            {
+              "label": "Service",
+              "value": "Tidio",
+              "when": "data.cfg.settings.provider == tidio"
+            },
+            {
+              "label": "Service",
+              "value": "LiveChat",
+              "when": "data.cfg.settings.provider == livechat"
+            },
+            {
+              "label": "Key",
+              "value": "{data.cfg.settings.publicKey}",
+              "when": "data.cfg.settings.publicKey"
+            },
+            {
+              "label": "Pages",
+              "value": "Every page",
+              "when": "data.cfg.settings.pages == all"
+            },
+            {
+              "label": "Pages",
+              "value": "Only {data.cfg.settings.paths}",
+              "when": "data.cfg.settings.pages == only"
+            },
+            {
+              "label": "Pages",
+              "value": "Every page except {data.cfg.settings.paths}",
+              "when": "data.cfg.settings.pages == except"
+            },
+            {
+              "label": "Chat button",
+              "value": "Bottom right",
+              "when": "data.cfg.settings.position == right"
+            },
+            {
+              "label": "Chat button",
+              "value": "Bottom left",
+              "when": "data.cfg.settings.position == left"
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "settings",
+          "title": "Settings",
+          "when": "data.cfg.canManage",
+          "footer": "The key is the public identifier in the install code: Tidio’s public key, or LiveChat’s license number. Paste the whole install code and Aglyn finds it. Off, the service loads only when a visitor presses the chat button, so it never slows your pages. On, it also loads once the page has finished loading, for visitors who allowed analytics.",
+          "fields": [
+            {
+              "key": "enabled",
+              "label": "Show the chat on this site",
+              "kind": "toggle",
+              "initial": "{data.cfg.settings.enabled}"
+            },
+            {
+              "key": "provider",
+              "label": "Chat service",
+              "kind": "select",
+              "initial": "{data.cfg.settings.provider}",
+              "options": [
+                {
+                  "value": "tidio",
+                  "label": "Tidio"
+                },
+                {
+                  "value": "livechat",
+                  "label": "LiveChat"
+                }
+              ]
+            },
+            {
+              "key": "publicKey",
+              "label": "Public key or license number",
+              "kind": "text",
+              "initial": "{data.cfg.settings.publicKey}",
+              "help": "Tidio: Settings, Developer, Public key. LiveChat: the license number in its install code."
+            },
+            {
+              "key": "pages",
+              "label": "Pages",
+              "kind": "select",
+              "initial": "{data.cfg.settings.pages}",
+              "options": [
+                {
+                  "value": "all",
+                  "label": "Every page"
+                },
+                {
+                  "value": "only",
+                  "label": "Only these pages"
+                },
+                {
+                  "value": "except",
+                  "label": "Every page except these"
+                }
+              ]
+            },
+            {
+              "key": "paths",
+              "label": "Page addresses",
+              "kind": "multiline",
+              "initial": "{data.cfg.settings.paths}",
+              "when": "form.pages == only,except",
+              "help": "One per line, such as /contact. End with /* for a whole section, such as /shop/*. Up to 50."
+            },
+            {
+              "key": "position",
+              "label": "Chat button",
+              "kind": "select",
+              "initial": "{data.cfg.settings.position}",
+              "options": [
+                {
+                  "value": "right",
+                  "label": "Bottom right"
+                },
+                {
+                  "value": "left",
+                  "label": "Bottom left"
+                }
+              ],
+              "help": "Match the side you chose in the chat service."
+            },
+            {
+              "key": "loadWithPage",
+              "label": "Load the chat with the page",
+              "kind": "toggle",
+              "initial": "{data.cfg.settings.loadWithPage}"
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "url": "/api/live-chat/settings",
+            "body": {
+              "hostId": "{site.id}",
+              "settings": {
+                "enabled": "{form.enabled}",
+                "provider": "{form.provider}",
+                "publicKey": "{form.publicKey}",
+                "pages": "{form.pages}",
+                "paths": {
+                  "$split": "{form.paths}"
+                },
+                "position": "{form.position}",
+                "loadWithPage": "{form.loadWithPage}"
+              }
+            },
+            "success": "Saved. Your live pages are updated."
+          }
+        }
+      ]
+    }
+  ]
+}

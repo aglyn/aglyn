@@ -1,14 +1,17 @@
 /**
  * Aglyn Docs theme.
  *
- * Colors are a faithful port of the console app's MUI theme. The single source of
- * truth is `libs/shared/ui/theme/src/lib/console.theme.ts` in this repo — if the
- * palette changes there, update the CSS variables below to match. See the mapping
- * table in apps/docs/CONTRIBUTING.md.
+ * Colors are a port of the console app's MUI theme,
+ * `libs/shared/ui/theme/src/lib/console.theme.ts`. The interactive ones are not
+ * typed here: `theme-tokens.generated.css`, loaded before this file, is written
+ * from the resolved theme by `tools/scripts/generate-mobile-theme-tokens.mjs`,
+ * whose `--check` fails the guard sweep when it drifts. The rest are hand-ported;
+ * see the mapping table in apps/docs/CONTRIBUTING.md.
  *
  *   console.theme.ts            ->  used here for
  *   -------------------------------------------------------------
- *   secondary.main  #00b0ff     ->  accent / links / primary buttons (interactive)
+ *   primary.main / contrastText ->  primary button fill and label (generated)
+ *   primary.dark                ->  links, active nav and TOC (generated)
  *   primary.main    #404C5C     ->  navbar + footer background (Material app bar), light
  *   primary.main    #2C3540     ->  navbar background, dark
  *   background.default #F5F5F5  ->  page background, light
@@ -28,15 +31,6 @@
 @import '@fontsource/roboto-mono/400.css';
 
 :root {
-  /* Interactive accent — console secondary #00b0ff and a generated ramp. */
-  --ifm-color-primary: #00b0ff;
-  --ifm-color-primary-dark: #00a1e6;
-  --ifm-color-primary-darker: #0098d9;
-  --ifm-color-primary-darkest: #007eb3;
-  --ifm-color-primary-light: #1ab8ff;
-  --ifm-color-primary-lighter: #26bcff;
-  --ifm-color-primary-lightest: #4dc8ff;
-
   /* Material typography + shape. */
   --ifm-font-family-base: 'Roboto', system-ui, -apple-system, 'Segoe UI', Helvetica,
     Arial, sans-serif;
@@ -53,7 +47,6 @@
      app bar (surface.main #F8F9FA, dark text) — not the old dark slate. */
   --ifm-navbar-background-color: #f8f9fa;
   --ifm-navbar-link-color: rgba(0, 0, 0, 0.78);
-  --ifm-navbar-link-hover-color: #00b0ff;
 
   /* Semantic colors from console.theme.ts, wired into admonitions. */
   --ifm-color-info: #1e88e5;
@@ -74,14 +67,6 @@
    `html[data-theme='dark']`, which out-specifies the bare attribute selector
    and would silently win otherwise. */
 html[data-theme='dark'] {
-  --ifm-color-primary: #00b0ff;
-  --ifm-color-primary-dark: #00a1e6;
-  --ifm-color-primary-darker: #0098d9;
-  --ifm-color-primary-darkest: #007eb3;
-  --ifm-color-primary-light: #33c0ff;
-  --ifm-color-primary-lighter: #4dc8ff;
-  --ifm-color-primary-lightest: #80d6ff;
-
   --ifm-background-color: #161c21; /* background.default (dark) */
   --ifm-background-surface-color: #2a3440; /* background.paper (dark) */
 

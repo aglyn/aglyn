@@ -17,6 +17,7 @@
 
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { usageNotificationLevel } from '@aglyn/aglyn/app-utils/notifications'
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { withoutMailWithheldAccounts } from '@aglyn/tenant-data-admin/server/account-mail'
 import { meterPlatformEmail } from '@aglyn/tenant-data-admin/server/email-metering'
@@ -86,10 +87,6 @@ const DEFAULT_CHANNELS: AiAllotmentAlertChannels = {
   reachable: withoutMailWithheldAccounts,
 }
 
-/** The console's absolute origin for an email link, or `''` when unset. */
-function consoleOrigin(): string {
-  return (process.env.NEXT_PUBLIC_CONSOLE_URL ?? '').trim().replace(/\/+$/, '')
-}
 
 /** Take the marker for `threshold` this month; `false` when it was taken. */
 export async function claimAiAllotmentAlert(
@@ -245,7 +242,7 @@ export async function announceAiAllotmentAlerts(
           { skipEmail: true },
         )
       }
-      const origin = consoleOrigin()
+      const origin = platformConsoleOrigin()
       const managerText = link && origin ? `${copy.body}\n\n${origin}${link}` : copy.body
       const managers = await filter(recipients.managerEmails)
       if (managers.length) {

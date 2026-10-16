@@ -64,11 +64,7 @@ const SAME_SURFACE: Record<string, string> = {
  * a parking lot: an entry fails the moment its link is no longer shared, so
  * it leaves with the fix that makes it stale.
  */
-const HANDED_OFF: Record<string, string> = {
-  // Moved with its section to the unlisted carrier guide (AGL-3777).
-  'plugin:carrierAccounts#carrier-accounts':
-    'Your shipping accounts renders only on a deployment that offers Easyship, Sendcloud or ShipperHQ, so its docs wait for that release; the commerce v3 lane holds the draft (from-tooltip-session.md).',
-}
+const HANDED_OFF: Record<string, string> = {}
 
 interface Tooltip {
   file: string

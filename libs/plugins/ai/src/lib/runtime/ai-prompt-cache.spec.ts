@@ -34,7 +34,7 @@ import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inv
 import { aiModelCacheMinTokens } from '../providers/catalog'
 import { AI_STEP_NOMINAL_USAGE } from '../providers/model-choice'
 import type { AiStepKind } from '../providers/catalog'
-import type { AiSystemBlock, AiTool } from '../providers/contract'
+import type { AiProvider, AiProviderRequest, AiResult, AiSystemBlock, AiTool } from '../providers/contract'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import { AI_EVAL_GRADER_INSTRUCTIONS, AI_EVAL_RUBRIC_TOOL } from './ai-eval-live'
 import {
@@ -42,6 +42,7 @@ import {
   aiDoctrineSystemBlock,
   aiDoctrineSystemBlocks,
   aiDoctrineTreeTool,
+  runValidatedGeneration,
 } from './ai-doctrine'
 import { detectPublishIntent } from './ai-doctrine-validators'
 import { AI_JOB_COMPONENT_INSTRUCTIONS } from '../jobs/ai-job-component-step'
@@ -89,7 +90,7 @@ import { aiComponentTool } from '../tools/ai-component-tool'
 import { aiExperimentExplainTool, aiExperimentVariantsTool } from '../tools/ai-experiment-tool'
 import { aiInsightAnswerTool, aiInsightReadTool } from '../tools/ai-insight-tool'
 import { AI_CRM_EMAIL_TOOL, AI_CRM_MAPPING_TOOL, aiCrmRecordTool } from '../tools/ai-crm-tool'
-import { aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
+import { AI_INVENTORY_LOOKUP_TOOL_NAME, aiInventoryLookupTool } from '../tools/ai-inventory-lookup-tool'
 import { AI_SEO_FIELDS_INSTRUCTIONS, aiSeoFieldsInstructions } from './seo-fields'
 import {
   AI_CATALOG_INSTRUCTIONS,
@@ -199,8 +200,8 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
   },
   'runtime/seo-fields.ts': {
     step: 'job.seo',
-    caches: false,
-    why: "a listing's rules are far under the fast tier's minimum; the prompt is kept short instead",
+    caches: true,
+    why: "a listing's rules and tool, kept short while the fast tier could not cache them, over Claude Haiku 5.5's 512-token minimum since it became the fast default (AGL-3781); a page's listings are asked a minute apart, so each reads the one before",
   },
   'jobs/ai-job-plan-step.ts': { step: 'job.plan', caches: true, why: 'the doctrine and the plan rules' },
   'jobs/ai-job-layout-step.ts': {
@@ -230,15 +231,15 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
   },
   'jobs/ai-job-crm-step.ts': {
     step: 'job.crm',
-    caches: false,
-    why: "a record's, an email's and an import's rules are far under the fast tier's minimum; the prompts are kept short instead",
+    caches: true,
+    why: "a record's, an email's and an import's rules and tool, kept short while the fast tier could not cache them, over Claude Haiku 5.5's 512-token minimum since AGL-3781",
   },
   'server/ai-media-svg.ts': {
     // An illustration in Media (AGL-3602) runs on the fast tier, the row
     // `copy.element` is served from.
     step: 'copy.element',
-    caches: false,
-    why: 'one short instruction block and the doctrine, about 2,100 tokens, under the fast tier’s minimum; the prompt is kept short instead',
+    caches: true,
+    why: 'one short instruction block and the doctrine, about 2,100 tokens: over Claude Haiku 5.5’s 512-token minimum since AGL-3781, under Haiku 4.5’s 4,096 before',
   },
   'server/ai-generate-component.ts': {
     step: 'job.component',
@@ -262,8 +263,8 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
   },
   'jobs/ai-job-seo-step.ts': {
     step: 'job.seo',
-    caches: false,
-    why: "the audit's site and fix passes, on the same fast tier as a listing",
+    caches: true,
+    why: "the audit's site and fix passes, on the same fast tier as a listing; a fix batch's tool names its own pages, so only its re-ask reads its prefix",
   },
   'jobs/ai-job-workflow-step.ts': {
     step: 'job.workflow',
@@ -886,8 +887,10 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // catalog lists each piece of a field, and the instructions say how a
       // field, a choice and a checkbox are put together. Most requests that
       // carry the document doctrine are up 1, from rule 17's larger form
-      // budget, which the same fields now need.
-      form: { prefixTokens: 3_365, minimum: 512, caches: true, toolsStable: true },
+      // budget, which the same fields now need. Up 139 at AGL-3825: the form
+      // catalog lists the Date Picker and Time Picker with their settings, and
+      // the instructions say a day and a time of day are answers a form takes.
+      form: { prefixTokens: 3_504, minimum: 512, caches: true, toolsStable: true },
       'page-section': { prefixTokens: 4_588, minimum: 512, caches: true, toolsStable: true },
       // The layout language (AGL-3660). Read four characters a token these
       // err low: the token counting endpoint puts the page's cached span at
@@ -913,15 +916,21 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // empty field.
       'workflow-draft': { prefixTokens: 5_001, minimum: 512, caches: true, toolsStable: true },
       'workflow-explain': { prefixTokens: 2_216, minimum: 512, caches: true, toolsStable: true },
-      'seo-fields': { prefixTokens: 734, minimum: 4_096, caches: false, toolsStable: true },
-      'seo-fields-full': { prefixTokens: 873, minimum: 4_096, caches: false, toolsStable: true },
-      'seo-site': { prefixTokens: 951, minimum: 4_096, caches: false, toolsStable: true },
+      // The listing doors were under Claude Haiku 4.5's 4,096-token minimum
+      // and are over Claude Haiku 5.5's 512 since it became the fast default
+      // (AGL-3781), read four characters a token, which errs low; that model
+      // counts the same text as about 30% more tokens.
+      'seo-fields': { prefixTokens: 734, minimum: 512, caches: true, toolsStable: true },
+      'seo-fields-full': { prefixTokens: 873, minimum: 512, caches: true, toolsStable: true },
+      'seo-site': { prefixTokens: 951, minimum: 512, caches: true, toolsStable: true },
       // The fixes tool's schema enumerates the eight pages of THIS batch, so
-      // its prefix is per-batch as well as too short. The enumeration is kept
-      // deliberately: on a door that cannot cache either way, a schema that
-      // refuses a page outside the batch is worth more than a stable prefix.
-      'seo-fixes': { prefixTokens: 921, minimum: 4_096, caches: false, toolsStable: false },
-      'eval-grade': { prefixTokens: 2_007, minimum: 512, caches: true, toolsStable: true },
+      // its prefix is per-batch: only a batch's own re-ask reads it. The
+      // enumeration is kept deliberately: a schema that refuses a page outside
+      // the batch is worth more than a prefix shared across batches.
+      'seo-fixes': { prefixTokens: 921, minimum: 512, caches: true, toolsStable: false },
+      // The grader's copy criterion is up 44 at AGL-3827: a template placeholder
+      // left where words belong grades a 1, and a bracketed fact is not filler.
+      'eval-grade': { prefixTokens: 2_051, minimum: 512, caches: true, toolsStable: true },
       // An insight's rules are short on purpose: no model caches them, so every
       // byte is billed as input on both calls and on a re-ask.
       // A/B tests by AI (AGL-2914): the rules are one block, well under the
@@ -940,12 +949,16 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // The edit doors are up 4 at AGL-3717 for the palette's lightbox switch.
       // Both up 101 at AGL-3716: the edit protocol's own Music player line,
       // which is where the player is named now that the catalog leaves it off.
-      'edit-screen': { prefixTokens: 6_063, minimum: 512, caches: true, toolsStable: true },
-      'edit-layout': { prefixTokens: 6_051, minimum: 512, caches: true, toolsStable: true },
+      // Both up 106 at AGL-3838: the protocol's Animation line, the
+      // vocabulary's presets, triggers, easings and caps an updateProps may set.
+      'edit-screen': { prefixTokens: 6_169, minimum: 512, caches: true, toolsStable: true },
+      'edit-layout': { prefixTokens: 6_157, minimum: 512, caches: true, toolsStable: true },
       // Both insight requests are up 60 or 61 at AGL-3663: a site's published
       // state comes only from its Site status table, never from its traffic.
-      'insight-read': { prefixTokens: 944, minimum: 512, caches: true, toolsStable: true },
-      'insight-answer': { prefixTokens: 983, minimum: 512, caches: true, toolsStable: true },
+      // Both up 25 at AGL-3834: so does which pages are published, never the
+      // pages a views table lists.
+      'insight-read': { prefixTokens: 969, minimum: 512, caches: true, toolsStable: true },
+      'insight-answer': { prefixTokens: 1_008, minimum: 512, caches: true, toolsStable: true },
       // A product's copy, a catalog, and categories with discounts (AGL-2916):
       // the whole doctrine, each generation's rules and its tool, which clear
       // the balanced tier's minimum, so a bulk job reads the prefix once a
@@ -959,19 +972,23 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       'blog-post': { prefixTokens: 821, minimum: 512, caches: true, toolsStable: true },
       // A site's dataset (AGL-3616): the doctrine's fields block, its rules and its tool.
       dataset: { prefixTokens: 1_030, minimum: 512, caches: true, toolsStable: true },
-      // CRM by AI (AGL-2917), on the fast tier: no shape reaches its minimum,
-      // so each prompt is only the field rules, the kind's own and its tool.
-      'crm-record-contact': { prefixTokens: 768, minimum: 4_096, caches: false, toolsStable: true },
-      'crm-record-deal': { prefixTokens: 913, minimum: 4_096, caches: false, toolsStable: true },
-      'crm-email': { prefixTokens: 650, minimum: 4_096, caches: false, toolsStable: true },
-      'crm-mapping': { prefixTokens: 680, minimum: 4_096, caches: false, toolsStable: true },
+      // CRM by AI (AGL-2917), on the fast tier: each prompt is only the field
+      // rules, the kind's own and its tool, which no shape took past Claude
+      // Haiku 4.5's minimum and every shape takes past Claude Haiku 5.5's
+      // (AGL-3781).
+      'crm-record-contact': { prefixTokens: 768, minimum: 512, caches: true, toolsStable: true },
+      'crm-record-deal': { prefixTokens: 913, minimum: 512, caches: true, toolsStable: true },
+      'crm-email': { prefixTokens: 650, minimum: 512, caches: true, toolsStable: true },
+      'crm-mapping': { prefixTokens: 680, minimum: 512, caches: true, toolsStable: true },
       // The text step marks a breakpoint its prompt is far too short to fill.
       // It costs nothing and it caches nothing; the brief is the request.
       text: { prefixTokens: 128, minimum: 512, caches: false, toolsStable: true },
       'overlay-popup': { prefixTokens: 866, minimum: 512, caches: true, toolsStable: true },
-      'copy.element': { prefixTokens: 339, minimum: 4_096, caches: false, toolsStable: true },
+      // Under even Claude Haiku 5.5's 512-token minimum (AGL-3781).
+      'copy.element': { prefixTokens: 339, minimum: 512, caches: false, toolsStable: true },
       'copy.blog': { prefixTokens: 340, minimum: 512, caches: false, toolsStable: true },
-      'copy.section': { prefixTokens: 736, minimum: 512, caches: true, toolsStable: true },
+      // Up 8 at AGL-3825: its element list names the Date and Time Pickers.
+      'copy.section': { prefixTokens: 744, minimum: 512, caches: true, toolsStable: true },
     })
   })
 
@@ -1146,3 +1163,197 @@ describe('a site’s context block extends the shared prefix, never enters it (A
   })
 })
 
+
+/**
+ * A GENERATION THAT CONTINUES READS ITS OWN CONVERSATION (AGL-3809).
+ *
+ * A lookup round and a re-ask re-send the whole first turn — the brief and
+ * what the door put beside it — and the site's inventory, which without a
+ * breakpoint after them is billed at the full input rate on every
+ * continuation. A door that turns `cacheConversation` on pays a cache write
+ * on its first call's tail, which pays back only where most generations
+ * continue, so the doors that may are listed with their measurement
+ * (`docs/AI_CACHE_AUDIT_2026-10.md`): a new one is red here until measured.
+ */
+const AI_CONVERSATION_CACHE_DOORS: Record<string, string> = {
+  'jobs/ai-job-plan-step.ts':
+    'plans continue more often than not: 27 lookup rounds to 42 answers on Claude Sonnet 5.5 in the golden replay store, and two or three calls in about half of production plan steps',
+}
+
+/** A provider that answers from a queue and keeps every request it was sent. */
+function recording(answers: AiResult[]): { fake: AiProvider; requests: AiProviderRequest[] } {
+  const requests: AiProviderRequest[] = []
+  const fake: AiProvider = {
+    id: 'fake',
+    label: 'Fake',
+    apiKeyEnv: 'FAKE_AI_KEY',
+    endpointHost: 'ai.test',
+    readApiKey: () => 'key',
+    models: () => [],
+    complete: async (request) => {
+      requests.push(request)
+      const next = answers.shift()
+      if (!next) throw new Error('no answer armed')
+      return next
+    },
+    stream: async () => {
+      throw new Error('the doctrine loop never streams')
+    },
+  }
+  return { fake, requests }
+}
+
+const answer = (toolUse: Array<{ name: string; input: Record<string, unknown> }>): AiResult => ({
+  kind: 'completion',
+  text: toolUse.length ? '' : 'A plan in prose.',
+  toolUse,
+  usage: { inputTokens: 100, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  estCostUsd: 0,
+  stopReason: toolUse.length ? 'tool_use' : 'end_turn',
+})
+
+describe('a generation that continues reads its own conversation (AGL-3809)', () => {
+  it('is turned on only by the doors measured to continue', () => {
+    const turnedOn = sourceFiles(LIB_ROOT)
+      .filter((path) => /\bcacheConversation:\s*true\b/.test(readFileSync(path, 'utf8')))
+      .map((path) => path.slice(LIB_ROOT.length + 1))
+      .sort()
+    expect(turnedOn).toEqual(Object.keys(AI_CONVERSATION_CACHE_DOORS).sort())
+  })
+
+  /** The wire body with every cache marker taken out: what the cache matches on. */
+  const unmarked = (request: AiProviderRequest) =>
+    JSON.parse(
+      JSON.stringify(buildAnthropicRequestBody({ ...request, stream: false }), (key, value) =>
+        key === 'cache_control' ? undefined : value,
+      ),
+    ) as { tools: unknown; system: unknown; messages: unknown[] }
+
+  const markers = (request: AiProviderRequest) =>
+    (JSON.stringify(buildAnthropicRequestBody({ ...request, stream: false })).match(/"cache_control"/g) ?? []).length
+
+  async function planGeneration(): Promise<AiProviderRequest[]> {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    // A lookup round, then two answers the check cannot read: three calls, as
+    // far as a plan's conversation grows before it gives up.
+    const { fake, requests } = recording([
+      answer([{ name: AI_INVENTORY_LOOKUP_TOOL_NAME, input: { kind: 'components', query: 'card' } }]),
+      answer([]),
+      answer([]),
+    ])
+    await runValidatedGeneration('plan', {
+      step: 'job.plan',
+      model: 'claude-sonnet-5-5',
+      provider: fake,
+      // The plan with its site block: three system breakpoints, so the
+      // conversation's is the fourth and last the provider caches.
+      instructions: aiInstructionsWithSiteContext(AI_JOB_PLAN_INSTRUCTIONS, {
+        profile: resolveBusinessProfile({ host: { displayName: 'Acme Roofing' }, site: {} }),
+        preferences: [],
+      }),
+      inventory: SITE_A,
+      messages: [{ role: 'user', content: 'Kind of job: site\nBrief: a roofer in Springfield' }],
+      tool: aiBuildPlanToolFor('', { language: true }),
+      cacheConversation: true,
+    })
+    warn.mockRestore()
+    return requests
+  }
+
+  it('asks every call of the generation to cache its conversation, within the four markers', async () => {
+    const requests = await planGeneration()
+    expect(requests).toHaveLength(3)
+    for (const request of requests) {
+      expect(request.cacheConversation).toBe(true)
+      expect(markers(request)).toBe(4)
+    }
+  })
+
+  it('sends each call’s cached bytes as the exact prefix of the next call’s', async () => {
+    const requests = await planGeneration()
+    for (let index = 1; index < requests.length; index++) {
+      const before = unmarked(requests[index - 1])
+      const after = unmarked(requests[index])
+      expect(after.tools).toEqual(before.tools)
+      expect(after.system).toEqual(before.system)
+      // Everything the earlier call marked, its whole conversation, opens the later one unchanged.
+      expect(after.messages.slice(0, before.messages.length)).toEqual(before.messages)
+      expect(after.messages.length).toBeGreaterThan(before.messages.length)
+    }
+  })
+
+  it('drops the conversation’s breakpoint, never a system one, where the system holds all four', async () => {
+    const { fake, requests } = recording([answer([{ name: 'submit', input: {} }])])
+    await runValidatedGeneration('four-breakpoints', {
+      model: 'claude-sonnet-5-5',
+      provider: fake,
+      // The doctrine's own breakpoint and these three.
+      instructions: [1, 2, 3].map((n) => ({ text: `rules ${n}`, cacheBreakpoint: true })),
+      messages: [{ role: 'user', content: 'brief' }],
+      tool: { name: 'submit', description: 'Submit.', strict: true, inputSchema: { type: 'object', properties: {} } },
+      cacheConversation: true,
+      check: () => ({ value: {}, violations: [] }),
+    })
+    expect(requests[0].cacheConversation).toBeUndefined()
+    expect(markers(requests[0])).toBe(4)
+  })
+})
+
+describe('a site job’s routes keep their prefix for the hour, in production too (AGL-3830)', () => {
+  /** Every step a guided start runs: the plan, the look, the frame, the pages, their listings, the creations, posts, products and the welcome email. */
+  const SITE_JOB_STEPS: readonly AiStepKind[] = [
+    'copy.blog',
+    'job.component',
+    'job.email',
+    'job.form',
+    'job.layout',
+    'job.page',
+    'job.plan',
+    'job.products',
+    'job.seo',
+    'job.template',
+    'job.theme',
+  ]
+
+  it('asks for the hour on exactly the routing rows a site job runs', () => {
+    const hourly = (Object.keys(AI_ROUTING_TABLE) as AiStepKind[])
+      .filter((step) => AI_ROUTING_TABLE[step].cacheTtl === '1h')
+      .sort()
+    expect(hourly).toEqual([...SITE_JOB_STEPS].sort())
+  })
+
+  async function generationOn(step: AiStepKind | undefined): Promise<AiProviderRequest> {
+    const { fake, requests } = recording([answer([{ name: 'submit', input: {} }])])
+    await runValidatedGeneration('route', {
+      ...(step ? { step } : {}),
+      model: 'claude-sonnet-5-5',
+      provider: fake,
+      instructions: [{ text: 'rules' }],
+      messages: [{ role: 'user', content: 'brief' }],
+      tool: { name: 'submit', description: 'Submit.', strict: true, inputSchema: { type: 'object', properties: {} } },
+      check: () => ({ value: {}, violations: [] }),
+    })
+    return requests[0]
+  }
+
+  it('sends the route’s hour on every breakpoint of a deployed server’s request, and five minutes elsewhere', async () => {
+    const saved = process.env['NODE_ENV']
+    ;(process.env as Record<string, string>)['NODE_ENV'] = 'production'
+    try {
+      for (const step of SITE_JOB_STEPS) {
+        const request = await generationOn(step)
+        expect([step, request.cacheTtl]).toEqual([step, '1h'])
+        const body = JSON.stringify(buildAnthropicRequestBody({ ...request, stream: false }))
+        const marks = body.match(/"cache_control":\{[^}]*\}/g) ?? []
+        expect(marks.length).toBeGreaterThan(0)
+        expect(new Set(marks)).toEqual(new Set(['"cache_control":{"type":"ephemeral","ttl":"1h"}']))
+      }
+      for (const step of ['job.crm', 'job.insight', 'job.edit', 'assist.chat'] as const) {
+        expect([step, (await generationOn(step)).cacheTtl]).toEqual([step, undefined])
+      }
+      expect((await generationOn(undefined)).cacheTtl).toBeUndefined()
+    } finally {
+      ;(process.env as Record<string, string | undefined>)['NODE_ENV'] = saved
+    }
+  })
+})

@@ -16,6 +16,9 @@
  */
 
 import type { AiJobOutput, AiJobSummary } from './ai-jobs.types'
+import { AI_PRODUCTS_BULK_MAX, aiProductsBulkBrief, aiProductsBulkInputs } from './ai-products-bulk'
+
+export { AI_PRODUCTS_BULK_MAX, aiProductsBulkBrief }
 
 /**
  * COMMERCE BY AI (AGL-2916): what a `products` job is asked, and what it
@@ -68,9 +71,6 @@ export const AI_PRODUCT_CATEGORY_LIST_MAX = 100
 export const AI_PRODUCT_OPTIONS_MAX = 3
 export const AI_PRODUCT_OPTION_VALUES_MAX = 25
 export const AI_PRODUCT_OPTION_NAME_MAX_CHARS = 30
-
-/** The most products one bulk job writes the copy of. */
-export const AI_PRODUCTS_BULK_MAX = 50
 
 /** How many products a catalog proposal holds. */
 export const AI_CATALOG_PRODUCTS = { min: 1, max: 12 } as const
@@ -257,12 +257,7 @@ export function aiProductsJobInputs(input: AiProductsJobInputs): Record<string, 
       return inputs
     }
     case 'bulk':
-      return {
-        target: 'bulk',
-        productIds: [...new Set(input.productIds.filter((id) => ID.test(id)))]
-          .slice(0, AI_PRODUCTS_BULK_MAX)
-          .join(','),
-      }
+      return aiProductsBulkInputs(input.productIds)
     default:
       return { target: input.target }
   }
@@ -464,10 +459,6 @@ export function aiProductGaps(...texts: readonly string[]): string[] {
 
 /** The option the import zone sets to write the imported products' copy. */
 export const AI_PRODUCTS_IMPORT_WRITE_COPY = 'ai.writeCopy'
-
-/** The brief a bulk copy job carries, which the jobs list shows and a card recognizes it by. */
-export const aiProductsBulkBrief = (count: number): string =>
-  `Write storefront copy for ${count} ${count === 1 ? 'product' : 'products'}`
 
 const BULK_BRIEF = /^Write storefront copy for (\d+) products?$/
 

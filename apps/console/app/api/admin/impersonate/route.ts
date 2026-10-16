@@ -23,6 +23,10 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import {
+  IMPERSONATION_MAX_REASON_LENGTH,
+  IMPERSONATION_MIN_REASON_LENGTH,
+} from '../../../../utils/impersonation-reason'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { FieldValue } from 'firebase-admin/firestore'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
@@ -45,20 +49,11 @@ import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write
  *
  * Free text rather than a code set, unlike `org-override`'s fixed vocabulary:
  * the useful answer here is what is being reproduced or which ticket it
- * serves, which no enumeration anticipates. `MIN_REASON_LENGTH` exists so the
+ * serves, which no enumeration anticipates. The minimum exists so the
  * field cannot be satisfied by a keystroke — a required field that accepts
  * `"x"` records that someone was made to type something, not why they acted.
  */
 
-/**
- * Long enough to be a sentence fragment, short enough not to obstruct. Chosen
- * against the shortest genuinely useful reasons staff actually write
- * ("ticket 481", "repro billing"), both of which clear it.
- */
-const MIN_REASON_LENGTH = 8
-
-/** Bounds the stored row; an audit entry is evidence, not a scratchpad. */
-const MAX_REASON_LENGTH = 500
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -76,13 +71,13 @@ async function handler(request: Request): Promise<Response> {
   // session that was opened and only then found to be unexplained is a
   // session that happened. Refusing costs a round trip; recording nothing
   // costs the audit trail.
-  const reason = String(body?.reason ?? '').trim().slice(0, MAX_REASON_LENGTH)
-  if (reason.length < MIN_REASON_LENGTH) {
+  const reason = String(body?.reason ?? '').trim().slice(0, IMPERSONATION_MAX_REASON_LENGTH)
+  if (reason.length < IMPERSONATION_MIN_REASON_LENGTH) {
     return Response.json(
       {
         error:
           'Impersonation needs a reason of at least ' +
-          `${MIN_REASON_LENGTH} characters — it is recorded on the audit ` +
+          `${IMPERSONATION_MIN_REASON_LENGTH} characters — it is recorded on the audit ` +
           'entry and is the only record of why this session happened.',
       },
       { status: 400 },

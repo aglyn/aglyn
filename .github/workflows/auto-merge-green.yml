@@ -39,6 +39,11 @@ name: Auto-merge green PRs
 #   A merge made with GITHUB_TOKEN does not start `push` workflows, so Main
 #   Gate's push trigger never sees it. After any merge the sweep dispatches Main
 #   Gate on `main`, which grades main's head.
+#
+#   It dispatches Native tests on `main` for the same reason (AGL-3783): main's
+#   run is what saves the Swift build every native PR restores. It passes main's
+#   head from before the sweep's merges as `base`, so a sweep that merged no
+#   Swift change takes no macOS runner.
 
 on:
   # Each PR check workflow finishing is the moment a PR can turn green.
@@ -92,6 +97,7 @@ jobs:
         run: |
           set -euo pipefail
           merged=0
+          main_before=$(gh api "repos/$REPO/commits/main" --jq .sha || true)
           hotfixes=$(gh pr list --repo "$REPO" --base production --state open --label hotfix --json number --jq '.[].number')
           for n in $(gh pr list --repo "$REPO" --base main --state open --limit 100 --json number --jq '.[].number') $hotfixes; do
             pr=$(gh pr view "$n" --repo "$REPO" \
@@ -135,4 +141,5 @@ jobs:
           done
           if [ "$merged" = 1 ]; then
             gh workflow run main-gate.yml --repo "$REPO" --ref main
+            gh workflow run native-tests.yml --repo "$REPO" --ref main -f base="$main_before"
           fi

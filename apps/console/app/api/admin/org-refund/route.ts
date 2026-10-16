@@ -24,7 +24,10 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { createHash, randomUUID } from 'crypto'
-import { normalizeRefundReason } from '../../../../constants/refund-reasons'
+import {
+  normalizeRefundReason,
+  stripeRefundReason,
+} from '../../../../constants/refund-reasons'
 import {
   checkRefundAuthority,
   refundAuthorityForRole,
@@ -489,6 +492,7 @@ async function handler(request: Request): Promise<Response> {
         'metadata[aglyn_org_id]': orgId,
         'metadata[aglyn_actor_uid]': String(decoded.uid),
         'metadata[aglyn_reason]': reason.reason,
+        reason: stripeRefundReason(reason.reason),
       },
       attemptKey || null,
     )

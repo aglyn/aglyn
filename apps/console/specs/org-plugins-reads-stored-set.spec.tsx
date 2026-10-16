@@ -200,6 +200,7 @@ describe('org Plugins page reads the stored set (AGL-2486)', () => {
       'Toggle Live chat',
       'Toggle Review platforms',
       'Toggle Music player',
+      'Toggle Help desks',
       'Toggle Ad conversions',
     ])
   })

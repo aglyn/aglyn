@@ -28,12 +28,27 @@
 	<string>$(AGLYN_BRAND_NAME)</string>
 	<key>AGLYN_PASSKEY_RP_ID</key>
 	<string>$(AGLYN_PASSKEY_RP_ID)</string>
+	<key>AGLYN_APP_CHECK</key>
+	<string>$(AGLYN_APP_CHECK)</string>
+	<key>AGLYN_LEGAL_ORIGIN</key>
+	<string>$(AGLYN_LEGAL_ORIGIN)</string>
+	<key>AGLYN_APPLE_SIGN_IN</key>
+	<string>$(AGLYN_APPLE_SIGN_IN)</string>
 	<key>AGLYN_DEBUG_EMAIL</key>
 	<string>$(AGLYN_DEBUG_EMAIL)</string>
 	<key>AGLYN_DEBUG_PASSWORD</key>
 	<string>$(AGLYN_DEBUG_PASSWORD)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>The camera reads product barcodes so you can find and sell items quickly.</string>
+	<!-- Firebase Auth's app-delegate proxy (iOS) takes the APNs callbacks and calls the app's own only when the
+	     delegate class implements them; SwiftUI's delegate forwards them to PushAppDelegate instead, so with the
+	     proxy on the device token never reaches PushCenter. The apps sign in with credentials only (no phone auth,
+	     no Firebase-hosted web flows), so nothing else relies on it. -->
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<false/>
+	<!-- HTTPS (TLS) only, which is exempt: no export-compliance question per upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

@@ -152,6 +152,8 @@ const FIELD_ELEMENT_COMPONENTS = new Set([
   'muiRadioGroup',
   'muiRadio',
   'muiRating',
+  'muiDatePicker',
+  'muiTimePicker',
 ])
 const FORM_CONTROL_COMPONENT = 'muiFormControl'
 const FORM_LABEL_COMPONENT = 'muiFormLabel'

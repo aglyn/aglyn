@@ -96,11 +96,15 @@ import {
   AI_EVAL_UNRECORDED_DOORS,
   AiEvalLiveRefusedError,
   aiEvalCasesNamed,
+  aiEvalEffortArm,
   aiEvalGraderOutput,
   aiEvalGraderPrompt,
   aiEvalLayoutOutline,
   aiEvalPlanOutline,
   aiEvalRecorderFor,
+  aiEvalRecordingBody,
+  aiEvalRecordingFileName,
+  aiEvalScoreLine,
   readAiEvalGrade,
   recordAiEvalLive,
 } from './ai-eval-live'
@@ -341,9 +345,11 @@ describe('the live run', () => {
     const sent = mockRunAiRequest.mock.calls.map((call) => call[0])
     const plans = sent.filter((request) => request.tools?.[0]?.name === AI_BUILD_PLAN_TOOL.name)
     expect(plans).toHaveLength(2)
-    // The one re-ask names both rules, and tells this Free workspace to draw its form.
+    // The one re-ask tells this Free workspace to draw its form. The hero that
+    // placed the page's own layout is settled in code, so it is not asked
+    // about (AGL-3807).
     const reask = String(plans[1].messages.at(-1).content)
-    expect(reask).toContain(`Rule 2 (${AI_DOCTRINE_RULES[2]}): A section places a layout.`)
+    expect(reask).not.toContain(`Rule 2 (${AI_DOCTRINE_RULES[2]}): A section places a layout.`)
     expect(reask).toContain(
       `Rule 7 (${AI_DOCTRINE_RULES[7]}): The "consultation request form" section places a creation named "consultation-form", but the plan never creates it, and this workspace's plan does not include saved forms. Place a form the site already has, or leave the form off the page.`,
     )
@@ -379,6 +385,47 @@ describe('the live run', () => {
     expect(report.recorded).toEqual([])
     expect(report.skipped).toEqual([expect.objectContaining({ caseId: section.id, kind: 'section' })])
     expect(mockRunAiRequest).not.toHaveBeenCalled()
+  })
+
+  it('asks every brief side by side in batch mode, so a round is one batch, and reports in the briefs’ order (AGL-3781)', async () => {
+    armReferenceAnswers()
+    const answer = mockRunAiRequest.getMockImplementation() as (request: unknown) => Promise<unknown>
+    // Every answer request is held until every brief has asked: a run that
+    // asked one brief after another would never get past the first.
+    const held: Array<() => void> = []
+    mockRunAiRequest.mockImplementation(async (request: { tools?: Array<{ name: string }> }) => {
+      if (request.tools?.[0]?.name !== AI_EVAL_RUBRIC_TOOL.name) {
+        await new Promise<void>((release) => {
+          held.push(release)
+          if (held.length === 2) for (const go of held) go()
+        })
+      }
+      return answer(request)
+    })
+    const report = await recordAiEvalLive([text, theme], {
+      ...LIVE,
+      env: { ...LIVE.env, AGLYN_LIVE_AI_BATCH: '1' },
+    })
+    expect(held).toHaveLength(2)
+    expect(report.recorded.map((entry) => entry.caseId)).toEqual([text.id, theme.id])
+    expect(report.failed).toEqual([])
+  })
+
+  it('asks the briefs one after another outside batch mode', async () => {
+    armReferenceAnswers()
+    const answer = mockRunAiRequest.getMockImplementation() as (request: unknown) => Promise<unknown>
+    let inFlight = 0
+    let most = 0
+    mockRunAiRequest.mockImplementation(async (request: unknown) => {
+      inFlight += 1
+      most = Math.max(most, inFlight)
+      await Promise.resolve()
+      inFlight -= 1
+      return answer(request)
+    })
+    const report = await recordAiEvalLive([text, theme], LIVE)
+    expect(most).toBe(1)
+    expect(report.recorded.map((entry) => entry.caseId)).toEqual([text.id, theme.id])
   })
 
   it('gives a failing rubric when the grader never answers with whole grades', async () => {
@@ -1012,5 +1059,73 @@ describe('readAiEvalGrade', () => {
     })
     expect(readAiEvalGrade({ structure: 0, copy: 3, reuse: 2 }, 'g')).toBeNull()
     expect(readAiEvalGrade({ structure: 4.5, copy: 3, reuse: 2 }, 'g')).toBeNull()
+  })
+})
+
+describe('an effort A/B arm’s recordings (AGL-3781)', () => {
+  // The arm round 3 ran, five kinds long: spelled into the file name it was
+  // past the limit, and the round's recordings were lost to ENAMETOOLONG.
+  const long = 'job.page:low,job.layout:low,job.plan:medium,job.form:low,job.text:low,job.section:low'
+  const candidate = {
+    source: 'recorded',
+    scope: 'full',
+    step: 'job.page',
+    model: 'claude-sonnet-5-5',
+    effort: 'low',
+    plan: null,
+    answer: {},
+    usage: { inputTokens: 1, outputTokens: 985, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    rubric: { structure: 4, copy: 4, reuse: 3 },
+  } as unknown as Parameters<typeof aiEvalScoreLine>[0]['candidate']
+
+  it('is named by a short tag, the same for the same efforts in any order or spacing', () => {
+    const arm = aiEvalEffortArm({ AGLYN_AI_EFFORT: long })
+    expect(arm?.tag).toMatch(/^effort-[0-9a-f]{8}$/)
+    const shuffled = ' job.section:low , job.text:low,job.form:low,job.plan:medium,job.layout:low,job.page:low'
+    expect(aiEvalEffortArm({ AGLYN_AI_EFFORT: shuffled })?.tag).toBe(arm?.tag)
+    expect(aiEvalEffortArm({ AGLYN_AI_EFFORT: 'job.page:medium' })?.tag).not.toBe(aiEvalEffortArm({ AGLYN_AI_EFFORT: 'job.page:low' })?.tag)
+    expect(aiEvalEffortArm({})).toBeNull()
+    expect(aiEvalEffortArm({ AGLYN_AI_EFFORT: 'job.page:bogus' })).toBeNull()
+  })
+
+  it('keeps the file name short and the whole arm inside the recording', () => {
+    const arm = aiEvalEffortArm({ AGLYN_AI_EFFORT: long })
+    const name = aiEvalRecordingFileName('page-bakery-home', 'claude-sonnet-5-5', arm)
+    expect(name).toBe(`page-bakery-home.claude-sonnet-5-5.${arm?.tag}.json`)
+    expect(name.length).toBeLessThan(80)
+    expect(aiEvalRecordingFileName('page-bakery-home', 'claude-sonnet-5-5', null)).toBe(
+      'page-bakery-home.claude-sonnet-5-5.json',
+    )
+    const body = JSON.parse(aiEvalRecordingBody('page-bakery-home', candidate, arm))
+    expect(body.arm).toEqual({
+      tag: arm?.tag,
+      efforts: {
+        'job.form': 'low',
+        'job.layout': 'low',
+        'job.page': 'low',
+        'job.plan': 'medium',
+        'job.section': 'low',
+        'job.text': 'low',
+      },
+    })
+    expect(body.caseId).toBe('page-bakery-home')
+    expect(body.candidate).toEqual(candidate)
+    // The default run's recording holds no arm at all.
+    expect(JSON.parse(aiEvalRecordingBody('page-bakery-home', candidate, null))).not.toHaveProperty('arm')
+  })
+
+  it('prints score lines that pair an arm with the defaults by brief', () => {
+    const arm = aiEvalEffortArm({ AGLYN_AI_EFFORT: long })
+    const entry = { caseId: 'page-bakery-home', kind: 'page' as const, candidate }
+    const byDefault = aiEvalScoreLine(entry, true, null)
+    const byArm = aiEvalScoreLine(entry, false, arm)
+    expect(byDefault).toBe(
+      'score page-bakery-home (page) claude-sonnet-5-5: pass, structure 4, copy 4, reuse 3, output 985 tokens',
+    )
+    expect(byArm).toBe(
+      `score page-bakery-home (page) claude-sonnet-5-5 ${arm?.tag}: fail, structure 4, copy 4, reuse 3, output 985 tokens`,
+    )
+    const key = (line: string) => line.slice(0, line.indexOf(':')).replace(/ effort-[0-9a-f]{8}$/, '')
+    expect(key(byArm)).toBe(key(byDefault))
   })
 })

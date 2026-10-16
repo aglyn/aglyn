@@ -130,3 +130,79 @@ interface FileExporter {
 }
 
 val LocalFileExporter = staticCompositionLocalOf<FileExporter?> { null }
+
+/**
+ * What the image editor writes, in the order the console's editor applies it
+ * to a picture standing upright: mirror (flipH, flipV), turn clockwise by
+ * [rotation] degrees (0, 90, 180 or 270), cut [cropW] by [cropH] from
+ * ([cropX], [cropY]) of the turned picture, and draw that at [width] by
+ * [height]. PNG stays lossless; anything else is a JPEG.
+ */
+data class ImageEditPlan(
+  val rotation: Int,
+  val flipH: Boolean,
+  val flipV: Boolean,
+  val cropX: Int,
+  val cropY: Int,
+  val cropW: Int,
+  val cropH: Int,
+  val width: Int,
+  val height: Int,
+  val png: Boolean,
+)
+
+/** A picture opened for editing: decoded and stood upright once, drawn at as many plans as the screen asks. */
+interface ImageEditSession {
+  /** The upright picture's size. */
+  val width: Int
+  val height: Int
+
+  /** The picture drawn as [plan] says, encoded; null when the device cannot draw or encode it. */
+  fun render(plan: ImageEditPlan): ByteArray?
+
+  /** Lets the decoded picture go. */
+  fun close() {}
+}
+
+/**
+ * The device's pixels for the image editor: Android's bitmaps, the desktop's
+ * java.awt. The shell provides one through [LocalImageTransformer].
+ */
+fun interface ImageTransformer {
+  /** Decodes [bytes] (a photo's EXIF turn applied), or null for a format the device cannot read. */
+  fun open(bytes: ByteArray): ImageEditSession?
+}
+
+val LocalImageTransformer = staticCompositionLocalOf<ImageTransformer?> { null }
+
+/** A picture's bytes as something Compose can draw, or null when they are not an image it reads. */
+fun ByteArray.toImageBitmapOrNull(): ImageBitmap? = try {
+  decodeToImageBitmap()
+} catch (error: CancellationException) {
+  throw error
+} catch (_: Throwable) {
+  null
+}
+
+/**
+ * What a device read from a film before it was uploaded (the console's `probeVideoFile`): its length and frame size, a still
+ * from near the start for a poster, or why none of that could be had. Neither server can decode a film, so the uploader's
+ * device does it, for nothing, before the bytes move.
+ */
+class VideoProbeResult(
+  val durationMs: Long? = null,
+  val width: Int? = null,
+  val height: Int? = null,
+  /** The poster still, as JPEG bytes. */
+  val poster: ByteArray? = null,
+  /** A short note on what did not happen; only said when something was tried and failed. */
+  val reason: String? = null,
+)
+
+/** The device's decoder for the film upload path: Android's media retriever; desktop has none, and says so. */
+fun interface VideoProbe {
+  suspend fun probe(file: PickedFile): VideoProbeResult
+}
+
+val LocalVideoProbe = staticCompositionLocalOf<VideoProbe?> { null }
+

@@ -14,6 +14,7 @@ public let commerceOrdersScreen = "commerce.orders"
 public let commerceOrderScreen = "commerce.order"
 public let commerceProductsScreen = "commerce.products"
 public let commerceProductScreen = "commerce.product"
+public let commerceProductMediaScreen = "commerce.productMedia"
 public let commerceScanScreen = "commerce.scan"
 public let commerceSalesScreen = "commerce.sales"
 public let commerceSettingsScreen = "commerce.settings"
@@ -32,8 +33,6 @@ public let commerceSettingsScreen = "commerce.settings"
 /// ship-orders, new-product and scan quick actions.
 @MainActor
 public func registerCommerceNative(_ r: NativePluginRegistrar) {
-  // The device's reader, for any plugin's counter payment (a booking's).
-  if DeviceCardReaders.shared == nil { DeviceCardReaders.shared = DeviceCardCollector.make() }
   r.screen(
     commerceRegisterScreen, title: "Register", requiresSite: true, apps: [.pos], icon: "dollarsign.circle",
     placement: .register
@@ -74,6 +73,10 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   r.screen(commerceProductsScreen, title: "Products", requiresSite: true, icon: "shippingbox") { context, _ in
     ProductsScreen(context: context)
   }
+  // A product's images and, for a digital product, its downloads and members videos.
+  r.screen(commerceProductMediaScreen, title: "Images and files", requiresSite: true, icon: "photo.on.rectangle") { context, params in
+    ProductMediaScreen(context: context, productID: params["productId"] ?? "")
+  }
   r.screen(commerceProductScreen, title: "Product", requiresSite: true, icon: "shippingbox") { context, params in
     if params["new"] == "1" {
       ProductsScreen(context: context, startNew: true)
@@ -100,6 +103,9 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   }
   r.widget("commerce.sales-trend", title: "Last 7 days", order: 110, size: .full, requiresSite: true) { context in
     SalesTrendWidget(context: context)
+  }
+  r.widget("commerce.glance", title: "At a glance", order: 120, size: .full, requiresSite: true) { context in
+    GlanceWidget(context: context)
   }
   r.quickAction(
     "commerce.orders-to-ship", title: "Ship orders", icon: "shippingbox", order: 100, screen: commerceOrdersScreen,

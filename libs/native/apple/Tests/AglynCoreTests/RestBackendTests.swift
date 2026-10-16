@@ -75,6 +75,28 @@ final class IdentityToolkitAuthTests: XCTestCase {
     XCTAssertEqual(store.load()?.uid, "u1")
   }
 
+  /// A custom token (a passkey's, or a support session's) is exchanged once, and the person is read off the ID token it answers.
+  func testSignsInWithACustomTokenAndReadsWhoItIsOffTheToken() async throws {
+    func encode(_ object: [String: Any]) -> String {
+      let data = (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
+      return data.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: "=", with: "")
+    }
+    let idToken = "\(encode(["alg": "none"])).\(encode(["user_id": "u9", "email": "p@example.test", "name": "Pat"])).sig"
+    let transport = RecordingTransport([
+      (200, #"{"idToken":"\#(idToken)","refreshToken":"r9","expiresIn":"3600","isNewUser":false}"#)
+    ])
+    let store = MemoryCredentialStore()
+    let user = try await auth(transport, store: store).signIn(customToken: "minted")
+    XCTAssertEqual(user, AglynUser(uid: "u9", email: "p@example.test", displayName: "Pat"))
+    XCTAssertEqual(transport.requests.map { $0.url?.lastPathComponent }, ["accounts:signInWithCustomToken"])
+    XCTAssertEqual(transport.json(0)["token"] as? String, "minted")
+    XCTAssertEqual(transport.json(0)["returnSecureToken"] as? Bool, true)
+    XCTAssertNil(transport.json(0)["tenantId"], "no pool named, none sent")
+    XCTAssertEqual(store.load()?.refreshToken, "r9")
+    XCTAssertEqual(store.load()?.uid, "u9")
+  }
+
   func testAPasswordChangeProvesTheCurrentOneThenReplacesTheTokens() async throws {
     let transport = RecordingTransport([
       (200, signedIn),
@@ -217,10 +239,85 @@ final class IdentityToolkitAuthTests: XCTestCase {
     XCTAssertEqual(store.load()?.refreshToken, "r1")
   }
 
-  func testSendsThePasswordReset() async throws {
-    let transport = RecordingTransport([(200, "{}")])
-    try await auth(transport).sendPasswordReset(email: "a@example.test")
-    XCTAssertEqual(transport.json(0)["requestType"] as? String, "PASSWORD_RESET")
+  private func jwt(_ claims: [String: Any]) -> String {
+    let data = try! JSONSerialization.data(withJSONObject: claims)
+    let payload = data.base64EncodedString().replacingOccurrences(of: "=", with: "")
+      .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+    return "h.\(payload).s"
+  }
+
+  /// Sign-up is the console's `createUserWithEmailAndPassword`: `accounts:signUp`, unverified on arrival.
+  func testSignsUpWithEmailAndPassword() async throws {
+    let token = jwt(["user_id": "u9", "email": "new@example.test", "email_verified": false])
+    let transport = RecordingTransport([
+      (200, #"{"localId":"u9","email":"new@example.test","idToken":"\#(token)","refreshToken":"r9","expiresIn":"3600"}"#)
+    ])
+    let store = MemoryCredentialStore()
+    let user = try await auth(transport, store: store).signUp(email: " new@example.test ", password: "Pw1!pw")
+    XCTAssertEqual(user, AglynUser(uid: "u9", email: "new@example.test", displayName: nil, emailVerified: false))
+    XCTAssertEqual(
+      transport.requests[0].url?.absoluteString,
+      "http://127.0.0.1:9399/identitytoolkit.googleapis.com/v1/accounts:signUp?key=key")
+    XCTAssertEqual(transport.json(0)["email"] as? String, "new@example.test")
+    XCTAssertEqual(transport.json(0)["password"] as? String, "Pw1!pw")
+    XCTAssertEqual(store.load()?.refreshToken, "r9")
+  }
+
+  /// A provider credential signs in, and says whether it signed somebody up.
+  func testSignsInWithAnIdentityProviderAndSaysWhetherItWasNew() async throws {
+    let token = jwt(["user_id": "g1", "email": "g@example.test", "email_verified": true])
+    let transport = RecordingTransport([
+      (200, #"{"localId":"g1","email":"g@example.test","displayName":"Grace","idToken":"\#(token)","refreshToken":"rg","isNewUser":true}"#)
+    ])
+    let (user, isNew) = try await auth(transport).signIn(idpPostBody: "id_token=abc&providerId=google.com")
+    XCTAssertTrue(isNew)
+    XCTAssertEqual(user, AglynUser(uid: "g1", email: "g@example.test", displayName: "Grace", emailVerified: true))
+    XCTAssertTrue(transport.requests[0].url!.absoluteString.hasSuffix("/v1/accounts:signInWithIdp?key=key"))
+    XCTAssertEqual(transport.json(0)["postBody"] as? String, "id_token=abc&providerId=google.com")
+    XCTAssertEqual(transport.json(0)["requestUri"] as? String, "http://localhost")
+  }
+
+  /// The emailed links' codes: a verification applied, a reset code checked, then used.
+  func testRedeemsTheEmailedActionCodes() async throws {
+    let transport = RecordingTransport([(200, "{}"), (200, #"{"email":"a@example.test"}"#), (200, "{}")])
+    let session = auth(transport)
+    try await session.applyActionCode("v-code")
+    let email = try await session.verifyPasswordResetCode("r-code")
+    try await session.confirmPasswordReset(code: "r-code", newPassword: "New1!pw")
+    XCTAssertEqual(email, "a@example.test")
+    XCTAssertTrue(transport.requests[0].url!.absoluteString.contains("/v1/accounts:update?"))
+    XCTAssertEqual(transport.json(0)["oobCode"] as? String, "v-code")
+    XCTAssertTrue(transport.requests[1].url!.absoluteString.contains("/v1/accounts:resetPassword?"))
+    XCTAssertNil(transport.json(1)["newPassword"])
+    XCTAssertEqual(transport.json(2)["newPassword"] as? String, "New1!pw")
+  }
+
+  /// Whether the address is confirmed is read off each fresh token.
+  func testAReloadReadsTheConfirmedAddressOffTheFreshToken() async throws {
+    let before = jwt(["user_id": "u1", "email_verified": false])
+    let after = jwt(["user_id": "u1", "email_verified": true])
+    let transport = RecordingTransport([
+      (200, #"{"localId":"u1","email":"a@example.test","idToken":"\#(before)","refreshToken":"r1"}"#),
+      (200, #"{"id_token":"\#(after)","refresh_token":"r2","expires_in":"3600"}"#),
+    ])
+    let session = auth(transport)
+    let signedIn = try await session.signIn(email: "a@example.test", password: "pw")
+    XCTAssertFalse(signedIn.emailVerified)
+    let reloaded = try await session.reload()
+    XCTAssertEqual(reloaded?.emailVerified, true)
+  }
+
+  /// The providers the account holds, from `accounts:lookup`, for the held workspace name's binding.
+  func testReadsTheAccountsProviders() async throws {
+    let transport = RecordingTransport([
+      (200, signedIn),
+      (200, #"{"users":[{"localId":"u1","providerUserInfo":[{"providerId":"password"},{"providerId":"google.com"}]}]}"#),
+    ])
+    let session = auth(transport)
+    try await session.signIn(email: "a@example.test", password: "pw")
+    let providers = try await session.providerIDs()
+    XCTAssertEqual(providers, ["password", "google.com"])
+    XCTAssertEqual(transport.json(1)["idToken"] as? String, "id1")
   }
 
   func testAnUnknownOverrideFallsBackToTheSignature() {

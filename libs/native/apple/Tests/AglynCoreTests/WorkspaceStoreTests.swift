@@ -114,4 +114,33 @@ final class WorkspaceStoreTests: XCTestCase {
       WorkspacePick(orgID: "b", hostID: "s9"))
     _ = restored
   }
+
+  /// A full window is a page, not the whole list: the console's `loadMoreOrgs` (AGL-2336).
+  func testAFullWindowOffersMoreAndGrowingItListensAgain() {
+    let reader = FakeReader()
+    let store = WorkspaceStore(uid: "u1", reader: reader, defaults: UserDefaults(suiteName: "workspace-\(UUID().uuidString)")!)
+    store.start()
+    reader.emit("users/u1/orgs", (0..<50).map { FirestoreDocument(id: "o\($0)", data: ["orgName": "Org \($0)"]) })
+    XCTAssertTrue(store.hasMoreOrgs)
+    store.loadMoreOrgs()
+    XCTAssertTrue(reader.queries[0].2.removed)
+    let grown = reader.queries.last { $0.0.path == "users/u1/orgs" }!
+    XCTAssertEqual(grown.0.limit, 100)
+    reader.emit("users/u1/orgs", (0..<73).map { FirestoreDocument(id: "o\($0)", data: ["orgName": "Org \($0)"]) })
+    XCTAssertEqual(store.orgs.count, 73)
+    XCTAssertFalse(store.hasMoreOrgs)
+  }
+
+  /// An SSO account signs in as its tenant uid (AGL-3816), and its switcher is that uid's memberships: every one of them.
+  func testATenantAccountListsEveryWorkspaceItBelongsTo() {
+    let reader = FakeReader()
+    let tenantUID = "SsoTenantMemberUid0000000001"
+    let store = WorkspaceStore(uid: tenantUID, reader: reader, defaults: UserDefaults(suiteName: "workspace-\(UUID().uuidString)")!)
+    store.start()
+    XCTAssertEqual(reader.queries[0].0.path, "users/\(tenantUID)/orgs")
+    let names = ["Juniper Street Co.", "EDR Construction", "Ready To Roll", "Elevated Concepts", "Test Org", "Aglyn LLC"]
+    reader.emit("users/\(tenantUID)/orgs", names.enumerated().map { FirestoreDocument(id: "o\($0.offset)", data: ["orgName": $0.element]) })
+    XCTAssertEqual(Set(store.orgs.map(\.name)), Set(names))
+    XCTAssertFalse(store.hasMoreOrgs)
+  }
 }

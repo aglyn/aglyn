@@ -7,11 +7,14 @@ import com.aglyn.core.FirestoreOrder
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreReader
 import com.aglyn.core.FirestoreTimestamp
+import com.aglyn.core.decode
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 
 /**
  * The reads a spec makes straight from Firestore, under the same rules the
@@ -32,6 +35,21 @@ internal object FirestoreLoads {
 
   fun json(doc: FirestoreDoc): JsonElement = JsonObject(doc.data.mapValues { json(it.value) } + ("\$id" to JsonPrimitive(doc.id)))
 
+  /**
+   * A stored document as the JSON a route that replaces it takes back: every field as stored, except the timestamps, which a
+   * client's JSON cannot carry (the route keeps the stored ones). `overlay` hands a spec this.
+   */
+  fun stored(value: Any?): JsonElement? = when (value) {
+    null -> JsonNull
+    is String -> JsonPrimitive(value)
+    is Boolean -> JsonPrimitive(value)
+    is Number -> JsonPrimitive(value)
+    is FirestoreTimestamp -> null
+    is List<*> -> JsonArray(value.mapNotNull { stored(it) })
+    is Map<*, *> -> JsonObject(value.entries.mapNotNull { (key, inner) -> stored(inner)?.let { key.toString() to it } }.toMap())
+    else -> JsonPrimitive(value.toString())
+  }
+
   suspend fun document(reader: FirestoreReader, path: String): JsonElement = reader.get(path)?.let { json(it) } ?: JsonNull
 
   /** `2026-10-13T04:00:00Z` (fraction optional, or a bare date) as a timestamp, else null. */
@@ -48,50 +66,132 @@ internal object FirestoreLoads {
     return FirestoreTimestamp(days * 86400 + clock[0] * 3600 + clock[1] * 60 + clock[2], fraction)
   }
 
-  private fun filterOp(symbol: String?): FilterOp = when (symbol) {
-    "!=" -> FilterOp.NE
-    "<" -> FilterOp.LT
-    "<=" -> FilterOp.LTE
-    ">" -> FilterOp.GT
-    ">=" -> FilterOp.GTE
-    "in" -> FilterOp.IN
-    "not-in" -> FilterOp.NOT_IN
-    "array-contains" -> FilterOp.ARRAY_CONTAINS
-    "array-contains-any" -> FilterOp.ARRAY_CONTAINS_ANY
-    else -> FilterOp.EQ
+  /**
+   * Whether the workspace carries a plan feature, as the console's `checkEntitlement` answers from the workspace's own
+   * document, with the name of the cheapest plan that includes it (what an upsell says): `{ carried, label }`.
+   */
+  suspend fun entitlement(reader: FirestoreReader, feature: String, orgId: String): JsonElement = JsonObject(
+    mapOf(
+      "carried" to JsonPrimitive(com.aglyn.core.planFeatureCarried(reader.get("orgs/$orgId")?.data, feature)),
+      "label" to (com.aglyn.core.PlanFeatureDefaults.grantedFrom[feature]?.let { JsonPrimitive(it) } ?: JsonNull),
+    ),
+  )
+
+  /**
+   * One order as an order widget is handed it (the console's `consoleOrderZoneOrder`): the stored order, and for each line
+   * its units, how many shipped and how many are left, whether it ships at all, whether the order has anything left to
+   * ship or anything shipped to bring back, and its number and test mode, all worked out by the ported figures.
+   */
+  suspend fun orderZone(reader: FirestoreReader, hostId: String, orderId: String): JsonElement {
+    val doc = reader.get("hosts/$hostId/orders/$orderId") ?: return JsonNull
+    val order = com.aglyn.contracts.liftLegacyOrder(doc.decode(com.aglyn.contracts.HostOrder.serializer()) ?: com.aglyn.contracts.HostOrder())
+    val states = com.aglyn.contracts.orderLineFulfillmentStates(order)
+    val stored = (json(doc) as? JsonObject) ?: JsonObject(emptyMap())
+    val lifted = com.aglyn.core.FirestoreDecoding.encodeToJsonElement(com.aglyn.contracts.HostOrder.serializer(), order) as? JsonObject ?: JsonObject(emptyMap())
+    val lines = (lifted["lineItems"] as? JsonArray).orEmpty().mapIndexed { index, line ->
+      val state = states.getOrNull(index)
+      JsonObject(
+        ((line as? JsonObject) ?: JsonObject(emptyMap())) + mapOf(
+          "lineItemId" to JsonPrimitive(index),
+          "quantity" to JsonPrimitive(state?.quantity ?: 0L),
+          "fulfilledQuantity" to JsonPrimitive(state?.fulfilledQuantity ?: 0L),
+          "remainingQuantity" to JsonPrimitive(state?.remainingQuantity ?: 0L),
+          "requiresShipping" to JsonPrimitive(state?.requiresShipping ?: true),
+        ),
+      )
+    }
+    return JsonObject(
+      stored + lifted + mapOf(
+        "id" to JsonPrimitive(doc.id),
+        "number" to JsonPrimitive(com.aglyn.contracts.formatOrderNumber(order, doc.id)),
+        "currency" to JsonPrimitive("USD"),
+        "lines" to JsonArray(lines),
+        "shipLines" to JsonArray(lines.filter { (it.jsonObject["requiresShipping"] as? JsonPrimitive)?.content == "true" }),
+        "shippable" to JsonPrimitive(states.any { it.requiresShipping && it.remainingQuantity > 0 }),
+        "returnable" to JsonPrimitive(states.any { it.requiresShipping && it.fulfilledQuantity > 0 }),
+        "testMode" to JsonPrimitive(com.aglyn.contracts.orderIsTestMode(order, doc.id, doc.data["livemode"] as? Boolean)),
+        "fulfillmentMethod" to JsonPrimitive(((stored["fulfillmentMethod"] as? JsonPrimitive)?.contentOrNull) ?: "shipping"),
+        // Where a pickup or a local delivery stands; a status the order does not hold reads as where each starts.
+        "pickupStatus" to JsonPrimitive(((stored["pickup"] as? JsonObject)?.get("status") as? JsonPrimitive)?.contentOrNull?.takeIf { it in listOf("preparing", "ready", "picked_up") } ?: "preparing"),
+        "deliveryStatus" to JsonPrimitive(((stored["localDelivery"] as? JsonObject)?.get("status") as? JsonPrimitive)?.contentOrNull?.takeIf { it in listOf("scheduled", "out_for_delivery", "delivered", "failed") } ?: "scheduled"),
+      ),
+    )
   }
 
-  /** `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. */
-  suspend fun query(reader: FirestoreReader, spec: JsonElement, context: JsonElement): JsonElement {
+  /** How many rows a query load reads to start with: the spec's `limit`, or fifty. */
+  fun queryLimit(spec: JsonElement): Int = ScreenValues.number(spec.obj("limit"))?.toInt() ?: 50
+
+  /**
+   * `spec` is `{ collection, where: [[field, op, value, condition?]], orderBy: "field desc", limit, aggregate }`; a value may be
+   * `{ "$date": ISO }` for a timestamp. [limit] replaces the spec's own
+   * when a list has been asked for more rows (a growing window, as the console's lists page).
+   */
+  suspend fun query(reader: FirestoreReader, spec: JsonElement, context: JsonElement, limit: Int? = null): JsonElement {
     val collection = ScreenValues.render(spec.str("collection").orEmpty(), context)
-    // `[field, op, value]`: equality, or any operator (`>`, `in`, …); a value may be `{ "$date": ISO }` for a timestamp.
     val filters = spec.arr("where").mapNotNull { clause ->
       val parts = clause as? JsonArray ?: return@mapNotNull null
-      if (parts.size != 3) return@mapNotNull null
+      // A fourth entry is a condition: the clause counts only while it holds (a filter the person has not picked is left off).
+      if (parts.size != 3 && parts.size != 4) return@mapNotNull null
+      if (parts.size == 4 && !ScreenValues.condition((parts[3] as? JsonPrimitive)?.content, context)) return@mapNotNull null
       val field = (parts[0] as? JsonPrimitive)?.content ?: return@mapNotNull null
-      val raw = parts[2]
-      val value = if (raw is JsonObject) raw else ScreenValues.resolve((raw as? JsonPrimitive)?.takeIf { it.isString }?.content ?: ScreenValues.text(raw), context)
-      val plain: Any? = when (value) {
-        is JsonObject -> value.str("\$date")?.let { isoInstant(it) } ?: ScreenValues.text(value)
-        is JsonPrimitive -> when {
-          value.isString -> value.content
-          value.content == "true" || value.content == "false" -> value.content == "true"
-          else -> value.content.toDoubleOrNull()
-        }
-        else -> ScreenValues.text(value)
+      val op = when ((parts[1] as? JsonPrimitive)?.content) {
+        "==" -> FilterOp.EQ
+        "!=" -> FilterOp.NE
+        "<" -> FilterOp.LT
+        "<=" -> FilterOp.LTE
+        ">" -> FilterOp.GT
+        ">=" -> FilterOp.GTE
+        "in" -> FilterOp.IN
+        "not-in" -> FilterOp.NOT_IN
+        "array-contains" -> FilterOp.ARRAY_CONTAINS
+        "array-contains-any" -> FilterOp.ARRAY_CONTAINS_ANY
+        else -> return@mapNotNull null
       }
-      FirestoreFilter(field, filterOp((parts[1] as? JsonPrimitive)?.content), plain)
+      fun plain(raw: JsonElement): Any? {
+        // A number or flag written into the spec is compared as itself, not as its text.
+        if (raw is JsonNull) return null
+        // `{ "$date": ISO }`: a timestamp.
+        if (raw is JsonObject) return raw.str("\$date")?.let { isoInstant(it) } ?: ScreenValues.text(raw)
+        (raw as? JsonPrimitive)?.takeIf { !it.isString }?.let { literal ->
+          return if (literal.content == "true" || literal.content == "false") literal.content == "true" else literal.content.toDoubleOrNull()
+        }
+        // `@now.ms-7d`: a time or number computed from the context, the way a condition's right side is.
+        (raw as? JsonPrimitive)?.content?.trim()?.takeIf { it.startsWith("@") }?.let { return ScreenValues.operand(it, context) }
+        val value = ScreenValues.resolve((raw as? JsonPrimitive)?.takeIf { it.isString }?.content ?: ScreenValues.text(raw), context)
+        return (value as? JsonPrimitive)?.let { p ->
+          when {
+            p.isString -> p.content
+            p.content == "true" || p.content == "false" -> p.content == "true"
+            else -> p.content.toDoubleOrNull()
+          }
+        }
+      }
+      // `in`, `not-in` and `array-contains-any` take a list; the others one value.
+      val listOp = op == FilterOp.IN || op == FilterOp.NOT_IN || op == FilterOp.ARRAY_CONTAINS_ANY
+      FirestoreFilter(field, op, if (listOp) (parts[2] as? JsonArray)?.map { plain(it) } ?: listOf(plain(parts[2])) else plain(parts[2]))
     }
     val order = spec.str("orderBy")?.split(' ')?.let { listOf(FirestoreOrder(it[0], it.getOrNull(1) == "desc")) } ?: emptyList()
-    val counting = spec.isTrue("count")
-    // `count: true` answers `{ "count": N }`: the server's count where the reader has one (the web SDK's
-    // getCountFromServer), else the rows up to a ceiling.
-    if (counting) {
-      reader.count(FirestoreQuery(collection, filters, emptyList(), 1))?.let { return JsonObject(mapOf("count" to JsonPrimitive(it.toDouble()))) }
+    val rows = limit ?: queryLimit(spec)
+    // `aggregate`: { count: true, sum: "balanceCents" } asks the server for the figures over every matching document
+    // and reads no rows: `count` and `sum` are missing from the result where the reader cannot answer, so a screen
+    // shows "Unavailable" instead of a zero.
+    spec.obj("aggregate")?.let { aggregate ->
+      val whole = FirestoreQuery(collection, filters, order)
+      val counting = (aggregate.obj("count") as? JsonPrimitive)?.content == "true"
+      // `rows: <ceiling>`: where the reader cannot count, the rows are read up to the ceiling and counted (a usage meter).
+      val count = if (!counting) null else reader.count(whole) ?: ScreenValues.number(aggregate.obj("rows"))?.let { ceiling ->
+        reader.page(FirestoreQuery(collection, filters, order, ceiling.toInt())).docs.size.toLong()
+      }
+      val sum = aggregate.str("sum")?.let { reader.sum(whole, it) }
+      return JsonObject(
+        buildMap {
+          put("items", JsonArray(emptyList()))
+          count?.let { put("count", JsonPrimitive(it.toDouble())) }
+          sum?.let { put("sum", JsonPrimitive(it)) }
+        },
+      )
     }
-    val limit = ScreenValues.number(spec.obj("limit"))?.toInt() ?: if (counting) 1000 else 50
-    val page = reader.page(FirestoreQuery(collection, filters, order, limit))
-    if (counting) return JsonObject(mapOf("count" to JsonPrimitive(page.docs.size.toDouble())))
+    val page = reader.page(FirestoreQuery(collection, filters, order, rows))
     return JsonObject(mapOf("items" to JsonArray(page.docs.map { json(it) })))
   }
 }

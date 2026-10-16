@@ -28,8 +28,8 @@ import { INVENTORY_PROVIDER_IDS, type InventoryProviderId } from '../model/inven
 /**
  * What this deployment can connect (AGL-3642), read from env on the console.
  *
- * - Cin7 Core and inFlow need nothing of Aglyn's: the merchant pastes their
- *   own account's API keys. They are offered once the token key that seals
+ * - Cin7 Core, inFlow and Ordoro need nothing of Aglyn's: the merchant pastes
+ *   their own account's API keys. They are offered once the token key that seals
  *   those keys is set.
  * - Brightpearl needs a developer app Aglyn registers with Brightpearl: its
  *   app reference (the OAuth client id), its developer reference, and its
@@ -85,13 +85,14 @@ export function offeredProviders(config: InventorySyncConfig): InventoryProvider
 
 /**
  * The secret half of a connection, sealed as one JSON value: the merchant's
- * API key (and Cin7 Core's account id, inFlow's company id), or Brightpearl's
- * access and refresh tokens.
+ * API key (and Cin7 Core's account id, inFlow's company id), Ordoro's client id
+ * and secret, or Brightpearl's access and refresh tokens.
  */
 export type SealedCredentialPayload =
   | { provider: 'cin7-core'; accountId: string; apiKey: string }
   | { provider: 'inflow'; companyId: string; apiKey: string }
   | { provider: 'brightpearl'; accessToken: string; refreshToken: string | null }
+  | { provider: 'ordoro'; clientId: string; clientSecret: string }
 
 /** The context a credential is sealed under: bound to its connection, so a moved value does not open. */
 export const credentialSealContext = (connectionId: string) => `${INVENTORY_SYNC_CONNECTIONS_COLLECTION}/${connectionId}#credential`

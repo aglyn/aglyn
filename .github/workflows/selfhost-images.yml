@@ -106,7 +106,49 @@ jobs:
       COMPOSE_DOCKER_CLI_BUILD: '1'
 
     steps:
+      # Depth 2: a PR is checked out as GitHub's test merge, and its first
+      # parent is the base it was merged onto (the next step diffs the two).
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      # The `package.json` trigger path fires on every PR that adds an npm
+      # script (AGL-3783: in the week to 2026-10-14, 94 of 215 PR runs were on
+      # feature PRs, and every one sampled had changed only `scripts`; the
+      # rest were promotions, which bump the version and so still build).
+      # An image runs `npm ci`,
+      # which reads the dependency fields and the install lifecycle scripts,
+      # then `nx build`, which reads project.json targets and never an npm
+      # script. So on a PR whose only trigger-path change is `package.json`'s
+      # non-lifecycle `scripts`, the images cannot have changed, and the build
+      # is skipped (the job still ends green; it is not a required check).
+      # Pushes, dispatches and any other trigger path always build, and so
+      # does anything this step cannot read: unknown means build.
+      - name: Can this change reach the images?
+        id: reach
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          build=true
+          if [ "$EVENT" = pull_request ] && git rev-parse --verify --quiet 'HEAD^1' >/dev/null; then
+            changed=$(git diff --name-only 'HEAD^1' HEAD)
+            others=$(printf '%s\n' "$changed" | grep -E '^(docker/|docker-compose\.yml$|\.dockerignore$|\.npmrc$|package-lock\.json$|\.env\.selfhost\.example$|apps/tenant/next\.config\.js$|tools/scripts/selfhost-ci-env\.mjs$|\.github/workflows/selfhost-images\.yml$)' || true)
+            if [ -z "$others" ] && printf '%s\n' "$changed" | grep -qx 'package.json'; then
+              build=$(node -e '
+                const { execFileSync } = require("node:child_process");
+                const read = (ref) => JSON.parse(execFileSync("git", ["show", `${ref}:package.json`], { encoding: "utf8" }));
+                const lifecycle = /^(pre|post)?(install|prepare|prepublish)$/;
+                const imageView = (pkg) => {
+                  const scripts = Object.fromEntries(Object.entries(pkg.scripts ?? {}).filter(([name]) => lifecycle.test(name)));
+                  return JSON.stringify({ ...pkg, scripts });
+                };
+                process.stdout.write(imageView(read("HEAD^1")) === imageView(read("HEAD")) ? "false" : "true");
+              ') || build=true
+            fi
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          if [ "$build" = true ]; then echo "The images may have changed; building them."; else echo "Only non-lifecycle npm scripts changed in package.json; the images cannot have changed, so nothing is built."; fi
 
       # No `docker/setup-buildx-action`: this repository's Actions policy is
       # `allowed_actions: selected` with `verified_allowed: false` and only
@@ -118,12 +160,15 @@ jobs:
       # relying on it.
 
       - name: Synthesise an operator's env file
+        if: steps.reach.outputs.build == 'true'
         run: node tools/scripts/selfhost-ci-env.mjs
 
       - name: Build both images, with the command the runbook gives
+        if: steps.reach.outputs.build == 'true'
         run: docker compose build
 
       - name: The tenant container serves its own apex instead of redirecting
+        if: steps.reach.outputs.build == 'true'
         run: |
           set -euo pipefail
           # `docker compose up`, never `docker run --env-file`: only compose
@@ -259,5 +304,5 @@ jobs:
           esac
 
       - name: Stop the smoke container
-        if: always()
+        if: always() && steps.reach.outputs.build == 'true'
         run: docker compose down || true

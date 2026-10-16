@@ -50,6 +50,15 @@ export interface AiMeasuredCredits {
  *   theme        4 /  8   (a site start's look)
  *   plan step   21 / 70
  *
+ * THE FAST TIER'S PART, REPRICED (AGL-3781). A site start's look, a Free
+ * start's plan and every page's listing run on the fast tier, measured above
+ * on Claude Haiku 4.5 at its cost. They run on Claude Haiku 5.5 at the
+ * platform's markup now, so those parts are repriced from what production
+ * sent, at the new rates and about 30% more tokens: over October 1–14 a look
+ * 4 / 7 → 1 / 2, a Free start's plan 15 / 22 → 3 / 5, a listing 3 / 5 → 1 / 1
+ * (2 less on every page), and a whole two-page Free site 148 → 121 at the
+ * median. The other rows ran on the balanced tier and do not move.
+ *
  * HOW TO RE-MEASURE: a read-only collection-group read of `aiJobs` in
  * production where `status == 'done'` and `createdAt` is in the window; group
  * each ledger row's (`items[]`) `creditsSpent` by its `op` (the site start's
@@ -61,11 +70,15 @@ export interface AiMeasuredCredits {
  * moves one moves the spec with it.
  */
 export const AI_MEASURED_UNIT_CREDITS = {
-  page: { median: 30, p90: 40 },
+  // 30 / 40 with its listing at Haiku 4.5's cost.
+  page: { median: 28, p90: 38 },
   form: { median: 29, p90: 31 },
   layout: { median: 23, p90: 24 },
-  theme: { median: 4, p90: 8 },
-  plan: { median: 21, p90: 70 },
+  // 4 / 8 on Haiku 4.5.
+  theme: { median: 1, p90: 2 },
+  // 21 / 70: the median is a Free start's plan, on the fast tier; the p90 a
+  // plan on the balanced tier, which does not move.
+  plan: { median: 4, p90: 70 },
 } as const satisfies Record<string, AiMeasuredCredits>
 
 /**
@@ -74,11 +87,11 @@ export const AI_MEASURED_UNIT_CREDITS = {
  * (Haiku) the table above is mostly made of: every `done` paid site job
  * since 2026-10-01, read 2026-10-12 (6 jobs; products from the 4 stores; AGL-3739).
  *
- *   plan step   81 / 86   (a Free start's plan: 20 / 42)
- *   page item   29 / 49   (about `AI_MEASURED_PAGE_SECTIONS` sections)
+ *   plan step   81 / 86   (a Free start's plan: 20 / 42 on Haiku 4.5, 3 / 5 repriced)
+ *   page item   29 / 49   (about `AI_MEASURED_PAGE_SECTIONS` sections; 27 / 47 with its listing repriced)
  *   form        32 / 39
  *   layout      29 / 29
- *   theme        4 /  4
+ *   theme        4 /  4   (1 / 1 repriced)
  *   email       49 / 51
  *   products    64 / 66   (a store's first products, one answer)
  *
@@ -92,19 +105,29 @@ export const AI_MEASURED_UNIT_CREDITS = {
  */
 export const AI_MEASURED_PAID_SITE_CREDITS = {
   plan: { median: 81, p90: 86 },
-  page: { median: 29, p90: 49 },
+  page: { median: 27, p90: 47 },
   form: { median: 32, p90: 39 },
   layout: { median: 29, p90: 29 },
-  theme: { median: 4, p90: 4 },
+  theme: { median: 1, p90: 1 },
   email: { median: 49, p90: 51 },
   products: { median: 64, p90: 66 },
 } as const satisfies Record<string, AiMeasuredCredits>
 
-/** When the table above was read, and from when its jobs ran. */
+/**
+ * When the table above was read, and from when its jobs ran. Both tables
+ * were measured before AGL-3781 asked a paid site's plan at medium effort and
+ * the layout language's pages and frames at low. A lower effort draws less,
+ * so their plan, page and layout figures stand as the higher reading until
+ * the next re-measure: a quote is never under what is drawn.
+ */
 export const AI_MEASURED_AT = { read: '2026-10-09', since: '2026-10-01' } as const
 
-/** What a whole Free two-page site job measured at, in credits, in the same window. */
-export const AI_MEASURED_FREE_SITE_CREDITS = { low: 148, high: 160 } as const
+/**
+ * What a whole Free two-page site job measured at, in credits, in the same
+ * window: 148–160 with its plan, look and listings at Haiku 4.5's cost, 27
+ * less at the median with them repriced (AGL-3781).
+ */
+export const AI_MEASURED_FREE_SITE_CREDITS = { low: 121, high: 133 } as const
 
 /** The sections the measured page item is about: a page is scaled around it. */
 export const AI_MEASURED_PAGE_SECTIONS = 5
@@ -138,10 +161,11 @@ export function aiMeasuredPageCredits(sections: number): AiMeasuredCredits {
  * "about 48 credits" for two 4-section pages (AGL-3722, 2026-10-10).
  *
  * So it is priced as a fixed cost — the prompt, the site, the listing — and a
- * cost per section: a 4-section page about 40 (p90 78), a 5-section 46 (p90 90).
+ * cost per section: a 4-section page about 38 (p90 76), a 5-section 44 (p90 88).
+ * The fixed part was 16 / 30 with its listing at Haiku 4.5's cost (AGL-3781).
  */
 export const AI_MEASURED_STANDALONE_PAGE = {
-  fixed: { median: 16, p90: 30 },
+  fixed: { median: 14, p90: 28 },
   perSection: { median: 6, p90: 12 },
 } as const satisfies Record<string, AiMeasuredCredits>
 

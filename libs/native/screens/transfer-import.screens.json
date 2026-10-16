@@ -3,18 +3,10 @@
   "screens": [
     {
       "id": "core.settings.data.import",
-      "title": "Import records",
+      "title": "{params.title|'Import records'}",
       "icon": "square.and.arrow.down|upload",
       "scope": "org",
       "requires": "org.manager",
-      "constants": {
-        "delimiter": {
-          "comma": ",",
-          "semicolon": ";",
-          "tab": "\t",
-          "pipe": "|"
-        }
-      },
       "load": {
         "info": {
           "url": "/api/transfer/fields",
@@ -32,14 +24,6 @@
           "type": "fields",
           "title": "{data.info.resource.label}",
           "rows": [
-            {
-              "label": "Most rows",
-              "value": "{data.info.resource.limits.maxRows|'50000'}"
-            },
-            {
-              "label": "Most size",
-              "value": "24 MB"
-            },
             {
               "label": "Finds existing records by",
               "value": "{data.info.matchKeys.*.fieldId}",
@@ -65,45 +49,12 @@
             {
               "key": "file",
               "label": "File",
-              "kind": "file",
+              "kind": "upload",
               "required": true,
-              "help": "CSV (comma, semicolon, tab or pipe separated), JSON or NDJSON. Spreadsheet text encodings are read as they are."
-            },
-            {
-              "key": "delimiter",
-              "label": "Separator",
-              "kind": "select",
-              "initial": "",
-              "options": [
-                {
-                  "value": "",
-                  "label": "Detect it"
-                },
-                {
-                  "value": "comma",
-                  "label": "Comma"
-                },
-                {
-                  "value": "semicolon",
-                  "label": "Semicolon"
-                },
-                {
-                  "value": "tab",
-                  "label": "Tab"
-                },
-                {
-                  "value": "pipe",
-                  "label": "Pipe"
-                }
-              ],
-              "when": "form.fileName !~= .json && form.fileName !~= .ndjson"
-            },
-            {
-              "key": "headerRow",
-              "label": "The first row holds the column names",
-              "kind": "toggle",
-              "initial": "true",
-              "when": "form.fileName !~= .json && form.fileName !~= .ndjson"
+              "maxBytes": "{data.info.resource.limits.maxBytes}",
+              "maxRows": "{data.info.resource.limits.maxRows}",
+              "formats": "{data.info.resource.formats}",
+              "help": "A spreadsheet (CSV, with commas, semicolons, tabs or bars), JSON or NDJSON. Pasted rows are read the same way."
             }
           ],
           "submit": {
@@ -113,10 +64,11 @@
               "orgId": "{org.id}",
               "resource": "{params.resource}",
               "hostId?": "{params.hostId}",
-              "fileName": "{form.fileName}",
-              "content": "{form.file}",
-              "delimiter?": "{const.delimiter[@form.delimiter]}",
-              "headerRow": "{form.headerRow}"
+              "fileName": "{form.file.fileName}",
+              "format": "{form.file.format}",
+              "content": "{form.file.text}",
+              "delimiter?": "{form.file.delimiter}",
+              "headerRow?": "{form.file.headerRow}"
             },
             "chunk": {
               "field": "content",
@@ -133,7 +85,7 @@
               "importJob": "{response.job.id}",
               "importResource": "{params.resource}",
               "importHost": "{params.hostId}",
-              "importFile": "{form.fileName}",
+              "importFile": "{form.file.fileName}",
               "importMapping": null,
               "importDates": null,
               "importPicklists": null,
@@ -148,7 +100,8 @@
               "importProgress": null,
               "importUndo": null,
               "importExtras": null,
-              "importPlanBody": null
+              "importPlanBody": null,
+              "importAfter": null
             },
             "after": {
               "label": "Read the file",
@@ -1525,7 +1478,11 @@
                   },
                   "help": "Tick each one to confirm you understand it."
                 }
-              ]
+              ],
+              "afterZone": {
+                "zone": "transferStep",
+                "stash": "importAfter"
+              }
             },
             {
               "id": "applyNow",
@@ -1551,7 +1508,11 @@
               "navigate": {
                 "screen": "core.settings.data.import.done"
               },
-              "reload": false
+              "reload": false,
+              "afterZone": {
+                "zone": "transferStep",
+                "stash": "importAfter"
+              }
             }
           ]
         }
@@ -1607,6 +1568,12 @@
           "tone": "info",
           "text": "This import was undone.",
           "when": "data.status.job.status == undone"
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "stash.importAfter",
+          "text": "{stash.importAfter}"
         },
         {
           "type": "list",

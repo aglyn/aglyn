@@ -2,6 +2,7 @@ package com.aglyn.shell
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
@@ -20,6 +21,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -61,11 +64,27 @@ fun AglynShell(
       com.aglyn.ui.LocalImageLoader provides services.imageLoader,
       com.aglyn.ui.LocalMediaPicker provides (com.aglyn.ui.LocalMediaPicker.current ?: services.mediaPicker),
       com.aglyn.ui.LocalFileExporter provides (com.aglyn.ui.LocalFileExporter.current ?: services.fileExporter),
+      com.aglyn.ui.LocalImageTransformer provides (com.aglyn.ui.LocalImageTransformer.current ?: platformImageTransformer()),
+      com.aglyn.ui.LocalVideoProbe provides (com.aglyn.ui.LocalVideoProbe.current ?: platformVideoProbe()),
     ) {
     val auth by services.auth.state.collectAsState()
+    val impersonation by services.auth.impersonation.collectAsState()
+    // A sign-up, sign-in, reset or verification link opens its own screen; any other link waits for the signed-in shell.
+    LaunchedEffect(pendingLink, auth is AuthState.SignedIn) {
+      val link = pendingLink ?: return@LaunchedEffect
+      val signedIn = auth is AuthState.SignedIn
+      val handled = services.authFlow.open(link, signedIn) { plan ->
+        services.workspace.state.value.org?.slug?.let { services.authFlow.landingLink = plan.destination(it) }
+      }
+      if (handled) onLinkOpened()
+    }
     when (val state = auth) {
       AuthState.Restoring -> Loading()
-      AuthState.SignedOut -> SignInScreen(services, autoSignIn)
+      AuthState.SignedOut -> SignedOutScreen(services, autoSignIn)
+      // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
+      is AuthState.SignedIn if services.authFlow.landing -> SignedOutScreen(services, autoSignIn)
+      // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
+      is AuthState.SignedIn if !state.user.emailVerified && impersonation == null -> VerifyEmailScreen(services, state.user.email)
       is AuthState.SignedIn -> SignedInShell(services, navigator, state.user.uid, pendingLink, onLinkOpened)
     }
     }
@@ -82,7 +101,19 @@ internal fun Loading() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, uid: String, pendingLink: String?, onLinkOpened: () -> Unit) {
-  LaunchedEffect(uid) { services.push.register(uid) }
+  val impersonation by services.auth.impersonation.collectAsState()
+  // A support session reads the customer's workspaces but never registers this device's notifications under their account.
+  LaunchedEffect(uid) { if (services.auth.impersonation.value == null) services.push.register(uid) }
+  // Entering or leaving a support session starts from home: nothing open belonged to the other person.
+  val supporting = impersonation != null
+  var wasSupporting by remember { mutableStateOf(supporting) }
+  LaunchedEffect(supporting) {
+    if (supporting != wasSupporting) {
+      wasSupporting = supporting
+      navigator.select(ShellNavigator.HOME)
+    }
+  }
+  val exitScope = rememberCoroutineScope()
   val workspace by services.workspace.state.collectAsState()
   val version by services.registry.version.collectAsState()
   val widthClass = currentWidthClass()
@@ -124,9 +155,22 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
   }
 
   LaunchedEffect(pendingLink, workspace.ready) {
-    if (pendingLink != null && workspace.ready) {
+    if (pendingLink != null && workspace.ready && !AuthFlow.isAuthLink(pendingLink)) {
       context.openLink(pendingLink)
       onLinkOpened()
+    }
+  }
+  // The first verified session of an account with no workspace creates the one its sign-up asked for; a new workspace with a
+  // plan lands on billing with it.
+  LaunchedEffect(uid, workspace.ready) { services.settleFirstRun(workspace) }
+  val landingLink = services.authFlow.landingLink
+  LaunchedEffect(landingLink, workspace.ready, workspace.org?.slug) {
+    val link = landingLink ?: return@LaunchedEffect
+    val slug = link.removePrefix("/").substringBefore('/')
+    if (workspace.ready && workspace.orgs.any { it.slug == slug }) {
+      workspace.orgs.firstOrNull { it.slug == slug }?.let { services.workspace.selectOrg(it.id) }
+      services.authFlow.landingLink = null
+      context.openLink(link)
     }
   }
 
@@ -152,6 +196,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     claims = claims,
     origin = services.config.consoleOrigin,
     reauthenticate = { password -> services.auth.signInWithEmail(user?.email.orEmpty(), password) },
+    impersonate = { token, tenantId -> services.auth.beginImpersonation(token, tenantId) },
     refreshClaims = { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull()) },
     openHostedPage = services.openHostedPage,
     back = { navigator.back() },
@@ -194,6 +239,8 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     Scaffold(
       containerColor = MaterialTheme.colorScheme.background,
       topBar = {
+        Column {
+        impersonation?.let { ImpersonationBanner(it, onExit = { exitScope.launch { services.auth.endImpersonation() } }) }
         TopAppBar(
           title = {
             if (route == null && navigator.top == ShellNavigator.HOME) {
@@ -216,6 +263,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
           },
           colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
         )
+        }
       },
     ) { padding ->
       Box(Modifier.padding(padding).fillMaxSize()) {

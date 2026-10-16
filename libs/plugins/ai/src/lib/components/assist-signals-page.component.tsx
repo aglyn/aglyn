@@ -47,6 +47,7 @@ import {
   freeTasteRefusals,
   kindTokenRows,
 } from '../usage/assist-signal-mining'
+import { money, percent, rankingFootnote } from '../usage/assist-signals-view'
 
 /** The month leaderboard as the route serves it beside the report. */
 interface AssistSpendLeaderboard {
@@ -94,12 +95,6 @@ interface AssistSpendLeaderboard {
  * draws the header, the breadcrumbs and the staff gate around this body, and
  * gives it the tab it had.
  */
-
-const money = (value: number) =>
-  `$${(Number(value) || 0).toFixed(Math.abs(Number(value) || 0) < 1 ? 4 : 2)}`
-
-const percent = (value: number | null) =>
-  value == null ? '—' : `${Math.round(value * 100)}%`
 
 /**
  * One cost breakdown — tier or model, dearest first (AGL-2340).
@@ -214,13 +209,11 @@ function RankingFootnote({
   /** Both forms: a fleet of one is the common case on a young install. */
   noun: { one: string; many: string }
 }) {
-  if (!total) return null
-  const counted = `${total.toLocaleString()} ${total === 1 ? noun.one : noun.many}`
+  const note = rankingFootnote(shown, total, noun)
+  if (!note) return null
   return (
     <Typography variant="caption" color="text.secondary">
-      {shown >= total
-        ? `Showing all ${counted}.`
-        : `Showing the top ${shown.toLocaleString()} of ${counted}. This is a ranking, not a page — what is past the cut is what it ranked lowest.`}
+      {note}
     </Typography>
   )
 }

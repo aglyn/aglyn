@@ -271,10 +271,12 @@ const PLUGIN_TOPICS = {
   connectOtherAccounting: '/commerce-and-bookings/commerce/connect-other-accounting-software',
   // The shipping settings card under the store's Settings (AGL-3612).
   shipping: '/commerce-and-bookings/commerce/shipping',
-  // The Carrier accounts, Your shipping accounts and Shipping labels cards,
-  // which draw nothing until the deployment holds a carrier provider
-  // (AGL-3777); the guide is unlisted until then.
-  carrierAccounts: '/commerce-and-bookings/commerce/carrier-accounts-and-labels',
+  // The Shipping labels and Carrier accounts cards on Shipping & delivery,
+  // and the Shipping labels card on Billing → Usage (AGL-3808). Listed with a
+  // Rolling out note: the cards draw nothing until a carrier platform exists.
+  shippingLabels: '/commerce-and-bookings/commerce/shipping-labels-and-live-rates',
+  // The Your shipping accounts card on Shipping & delivery (AGL-3808).
+  ownShippingAccounts: '/commerce-and-bookings/commerce/ship-with-your-own-easyship-sendcloud-or-shipperhq',
   // The Discounts and Coupons cards under Promotions (AGL-3714).
   discountsAndCoupons: '/commerce-and-bookings/commerce/discounts-and-coupons',
   // The Dropship suppliers card under the store's Settings (AGL-3714).
@@ -282,6 +284,10 @@ const PLUGIN_TOPICS = {
   // The Trustpilot and Yotpo Reviews cards under the store's Settings and
   // the order dialog's Review invitations section (AGL-3699).
   reviewPlatforms: '/commerce-and-bookings/commerce/review-platforms',
+  // The Help desks card on a site's Setup → Integrations (AGL-3824). Listed
+  // with a Rolling out note: the card draws nothing until the console holds
+  // HELP_DESKS_TOKEN_KEY.
+  helpDesks: '/commerce-and-bookings/commerce/help-desks',
   // The Tax service card under the store's Settings (AGL-3631).
   taxServices: '/commerce-and-bookings/commerce/tax-services',
   // The Print on demand card under the store's Settings, and its product and
@@ -331,11 +337,6 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   'connectQuickbooksOnline',
   'connectXero',
   'connectOtherAccounting',
-  // The Carrier accounts, Your shipping accounts and Shipping labels cards
-  // draw nothing until the deployment holds SHIPPO_API_TOKEN or
-  // EASYPOST_API_KEY with SHIPPING_TOKEN_KEY, the gate the guide waits on
-  // (AGL-3777).
-  'carrierAccounts',
   // The Couriers card, the order's Courier section and the queue's "Send a
   // courier" draw nothing until the console holds COURIERS_TOKEN_KEY, the gate
   // the guide waits on (AGL-3695).

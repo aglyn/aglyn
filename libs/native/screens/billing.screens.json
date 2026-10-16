@@ -580,7 +580,10 @@
         "datasets": {
           "query": {
             "collection": "orgs/{org.id}/datasets",
-            "count": true
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
           },
           "optional": true
         }
@@ -728,28 +731,40 @@
         "datasets": {
           "query": {
             "collection": "orgs/{org.id}/datasets",
-            "count": true
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
           },
           "optional": true
         },
         "contacts": {
           "query": {
             "collection": "orgs/{org.id}/contacts",
-            "count": true
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
           },
           "optional": true
         },
         "companies": {
           "query": {
             "collection": "orgs/{org.id}/companies",
-            "count": true
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
           },
           "optional": true
         },
         "deals": {
           "query": {
             "collection": "orgs/{org.id}/deals",
-            "count": true
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
           },
           "optional": true
         },
@@ -2062,42 +2077,60 @@
         "layouts": {
           "query": {
             "collection": "hosts/{params.siteId}/layouts",
-            "count": true
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
           },
           "optional": true
         },
         "variables": {
           "query": {
             "collection": "hosts/{params.siteId}/variables",
-            "count": true
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
           },
           "optional": true
         },
         "functions": {
           "query": {
             "collection": "hosts/{params.siteId}/functions",
-            "count": true
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
           },
           "optional": true
         },
         "forms": {
           "query": {
             "collection": "hosts/{params.siteId}/forms",
-            "count": true
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
           },
           "optional": true
         },
         "componentsAll": {
           "query": {
             "collection": "hosts/{params.siteId}/components",
-            "count": true
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            }
           },
           "optional": true
         },
         "componentsGone": {
           "query": {
             "collection": "hosts/{params.siteId}/components",
-            "count": true,
+            "aggregate": {
+              "count": true,
+              "rows": 1000
+            },
             "where": [
               [
                 "deletedAt",
