@@ -63,7 +63,7 @@ public struct ScreenSpec: Identifiable, Sendable {
     self.zones = json["zones"].arrayOfStrings
     self.cardSlot = json["cardSlot"]?.stringValue
     self.loads = json["load"].objectEntries.map { LoadSpec(key: $0.key, $0.value) }
-    self.blocks = json["blocks"].array.compactMap(BlockSpec.init)
+    self.blocks = BlockSpec.distinct(json["blocks"].array.compactMap(BlockSpec.init))
     self.hook = json["hook"]
     self.startAction = json["start"]?["action"]?.stringValue
     self.raw = json
@@ -195,7 +195,9 @@ public struct LoadSpec: Sendable, Hashable {
 
 /// One part of a screen.
 public struct BlockSpec: Sendable, Identifiable {
-  public let id: String
+  /// The block's `id`, else `type:title`; a repeat of an earlier block's gets `#2`, `#3` in spec order, so two untitled
+  /// notices shown at once are two views (and two list keys), not one drawn twice.
+  public internal(set) var id: String
   public let type: String
   public let title: String?
   public let footer: String?
@@ -213,6 +215,18 @@ public struct BlockSpec: Sendable, Identifiable {
   }
 
   public subscript(key: String) -> JSONValue? { raw[key] }
+
+  /// The blocks with every id unique: a repeated one is numbered after its first.
+  static func distinct(_ blocks: [BlockSpec]) -> [BlockSpec] {
+    var seen: [String: Int] = [:]
+    return blocks.map { block in
+      var block = block
+      let count = (seen[block.id] ?? 0) + 1
+      seen[block.id] = count
+      if count > 1 { block.id += "#\(count)" }
+      return block
+    }
+  }
 }
 
 /// A route call a button, row or form makes.

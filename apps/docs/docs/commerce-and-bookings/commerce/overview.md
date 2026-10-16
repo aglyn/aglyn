@@ -288,7 +288,9 @@ snapshots, totals, and a timeline:
   either.
 - **Draft orders**: build an order in the console and send the buyer a
   payment link (Shopify parity). Requires an active plan with commerce — see
-  the note below.
+  the note below — and a connected Stripe account, since the buyer pays on a
+  Stripe page. Without one, the **Draft order** dialog says so and links to
+  **Payments**.
 
 ### The Orders page {#orders-screen}
 

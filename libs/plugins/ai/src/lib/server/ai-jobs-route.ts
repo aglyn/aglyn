@@ -88,6 +88,13 @@ async function reportJobFault(what: string, error: unknown): Promise<void> {
  * caller gets the job document, and the events route is how it watches
  * from there.
  *
+ * `POST` with `check: true` climbs the same ladder and asks the same
+ * admission, then hands the reservation back and creates nothing: a 200
+ * with `ok` true, or the refusal the create would have answered. "Create site"
+ * asks it before it makes the site a guided start builds on (AGL-3859), so
+ * a start that would be refused, or that asks for the Free go-ahead, leaves
+ * no empty site behind. A checked job may name no site yet.
+ *
  * `GET` lists the org's jobs, newest first, through the read gate: the
  * same rungs up to the lockdown verdict, no reservation. A job naming a
  * site that no longer exists is left out, so a page can come back shorter
@@ -223,6 +230,8 @@ export async function POST(request: Request): Promise<Response> {
   // A Free start past what is left, which the person chose to build as far as
   // it goes (AGL-3722): the prompt they confirmed, kept on the job.
   let confirmedCredits: AiCreditsPrompt | null = null
+  // Asked before the site exists (AGL-3859): answers, creates nothing.
+  const check = (payload as Record<string, unknown> | null)?.['check'] === true
   try {
     // A site that switched AI off first (AGL-3028), then the kind's own check.
     refusal =
@@ -235,6 +244,7 @@ export async function POST(request: Request): Promise<Response> {
         firestore: gate.firestore,
         orgId: gate.orgId,
         hostId: parsed.hostId,
+        siteToCome: check && !parsed.hostId,
         inputs: parsed.inputs,
         org: gate.org,
         uid: gate.uid,
@@ -261,6 +271,13 @@ export async function POST(request: Request): Promise<Response> {
       { error: refusal.error, ...(refusal.code ? { code: refusal.code } : {}), ...(refusal.credits ? { credits: refusal.credits } : {}) },
       { status: refusal.status },
     )
+  }
+  if (check) {
+    // Admitted, and nothing to run: the reservation goes back.
+    await releaseAssistMessage(gate.firestore, gate.orgId, gate.reservation).catch(
+      () => undefined,
+    )
+    return Response.json({ ok: true }, { status: 200 })
   }
 
   const now = new Date()

@@ -89,6 +89,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
   return {
     useFirestore: () => ({}),
     useOrgPlan: () => mockOrgPlan,
+    useMerchantPayments: () => ({ state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }),
     useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
     // The real builder, through the mocked markers, so the ordering a
     // ceilinged read carries stays visible to the assertions.

@@ -129,6 +129,10 @@ const DELIBERATE_NON_DOORS = [
     why: 'the second half of ONE sign-in — the person already signed in on the auth host, which counted it; counting here would double every workspace-subdomain login',
   },
   {
+    file: 'apps/console/app/auth/besigner/page.tsx',
+    why: 'the native apps\' Besigner web view adopting the session the app is already signed in with (AGL-3850); the person signed in once, in the app',
+  },
+  {
     file: 'apps/console/components/session-reauth-dialog.component.tsx',
     why: 'a re-prompt inside a session that is already signed in, not a new sign-in',
   },

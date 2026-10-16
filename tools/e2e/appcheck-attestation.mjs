@@ -116,26 +116,52 @@ async function main() {
   const end = new Date()
   const start = new Date(end.getTime() - WINDOW_HOURS * 3600_000)
   const iso = (d) => d.toISOString().replace(/\.\d+Z$/, 'Z')
-  const query = new URLSearchParams({
-    filter: `metric.type="${METRIC}"`,
-    'interval.startTime': iso(start),
-    'interval.endTime': iso(end),
-    // One bucket over the whole window: the verdict wants totals, not a shape.
-    'aggregation.alignmentPeriod': `${WINDOW_HOURS * 3600}s`,
-    'aggregation.perSeriesAligner': 'ALIGN_SUM',
-  })
 
-  const res = await fetch(
-    `https://monitoring.googleapis.com/v3/projects/${sa.projectId}/timeSeries?${query}`,
-    {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(30_000),
-    },
-  )
-  if (!res.ok) {
-    throw new Error(`timeSeries answered ${res.status}`)
+  /**
+   * Five-minute buckets, summed here, and only the buckets that START inside
+   * the window.
+   *
+   * Not one six-hour bucket. Measured 2026-10-16: a single `ALIGN_SUM` bucket
+   * over this DELTA metric went on reporting all 61 denials of a 02:24–03:49Z
+   * burst for every hourly sample from 08:27 to 13:27Z, while the true count
+   * inside each window was 2. The burst stayed in the reading until the LAST
+   * denial aged out, and the journeys door stayed red for eleven hours over a
+   * two-hour event. The same query re-run afterwards returns 2, so the
+   * server's single-bucket answer cannot be trusted while the data is fresh.
+   * A bucket whose own interval is printed in the response can be checked,
+   * so the window is enforced on our side.
+   */
+  const series = []
+  let pageToken = ''
+  do {
+    const query = new URLSearchParams({
+      filter: `metric.type="${METRIC}"`,
+      'interval.startTime': iso(start),
+      'interval.endTime': iso(end),
+      'aggregation.alignmentPeriod': '300s',
+      'aggregation.perSeriesAligner': 'ALIGN_SUM',
+      ...(pageToken ? { pageToken } : {}),
+    })
+    const res = await fetch(
+      `https://monitoring.googleapis.com/v3/projects/${sa.projectId}/timeSeries?${query}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(30_000),
+      },
+    )
+    if (!res.ok) {
+      throw new Error(`timeSeries answered ${res.status}`)
+    }
+    const page = await res.json()
+    series.push(...(page.timeSeries ?? []))
+    pageToken = page.nextPageToken ?? ''
+  } while (pageToken)
+
+  const insideWindow = (point) => {
+    const startedMs = Date.parse(point.interval?.startTime ?? '')
+    const endedMs = Date.parse(point.interval?.endTime ?? '')
+    return startedMs >= start.getTime() - 1_000 && endedMs <= end.getTime() + 1_000
   }
-  const body = await res.json()
 
   /**
    * Flattened to what the verdict grades, and nothing else.
@@ -145,17 +171,16 @@ async function main() {
    * question is a rate, not an audience.
    */
   const samples = []
-  for (const series of body.timeSeries ?? []) {
-    const labels = series.metric?.labels ?? {}
-    const count = (series.points ?? []).reduce(
-      (sum, point) => sum + Number(point.value?.int64Value ?? 0),
-      0,
-    )
+  for (const one of series) {
+    const labels = one.metric?.labels ?? {}
+    const count = (one.points ?? [])
+      .filter(insideWindow)
+      .reduce((sum, point) => sum + Number(point.value?.int64Value ?? 0), 0)
     if (!count) continue
     samples.push({
       result: labels.result,
       security: labels.security,
-      service: series.resource?.labels?.service_id ?? labels.service_id,
+      service: one.resource?.labels?.service_id ?? labels.service_id,
       count,
     })
   }

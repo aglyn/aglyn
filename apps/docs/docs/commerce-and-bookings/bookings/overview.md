@@ -44,7 +44,8 @@ book: each service's length, price and the weekly hours it is offered in.
 
 1. Select **Add service** and enter its **Name**, **Duration (minutes)** and
    **Price** (`0` is free). A paid service needs Stripe connected first (see
-   above); **Show the price as** offers a label such as a free estimate instead
+   above); until it is, the dialog warns that visitors can't book it and links
+   to **Payments**. **Show the price as** offers a label such as a free estimate instead
    — see [Price labels](#price-labels).
 2. Choose the service's **Timezone**. Under **Weekly availability**, switch on
    each day slots are offered and pick the **From** and **To** times; select

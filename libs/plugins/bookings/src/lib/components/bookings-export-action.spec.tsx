@@ -28,6 +28,7 @@ import type { ReactNode } from 'react'
 import BookingsConsolePage from './bookings-console-page'
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useMerchantPayments: () => ({ state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }),
   useFirestore: () => ({}),
   useFirestoreCollection: () => ({
     data: [],

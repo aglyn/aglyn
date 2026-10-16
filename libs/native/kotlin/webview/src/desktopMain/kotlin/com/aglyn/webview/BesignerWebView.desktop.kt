@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import com.aglyn.core.AuthSession
 import com.aglyn.core.defaultHttpClient
+import com.aglyn.pluginhost.BesignerEntry
 import com.aglyn.pluginhost.BesignerPaths
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
@@ -80,7 +81,7 @@ actual fun BesignerWebView(
         Button(onClick = { runCatching { Desktop.getDesktop().browse(URI(WEBVIEW2_RUNTIME_DOWNLOAD)) } }) { Text("Get WebView2 from Microsoft") }
       },
     )
-    else -> WebView2Besigner(origin, path, auth, brandName, onConsoleLink, bridge)
+    else -> WebView2Besigner(origin, path, auth, brandName, onExit, onConsoleLink, bridge)
   }
 }
 
@@ -90,11 +91,13 @@ private fun WebView2Besigner(
   path: String,
   auth: AuthSession,
   brandName: String,
+  onExit: () -> Unit,
   onConsoleLink: (path: String) -> Unit,
   bridge: ConsoleBridge?,
 ) {
   val scope = rememberCoroutineScope()
   val leave by rememberUpdatedState(onConsoleLink)
+  val exit by rememberUpdatedState(onExit)
   var error by remember(path) { mutableStateOf<String?>(null) }
   var ready by remember(path) { mutableStateOf(false) }
   val nonce = remember { createBridgeNonce() }
@@ -103,21 +106,32 @@ private fun WebView2Besigner(
   }
   var view by remember { mutableStateOf<WebView2View?>(null) }
 
+  // The editor the view shows, and whether it has handed the person back to the app (AGL-3850).
+  val current = remember(path) { arrayOf(path) }
+  val left = remember(path) { booleanArrayOf(false) }
+
+  /** Acts on where a navigation leads; answers whether the view may show it. Runs on the WebView2 thread. */
+  fun route(uri: String): NavigationVerdict {
+    if (left[0]) return NavigationVerdict.CANCEL
+    when (val next = besignerNavigation(uri, origin, current[0])) {
+      BesignerNavigation.Stay -> {
+        val shown = consolePathOf(uri)
+        if (!shown.startsWith(BesignerEntry.PATH)) current[0] = shown
+        return NavigationVerdict.ALLOW
+      }
+      BesignerNavigation.Leave -> { left[0] = true; scope.launch { exit() } }
+      is BesignerNavigation.Native -> { left[0] = true; scope.launch { leave(next.path) } }
+      BesignerNavigation.SessionEnded -> scope.launch { error = "Your session ended. Open the Besigner again to keep editing." }
+      BesignerNavigation.External -> runCatching { Desktop.getDesktop().browse(URI(uri)) }
+    }
+    return NavigationVerdict.CANCEL
+  }
+
   val listener = remember(origin, bridge) {
     WebView2Listener(
-      onNavigation = { uri ->
-        when (val next = besignerNavigation(uri, origin)) {
-          BesignerNavigation.Stay -> NavigationVerdict.ALLOW
-          is BesignerNavigation.Native -> {
-            scope.launch { leave(next.path) }
-            NavigationVerdict.CANCEL
-          }
-          BesignerNavigation.External -> {
-            runCatching { Desktop.getDesktop().browse(URI(uri)) }
-            NavigationVerdict.CANCEL
-          }
-        }
-      },
+      onNavigation = { uri -> route(uri) },
+      // A client-side route change cannot be cancelled; leaving the editor still returns to the app.
+      onSourceChanged = { uri -> if (isTrustedUrl(uri, listOf(origin))) route(uri) },
       onMessage = { source, data ->
         val offered = bridge ?: return@WebView2Listener
         when (val parsed = parseBridgeMessage(data, source, listOf(origin), nonce, offered.handlers.keys.toList())) {
@@ -168,7 +182,9 @@ private fun WebView2Besigner(
             })
             scope.launch {
               val cookies = signInCookies(origin, auth, brandName)
-              if (cookies == null) error = "Sign in to continue." else cookies.fold({ made.start(origin.trimEnd('/') + path, it) }, { error = it.message })
+              // The entry page signs the view in from the cookies, then opens the editor (AGL-3850).
+              val entry = BesignerEntry.url(origin, path)
+              if (cookies == null || entry == null) error = "Sign in to continue." else cookies.fold({ made.start(entry, it) }, { error = it.message })
             }
           }
 
