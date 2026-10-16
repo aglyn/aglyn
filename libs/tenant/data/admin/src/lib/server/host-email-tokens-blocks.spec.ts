@@ -122,8 +122,9 @@ describe('renderHostEmailWithTokens and a placed header (AGL-3287)', () => {
       { name: 'Alex' },
     )
     expect(rendered?.html).toContain(
-      'Acme header: Your booking — write to help@northwind.example',
+      'Acme header: Your booking — write to <a href="mailto:help@northwind.example"',
     )
+    expect(rendered?.html).toContain('help@northwind.example</a>')
     expect(rendered?.html).toContain('Hi Alex, see you soon.')
     expect(rendered?.text).toContain('Acme header: Your booking')
     expect(rendered?.subject).toBe('Booked, Alex')
