@@ -118,6 +118,9 @@ private class Gated(val action: ActionSpec, val scope: JsonElement, val spec: Sc
  * skeleton, empty and error states, and every action with its confirmation,
  * inputs, re-auth and result. Twin of the Apple `SpecScreenView`.
  */
+/** Whether a notice in [tone] stays until dismissed: a refusal or a warning has to be read, a success need not be. */
+internal fun noticeStays(tone: StatusTone): Boolean = tone == StatusTone.ERROR || tone == StatusTone.WARNING
+
 @Composable
 fun SpecScreen(
   spec: ScreenSpec,
@@ -203,11 +206,15 @@ private fun SpecBodyContent(
   var refreshing by remember { mutableStateOf(false) }
   val context = model.context
 
+  // A success reads and goes; a refusal or a warning stays until it is dismissed or the next action replaces it.
   fun show(text: String, tone: StatusTone) {
-    notice = text to tone
-    scope.launch {
-      delay(4000)
-      if (notice?.first == text) notice = null
+    val shown = text to tone
+    notice = shown
+    if (!noticeStays(tone)) {
+      scope.launch {
+        delay(4000)
+        if (notice === shown) notice = null
+      }
     }
   }
 
@@ -216,6 +223,7 @@ private fun SpecBodyContent(
   }
 
   suspend fun execute(action: ActionSpec, actionScope: JsonElement, afterGate: Boolean = false) {
+    notice = null
     action.exportRequest(actionScope)?.let {
       exportDialog = it
       return
@@ -363,7 +371,14 @@ private fun SpecBodyContent(
           contentPadding = androidx.compose.foundation.layout.PaddingValues(space(2f)),
         ) {
           notice?.let { (text, tone) ->
-            item("notice") { NoticeBanner(text, tone, Modifier.widthIn(max = 840.dp).fillMaxWidth().testTag("spec-notice")) }
+            item("notice") {
+              NoticeBanner(
+                text,
+                tone,
+                Modifier.widthIn(max = 840.dp).fillMaxWidth().testTag("spec-notice"),
+                action = { TextButton(onClick = { notice = null }, Modifier.testTag("spec-notice-dismiss")) { Text("Dismiss") } },
+              )
+            }
           }
           if (actions.isNotEmpty()) {
             item("actions") {

@@ -37,6 +37,7 @@ import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.Busy
 import com.aglyn.ui.ChipOption
@@ -174,6 +175,8 @@ fun SequenceDetail(context: NativePluginContext, api: OutreachApi, sequenceId: S
   val busy = remember { Busy() }
   LaunchedEffect(enrollments) { enrollments.show { enrollmentsQuery(api.orgId, sequenceId, it) } }
   val value = doc
+  // A deleted one closes its detail.
+  CloseWhenGone(if (gone) false else (value as? Live.Ready)?.let { it.value != null })
   if (gone || (value is Live.Ready && value.value == null)) {
     EmptyState("This sequence is gone", icon = AglynIcons.named("timeline"))
     return
