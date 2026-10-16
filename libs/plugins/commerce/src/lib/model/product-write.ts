@@ -122,6 +122,40 @@ export function productEditWrite(
   }
 }
 
+/** A duplicate's name: the source's, marked as a copy. */
+export function productDuplicateName(name: string): string {
+  return `${name} (copy)`
+}
+
+/** The slug a duplicate starts from, before the store is asked which are taken. */
+export function productDuplicateSlugBase(slug: string | undefined, name: string): string {
+  return commerceSlug(`${slug || commerceSlug(name)}-copy`)
+}
+
+/**
+ * What Duplicate writes (the products list's Duplicate, AGL-3321): the source
+ * as a draft under the copy's name, with the COPY's search keys (spreading the
+ * source's would sort and find it by the source's name) and stock fields, and
+ * not the source's SKU and barcode keys, which are derived again from its
+ * variants. The caller adds the claimed `slug`'s smart-collection membership.
+ */
+export function productDuplicateFields(
+  product: HostProduct & { $id?: string; skus?: string[]; barcodes?: string[] },
+  slug: string,
+  nowMs: number,
+) {
+  const { $id: _sourceId, skus: _skus, barcodes: _barcodes, ...copy } = product
+  return {
+    ...copy,
+    ...productSearchFields({ name: productDuplicateName(product.name), variants: product.variants }),
+    ...productStockFields(product),
+    slug,
+    status: 'draft' as const,
+    createdAtMs: nowMs,
+    updatedAtMs: nowMs,
+  }
+}
+
 /** A smart collection as `hosts/{hostId}/collections` stores it, as the membership rules read it. */
 export function smartCollectionRulesOf(id: string, data: Record<string, unknown>): SmartCollectionRules {
   return {

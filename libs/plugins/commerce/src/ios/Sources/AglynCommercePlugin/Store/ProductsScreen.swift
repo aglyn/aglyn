@@ -18,6 +18,7 @@ struct ProductsScreen: View {
   @State private var created: String?
   @State private var selection: ProductRow.ID?
   @State private var searchText = ""
+  @State private var quota = ProductQuotaModel()
 
   var body: some View {
     WideLayoutReader { wide in
@@ -49,8 +50,9 @@ struct ProductsScreen: View {
         } label: {
           Label("New product", systemImage: "plus")
         }
+        .disabled(!quota.hasRoom)
         .accessibilityIdentifier("new-product")
-        .help("Add a product to this site")
+        .help(quota.hasRoom ? "Add a product to this site" : "Your plan includes \(Int(quota.limit ?? 0)) products — upgrade for more")
       }
       ToolbarItem(placement: .primaryAction) {
         Button {
@@ -60,8 +62,23 @@ struct ProductsScreen: View {
         }
         .help("Find a product by its barcode or SKU")
       }
+      if canImportProducts(context) {
+        ToolbarItem(placement: .secondaryAction) {
+          // The console's Import beside Add product: the data transfer hub's import, for this site's products.
+          Button {
+            context.navigate(coreDataImportScreen, productsImportParams(hostID: context.hostID))
+          } label: {
+            Label("Import", systemImage: "square.and.arrow.down")
+          }
+          .accessibilityIdentifier("import-products")
+          .help("Import products from a CSV or spreadsheet file")
+        }
+      }
     }
-    .task(id: context.hostID) { model.start(context.firestore, hostID: context.hostID) }
+    .task(id: context.hostID) {
+      model.start(context.firestore, hostID: context.hostID)
+      await quota.load(context)
+    }
     .onAppear { if startNew, creating == nil, created == nil { creating = .creating() } }
     .onDisappear { model.stop() }
     .sheet(item: $creating) { editor in
@@ -79,20 +96,43 @@ struct ProductsScreen: View {
         ForEach(ContractValues.shared.productListOptions["status"] ?? [], id: \.value) { option in
           AglynChoiceChip(option.label, selected: model.status == option.value) { model.status = option.value }
         }
+        ListSortMenu(sorts: ContractValues.shared.productListQuery.sorts, selected: model.sort) { model.sort = $0 }
       }
       .padding(.horizontal, AglynSpace.two)
       .padding(.vertical, AglynSpace.one)
     }
   }
 
+  /// Any filter the console's grid takes: name, status, type, slug, SKU, barcode.
+  private var filters: some View {
+    ClauseFilterBar(
+      fields: ContractValues.shared.productListQuery.fields, headers: ContractValues.shared.productListHeaders,
+      choices: filterChoices(ContractValues.shared.productListOptions), clauses: model.clauses,
+      refused: model.plan.map { filterRefusals($0, clauses: model.clauses) } ?? [], notices: model.plan?.notices ?? []
+    ) { model.clauses = $0 }
+    .padding(.horizontal, AglynSpace.two)
+  }
+
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       chips
+      filters
+      ProductsZone(context: context, slot: commerceProductsCreateSlot)
+      ProductsZone(context: context, slot: commerceProductsHubSlot)
       if created != nil {
         AglynNotice("Product added.", tone: .success) { created = nil }
           .padding(.horizontal, AglynSpace.two)
       }
+      // Products listed before they have a price (AGL-3676): the one step left before the store sells them.
+      if let notice = comingSoonNotice(model.rows.filter { $0.status == "active" && $0.priceMissing }.map(\.name)) {
+        AglynNotice(notice, tone: .info).padding(.horizontal, AglynSpace.two)
+      }
       content(selectable: selectable)
+      // The cap, standing rather than only on refusal (AGL-2113).
+      AglynQuotaReadout(ready: quota.ready, used: quota.used, limit: quota.limit, noun: "product")
+        .padding(.horizontal, AglynSpace.two)
+        .padding(.vertical, AglynSpace.one)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     .background(AglynColor.page)
   }
@@ -184,6 +224,11 @@ struct ProductDetailView: View {
   @State private var model = ProductModel()
   @State private var editing: ProductEditorModel?
   @State private var adjusting = false
+  @State private var labels: [ProductLabelRow]?
+  @State private var keys = false
+  @State private var deleting = false
+  @State private var working = false
+  @State private var notice: (text: String, tone: AglynTone)?
 
   var body: some View {
     Group {
@@ -235,9 +280,68 @@ struct ProductDetailView: View {
           .disabled(row.item.variants.isEmpty)
           .accessibilityIdentifier("adjust-stock")
         }
+        ToolbarItem(placement: .secondaryAction) {
+          Button {
+            Task { await duplicate() }
+          } label: {
+            Label("Duplicate", systemImage: "plus.square.on.square")
+          }
+          .disabled(working)
+          .accessibilityIdentifier("product-duplicate")
+        }
+        ToolbarItem(placement: .secondaryAction) {
+          Button {
+            Task { await setStatus(doc, row, row.status == "archived" ? "active" : "archived") }
+          } label: {
+            Label(row.status == "archived" ? "Activate" : "Archive", systemImage: row.status == "archived" ? "tray.and.arrow.up" : "archivebox")
+          }
+          .disabled(working)
+          .accessibilityIdentifier("product-archive")
+        }
+        if row.type == "digital" {
+          ToolbarItem(placement: .secondaryAction) {
+            Button {
+              keys = true
+            } label: {
+              Label("Keys", systemImage: "key")
+            }
+            .accessibilityIdentifier("product-keys")
+          }
+        }
+        ToolbarItem(placement: .secondaryAction) {
+          Button(role: .destructive) {
+            deleting = true
+          } label: {
+            Label("Delete", systemImage: "trash")
+          }
+          .disabled(working)
+          .accessibilityIdentifier("product-delete")
+        }
+        if row.type == "physical" {
+          ToolbarItem(placement: .secondaryAction) {
+            // Shelf labels with a barcode the register scans back (the console's Labels).
+            Button {
+              labels = productLabelRows(JSONValue.from(doc.data))
+            } label: {
+              Label("Labels", systemImage: "barcode")
+            }
+            .accessibilityIdentifier("product-labels")
+          }
+        }
       }
     }
     .sheet(item: $editing) { editor in ProductEditorSheet(context: context, model: editor) }
+    .sheet(isPresented: Binding(get: { labels != nil }, set: { if !$0 { labels = nil } })) {
+      ProductLabelsSheet(productName: model.row?.name ?? "Product", rows: labels ?? [])
+    }
+    .sheet(isPresented: $keys) {
+      ProductKeysSheet(context: context, productID: productID, productName: model.row?.name ?? "Product")
+    }
+    .confirmationDialog("Delete this product?", isPresented: $deleting, titleVisibility: .visible) {
+      Button("Delete", role: .destructive) { Task { await delete() } }
+    } message: {
+      Text("\"\(model.row?.name ?? "This product")\" stops being purchasable; blocks referencing it show a checkout error until repointed.")
+    }
     .sheet(isPresented: $adjusting) {
       if let row = model.row { StockAdjustSheet(context: context, row: row) }
     }
@@ -249,6 +353,7 @@ struct ProductDetailView: View {
 
   private func form(_ row: ProductRow) -> some View {
     Form {
+      if let notice { AglynNotice(notice.text, tone: notice.tone) { self.notice = nil } }
       Section {
         if let image = row.item.imageURL.flatMap(URL.init(string:)) {
           AsyncImage(url: image) { phase in
@@ -295,4 +400,62 @@ struct ProductDetailView: View {
     .formStyle(.grouped)
     .aglynListBackground()
   }
+}
+
+extension ProductDetailView {
+  fileprivate func duplicate() async {
+    guard let hostID = context.hostID else { return }
+    working = true
+    defer { working = false }
+    do {
+      let id = try await duplicateProduct(api: context.api, hostID: hostID, productID: productID, newProductID: createResourceUID(length: 20))
+      notice = ("Product duplicated as draft", .success)
+      context.navigate(commerceProductScreen, ["productId": id])
+    } catch {
+      notice = (productWriteProblem(error).errorDescription ?? "Could not duplicate product", .warning)
+    }
+  }
+
+  fileprivate func setStatus(_ doc: FirestoreDocument, _ row: ProductRow, _ status: String) async {
+    guard let hostID = context.hostID else { return }
+    working = true
+    defer { working = false }
+    do {
+      try await ConsoleProductWriteAPI(api: context.api).save(
+        hostID: hostID, productID: productID, create: false, product: productStatusSaveJSON(doc.data, status: status),
+        attemptKey: UUID().uuidString)
+      // A product with a variant nobody has priced may go live (AGL-3676): the owner is told, not stopped.
+      notice = status == "active" && row.priceMissing ? (activatingUnpricedNotice(row.name), .info) : nil
+    } catch {
+      notice = (productWriteProblem(error).errorDescription ?? "The product could not be saved", .error)
+    }
+  }
+
+  fileprivate func delete() async {
+    guard let hostID = context.hostID else { return }
+    working = true
+    defer { working = false }
+    do {
+      try await deleteProduct(api: context.api, hostID: hostID, productID: productID)
+      notice = ("Product deleted", .success)
+    } catch {
+      notice = (productWriteProblem(error).errorDescription ?? "Could not delete product", .error)
+    }
+  }
+}
+
+/// The data transfer hub's import screen (core), which the products list's Import opens.
+let coreDataImportScreen = "core.settings.data.import"
+
+/// The import screen's parameters for this site's products, as the console's Import names its target.
+func productsImportParams(hostID: String?) -> NativeParams {
+  var params: NativeParams = ["resource": "commerce.products", "title": "Import products"]
+  if let hostID { params["hostId"] = hostID }
+  return params
+}
+
+/// Who may import: the import screen's own gate (a workspace owner or admin, or staff), as the console offers Import
+/// only to whom the transfer route takes it from.
+func canImportProducts(_ context: NativePluginContext) -> Bool {
+  context.hostID != nil && (context.orgRole == "owner" || context.orgRole == "admin" || context.staff != nil)
 }

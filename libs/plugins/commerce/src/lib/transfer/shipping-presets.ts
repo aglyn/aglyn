@@ -106,3 +106,31 @@ export const ORDER_SHIPPING_PRESETS: readonly TransferResourcePreset[] = [
   EASYPOST_ORDER_PRESET,
   GENERIC_SHIPPING_ORDER_PRESET,
 ]
+
+/** One of the shipping exports as the apps list it: the preset's id, its name and what it is for. */
+export interface ShippingPresetChoice {
+  id: string
+  label: string
+  description?: string
+}
+
+/** The shipping exports the orders list's "Export for shipping" offers, as the apps list them. */
+export const ORDER_SHIPPING_PRESET_CHOICES: readonly ShippingPresetChoice[] = ORDER_SHIPPING_PRESETS.map(
+  ({ id, label, description }) => ({ id, label, ...(description ? { description } : {}) }),
+)
+
+/** What the shipping export's filter is called in "The current filter: …". */
+export const ORDERS_TO_SHIP_FILTER_LABEL = 'orders still to ship'
+
+/**
+ * The orders still to ship (AGL-3613): paid or partly fulfilled orders that
+ * need shipping, newest first, as the orders resource's `readPage` reads a
+ * filter.
+ */
+export const ORDERS_TO_SHIP_FILTER_VALUE: unknown = {
+  filters: [
+    { path: 'requiresShipping', op: '==', value: true },
+    { path: 'status', op: 'in', value: ['paid', 'partially_fulfilled'] },
+  ],
+  orderBy: { path: 'createdAtMs', direction: 'desc' },
+}

@@ -45,8 +45,20 @@ private class RecordingApi(var failWith: Throwable? = null, var verdict: String 
     calls += call
     failWith?.let { throw it }
   }
-  override suspend fun fulfill(orderId: String, carrier: String?, trackingNumber: String?, notify: Boolean, attemptKey: String) =
-    record("fulfill $orderId $carrier $trackingNumber $notify $attemptKey")
+  override suspend fun fulfill(orderId: String, request: FulfillItemsRequest, attemptKey: String): String {
+    record("fulfill $orderId ${request.lineItems} ${request.carrier} ${request.trackingNumber} ${request.shippingCostCents} ${request.notify} $attemptKey")
+    return "Order fulfilled"
+  }
+  override suspend fun updateTracking(orderId: String, fulfillmentId: String, carrier: String, trackingNumber: String, trackingUrl: String): String {
+    record("tracking $orderId $fulfillmentId $carrier $trackingNumber $trackingUrl")
+    return "Tracking updated"
+  }
+  override suspend fun cancelShipment(orderId: String, fulfillmentId: String): String {
+    record("cancel-shipment $orderId $fulfillmentId")
+    return "Shipment canceled"
+  }
+  override suspend fun refundLines(orderId: String, lineItemIds: List<Int>, attemptKey: String) = record("refund-lines $orderId $lineItemIds $attemptKey")
+  override suspend fun storeCurrency() = "USD"
   override suspend fun markDelivered(orderId: String) = record("delivered $orderId")
   override suspend fun refund(orderId: String, amountCents: Long?, attemptKey: String) = record("refund $orderId $amountCents $attemptKey")
   override suspend fun cancel(orderId: String) = record("cancel $orderId")
@@ -153,7 +165,43 @@ class OrdersTest {
     assertFalse(detail.actions.cancel)
     val shipment = detail.shipments.single()
     assertEquals("2× Mug", shipment.summary)
-    assertNull(shipment.trackingUrl, "only an https tracking link is offered")
+    assertEquals("USPS", shipment.carrier)
+    assertEquals(
+      "https://tools.usps.com/go/TrackConfirmAction?tLabels=9400",
+      shipment.trackingUrl,
+      "an http link is not offered; the carrier's own https tracker is, as the console's list links it",
+    )
+    assertTrue(shipment.active)
+    assertTrue(shipment.editable, "a fulfilled order's shipments may still be edited or canceled")
+  }
+
+  @Test
+  fun aCanceledShipmentStaysListedAndADeliveredOrderIsHistory() {
+    val shipped = mapOf("id" to "f1", "atMs" to 5L, "lineItemIds" to listOf(0L), "status" to "cancelled")
+    val canceled = orderDetail(orderDoc("o1", "status" to "paid", "lineItems" to listOf(line(2)), "fulfillments" to listOf(shipped))).shipments.single()
+    assertFalse(canceled.active)
+    assertFalse(canceled.editable)
+    val delivered = orderDetail(
+      orderDoc("o1", "status" to "delivered", "lineItems" to listOf(line(2)), "fulfillments" to listOf(mapOf("id" to "f1", "atMs" to 5L, "lineItemIds" to listOf(0L)))),
+    ).shipments.single()
+    assertTrue(delivered.active)
+    assertFalse(delivered.editable)
+  }
+
+  @Test
+  fun fulfillItemsSendsTheConsolesBody() {
+    val body = fulfillItemsBody(
+      FulfillItemsRequest(listOf(com.aglyn.contracts.FulfillmentLine(0, 1)), " UPS ", "1Z1", "", 850, notify = false),
+    ).filter { it.second != null }.toMap()
+    assertEquals("fulfilled", body["to"])
+    assertEquals("UPS", body["carrier"])
+    assertEquals("1Z1", body["trackingNumber"])
+    assertEquals(850L, body["shippingCostCents"])
+    assertEquals(false, body["notify"])
+    assertNull(body["trackingUrl"])
+    assertEquals("""[{"lineItemId":0,"quantity":1}]""", body["lineItems"].toString())
+    val everything = fulfillItemsBody(FulfillItemsRequest()).filter { it.second != null }.toMap()
+    assertEquals(setOf("to"), everything.keys, "everything left, no tracking, notify on: the route needs only the status")
   }
 
   @Test
@@ -165,9 +213,9 @@ class OrdersTest {
   }
 
   @Test
-  fun aDigitalOnlyOrderHasNothingToShip() {
+  fun aDigitalOnlyOrderIsFulfilledInOneStepAsTheConsoleDoes() {
     val detail = orderDetail(orderDoc("o1", "status" to "paid", "lineItems" to listOf(line(1, "digital")), "totals" to mapOf("totalCents" to 900L)))
-    assertFalse(detail.actions.fulfill)
+    assertTrue(detail.actions.fulfill, "the console's Fulfill items starts a digital-only order's lines full")
   }
 
   @Test

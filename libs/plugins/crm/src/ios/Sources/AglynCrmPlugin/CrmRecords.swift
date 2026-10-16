@@ -82,6 +82,17 @@ struct CrmFilter: Identifiable, Equatable {
   var clauses: [ListFilterRequest] = []
 }
 
+/// The query param the Contacts list opens one person by (`CONTACTS_LIST_EMAIL_PARAM`).
+let contactsListEmailParam = "email"
+let contactEmailFilterID = "email"
+
+/// The Contacts list narrowed to one address, as `contactsListSeed` narrows it; nil for no address or not one.
+func contactEmailFilter(_ raw: String?) -> CrmFilter? {
+  let email = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+  guard email.contains("@"), email.count <= 320 else { return nil }
+  return CrmFilter(id: contactEmailFilterID, label: email, clauses: [ListFilterRequest(field: "email", op: "equals", value: email)])
+}
+
 func facetKeyValue(_ value: String) -> String {
   String(value.trimmingCharacters(in: .whitespacesAndNewlines).split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased().prefix(120))
 }

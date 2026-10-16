@@ -18,6 +18,13 @@
 
 import * as CommerceModel from '../../model'
 import {
+  FULFILLMENT_OTHER_CARRIER,
+  fulfillItemsIsEverything,
+  fulfillItemsSelection,
+  fulfillItemsStartQuantities,
+  fulfillmentCarrierChoice,
+} from '../../model/order-dialog'
+import {
   Button,
   Checkbox,
   Chip,
@@ -49,7 +56,7 @@ import type {
  */
 
 /** The carrier select's value for a carrier typed by hand. */
-const OTHER_CARRIER = 'other'
+const OTHER_CARRIER = FULFILLMENT_OTHER_CARRIER
 
 /** What the panel asks the dialog to record. */
 export interface FulfillItemsSubmission {
@@ -181,11 +188,7 @@ export function toZoneFulfillment(
 }
 
 /** The select's value for a typed carrier: a known name, or Other. */
-function carrierChoiceFor(carrier: string): string {
-  if (!carrier) return ''
-  const label = CommerceModel.carrierLabelFor(carrier)
-  return CommerceModel.FULFILLMENT_CARRIER_CHOICES.includes(label) ? label : OTHER_CARRIER
-}
+const carrierChoiceFor = fulfillmentCarrierChoice
 
 interface CarrierFieldsProps {
   carrier: string
@@ -280,20 +283,10 @@ export function FulfillItemsPanel(props: FulfillItemsPanelProps) {
   const { order, busy, onSubmit, onCancel, renderZone } = props
   const currency = String(props.currency || 'USD').toUpperCase()
   const states = useMemo(() => CommerceModel.orderLineFulfillmentStates(order), [order])
+  // Digital and service lines start at zero (nothing to ship), unless
+  // nothing physical is left (`fulfillItemsStartQuantities`).
   const [quantities, setQuantities] = useState<Record<number, number>>(() =>
-    Object.fromEntries(
-      states.map((state) => [
-        state.lineItemId,
-        // Digital and service lines start at zero: nothing to ship. When the
-        // order has nothing physical left, they start full instead, so the
-        // panel still closes a digital-only order in one click.
-        states.some((candidate) => candidate.requiresShipping && candidate.remainingQuantity > 0)
-          ? state.requiresShipping
-            ? state.remainingQuantity
-            : 0
-          : state.remainingQuantity,
-      ]),
-    ),
+    Object.fromEntries(fulfillItemsStartQuantities(order).map((quantity, index) => [index, quantity])),
   )
   const [tracking, setTracking] = useState({ carrier: '', trackingNumber: '', trackingUrl: '', labelUrl: '' })
   const [notify, setNotify] = useState(true)
@@ -306,23 +299,10 @@ export function FulfillItemsPanel(props: FulfillItemsPanelProps) {
   const [zoneKey, setZoneKey] = useState(0)
 
   const selection = useMemo(
-    () =>
-      states
-        .map((state) => ({ lineItemId: state.lineItemId, quantity: quantities[state.lineItemId] ?? 0 }))
-        .filter((entry) => entry.quantity > 0),
+    () => fulfillItemsSelection(states.map((state) => quantities[state.lineItemId] ?? 0)),
     [states, quantities],
   )
-  const everything = useMemo(() => {
-    const remaining = CommerceModel.remainingFulfillmentLines(order)
-    return (
-      remaining.length > 0 &&
-      remaining.length === selection.length &&
-      remaining.every(
-        (entry, index) =>
-          selection[index]?.lineItemId === entry.lineItemId && selection[index]?.quantity === entry.quantity,
-      )
-    )
-  }, [order, selection])
+  const everything = useMemo(() => fulfillItemsIsEverything(order, selection), [order, selection])
 
   const setQuantity = (lineItemId: number, value: number, max: number) =>
     setQuantities((current) => ({

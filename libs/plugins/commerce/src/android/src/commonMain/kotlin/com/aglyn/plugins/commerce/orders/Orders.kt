@@ -1,9 +1,17 @@
 package com.aglyn.plugins.commerce.orders
 
 import com.aglyn.contracts.Contracts
+import com.aglyn.contracts.FulfillmentLine
+import com.aglyn.contracts.carrierLabelFor
+import com.aglyn.contracts.describeFulfillmentLines
+import com.aglyn.contracts.fulfillmentLines
+import com.aglyn.contracts.fulfillmentTrackingUrl
+import com.aglyn.contracts.orderFulfillmentsEditable
+import com.aglyn.contracts.trackingStatusLabel
 import com.aglyn.contracts.HostOrder
 import com.aglyn.contracts.ListFilterRequest
 import com.aglyn.contracts.ListQueryRequest
+import com.aglyn.contracts.ListQuerySort
 import com.aglyn.contracts.OrderChannel
 import com.aglyn.contracts.OrderLineFulfillmentState
 import com.aglyn.contracts.OrderRefundState
@@ -21,7 +29,6 @@ import com.aglyn.contracts.orderDisputeBlocksRefund
 import com.aglyn.contracts.orderLineFulfillmentStates
 import com.aglyn.contracts.orderNetCents
 import com.aglyn.contracts.orderRefundState
-import com.aglyn.contracts.remainingFulfillmentLines
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.FirestoreDoc
@@ -73,14 +80,27 @@ enum class OrderFilter(val label: String, val clauses: () -> List<ListFilterRequ
   DISPUTES("Disputes", { Contracts.openDisputeClause.let { listOf(ListFilterRequest(it.field, it.op, it.value)) } }),
 }
 
-/** The request the list sends the planner: the chip's clauses and the quick search's words. */
-fun ordersListRequest(filter: OrderFilter, search: String = ""): ListQueryRequest = ListQueryRequest(
-  clauses = filter.clauses(),
+/** The request the list sends the planner: the chip's clauses, the filters added, the quick search's words and the sort asked. */
+fun ordersListRequest(
+  filter: OrderFilter,
+  search: String = "",
+  clauses: List<ListFilterRequest> = emptyList(),
+  sort: ListQuerySort? = null,
+): ListQueryRequest = ListQueryRequest(
+  clauses = filter.clauses() + clauses,
   search = search.trim().ifEmpty { null }?.let { listOf(it) },
+  sort = sort,
 )
 
-fun ordersQuery(hostId: String, filter: OrderFilter, search: String = "", startAfter: List<Any?>? = null): FirestoreQuery =
-  planListQuery(Contracts.orderListQuery, ordersListRequest(filter, search))
+fun ordersQuery(
+  hostId: String,
+  filter: OrderFilter,
+  search: String = "",
+  startAfter: List<Any?>? = null,
+  clauses: List<ListFilterRequest> = emptyList(),
+  sort: ListQuerySort? = null,
+): FirestoreQuery =
+  planListQuery(Contracts.orderListQuery, ordersListRequest(filter, search, clauses, sort))
     .toFirestoreQuery(ordersPath(hostId), ORDERS_PAGE_SIZE, startAfter)
 
 /** An order as the console reads it ([liftLegacyOrder]); a document that is not an order reads as an empty one. */
@@ -135,7 +155,8 @@ data class OrderActions(
 
 fun orderActions(order: HostOrder): OrderActions {
   val status = order.status ?: OrderStatus.PENDING
-  val remaining = remainingFulfillmentLines(order).isNotEmpty()
+  // Anything left to fulfill: a digital-only order is fulfilled in one step too (Fulfill items starts its lines full).
+  val remaining = orderLineFulfillmentStates(order).any { it.remainingQuantity > 0 }
   val refundable = max(0.0, orderNetCents(order)) > 0 && status != OrderStatus.PENDING
   return OrderActions(
     fulfill = remaining && (canTransitionOrder(status, OrderStatus.FULFILLED) || canTransitionOrder(status, OrderStatus.PARTIALLY_FULFILLED)),
@@ -146,14 +167,26 @@ fun orderActions(order: HostOrder): OrderActions {
   )
 }
 
-/** A shipment still on the order. */
+/** A shipment recorded on the order, as the dialog's Shipments list shows it. */
 data class Shipment(
   val id: String,
   val carrier: String,
   val trackingNumber: String,
   val trackingUrl: String?,
   val atMs: Long,
+  /** "2× Mug, 1× Shirt": what it carried. */
   val summary: String,
+  /** The carrier's label, which prints on the device's print sheet. */
+  val labelUrl: String? = null,
+  /** Canceled shipments stay listed, struck through. */
+  val active: Boolean = true,
+  /** Edit tracking and Cancel shipment, while the order is still open to them. */
+  val editable: Boolean = false,
+  /** The carrier's tracking status in words (`Delivered`), when a carrier reports one. */
+  val trackingStatus: String = "",
+  /** The tracking number as stored, for Edit tracking. */
+  val rawCarrier: String = "",
+  val rawTrackingUrl: String = "",
 )
 
 /** One order, with what its screen may offer. */
@@ -177,21 +210,25 @@ data class OrderDetail(
 fun orderDetail(doc: FirestoreDoc): OrderDetail {
   val order = hostOrderFrom(doc)
   val names = order.lineItems.orEmpty()
+  val editable = orderFulfillmentsEditable(order.status)
   val shipments = order.fulfillments.orEmpty()
-    .filter(::fulfillmentIsActive)
     .map { f ->
-      val lines = f.lines?.takeIf { it.isNotEmpty() }?.map { it.lineItemId.toInt() to it.quantity.toLong() }
-        ?: f.lineItemIds.map { it.toInt() to (names.getOrNull(it.toInt())?.quantity?.toLong() ?: 1L) }
+      val active = fulfillmentIsActive(f)
       Shipment(
         id = f.id,
-        carrier = f.carrier.orEmpty(),
+        carrier = f.carrier?.let { carrierLabelFor(it) }.orEmpty(),
         trackingNumber = f.trackingNumber.orEmpty(),
-        trackingUrl = f.trackingUrl?.takeIf { it.startsWith("https://") },
+        trackingUrl = fulfillmentTrackingUrl(f.carrier, f.trackingNumber, f.trackingUrl),
         atMs = f.atMs.toLong(),
-        summary = lines.joinToString(", ") { (index, quantity) -> "$quantity× ${names.getOrNull(index)?.name ?: "Item"}" },
+        summary = describeFulfillmentLines(order, fulfillmentLines(order, f)).ifEmpty { "Fulfilled" },
+        labelUrl = f.labelUrl?.takeIf { it.startsWith("https://") || it.startsWith("http://") },
+        active = active,
+        editable = active && editable,
+        trackingStatus = trackingStatusLabel(f.trackingStatus),
+        rawCarrier = f.carrier.orEmpty(),
+        rawTrackingUrl = f.trackingUrl.orEmpty(),
       )
     }
-    .sortedByDescending { it.atMs }
   return OrderDetail(
     id = doc.id,
     label = formatOrderNumber(order, doc.id),
@@ -245,8 +282,56 @@ enum class ReceiptChannel(val raw: String, val label: String) { EMAIL("email", "
  * The order routes, as the console's order dialog calls them. Each refuses
  * the app exactly when it would refuse the console.
  */
+/** What Fulfill items asks the route to record (`FulfillItemsSubmission`). */
+data class FulfillItemsRequest(
+  /** Null when the picked units are everything still to ship. */
+  val lineItems: List<FulfillmentLine>? = null,
+  val carrier: String = "",
+  val trackingNumber: String = "",
+  val trackingUrl: String = "",
+  /** Whole minor units of the store's currency; null when not typed (not known, which is not 0). */
+  val shippingCostCents: Long? = null,
+  val notify: Boolean = true,
+)
+
+/** The route body beyond the site and order, as the console's dialog sends it. */
+fun fulfillItemsBody(request: FulfillItemsRequest): List<Pair<String, Any?>> = listOf(
+  "to" to "fulfilled",
+  "lineItems" to request.lineItems?.let { lines ->
+    kotlinx.serialization.json.JsonArray(lines.map { JsonObject(mapOf("lineItemId" to JsonPrimitive(it.lineItemId), "quantity" to JsonPrimitive(it.quantity))) })
+  },
+  "carrier" to request.carrier.trim().ifEmpty { null },
+  "trackingNumber" to request.trackingNumber.trim().ifEmpty { null },
+  "trackingUrl" to request.trackingUrl.trim().ifEmpty { null },
+  "shippingCostCents" to request.shippingCostCents,
+  "notify" to if (request.notify) null else false,
+)
+
+/** What the route answered a shipment with, in the console's words. */
+fun fulfillmentMessage(answer: JsonElement?): String {
+  val o = answer as? JsonObject
+  return when {
+    (o?.get("already") as? JsonPrimitive)?.booleanOrNull == true -> "Order was already fulfilled"
+    (o?.get("status") as? JsonPrimitive)?.contentOrNull == "partially_fulfilled" -> "Items fulfilled — the rest are still to ship"
+    else -> "Order fulfilled"
+  }
+}
+
 interface OrderActionsApi {
-  suspend fun fulfill(orderId: String, carrier: String?, trackingNumber: String?, notify: Boolean, attemptKey: String)
+  /** Records a shipment and answers what to say about it. */
+  suspend fun fulfill(orderId: String, request: FulfillItemsRequest, attemptKey: String): String
+
+  /** Changes a shipment's carrier, number and link. */
+  suspend fun updateTracking(orderId: String, fulfillmentId: String, carrier: String, trackingNumber: String, trackingUrl: String): String
+
+  /** Cancels a shipment: its items go back to unfulfilled; the buyer is not told. */
+  suspend fun cancelShipment(orderId: String, fulfillmentId: String): String
+
+  /** Refunds the named lines; the route works out the amount from them. */
+  suspend fun refundLines(orderId: String, lineItemIds: List<Int>, attemptKey: String)
+
+  /** The store's currency, which a typed shipping cost is in. */
+  suspend fun storeCurrency(): String
   suspend fun markDelivered(orderId: String)
   suspend fun refund(orderId: String, amountCents: Long?, attemptKey: String)
   suspend fun cancel(orderId: String)
@@ -263,7 +348,11 @@ enum class RestockAnswerChoice(val raw: String, val label: String, val recorded:
   DISMISSED("dismissed", "No restock", "Recorded — no restock"),
 }
 
-class ConsoleOrderActionsApi(private val api: ConsoleApiClient, private val hostId: String) : OrderActionsApi {
+class ConsoleOrderActionsApi(
+  private val api: ConsoleApiClient,
+  private val hostId: String,
+  private val firestore: com.aglyn.core.FirestoreReader? = null,
+) : OrderActionsApi {
   private fun body(vararg pairs: Pair<String, Any?>): JsonObject = JsonObject(
     (listOf("hostId" to hostId) + pairs).filter { it.second != null }.associate { (key, value) ->
       key to when (value) {
@@ -275,19 +364,50 @@ class ConsoleOrderActionsApi(private val api: ConsoleApiClient, private val host
     },
   )
 
-  override suspend fun fulfill(orderId: String, carrier: String?, trackingNumber: String?, notify: Boolean, attemptKey: String) {
-    api.request(
+  override suspend fun fulfill(orderId: String, request: FulfillItemsRequest, attemptKey: String): String =
+    fulfillmentMessage(
+      api.request(FULFILL_ORDER_ROUTE, ApiMethod.POST, body("orderId" to orderId, *fulfillItemsBody(request).toTypedArray()), idempotencyKey = attemptKey),
+    )
+
+  override suspend fun updateTracking(orderId: String, fulfillmentId: String, carrier: String, trackingNumber: String, trackingUrl: String): String {
+    val answer = api.request(
       FULFILL_ORDER_ROUTE,
       ApiMethod.POST,
       body(
         "orderId" to orderId,
-        "to" to "fulfilled",
-        "carrier" to carrier?.trim()?.ifEmpty { null },
-        "trackingNumber" to trackingNumber?.trim()?.ifEmpty { null },
-        "notify" to if (notify) null else false,
+        "action" to "update-tracking",
+        "fulfillmentId" to fulfillmentId,
+        "carrier" to carrier.trim(),
+        "trackingNumber" to trackingNumber.trim(),
+        "trackingUrl" to trackingUrl.trim().ifEmpty { null },
       ),
+    ) as? JsonObject
+    return if ((answer?.get("already") as? JsonPrimitive)?.booleanOrNull == true) "Tracking was already up to date" else "Tracking updated"
+  }
+
+  override suspend fun cancelShipment(orderId: String, fulfillmentId: String): String {
+    val answer = api.request(
+      FULFILL_ORDER_ROUTE,
+      ApiMethod.POST,
+      body("orderId" to orderId, "action" to "cancel-fulfillment", "fulfillmentId" to fulfillmentId),
+    ) as? JsonObject
+    return if ((answer?.get("already") as? JsonPrimitive)?.booleanOrNull == true) "Shipment was already canceled" else "Shipment canceled"
+  }
+
+  override suspend fun refundLines(orderId: String, lineItemIds: List<Int>, attemptKey: String) {
+    api.request(
+      REFUND_ORDER_ROUTE,
+      ApiMethod.POST,
+      body("orderId" to orderId, "lineItemIds" to kotlinx.serialization.json.JsonArray(lineItemIds.map { JsonPrimitive(it) })),
       idempotencyKey = attemptKey,
     )
+  }
+
+  override suspend fun storeCurrency(): String = try {
+    (firestore?.get("hosts/$hostId/settings/store")?.data?.get("currency") as? String)?.ifEmpty { null }?.uppercase() ?: "USD"
+  } catch (error: Throwable) {
+    if (error is kotlinx.coroutines.CancellationException) throw error
+    "USD"
   }
 
   override suspend fun markDelivered(orderId: String) {
@@ -326,5 +446,23 @@ class ConsoleOrderActionsApi(private val api: ConsoleApiClient, private val host
       body("orderId" to orderId, "resolution" to resolution.raw, "flaggedAtMs" to flaggedAtMs.toLong()),
     )?.jsonObject
     return (answer?.get("verdict") as? JsonPrimitive)?.contentOrNull ?: "recorded"
+  }
+}
+
+/**
+ * The console link to the customer's CRM record (`pluginRecordByEmailHref('contact', …)`): the Contacts list asked
+ * to open the one person with this address. Null for a guest with no address, or before the site's slugs are known.
+ */
+fun customerCrmLink(orgSlug: String?, hostSlug: String?, email: String?): String? {
+  val address = email?.trim().orEmpty()
+  if (orgSlug.isNullOrBlank() || hostSlug.isNullOrBlank() || address.isEmpty()) return null
+  return "/$orgSlug/hosts/$hostSlug/crm/contacts?email=${percentEncode(address)}"
+}
+
+/** Percent-encodes every byte but the unreserved characters, as `encodeURIComponent` does for a query value. */
+private fun percentEncode(value: String): String = buildString {
+  for (byte in value.encodeToByteArray()) {
+    val c = byte.toInt().toChar()
+    if (c.isLetterOrDigit() && c.code < 128 || c in "-._~") append(c) else append('%').append((byte.toInt() and 0xff).toString(16).uppercase().padStart(2, '0'))
   }
 }

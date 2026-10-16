@@ -33,6 +33,10 @@ struct OrdersScreen: View {
   @State private var confirmingBulk = false
   @State private var running = false
   @State private var outcome: BulkFulfillResult?
+  @State private var disputes = OpenDisputesModel()
+  @State private var drafting = false
+  @State private var exporting: TransferExportRequest?
+  @State private var notice: String?
 
   var body: some View {
     WideLayoutReader { wide in
@@ -62,6 +66,49 @@ struct OrdersScreen: View {
           picked = []
         }
         .accessibilityIdentifier("orders-select")
+      }
+      ToolbarItem(placement: .primaryAction) {
+        // Selling to someone directly: their order as a payment link (the console's Draft order).
+        Button {
+          drafting = true
+        } label: {
+          Label("Draft order", systemImage: "link.badge.plus")
+        }
+        .accessibilityIdentifier("orders-draft")
+      }
+      ToolbarItem(placement: .secondaryAction) {
+        Menu {
+          ForEach(ContractValues.shared.orderShippingPresetChoices, id: \.id) { preset in
+            Button {
+              Task { await exportForShipping(preset.id) }
+            } label: {
+              Text(preset.label)
+              if let description = preset.description { Text(description) }
+            }
+          }
+        } label: {
+          Label("Export for shipping", systemImage: "shippingbox.and.arrow.backward")
+        }
+        .accessibilityIdentifier("orders-export-shipping")
+      }
+      if canImportProducts(context) {
+        ToolbarItem(placement: .secondaryAction) {
+          Button {
+            context.navigate(coreDataImportScreen, trackingImportParams(hostID: context.hostID))
+          } label: {
+            Label("Import tracking", systemImage: "square.and.arrow.down")
+          }
+          .accessibilityIdentifier("orders-import-tracking")
+        }
+      }
+    }
+    .sheet(isPresented: $drafting) {
+      DraftOrderSheet(context: context) { notice = $0 }
+    }
+    .sheet(item: $exporting) { request in
+      TransferExportSheet(context: context, request: request) { said in
+        exporting = nil
+        if let said { notice = said }
       }
     }
     .safeAreaInset(edge: .bottom) {
@@ -102,8 +149,18 @@ struct OrdersScreen: View {
     .task(id: context.hostID) {
       if model.filter == .all { model.filter = initialFilter }
       model.start(context.firestore, hostID: context.hostID)
+      disputes.start(context.firestore, hostID: context.hostID)
     }
-    .onDisappear { model.stop() }
+    .onDisappear {
+      model.stop()
+      disputes.stop()
+    }
+  }
+
+  private func exportForShipping(_ presetID: String) async {
+    guard let hostID = context.hostID else { return }
+    await prepareOrdersForShipping(api: context.api, hostID: hostID)
+    exporting = shippingExportRequest(hostID: hostID, presetID: presetID)
   }
 
   private func fulfillPicked() async {
@@ -119,16 +176,26 @@ struct OrdersScreen: View {
   }
 
   private var chips: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: AglynSpace.one) {
-        ForEach(OrderFilter.allCases) { filter in
-          AglynChoiceChip(filter.label, selected: model.filter == filter) { model.filter = filter }
+    VStack(alignment: .leading, spacing: 0) {
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: AglynSpace.one) {
+          ForEach(OrderFilter.allCases) { filter in
+            AglynChoiceChip(filter.label, selected: model.filter == filter) { model.filter = filter }
+          }
+          ListSortMenu(sorts: ContractValues.shared.orderListQuery.sorts, selected: model.sort) { model.sort = $0 }
         }
+        .padding(.horizontal, AglynSpace.two)
+        .padding(.vertical, AglynSpace.one)
       }
+      .accessibilityIdentifier("orders-status-chips")
+      // Any filter the console's grid takes: status, channel, customer, date, product, disputes.
+      ClauseFilterBar(
+        fields: ContractValues.shared.orderListQuery.fields, headers: ContractValues.shared.orderListHeaders,
+        choices: orderFilterChoices(), clauses: model.clauses,
+        refused: model.plan.map { filterRefusals($0, clauses: model.clauses) } ?? [], notices: model.plan?.notices ?? []
+      ) { model.clauses = $0 }
       .padding(.horizontal, AglynSpace.two)
-      .padding(.vertical, AglynSpace.one)
     }
-    .accessibilityIdentifier("orders-status-chips")
   }
 
   @ViewBuilder
@@ -137,6 +204,22 @@ struct OrdersScreen: View {
       chips
       if let notice = model.notice {
         AglynNotice(notice, tone: .info).padding(.horizontal, AglynSpace.two)
+      }
+      if let notice {
+        AglynNotice(notice, tone: .success) { self.notice = nil }.padding(.horizontal, AglynSpace.two)
+      }
+      // Charges a shopper's bank is disputing, whatever the list is filtered to (the console's banner).
+      if disputes.summary.count > 0 {
+        VStack(alignment: .leading, spacing: AglynSpace.one) {
+          AglynNotice(
+            "\(openDisputesTitle(disputes.summary, more: disputes.more)). \(openDisputesDetail(disputes.summary))",
+            tone: disputes.summary.overdue ? .error : .warning)
+          if model.filter != .disputes {
+            Button("Show them") { model.filter = .disputes }.buttonStyle(.bordered)
+          }
+        }
+        .padding(.horizontal, AglynSpace.two)
+        .accessibilityIdentifier("orders-disputes")
       }
       if let done = outcome {
         AglynNotice(describeBulkFulfill(done), tone: done.refused.isEmpty && done.unknown.isEmpty ? .success : .warning) {

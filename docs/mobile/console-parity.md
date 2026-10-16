@@ -12,7 +12,7 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | area | console routes / plugin | lane | Apple | Kotlin |
 | -- | -- | -- | -- | -- |
 | Home, site switcher | `(home)`, `[orgSlug]`, `hosts`, `hosts/[host]` | leads | [x] | [x] |
-| Orders, products, stock, sales | `commerce` | leads | [ ] | [ ] |
+| Orders, products, stock, sales | `commerce` | leads | [x] | [x] |
 | POS register, readers, kiosk | `commerce` POS, `kiosk/[pluginId]` | leads | [x] | [x] |
 | Redirects | `redirects` | leads | [x] | [x] |
 | Commerce integrations cards | `accounting`, `shipping`, `post-purchase`, `tax-engines`, `marketing-platforms`, `fulfillment-networks`, `couriers`, `sales-channels` | next lane | [x] | [x] |
@@ -126,6 +126,20 @@ queue in the register's `posOrders` zone (the delivery-apps plugin's own native
 package), and the shift, cashier PIN and drawer operations. The typed card is on
 iPhone, iPad and Android phone and tablet, where Stripe has a card SDK; the Mac
 and desktop registers take cards on smart readers and the QR payment page.
+
+Orders, products, stock, sales: ticked on both platforms (AGL-3841), driven in
+the running apps on iPhone, iPad and Android phone and tablet against the seeded
+emulator stack. Everything the console's Orders and Products pages do is
+native: the list filters (any clause the grid takes, through the shared filter
+bar) and every header sort; Fulfill items with carrier, tracking and shipping
+cost, each shipment's Edit tracking, Cancel shipment and Print label; Refund
+and Refund line; the dispute and payment-risk notices; Draft order, Export for
+shipping and Import tracking; View customer in CRM (the CRM's Contacts list
+opens the one person with that address); the packing slip, invoice and product
+labels on the device's print sheet (barcodes drawn natively, ZPL for a Zebra);
+Duplicate, Archive or Activate, Delete and license keys on a product; Import
+(the data hub's import for `commerce.products`); and the Products page's
+`productsCreate` and `productsHub` zones.
 
 Open in the AGL-3668 rows, 2026-10-14 (found by re-checking the ticked rows
 against the console; each is a console action with no native screen on main

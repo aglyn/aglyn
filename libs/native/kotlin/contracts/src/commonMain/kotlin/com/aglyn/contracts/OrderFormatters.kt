@@ -141,6 +141,9 @@ private val ZERO_DIGIT = setOf(
 private val THREE_DIGIT = setOf("BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND")
 private val CODE = Regex("^[A-Z]{3}$")
 
+/** A well-formed currency code's minor digits (0, 2 or 3), or null for one that is not a code. */
+internal fun currencyDigits(code: String): Int? = styleOf(code)?.digits
+
 private fun styleOf(code: String): CurrencyStyle? {
   if (!CODE.matches(code)) return null
   val digits = when (code) {

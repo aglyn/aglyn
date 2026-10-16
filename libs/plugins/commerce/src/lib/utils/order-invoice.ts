@@ -47,6 +47,24 @@ export interface OrderInvoiceStore {
   termsUrl?: string | null
 }
 
+/**
+ * The invoice's store from the site's document and its store settings, as
+ * the order dialog's Invoice button and `commerce/order-print` read them.
+ */
+export function invoiceStoreFrom(
+  host: Record<string, unknown> | undefined | null,
+  store: Record<string, unknown> | undefined | null,
+): OrderInvoiceStore {
+  const hostData = host ?? {}
+  const storeData = store ?? {}
+  return {
+    name: String(hostData['businessName'] ?? hostData['displayName'] ?? hostData['name'] ?? ''),
+    currency: String(storeData['currency'] ?? 'USD'),
+    footer: (storeData['receiptFooter'] as string | undefined) ?? null,
+    termsUrl: (storeData['termsUrl'] as string | undefined) ?? null,
+  }
+}
+
 type InvoiceOrder = Pick<
   HostOrder,
   | 'number'

@@ -22,7 +22,11 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { Button, ListItemText, Menu, MenuItem, Stack } from '@mui/material'
 import { useState } from 'react'
-import { ORDER_SHIPPING_PRESETS } from '../../transfer/shipping-presets'
+import {
+  ORDER_SHIPPING_PRESETS,
+  ORDERS_TO_SHIP_FILTER_LABEL,
+  ORDERS_TO_SHIP_FILTER_VALUE,
+} from '../../transfer/shipping-presets'
 import { COMMERCE_ORDERS_TRANSFER, COMMERCE_TRACKING_TRANSFER } from '../../transfer/transfer-keys'
 
 /**
@@ -31,14 +35,8 @@ import { COMMERCE_ORDERS_TRANSFER, COMMERCE_TRACKING_TRANSFER } from '../../tran
  * one indexed query, `(requiresShipping, status, createdAtMs)`.
  */
 export const ORDERS_TO_SHIP_FILTER = {
-  label: 'orders still to ship',
-  value: {
-    filters: [
-      { path: 'requiresShipping', op: '==', value: true },
-      { path: 'status', op: 'in', value: ['paid', 'partially_fulfilled'] },
-    ],
-    orderBy: { path: 'createdAtMs', direction: 'desc' },
-  },
+  label: ORDERS_TO_SHIP_FILTER_LABEL,
+  value: ORDERS_TO_SHIP_FILTER_VALUE,
 } as const
 
 export interface OrderShippingActionsProps {

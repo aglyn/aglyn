@@ -2,6 +2,8 @@ package com.aglyn.app
 
 import android.app.Application
 import com.aglyn.core.AglynEnv
+import com.aglyn.hardware.AndroidSystemPrinter
+import com.aglyn.hardware.StaticPeripherals
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.plugins.manifest.NativePluginManifest
 import com.aglyn.shell.AndroidShell
@@ -32,6 +34,9 @@ class AglynApplication : Application() {
       } else {
         null
       },
+      // Packing slips, invoices, shipping labels and product labels go to Android's print sheet, as the console's go to
+      // the browser's print dialog.
+      peripherals = StaticPeripherals(systemPrinter = AndroidSystemPrinter(this)),
     )
   }
 }
