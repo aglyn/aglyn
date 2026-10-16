@@ -1530,7 +1530,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'summary.html',
           description: 'The figures, drawn as tiles and ranked lists in the email’s theme',
-          sample: '<div style="padding:16px 0 8px;"><div style="font-family:Helvetica, Arial, sans-serif;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#666666;">Traffic</div></div>',
+          sample: '<div style="padding:16px 0 8px;"><div style="font-family:Helvetica, Arial, sans-serif;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Traffic</div></div>',
         },
         {
           name: 'summary.buttonLabel',
@@ -1598,7 +1598,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'summary.html',
           description: 'The figures, drawn as tiles and ranked lists in the email’s theme',
-          sample: '<div style="padding:16px 0 8px;"><div style="font-family:Helvetica, Arial, sans-serif;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#666666;">Traffic</div></div>',
+          sample: '<div style="padding:16px 0 8px;"><div style="font-family:Helvetica, Arial, sans-serif;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Traffic</div></div>',
         },
         {
           name: 'summary.buttonLabel',

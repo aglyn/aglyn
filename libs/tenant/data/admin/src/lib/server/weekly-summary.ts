@@ -54,7 +54,13 @@ import {
   type PluginFigureSummaryPart,
   type ResolvedPluginFigureReader,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
-import { emailAccent, rateLimitedRetryAtMs, resolveEmailColor, sendEmail } from '@aglyn/shared-util-email'
+import {
+  emailAccent,
+  PLATFORM_EMAIL_PALETTE,
+  rateLimitedRetryAtMs,
+  resolveEmailColor,
+  sendEmail,
+} from '@aglyn/shared-util-email'
 import { withoutMailWithheldAccounts } from './account-mail'
 import { findUserByUidAcrossPools } from './auth-pools'
 import { isCronAuthorized, isCronDryRun } from './cron-auth'
@@ -161,18 +167,6 @@ const COLOR_TOKENS: Record<keyof WeeklySummaryColors, string> = {
   link: 'primary.main',
   up: 'success.dark',
   down: 'error.dark',
-}
-
-/** Last resort for a token a palette cannot resolve; the platform palette's own values. */
-const COLOR_FALLBACKS: WeeklySummaryColors = {
-  text: '#212121',
-  muted: '#666666',
-  border: '#e0e0e0',
-  surface: '#fafafa',
-  accent: '#00b0ff',
-  link: '#0077ad',
-  up: '#357a38',
-  down: '#9e1e1b',
 }
 
 export interface WeeklySummarySendResult {
@@ -582,9 +576,14 @@ export async function weeklySummaryDeps(options: { runAt: Date; dryRun: boolean 
     readers: (context) => eligibleFigureReaders({ ...context, accept: (reader) => Boolean(reader.weeklySummary) }),
     colors: (org) => {
       const { palette } = systemEmailTheme(systemEmailBrand(org as never).options)
-      const colors = { ...COLOR_FALLBACKS }
+      const colors = {} as WeeklySummaryColors
       for (const key of Object.keys(COLOR_TOKENS) as Array<keyof WeeklySummaryColors>) {
-        colors[key] = resolveEmailColor(COLOR_TOKENS[key], palette) ?? COLOR_FALLBACKS[key]
+        // A brand palette that cannot resolve a token falls back to the
+        // platform's, which resolves every one of them.
+        colors[key] =
+          resolveEmailColor(COLOR_TOKENS[key], palette) ??
+          resolveEmailColor(COLOR_TOKENS[key], PLATFORM_EMAIL_PALETTE) ??
+          'inherit'
       }
       // Links take the color the renderer gives every other link in the
       // email, not the raw primary, which is too light to read as text.
