@@ -245,6 +245,14 @@ describe('the event writer', () => {
       expect(stored['coverImageAlt']).toBeUndefined()
     })
 
+    it('stores the words the picker describes the photo by, so the list never draws it with an empty alt (AGL-3856)', async () => {
+      const { writer: covered } = picking({ ...PICK, alt: 'A barbell, crossfit and lifting' })
+      await covered.write(request())
+      const stored = store.get('hosts/host-1/events/job-1-i0') as Record<string, unknown>
+      expect(stored['coverImage']).toBe(PICK.url)
+      expect(stored['coverImageAlt']).toBe('A barbell, crossfit and lifting')
+    })
+
     it('takes a starter photo’s path as it takes a library photo’s', async () => {
       const { writer: covered } = picking({ ...PICK, src: '/_static/starter/desk.jpg', url: '/_static/starter/desk.jpg', origin: 'starter' })
       await covered.write(request())

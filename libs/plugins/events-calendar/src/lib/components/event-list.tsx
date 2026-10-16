@@ -55,6 +55,21 @@ export interface EventItem {
 }
 
 /**
+ * Where an event is and who hosts it, as its list line reads them
+ * (AGL-3856): the host is left out where the place already names it, so
+ * "Ironline Strength Studio, Austin, Texas" is never followed by "Ironline
+ * Strength Studio" again, and the place where the host's name holds it.
+ */
+export function eventPlaceAndHost(event: Pick<EventItem, 'location' | 'organizer'>): string[] {
+  const location = event.location?.replace(/\s+/g, ' ').trim() ?? ''
+  const organizer = event.organizer?.replace(/\s+/g, ' ').trim() ?? ''
+  const names = (outer: string, inner: string) => outer.toLowerCase().includes(inner.toLowerCase())
+  if (location && organizer && names(location, organizer)) return [location]
+  if (location && organizer && names(organizer, location)) return [organizer]
+  return [location, organizer].filter(Boolean)
+}
+
+/**
  * One event as its `schema.org/Event` JSON-LD string (AGL-143/145).
  *
  * Lifted out of the JSX so the structured data can be asserted on its own,
@@ -216,8 +231,7 @@ const EventList = forwardRef<HTMLDivElement, EventListProps>((props, ref) => {
                 dateStyle: 'medium',
                 timeStyle: 'short',
               })}
-              {event.location ? ` · ${event.location}` : ''}
-              {event.organizer ? ` · ${event.organizer}` : ''}
+              {eventPlaceAndHost(event).map((part) => ` · ${part}`).join('')}
             </Typography>
             {event.description ? (
               <Typography variant="body2">{event.description}</Typography>

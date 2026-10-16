@@ -66,13 +66,16 @@ function line(value: unknown): string {
   return typeof value === 'string' ? value.replace(/[\p{Cc}\s]+/gu, ' ').trim() : ''
 }
 
+/** The pick of a placed photo, described by its own words where it brings them, else by the slot's (AGL-3856). */
 function pickOf(
   photo: AiLayoutPicturePhoto,
   origin: StockPhotoPick['origin'],
   hostId: string,
+  alt: string,
 ): StockPhotoPick | null {
   const url = origin === 'library' ? siteRelativeMediaSrc(photo.src, { hostId }) : photo.src
-  return url ? { src: photo.src, url, width: photo.width, height: photo.height, origin } : null
+  const said = photo.alt?.trim() || alt
+  return url ? { src: photo.src, url, width: photo.width, height: photo.height, origin, ...(said ? { alt: said } : {}) } : null
 }
 
 /** A photo for the request's subject: from the site's library or the stock library, else a starter. */
@@ -91,6 +94,9 @@ export async function aiStockPhotoPick(
     aspect: ASPECTS[request.orientation ?? 'horizontal'],
     sectionIndex: 0,
     role: 'gallery',
+    // A subject alone is a search's words, never a description: an event's
+    // title is not what its cover shows (AGL-3856).
+    ...(line(request.alt) ? {} : { standIn: true }),
   }
   const seed = line(request.seed) || `${request.scope ?? request.hostId}:${subject}`
   try {
@@ -106,7 +112,7 @@ export async function aiStockPhotoPick(
       ...(request.signal ? { signal: request.signal } : {}),
     })
     const [found] = source ? await source([slot]) : []
-    const picked = found?.src ? pickOf(found, 'library', request.hostId) : null
+    const picked = found?.src ? pickOf(found, 'library', request.hostId, alt) : null
     if (picked) return picked
   } catch (error) {
     console.warn('ai stock photo pick: the stock library failed; a starter stands in', {
@@ -114,5 +120,5 @@ export async function aiStockPhotoPick(
     })
   }
   const [starter] = aiLayoutStarterPhotos([slot], seed)
-  return starter ? pickOf(starter, 'starter', request.hostId) : null
+  return starter ? pickOf(starter, 'starter', request.hostId, alt) : null
 }

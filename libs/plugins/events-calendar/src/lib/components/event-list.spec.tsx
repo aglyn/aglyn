@@ -28,7 +28,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { render, screen, waitFor } from '@testing-library/react'
-import EventList, { eventJsonLd, type EventItem } from './event-list'
+import EventList, { eventJsonLd, eventPlaceAndHost, type EventItem } from './event-list'
 
 const anEvent = (overrides: Partial<EventItem> = {}): EventItem => ({
   $id: 'e1',
@@ -244,5 +244,27 @@ describe('the Event List cover’s authored alt (AGL-2418)', () => {
     })
 
     expect(img?.getAttribute('alt')).toBe('')
+  })
+})
+
+describe('the Event List’s place and host line (AGL-3856)', () => {
+  it('names the business once when the place already names it', () => {
+    // The beta.259 Ironline Strength Studio events read "…, Austin, Texas · Ironline Strength Studio".
+    expect(
+      eventPlaceAndHost({ location: 'Ironline Strength Studio, Austin, Texas', organizer: 'Ironline Strength Studio' }),
+    ).toEqual(['Ironline Strength Studio, Austin, Texas'])
+    expect(eventPlaceAndHost({ location: 'ironline strength studio', organizer: 'Ironline  Strength Studio' })).toEqual([
+      'ironline strength studio',
+    ])
+  })
+
+  it('keeps a place and a host that say different things, and either alone', () => {
+    expect(eventPlaceAndHost({ location: 'Zilker Park', organizer: 'Ironline Strength Studio' })).toEqual([
+      'Zilker Park',
+      'Ironline Strength Studio',
+    ])
+    expect(eventPlaceAndHost({ location: 'Online', organizer: null })).toEqual(['Online'])
+    expect(eventPlaceAndHost({ location: '  ', organizer: 'Acme' })).toEqual(['Acme'])
+    expect(eventPlaceAndHost({})).toEqual([])
   })
 })
