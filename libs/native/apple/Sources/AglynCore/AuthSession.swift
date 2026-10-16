@@ -459,6 +459,9 @@ public final class AuthSession {
       return
     }
     try? Auth.auth().signOut()
+    // An SSO account's pool outlives `signOut`. Every sign-in door sets its own, but the emailed-code steps (verify an address,
+    // reset a password) use whatever is left, so signed out means the project pool (AGL-3844).
+    Auth.auth().tenantID = nil
   }
 
   /// Reads the staff standing from the current ID token's claims.

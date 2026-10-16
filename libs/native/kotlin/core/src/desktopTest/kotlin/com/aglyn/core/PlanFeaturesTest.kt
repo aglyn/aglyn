@@ -57,4 +57,19 @@ class PlanFeaturesTest {
       assertEquals(case["result"], got, case.toString())
     }
   }
+
+  @Test
+  fun theMarketplaceTakeRateIsTheConsoles() {
+    val root = Json.parseToJsonElement(File(System.getProperty("aglyn.contractsDir"), "derived-values.generated.json").readText()).jsonObject
+    val fee = root.getValue("marketplaceFee").jsonObject
+    val cases = fee.getValue("cases").jsonArray
+    assertTrue(cases.isNotEmpty())
+    for (item in cases) {
+      val case = item.jsonObject
+      @Suppress("UNCHECKED_CAST")
+      val org = plain(case["org"]) as? Map<String, Any?>
+      assertEquals(case.getValue("result").jsonPrimitive.content.toDouble(), marketplaceFeePct(org), "$org")
+    }
+    assertEquals(fee.getValue("paid").jsonPrimitive.content.toDouble(), MarketplaceFeeDefaults.paid)
+  }
 }

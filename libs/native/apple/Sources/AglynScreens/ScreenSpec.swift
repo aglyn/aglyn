@@ -105,6 +105,9 @@ public struct LoadSpec: Sendable, Hashable {
   public let switchboard: String?
   /// A plan feature whose gate the screen reads: `{ carried, label }`, where `label` names the plan that includes it.
   public let entitlement: String?
+  /// `marketplace`: the take rate on the workspace's marketplace sales, `{ pct, paid }` (`paid` is what a paid plan pays),
+  /// as the console's `resolveMarketplaceFeePct` prices it from the workspace's own document.
+  public let takeRate: String?
   /// An order id (a template): the order as a widget is handed it, with its lines' units and what is left to ship.
   public let orderZone: String?
   /// Runs once the other loads have answered, with their answers under `data`: a read keyed by
@@ -143,6 +146,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.query = nil
       self.switchboard = nil
       self.entitlement = nil
+      self.takeRate = nil
       self.orderZone = nil
       self.each = nil
       self.compute = nil
@@ -169,6 +173,7 @@ public struct LoadSpec: Sendable, Hashable {
       self.query = json["query"]
       self.switchboard = json["switchboard"]?.stringValue
       self.entitlement = json["entitlement"]?.stringValue
+      self.takeRate = json["takeRate"]?.stringValue
       self.orderZone = json["orderZone"]?.stringValue
       self.each = json["each"]?.stringValue
       self.compute = json["compute"]?.stringValue
@@ -603,7 +608,8 @@ public struct FieldSpec: Sendable, Identifiable {
   public let mustMatchAs: String?
   /// What to say under the field while something is typed that does not match.
   public let mismatch: String?
-  /// For a `file` field: `json` parses the chosen file and sends the value, else its text is sent.
+  /// For a `file` field: `json` parses the chosen file and sends the value, `base64` sends its bytes base64-encoded (a
+  /// plugin bundle), else its text is sent.
   public let parse: String?
   /// For a `multiselect`: the field is unfinished until every choice is chosen (the warnings an
   /// import must have acknowledged, each one).
@@ -825,6 +831,14 @@ public struct FieldSpec: Sendable, Identifiable {
     self.parse = json["parse"]?.stringValue
     self.coversAll = json["coversAll"] == .bool(true)
     self.config = json
+  }
+
+  /// What a static option says under its label (`{ value, label, detail }`), a template over the screen.
+  public func detail(for value: String, in context: JSONValue) -> String? {
+    guard let option = config?["options"].array.first(where: { ScreenValues.text($0["value"]) == value }),
+      let detail = option["detail"]?.stringValue, !detail.isEmpty
+    else { return nil }
+    return ScreenValues.render(detail, in: context)
   }
 
   /// The choices for a `select`: the static options, then any read from data. A `country` field offers the

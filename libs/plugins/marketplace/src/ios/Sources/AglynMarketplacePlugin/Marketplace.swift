@@ -23,6 +23,8 @@ let marketplaceBrowseScreen = "marketplace.browse"
 let marketplaceListingScreen = "marketplace.listing"
 let marketplaceInstalledScreen = "marketplace.installed"
 let marketplaceLicencesScreen = "marketplace.licenses"
+/// Publishing to the marketplace is a spec screen (marketplace.screens.json): what this site and the workspace can publish.
+let marketplacePublishScreen = "marketplace.publish"
 let marketplacePluginSettingsScreen = "marketplace.plugin-settings"
 
 /// Workspace roles with `plugins.install` (`installPlugins`): the admin tier and editors.
@@ -285,6 +287,8 @@ struct LicenceRow: Identifiable, Equatable {
   let id: String
   let listingID: String
   let buyerUID: String?
+  /// The workspace the license landed in; none (before AGL-2331) licenses every workspace the buyer belongs to.
+  let buyerOrgID: String?
   let paidCents: Int
   let createdAt: Date?
 
@@ -292,9 +296,43 @@ struct LicenceRow: Identifiable, Equatable {
     id = doc.id
     listingID = doc.string("listingId") ?? ""
     buyerUID = doc.string("buyerUid")
+    buyerOrgID = doc.string("buyerOrgId").flatMap { $0.isEmpty ? nil : $0 }
     paidCents = Int(doc.number("amountCents") ?? 0) - Int(doc.number("taxCents") ?? 0)
     createdAt = doc.date("createdAt")
   }
+}
+
+/// The longest reason a report keeps (the console's and the route's `MAX_REASON_LENGTH`).
+let maxReportReasonLength = 1000
+
+/// The Licensed-to choice that means a purchase naming no workspace (`EVERY_WORKSPACE`).
+let everyWorkspace = "every"
+
+/// "Bought by you": the signed-in person's own live purchases across every workspace (`MINE_LICENCE_QUERY` over
+/// `licenceBase`), narrowed to the workspace each landed in when one is chosen; `everyWorkspace` asks for those that name
+/// none, as `mineLicenceClauses` reads it.
+func boughtByYouQuery(uid: String, licensedTo: String?) -> FirestoreQuery {
+  let clauses: [ListFilterRequest] =
+    switch licensedTo {
+    case nil: []
+    case everyWorkspace?: [ListFilterRequest(field: "buyerOrgId", op: "isEmpty", value: "")]
+    case let orgID?: [ListFilterRequest(field: "buyerOrgId", op: "equals", value: orgID)]
+    }
+  return planListQuery(
+    ContractValues.shared.mineLicenceQuery,
+    ListQueryRequest(
+      base: [ListQueryFilter(op: .equal, path: "buyerUid", value: .string(uid)), ListQueryFilter(op: .equal, path: "refundedAt", value: .null)],
+      clauses: clauses)
+  ).firestoreQuery(["marketplacePurchases"], limit: 100)
+}
+
+/// Who bought a license the workspace holds, as the console's table says it.
+func boughtByLabel(_ licence: LicenceRow, uid: String) -> String { licence.buyerUID == uid ? "You" : "A colleague" }
+
+/// Which workspace one of your purchases licenses, as the console's table says it.
+func licensedToLabel(_ licence: LicenceRow, orgID: String?, names: [String: String]) -> String {
+  guard let licensed = licence.buyerOrgID else { return "Every workspace you belong to" }
+  return licensed == orgID ? "This workspace" : names[licensed] ?? licensed
 }
 
 /// "This workspace": its live purchases, by document id (`HELD_LICENCE_QUERY` over `licenceBase`).
@@ -377,9 +415,10 @@ struct MarketplaceAPI {
     try await api.request("/api/marketplace/reviews", method: .delete, body: JSONValue.from(["listingId": listingID]))
   }
 
-  /// Reports a listing to staff.
-  func report(listingID: String, reason: String) async throws {
-    try await api.request(
-      "/api/marketplace/report", method: .post, body: JSONValue.from(["listingId": listingID, "reason": reason.trimmingCharacters(in: .whitespacesAndNewlines)]))
+  /// Reports a listing, or one of its reviews (`reviewUID`, the reviewer's uid), to staff. Reporting again updates the report.
+  func report(listingID: String, reason: String, reviewUID: String? = nil) async throws {
+    var body: [String: Any?] = ["listingId": listingID, "reason": reason.trimmingCharacters(in: .whitespacesAndNewlines)]
+    if let reviewUID { body["reviewUid"] = reviewUID }
+    try await api.request("/api/marketplace/report", method: .post, body: JSONValue.from(body))
   }
 }
