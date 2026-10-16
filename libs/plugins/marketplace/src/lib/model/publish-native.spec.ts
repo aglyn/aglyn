@@ -55,7 +55,7 @@ interface Screen {
     type: string
     text?: string
     title?: string
-    fields?: Array<{ key: string; help?: string; required?: boolean }>
+    fields?: Array<{ key: string; label?: string; help?: string; required?: boolean; options?: Array<{ value: string; label: string; detail?: string }> }>
     submit?: { url: string; body: Record<string, string> }
     items?: Array<{ id?: string; url?: string; body?: Record<string, string>; label?: string }>
     filter?: string
@@ -209,10 +209,7 @@ describe('native publishing to the marketplace', () => {
   it('publishes a plugin through the route, fields, statements and price the console form uses', () => {
     const form = read('libs/plugins/marketplace/src/lib/components/publish-plugin-form.component.tsx')
     const source = flat(form)
-    const publish = screen('marketplace.publishPlugin') as Screen & {
-      constants?: { categories?: string[]; agreement?: Record<string, unknown> }
-      blocks: Array<Screen['blocks'][number] & { fields?: Array<{ key: string; label?: string; help?: string; options?: Array<{ value: string; label: string; detail?: string }> }> }>
-    }
+    const publish = screen('marketplace.publishPlugin') as Screen & { constants?: { categories?: string[]; agreement?: Record<string, unknown> } }
     expect(publish.scope).toBe('org')
     expect(publish.constants?.agreement).toEqual(screen('marketplace.publishTemplate').constants?.agreement)
     expect(publish.constants?.categories).toEqual([...LISTING_CATEGORIES])
