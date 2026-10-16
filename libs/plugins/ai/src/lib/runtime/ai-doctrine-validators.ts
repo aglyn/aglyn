@@ -4993,9 +4993,100 @@ function undeclaredPlacementKind(
   plan: AiBuildPlan,
   kinds: Map<string, RecordKind>,
 ): 'form' | 'component' {
-  if (FORM_SECTION_NAME.test(name)) return 'form'
+  if (readsAsForm(name)) return 'form'
   const placesForm = section.uses.some((ref) => refKind(ref, plan, kinds) === 'form')
   return FORM_SECTION_NAME.test(section.name) && !placesForm ? 'form' : 'component'
+}
+
+/** A creation's name in words: `contactForm` → "contact Form", so `\\bform\\b` can read it. */
+function nameInWords(name: string): string {
+  return name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').trim()
+}
+
+/** Whether a creation's name, camelCase or not, names a form. */
+function readsAsForm(name: string): boolean {
+  return FORM_SECTION_NAME.test(nameInWords(name))
+}
+
+const NEWSLETTER_NAME = /\bnewsletter\b|\bsubscribe\b|\bsign[- ]?up\b/i
+
+/**
+ * A section that places a creation the plan never declares is settled
+ * before the rules read the plan, where it has one answer (AGL-3845). The
+ * live candle-shop start of 2026-10-16 placed `new:contactForm` in its
+ * "Care, shipping and contact" section on both answers and stopped needing
+ * input: the camelCase name read as a component, which a site start may not
+ * make, and the refusal itself said to take it out.
+ *
+ * - A name that reads as a form, where this job may make one more form, is
+ *   declared as one: a newsletter's takes an email, any other the contact
+ *   form's fields, named in words ("Contact form") with the reference
+ *   pointed at it.
+ * - Anything else this job could not make one more of is taken out of the
+ *   section's uses, and the section is drawn on the page.
+ * - A component the job could declare is left for the rule to ask about:
+ *   what it should be has more than one answer.
+ */
+export function aiSettlePlanUndeclaredUses(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiBuildPlan {
+  if (!capabilities) return plan
+  const kinds = inventoryKinds(inventory)
+  let next = plan
+  const repoint = new Map<string, string>()
+  const drop = new Set<string>()
+  for (const ref of aiPlanUndeclaredRefs(plan)) {
+    if (ref.field !== 'uses') continue
+    const key = ref.name.toLowerCase()
+    if (repoint.has(key) || drop.has(ref.path)) continue
+    const section = plan.screens[ref.screenIndex].sections[ref.sectionIndex]
+    const kind = undeclaredPlacementKind(ref.name, section, next, kinds)
+    if (kind === 'form' && readsAsForm(ref.name) && !aiPlanUncreatableKind(next, 'form', capabilities)) {
+      const words = nameInWords(ref.name).toLowerCase()
+      const name = `${words.charAt(0).toUpperCase()}${words.slice(1)}`
+      repoint.set(key, `new:${name}`)
+      if (!aiPlanCreateFor(next, `new:${name}`)) {
+        next = {
+          ...next,
+          create: [
+            ...next.create,
+            {
+              kind: 'form',
+              name,
+              why: AI_PLAN_SETTLED_FORM.why,
+              duplicateOf: null,
+              fields: NEWSLETTER_NAME.test(words) ? ['email'] : [...AI_PLAN_SETTLED_FORM.fields],
+            },
+          ],
+        }
+      }
+    } else if (aiPlanUncreatableKind(next, kind, capabilities)) {
+      drop.add(ref.path)
+    }
+  }
+  if (!repoint.size && !drop.size) return plan
+  const undeclaredName = (ref: string) =>
+    isAiPlanNewRef(ref) && !aiPlanCreateFor(plan, ref) && !aiPlanItemFor(plan, ref)
+      ? ref.slice('new:'.length).trim().toLowerCase()
+      : null
+  return {
+    ...next,
+    screens: next.screens.map((screen, screenIndex) => ({
+      ...screen,
+      sections: screen.sections.map((section, sectionIndex) => {
+        const uses = section.uses.flatMap((ref, useIndex) => {
+          if (drop.has(`screens[${screenIndex}].sections[${sectionIndex}].uses[${useIndex}]`)) return []
+          const name = undeclaredName(ref)
+          return [name !== null ? (repoint.get(name) ?? ref) : ref]
+        })
+        return uses.length === section.uses.length && uses.every((ref, index) => ref === section.uses[index])
+          ? section
+          : { ...section, uses }
+      }),
+    })),
+  }
 }
 
 /**

@@ -64,6 +64,7 @@ import {
   aiSettlePlanLayoutsInSections,
   aiSettlePlanRefs,
   aiSettlePlanSeo,
+  aiSettlePlanUndeclaredUses,
   aiSettleWrittenGridItems,
   aiSettleWrittenMechanicalRules,
   validateAiBuildPlan,
@@ -716,6 +717,8 @@ export function aiDoctrinePlanCheck(
     // taken off the page (AGL-3750), first after those, so the wall
     // counts what the page keeps. A site start's section that shows the work
     // with fewer pieces than its fewest is given that many (AGL-3754).
+    // A section's creation the plan never declares is declared as a form or
+    // taken out where that has one answer (AGL-3845), after the forms.
     // A Free plan a section or two past the wall is trimmed to fit (AGL-3737),
     // last, once every creation the wall counts is settled. The door's own
     // settling (a build's events page, AGL-3755) runs first, so every rule
@@ -723,24 +726,28 @@ export function aiDoctrinePlanCheck(
     // past its length is cut at a word right after it (AGL-3837), so a page
     // the door added is held to the same lengths.
     const plan = aiSettlePlanFreeWall(
-      aiSettlePlanForms(
-        aiSettlePlanLayouts(
-          aiSettlePlanDatasets(
-            aiSettlePlanFormDatasets(
-              aiSettlePlanGalleries(
-                aiSettlePlanLayoutRegionSections(
-                  aiSettlePlanLayoutsInSections(
-                    aiSettlePlanRefs(aiSettlePlanSeo(settle ? settle(parsed.plan) : parsed.plan), inventory),
+      aiSettlePlanUndeclaredUses(
+        aiSettlePlanForms(
+          aiSettlePlanLayouts(
+            aiSettlePlanDatasets(
+              aiSettlePlanFormDatasets(
+                aiSettlePlanGalleries(
+                  aiSettlePlanLayoutRegionSections(
+                    aiSettlePlanLayoutsInSections(
+                      aiSettlePlanRefs(aiSettlePlanSeo(settle ? settle(parsed.plan) : parsed.plan), inventory),
+                      inventory,
+                    ),
                     inventory,
                   ),
                   inventory,
+                  capabilities,
                 ),
                 inventory,
                 capabilities,
               ),
-              inventory,
               capabilities,
             ),
+            inventory,
             capabilities,
           ),
           inventory,
