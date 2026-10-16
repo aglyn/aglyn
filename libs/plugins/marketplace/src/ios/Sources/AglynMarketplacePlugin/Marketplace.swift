@@ -302,6 +302,9 @@ struct LicenceRow: Identifiable, Equatable {
   }
 }
 
+/// The longest reason a report keeps (the console's and the route's `MAX_REASON_LENGTH`).
+let maxReportReasonLength = 1000
+
 /// The Licensed-to choice that means a purchase naming no workspace (`EVERY_WORKSPACE`).
 let everyWorkspace = "every"
 
@@ -412,9 +415,10 @@ struct MarketplaceAPI {
     try await api.request("/api/marketplace/reviews", method: .delete, body: JSONValue.from(["listingId": listingID]))
   }
 
-  /// Reports a listing to staff.
-  func report(listingID: String, reason: String) async throws {
-    try await api.request(
-      "/api/marketplace/report", method: .post, body: JSONValue.from(["listingId": listingID, "reason": reason.trimmingCharacters(in: .whitespacesAndNewlines)]))
+  /// Reports a listing, or one of its reviews (`reviewUID`, the reviewer's uid), to staff. Reporting again updates the report.
+  func report(listingID: String, reason: String, reviewUID: String? = nil) async throws {
+    var body: [String: Any?] = ["listingId": listingID, "reason": reason.trimmingCharacters(in: .whitespacesAndNewlines)]
+    if let reviewUID { body["reviewUid"] = reviewUID }
+    try await api.request("/api/marketplace/report", method: .post, body: JSONValue.from(body))
   }
 }

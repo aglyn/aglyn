@@ -92,6 +92,8 @@ private sealed interface ListingDialog {
   data class Uninstall(val scope: InstallTarget) : ListingDialog
   data object Review : ListingDialog
   data object Report : ListingDialog
+  /** Reporting someone else's review: its reviewer's uid and name. */
+  data class ReportReview(val uid: String, val name: String) : ListingDialog
 }
 
 /** The marketplace's sections, as the console's hub tabs them. */
@@ -348,7 +350,10 @@ private fun ListingBody(
               icon = AglynIcons.named("person"),
               trailing = if (review.uid == context.uid) ({
                 TextButton(onClick = { runner.run("Your review was removed.") { api.deleteReview(listing.id) } }) { Text("Delete") }
-              }) else null,
+              }) else ({
+                // Not on your own review: the queue is for what someone else wrote.
+                TextButton(onClick = { open(ListingDialog.ReportReview(review.uid, review.name)) }, modifier = Modifier.testTag("review-report-${review.uid}")) { Text("Report") }
+              }),
             )
           }
         }
@@ -433,22 +438,8 @@ private fun ListingDialogs(
         OutlinedTextField(comment, { comment = it.take(2000) }, label = { Text("Comment") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("review-comment"))
       }
     }
-    ListingDialog.Report -> {
-      var reason by remember { mutableStateOf("") }
-      ActionDialog(
-        title = "Report ${listing.name}",
-        body = "Tell the marketplace team what is wrong with it.",
-        icon = "warning",
-        confirmLabel = "Report",
-        confirmEnabled = reason.isNotBlank(),
-        busy = runner.busy,
-        error = runner.error,
-        onDismiss = { runner.error = null; close() },
-        onConfirm = { runner.run("Reported. The marketplace team will look at it.", onDone = close) { api.report(listing.id, reason) } },
-      ) {
-        OutlinedTextField(reason, { reason = it.take(1000) }, label = { Text("What is wrong") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("report-reason"))
-      }
-    }
+    ListingDialog.Report -> ReportDialog(listing.name, "listing", null, listing.id, api, runner, close)
+    is ListingDialog.ReportReview -> ReportDialog("this review by ${dialog.name}", "review", dialog.uid, listing.id, api, runner, close)
   }
 }
 
@@ -614,4 +605,23 @@ private fun OwnerActions(context: NativePluginContext, listingId: String, plugin
     ) { Text("Edit listing") }
   }
   editing?.let { listing -> EditListingDialog(context, listing, runner, api) { editing = null } }
+}
+
+/** The console's report dialog, for a listing or a review. */
+@Composable
+private fun ReportDialog(label: String, noun: String, reviewUid: String?, listingId: String, api: MarketplaceApi, runner: ActionRunner, close: () -> Unit) {
+  var reason by remember(reviewUid) { mutableStateOf("") }
+  ActionDialog(
+    title = "Report $label",
+    body = "Tell us what is wrong with this $noun. A staff member reads every report. Reporting again updates your report rather than adding another one.",
+    icon = "warning",
+    confirmLabel = "Send report",
+    confirmEnabled = reason.isNotBlank(),
+    busy = runner.busy,
+    error = runner.error,
+    onDismiss = { runner.error = null; close() },
+    onConfirm = { runner.run("Thanks — staff will review this report", onDone = close) { api.report(listingId, reason, reviewUid) } },
+  ) {
+    OutlinedTextField(reason, { reason = it.take(MAX_REPORT_REASON_LENGTH) }, label = { Text("Reason") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("report-reason"))
+  }
 }

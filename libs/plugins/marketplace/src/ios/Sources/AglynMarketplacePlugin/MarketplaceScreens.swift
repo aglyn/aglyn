@@ -203,6 +203,8 @@ private enum ListingSheet: Identifiable {
   case uninstall(InstallTarget)
   case review
   case report
+  /// Reporting someone else's review: its reviewer's uid and name.
+  case reportReview(uid: String, name: String)
 
   var id: String {
     switch self {
@@ -210,6 +212,7 @@ private enum ListingSheet: Identifiable {
     case .uninstall(let scope): "uninstall-\(scope.rawValue)"
     case .review: "review"
     case .report: "report"
+    case .reportReview(let uid, _): "report-review-\(uid)"
     }
   }
 }
@@ -467,6 +470,11 @@ private struct ListingBody: View {
         ) {
           if review.uid == context.uid {
             Button("Delete") { runner.run(success: "Your review was removed.") { try await api.deleteReview(listingID: listing.id) } }.buttonStyle(.borderless)
+          } else {
+            // Not on your own review: the queue is for what someone else wrote.
+            Button("Report") { open(.reportReview(uid: review.uid, name: review.name)) }
+              .buttonStyle(.borderless)
+              .accessibilityIdentifier("review-report-\(review.uid)")
           }
         }
       }
@@ -543,17 +551,28 @@ private struct ListingSheets: View {
           .accessibilityIdentifier("review-comment")
       }
     case .report:
-      AglynActionSheet(
-        "Report \(listing.name)", message: "Tell the marketplace team what is wrong with it.", confirmLabel: "Report",
-        confirmEnabled: !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, busy: runner.busy, error: runner.error,
-        onCancel: { runner.error = nil; close() },
-        onConfirm: {
-          runner.run(success: "Reported. The marketplace team will look at it.", onDone: close) { try await api.report(listingID: listing.id, reason: reason) }
+      reportSheet(label: listing.name, noun: "listing", reviewUID: nil)
+    case .reportReview(let uid, let name):
+      reportSheet(label: "this review by \(name)", noun: "review", reviewUID: uid)
+    }
+  }
+
+  /// The console's report dialog, for a listing or a review.
+  private func reportSheet(label: String, noun: String, reviewUID: String?) -> some View {
+    AglynActionSheet(
+      "Report \(label)",
+      message: "Tell us what is wrong with this \(noun). A staff member reads every report. Reporting again updates your report rather than adding another one.",
+      confirmLabel: "Send report", confirmEnabled: !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, busy: runner.busy,
+      error: runner.error,
+      onCancel: { runner.error = nil; close() },
+      onConfirm: {
+        runner.run(success: "Thanks — staff will review this report", onDone: close) {
+          try await api.report(listingID: listing.id, reason: reason, reviewUID: reviewUID)
         }
-      ) {
-        TextField("What is wrong", text: Binding(get: { reason }, set: { reason = String($0.prefix(1000)) }), axis: .vertical).lineLimit(3...8)
-          .accessibilityIdentifier("report-reason")
       }
+    ) {
+      TextField("Reason", text: Binding(get: { reason }, set: { reason = String($0.prefix(maxReportReasonLength)) }), axis: .vertical).lineLimit(3...8)
+        .accessibilityIdentifier("report-reason")
     }
   }
 

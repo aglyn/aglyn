@@ -262,4 +262,21 @@ describe('native publishing to the marketplace', () => {
     expect(derived.marketplaceFee.paid).toBe(PLAN_ENTITLEMENTS.starter.marketplaceFeePct)
     for (const { org, result } of derived.marketplaceFee.cases) expect(resolveMarketplaceFeePct(org as never)).toBe(result)
   })
+
+  it('reports a listing or a review in the console dialog\'s words, through its route', () => {
+    const dialog = flat(read('libs/plugins/marketplace/src/lib/components/report-target.component.tsx'))
+    const swift = read('libs/plugins/marketplace/src/ios/Sources/AglynMarketplacePlugin/MarketplaceScreens.swift')
+    const kotlin = read('libs/plugins/marketplace/src/android/src/commonMain/kotlin/com/aglyn/plugins/marketplace/MarketplaceScreens.kt')
+    expect(dialog).toContain("'Tell us what is wrong with this ' + (reviewUid ? 'review' : 'listing') + '. A staff member reads every report.'")
+    expect(dialog).toContain('Reporting again updates your report rather than adding another one.')
+    expect(dialog).toContain("'Thanks — staff will review this report'")
+    expect(dialog).toContain("{'Send report'}")
+    expect(read('libs/plugins/marketplace/src/lib/components/listing-reviews.component.tsx')).toContain('label={`this review by ${name}`}')
+    for (const native of [swift, kotlin]) {
+      expect(native).toContain('A staff member reads every report. Reporting again updates your report rather than adding another one.')
+      expect(native).toContain('"Thanks — staff will review this report"')
+      expect(native).toContain('"Send report"')
+      expect(native).toContain('this review by ')
+    }
+  })
 })

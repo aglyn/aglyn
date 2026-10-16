@@ -386,13 +386,17 @@ class MarketplaceApi(private val api: ConsoleApiClient) {
     api.request("/api/marketplace/reviews", ApiMethod.DELETE, jsonBody("listingId" to listingId))
   }
 
-  /** Reports a listing to staff. */
-  suspend fun report(listingId: String, reason: String) {
-    api.request("/api/marketplace/report", ApiMethod.POST, jsonBody("listingId" to listingId, "reason" to reason.trim()))
+  /** Reports a listing, or one of its reviews ([reviewUid], the reviewer's uid), to staff. Reporting again updates the report. */
+  suspend fun report(listingId: String, reason: String, reviewUid: String? = null) {
+    val fields = listOfNotNull("listingId" to listingId, "reason" to reason.trim(), reviewUid?.let { "reviewUid" to it })
+    api.request("/api/marketplace/report", ApiMethod.POST, jsonBody(*fields.toTypedArray()))
   }
 }
 
 /** "This workspace": its live purchases, by document id (`HELD_LICENCE_QUERY` over `licenceBase`). */
+/** The longest reason a report keeps (the console's and the route's `MAX_REASON_LENGTH`). */
+const val MAX_REPORT_REASON_LENGTH = 1000
+
 /** The Licensed-to choice that means a purchase naming no workspace (`EVERY_WORKSPACE`). */
 const val EVERY_WORKSPACE = "every"
 
