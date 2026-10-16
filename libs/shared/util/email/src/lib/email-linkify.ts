@@ -50,13 +50,39 @@ const URL_TRAILING_PUNCTUATION = /[.,!?'"]+$/
  *
  * `http`/`https` only. Every URL our system copy emits is absolute — the
  * senders share one `consoleOrigin()` precisely because a mail client has no
- * page to resolve a relative path against — and matching bare `www.` or
- * addresses would turn ordinary prose into links nobody wrote.
+ * page to resolve a relative path against — and matching bare `www.` would
+ * turn ordinary prose into links nobody wrote.
  */
 const BARE_URL = /https?:\/\/[^\s<>"]+/g
 
 /**
- * Links the bare URLs in one escaped line.
+ * Bare email addresses, linked as `mailto:`.
+ *
+ * Apple Mail, Gmail and Outlook detect an address in text and link it
+ * themselves, in their own link color rather than the theme's. Linking it
+ * here paints it the same accent-text shade as every other link. The domain
+ * must end in a letters-only label, so a sentence's closing period stays
+ * prose.
+ */
+const BARE_EMAIL =
+  /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/
+
+/**
+ * A URL or an address, URL first: an address inside a URL's query string
+ * belongs to that URL.
+ */
+const BARE_LINK = new RegExp(`${BARE_URL.source}|${BARE_EMAIL.source}`, 'g')
+
+function anchor(href: string, label: string, color: string): string {
+  return (
+    `<a href="${href}" target="_blank" ` +
+    `style="color:${color};text-decoration:underline;word-break:break-word;">` +
+    `${label}</a>`
+  )
+}
+
+/**
+ * Links the bare URLs and email addresses in one escaped line.
  *
  * Balanced closing parens and brackets are kept, because a URL can genuinely
  * end in one and a wrapping "(see https://…/a_(b))" is the rarer case.
@@ -67,7 +93,8 @@ export function linkifyEscapedText(
   /** The link color: the theme's accent text shade, when the sender has a theme. */
   color = '#1a73e8',
 ): string {
-  return escaped.replace(BARE_URL, (match) => {
+  return escaped.replace(BARE_LINK, (match) => {
+    if (!/^https?:\/\//.test(match)) return anchor(`mailto:${match}`, match, color)
     let url = match.replace(URL_TRAILING_PUNCTUATION, '')
     // `)` and `]` alike: a token's value dropped into "[{{brand.supportUrl}}]"
     // closes on a bracket the URL never opened.
@@ -78,12 +105,7 @@ export function linkifyEscapedText(
       url = url.slice(0, -1)
     }
     if (!url) return match
-    const trailer = match.slice(url.length)
-    return (
-      `<a href="${url}" target="_blank" ` +
-      `style="color:${color};text-decoration:underline;word-break:break-word;">` +
-      `${url}</a>${trailer}`
-    )
+    return `${anchor(url, url, color)}${match.slice(url.length)}`
   })
 }
 
