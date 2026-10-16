@@ -840,7 +840,8 @@ the RN POS lane (AGL-3618, `reference/rn-pos-mobile-agl3618`). The native POS re
   another plugin keeps (`credits` in the context, found by `credit-lookup`),
   a room charge to a checked-in stay (`reservations` asked for by status), and
   the QR payment page (`card-link`), drawn as a QR code on the device and never
-  sent anywhere, and the typed card ("Type card", `card-keyed`). A split pays
+  sent anywhere, and the typed card ("Enter card manually", the console's
+  "Type card", `card-keyed`). A split pays
   part of the balance; a declined reader payment can be retried and, in test
   mode, tapped with a test card.
 - **Typed card:** the console loads Stripe's Payment Element on the
@@ -852,12 +853,15 @@ the RN POS lane (AGL-3618, `reference/rn-pos-mobile-agl3618`). The native POS re
   receipt are the server's, exactly as for the console; the device only shows
   the form and reports how it closed (`KeyedCardEntry` in the hardware kit:
   confirmed, canceled or failed), and the server re-reads Stripe before it
-  records anything. The button shows when the register's context carries the
-  site's publishable key (as the console's does) and the app has the form.
+  records anything. The button ("Enter card manually") shows whenever the
+  app has the form and the register is online; the `card-keyed` answer
+  carries the publishable key beside the client secret, so a register whose
+  context read failed still takes the card, and no key at all fails with
+  words instead of hiding the tender.
   That is **Aglyn POS on iPhone, iPad and Android only**: Stripe has no card
   SDK for native macOS (the iOS SDK is UIKit, and Aglyn POS is not a Mac
   Catalyst app) or for the JVM, so the Mac and desktop registers take cards on
-  smart readers and the QR payment page, and do not offer "Type card".
+  smart readers and the QR payment page, and do not offer a typed card.
 - **The card SDK stays in Aglyn POS.** On Apple it is the `StripePaymentSheet`
   product of `stripe-ios-spm`, pinned exact in `Aglyn.xcodeproj` and linked to
   the AglynPOS target only, filtered to iOS; on Android it is
@@ -916,10 +920,23 @@ on `main`, because it is server code with nothing RN in it.
   `StripeTerminalCollector` (`apps/ios/AglynPOS`, iOS only) binds the SDK to
   it, and Aglyn POS publishes it as `DeviceCardReaders.shared` at launch; the
   commerce plugin's register, readers screen and kiosk, and a booking paid at
-  the counter, see only `CardCollector`. It connects the
-  first reader discovery finds (this iPhone for Tap to Pay, the nearest
-  Bluetooth reader), with the SDK's simulated readers whenever the
-  connection token says test mode. Card-present payments settle on the
+  the counter, see only `CardCollector` and `DeviceReaderControls` (the twin
+  of the Kotlin interface). The Card readers screen (in the register's menu,
+  the shell's store menu and POS Settings) finds readers by kind ("Set up Tap
+  to Pay on iPhone", "Find Bluetooth readers"), lists what discovery finds,
+  connects the one the cashier picks, and then shows its battery and software
+  version, offers and installs reader updates with their progress, and
+  disconnects (which also forgets it). Location is asked for only when the
+  cashier connects a reader, with the words and an Open Settings button when
+  it is refused; the SDK asks for Bluetooth as it scans. Opening the register
+  only reconnects the reader connected last time, silently, when those
+  permissions were already given. The kiosk's one-button setup still connects
+  the first reader discovery finds. The SDK's simulated readers answer
+  whenever the connection token says test mode (a Debug build's
+  `-AglynSimulateReaderUpdate available|required` offers the simulated
+  Bluetooth reader an update). The same screen pairs, renames, moves between
+  registers and removes smart readers through `commerce/pos-readers`, as the
+  console's POS devices card does. Card-present payments settle on the
   platform account, so the connection never sets `onBehalfOf`.
 - The Stripe Terminal iOS SDK comes through SPM, pinned `exact: 6.0.0` in
   `Aglyn.xcodeproj`, and only the AglynPOS target links its `StripeTerminal`

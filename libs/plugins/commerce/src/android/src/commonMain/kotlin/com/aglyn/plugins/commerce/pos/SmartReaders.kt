@@ -30,18 +30,23 @@ fun checkReaderPairing(code: String, address: ReaderAddress?): String? = when {
  * readers card calls (`commerce/pos-readers`), under the same staff gate.
  */
 interface SmartReadersApi {
-  suspend fun pair(code: String, label: String, address: ReaderAddress?)
+  suspend fun pair(code: String, label: String, address: ReaderAddress?, registerId: String? = null)
+
+  /** Renames a reader ([label]), or moves it to another register ([registerId], "" for any register). */
+  suspend fun update(readerId: String, label: String? = null, registerId: String? = null)
+
   suspend fun remove(readerId: String)
 }
 
 class ConsoleSmartReadersApi(private val api: ConsoleApiClient, private val hostId: String) : SmartReadersApi {
-  override suspend fun pair(code: String, label: String, address: ReaderAddress?) {
+  override suspend fun pair(code: String, label: String, address: ReaderAddress?, registerId: String?) {
     val fields = mutableMapOf<String, kotlinx.serialization.json.JsonElement>(
       "hostId" to JsonPrimitive(hostId),
       "action" to JsonPrimitive("register"),
       "registrationCode" to JsonPrimitive(code.trim()),
       "label" to JsonPrimitive(label.trim()),
     )
+    if (!registerId.isNullOrEmpty()) fields["registerId"] = JsonPrimitive(registerId)
     if (address != null) {
       fields["address"] = JsonObject(
         mapOf(
@@ -53,6 +58,17 @@ class ConsoleSmartReadersApi(private val api: ConsoleApiClient, private val host
         ),
       )
     }
+    api.request(POS_READERS_ROUTE, ApiMethod.POST, JsonObject(fields))
+  }
+
+  override suspend fun update(readerId: String, label: String?, registerId: String?) {
+    val fields = mutableMapOf<String, kotlinx.serialization.json.JsonElement>(
+      "hostId" to JsonPrimitive(hostId),
+      "action" to JsonPrimitive("update"),
+      "readerId" to JsonPrimitive(readerId),
+    )
+    if (label != null) fields["label"] = JsonPrimitive(label.trim())
+    if (registerId != null) fields["registerId"] = JsonPrimitive(registerId)
     api.request(POS_READERS_ROUTE, ApiMethod.POST, JsonObject(fields))
   }
 

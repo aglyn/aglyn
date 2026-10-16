@@ -6,25 +6,125 @@ import AglynHardware
 import AglynPluginHost
 import AglynUI
 import SwiftUI
+#if canImport(UIKit)
+  import UIKit
+#endif
 
 let posReadersRoute = "/api/commerce/pos-readers"
 
+/// A smart reader as the readers route lists it.
+struct PosReaderRow: Equatable, Identifiable {
+  let id: String
+  let label: String
+  let registerID: String?
+  let deviceType: String?
+  let serialNumber: String?
+  let status: String
+  let livemode: Bool
+  var online: Bool { status == "online" }
+}
+
+/// What the readers route answers for a site.
+struct PosReadersList: Equatable {
+  let available: Bool
+  let testMode: Bool
+  let locationReady: Bool
+  let readers: [PosReaderRow]
+}
+
+/// The address a store's card readers are used at, as the readers route takes it.
+struct ReaderAddress: Equatable {
+  var line1 = ""
+  var city = ""
+  var state = ""
+  var postalCode = ""
+  var country = "US"
+
+  var json: JSONValue {
+    .object([
+      "line1": .string(line1.trimmingCharacters(in: .whitespaces)),
+      "city": .string(city.trimmingCharacters(in: .whitespaces)),
+      "state": .string(state.trimmingCharacters(in: .whitespaces)),
+      "postalCode": .string(postalCode.trimmingCharacters(in: .whitespaces)),
+      "country": .string(country.trimmingCharacters(in: .whitespaces).uppercased()),
+    ])
+  }
+}
+
+/// Why a pairing cannot be sent yet, or nil. The route checks again.
+func checkReaderPairing(code: String, address: ReaderAddress?) -> String? {
+  if code.trimmingCharacters(in: .whitespaces).range(of: "^[A-Za-z0-9-]{3,64}$", options: .regularExpression) == nil {
+    return "Enter the code the reader shows on its screen."
+  }
+  if let address {
+    if [address.line1, address.city, address.postalCode].contains(where: { $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+      return "Enter the street, city and postal code."
+    }
+    if address.country.trimmingCharacters(in: .whitespaces).range(of: "^[A-Za-z]{2}$", options: .regularExpression) == nil {
+      return "Enter the two-letter country code, such as US."
+    }
+  }
+  return nil
+}
+
+/// The site's smart readers, through the route the console's POS devices card calls, under the same staff gate.
+struct SmartReadersAPI {
+  let api: ConsoleAPIClient
+  let hostID: String
+
+  func list(refresh: Bool = false) async throws -> PosReadersList {
+    readPosReadersList(
+      try await api.request(
+        posReadersRoute, method: .post,
+        body: ["hostId": .string(hostID), "action": "list", "refresh": .bool(refresh)]))
+  }
+
+  func pair(code: String, label: String, registerID: String?, address: ReaderAddress?) async throws {
+    var body: [String: JSONValue] = [
+      "hostId": .string(hostID), "action": "register",
+      "registrationCode": .string(code.trimmingCharacters(in: .whitespaces)),
+      "label": .string(label.trimmingCharacters(in: .whitespaces)),
+    ]
+    if let registerID, !registerID.isEmpty { body["registerId"] = .string(registerID) }
+    if let address { body["address"] = address.json }
+    _ = try await api.request(posReadersRoute, method: .post, body: .object(body))
+  }
+
+  /// Renames a reader, or moves it to another register ("" is any register).
+  func update(readerID: String, label: String? = nil, registerID: String? = nil) async throws {
+    var body: [String: JSONValue] = ["hostId": .string(hostID), "action": "update", "readerId": .string(readerID)]
+    if let label { body["label"] = .string(label.trimmingCharacters(in: .whitespaces)) }
+    if let registerID { body["registerId"] = .string(registerID) }
+    _ = try await api.request(posReadersRoute, method: .post, body: .object(body))
+  }
+
+  func remove(readerID: String) async throws {
+    _ = try await api.request(
+      posReadersRoute, method: .post,
+      body: ["hostId": .string(hostID), "action": "remove", "readerId": .string(readerID)])
+  }
+}
+
 /// The register's card readers: whether this store can take cards at all,
-/// this device's own reader (Tap to Pay or a Bluetooth reader, through the
-/// Stripe Terminal SDK, on iPhone and iPad), and the smart readers on the
-/// counter. The merchant buys their own Stripe reader and pairs it here by
-/// the code it shows (`commerce/pos-readers`, `register`).
+/// this device's own reader (Tap to Pay on iPhone or a Bluetooth reader,
+/// through the Stripe Terminal SDK, on iPhone and iPad: find, connect,
+/// battery, software updates, disconnect), and the smart readers on the
+/// counter, paired, renamed, moved and removed here as in the console's POS
+/// devices card (`commerce/pos-readers`).
 struct CardReadersScreen: View {
   let context: NativePluginContext
   @State private var readiness: Load<TerminalReadiness> = .loading
-  @State private var pos: PosContext?
+  @State private var list: PosReadersList?
+  @State private var registers: [PosRegister] = []
   @State private var refresh = 0
   @State private var pairing = false
+  @State private var renaming: PosReaderRow?
+  @State private var removing: PosReaderRow?
+  @State private var smartError: String?
   @State private var collector = DeviceCardCollector.make()
-  @State private var connecting = false
-  @State private var deviceProblem: String?
 
   private var hostID: String { context.hostID ?? "" }
+  private var smart: SmartReadersAPI { SmartReadersAPI(api: context.api, hostID: hostID) }
 
   var body: some View {
     Form {
@@ -42,52 +142,106 @@ struct CardReadersScreen: View {
             value.merchantReady ? nil : "Finish payments setup in the console before taking cards.")
           check(
             "Store address for card readers", value.locationReady,
-            value.locationReady ? nil : "Add the address card readers are used at, in the console's register settings.")
+            value.locationReady ? nil : "Pair a smart reader below with the store's address, or add it in the console's register settings.")
         }
       }
-      Section {
-        if let collector {
-          deviceRow(collector)
-        } else {
+      if let collector, let controls = collector.deviceReaders {
+        DeviceReaderSection(
+          collector: collector, controls: controls, hostID: hostID,
+          sessions: CommerceTerminalConnection(api: context.api), ready: readiness.value?.ready == true)
+      } else {
+        Section("This device") {
           AglynRow(
-            "Smart readers only", subtitle: "This Mac takes cards on the smart readers below.", systemImage: "wave.3.right")
-        }
-        if let deviceProblem { AglynNotice(deviceProblem, tone: .warning) }
-      } header: {
-        Text("This device")
-      }
-      Section {
-        if pos == nil, case .loading = readiness {
-          SkeletonRows(count: 2)
-        } else if let readers = pos?.readers, !readers.isEmpty {
-          ForEach(readers) { reader in
-            AglynRow(reader.label, subtitle: reader.livemode ? "Live" : "Test mode", systemImage: "creditcard.and.123") {
-              StatusChip(reader.online ? "Online" : "Offline", tone: reader.online ? .success : .neutral)
-            }
-            .accessibilityIdentifier("reader-\(reader.id)")
-          }
-        } else {
-          Text("No smart reader is paired with this store yet. A WisePOS E or S700 shows a code to pair it with.")
-            .foregroundStyle(.secondary)
-        }
-      } header: {
-        AglynSectionHeader("Smart readers") {
-          Button("Pair a reader", systemImage: "plus") { pairing = true }
-            .disabled(readiness.value?.available != true)
-            .accessibilityIdentifier("pair-reader")
+            "Smart readers and QR payments",
+            subtitle: "This device has no card reader of its own. Take cards on a smart reader below, by Card (QR), or by Enter card manually on an iPhone or iPad.",
+            systemImage: "wave.3.right")
         }
       }
+      smartSection
     }
     .formStyle(.grouped)
     .navigationTitle("Card readers")
     .refreshable { refresh += 1 }
-    .task(id: refresh) { await load() }
+    .task(id: refresh) { await load(fresh: refresh > 0) }
+    .task { await loadRegisters() }
     .sheet(isPresented: $pairing) {
-      PairReaderSheet(context: context) {
+      PairReaderSheet(
+        api: smart, registers: registers, needsAddress: readiness.value?.locationReady == false
+      ) {
         pairing = false
         refresh += 1
       }
     }
+    .sheet(item: $renaming) { reader in
+      RenameReaderSheet(api: smart, reader: reader) {
+        renaming = nil
+        refresh += 1
+      }
+    }
+    .confirmationDialog(
+      "Remove \(removing?.label ?? "this reader")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+      titleVisibility: .visible
+    ) {
+      Button("Remove reader", role: .destructive) {
+        guard let reader = removing else { return }
+        Task { await act { try await smart.remove(readerID: reader.id) } }
+      }
+    } message: {
+      Text("The reader is unpaired from this store. Pair it again with a new code to use it.")
+    }
+  }
+
+  @ViewBuilder private var smartSection: some View {
+    Section {
+      if list == nil, case .loading = readiness {
+        SkeletonRows(count: 2)
+      } else if let readers = list?.readers, !readers.isEmpty {
+        ForEach(readers) { reader in smartRow(reader) }
+      } else {
+        Text("No smart reader is paired with this store yet. A WisePOS E or S700 shows a code to pair it with.")
+          .foregroundStyle(.secondary)
+      }
+      if let smartError { AglynNotice(smartError, tone: .error) { self.smartError = nil } }
+    } header: {
+      AglynSectionHeader("Smart readers") {
+        Button("Pair a reader", systemImage: "plus") {
+          smartError = nil
+          pairing = true
+        }
+        .disabled(readiness.value?.available != true)
+        .accessibilityIdentifier("pair-reader")
+      }
+    }
+  }
+
+  private func smartRow(_ reader: PosReaderRow) -> some View {
+    let register = registers.first { $0.id == reader.registerID }?.name ?? "Any register"
+    return AglynRow(
+      reader.label, subtitle: "\(register) · \(reader.livemode ? "Live" : "Test mode")", systemImage: "creditcard.and.123"
+    ) {
+      HStack(spacing: AglynSpace.one) {
+        StatusChip(reader.online ? "Online" : "Offline", tone: reader.online ? .success : .neutral)
+        Menu {
+          Button("Rename", systemImage: "pencil") { renaming = reader }
+          if !registers.isEmpty {
+            Picker(
+              "Register",
+              selection: Binding(
+                get: { reader.registerID ?? "" },
+                set: { next in Task { await act { try await smart.update(readerID: reader.id, registerID: next) } } })
+            ) {
+              Text("Any register").tag("")
+              ForEach(registers) { Text($0.name).tag($0.id) }
+            }
+          }
+          Button("Remove", systemImage: "trash", role: .destructive) { removing = reader }
+        } label: {
+          Image(systemName: "ellipsis.circle").accessibilityLabel("\(reader.label) actions")
+        }
+        .accessibilityIdentifier("reader-actions-\(reader.id)")
+      }
+    }
+    .accessibilityIdentifier("reader-\(reader.id)")
   }
 
   private func check(_ title: String, _ ok: Bool, _ detail: String?) -> some View {
@@ -96,43 +250,21 @@ struct CardReadersScreen: View {
     }
   }
 
-  @ViewBuilder
-  private func deviceRow(_ collector: CardCollector) -> some View {
-    switch collector.state {
-    case .connected(let label, _, let testMode):
-      AglynRow(label, subtitle: testMode ? "Ready · test mode" : "Ready", systemImage: "wave.3.right") {
-        StatusChip("Connected", tone: .success)
-      }
-      Button("Disconnect", role: .destructive) { Task { await collector.disconnect() } }
-    case .connecting(let what):
-      AglynRow(what, subtitle: "Connecting…", systemImage: "wave.3.right") { ProgressView() }
-    case .unavailable(let reason):
-      AglynRow("Tap to Pay and Bluetooth readers", subtitle: reason, systemImage: "wave.3.right") {
-        StatusChip("Not available")
-      }
-    case .disconnected:
-      ForEach(collector.kinds, id: \.self) { kind in
-        Button {
-          Task { await connect(collector, kind) }
-        } label: {
-          AglynRow(DeviceCardCollector.title(kind), subtitle: DeviceCardCollector.detail(kind), systemImage: "wave.3.right")
-        }
-        .buttonStyle(.plain)
-        .disabled(connecting || readiness.value?.ready != true)
-      }
+  private func act(_ call: () async throws -> Void) async {
+    smartError = nil
+    do {
+      try await call()
+      removing = nil
+      refresh += 1
+    } catch {
+      smartError =
+        (error as? ConsoleAPIError).flatMap { $0.status == 0 ? nil : $0.message }
+        ?? "That did not go through. Check the connection and try again."
     }
   }
 
-  private func connect(_ collector: CardCollector, _ kind: CardCollectorKind) async {
-    connecting = true
-    deviceProblem = nil
-    let state = await collector.connect(hostID: hostID, kind: kind, sessions: CommerceTerminalConnection(api: context.api))
-    if case .unavailable(let reason) = state { deviceProblem = reason }
-    connecting = false
-  }
-
-  private func load() async {
-    readiness = .loading
+  private func load(fresh: Bool) async {
+    if readiness.value == nil { readiness = .loading }
     do {
       readiness = .ready(try await CommerceTerminalConnection(api: context.api).readiness(hostID: hostID))
     } catch {
@@ -142,18 +274,189 @@ struct CardReadersScreen: View {
         ?? "Card readers could not be checked. Check the connection and try again."
       readiness = .failed(message)
     }
-    pos = try? await ConsolePosSaleAPI(api: context.api, hostID: hostID).context()
+    list = try? await smart.list(refresh: fresh)
+  }
+
+  private func loadRegisters() async {
+    let all: [PosRegister] = await withCheckedContinuation { continuation in
+      var listening: FirestoreListening?
+      var answered = false
+      listening = context.firestore.listen(registersQuery(hostID)) { result in
+        guard !answered else { return }
+        answered = true
+        listening?.remove()
+        continuation.resume(returning: (try? result.get())?.map(posRegister) ?? [])
+      }
+    }
+    registers = sortRegisters(all)
+  }
+}
+
+/// This device's own reader: Tap to Pay on this iPhone, or a Bluetooth reader
+/// near it. Find, pick, connect, then battery, software updates and
+/// disconnect. Location is asked for only when the cashier connects one.
+private struct DeviceReaderSection: View {
+  let collector: CardCollector
+  let controls: DeviceReaderControls
+  let hostID: String
+  let sessions: CardReaderSessionSource
+  let ready: Bool
+  @State private var busy = false
+  @Environment(\.openURL) private var openURL
+
+  var body: some View {
+    Section {
+      switch collector.state {
+      case .connected(let label, let kind, let testMode):
+        AglynRow(
+          label,
+          subtitle: [
+            testMode ? "Ready · test mode" : "Ready",
+            readerBatteryText(controls.connectedReader?.batteryLevel, charging: controls.connectedReader?.charging ?? false),
+            controls.connectedReader?.softwareVersion.map { "Software \($0)" },
+          ].compactMap { $0 }.joined(separator: " · "),
+          systemImage: kind == .tapToPay ? "wave.3.right" : "creditcard.and.123"
+        ) {
+          StatusChip("Connected", tone: .success)
+        }
+        .accessibilityIdentifier("device-reader-connected")
+        updateRow
+        Button("Disconnect", role: .destructive) { run { await controls.forget() } }
+          .disabled(busy || controls.update?.progress != nil)
+          .accessibilityIdentifier("device-reader-disconnect")
+      case .connecting(let what):
+        AglynRow(what, subtitle: "Keep the reader on and close by.", systemImage: "wave.3.right") { ProgressView() }
+      case .unavailable, .disconnected:
+        if case .unavailable(let reason) = collector.state {
+          AglynNotice(reason, tone: .warning)
+        }
+        ForEach(collector.kinds, id: \.self) { kind in
+          Button {
+            run { await controls.discover(kind, hostID: hostID, sessions: sessions) }
+          } label: {
+            AglynRow(
+              kind == .tapToPay ? "Set up Tap to Pay on iPhone" : "Find Bluetooth readers",
+              subtitle: DeviceCardCollector.detail(kind),
+              systemImage: kind == .tapToPay ? "wave.3.right" : "antenna.radiowaves.left.and.right")
+          }
+          .buttonStyle(.plain)
+          .disabled(busy || isSearching || !ready)
+          .accessibilityIdentifier(kind == .tapToPay ? "device-reader-tap-to-pay" : "device-reader-bluetooth")
+        }
+      }
+      discoveryRows
+    } header: {
+      Text("This device")
+    } footer: {
+      if !collector.state.isConnected {
+        Text("Aglyn POS asks for location when you connect a reader (card networks require the location of in-person payments), and for Bluetooth when it looks for one.")
+      }
+    }
+  }
+
+  private var isSearching: Bool {
+    if case .searching = controls.discovery { return true }
+    return false
+  }
+
+  @ViewBuilder private var updateRow: some View {
+    if let update = controls.update {
+      if let progress = update.progress {
+        VStack(alignment: .leading, spacing: AglynSpace.one) {
+          Text("Updating the reader… keep it on and nearby.").font(AglynFont.subheadline)
+          ProgressView(value: progress)
+        }
+        .accessibilityIdentifier("device-reader-updating")
+      } else {
+        AglynNotice(
+          (update.required
+            ? "This reader needs a software update before its next payment."
+            : "A software update is ready for this reader.")
+            + (update.duration.map { " It takes \($0)." } ?? ""),
+          tone: update.required ? .warning : .info, actionTitle: "Install update"
+        ) {
+          run { await controls.installUpdate() }
+        }
+        .accessibilityIdentifier("device-reader-update")
+      }
+    }
+  }
+
+  @ViewBuilder private var discoveryRows: some View {
+    switch controls.discovery {
+    case .idle:
+      EmptyView()
+    case .failed(let message):
+      AglynNotice(message, tone: .error)
+      if message == readerLocationRefused {
+        Button("Open Settings") { openSettings() }
+      }
+    case .searching(let kind, let readers):
+      HStack(spacing: AglynSpace.one) {
+        ProgressView()
+        Text(kind == .tapToPay ? "Starting Tap to Pay…" : "Looking for card readers…").foregroundStyle(.secondary)
+        Spacer()
+        Button("Stop looking") { Task { await controls.cancelDiscovery() } }.buttonStyle(.borderless)
+      }
+      choices(readers)
+    case .found(let kind, let readers):
+      if readers.isEmpty {
+        Text(
+          kind == .tapToPay
+            ? "Tap to Pay is not available on this iPhone."
+            : "No card reader answered. Turn the reader on, keep it close and try again."
+        )
+        .foregroundStyle(.secondary)
+      }
+      choices(readers)
+    }
+  }
+
+  private func choices(_ readers: [DeviceReader]) -> some View {
+    ForEach(readers) { reader in
+      AglynRow(
+        reader.label,
+        subtitle: ([reader.kind == .tapToPay ? "This iPhone" : "Bluetooth"] + [readerBatteryText(reader.batteryLevel)].compactMap { $0 })
+          .joined(separator: " · "),
+        systemImage: reader.kind == .tapToPay ? "wave.3.right" : "creditcard.and.123"
+      ) {
+        Button("Connect") { run { await controls.connect(to: reader, hostID: hostID, sessions: sessions) } }
+          .buttonStyle(.borderedProminent)
+          .disabled(busy)
+          .accessibilityIdentifier("device-reader-connect-\(reader.id)")
+      }
+    }
+  }
+
+  private func run(_ work: @escaping () async -> Void) {
+    guard !busy else { return }
+    busy = true
+    Task {
+      await work()
+      busy = false
+    }
+  }
+
+  private func openSettings() {
+    #if canImport(UIKit)
+      if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+    #endif
   }
 }
 
 /// Pairs a smart reader the merchant bought: the code its screen shows, a
-/// name, and the register it serves.
+/// name, the register it serves, and the store's address when the site has
+/// no reader location yet.
 struct PairReaderSheet: View {
-  let context: NativePluginContext
+  let api: SmartReadersAPI
+  let registers: [PosRegister]
+  let needsAddress: Bool
   let done: () -> Void
   @Environment(\.dismiss) private var dismiss
   @State private var code = ""
   @State private var label = ""
+  @State private var registerID = ""
+  @State private var address = ReaderAddress()
   @State private var busy = false
   @State private var error: String?
 
@@ -161,15 +464,34 @@ struct PairReaderSheet: View {
     NavigationStack {
       Form {
         Section {
-          TextField("Registration code", text: $code)
+          TextField("Pairing code", text: $code)
             .autocorrectionDisabled()
             #if os(iOS)
               .textInputAutocapitalization(.never)
             #endif
             .accessibilityIdentifier("reader-code")
           TextField("Name, like Front counter", text: $label)
+          if !registers.isEmpty {
+            Picker("Register", selection: $registerID) {
+              Text("Any register").tag("")
+              ForEach(registers) { Text($0.name).tag($0.id) }
+            }
+          }
         } footer: {
           Text("On the reader, open Settings and choose Generate pairing code, then type the code it shows.")
+        }
+        if needsAddress {
+          Section {
+            TextField("Street", text: $address.line1)
+            TextField("City", text: $address.city)
+            TextField("State", text: $address.state)
+            TextField("Postal code", text: $address.postalCode)
+            TextField("Country", text: $address.country)
+          } header: {
+            Text("Where the reader is used")
+          } footer: {
+            Text("Stripe sets card readers up for this address's country.")
+          }
         }
         if let error { Section { AglynNotice(error, tone: .error) } }
       }
@@ -179,7 +501,7 @@ struct PairReaderSheet: View {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
           Button("Pair") { Task { await pair() } }
-            .disabled(code.trimmingCharacters(in: .whitespaces).count < 3 || busy)
+            .disabled(checkReaderPairing(code: code, address: needsAddress ? address : nil) != nil || busy)
         }
       }
     }
@@ -189,17 +511,52 @@ struct PairReaderSheet: View {
     busy = true
     error = nil
     do {
-      _ = try await context.api.request(
-        posReadersRoute, method: .post,
-        body: [
-          "hostId": .string(context.hostID ?? ""), "action": "register",
-          "registrationCode": .string(code.trimmingCharacters(in: .whitespaces)),
-          "label": .string(label.trimmingCharacters(in: .whitespaces)),
-        ])
+      try await api.pair(code: code, label: label, registerID: registerID, address: needsAddress ? address : nil)
       done()
     } catch {
       self.error = (error as? ConsoleAPIError)?.message ?? "The reader could not be paired. Try again."
     }
     busy = false
+  }
+}
+
+/// Renames a smart reader, as the console's Rename does.
+struct RenameReaderSheet: View {
+  let api: SmartReadersAPI
+  let reader: PosReaderRow
+  let done: () -> Void
+  @Environment(\.dismiss) private var dismiss
+  @State private var label = ""
+  @State private var busy = false
+  @State private var error: String?
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        TextField("Name", text: $label)
+        if let error { AglynNotice(error, tone: .error) }
+      }
+      .formStyle(.grouped)
+      .navigationTitle("Rename reader")
+      .onAppear { label = reader.label }
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Save") {
+            Task {
+              busy = true
+              do {
+                try await api.update(readerID: reader.id, label: label)
+                done()
+              } catch {
+                self.error = (error as? ConsoleAPIError)?.message ?? "The reader could not be renamed. Try again."
+              }
+              busy = false
+            }
+          }
+          .disabled(label.trimmingCharacters(in: .whitespaces).isEmpty || busy)
+        }
+      }
+    }
   }
 }
