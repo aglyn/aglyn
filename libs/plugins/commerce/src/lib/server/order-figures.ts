@@ -23,13 +23,7 @@ import {
   type PluginFigureReader,
   type PluginFigureRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
-import {
-  figureCount,
-  figureHasColumn,
-  figurePlural,
-  figureRanked,
-  figureWithChange,
-} from '@aglyn/aglyn/app-utils/weekly-summary'
+import { figureCount, figureHasColumn, figureRanked, figureStat } from '@aglyn/aglyn/app-utils/weekly-summary'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
   orderWindowFigures,
@@ -110,18 +104,18 @@ export function orderFigureReaders(firestore: () => Firestore): PluginFigureRead
       feature: 'commerceAnalytics',
       weeklySummary: {
         order: 70,
-        lines: (table) => {
+        summarize: (table) => {
           const week = table.rows[0]
-          if (!week || !figureHasColumn(table, 'revenue')) return []
-          const orders = figureCount(week['orders'])
-          if (!orders && !figureCount(week['revenue'])) return []
-          return [
-            `Sales: ${figureWithChange(table, week, 'revenue', 'revenueChange')} from ${figurePlural(orders, 'order', 'orders')}`,
-          ]
-        },
-        headline: (table) => {
-          const count = figureCount(table.rows[0]?.['orders'])
-          return count ? { count, one: 'order', many: 'orders' } : null
+          if (!week || !figureHasColumn(table, 'revenue')) return null
+          if (!figureCount(week['orders']) && !figureCount(week['revenue'])) return null
+          return {
+            title: 'Sales',
+            stats: [
+              figureStat(table, week, 'revenue', 'Revenue', { change: 'revenueChange' }),
+              figureStat(table, week, 'orders', 'Orders', { change: 'ordersChange', total: { one: 'order', many: 'orders' } }),
+              figureStat(table, week, 'averageOrder', 'Average order'),
+            ],
+          }
         },
       },
       read: async (request) => {
@@ -182,9 +176,9 @@ export function orderFigureReaders(firestore: () => Firestore): PluginFigureRead
       feature: 'commerceAnalytics',
       weeklySummary: {
         order: 80,
-        lines: (table) => {
-          const top = figureHasColumn(table, 'units') ? figureRanked(table, 'product', 'units', 'sold') : null
-          return top ? [`Top products: ${top}`] : []
+        summarize: (table) => {
+          const rows = figureHasColumn(table, 'units') ? figureRanked(table, 'product', 'units') : []
+          return rows.length ? { title: 'Top products', rows: rows.map((row) => ({ ...row, value: `${row.value} sold` })) } : null
         },
       },
       read: async (request) => {

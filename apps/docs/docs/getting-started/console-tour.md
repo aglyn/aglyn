@@ -444,22 +444,25 @@ workspace, so there is nothing for a workspace answer to change.
 
 ### Daily digests
 
-**Weekly summary** is on by default, for every workspace you own or are an
-admin of. Each Monday morning it emails you how that workspace's busiest sites
-(up to five) did the week before, Monday to Sunday:
+**Weekly summary** is on by default. Each Monday morning it emails you how
+the week before went, Monday to Sunday, for up to five of a workspace's
+busiest sites:
 
-- visitors and page views, with the change on the week before;
-- top pages and top traffic sources;
-- form submissions so far this month, by form;
-- new leads and new contacts;
-- bookings, sales and top products;
-- campaigns sent, funnels and automation runs;
-- across the workspace, deals won and lost and the open pipeline.
+- **One email for each site** that had something to report. It names the site
+  and links to its address, then shows visitors and page views with the change
+  on the week before, top pages and traffic sources, form submissions so far
+  this month, new leads and contacts, bookings, sales and top products,
+  campaigns, funnels and automation runs.
+- **A workspace overview** that adds the sites up: the week's totals, a line
+  for each site, and the workspace's deals won and lost and its open pipeline.
+  When only one site had anything to report, its email carries the workspace's
+  deals instead and no overview is sent.
 
-Each line appears only for what your plan includes and your site uses, and a
-site that had nothing to report is left out. If nothing happened anywhere, no
-email is sent. It is free and nothing in it is written by AI. Switch it off to
-stop it.
+Workspace owners and admins get the overview and every site's email. If you
+are an admin of a site but not of the workspace, you get that site's email.
+Each figure appears only where your plan includes it and the site uses it, and
+a week with nothing to report sends nothing. It is free and nothing in it is
+written by AI. Switch it off to stop all of it.
 
 **Daily CRM digest** is on by default. Each morning it sends you one
 notification and one email listing your overdue and due-today tasks and the

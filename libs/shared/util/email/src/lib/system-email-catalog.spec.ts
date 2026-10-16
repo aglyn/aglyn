@@ -83,7 +83,12 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
       for (const entry of SYSTEM_EMAIL_TEMPLATES) {
         const declared = new Set(entry.mergeTokens.map((token) => token.name))
         for (const block of entry.defaultBody ?? []) {
-          const text = block.block === 'button' ? block.href : block.text
+          const text =
+            block.block === 'button'
+              ? `${block.label} ${block.href}`
+              : block.block === 'html'
+                ? block.html
+                : block.text
           const used = [...text.matchAll(/\{\{([^}]+)\}\}/g)].map((m) =>
             m[1].trim(),
           )
@@ -117,13 +122,13 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
 
     it('gives every Resend-delivered email a reason, and nothing else one', () => {
       // Premise: the catalog's Resend emails, all of them.
-      // The 30 written out — the workspace handoff and the upgrade proposal
+      // The 31 written out — the workspace handoff and the upgrade proposal
       // joined them in AGL-3466, the staff follow-up in AGL-3691, the weekly
-      // summary in AGL-3867 — the five
+      // summary's workspace and site emails in AGL-3867 — the five
       // getting-started emails (AGL-3692), and one per risk notice kind plus the risk
       // digest and review acknowledgment (AGL-3368, pinned in
       // `risk-notice-catalog.spec.ts`).
-      expect(editable.length).toBe(30 + 5 + RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length)
+      expect(editable.length).toBe(31 + 5 + RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length)
       for (const entry of SYSTEM_EMAIL_TEMPLATES) {
         if (isSystemEmailEditable(entry)) {
           expect(entry.footerReason?.startsWith('You’re receiving this')).toBe(true)
@@ -294,6 +299,32 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
         const heading = html.indexOf('Northwind has used all 6 of its pages')
         expect(heading).toBeGreaterThanOrEqual(0)
         expect(html.indexOf('Northwind is using 6 of the 6')).toBeGreaterThan(heading)
+      }
+    })
+
+    it('turns an html block into an emailHtml node that draws its token’s markup (AGL-3867)', () => {
+      for (const key of ['weekly-summary', 'weekly-summary-site']) {
+        const map = buildDefaultEmailNodeMap(getSystemEmailTemplate(key)!)
+        const html = Object.values(map).find((node) => node.componentId === 'emailHtml')
+        expect(html?.props).toEqual({ html: '{{summary.html}}' })
+        const rendered = renderEmailHtml({
+          nodes: map as never,
+          rootId: EMAIL_NODE_ROOT_ID,
+          merge: {
+            'summary.title': 'Shop last week',
+            'summary.period': 'Oct 5 – Oct 11, compared with the week before',
+            'summary.html': '<table role="presentation"><tr><td style="color:#212121;">577 Visitors</td></tr></table>',
+            'summary.buttonLabel': 'Open Shop',
+            'summary.url': 'https://app.example.com/acme/hosts/shop',
+          },
+          sanitize: (value) => value,
+        }).html
+        // The heading, the drawn figures, then the button, in that order.
+        const heading = rendered.indexOf('Shop last week')
+        const figures = rendered.indexOf('<td style="color:#212121;">577 Visitors</td>')
+        expect(heading).toBeGreaterThanOrEqual(0)
+        expect(figures).toBeGreaterThan(heading)
+        expect(rendered.indexOf('Open Shop')).toBeGreaterThan(figures)
       }
     })
 
