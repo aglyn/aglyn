@@ -111,6 +111,16 @@ on:
     # The route records its beat regardless, so the row can be added once a
     # beat exists.
     - cron: '0 13 * * *' # crm-daily-digest — daily 13:00 UTC (08:00 America/Chicago)
+    # The weekly summary (AGL-3867): Mondays 13:00 UTC (08:00 America/Chicago),
+    # the free email that tells each workspace's owners and admins how their
+    # sites did the week before. Here rather than on Cloud Scheduler for the
+    # CRM digest's reasons: an hour of drift is still Monday morning, and the
+    # route is idempotent per person per ISO week
+    # (`orgs/{orgId}/weeklySummaries/{week}`), so a manual re-dispatch after a
+    # dropped Monday sends only what never went. NOT in `SCHEDULED_JOBS` yet,
+    # for the same reason the CRM digest is not: the route beats on every
+    # POST, so the row is added once a beat exists.
+    - cron: '0 13 * * 1' # weekly-summary — Mondays 13:00 UTC (08:00 America/Chicago)
     # ⛔ The hourly CRM task reminders (AGL-2659) are NOT here any more; they
     # run on Cloud Scheduler as `consoleCrmTaskReminders`. GitHub delivered
     # this `0 * * * *` entry about once every six hours — 00:12 and 06:12 on
@@ -240,6 +250,11 @@ on:
           # idempotent per member per UTC day, so a second run on the same
           # day reaches only whoever the first one did not.
           - /api/crm/daily-digest
+          # The weekly summary (AGL-3867). A GET reports who would be sent
+          # what; the scheduled POST sends. Safe to run by hand at any time —
+          # each person is sent a week's summary once, so a second run in the
+          # same week reaches only whoever the first one did not.
+          - /api/admin/weekly-summary
           # Task reminders (AGL-2659). A GET reports the plan; the scheduled
           # POST sends. Safe to run by hand at any time — a handled reminder
           # is stamped on the task, so a second run reaches only what the
@@ -348,6 +363,7 @@ jobs:
         run: |
           case "$FIRED_SCHEDULE" in
             '0 13 * * *') path=/api/crm/daily-digest ;;
+            '0 13 * * 1') path=/api/admin/weekly-summary ;;
             '0 5 * * 1') path=/api/admin/firestore-export ;;
             '30 5 * * 1') path=/api/admin/reap-plugin-artifacts ;;
             '0 6 * * 1') path=/api/admin/reverify-plugin-versions ;;

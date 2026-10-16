@@ -365,6 +365,11 @@
   ],
   "digests": [
     {
+      "key": "weeklySummary",
+      "label": "Weekly summary",
+      "description": "Each Monday by email, for the workspaces you own or manage: last week’s visitors, top pages, form submissions, new leads, bookings, sales and deals. Free, and nothing is generated."
+    },
+    {
       "key": "crmDaily",
       "label": "Daily CRM digest",
       "description": "Each morning: your overdue and due-today tasks and the leads nobody has worked, here and by email."

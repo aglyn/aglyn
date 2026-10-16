@@ -18,12 +18,14 @@
 import { isPipelineArchived, type CrmDeal, type CrmPipeline } from '@aglyn/aglyn/app-utils/crm'
 import {
   PLUGIN_FIGURE_MAX_ROWS,
+  pluginFigureCellText,
   pluginFigureChange,
   pluginFigureWindows,
   registerPluginFigureReader,
   type PluginFigureReader,
   type PluginFigureRow,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
+import { figureCount, figureHasColumn, figurePlural, figureRow } from '@aglyn/aglyn/app-utils/weekly-summary'
 import { scopedToHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { currencyOfDeals, pipelineTotals } from '../model/crm-reports'
@@ -109,6 +111,15 @@ export function crmPipelineFigureReader(firestore: () => Firestore): PluginFigur
     scope: 'org',
     windows: [],
     feature: 'crm',
+    weeklySummary: {
+      order: 20,
+      lines: (table) => {
+        const all = figureRow(table, 'pipeline', 'All pipelines')
+        const deals = figureCount(all?.['deals'])
+        if (!all || !deals) return []
+        return [`Open pipeline: ${figurePlural(deals, 'deal', 'deals')} worth ${pluginFigureCellText(table, 'value', all['value'] ?? 0)}`]
+      },
+    },
     read: async (request) => {
       const db = firestore()
       const [open, pipelines] = await Promise.all([
@@ -214,6 +225,21 @@ export function crmClosedDealsFigureReader(firestore: () => Firestore): PluginFi
     scope: 'org',
     windows: WINDOWS,
     feature: 'crm',
+    weeklySummary: {
+      order: 10,
+      lines: (table) => {
+        const row = table.rows[0]
+        if (!row || !figureHasColumn(table, 'won')) return []
+        const won = figureCount(row['won'])
+        const lost = figureCount(row['lost'])
+        if (!won && !lost) return []
+        return [
+          `Deals: ${won.toLocaleString('en-US')} won` +
+            (won ? ` (${pluginFigureCellText(table, 'wonValue', row['wonValue'] ?? 0)})` : '') +
+            `, ${lost.toLocaleString('en-US')} lost`,
+        ]
+      },
+    },
     read: async (request) => {
       if (!WINDOWS.includes(request.days)) {
         return { ok: false, status: 400, error: 'That window is not one closed deals are read over' }
