@@ -546,6 +546,8 @@ struct FieldInput: View {
           }
         }
       case "file":
+        // The field says what file it wants (a bundle, a manifest), as the Kotlin renderer's title does.
+        Text(label).font(AglynFont.subheadline)
         HStack {
           Button(text.wrappedValue.isEmpty ? "Choose a file" : "Choose a different file") { picking = .files }
           if !text.wrappedValue.isEmpty {

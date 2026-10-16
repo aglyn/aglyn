@@ -28,6 +28,9 @@ import {
   Typography,
 } from '@mui/material'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
+import { useMerchantPayments } from '@aglyn/tenant-feature-instance'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as CommerceModel from '../../../model'
 import {
@@ -111,6 +114,12 @@ export interface PosTenderPanelProps {
 export function PosTenderPanel(props: PosTenderPanelProps) {
   const { user, hostId, sale, context, display, onSale, notify } = props
   const settings = context?.settings
+  // Card tenders all charge through the workspace's Stripe account. They stay
+  // on screen without one, disabled with the reason, so the register says
+  // what to set up instead of losing the buttons or refusing after a tap.
+  const payments = useMerchantPayments(hostId)
+  const cardsBlocked = payments.blocked
+  const cardsReason = payments.reason ?? ''
   const [amount, setAmount] = useState('')
   const [tipCents, setTipCents] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -350,6 +359,11 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
               'Card readers, typed cards, the QR link, gift cards, store credit and room charges are off.'}
         </Alert>
       ) : null}
+      {!paid && !offline && cardsBlocked ? (
+        <PrerequisiteNotice href={payments.href ?? undefined} actionLabel="Open Payments">
+          {`${cardsReason} Cash, gift cards and store credit work without it.`}
+        </PrerequisiteNotice>
+      ) : null}
       {!paid ? (
         <>
           <Divider />
@@ -414,43 +428,51 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
               {'Cash'}
             </Button>
             {context?.terminal?.available && readers.length ? (
-              <Button
-                variant="contained"
-                disabled={offline || busy || chargeCents <= 0 || !readerId}
-                onClick={() => void startCardPresent()}
-                sx={{ minHeight: 56 }}
-              >
-                {'Card reader'}
-              </Button>
+              <BlockedControl blocked={cardsBlocked} reason={cardsReason} fullWidth>
+                <Button
+                  variant="contained"
+                  disabled={offline || busy || chargeCents <= 0 || !readerId}
+                  onClick={() => void startCardPresent()}
+                  sx={{ minHeight: 56 }}
+                >
+                  {'Card reader'}
+                </Button>
+              </BlockedControl>
             ) : null}
             {posNativeBridge() ? (
-              <Button
-                variant="contained"
-                disabled={offline || busy || chargeCents <= 0}
-                onClick={() => void startBridge()}
-                sx={{ minHeight: 56 }}
-              >
-                {'Tap to Pay / Bluetooth reader'}
-              </Button>
+              <BlockedControl blocked={cardsBlocked} reason={cardsReason} fullWidth>
+                <Button
+                  variant="contained"
+                  disabled={offline || busy || chargeCents <= 0}
+                  onClick={() => void startBridge()}
+                  sx={{ minHeight: 56 }}
+                >
+                  {'Tap to Pay / Bluetooth reader'}
+                </Button>
+              </BlockedControl>
             ) : null}
             {context?.publishableKey ? (
+              <BlockedControl blocked={cardsBlocked} reason={cardsReason} fullWidth>
+                <Button
+                  variant="outlined"
+                  disabled={offline || busy || chargeCents <= 0}
+                  onClick={() => void startKeyed()}
+                  sx={{ minHeight: 56 }}
+                >
+                  {'Type card'}
+                </Button>
+              </BlockedControl>
+            ) : null}
+            <BlockedControl blocked={cardsBlocked} reason={cardsReason} fullWidth>
               <Button
                 variant="outlined"
                 disabled={offline || busy || chargeCents <= 0}
-                onClick={() => void startKeyed()}
+                onClick={() => void startLink()}
                 sx={{ minHeight: 56 }}
               >
-                {'Type card'}
+                {'Card (QR)'}
               </Button>
-            ) : null}
-            <Button
-              variant="outlined"
-              disabled={offline || busy || chargeCents <= 0}
-              onClick={() => void startLink()}
-              sx={{ minHeight: 56 }}
-            >
-              {'Card (QR)'}
-            </Button>
+            </BlockedControl>
             <Button
               variant="outlined"
               disabled={offline || busy || chargeCents <= 0}

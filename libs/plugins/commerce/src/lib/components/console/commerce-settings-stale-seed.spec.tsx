@@ -140,6 +140,7 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change', () =>
 )
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useMerchantPayments: () => ({ state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }),
   useFirestore: () => ({}),
   useFirestoreDoc: () => ({
     data: storeDoc,

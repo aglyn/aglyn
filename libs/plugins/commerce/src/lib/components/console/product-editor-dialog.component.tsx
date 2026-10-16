@@ -1883,6 +1883,10 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             modifierGroups={current.modifierGroups ?? NO_MODIFIER_GROUPS}
             update={update}
           />
+        ) : pos.ready ? (
+          <EntitlementUpsell planLabel={pos.planLabel} upgradeHref={pos.upgradeHref}>
+            {'Register quick keys and modifier groups (sizes, add-ons) come with the point of sale.'}
+          </EntitlementUpsell>
         ) : null}
         {current.type === 'digital' ? (
           <ProductDigitalFields

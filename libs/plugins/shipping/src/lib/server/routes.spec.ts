@@ -390,6 +390,8 @@ describe('one order: rate, buy, list, void', () => {
 
     const listed = await read(await call(labelsRoute, { query: { hostId: HOST, recordId: 'order-1' } }))
     expect(listed.body.labels).toHaveLength(1)
+    // The site bought a label, so it has somewhere to ship from.
+    expect(listed.body.shipFrom).toBe(true)
     expect((await call(labelsRoute, { query: { hostId: HOST } })).status).toBe(400)
 
     const voided = await read(await call(labelsVoidRoute, { body: { hostId: HOST, labelId: first.body.label.labelId } }))

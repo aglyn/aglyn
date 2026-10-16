@@ -420,11 +420,21 @@ export const labelsRoute: Handler = methods(['GET'], async (request) => {
   const recordId = new URL(request.url).searchParams.get('recordId') ?? ''
   if (!isDocumentId(recordId)) return shippingError(400, 'Missing recordId')
   try {
-    const [labels, addressCheck] = await Promise.all([
+    const [labels, addressCheck, shipFrom] = await Promise.all([
       listRecordLabels(gate.actor.orgId, gate.actor.hostId, recordId),
       readAddressCheck(gate.actor.orgId, gate.actor.hostId, recordId),
+      // Whether a label can be bought at all: every quote needs a ship-from
+      // address, and the order's labels card says so before Buy label rather
+      // than in the refusal after it.
+      readHostSettings(gate.actor.orgId, gate.actor.hostId)
+        .then((settings) => resolveShipFrom(gate.actor.hostId, settings))
+        .catch(() => null),
     ])
-    return shippingJson({ labels: labels.map(publicLabel), addressCheck: publicAddressCheck(addressCheck) })
+    return shippingJson({
+      labels: labels.map(publicLabel),
+      addressCheck: publicAddressCheck(addressCheck),
+      shipFrom: Boolean(shipFrom),
+    })
   } catch (error) {
     return flowRefusal(error)
   }
