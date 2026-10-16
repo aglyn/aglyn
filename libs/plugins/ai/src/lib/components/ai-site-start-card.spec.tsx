@@ -110,9 +110,17 @@ const siteJob = (patch: Record<string, unknown> = {}) => ({
   ...patch,
 })
 
-/** The create door's request: the one POST to the jobs route itself. */
+/** The jobs route's POSTs that only check (AGL-3859): asked before "Create site" makes the site. */
+const checkCalls = () =>
+  mockFetch.mock.calls.filter(
+    ([url, init]) => url === '/api/ai/jobs' && init?.method === 'POST' && JSON.parse(init.body).check === true,
+  )
+
+/** The create door's request: the one POST to the jobs route that starts the job. */
 const postCall = () => {
-  const call = mockFetch.mock.calls.find(([url, init]) => url === '/api/ai/jobs' && init?.method === 'POST')
+  const call = mockFetch.mock.calls.find(
+    ([url, init]) => url === '/api/ai/jobs' && init?.method === 'POST' && JSON.parse(init.body).check !== true,
+  )
   if (!call) throw new Error('no job was started')
   return call
 }
@@ -1098,10 +1106,14 @@ describe('before the site exists (AGL-3761)', () => {
     // Nothing is created by answering.
     expect(site.create).not.toHaveBeenCalled()
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ ok: true }))
     mockFetch.mockResolvedValueOnce(json({ job: siteJob({ hostId: 'host-new' }) }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/acme/hosts/royal-styles/ai-jobs/job-1'))
     expect(site.create).toHaveBeenCalledTimes(1)
+    // Checked first, with no site yet (AGL-3859), then started on the site made.
+    expect(checkCalls()).toHaveLength(1)
+    expect(JSON.parse(checkCalls()[0][1].body)).toEqual(expect.objectContaining({ hostId: null, kind: 'site', check: true }))
     const [, init] = postCall()
     expect(JSON.parse(init.body)).toEqual(expect.objectContaining({ hostId: 'host-new', kind: 'site' }))
     expect(leave).toHaveBeenCalledTimes(1)
@@ -1116,10 +1128,48 @@ describe('before the site exists (AGL-3761)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
     await screen.findByText('Tell us about your site')
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ ok: true }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     expect(await screen.findByText('That subdomain is taken')).toBeTruthy()
     expect(await screen.findByText('How do you want to start?')).toBeTruthy()
-    expect(mockFetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+    expect(() => postCall()).toThrow('no job was started')
+  })
+
+  /*
+   * A start the jobs route would refuse, or would ask the Free go-ahead for,
+   * is answered before any site exists (AGL-3859): a person who leaves there
+   * leaves nothing behind.
+   */
+  it('creates no site when the check refuses the start, and says why', async () => {
+    const site = pendingSite()
+    await openChoice(pendingProps(site))
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await screen.findByText('Tell us about your site')
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    mockFetch.mockResolvedValueOnce(json({ error: 'Too many AI jobs at once. Try again in a minute.' }, 429))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    expect(await screen.findByText('Too many AI jobs at once. Try again in a minute.')).toBeTruthy()
+    expect(site.create).not.toHaveBeenCalled()
+    expect(() => postCall()).toThrow('no job was started')
+  })
+
+  it('asks the Free go-ahead before the site exists, and creates it only once it is given', async () => {
+    const site = pendingSite()
+    await openChoice(pendingProps(site), { jobs: [], freeTaste: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await screen.findByText('Tell us about your site')
+    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    const prompt = aiFreeSitePrompt({ left: 60, resetsOn: '2026-11-01' }, 2)!
+    mockFetch.mockResolvedValueOnce(json({ error: aiCreditsPromptText(prompt, 'site'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt }, 409))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    const fits = await screen.findByRole('button', { name: 'Build what fits' })
+    expect(site.create).not.toHaveBeenCalled()
+    mockFetch.mockResolvedValueOnce(json({ ok: true }))
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob({ hostId: 'host-new' }) }))
+    fireEvent.click(fits)
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/acme/hosts/royal-styles/ai-jobs/job-1'))
+    expect(site.create).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(postCall()[1].body)).toEqual(expect.objectContaining({ hostId: 'host-new', creditsConfirmed: true }))
   })
 
   it('gives a site it created, whose job could not start, the starter on the way out', async () => {

@@ -242,6 +242,11 @@ export interface StockPhotoPick {
    * picture of last resort when the library is down or found nothing.
    */
   origin: 'library' | 'starter'
+  /**
+   * What the photo shows, in words a page's `alt` takes as they stand
+   * (AGL-3856): the photo's own where the subject's words do not describe it.
+   */
+  alt?: string
 }
 
 export interface StockPhotoPicker {

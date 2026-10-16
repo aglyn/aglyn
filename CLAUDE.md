@@ -48,6 +48,34 @@ The session that fixes it owns the whole path, in the same turn:
 A fix that is on main and missing from production counts as the bug still
 being live.
 
+## A red status check is green again within the hour
+
+Zach, 2026-10-16, standing. Any health check that goes red counts as a
+production incident: a `/api/health/*` door, an UptimeRobot monitor, a GCP
+uptime check, or a `[Must know]` / `[Should know]` "is degraded" in
+#ops-alerts. This holds even when real users are fine and the check is
+"only" wrong. AGL-3857: Console journeys stayed red for 11 h over a 2 h
+App Check burst. Its fix (#1659) merged to main in 35 minutes and then sat
+there. The hand-off notes said "the window rolls clear by 10:30Z". It did
+not clear, and nobody re-read the door to find that out.
+
+The session that sees it owns it to green, in the same turn:
+
+1. Read the failing check's `code` in the door's body, then find the cause.
+2. Fix the cause, or the check if the check is what is wrong. A false red
+   is a bug in the check, and it gets fixed the same way.
+3. Ship the fix through the sign-up-blocker path above. Merge to main,
+   carry it into the open promotion (or cut one and label it `hotfix`), and
+   get it into production. Code that runs from main, such as the samplers
+   in `tools/e2e` and the scheduled workflows, takes effect on merge.
+   Trigger the next run by hand (`gh workflow run …`) rather than waiting
+   for the schedule.
+4. Re-read the door until it answers 200. If it cannot go green within the
+   hour, say why to Zach directly, with the time it will go green.
+
+⛔ "It will roll clear in N hours", "it rides the next promotion" and "a
+peer is on it" are not states a red check may be left in.
+
 ## Every PR body details every change and every commit in it
 
 Zach, 2026-10-09, standing: a PR description lists every change it carries and

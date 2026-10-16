@@ -105,15 +105,18 @@ const words = aiStockPhotoWordsOf({ plan: { language: 'es', photoWords: PHOTO_WO
 beforeEach(() => aiStockForgetJobPhotos())
 
 describe('a site’s photo words are read subject first (AGL-3769, Panaderia La Espiga Dorada)', () => {
-  it('read "bakery pan dulce conchas" head last: the business "pan dulce conchas", the craft "concha"', () => {
+  it('read "bakery pan dulce conchas" head last: the business "pan dulce conchas", searched first', () => {
     const terms = aiStockSiteTerms(PHOTO_WORDS)
     expect(terms.business).toBe('pan dulce conchas')
-    expect(terms.craft).toBe('concha')
     expect(aiStockSearchesFor(HERO, terms, '')[0]?.query).toBe('pan dulce conchas')
-    // And held the hero to "concha" in its first tag, which "ceanothus concha" names.
+    // Read so, the craft was "concha", and the hero was held to it in its first
+    // tag, which "ceanothus concha" names. The craft the table lists beside it
+    // is the craft now ("bakery", AGL-3856), and the ceanothus is turned down
+    // even on this reading.
+    expect(terms.craft).toBe('bakery')
     const ceanothus = byId(PAN_DULCE_CONCHAS, CEANOTHUS)
     expect(ceanothus.tags[0]).toBe('ceanothus concha')
-    expect(aiStockRelevance(ceanothus, { subject: '', domain: terms.domain, category: terms.core, named: terms.named, rivals: terms.rivals, first: true })).toBeGreaterThan(0)
+    expect(aiStockRelevance(ceanothus, { subject: '', domain: terms.domain, category: terms.core, named: terms.named, rivals: terms.rivals, first: true })).toBe(0)
   })
 
   it('takes the subject the words lead with, and the place or person that names it', () => {
