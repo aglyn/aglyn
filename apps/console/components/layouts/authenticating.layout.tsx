@@ -25,14 +25,14 @@ import {
 import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'
 import { Stack } from '@mui/material'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   isSignUpLandingHeld,
   useSignUpLandingHeld,
 } from '../../utils/sign-up-landing-hold'
 import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
-import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { emailGateWouldRefuse } from '../../utils/email-verification-gate'
+import { mintSession } from '../../utils/session-mint'
 import { VisitorConsentPill } from '../visitor-consent.component'
 
 export interface AuthenticatingLayoutProps
@@ -71,6 +71,18 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
   // raises the hold in an effect of its own, which runs before this one in
   // the same commit, after this render read the state.
   const signUpLanding = useSignUpLandingHeld()
+  // The account whose delegated hand-off is under way (AGL-3843). The effect
+  // below re-runs on every ID-token emission, and the hand-off's own forced
+  // refresh is one, so without this each run minted again: one SSO sign-in in
+  // mobile Safari minted four sessions and four device rows in seven seconds.
+  const handingOff = useRef<string | null>(null)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   useEffect(() => {
     // A one-shot code is being redeemed on this URL — no redirect may fire
@@ -106,18 +118,20 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
     // in-flight mint. A same-origin '/' return keeps the client-nav path
     // (no race — the mint stays in flight).
     if (/^https?:\/\//.test(continueUrl)) {
-      let active = true
+      // Use the live SDK user (auth.currentUser) — the most reliable source
+      // of a fresh ID token; signInCheckResult.user can lag.
+      const user = auth.currentUser ?? signInCheckResult?.user ?? null
+      if (!user) {
+        // Signed-in but no user object yet — wait for the next tick rather
+        // than hand off with no cookie.
+        return void 0
+      }
+      // Once per sign-in (AGL-3843). A re-run for the same account neither
+      // mints again nor cancels the run in flight: that run owns the
+      // navigation, and only leaving the page stops it.
+      if (handingOff.current === user.uid) return void 0
+      handingOff.current = user.uid
       void (async () => {
-        // Use the live SDK user (auth.currentUser) — the most reliable
-        // source of a fresh ID token; signInCheckResult.user can lag. Force
-        // a token refresh, and confirm the mint returned before handing off
-        // so the workspace's silent sign-in has a cookie to read (AGL-467).
-        const user = auth.currentUser ?? signInCheckResult?.user ?? null
-        if (!user) {
-          // Signed-in but no user object yet — wait for the next tick
-          // rather than hand off with no cookie.
-          return
-        }
         // An unverified password account cannot have the cookie (AGL-479),
         // so handing it off lands it session-less on the other origin, which
         // sends it straight back here to be handed off again — a phone
@@ -126,37 +140,32 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
         // origin that holds the session; /verify-email mints the cookie and
         // carries the continue URL on once the address is confirmed.
         if (await emailGateWouldRefuse(user)) {
-          if (active) {
+          handingOff.current = null
+          if (mounted.current) {
             router.replace(
               `/verify-email?${continueParam(encodeURIComponent(continueUrl))}`,
             )
           }
           return
         }
-        try {
-          const response = await authorizedFetch(
-            user,
-            '/api/auth/session',
-            { method: 'POST' },
-            { forceRefresh: true },
-          )
-          if (!response.ok) {
-            console.error(
-              '[auth] delegated mint failed before hand-off',
-              response.status,
-              await response.text().catch(() => ''),
-            )
-          }
-        } catch (error) {
-          console.error('[auth] delegated mint threw before hand-off', error)
-        }
-        if (active && typeof window !== 'undefined') {
+        // Force a token refresh, and confirm the mint returned before handing
+        // off so the workspace's silent sign-in has a cookie to read
+        // (AGL-467). Shared with any mint already in flight for this account
+        // (`useSessionCookie` mints on the same landing), so the browser gets
+        // one session and one device row. A refusal is logged by the mint.
+        const minted = await mintSession(user, { current: null }, { forceRefresh: true })
+        if (!minted) console.error('[auth] delegated mint failed before hand-off')
+        if (
+          mounted.current &&
+          auth.currentUser?.uid === user.uid &&
+          typeof window !== 'undefined'
+        ) {
           window.location.assign(continueUrl)
+        } else {
+          handingOff.current = null
         }
       })()
-      return () => {
-        active = false
-      }
+      return void 0
     }
 
     // Carry a marketing plan CTA through the auth bounce (AGL-1117). Someone
