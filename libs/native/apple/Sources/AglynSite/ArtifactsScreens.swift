@@ -133,6 +133,10 @@ struct ArtifactsScreen: View {
         .keyboardShortcut("n", modifiers: .command)
         .accessibilityIdentifier("add-\(kind.singular)")
       }
+      // Create with AI and anything else a plugin puts beside New (the console's zone for this list).
+      ToolbarItemGroup(placement: .primaryAction) {
+        SlotWidgets(context: context, slot: kind.createZone, placement: .header)
+      }
     }
     .onAppear {
       if !seeded {
@@ -223,7 +227,10 @@ struct ArtifactsScreen: View {
       let filtered = !model.search.isEmpty || model.kindFilter != nil
       AglynEmptyState(
         filtered ? "No \(kind.title.lowercased()) match" : "No \(kind.title.lowercased()) yet", systemImage: kind.systemImage,
-        message: filtered ? "Try another search." : kind.emptyMessage)
+        message: filtered ? "Try another search." : kind.emptyMessage
+      ) {
+        if !filtered { SlotWidgets(context: context, slot: kind.createZone) }
+      }
     case .ready(let rows):
       if selectable {
         List(selection: $selection) {

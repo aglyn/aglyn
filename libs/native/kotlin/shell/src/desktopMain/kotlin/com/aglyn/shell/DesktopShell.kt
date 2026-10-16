@@ -53,6 +53,12 @@ object DesktopShell {
     )
   }
 
+  /**
+   * The Aglyn app's peripherals on a desktop: only the print dialog, where packing slips, invoices, shipping labels and
+   * product labels go, as the console's go to the browser's.
+   */
+  fun appPeripherals(): com.aglyn.hardware.Peripherals = com.aglyn.hardware.StaticPeripherals(systemPrinter = com.aglyn.hardware.AwtSystemPrinter())
+
   fun envFromSystem(): AglynEnv {
     fun read(name: String, fallback: String?): String? =
       System.getProperty("aglyn.$name")

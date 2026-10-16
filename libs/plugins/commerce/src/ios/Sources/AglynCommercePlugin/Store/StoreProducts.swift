@@ -23,12 +23,15 @@ struct ProductRow: Identifiable, Hashable {
   let status: String
   let type: String?
   let description: String?
+  /// A variant still has no price (`productPriceMissing`): listed, it shows "Price coming soon" and sells nowhere.
+  let priceMissing: Bool
 
   init(_ doc: FirestoreDocument) {
     id = doc.id
     item = posItem(doc)
     status = doc.string("status") ?? "draft"
     type = doc.string("type")
+    priceMissing = productPriceMissing(doc.data)
     let text = doc.string("description")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     description = text.isEmpty ? nil : text
   }
@@ -55,14 +58,14 @@ struct ProductRow: Identifiable, Hashable {
 }
 
 
-func productsPlan(status: String?, search: String) -> ListQueryPlan {
+func productsPlan(status: String?, search: String, clauses: [ListFilterRequest] = [], sort: ListQuerySort? = nil) -> ListQueryPlan {
   let words = search.trimmingCharacters(in: .whitespacesAndNewlines)
   return planListQuery(
     ContractValues.shared.productListQuery,
     ListQueryRequest(
       base: ContractValues.shared.productListBase,
-      clauses: status.map { [ListFilterRequest(field: "status", op: "equals", value: $0)] } ?? [],
-      search: words.isEmpty ? nil : [words]))
+      clauses: (status.map { [ListFilterRequest(field: "status", op: "equals", value: $0)] } ?? []) + clauses,
+      search: words.isEmpty ? nil : [words], sort: sort))
 }
 
 /// A scanned or typed code as a lookup over one code field, any status.
@@ -84,6 +87,12 @@ final class ProductsModel {
   private(set) var hasMore = false
   var status: String? { didSet { if oldValue != status { restart() } } }
   var search = "" { didSet { if oldValue != search { restart() } } }
+  /// The filters added in the filter bar, beside the status chip.
+  var clauses: [ListFilterRequest] = [] { didSet { if oldValue != clauses { restart() } } }
+  /// The header sort asked; nil is name order.
+  var sort: ListQuerySort? { didSet { if oldValue != sort { restart() } } }
+  /// The plan the list ran, for its refusals and notices.
+  private(set) var plan: ListQueryPlan?
 
   @ObservationIgnored private var reader: FirestoreReader?
   @ObservationIgnored private var hostID: String?
@@ -119,7 +128,9 @@ final class ProductsModel {
     failed = false
     guard let reader, let hostID else { return }
     let window = limit
-    let query = productsPlan(status: status, search: search).firestoreQuery(productsPath(hostID), limit: window + 1)
+    let plan = productsPlan(status: status, search: search, clauses: clauses, sort: sort)
+    self.plan = plan
+    let query = plan.firestoreQuery(productsPath(hostID), limit: window + 1)
     listener = reader.listen(query) { [weak self] result in
       guard let self else { return }
       switch result {

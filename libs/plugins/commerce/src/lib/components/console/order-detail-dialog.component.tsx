@@ -17,7 +17,8 @@
 'use client'
 
 import * as CommerceModel from '../../model'
-import { escapeHtml } from '../../utils/escape-html'
+import { buildPackingSlipHtml } from '../../utils/order-packing-slip'
+import { orderRefundPrompt, REFUND_BLOCKED_BY_DISPUTE } from '../../model/order-dialog'
 // The CRM's address from the SHARED builder, not the plugin (AGL-2622): the
 // CRM already reaches marketing, and marketing reaches commerce, so an
 // import of the CRM from here would close a cycle between the three
@@ -599,40 +600,14 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
    */
   const handleRefund = useCallback(async (lineItemIds?: number[]) => {
     if (!order || !orderId) return
-    const lines = order.lineItems ?? []
     const scoped = (lineItemIds ?? []).length > 0
-    // The SERVER's figure, not a second derivation of it. This was
-    // the list value `unitAmountCents x quantity`, which on a discounted order
-    // is more than the buyer paid — so the dialog quoted one number and the
-    // route refunded another. One function answers both.
-    const scopedCents = CommerceModel.orderLineRefundCents(
-      order,
-      lineItemIds ?? [],
-    )
+    // The SERVER's figure, not a second derivation of it (`orderLineRefundCents`
+    // inside the prompt): the list value `unitAmountCents x quantity` is more
+    // than the buyer paid on a discounted order.
+    const prompt = orderRefundPrompt(order, lineItemIds ?? [])
     const confirmed = await confirm({
-      title: scoped ? 'Refund this line?' : 'Refund this order?',
-      description:
-        (scoped
-          ? `Refunds ${usd(scopedCents)} for ${(lineItemIds ?? [])
-              .map((index) => lines[index]?.name ?? `line ${index}`)
-              .join(', ')} through Stripe, and withdraws that line's ` +
-            'downloads, license keys and gated content. A license key already ' +
-            'sent to the buyer is retired, not returned to your pool — they ' +
-            'still hold the string, so reissuing it would give two people one ' +
-            'working key.'
-          : `Refunds ${usd(
-              (order.totals?.totalCents ?? order.amountCents ?? 0) -
-                (order.refundedCents ?? 0),
-            )} to the buyer through Stripe.`) +
-        // An open INQUIRY keeps this button live on purpose (AGL-1820):
-        // Stripe names a full refund as the way to resolve one before it
-        // escalates to a chargeback. Said here so the admin reads the refund
-        // as the documented exit, not a risk taken against the badge.
-        (CommerceModel.orderHasOpenDispute(order) &&
-        !CommerceModel.orderDisputeBlocksRefund(order)
-          ? ' An inquiry is open on this charge — a full refund resolves it' +
-            ' before it can become a chargeback.'
-          : ''),
+      title: prompt.title,
+      description: prompt.text,
       confirmationText: 'Refund',
       confirmationButtonProps: { color: 'error' },
     })
@@ -782,34 +757,10 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
     if (!order) return
     const win = window.open('', '_blank', 'width=600,height=800')
     if (!win) return
-    // ESCAPED (AGL-2283). This is `document.write` into an `about:blank`
-    // popup, which INHERITS the console's origin — and `order.shippingAddress`
-    // is copied verbatim from Stripe's `shipping_details`, i.e. typed by the
-    // SHOPPER. A name of `<img src=x onerror=…>` ran script against the
-    // merchant's own authenticated session. React guards nothing here because
-    // none of this is React. Line names and SKUs are merchant-authored and
-    // lower severity, but they are the same construction and get the same
-    // treatment rather than a case-by-case argument.
-    const rows = (order.lineItems ?? [])
-      .map(
-        (line) =>
-          `<tr><td>${escapeHtml(line.quantity)}×</td><td>${escapeHtml(
-            line.name,
-          )}${
-            line.variantLabel ? ` — ${escapeHtml(line.variantLabel)}` : ''
-          }</td><td>${escapeHtml(line.sku ?? '')}</td></tr>`,
-      )
-      .join('')
-    const address = order.shippingAddress
-    win.document.write(
-      `<h2>Packing slip ${escapeHtml(
-        CommerceModel.formatOrderNumber(order, orderId),
-      )}</h2>` +
-        (address
-          ? `<p>${[address.name, address.line1, address.line2, `${address.city ?? ''} ${address.state ?? ''} ${address.postalCode ?? ''}`, address.country].filter(Boolean).map((part) => escapeHtml(part)).join('<br/>')}</p>`
-          : '') +
-        `<table border="0" cellpadding="6">${rows}</table>`,
-    )
+    // Every value is escaped by the builder (AGL-2283): this is
+    // `document.write` into an `about:blank` popup, which inherits the
+    // console's origin, and the address is typed by the shopper.
+    win.document.write(buildPackingSlipHtml(order, orderId))
     win.document.close()
     // Print from the opener, not from an injected inline script (AGL-523) —
     // the popup inherits this document's CSP, where an un-nonced inline
@@ -1165,15 +1116,7 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
           // (AGL-1809), while an open INQUIRY shows the badge but must keep
           // this button live — a full refund is how an inquiry is resolved.
           CommerceModel.orderDisputeBlocksRefund(order) ? (
-            <Tooltip
-              title={
-                'A chargeback is open on this order, and refunding would not' +
-                ' withdraw it — the bank has already taken the disputed' +
-                ' amount, so a refund on top would pay the shopper twice.' +
-                ' Respond to the dispute or accept it in the Stripe' +
-                ' dashboard; refund any remainder once it settles.'
-              }
-            >
+            <Tooltip title={REFUND_BLOCKED_BY_DISPUTE}>
               {/* A disabled button fires no pointer events; the wrapper
                   carries the hover for the tooltip. */}
               <span>

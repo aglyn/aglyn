@@ -12,7 +12,7 @@ import com.aglyn.shell.ShellNavigator
 
 /** "Aglyn" on the desktop. */
 fun main(args: Array<String>) {
-  val services = DesktopShell.services(NativeApp.AGLYN, DesktopShell.envFromSystem(), NativePluginManifest.entries)
+  val services = DesktopShell.services(NativeApp.AGLYN, DesktopShell.envFromSystem(), NativePluginManifest.entries, DesktopShell.appPeripherals())
   if (LAUNCH_CHECK_ARG in args) launchCheck("Aglyn") { AglynShell(services) }
   val autoSignIn = System.getProperty("aglyn.autoSignIn") == "true"
   // "Connect Google": the system browser, once the desktop OAuth client is configured.

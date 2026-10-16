@@ -18,6 +18,7 @@
 import { escapeHtml } from '../utils/escape-html'
 import { barcodeSvg, encodeBarcode, type EncodedBarcode } from '../barcode/barcode-encode'
 import { formatReceiptMoney } from '../model/commerce-receipt'
+import type { HostProduct } from '../model/commerce'
 import { toPrintable } from './print-document'
 
 /**
@@ -65,10 +66,60 @@ export function labelSize(id: string | undefined): LabelSize {
 
 const copiesOf = (label: ProductLabel) => Math.max(0, Math.min(MAX_LABEL_COPIES, Math.floor(Number(label.copies) || 0)))
 
-const priceText = (label: ProductLabel) =>
-  label.priceCents != null && Number.isFinite(label.priceCents)
+const priceText = (label: ProductLabel) => labelPriceText(label)
+
+/** A label the products list prints for one variant, with the variant it is for. */
+export type ProductLabelRow = ProductLabel & { variantId: string }
+
+/**
+ * The labels a product prints: one row per variant, its options as the
+ * detail, its price and the code the register looks up (the barcode, else
+ * the SKU). A row with no code prints nothing until one is added. One copy
+ * each to start; the person changes the counts before printing.
+ */
+export function productLabelRows(product: Pick<HostProduct, 'name' | 'variants'>): ProductLabelRow[] {
+  return product.variants.map((variant) => {
+    const options = Object.values(variant.options ?? {}).filter(Boolean)
+    return {
+      variantId: variant.id,
+      name: product.name,
+      ...(options.length ? { detail: options.join(' / ') } : {}),
+      ...(Number.isFinite(Number(variant.priceUsd))
+        ? { priceCents: Math.round(Number(variant.priceUsd) * 100) }
+        : {}),
+      currency: 'usd',
+      code: String(variant.barcode || variant.sku || '').trim(),
+      copies: 1,
+    }
+  })
+}
+
+/** The rows that print: a code and at least one copy, each count kept within {@link MAX_LABEL_COPIES}. */
+export function printableLabelRows<T extends ProductLabel>(rows: readonly T[]): T[] {
+  return rows.filter((row) => row.code && copiesOf(row) > 0)
+}
+
+/** How many labels the rows print in all. */
+export function labelCopiesTotal(rows: readonly ProductLabel[]): number {
+  return printableLabelRows(rows).reduce((sum, row) => sum + copiesOf(row), 0)
+}
+
+/** A typed copy count as the dialog keeps it: whole, at least 0, at most {@link MAX_LABEL_COPIES}. */
+export function labelCopiesFromInput(value: unknown): number {
+  return Math.max(0, Math.min(MAX_LABEL_COPIES, Math.floor(Number(value) || 0)))
+}
+
+/** The label's price line, empty when it has no price. */
+export function labelPriceText(label: Pick<ProductLabel, 'priceCents' | 'currency'>): string {
+  return label.priceCents != null && Number.isFinite(label.priceCents)
     ? formatReceiptMoney(Math.round(label.priceCents), label.currency ?? 'usd')
     : ''
+}
+
+/** The file name the ZPL download is saved under. */
+export function labelsZplFileName(productName: string | undefined): string {
+  return `labels-${(productName ?? 'product').replace(/[^A-Za-z0-9]+/g, '-').toLowerCase()}.zpl`
+}
 
 /*==========================================
  * The printable page

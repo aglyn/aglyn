@@ -189,8 +189,8 @@
           "type": "list",
           "title": "Made",
           "items": "data.jobs.jobs[id=params.jobId].outputs",
-          "primary": "{item.title|item.name|item.kind:title}",
-          "secondary": "{item.kind:title}",
+          "primary": "{item.label|item.title|item.name|item.resource:title}",
+          "secondary": "{item.resource:title}",
           "count": false,
           "empty": "Nothing yet."
         },

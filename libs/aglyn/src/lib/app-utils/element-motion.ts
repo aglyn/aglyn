@@ -54,7 +54,15 @@ import {
  *    page's Largest Contentful Paint, never move: they are painted where
  *    they stand from the first frame. Its band — a background color or a
  *    cover photo — never moves either.
- *  - Every later section's content slides in on `scroll`.
+ *  - Every later section's content slides in on `scroll`, each section in
+ *    turn taking the next of the character's {@link
+ *    ElementMotionCharacter.sectionPresets}, so a page does not arrive as
+ *    one repeated move.
+ *  - A split — a column of words beside a picture — comes in from its
+ *    sides when the character says {@link ElementMotionCharacter.sides}:
+ *    the left column from the left, the right from the right, the second a
+ *    stagger step after the first. A picture whose preset zooms keeps its
+ *    zoom.
  *  - A group of like items — a grid of cards, a list, the questions of an
  *    FAQ, a dataset repeated over one card — STAGGERS its items, one after
  *    another, rather than arriving as one block.
@@ -90,6 +98,14 @@ export interface ElementMotionCharacter {
   staggerStepMs: number
   /** Gap between the rungs of the first section's load ladder. */
   heroStepMs: number
+  /**
+   * The presets later sections take in turn, the second section the first of
+   * them; {@link preset} alone when absent. A section's pictures still take
+   * {@link mediaPreset}.
+   */
+  sectionPresets?: readonly AnimationPreset[]
+  /** Whether a split's two columns come in from their own sides. */
+  sides?: boolean
 }
 
 /** The motion a page gets when nothing says otherwise: a soft rise, as the attributes panel defaults to. */
@@ -100,6 +116,8 @@ export const ELEMENT_MOTION_DEFAULT: ElementMotionCharacter = {
   durationMs: 600,
   staggerStepMs: 90,
   heroStepMs: 120,
+  sectionPresets: ['slide-up', 'fade'],
+  sides: true,
 }
 
 /** The most rungs the first section's ladder climbs; later blocks share the last. */
@@ -290,15 +308,22 @@ export function applyElementMotion<T extends Record<string, any>>(nodes: T, opti
     }
     return false
   }
-  const presetOf = (id: string, group: boolean): AnimationPreset => {
+  const presetOf = (id: string, group: boolean, words: AnimationPreset): AnimationPreset => {
     const media = group ? children(id).every(leadsWithMedia) : leadsWithMedia(id)
-    return media ? character.mediaPreset : character.preset
+    return media ? character.mediaPreset : words
   }
 
-  const animate = (id: string, trigger: AnimationTrigger, delayMs: number): void => {
+  const animate = (
+    id: string,
+    trigger: AnimationTrigger,
+    delayMs: number,
+    words: AnimationPreset = character.preset,
+    side?: AnimationPreset,
+  ): void => {
     const group = isGroup(id)
+    const preset = presetOf(id, group, words)
     patches.set(id, {
-      [NODE_ANIMATION_PROP]: presetOf(id, group),
+      [NODE_ANIMATION_PROP]: side && !preset.startsWith('zoom') ? side : preset,
       [NODE_ANIMATION_TRIGGER_PROP]: trigger,
       [NODE_ANIMATION_DURATION_PROP]: clamp(character.durationMs, ANIMATION_MAX_DURATION_MS),
       ...(delayMs > 0 ? { [NODE_ANIMATION_DELAY_PROP]: clamp(delayMs, ANIMATION_MAX_DELAY_MS) } : {}),
@@ -323,14 +348,30 @@ export function applyElementMotion<T extends Record<string, any>>(nodes: T, opti
     return at
   }
 
-  /** A later section's content: on scroll, groups staggered, nothing nested. */
-  const place = (id: string): void => {
+  /**
+   * A column of words beside a picture: two blocks, one of which leads with a
+   * picture and one of which does not, neither left alone. Two cards that
+   * both lead with one are a group, and stagger.
+   */
+  const isSplit = (id: string): boolean => {
+    const kids = children(id)
+    return kids.length === 2 && leadsWithMedia(kids[0]) !== leadsWithMedia(kids[1]) && !kids.some(holds)
+  }
+
+  /** A later section's content: on scroll, groups staggered, splits from their sides, nothing nested. */
+  const place = (id: string, words: AnimationPreset): void => {
     if (closed(id)) return
-    if (holds(id) || (!isGroup(id) && holdsGroup(id))) {
-      for (const child of children(id)) place(child)
+    if (character.sides && isSplit(id)) {
+      const [start, end] = children(id)
+      animate(start, 'scroll', 0, words, 'slide-right')
+      animate(end, 'scroll', character.staggerStepMs, words, 'slide-left')
       return
     }
-    animate(id, 'scroll', 0)
+    if (holds(id) || (!isGroup(id) && holdsGroup(id))) {
+      for (const child of children(id)) place(child, words)
+      return
+    }
+    animate(id, 'scroll', 0, words)
   }
 
   /** Down through wrappers of one child that are free to move. */
@@ -406,15 +447,18 @@ export function applyElementMotion<T extends Record<string, any>>(nodes: T, opti
 
   const sections = (options.sectionIds ?? children(rootId)).filter((id) => !!node(id))
   if (sections[0]) markStill(sections[0])
+  const turns = character.sectionPresets?.length ? character.sectionPresets : [character.preset]
   sections.forEach((id, index) => {
     if (closed(id)) return
     const content = contentOf(id)
     // The band itself never moves — only what it holds — so a section that
     // is nothing but its band has nothing to move.
     if (content === id && !children(id).length) return
+    const words = turns[(index - 1) % turns.length] ?? character.preset
     if (index === 0) ladder(content)
-    else if (content === id && !isGroup(id)) for (const child of children(id)) place(child)
-    else place(content)
+    else if (content === id && !isGroup(id) && !(character.sides && isSplit(id)))
+      for (const child of children(id)) place(child, words)
+    else place(content, words)
   })
 
   if (!patches.size) return nodes

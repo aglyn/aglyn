@@ -19,32 +19,51 @@ struct RecordsSection: View {
   let api: CrmAPI
   let reference: CrmReference
   var initial: String?
+  /// An address to open the one contact of (`contactsListSeed`'s `openEmail`): the list filters on it and moves on
+  /// to the record when exactly one matches; no match leaves the filtered list on screen.
+  var openEmail: String?
   @State private var list: LiveQueryList<CrmRow>?
+  @State private var openedByEmail = false
   @State private var filterID = ""
   @State private var searchText = ""
   @State private var search = ""
   @State private var selection: String?
   @State private var creating = false
 
-  private var filters: [CrmFilter] { crmFilters(kind, scope) }
+  private var filters: [CrmFilter] { (contactEmailFilter(openEmail).map { [$0] } ?? []) + crmFilters(kind, scope) }
+
+  /// The one row the address filter found, once the list has settled on it.
+  private var oneMatch: String? {
+    guard contactEmailFilter(openEmail) != nil, filterID == contactEmailFilterID, search.isEmpty, let list, list.ready,
+      list.failure == nil, list.rows.count == 1, !list.hasMore
+    else { return nil }
+    return list.rows.first?.id
+  }
 
   var body: some View {
     WideLayoutReader { wide in
-      if wide {
-        HStack(spacing: 0) {
-          listPane(selectable: true).frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
-          Divider()
-          Group {
-            if let selection {
-              RecordDetail(context: context, kind: kind, id: selection, scope: scope, api: api, reference: reference).id(selection)
-            } else {
-              AglynEmptyState("Pick a \(kind.singular.lowercased()) to see it here", systemImage: kind.symbol)
+      Group {
+        if wide {
+          HStack(spacing: 0) {
+            listPane(selectable: true).frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
+            Divider()
+            Group {
+              if let selection {
+                RecordDetail(context: context, kind: kind, id: selection, scope: scope, api: api, reference: reference).id(selection)
+              } else {
+                AglynEmptyState("Pick a \(kind.singular.lowercased()) to see it here", systemImage: kind.symbol)
+              }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+          listPane(selectable: false)
         }
-      } else {
-        listPane(selectable: false)
+      }
+      .onChange(of: oneMatch, initial: true) { _, id in
+        guard let id, !openedByEmail else { return }
+        openedByEmail = true
+        if wide { selection = id } else { context.navigate(kind.detailScreen, [kind.param: id]) }
       }
     }
     .searchable(text: $searchText, prompt: "Search \(kind.plural.lowercased())")

@@ -526,11 +526,47 @@ export function AiSiteStartCard({
     setNotice(null)
     setServerPrompt(null)
     try {
+      const requestJob = (siteId: string | null, check: boolean) =>
+        authorizedFetch(userRef.current, '/api/ai/jobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orgId,
+            hostId: siteId,
+            kind: 'site',
+            brief: aiSiteStartBrief(asked),
+            // The guided start confirms its own plan (AGL-3594): the build
+            // follows the plan with no approval to make.
+            inputs: { ...aiSiteStartInputs(asked), [AI_JOB_AUTO_CONFIRM_INPUT]: true },
+            ...(pickedModel ? { model: pickedModel } : {}),
+            ...(options.creditsConfirmed ? { creditsConfirmed: true } : {}),
+            ...(check ? { check: true } : {}),
+          }),
+        })
+      // A refusal said in the dialog, or the Free go-ahead it asks for.
+      const refused = async (response: Response): Promise<unknown> => {
+        const payload = await response.json().catch(() => null)
+        if (response.ok) return payload ?? {}
+        if (response.status === 409 && payload?.code === AI_CREDITS_CONFIRM_CODE && payload?.credits) {
+          setServerPrompt(payload.credits as AiCreditsPrompt)
+          return null
+        }
+        const locked = parseLockdownRefusal(response.status, payload)
+        setNotice(
+          locked
+            ? lockdownRefusalText(locked)
+            : String(payload?.error ?? 'The site could not be started. Try again.'),
+        )
+        return null
+      }
       // The site, created now when it does not exist yet (AGL-3761): this is
-      // the moment the person asked for it. A refusal is said here, and one
-      // about the name or address goes back to step 1, where they are typed.
+      // the moment the person asked for it. The start is checked first
+      // (AGL-3859), so one the jobs route would refuse, or would ask the Free
+      // go-ahead for, is answered before any site exists. A refusal about the
+      // name or address goes back to step 1, where they are typed.
       let site = { hostId, host, orgSlug }
       if (!hostId && pendingSite) {
+        if (!pendingSite.created && !(await refused(await requestJob(null, true)))) return
         const made = await pendingSite.create()
         if ('error' in made) {
           setNotice(made.error)
@@ -540,35 +576,8 @@ export function AiSiteStartCard({
         site = { hostId: made.hostId, host: made.host, orgSlug: made.orgSlug || orgSlug }
       }
       if (!site.hostId) return
-      const response = await authorizedFetch(userRef.current, '/api/ai/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orgId,
-          hostId: site.hostId,
-          kind: 'site',
-          brief: aiSiteStartBrief(asked),
-          // The guided start confirms its own plan (AGL-3594): the build
-          // follows the plan with no approval to make.
-          inputs: { ...aiSiteStartInputs(asked), [AI_JOB_AUTO_CONFIRM_INPUT]: true },
-          ...(pickedModel ? { model: pickedModel } : {}),
-          ...(options.creditsConfirmed ? { creditsConfirmed: true } : {}),
-        }),
-      })
-      const payload = await response.json().catch(() => null)
-      if (!response.ok) {
-        if (response.status === 409 && payload?.code === AI_CREDITS_CONFIRM_CODE && payload?.credits) {
-          setServerPrompt(payload.credits as AiCreditsPrompt)
-          return
-        }
-        const locked = parseLockdownRefusal(response.status, payload)
-        setNotice(
-          locked
-            ? lockdownRefusalText(locked)
-            : String(payload?.error ?? 'The site could not be started. Try again.'),
-        )
-        return
-      }
+      const payload = (await refused(await requestJob(site.hostId, false))) as { job?: AiJobSummary } | null
+      if (!payload) return
       const created = (payload?.job as AiJobSummary | undefined) ?? null
       if (!created) {
         setNotice('The site could not be started. Try again.')

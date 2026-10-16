@@ -89,9 +89,17 @@ internal fun problemText(error: Throwable) = error.message?.takeIf { it.isNotBla
  * the picked record on wide windows, with New in the list's header.
  */
 @Composable
-fun RecordsSection(context: NativePluginContext, kind: CrmKind, scope: CrmScope, api: CrmApi, reference: CrmReference, initial: String?) {
+fun RecordsSection(
+  context: NativePluginContext,
+  kind: CrmKind,
+  scope: CrmScope,
+  api: CrmApi,
+  reference: CrmReference,
+  initial: String?,
+  openEmail: String? = null,
+) {
   val coroutines = rememberCoroutineScope()
-  val filters = remember(kind, scope) { crmFilters(kind, scope) }
+  val filters = remember(kind, scope, openEmail) { listOfNotNull(contactEmailFilter(openEmail)) + crmFilters(kind, scope) }
   var filterKey by rememberSaveable(kind) { mutableStateOf(filters.first().key) }
   var search by rememberSaveable(kind) { mutableStateOf("") }
   var asked by rememberSaveable(kind) { mutableStateOf("") }
@@ -104,6 +112,16 @@ fun RecordsSection(context: NativePluginContext, kind: CrmKind, scope: CrmScope,
     list.show { limit -> crmListQuery(kind, scope, filter, asked, limit) }
   }
   var picked by rememberSaveable(kind) { mutableStateOf(initial) }
+  // Asked to open the one contact with an address (`contactsListSeed`): on exactly one match the record opens; no
+  // match leaves the filtered list on screen.
+  var openedByEmail by rememberSaveable(kind) { mutableStateOf(false) }
+  LaunchedEffect(openEmail, scope) {
+    val byEmail = contactEmailFilter(openEmail) ?: return@LaunchedEffect
+    if (openedByEmail || picked != null) return@LaunchedEffect
+    val page = runCatching { context.firestore.page(crmListQuery(kind, scope, byEmail, "", 2)) }.getOrNull() ?: return@LaunchedEffect
+    openedByEmail = true
+    if (page.docs.size == 1) picked = page.docs.first().id
+  }
   AglynListDetail(
     initialSelected = picked,
     list = { selected, onSelect ->

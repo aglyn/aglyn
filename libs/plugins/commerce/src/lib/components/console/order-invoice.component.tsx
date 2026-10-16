@@ -22,7 +22,7 @@ import { Button } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import type * as CommerceModel from '../../model'
-import { buildOrderInvoiceHtml } from '../../utils/order-invoice'
+import { buildOrderInvoiceHtml, invoiceStoreFrom } from '../../utils/order-invoice'
 
 export interface OrderInvoiceButtonProps {
   hostId: string
@@ -52,17 +52,13 @@ export function OrderInvoiceButton(props: OrderInvoiceButtonProps) {
         getDoc(doc(firestore, 'hosts', hostId)).catch(() => null),
         getDoc(doc(firestore, 'hosts', hostId, 'settings', 'store')).catch(() => null),
       ])
-      const hostData = (host?.data() ?? {}) as Record<string, unknown>
-      const storeData = (store?.data() ?? {}) as Record<string, unknown>
       const html = buildOrderInvoiceHtml({
         order,
         orderId,
-        store: {
-          name: String(hostData['businessName'] ?? hostData['displayName'] ?? hostData['name'] ?? ''),
-          currency: String(storeData['currency'] ?? 'USD'),
-          footer: (storeData['receiptFooter'] as string | undefined) ?? null,
-          termsUrl: (storeData['termsUrl'] as string | undefined) ?? null,
-        },
+        store: invoiceStoreFrom(
+          host?.data() as Record<string, unknown> | undefined,
+          store?.data() as Record<string, unknown> | undefined,
+        ),
       })
       // Every value in `html` is escaped by the builder (AGL-2283).
       win.document.write(html)

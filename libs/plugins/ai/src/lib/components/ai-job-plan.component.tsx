@@ -15,20 +15,13 @@
  * limitations under the License.
  */
 
-import {
-  AI_BUILD_PLAN_CREATION_NOUNS,
-  AI_BUILD_PLAN_EMBED_HOST_NAMES,
-  isAiPlanNewRef,
-  type AiBuildPlanEmbed,
-} from '../model/ai-build-plan'
+import { aiJobPlanHeading, aiJobPlanLines, aiPlanEmbedLine } from '../model/ai-job-plan-lines'
 import type { AiJobReview, AiJobSummary } from '../model/ai-jobs.types'
 import { aiBuildFreePageCapNote, aiBuildSmaller, aiJobCreditRange } from '../model/ai-build-job'
 import { aiCreditRangeText, aiCreditsPromptFor } from '../model/ai-credit-estimate'
 import { aiFreeCreditsResetLabel } from '../model/ai-site-job'
 import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
 import type { AiJobResumeOptions } from './ai-job-requests'
-import { aiBuildOpNoun } from '../model/ai-build-progress'
-import { aiBuildStorePagesAdded } from '../model/ai-build-store-pages'
 import {
   AI_PAGE_BUILDING_JOB_KINDS,
   AI_SITE_BUILD_IN_FLIGHT_COPY,
@@ -103,21 +96,9 @@ export function aiJobReviewDetails(review: AiJobReview | null): string[] {
   return lines
 }
 
-/**
- * A third-party player the plan lists, with what it costs the page, read
- * before the member confirms it (rule 16, AGL-3433). The cost is the
- * platform's sentence, never the model's: the player is framed lazily, so its
- * host's code loads when a visitor reaches it, whether or not they press play.
- */
-export function aiPlanEmbedLine(
-  embed: AiBuildPlanEmbed,
-  named: (ref: string) => string,
-): string {
-  const host = AI_BUILD_PLAN_EMBED_HOST_NAMES[embed.host]
-  const where = isAiPlanNewRef(embed.where) ? `the component ${named(embed.where)}` : embed.where
-  const link = embed.url ? ` playing ${embed.url}` : ', its link left for you to paste'
-  return `Embeds a ${host} player on ${where}${link}, as you asked (“${embed.asked}”). It loads ${host}’s own code when a visitor reaches it, whether or not they press play.`
-}
+// A plan's lines are the model's, which the native apps' follow view sends
+// too (AGL-3854); re-exported for this card's existing readers.
+export { aiPlanEmbedLine }
 
 export function AiJobPlan({
   job,
@@ -144,13 +125,6 @@ export function AiJobPlan({
   const { plan, review } = job
   if (!plan && !review) return null
   const details = staff ? aiJobReviewDetails(review) : []
-  /** A reference as a person reads it: the record's name, or what the plan creates. */
-  const named = (ref: string | null): string =>
-    !ref
-      ? ''
-      : isAiPlanNewRef(ref)
-        ? ref.slice('new:'.length)
-        : (plan?.labels[ref] ?? ref)
   // A plan the machine is confirming itself is not one to confirm (AGL-3596).
   const waiting = job.status === 'needs_review' && review !== null && !aiJobConfirmingOwnPlan(job)
   // The guard rail (AGL-2911): what the plan is estimated to cost is read
@@ -176,51 +150,16 @@ export function AiJobPlan({
       {plan && (
         <Stack spacing={0.5} role="list" aria-label="Plan">
           <Typography variant="caption" color="text.secondary">
-            {plan.status === 'confirmed' ? 'Confirmed plan' : 'Proposed plan'}
+            {aiJobPlanHeading(plan)}
           </Typography>
-          {plan.reuse.map((entry, index) => (
-            <Typography key={`reuse-${index}`} variant="body2" role="listitem">
-              Reuses the {entry.kind === 'screen' ? 'page' : entry.kind} {named(entry.id)} — {entry.purpose}
-            </Typography>
-          ))}
-          {plan.create.map((entry, index) => (
-            <Typography key={`create-${index}`} variant="body2" role="listitem">
-              Creates the {AI_BUILD_PLAN_CREATION_NOUNS[entry.kind].noun} {entry.name}
-              {entry.duplicateOf
-                ? `, from a copy of ${named(entry.duplicateOf)}`
-                : ''}{' '}
-              — {entry.why}
-            </Typography>
-          ))}
-          {plan.screens.map((screen, index) => (
-            <Typography key={`screen-${index}`} variant="body2" role="listitem">
-              {screen.record
-                ? `Builds the record template ${screen.title}, a page per record of ${named(screen.record.dataset)} at /${screen.record.base}/…`
-                : `Builds the page ${screen.title} at ${screen.slug}`}
-              {screen.duplicateOf
-                ? `, from a copy of ${named(screen.duplicateOf)}`
-                : ''}
-              {screen.layout ? ` in ${named(screen.layout)}` : ''}
-              {screen.sections.length
-                ? `: ${screen.sections.map((section) => section.name).join(', ')}`
-                : ''}
-            </Typography>
-          ))}
-          {(plan.items ?? []).map((item) => (
-            <Typography key={`item-${item.slot}`} variant="body2" role="listitem">
-              {`Makes the ${aiBuildOpNoun(item.op).toLowerCase()} ${item.name}`}
-              {item.why ? ` — ${item.why}` : ''}
-            </Typography>
-          ))}
-          {(plan.embeds ?? []).map((embed, index) => (
-            <Typography key={`embed-${index}`} variant="body2" role="listitem">
-              {aiPlanEmbedLine(embed, named)}
-            </Typography>
-          ))}
-          {/* A store's own pages (AGL-3676): added by the platform, written by code, no credits. */}
-          {aiBuildStorePagesAdded(plan).map((page) => (
-            <Typography key={`store-${page.key}`} variant="body2" role="listitem" data-platform-added="true">
-              {`Adds the page ${page.title} at ${page.href} — added for your store automatically, uses no AI credits`}
+          {aiJobPlanLines(plan).map((line) => (
+            <Typography
+              key={line.key}
+              variant="body2"
+              role="listitem"
+              {...(line.platformAdded ? { 'data-platform-added': 'true' } : {})}
+            >
+              {line.text}
             </Typography>
           ))}
         </Stack>

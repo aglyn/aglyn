@@ -19,7 +19,7 @@ import type { PluginMediaIngest, PluginMediaIngestRequest } from '@aglyn/aglyn/p
 import type { StockPhoto, StockPhotoProvider } from '@aglyn/aglyn/plugin-manager/stock-photo-provider'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { aiResolveLayoutPictures, type AiLayoutPictureSlot } from '../layout-language/ai-layout-pictures'
-import { aiLayoutStockPhotoSource, aiStockForgetJobPhotos, aiStockPhotoAlt } from './ai-layout-stock-photos'
+import { aiLayoutStockPhotoSource, aiStockForgetJobPhotos, aiStockPhotoAlt, aiStockTagsAlt } from './ai-layout-stock-photos'
 
 /*
  * The beta.253 Panadería La Concha Dorada start (2026-10-15, job eg4maZMGtN,
@@ -157,8 +157,9 @@ describe("a stock photo's alt text says what the photo shows (AGL-3805)", () => 
     const image = (nodes as unknown as Record<string, { props: Record<string, unknown> }>)['img']
     const placed = BAKERY.find((photo) => image?.props['src'] === `media:site/${photo.id}`)
     expect(placed).toBeDefined()
-    const said = (placed?.tags ?? []).slice(0, 3).join(', ')
-    expect(image?.props['alt']).toBe(`${said.charAt(0).toUpperCase()}${said.slice(1)}`)
+    // An English phrase of what its first tags name, never the library's tag list (AGL-3856).
+    expect(image?.props['alt']).toBe(aiStockTagsAlt(placed?.tags ?? []))
+    expect(image?.props['alt']).not.toBe((placed?.tags ?? []).slice(0, 3).join(', '))
     expect(stored[0]?.alt).toBe(image?.props['alt'])
   })
 
@@ -170,8 +171,10 @@ describe("a stock photo's alt text says what the photo shows (AGL-3805)", () => 
   })
 
   it("describes the photo by its first tags when the slot's words do not, and by the library's own description where it writes one", () => {
-    expect(aiStockPhotoAlt(CAKE, slot('Fresh conchas on a tray at the bakery counter'))).toBe('Cake, homemade, dessert')
-    expect(aiStockPhotoAlt(BAKERY[3] as StockPhoto, slot('The family kneading pan dulce in the kitchen', 'about'))).toBe('Cake, candles, bithday cake')
+    expect(aiStockPhotoAlt(CAKE, slot('Fresh conchas on a tray at the bakery counter'))).toBe('A cake, dessert and a bakery')
+    expect(aiStockPhotoAlt(BAKERY[3] as StockPhoto, slot('The family kneading pan dulce in the kitchen', 'about'))).toBe(
+      'A bithday cake, birthday candles and flowers',
+    )
     const pexels = { ...CAKE, alt: 'Round cake dusted with powdered sugar on a white cloth' }
     expect(aiStockPhotoAlt(pexels, slot('Fresh conchas on a tray'))).toBe('Round cake dusted with powdered sugar on a white cloth')
     expect(aiStockPhotoAlt({ ...CAKE, tags: [] }, slot('Fresh conchas on a tray'))).toBe('Illustrative photo')

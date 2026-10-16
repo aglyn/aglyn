@@ -36,7 +36,7 @@ import {
   eventDraftWallText,
   readEventDraftContent,
 } from '../model/event-draft-content'
-import { eventWrite } from '../model/event-write'
+import { EVENT_COVER_ALT_MAX_LENGTH, eventWrite } from '../model/event-write'
 
 /**
  * AN EVENT ANOTHER PLUGIN ASKS FOR (AGL-3743).
@@ -135,12 +135,17 @@ export interface EventDraftWriterDeps {
   stockPhotos?: () => StockPhotoPicker | null
 }
 
-/** A cover for an event the content gave none: the picker's, held to what the editor's field takes. */
+/**
+ * A cover for an event the content gave none: the picker's, held to what the
+ * editor's field takes, with the words that describe it (AGL-3856): a cover
+ * the event list drew with `alt=""` hid a yoga pose under "Open gym strength
+ * session" from a screen reader.
+ */
 async function coverFor(
   picker: StockPhotoPicker | null,
   request: PluginDraftRequest,
   title: string,
-): Promise<string | null> {
+): Promise<{ src: string; alt: string | null } | null> {
   if (!picker) return null
   try {
     const pick = await picker.pick({
@@ -153,7 +158,9 @@ async function coverFor(
       // The draft's id: asked again, the same photo.
       seed: request.id,
     })
-    return pick && EVENT_DRAFT_COVER_ADDRESS.test(pick.url) ? pick.url : null
+    if (!pick || !EVENT_DRAFT_COVER_ADDRESS.test(pick.url)) return null
+    const alt = pick.alt?.replace(/\s+/g, ' ').trim().slice(0, EVENT_COVER_ALT_MAX_LENGTH) ?? ''
+    return { src: pick.url, alt: alt || null }
   } catch (error) {
     console.warn('event draft: no cover photo', { error: String(error) })
     return null
@@ -198,7 +205,10 @@ export function createEventDraftWriter(deps: EventDraftWriterDeps = {}): PluginR
         const [host, existing] = await Promise.all([hostRef.get(), eventRef.get()])
         if (host.exists && !existing.exists && !roleRefusal(host, request.uid) && !planRefusal(request.org)) {
           const cover = await coverFor(stockPhotos(), request, read.value.title)
-          if (cover) read.value.coverImage = cover
+          if (cover) {
+            read.value.coverImage = cover.src
+            if (cover.alt && !read.value.coverImageAlt) read.value.coverImageAlt = cover.alt
+          }
         }
       }
       return db.runTransaction(async (tx): Promise<PluginDraftWrite> => {

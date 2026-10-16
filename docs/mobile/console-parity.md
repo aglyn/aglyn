@@ -12,7 +12,7 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | area | console routes / plugin | lane | Apple | Kotlin |
 | -- | -- | -- | -- | -- |
 | Home, site switcher | `(home)`, `[orgSlug]`, `hosts`, `hosts/[host]` | leads | [x] | [x] |
-| Orders, products, stock, sales | `commerce` | leads | [ ] | [ ] |
+| Orders, products, stock, sales | `commerce` | leads | [x] | [x] |
 | POS register, readers, kiosk | `commerce` POS, `kiosk/[pluginId]` | leads | [x] | [x] |
 | Redirects | `redirects` | leads | [x] | [x] |
 | Commerce integrations cards | `accounting`, `shipping`, `post-purchase`, `tax-engines`, `marketing-platforms`, `fulfillment-networks`, `couriers`, `sales-channels` | next lane | [x] | [x] |
@@ -127,6 +127,20 @@ package), and the shift, cashier PIN and drawer operations. The typed card is on
 iPhone, iPad and Android phone and tablet, where Stripe has a card SDK; the Mac
 and desktop registers take cards on smart readers and the QR payment page.
 
+Orders, products, stock, sales: ticked on both platforms (AGL-3841), driven in
+the running apps on iPhone, iPad and Android phone and tablet against the seeded
+emulator stack. Everything the console's Orders and Products pages do is
+native: the list filters (any clause the grid takes, through the shared filter
+bar) and every header sort; Fulfill items with carrier, tracking and shipping
+cost, each shipment's Edit tracking, Cancel shipment and Print label; Refund
+and Refund line; the dispute and payment-risk notices; Draft order, Export for
+shipping and Import tracking; View customer in CRM (the CRM's Contacts list
+opens the one person with that address); the packing slip, invoice and product
+labels on the device's print sheet (barcodes drawn natively, ZPL for a Zebra);
+Duplicate, Archive or Activate, Delete and license keys on a product; Import
+(the data hub's import for `commerce.products`); and the Products page's
+`productsCreate` and `productsHub` zones.
+
 Open in the AGL-3668 rows, 2026-10-14 (found by re-checking the ticked rows
 against the console; each is a console action with no native screen on main
 yet, and a row is ticked again when its last one lands). Components,
@@ -159,6 +173,16 @@ Setup's Integrations section (the cards of the plugins running on the site)
   or an admin, the transfer routes' own rule), and opens the Imports and
   exports hub's import wizard on `data.dataset:<id>`, as the console's
   `openImport` does; export of a dataset is native too.
+
+Create with AI (AGL-3854): beside Create on Pages, Templates, Layouts, Forms and
+Components, in each list's create zone (`hostScreens`, `hostTemplates`, `hostLayouts`,
+`hostForms`, `hostComponents`, drawn natively through `SlotWidgets`), and in the list's empty
+state. The AI plugin's `ai.create` screen reads `/api/ai/create` (whether the entry is drawn and
+as what, the brief's words and choices, a template's collections, the month's credits) and
+follows the job through `/api/ai/create/:jobId` (plan, estimated cost, Confirm, Cancel, the draft
+opened natively or in the Besigner); it starts, confirms and cancels through the console's own
+jobs routes. Driven on the Android phone and tablet against the local stack; the iPhone and iPad
+run waits on the Simulator (see the issue).
 
 The media library's "Default sharing for new media" card is in Workspace
 settings, where the apps keep the workspace's defaults.

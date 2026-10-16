@@ -1,5 +1,9 @@
 package com.aglyn.plugins.commerce.products
 
+import com.aglyn.plugins.commerce.lists.ListSortMenu
+import com.aglyn.plugins.commerce.lists.filterChoices
+import com.aglyn.plugins.commerce.lists.filterRefusals
+import com.aglyn.pluginhost.ClauseFilterBar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import com.aglyn.contracts.Contracts
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
@@ -119,6 +124,8 @@ fun ProductsScreen(context: NativePluginContext, initialProductId: String? = nul
 @Composable
 private fun ProductsList(context: NativePluginContext, model: ProductsListModel, editor: ProductEditorModel, selected: String?, onSelect: (String) -> Unit) {
   val listState = rememberLazyListState()
+  // A new chip, filter or sort is a new list: it starts at its first row, not at the row that was on top before.
+  LaunchedEffect(model.filter, model.clauses, model.sort) { listState.scrollToItem(0) }
   val nearEnd by remember {
     derivedStateOf {
       val info = listState.layoutInfo
@@ -126,6 +133,21 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
     }
   }
   LaunchedEffect(nearEnd, model.hasMore) { if (nearEnd && model.hasMore) model.loadMore() }
+  // The cap, standing rather than only on refusal (AGL-2113): the site's products against the plan's productsPerHost.
+  var used by remember { mutableStateOf(0L) }
+  var limit by remember { mutableStateOf<Double?>(null) }
+  var planReady by remember { mutableStateOf(false) }
+  LaunchedEffect(context.hostId, editor.done) {
+    val hostId = context.hostId ?: return@LaunchedEffect
+    try {
+      used = context.firestore.count(com.aglyn.core.FirestoreQuery(productsPath(hostId))) ?: used
+      limit = productsPerHostLimit(context.api, hostId)
+      planReady = true
+    } catch (error: Throwable) {
+      if (error is kotlinx.coroutines.CancellationException) throw error
+    }
+  }
+  val hasRoom = !planReady || limit?.let { used < it } ?: true
   Column(Modifier.fillMaxSize()) {
     Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
@@ -141,11 +163,38 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
           onSelect = { model.pick(ProductFilter.valueOf(it)) },
           modifier = Modifier.weight(1f),
         )
-        Button(onClick = editor::create, Modifier.padding(start = space(1f)).testTag("new-product")) {
+        Button(onClick = editor::create, Modifier.padding(start = space(1f)).testTag("new-product"), enabled = hasRoom) {
           Icon(AglynIcons.named("add"), contentDescription = null)
           Text("New product", Modifier.padding(start = space(1f)))
         }
+        if (canImportProducts(context)) {
+          // The console's Import beside Add product: the data transfer hub's import, for this site's products.
+          OutlinedButton(
+            onClick = { context.navigate(CORE_DATA_IMPORT_SCREEN, productsImportParams(context.hostId)) },
+            modifier = Modifier.padding(start = space(1f)).testTag("import-products"),
+          ) { Text("Import") }
+        }
       }
+      // Any filter the console's grid takes (name, status, type, slug, SKU, barcode) and its header sorts.
+      Row(verticalAlignment = Alignment.Top) {
+        ClauseFilterBar(
+          fields = Contracts.productListQuery.fields,
+          headers = Contracts.productListHeaders,
+          choices = filterChoices(Contracts.productListOptions),
+          clauses = model.clauses,
+          onChange = model::setFilters,
+          modifier = Modifier.weight(1f),
+          refused = model.plan?.let { filterRefusals(it, model.clauses) } ?: emptyList(),
+          notices = model.plan?.notices ?: emptyList(),
+        )
+        ListSortMenu(Contracts.productListQuery.sorts, model.sort, model::sortBy, Modifier.padding(start = space(1f)))
+      }
+      ProductsZone(context, COMMERCE_PRODUCTS_CREATE_SLOT)
+      ProductsZone(context, COMMERCE_PRODUCTS_HUB_SLOT)
+      // Products listed before they have a price (AGL-3676): the one step left before the store sells them.
+      comingSoonNotice((model.rows as? Load.Ready)?.value.orEmpty().filter { it.status == ProductStatus.ACTIVE && it.priceMissing }.map { it.name })
+        ?.let { NoticeBanner(it, StatusTone.INFO) }
+      Text(productQuotaReadout(used, limit, planReady), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("products-quota"))
       if (editor.draft == null && editor.stock == null) {
         editor.done?.let { message ->
           NoticeBanner(message, StatusTone.SUCCESS, action = { androidx.compose.material3.TextButton(onClick = { editor.done = null }) { Text("Dismiss") } })
@@ -196,6 +245,12 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
   val hostId = context.hostId ?: return
   val flow = remember(hostId, productId, context.firestore) { context.firestore.observeDoc("${productsPath(hostId)}/$productId") }
   val live by flow.collectAsState(Live.Loading)
+  var labels by remember(productId) { mutableStateOf<List<ProductLabelRow>?>(null) }
+  var keys by remember(productId) { mutableStateOf(false) }
+  var deleting by remember(productId) { mutableStateOf(false) }
+  var working by remember(productId) { mutableStateOf(false) }
+  var notice by remember(productId) { mutableStateOf<Pair<String, StatusTone>?>(null) }
+  val scope = rememberCoroutineScope()
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this product", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
@@ -207,10 +262,42 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
       }
       val product = hostProductFrom(doc)
       val status = product.status ?: ProductStatus.ACTIVE
+      labels?.let { rows ->
+        ProductLabelsDialog(product.name ?: "Product", rows, context.peripherals.systemPrinter) { labels = null }
+      }
+      if (keys) ProductKeysDialog(context, productId, product.name ?: "Product") { keys = false }
+      if (deleting) {
+        ActionDialog(
+          title = "Delete this product?",
+          body = "\"${product.name ?: "This product"}\" stops being purchasable; blocks referencing it show a checkout error until repointed.",
+          icon = "delete",
+          confirmLabel = "Delete",
+          destructive = true,
+          busy = working,
+          error = null,
+          onDismiss = { deleting = false },
+          onConfirm = {
+            working = true
+            scope.launch {
+              notice = try {
+                deleteProduct(context.api, hostId, productId)
+                "Product deleted" to StatusTone.SUCCESS
+              } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                productWriteMessage(error, "Could not delete product") to StatusTone.ERROR
+              } finally {
+                working = false
+                deleting = false
+              }
+            }
+          },
+        )
+      }
       Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("product-detail"),
         verticalArrangement = Arrangement.spacedBy(space(2f)),
       ) {
+        notice?.let { (text, tone) -> NoticeBanner(text, tone, action = { androidx.compose.material3.TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }
         SectionCard(null) {
           Row(verticalAlignment = Alignment.CenterVertically) {
             Text(product.name ?: "Product", Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
@@ -236,6 +323,56 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
             // The pictures, and a digital product's downloads and members videos.
             OutlinedButton(onClick = { context.navigate(COMMERCE_PRODUCT_MEDIA_SCREEN, mapOf("productId" to productId)) }, Modifier.testTag("product-media-link")) {
               Text("Images and files")
+            }
+            OutlinedButton(
+              onClick = {
+                working = true
+                scope.launch {
+                  notice = try {
+                    val id = duplicateProduct(context.api, hostId, productId, com.aglyn.core.createResourceUid(20))
+                    context.navigate(COMMERCE_PRODUCT_SCREEN, mapOf("product" to id))
+                    "Product duplicated as draft" to StatusTone.SUCCESS
+                  } catch (error: Throwable) {
+                    if (error is CancellationException) throw error
+                    productWriteMessage(error, "Could not duplicate product") to StatusTone.WARNING
+                  } finally {
+                    working = false
+                  }
+                }
+              },
+              enabled = !working,
+              modifier = Modifier.testTag("product-duplicate"),
+            ) { Text("Duplicate") }
+            val archived = status == ProductStatus.ARCHIVED
+            OutlinedButton(
+              onClick = {
+                working = true
+                val next = if (archived) "active" else "archived"
+                scope.launch {
+                  notice = try {
+                    ConsoleProductWriteApi(context.api, hostId).save(productId, false, productStatusSaveJson(doc.data, next), com.aglyn.plugins.commerce.pos.newAttemptKey("status"))
+                    // A product with a variant nobody has priced may go live (AGL-3676): the owner is told, not stopped.
+                    if (next == "active" && productPriceMissing(doc.data)) activatingUnpricedNotice(product.name ?: "This product") to StatusTone.INFO else null
+                  } catch (error: Throwable) {
+                    if (error is CancellationException) throw error
+                    productWriteMessage(error, "The product could not be saved") to StatusTone.ERROR
+                  } finally {
+                    working = false
+                  }
+                }
+              },
+              enabled = !working,
+              modifier = Modifier.testTag("product-archive"),
+            ) { Text(if (archived) "Activate" else "Archive") }
+            if (product.type == ProductType.DIGITAL) {
+              OutlinedButton(onClick = { keys = true }, Modifier.testTag("product-keys")) { Text("Keys") }
+            }
+            OutlinedButton(onClick = { deleting = true }, enabled = !working, modifier = Modifier.testTag("product-delete")) { Text("Delete") }
+            // Shelf labels with a barcode the register scans back (the console's Labels).
+            if (product.type == ProductType.PHYSICAL) {
+              OutlinedButton(onClick = { labels = productLabelRows(doc.data) }, Modifier.testTag("product-labels")) {
+                Text("Labels")
+              }
             }
           }
         }
@@ -434,5 +571,48 @@ private fun ProductDialogs(editor: ProductEditorModel) {
         wrap = true,
       )
     }
+  }
+}
+
+/** The data transfer hub's import screen (core), which the products list's Import opens. */
+const val CORE_DATA_IMPORT_SCREEN = "core.settings.data.import"
+
+/** The import screen's parameters for this site's products, as the console's Import names its target. */
+fun productsImportParams(hostId: String?): Map<String, String> =
+  buildMap {
+    put("resource", "commerce.products")
+    put("title", "Import products")
+    if (hostId != null) put("hostId", hostId)
+  }
+
+/**
+ * Who may import: the import screen's own gate (a workspace owner or admin), as the console offers Import only to whom
+ * the transfer route takes it from.
+ */
+fun canImportProducts(context: NativePluginContext): Boolean = context.hostId != null && (context.orgRole == "owner" || context.orgRole == "admin")
+
+/** What a product write's failure says: the route's own words for a refusal, else that it is not known whether it landed. */
+fun productWriteMessage(error: Throwable, fallback: String): String {
+  val refused = error as? com.aglyn.core.ConsoleApiError
+  return when {
+    refused != null && refused.status in 1..499 -> refused.message.ifEmpty { fallback }
+    else -> "It is not known whether that went through. Trying again is safe; it will not happen twice."
+  }
+}
+
+/**
+ * The Products page's zones, the console's `productsCreate` (another way to start a product, beside Add product) and
+ * `productsHub` (above the catalog: proposals the hub writes). The plugins that put a widget here are never named;
+ * each zone draws whatever the registry holds for it, and nothing when no plugin contributes.
+ */
+const val COMMERCE_PRODUCTS_CREATE_SLOT = "productsCreate"
+const val COMMERCE_PRODUCTS_HUB_SLOT = "productsHub"
+
+@Composable
+internal fun ProductsZone(context: NativePluginContext, slot: String) {
+  val widgets = context.slotWidgets(slot)
+  if (widgets.isEmpty()) return
+  Column(Modifier.fillMaxWidth().testTag("products-zone-$slot"), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+    for (widget in widgets) androidx.compose.runtime.key(widget.id) { widget.content(context) }
   }
 }

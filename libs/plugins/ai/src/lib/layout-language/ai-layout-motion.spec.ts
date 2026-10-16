@@ -75,12 +75,17 @@ describe('the motion each kind of site moves in (AGL-3838)', () => {
   it('moves a calm practice gently, a bold studio with overshoot, a gallery’s pictures by zooming in', () => {
     for (const seed of SEEDS) {
       const law = aiSiteMotion({ kind: 'professional', seed })
-      expect(law.preset).toBe('fade')
+      // A calm page fades and rises in turn, never one move repeated.
+      expect([...(law.sectionPresets ?? [])].sort()).toEqual(['fade', 'slide-up'])
+      expect(law.preset).toBe(law.sectionPresets?.[0])
+      expect(law.sides).toBe(true)
       expect(['gentle-end', 'gentle-both']).toContain(law.ease)
       const gym = aiSiteMotion({ kind: 'fitness', seed })
-      expect(gym).toMatchObject({ preset: 'slide-up', mediaPreset: 'zoom-in', ease: 'overshoot' })
+      expect(gym).toMatchObject({ preset: 'slide-up', mediaPreset: 'zoom-in', ease: 'overshoot', sides: true })
       expect(aiSiteMotion({ kind: 'photography', seed }).mediaPreset).toBe('zoom-in')
-      expect(aiSiteMotion({ kind: 'trades', seed })).toMatchObject({ preset: 'slide-up', ease: 'smooth' })
+      const trades = aiSiteMotion({ kind: 'trades', seed })
+      expect(trades).toMatchObject({ ease: 'smooth', sides: true })
+      expect([...(trades.sectionPresets ?? [])].sort()).toEqual(['fade', 'slide-up'])
       // A calm site is slower than a bold one, whatever their seeds.
       expect(law.durationMs).toBeGreaterThan(gym.durationMs)
     }
