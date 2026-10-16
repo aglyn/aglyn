@@ -1024,7 +1024,11 @@ const CRAFT_KIN: ReadonlyArray<{
     ],
     broad: ['gym', 'weight training'],
     making: ['coach training athlete', 'barbell training'],
-    shunLead: ['yoga', 'pilates', 'meditation', 'ballet', 'ballerina', 'dance', 'dancer', 'karate', 'kickboxing', 'boxing', 'boxer', 'beach', 'circus'],
+    shunLead: [
+      'yoga', 'pilates', 'meditation', 'ballet', 'ballerina', 'dance', 'dancer', 'karate', 'kickboxing', 'boxing', 'boxer', 'beach', 'circus',
+      // Another sport's ball, never "medicine ball": a basketball court covered a deadlift night (AGL-3864).
+      'basketball', 'football', 'soccer', 'baseball', 'volleyball', 'tennis', 'golf', 'rugby', 'hockey',
+    ],
   },
   {
     // A photographer's own photos are of a camera or a shoot; "film" is a

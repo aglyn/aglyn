@@ -878,6 +878,19 @@ const LITERAL_COLOR =
 const LENGTH_WITH_UNIT = /-?\d*\.?\d+\s*(?:px|rem|em|pt|vh|vw|ch)\b/i
 const paletteTokens = new Set<string>(AI_SX_TOKENS.palette)
 
+/**
+ * A color written as a value — a hex code or a color function — and never a
+ * color WORD. Plan prose names things in words: a photographer's "Blue Ridge
+ * elopements" or "Black and white portraits" is a place and a style, not a
+ * color, and the live 2026-10-16 guided start was refused for it (AGL-3864).
+ */
+const LITERAL_COLOR_VALUE = /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\s*\(/i
+
+/** Whether plan prose writes a color by value: a hex code or a color function. */
+function proseHasLiteralColor(value: unknown): boolean {
+  return typeof value === 'string' && LITERAL_COLOR_VALUE.test(value)
+}
+
 /** Whether a value names a color by value rather than by theme token. */
 function hasLiteralColor(value: unknown): boolean {
   if (typeof value !== 'string') return false
@@ -4925,12 +4938,12 @@ export function detectPlanLiteralColors(plan: AiBuildPlan): AiDoctrineViolation[
   const paths: string[] = []
   plan.create.forEach((entry, index) => {
     if (entry.kind === 'theme-change') return
-    if (hasLiteralColor(entry.why) || entry.fields.some(hasLiteralColor)) {
+    if (proseHasLiteralColor(entry.why) || entry.fields.some(proseHasLiteralColor)) {
       paths.push(`create[${index}]`)
     }
   })
   for (const { section, path } of sectionPaths(plan)) {
-    if (hasLiteralColor(section.name)) paths.push(path)
+    if (proseHasLiteralColor(section.name)) paths.push(path)
   }
   return paths.length
     ? [
@@ -5205,6 +5218,12 @@ export function detectPlanTypedData(
     )
     if (bindsData) continue
     if (section.items >= AI_TYPED_LIST_MIN_ITEMS) typed.push(path)
+    // A form section COLLECTS what its dataset holds; it never copies it
+    // (AGL-3864). A workspace whose other site made a "Consultation
+    // requests" dataset refused a new law firm's "Consultation requests" form.
+    const collects =
+      FORM_SECTION_NAME.test(section.name) || section.uses.some((ref) => refKind(ref, plan, kinds) === 'form')
+    if (collects) continue
     const match = data.find((row) => aiNamesMatch(row.name, section.name))
     if (match) unbound.push({ path, name: match.name })
   }
