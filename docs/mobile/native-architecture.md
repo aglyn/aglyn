@@ -171,9 +171,10 @@ merges stay quiet. Local Swift packages are referenced by relative path:
 `libs/native/apple`, `apps/ios/PluginManifest`, and through it every plugin's
 `src/ios`. External packages come in through SPM: `firebase-ios-sdk` (Auth,
 Firestore, Messaging), and, for the AglynPOS target only and filtered to
-iOS, `stripe-ios-spm` (`StripePaymentSheet`) and `stripe-terminal-ios`
-(`StripeTerminal`). Both are referenced by `Aglyn.xcodeproj` itself, never
-by a plugin package, because both app targets link the one plugin manifest.
+iOS, `stripe-terminal-ios` (`StripeTerminal`). It is referenced by
+`Aglyn.xcodeproj` itself, never by a plugin package, because both app targets
+link the one plugin manifest. (A typed card uses no Stripe SDK on Apple: §
+"Typed card".)
 
 `#if os(iOS)` appears only where an API is iOS-only: Tap to Pay, Bluetooth
 readers, the camera barcode scanner, and the `UIApplication` push
@@ -830,8 +831,8 @@ With React Native gone, the guard's TypeScript rules for `libs/mobile` and
 plugin `src/mobile` go with it. `mobile-pure-modules.json` stays: it is now
 the list of pure modules the native generators (§5) may read.
 
-Two SDKs are placed by the same guard: Stripe's card-entry SDK (PaymentSheet)
-and the Stripe Terminal SDK may be linked, imported or declared only by Aglyn
+Two SDKs are placed by the same guard: Stripe's card-entry SDK (PaymentSheet,
+Android only now) and the Stripe Terminal SDK may be linked, imported or declared only by Aglyn
 POS (`apps/ios/AglynPOS`, the AglynPOS Xcode target, `apps/android/pos`, and
 the version catalog lines that pin them). A kit, a plugin (its Swift package,
 its Gradle build or its sources), the plugin manifest, the Aglyn app target or
@@ -862,29 +863,42 @@ the RN POS lane (AGL-3618, `reference/rn-pos-mobile-agl3618`). The native POS re
   mode, tapped with a test card.
 - **Typed card:** the console loads Stripe's Payment Element on the
   PaymentIntent the server made (`card-keyed`), then reads the payment back
-  (`status`); closing it without paying runs `cancel`. The apps do the same
-  with Stripe's own card form (PaymentSheet) on that intent: the number is typed
-  into Stripe's fields and goes to Stripe, never through our code, so our PCI
-  scope does not change. The intent, its metadata, the idempotency key and the
-  receipt are the server's, exactly as for the console; the device only shows
-  the form and reports how it closed (`KeyedCardEntry` in the hardware kit:
-  confirmed, canceled or failed), and the server re-reads Stripe before it
-  records anything. The button ("Enter card manually") shows whenever the
-  app has the form and the register is online; the `card-keyed` answer
-  carries the publishable key beside the client secret, so a register whose
-  context read failed still takes the card, and no key at all fails with
-  words instead of hiding the tender.
-  That is **Aglyn POS on iPhone, iPad and Android only**: Stripe has no card
-  SDK for native macOS (the iOS SDK is UIKit, and Aglyn POS is not a Mac
-  Catalyst app) or for the JVM, so the Mac and desktop registers take cards on
-  smart readers and the QR payment page, and do not offer a typed card.
-- **The card SDK stays in Aglyn POS.** On Apple it is the `StripePaymentSheet`
-  product of `stripe-ios-spm`, pinned exact in `Aglyn.xcodeproj` and linked to
-  the AglynPOS target only, filtered to iOS; on Android it is
-  `com.stripe:paymentsheet`, pinned in the version catalog and used by `:pos`
-  only. The shared kits and every plugin see only the `KeyedCardEntry` seam, and
-  `check-mobile-isolation` fails if the Aglyn app target, a kit, a plugin or a
-  web tree names the SDK. Tests for the tender run against a fake form.
+  (`status`); closing it without paying runs `cancel`. Android does the same
+  with Stripe's own card form (PaymentSheet, `com.stripe:paymentsheet`, used by
+  `:pos` only) on that intent.
+- **On Apple (iPhone, iPad and Mac) the typed card is Aglyn POS's own native
+  card fields** (`CardFieldsSheet` in the commerce plugin, rules in
+  `AglynHardware/CardFields.swift`), so it looks like every other form in the
+  app and works on the Mac, where Stripe has no card SDK. The fields format the
+  number as it is typed and name its brand, check Luhn, the expiry, the
+  security code (4 digits for Amex) and the billing postal code, and show each
+  error under its field. Pay sends the card in ONE request, from the device,
+  to Stripe's PaymentMethods API (`POST /v1/payment_methods`, `type=card`)
+  under the site's publishable key, exactly what Stripe's SDKs do; Stripe
+  answers with a PaymentMethod id, and only that id goes to our server
+  (`card-keyed` with `paymentMethodId`), which creates the intent, confirms it
+  with the platform's secret key and records the payment from Stripe's answer.
+  A decline keeps the fields open with the bank's words (the security code is
+  asked for again, and the next card is a new attempt key); a card whose bank
+  asks for 3-D Secure cannot be approved at the register, so the server
+  releases that intent and the payment fails with words that point at Card
+  (QR). The card is never logged, stored, cached or put in a URL (an
+  ephemeral `URLSession`, no cookies, a form body), the fields are emptied
+  when the form closes, and the form is covered whenever the app is not in
+  front, so the app switcher's snapshot never shows it. **PCI:** because the
+  number passes through our own fields on its way to Stripe, Aglyn POS on
+  Apple is in scope for SAQ A-EP rather than SAQ A (Zach's decision,
+  2026-10-16, to match Shopify's native manual entry).
+- The button ("Enter card manually", the console's "Type card") shows
+  whenever the register is online; the publishable key is the register
+  context's, read again at the press when the register has none, and no key
+  at all fails with words instead of hiding the tender. The Compose Desktop
+  register (Windows) has no typed card yet.
+- **The card SDK stays in Aglyn POS.** Android's PaymentSheet is pinned in the
+  version catalog and used by `:pos` only; the shared kits and every plugin see
+  only the `KeyedCardEntry` seam, and `check-mobile-isolation` fails if the
+  Aglyn app, a kit, a plugin or a web tree names a Stripe card SDK. Tests for
+  the tender run against a fake form.
 - **The reader SDK stays in Aglyn POS too.** Stripe Terminal is linked the
   same way (the `StripeTerminal` product of `stripe-terminal-ios` on the
   AglynPOS target, filtered to iOS; `com.stripe:stripeterminal` in `:pos`),

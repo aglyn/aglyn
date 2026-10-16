@@ -57,6 +57,13 @@ struct CheckoutView: View {
       }
     }
     .sensoryFeedback(.success, trigger: isPaid)
+    // A typed card: the register's own card fields, over the checkout.
+    .sheet(item: cardForm) { session in CardFieldsSheet(session: session) }
+  }
+
+  private var cardForm: Binding<CardFormSession?> {
+    let presenter = model.keyedEntry as? CardFieldsPresenter
+    return Binding(get: { presenter?.session }, set: { next in if next == nil { presenter?.session?.cancel() } })
   }
 
   private var isPaid: Bool {

@@ -236,6 +236,9 @@ export const posPaymentHandler: PluginApiHandler = async (req, res) => {
           tipCents,
           cashierId: staff.uid,
           org: staff.org,
+          // The register's own card fields send the PaymentMethod Stripe
+          // made from the card, never the card; the server confirms with it.
+          ...(body['paymentMethodId'] ? { paymentMethodId: String(body['paymentMethodId']) } : {}),
         })
         break
       case 'card-link':

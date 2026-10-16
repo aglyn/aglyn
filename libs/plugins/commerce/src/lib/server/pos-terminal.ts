@@ -622,8 +622,12 @@ export async function retryCardPresentPayment(input: {
  * goes through Stripe's normal online checks, 3-D Secure included.
  */
 export async function startCardKeyedPayment(
-  start: CardStart,
+  start: CardStart & { paymentMethodId?: string },
 ): Promise<PosPaymentOutcome & { clientSecret?: string }> {
+  const paymentMethodId = start.paymentMethodId ?? ''
+  if (paymentMethodId && !isPaymentMethodId(paymentMethodId)) {
+    return { ok: false, status: 400, error: 'The card could not be read. Enter it again.' }
+  }
   const destination = await posMerchantAccount(start.hostId, start.org)
   if (!destination) return { ok: false, status: 409, error: 'Card payments not set up' }
   const reserved = await reserveCardPayment(start, 'card_keyed', {})
@@ -653,7 +657,62 @@ export async function startCardKeyedPayment(
         paymentIntentId: String(intent.body.id),
         livemode: Boolean(intent.body.livemode),
       }))
-  return { ...updated, clientSecret: String(intent.body.client_secret) }
+  if (!paymentMethodId) return { ...updated, clientSecret: String(intent.body.client_secret) }
+  return await confirmKeyedCard(start, payment.id, String(intent.body.id), paymentMethodId)
+}
+
+/** A PaymentMethod id as Stripe mints them; anything else never reaches Stripe. */
+function isPaymentMethodId(value: string): boolean {
+  return /^pm_[A-Za-z0-9]{8,64}$/.test(value)
+}
+
+/** What a typed card that needs the cardholder's bank to approve it says. */
+export const KEYED_CARD_NEEDS_AUTHENTICATION =
+  'This card needs the cardholder to approve the payment with their bank, which a typed card cannot do. Use Card (QR) so they can approve it on their phone.'
+
+/**
+ * A card typed into the register's own card fields (AGL-3848): the device
+ * sent the number to Stripe alone, which answered with a PaymentMethod, and
+ * hands this route only its id. The server confirms the intent with it, with
+ * the platform's secret key, and records the payment from Stripe's answer as
+ * every card payment is. A card whose bank asks for the cardholder's approval
+ * (3-D Secure) cannot be approved at the register, so that intent is released
+ * and the payment fails with words that point at Card (QR).
+ */
+async function confirmKeyedCard(
+  start: CardStart,
+  paymentId: string,
+  intentId: string,
+  paymentMethodId: string,
+): Promise<PosPaymentOutcome> {
+  const input = { hostId: start.hostId, orderId: start.orderId, paymentId }
+  const confirmed = await posStripe('POST', `payment_intents/${intentId}/confirm`, {
+    idempotencyKey: `pos-keyed-confirm:${intentId}:${paymentMethodId}`,
+    params: { payment_method: paymentMethodId },
+  })
+  const status = String(confirmed.body?.status ?? confirmed.body?.error?.payment_intent?.status ?? '')
+  if (status === 'requires_action') {
+    await posStripe('POST', `payment_intents/${intentId}/cancel`, {
+      idempotencyKey: `pos-cancel:${intentId}`,
+    })
+    return await patchCardPayment(start.hostId, start.orderId, paymentId, (current) =>
+      current.status === 'pending'
+        ? { ...current, status: 'failed', failureMessage: KEYED_CARD_NEEDS_AUTHENTICATION }
+        : null,
+    )
+  }
+  if (!confirmed.ok && confirmed.body?.error && !confirmed.body.error.payment_intent) {
+    // Refused before the card was tried (a stale method, a bad request): say so, leave nothing pending.
+    const message = posStripeErrorMessage(confirmed.body, 'The card was not accepted.')
+    await posStripe('POST', `payment_intents/${intentId}/cancel`, {
+      idempotencyKey: `pos-cancel:${intentId}`,
+    })
+    return await patchCardPayment(start.hostId, start.orderId, paymentId, (current) =>
+      current.status === 'pending' ? { ...current, status: 'failed', failureMessage: message } : null,
+    )
+  }
+  // Approved, declined or still processing: Stripe's own read of the intent decides.
+  return await refreshPosCardPayment(input)
 }
 
 /**

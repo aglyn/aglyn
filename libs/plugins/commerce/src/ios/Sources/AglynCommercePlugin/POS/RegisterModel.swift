@@ -67,14 +67,17 @@ final class RegisterModel {
   /// The checked-in stays a sale can be charged to.
   private(set) var stays: [PosStay] = []
 
-  /// A card typed in (the console's "Type card"), wherever this app has
-  /// Stripe's card form. Offered even before the register's context has
-  /// loaded: the server hands the publishable key back with the intent, so
-  /// a context read that failed never hides the tender. Not offered while
-  /// offline: a card needs the server's intent.
+  /// A card typed in (the console's "Type card"), in this app's own card
+  /// fields. Offered even before the register's context has loaded: the
+  /// tender reads the publishable key again at the press, so a context read
+  /// that failed never hides it. Not offered while offline: a card needs
+  /// the server.
   var keyedCard: KeyedCardService? {
     guard online, let entry = keyedEntry else { return nil }
-    return KeyedCardService(entry: entry, publishableKey: context?.publishableKey ?? "", merchantName: storeName)
+    return KeyedCardService(
+      entry: entry, publishableKey: context?.publishableKey ?? "", merchantName: storeName, money: { [currency] in
+        posMoney($0, currency: currency)
+      })
   }
 
   /// The card tender a payment step names by label, to cancel or to read what it asks for.
@@ -88,7 +91,7 @@ final class RegisterModel {
   @ObservationIgnored private let api: PosSaleAPI
   @ObservationIgnored let terminal: CommerceTerminalConnection
   @ObservationIgnored let collector: CardCollector?
-  /// Stripe's card form, where this app carries it (Aglyn POS on iPhone and iPad): a typed card.
+  /// This app's own card fields (Aglyn POS on iPhone, iPad and Mac): a typed card.
   @ObservationIgnored let keyedEntry: KeyedCardEntry?
   @ObservationIgnored private let store: RegisterStore
   @ObservationIgnored private var openAttempt = AttemptKeys()

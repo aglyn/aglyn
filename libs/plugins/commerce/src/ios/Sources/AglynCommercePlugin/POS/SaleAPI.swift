@@ -283,7 +283,8 @@ enum SaleStep: Equatable {
   /// The QR payment page: the customer pays on their phone.
   case cardLink(amountCents: Int, tipCents: Int)
   /// A card typed into Stripe's own card form (card not present); the server makes the intent and hands back its secret.
-  case cardKeyed(amountCents: Int, tipCents: Int)
+  /// A typed card: with `paymentMethodID` (the register's own card fields) the server confirms it at once.
+  case cardKeyed(amountCents: Int, tipCents: Int, paymentMethodID: String? = nil)
   case status(paymentID: String)
   case cancel(paymentID: String)
   /// Tries a declined reader payment again on the same reader.
@@ -349,9 +350,13 @@ enum SaleStep: Equatable {
     case .folio(let reservationID, let amount):
       record["reservationId"] = .string(reservationID)
       if let amount, amount > 0 { put("amountCents", amount) }
-    case .cardLink(let amount, let tip), .cardKeyed(let amount, let tip):
+    case .cardLink(let amount, let tip):
       put("amountCents", amount)
       put("tipCents", tip)
+    case .cardKeyed(let amount, let tip, let paymentMethodID):
+      put("amountCents", amount)
+      put("tipCents", tip)
+      if let paymentMethodID { record["paymentMethodId"] = .string(paymentMethodID) }
     case .status(let id), .cancel(let id), .retry(let id), .simulate(let id): record["paymentId"] = .string(id)
     case .receipt(let channel, let to, let marketingOptIn):
       record["channel"] = .string(channel)

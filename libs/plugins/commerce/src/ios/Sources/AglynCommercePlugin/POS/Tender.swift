@@ -245,23 +245,25 @@ final class DeviceReaderService: CardReaderService {
 let keyedCardLabel = "Enter card manually"
 
 /// A card typed in at the register (card not present), the console's "Type
-/// card": the server makes the PaymentIntent (`card-keyed`) and hands back its
-/// secret, Stripe's own card form takes the card (the number never touches the
-/// register), the server records the payment from Stripe (`status`). Closing
-/// the form without paying releases the amount (`cancel`), as the console's
-/// dialog does. Before the form opens, the answer is checked: the secret must
-/// name an intent, and the amount must be the amount plus the tip the register
-/// asked for.
+/// card", in this app's own card fields. The fields send the card to Stripe
+/// alone, which answers with a PaymentMethod; the register hands only that
+/// id to the server (`card-keyed` with `paymentMethodId`), which makes the
+/// intent, confirms it and records the payment from Stripe's answer. A
+/// decline keeps the fields open with the bank's words; the next card is a
+/// new attempt. The publishable key is the register context's, read again
+/// at the press when the register has none.
 @MainActor
 final class KeyedCardService: CardReaderService {
   let entry: KeyedCardEntry
   let publishableKey: String
   let merchantName: String
+  let money: (Int) -> String
 
-  init(entry: KeyedCardEntry, publishableKey: String, merchantName: String) {
+  init(entry: KeyedCardEntry, publishableKey: String, merchantName: String, money: @escaping (Int) -> String = { posMoney($0, currency: "usd") }) {
     self.entry = entry
     self.publishableKey = publishableKey
     self.merchantName = merchantName
+    self.money = money
   }
 
   var id: String { "keyed" }
@@ -273,61 +275,57 @@ final class KeyedCardService: CardReaderService {
     _ deps: TenderDeps, amountCents: Int, tipCents: Int, attemptKey: String,
     onWaiting: @escaping @MainActor (String?) -> Void
   ) async -> TenderOutcome {
-    let started: PosPaymentAnswer
-    do {
-      started = try await deps.api.payment(
-        orderID: deps.orderID, step: .cardKeyed(amountCents: amountCents, tipCents: tipCents), attemptKey: attemptKey)
-    } catch {
-      return failedOrUnknown(error, "The card payment could not be started.")
-    }
-    // A retried press whose first attempt already settled or failed.
-    if let already = outcomeOfPayment(started) {
-      if case .canceled = already {} else { return already }
-    }
-    guard let payment = started.payment, let secret = started.clientSecret else {
-      return .failed(started.payment?.failureMessage ?? "The card payment could not be started.", started)
-    }
-    // The secret names its own intent (`pi_…_secret_…`).
-    let intent = started.paymentIntentID ?? secret.components(separatedBy: "_secret_").first ?? ""
-    // The key the server answered with, else the one the register's context read.
-    let key = started.publishableKey.flatMap { $0.isEmpty ? nil : $0 } ?? publishableKey
+    var key = publishableKey
+    if !key.hasPrefix("pk_") { key = (try? await deps.api.context())?.publishableKey ?? "" }
     let request = KeyedCardRequest(
-      paymentIntentID: intent, clientSecret: secret, publishableKey: key,
-      amountCents: payment.amountCents + payment.tipCents, merchantName: merchantName)
-    let problem =
-      request.problem
-      ?? (payment.amountCents + payment.tipCents != amountCents + tipCents
-        ? "The amount to charge does not match the register. Start the payment again." : nil)
-    if let problem {
-      return .failed(problem, await cancelCardPayment(deps, payment.id) ?? started)
+      publishableKey: key, amountCents: amountCents + tipCents, amountText: money(amountCents + tipCents),
+      merchantName: merchantName)
+    if let problem = request.problem { return .failed(problem, nil) }
+    var pressKey = attemptKey
+    var last: TenderOutcome?
+    let closed = await entry.collect(request) { paymentMethodID in
+      let answer: PosPaymentAnswer
+      do {
+        answer = try await deps.api.payment(
+          orderID: deps.orderID,
+          step: .cardKeyed(amountCents: amountCents, tipCents: tipCents, paymentMethodID: paymentMethodID),
+          attemptKey: pressKey)
+      } catch {
+        let outcome = failedOrUnknown(error, "The card payment could not be taken.")
+        last = outcome
+        if case .unknown(let words) = outcome { return .lost(words) }
+        pressKey = newAttemptKey()
+        if case .failed(let words, _) = outcome { return .declined(words) }
+        return .declined("The card payment could not be taken.")
+      }
+      // Any answer retires this press: the next card is a new attempt.
+      pressKey = newAttemptKey()
+      if let payment = answer.payment { onWaiting(payment.id) }
+      var outcome = outcomeOfPayment(answer)
+      if outcome == nil, let payment = answer.payment {
+        outcome = await settleCardPayment(deps, payment.id)
+      }
+      let settled = outcome ?? .failed(answer.payment?.failureMessage ?? "The card payment could not be taken.", answer)
+      last = settled
+      switch settled {
+      case .settled: return .paid
+      case .failed(let words, _): return .declined(words)
+      case .canceled: return .declined("The card payment was canceled. Nobody was charged.")
+      case .unknown(let words): return .lost(words)
+      }
     }
-    onWaiting(payment.id)
-    switch await entry.collect(request) {
+    switch closed {
+    case .paid: return last ?? .unknown(lostAnswer)
+    case .lost(let words): return .unknown(words)
     case .canceled:
-      return await released(deps, payment.id, started) { .canceled($0) }
-    case .failed(_, let message):
-      // The intent stays open on the server; releasing it lets the cashier
-      // try another card or another tender.
-      return await released(deps, payment.id, started) { .failed(message, $0) }
-    case .confirmed:
-      return await settleCardPayment(deps, payment.id)
+      // Closed without paying: a declined card stays in the ledger as declined, nobody was charged.
+      if case .failed(_, let answer) = last { return .canceled(answer) }
+      return .canceled(nil)
     }
-  }
-
-  /// Releases the amount. A card that completed in the gap (the form said
-  /// "failed" after Stripe took it) is recorded as paid, never lost: the
-  /// server reads Stripe before it cancels.
-  private func released(
-    _ deps: TenderDeps, _ paymentID: String, _ started: PosPaymentAnswer,
-    otherwise otherwise: (PosPaymentAnswer) -> TenderOutcome
-  ) async -> TenderOutcome {
-    let answer = await cancelCardPayment(deps, paymentID)
-    if let answer, let paid = outcomeOfPayment(answer), case .settled = paid { return paid }
-    return otherwise(answer ?? started)
   }
 
   func cancel(_ deps: TenderDeps, paymentID: String?) async {
-    if let paymentID { _ = await cancelCardPayment(deps, paymentID) }
+    entry.dismiss()
   }
 }
 
