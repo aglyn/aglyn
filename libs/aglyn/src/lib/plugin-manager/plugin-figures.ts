@@ -474,3 +474,49 @@ export function pluginFigureChange(current: number, previous: number | null): nu
   if (!Number.isFinite(current)) return null
   return Math.round(((current - previous) / previous) * 1_000) / 10
 }
+
+/**
+ * How a cell reads to a person, by its column's kind; `null` is "—". Every
+ * consumer that shows a table to a person words its cells here, so an insight
+ * answer and a weekly summary print the same figure the same way.
+ */
+export function pluginFigureCellText(
+  table: Pick<PluginFigureTable, 'columns'>,
+  key: string,
+  value: PluginFigureCell | undefined,
+): string {
+  if (value === null || value === undefined || value === '') return '—'
+  const column = table.columns.find((entry) => entry.key === key)
+  if (typeof value === 'string' || !column) return String(value)
+  switch (column.kind) {
+    case 'money':
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: column.currency ?? 'USD',
+      }).format(value)
+    case 'percent':
+      return `${value.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`
+    case 'change':
+      return `${value > 0 ? '+' : ''}${value.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`
+    case 'duration': {
+      const seconds = Math.round(value)
+      if (seconds < 60) return `${seconds}s`
+      const minutes = Math.floor(seconds / 60)
+      if (minutes < 60) return `${minutes}m ${String(seconds % 60).padStart(2, '0')}s`
+      return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
+    }
+    default:
+      return value.toLocaleString('en-US', { maximumFractionDigits: 2 })
+  }
+}
+
+/** The ISO 8601 week an instant falls in, in UTC (`2026-W38`). */
+export function pluginFigureIsoWeek(at: Date): string {
+  const date = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()))
+  // Thursday decides the week's year.
+  const weekday = date.getUTCDay() || 7
+  date.setUTCDate(date.getUTCDate() + 4 - weekday)
+  const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1)
+  const week = Math.ceil(((date.getTime() - yearStart) / 86_400_000 + 1) / 7)
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
+}

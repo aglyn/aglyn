@@ -444,6 +444,23 @@ workspace, so there is nothing for a workspace answer to change.
 
 ### Daily digests
 
+**Weekly summary** is on by default, for every workspace you own or are an
+admin of. Each Monday morning it emails you how that workspace's busiest sites
+(up to five) did the week before, Monday to Sunday:
+
+- visitors and page views, with the change on the week before;
+- top pages and top traffic sources;
+- form submissions so far this month, by form;
+- new leads and new contacts;
+- bookings, sales and top products;
+- campaigns sent, funnels and automation runs;
+- across the workspace, deals won and lost and the open pipeline.
+
+Each line appears only for what your plan includes and your site uses, and a
+site that had nothing to report is left out. If nothing happened anywhere, no
+email is sent. It is free and nothing in it is written by AI. Switch it off to
+stop it.
+
 **Daily CRM digest** is on by default. Each morning it sends you one
 notification and one email listing your overdue and due-today tasks and the
 leads nobody has worked, across every workspace you belong to. Switch it off to
@@ -453,7 +470,8 @@ digest's console notification but not its email. What it counts, and when, is in
 
 **Weekly insights** appear beside it once you have turned them on for a workspace from
 **Ask about your numbers**, with one switch per workspace. They are off unless you turn
-them on. See [Insights](../marketing-and-automation/analytics/insights.md#weekly-insights).
+them on, because AI writes each one and it uses your workspace's AI credits. The free
+**Weekly summary** gives you the numbers; weekly insights explain what moved them. See [Insights](../marketing-and-automation/analytics/insights.md#weekly-insights).
 
 **Task reminders** — the notification and email a CRM task sends at its own due time —
 are **Forms & bookings** notifications, beside **Task assigned to you**. Open that
