@@ -47,6 +47,7 @@ import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.Busy
 import com.aglyn.ui.ChipOption
@@ -439,6 +440,8 @@ fun ListDetail(context: NativePluginContext, actions: EmailActions, listId: Stri
   val busy = remember { Busy() }
   LaunchedEffect(members, asked) { members.show { limit -> listMembersQuery(actions.orgId, listId, asked, limit) } }
   val row = (doc as? Live.Ready)?.value?.let(::emailListRowOf)
+  // A deleted list closes its detail.
+  CloseWhenGone(if (gone) false else (doc as? Live.Ready)?.let { it.value != null })
   if (gone) {
     EmptyState("This list was deleted", icon = AglynIcons.named("groups"))
     return

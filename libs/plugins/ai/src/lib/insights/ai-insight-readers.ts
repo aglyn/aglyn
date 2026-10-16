@@ -15,13 +15,9 @@
  * limitations under the License.
  */
 
-import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { isHostPluginEnabled, isPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import {
-  listPluginFigureReaders,
   normalizePluginFigureTable,
   pluginFigureParams,
-  pluginFigureReaderPlugin,
   type ResolvedPluginFigureReader,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
 import {
@@ -31,7 +27,10 @@ import {
   type AiInsightSurface,
   type AiInsightTable,
 } from '../model/ai-insight'
-import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin/server/release-flags'
+import {
+  eligibleFigureReaders,
+  type ReleasedFigurePlugins,
+} from '@aglyn/tenant-data-admin/server/figure-readers'
 import type { AiInsightReadRequest } from '../tools/ai-insight-tool'
 import type { AiDatasetCatalogEntry } from './ai-dataset-catalog'
 
@@ -48,10 +47,7 @@ import type { AiDatasetCatalogEntry } from './ai-dataset-catalog'
  */
 
 /** Which of a set of plugins are past their release flags for an org; the platform's flags by default. */
-export type AiReleasedPlugins = (pluginIds: string[], orgId: string) => Promise<string[]>
-
-const releasedByFlags: AiReleasedPlugins = (pluginIds, orgId) =>
-  filterEnabledPluginsByReleaseFlags(pluginIds, { orgId, authorization: null })
+export type AiReleasedPlugins = ReleasedFigurePlugins
 
 export interface AiInsightReaderContext {
   orgId: string
@@ -68,22 +64,13 @@ export interface AiInsightReaderContext {
 /** The readers a job on this surface may read, ordered by id so a prompt lists them in the same order every time. */
 export async function aiInsightReaders(context: AiInsightReaderContext): Promise<ResolvedPluginFigureReader[]> {
   const prefixes = AI_INSIGHT_SURFACE_READERS[context.surface]
-  const org = context.org as { enabledPlugins?: string[] } | null
-  const candidates = listPluginFigureReaders().filter(({ reader }) => {
-    if (!prefixes.includes(reader.id.split('.')[0])) return false
-    // A site reader needs a site; a workspace reader reads with or without one.
-    if (reader.scope === 'site' && !context.hostId) return false
-    return !reader.feature || checkEntitlement(org as never, reader.feature)
-  })
-  const plugins = [...new Set(candidates.map(pluginFigureReaderPlugin).filter((id): id is string => Boolean(id)))]
-  const released = new Set(plugins.length ? await (context.released ?? releasedByFlags)(plugins, context.orgId) : [])
-  return candidates.filter((resolved) => {
-    const plugin = pluginFigureReaderPlugin(resolved)
-    if (!plugin) return true
-    if (!released.has(plugin)) return false
-    return context.hostId
-      ? isHostPluginEnabled(org, context.host as { disabledPlugins?: string[] } | null, plugin)
-      : isPluginEnabled(org, plugin)
+  return eligibleFigureReaders({
+    orgId: context.orgId,
+    hostId: context.hostId,
+    org: context.org,
+    host: context.host,
+    accept: (reader) => prefixes.includes(reader.id.split('.')[0]),
+    ...(context.released ? { released: context.released } : {}),
   })
 }
 

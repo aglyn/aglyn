@@ -17,10 +17,12 @@
 
 import {
   PLUGIN_FIGURE_MAX_ROWS,
+  pluginFigureCellText,
   pluginFigureWindows,
   registerPluginFigureReader,
   type PluginFigureReader,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
+import { figureCount, figureHasColumn, WEEKLY_SUMMARY_TOP_ROWS } from '@aglyn/aglyn/app-utils/weekly-summary'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { computeFunnel } from '../model/funnel-compute'
 import { normalizeFunnelDefinition } from '../model/funnel-definition'
@@ -82,6 +84,26 @@ export function funnelFigureReaders(firestore: () => any): PluginFigureReader[] 
       scope: 'site',
       windows: WINDOWS,
       feature: FUNNEL_FEATURE,
+      weeklySummary: {
+        order: 100,
+        lines: (table) => {
+          if (!figureHasColumn(table, 'entered')) return []
+          const busy = table.rows
+            .filter((row) => figureCount(row['entered']) > 0)
+            .slice(0, WEEKLY_SUMMARY_TOP_ROWS)
+          if (!busy.length) return []
+          return [
+            'Funnels: ' +
+              busy
+                .map(
+                  (row) =>
+                    `${row['funnel']} ${pluginFigureCellText(table, 'entered', row['entered'] ?? 0)} started, ` +
+                    `${pluginFigureCellText(table, 'completed', row['completed'] ?? 0)} finished`,
+                )
+                .join('; '),
+          ]
+        },
+      },
       read: async (request) => {
         if (!request.hostId) return { ok: false, status: 400, error: 'Open a site to read its funnels' }
         if (!windowCheck(request.days)) {

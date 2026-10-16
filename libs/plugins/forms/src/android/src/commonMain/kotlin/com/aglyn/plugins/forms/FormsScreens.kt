@@ -42,6 +42,7 @@ import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.ActionRunner
+import com.aglyn.pluginhost.RunnerBanners
 import com.aglyn.pluginhost.ConsoleScope
 import com.aglyn.pluginhost.ListCreateZone
 import com.aglyn.pluginhost.NativePluginContext
@@ -51,6 +52,7 @@ import com.aglyn.pluginhost.TransferExportDialog
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
@@ -108,6 +110,9 @@ fun FormsScreen(context: NativePluginContext, initialFormId: String? = null) {
 
   AglynListDetail(
     initialSelected = initialFormId,
+    onItemRemoved = { model.refresh() },
+    // A phone shows a form without the list, so the form carries the list's banners (CRM routing saved, a version published).
+    detailBanner = { if (dialog == null) RunnerBanners(runner) },
     list = { selected, onSelect ->
       val listState = rememberLazyListState()
       LoadMoreEffect(listState, model.hasMore, onLoadMore = model::loadMore)
@@ -195,6 +200,7 @@ private fun FormDetail(
   open: (FormDialog) -> Unit,
 ) {
   val live by remember(hostId, formId, context.firestore) { context.firestore.observeDoc("${formsPath(hostId)}/$formId") }.collectAsState(Live.Loading)
+  CloseWhenGone((live as? Live.Ready)?.let { it.value != null })
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this form", body = "Check the connection and try again.", icon = AglynIcons.named("error"))

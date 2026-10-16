@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -20,6 +21,14 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -152,9 +161,54 @@ fun AglynNavigationSuite(
 }
 
 /**
+ * What a list-detail's detail may do to its own selection, from inside it
+ * ([LocalListDetailSelection]): the detail of a deleted item closes itself, so
+ * a phone returns to the list instead of standing on "This … is gone".
+ */
+@Stable
+class ListDetailSelection internal constructor(private val clear: () -> Unit, private val onRemoved: () -> Unit) {
+  /** Clears the selection: a phone shows the list again, a wide window its empty detail. */
+  fun close() = clear()
+
+  /** The selected item is gone: the selection clears and the list is told, so a list read once reloads without it. */
+  fun removed() {
+    clear()
+    onRemoved()
+  }
+}
+
+/** The nearest [AglynListDetail]'s selection; null outside one (a detail opened as a screen of its own). */
+val LocalListDetailSelection = compositionLocalOf<ListDetailSelection?> { null }
+
+/**
+ * Closes the detail once the item it shows, having been there, is no longer
+ * (deleted here, or elsewhere while it was open): [present] is whether it is
+ * there, null while that is still loading. An item that was never there (a
+ * link to a deleted one) keeps its "gone" detail rather than closing at once.
+ */
+@Composable
+fun CloseWhenGone(present: Boolean?) {
+  val selection = LocalListDetailSelection.current ?: return
+  var seen by remember { mutableStateOf(false) }
+  LaunchedEffect(present) {
+    when (present) {
+      true -> seen = true
+      false -> if (seen) selection.removed()
+      null -> Unit
+    }
+  }
+}
+
+/**
  * A list beside its selected item's detail on medium and wider windows, and
  * list then detail (back returns to the list) on phones. Keys are strings so
- * the selection survives configuration changes.
+ * the selection survives configuration changes, and the list keeps its scroll
+ * position and filters while a phone shows the detail.
+ *
+ * [detailBanner] is what the screen reports in its list column (an action's
+ * error or notice): a phone, which hides the list behind the detail, shows it
+ * above the detail too. [onItemRemoved] runs when the detail closes itself
+ * because its item is gone ([CloseWhenGone], [ListDetailSelection.removed]).
  *
  * Built on the window size class rather than ListDetailPaneScaffold: the
  * JVM desktop build of material3-adaptive 1.3.0 does not ship the navigable
@@ -166,31 +220,50 @@ fun AglynListDetail(
   modifier: Modifier = Modifier,
   /** The item picked on arrival, as when a link or a notification names one. */
   initialSelected: String? = null,
+  onItemRemoved: () -> Unit = {},
+  detailBanner: @Composable () -> Unit = {},
   list: @Composable (selected: String?, onSelect: (String) -> Unit) -> Unit,
   detail: @Composable (selected: String?) -> Unit,
 ) {
-  var selected by rememberSaveable(initialSelected) { mutableStateOf(initialSelected) }
+  val selection = rememberSaveable(initialSelected) { mutableStateOf(initialSelected) }
+  var selected by selection
+  val removed by rememberUpdatedState(onItemRemoved)
+  val handle = remember(selection) { ListDetailSelection(clear = { selection.value = null }, onRemoved = { removed() }) }
+  val panes = rememberSaveableStateHolder()
   val wide = currentWidthClass() != WidthClass.COMPACT
-  if (wide) {
-    Row(modifier.fillMaxSize()) {
-      Box(Modifier.weight(0.4f).fillMaxHeight()) { list(selected) { selected = it } }
-      VerticalDivider()
-      Box(Modifier.weight(0.6f).fillMaxHeight()) {
-        AnimatedContent(selected, transitionSpec = { fadeIn() togetherWith fadeOut() }) { key -> detail(key) }
+  CompositionLocalProvider(LocalListDetailSelection provides handle) {
+    if (wide) {
+      Row(modifier.fillMaxSize()) {
+        Box(Modifier.weight(0.4f).fillMaxHeight()) { panes.SaveableStateProvider("list") { list(selected) { selected = it } } }
+        VerticalDivider()
+        Box(Modifier.weight(0.6f).fillMaxHeight()) {
+          AnimatedContent(selected, transitionSpec = { fadeIn() togetherWith fadeOut() }) { key ->
+            panes.SaveableStateProvider("detail:$key") { detail(key) }
+          }
+        }
       }
-    }
-  } else {
-    BackHandler(enabled = selected != null) { selected = null }
-    AnimatedContent(
-      selected,
-      modifier = modifier.fillMaxSize(),
-      transitionSpec = {
-        val forward = targetState != null
-        (slideInHorizontally { if (forward) it / 4 else -it / 4 } + fadeIn()) togetherWith
-          (slideOutHorizontally { if (forward) -it / 4 else it / 4 } + fadeOut())
-      },
-    ) { key ->
-      if (key == null) list(null) { selected = it } else detail(key)
+    } else {
+      BackHandler(enabled = selected != null) { selected = null }
+      AnimatedContent(
+        selected,
+        modifier = modifier.fillMaxSize(),
+        transitionSpec = {
+          val forward = targetState != null
+          (slideInHorizontally { if (forward) it / 4 else -it / 4 } + fadeIn()) togetherWith
+            (slideOutHorizontally { if (forward) -it / 4 else it / 4 } + fadeOut())
+        },
+      ) { key ->
+        if (key == null) {
+          panes.SaveableStateProvider("list") { list(null) { selected = it } }
+        } else {
+          panes.SaveableStateProvider("detail:$key") {
+            Column(Modifier.fillMaxSize()) {
+              Column(Modifier.padding(horizontal = space(2f)).testTag("list-detail-banner"), verticalArrangement = Arrangement.spacedBy(space(1f))) { detailBanner() }
+              Box(Modifier.weight(1f).fillMaxWidth()) { detail(key) }
+            }
+          }
+        }
+      }
     }
   }
 }

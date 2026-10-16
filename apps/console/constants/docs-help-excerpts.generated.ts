@@ -464,7 +464,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#alerts-on-this-device': 'At the foot of the Settings section, three switches control how a new notification reaches you in this browser: Unread count in tab title — badges the browser tab, e.g.',
     '#all-notifications': 'The All notifications card is your whole feed, newest first, across every workspace you belong to: Mark all read clears it, and Filters narrows it by type or status.',
     '#choose-a-workspace': 'If you belong to more than one organization, signing in opens Workspaces: one card per workspace, with its name, its workspace address underneath, and Open, which takes you to its sites.',
-    '#daily-digests': 'Daily CRM digest is on by default. Each morning it sends you one notification and one email listing your overdue and due-today tasks and the leads nobody has worked, across every workspace you belong to.',
+    '#daily-digests': 'Weekly summary is on by default, for every workspace you own or are an admin of.',
     '#notification-settings': 'Everything about what reaches you lives on the second section, Settings.',
     '#organization-general': 'The General card renames the organization, changes its workspace URL and sets the time zone its sites inherit — "workspace" is the console\'s word for your organization\'s home.',
     '#organization-settings': 'Organization → Settings is where you run the workspace itself: its name and workspace URL under General, then — for owners and admins — Profile, Plugins, API keys, Branding, Single sign-on, Privacy, Holds & reviews…',

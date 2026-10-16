@@ -42,6 +42,7 @@ import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.AmountRow
 import com.aglyn.ui.ChipOption
@@ -155,6 +156,8 @@ fun EmailDetail(context: NativePluginContext, orgId: String, hostId: String, sen
   val coroutines = rememberCoroutineScope()
   var dialog by remember(sendId) { mutableStateOf<SendDialog?>(null) }
   var notice by remember(sendId) { mutableStateOf<String?>(null) }
+  // A discarded draft closes its detail.
+  CloseWhenGone((live as? Live.Ready)?.let { it.value != null })
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this email", body = value.error.message, icon = AglynIcons.named("error"))

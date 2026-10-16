@@ -29,6 +29,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -172,7 +173,8 @@ fun BookingsCalendarScreen(context: NativePluginContext, params: NativeParams) {
   val hostId = context.hostId ?: return
   val width = currentWidthClass()
   val wide = width >= WidthClass.EXPANDED
-  var mode by remember { mutableStateOf(if (width == WidthClass.COMPACT) CalendarMode.LIST else CalendarMode.WEEK) }
+  // Upcoming first at every width, as the console's Bookings page opens; the calendar is a tap away.
+  var mode by rememberSaveable { mutableStateOf(CalendarMode.LIST) }
   var anchor by remember { mutableStateOf(currentMs()) }
   var serviceFilter by remember(params["service"]) { mutableStateOf(params["service"]) }
   var booker by remember(params["email"]) { mutableStateOf(params["email"]?.takeIf { it.isNotBlank() }) }
