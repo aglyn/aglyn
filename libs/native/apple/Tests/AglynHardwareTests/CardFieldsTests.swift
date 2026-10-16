@@ -134,6 +134,15 @@ final class CardFieldsTests: XCTestCase {
     }
   }
 
+  func testAStripeAccountWithoutDeviceCardEntrySaysSoInPlainWords() {
+    // Stripe's answer when the platform account has not switched on card entry from a device.
+    let error = StripeCardTokenizer.tokenError(
+      code: nil,
+      message: "This integration surface is unsupported for publishable key tokenization. To enable this surface, please go to your dashboard")
+    XCTAssertEqual(error.message, "Card entry is not switched on for this store yet. Use Card (QR) or a card reader.")
+    XCTAssertNil(error.field)
+  }
+
   func testNoPublishableKeyNeverCallsStripe() async {
     let tokenizer = StripeCardTokenizer { _ in
       XCTFail("Stripe was called")

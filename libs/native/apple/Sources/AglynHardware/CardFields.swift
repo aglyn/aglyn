@@ -343,6 +343,10 @@ public struct StripeCardTokenizer: Sendable {
     case "api_key_expired", "invalid_api_key", "secret_key_required":
       CardTokenError(message: "Card entry is not set up for this site.")
     default:
+      // The platform's Stripe account has not switched on card entry from a device
+      // (Dashboard → Settings → Integration); the cashier can only use another way to pay.
+      (message ?? "").localizedCaseInsensitiveContains("publishable key tokenization")
+        ? CardTokenError(message: "Card entry is not switched on for this store yet. Use Card (QR) or a card reader.") :
       CardTokenError(message: (message?.isEmpty == false ? message : nil) ?? "The card was not accepted. Check it and try again.")
     }
   }

@@ -6,6 +6,12 @@ import AglynUI
 import Observation
 import SwiftUI
 
+#if canImport(UIKit)
+  import UIKit
+#elseif canImport(AppKit)
+  import AppKit
+#endif
+
 /*
  * "ENTER CARD MANUALLY": THE REGISTER'S OWN CARD FIELDS.
  *
@@ -150,6 +156,7 @@ final class CardFormSession: Identifiable {
     fields.clear()
     raised = [:]
     left = []
+    message = nil
     guard let finish = onClose else { return }
     onClose = nil
     finish(outcome)
@@ -159,7 +166,8 @@ final class CardFormSession: Identifiable {
 /// The card fields, as a sheet over the checkout.
 struct CardFieldsSheet: View {
   @Bindable var session: CardFormSession
-  @FocusState private var focus: CardFields.Field?
+  /// The field the cursor is in (the platform fields report and follow it).
+  @State private var focus: CardFields.Field?
   @Environment(\.scenePhase) private var scenePhase
 
   var body: some View {
@@ -216,6 +224,7 @@ struct CardFieldsSheet: View {
       }
       .onAppear { focus = .number }
       .onChange(of: focus) { previous, _ in if let previous { session.leave(previous) } }
+      .onChange(of: session.busy) { _, busy in if busy { focus = nil } }
     }
     .interactiveDismissDisabled()
     // Covered whenever the app is not in front, so the app switcher's snapshot never shows the card.
@@ -238,29 +247,27 @@ struct CardFieldsSheet: View {
     let error = session.error(which, editing: focus)
     return VStack(alignment: .leading, spacing: AglynSpace.half) {
       HStack {
-        TextField(
-          title,
-          text: Binding(
-            get: { text(which) },
-            set: { next in
-              session.edit(which, next)
-              if session.isComplete(which) { focus = following(which) }
+        CardTextField(
+          kind: which, placeholder: prompt, accessibilityLabel: title, identifier: identifier(which),
+          text: { text(which) },
+          edit: { next in
+            session.edit(which, next)
+            if session.isComplete(which) { focus = following(which) }
+          },
+          focused: Binding(
+            get: { focus == which },
+            set: { now in
+              if now {
+                focus = which
+              } else if focus == which {
+                focus = nil
+              }
             }),
-          prompt: Text(prompt)
+          onSubmit: {
+            if which == .postalCode { Task { await session.pay() } } else { focus = following(which) }
+          }
         )
-        .focused($focus, equals: which)
-        .autocorrectionDisabled()
-        #if os(iOS)
-          .textInputAutocapitalization(which == .postalCode ? .characters : .never)
-          .keyboardType(which == .postalCode ? .numbersAndPunctuation : .numberPad)
-        #endif
-        .monospacedDigit()
-        .privacySensitive()
-        .submitLabel(which == .postalCode ? .done : .next)
-        .onSubmit {
-          if which == .postalCode { Task { await session.pay() } } else { focus = following(which) }
-        }
-        .accessibilityIdentifier(identifier(which))
+        .frame(minHeight: 30)
         trailing()
       }
       if let error {
@@ -297,3 +304,188 @@ struct CardFieldsSheet: View {
     }
   }
 }
+
+/*
+ * One card field, on the platform's own text field. Each keystroke is
+ * formatted in the field's delegate, before the field changes, so fast
+ * typing, a hardware keyboard or a paste never loses a digit to a re-render
+ * (a SwiftUI TextField whose binding rewrites the text drops keystrokes that
+ * arrive in between). No autocorrection, no suggestions, no autofill, no
+ * smart punctuation: nothing the system keeps or offers back.
+ */
+#if os(iOS)
+  struct CardTextField: UIViewRepresentable {
+    let kind: CardFields.Field
+    let placeholder: String
+    let accessibilityLabel: String
+    let identifier: String
+    let text: () -> String
+    let edit: (String) -> Void
+    @Binding var focused: Bool
+    let onSubmit: () -> Void
+
+    func makeUIView(context: Context) -> UITextField {
+      let field = UITextField()
+      field.delegate = context.coordinator
+      field.placeholder = placeholder
+      field.accessibilityLabel = accessibilityLabel
+      field.accessibilityIdentifier = identifier
+      field.font = UIFont.monospacedDigitSystemFont(ofSize: UIFont.preferredFont(forTextStyle: .body).pointSize, weight: .regular)
+      field.adjustsFontForContentSizeCategory = true
+      field.autocorrectionType = .no
+      field.spellCheckingType = .no
+      field.smartDashesType = .no
+      field.smartQuotesType = .no
+      field.smartInsertDeleteType = .no
+      field.inlinePredictionType = .no
+      field.textContentType = nil
+      field.autocapitalizationType = kind == .postalCode ? .allCharacters : .none
+      field.keyboardType = kind == .postalCode ? .numbersAndPunctuation : .numberPad
+      field.returnKeyType = kind == .postalCode ? .done : .next
+      field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+      field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+      return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+      context.coordinator.parent = self
+      if field.placeholder != placeholder { field.placeholder = placeholder }
+      let current = text()
+      if field.text != current { field.text = current }
+      if focused, !field.isFirstResponder {
+        DispatchQueue.main.async { field.becomeFirstResponder() }
+      } else if !focused, field.isFirstResponder {
+        DispatchQueue.main.async { field.resignFirstResponder() }
+      }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+      var parent: CardTextField
+
+      init(_ parent: CardTextField) { self.parent = parent }
+
+      func textField(_ field: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+        let current = field.text ?? ""
+        guard let swapped = Range(range, in: current) else { return false }
+        var start = range.location
+        var proposed = current.replacingCharacters(in: swapped, with: string)
+        // Deleting a separator deletes the digit before it, or the cursor would stick.
+        if string.isEmpty, range.length == 1, let removed = current[swapped].first, !removed.isLetter, !removed.isNumber,
+          range.location > 0
+        {
+          let before = current.index(current.startIndex, offsetBy: range.location - 1)
+          proposed = current.replacingCharacters(in: before..<swapped.upperBound, with: "")
+          start -= 1
+        }
+        // Where the cursor goes: after as many letters and digits as precede the edit's end.
+        let keep = proposed.prefix(start + string.count).filter { $0.isLetter || $0.isNumber }.count
+        parent.edit(proposed)
+        let formatted = parent.text()
+        field.text = formatted
+        var seen = 0
+        var offset = formatted.count
+        if keep < formatted.filter({ $0.isLetter || $0.isNumber }).count {
+          for (index, character) in formatted.enumerated() where character.isLetter || character.isNumber {
+            seen += 1
+            if seen == keep { offset = index + 1; break }
+          }
+          if keep == 0 { offset = 0 }
+        }
+        if let position = field.position(from: field.beginningOfDocument, offset: offset) {
+          field.selectedTextRange = field.textRange(from: position, to: position)
+        }
+        return false
+      }
+
+      func textFieldDidBeginEditing(_ field: UITextField) {
+        if !parent.focused { parent.focused = true }
+      }
+
+      func textFieldDidEndEditing(_ field: UITextField) {
+        if parent.focused { parent.focused = false }
+      }
+
+      func textFieldShouldReturn(_ field: UITextField) -> Bool {
+        parent.onSubmit()
+        return false
+      }
+    }
+  }
+#elseif os(macOS)
+  struct CardTextField: NSViewRepresentable {
+    let kind: CardFields.Field
+    let placeholder: String
+    let accessibilityLabel: String
+    let identifier: String
+    let text: () -> String
+    let edit: (String) -> Void
+    @Binding var focused: Bool
+    let onSubmit: () -> Void
+
+    func makeNSView(context: Context) -> NSTextField {
+      let field = NSTextField()
+      field.delegate = context.coordinator
+      field.placeholderString = placeholder
+      field.setAccessibilityLabel(accessibilityLabel)
+      field.setAccessibilityIdentifier(identifier)
+      field.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+      field.isBordered = false
+      field.drawsBackground = false
+      field.focusRingType = .none
+      field.isAutomaticTextCompletionEnabled = false
+      field.contentType = nil
+      field.lineBreakMode = .byClipping
+      field.usesSingleLineMode = true
+      field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+      return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+      context.coordinator.parent = self
+      if field.placeholderString != placeholder { field.placeholderString = placeholder }
+      let current = text()
+      if field.stringValue != current { field.stringValue = current }
+      let editing = field.currentEditor() != nil
+      if focused, !editing {
+        DispatchQueue.main.async { field.window?.makeFirstResponder(field) }
+      }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+      var parent: CardTextField
+
+      init(_ parent: CardTextField) { self.parent = parent }
+
+      func controlTextDidBeginEditing(_ notification: Notification) {
+        if !parent.focused { parent.focused = true }
+      }
+
+      func controlTextDidChange(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField else { return }
+        let typed = field.stringValue
+        parent.edit(typed)
+        let formatted = parent.text()
+        if formatted != typed {
+          field.stringValue = formatted
+          field.currentEditor()?.selectedRange = NSRange(location: (formatted as NSString).length, length: 0)
+        }
+      }
+
+      func controlTextDidEndEditing(_ notification: Notification) {
+        if parent.focused { parent.focused = false }
+      }
+
+      func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        if selector == #selector(NSResponder.insertNewline(_:)) {
+          parent.onSubmit()
+          return true
+        }
+        return false
+      }
+    }
+  }
+#endif
