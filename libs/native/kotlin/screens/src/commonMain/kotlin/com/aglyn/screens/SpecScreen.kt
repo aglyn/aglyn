@@ -1081,7 +1081,8 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
             onClick = {
               chooser.launch {
                 picker?.pick(com.aglyn.ui.PickSource.FILES, multiple = false)?.firstOrNull()?.let { file ->
-                  onChange(FieldValue.File(file.name, ScreenValues.decodeFileText(file.bytes)))
+                  // `base64` keeps the file's bytes as they are (a plugin bundle sent whole); otherwise it is read as text.
+                  onChange(FieldValue.File(file.name, if (field.parse == "base64") ScreenValues.base64(file.bytes) else ScreenValues.decodeFileText(file.bytes)))
                 }
               }
             },
@@ -1098,11 +1099,12 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
         val chosen = text.split('\n').filter { it.isNotEmpty() }
         Text(field.label, style = MaterialTheme.typography.titleSmall)
         for ((id, label) in choices) {
+          // A choice may say what agreeing to it means (a publisher's attestation), under its label.
           SwitchRow(label, id in chosen, { on ->
             val offered = choices.map { it.first }
             val next = offered.filter { if (it == id) on else it in chosen } + chosen.filter { it !in offered }
             onChange(FieldValue.Text(next.joinToString("\n")))
-          }, supporting = null)
+          }, supporting = field.detail(id, context))
         }
         help?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
       }

@@ -2631,6 +2631,7 @@ internal data class ContractValuesPart3(
     @SerialName("MEDIA_TAG_MAX_COUNT") val mediaTagMaxCount: Long,
     @SerialName("MEDIA_TAG_MAX_LENGTH") val mediaTagMaxLength: Long,
     @SerialName("MEDIA_TYPE_OPTIONS") val mediaTypeOptions: List<ListFilterOption>,
+    @SerialName("MINE_LICENCE_QUERY") val mineLicenceQuery: ListQueryDeclaration,
     @SerialName("NAME_TOKEN_LIMIT") val nameTokenLimit: Long,
     @SerialName("NAME_TOKEN_MAX_PREFIX") val nameTokenMaxPrefix: Long,
     @SerialName("NATIVE_CAMPAIGN_SEND_STATUSES") val nativeCampaignSendStatuses: List<NativeCampaignSendStatusesItem>,
@@ -2654,11 +2655,11 @@ internal data class ContractValuesPart3(
     @SerialName("ORDER_LIST_HEADERS") val orderListHeaders: Map<String, String>,
     @SerialName("ORDER_LIST_QUERY") val orderListQuery: ListQueryDeclaration,
     @SerialName("ORDER_LIST_SELECT_FIELDS") val orderListSelectFields: List<String>,
-    @SerialName("ORDER_LOCAL_DELIVERY_STATUS_LABELS") val orderLocalDeliveryStatusLabels: Map<String, String>,
 )
 
 @Serializable
 internal data class ContractValuesPart4(
+    @SerialName("ORDER_LOCAL_DELIVERY_STATUS_LABELS") val orderLocalDeliveryStatusLabels: Map<String, String>,
     @SerialName("ORDER_PICKUP_STATUS_LABELS") val orderPickupStatusLabels: Map<String, String>,
     @SerialName("ORDER_STATUS_COLOR") val orderStatusColor: Map<String, OrderStatusColorValue>,
     @SerialName("ORDER_STATUS_LABELS") val orderStatusLabels: Map<String, String>,
@@ -2706,11 +2707,11 @@ internal data class ContractValuesPart4(
     @SerialName("PRODUCT_LIST_QUERY") val productListQuery: ListQueryDeclaration,
     @SerialName("PRODUCT_LIST_SELECT_FIELDS") val productListSelectFields: List<String>,
     @SerialName("REMINDER_WINDOW_END_HOURS") val reminderWindowEndHours: Long,
-    @SerialName("REMINDER_WINDOW_START_HOURS") val reminderWindowStartHours: Long,
 )
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("REMINDER_WINDOW_START_HOURS") val reminderWindowStartHours: Long,
     @SerialName("REPLY_BODY_MAX") val replyBodyMax: Long,
     @SerialName("REPLY_SUBJECT_MAX") val replySubjectMax: Long,
     @SerialName("RESERVED_SCREEN_ROUTE_SEGMENTS") val reservedScreenRouteSegments: List<String>,
@@ -2877,6 +2878,7 @@ class ContractValues internal constructor(
     val mediaTagMaxCount: Long get() = part3.mediaTagMaxCount
     val mediaTagMaxLength: Long get() = part3.mediaTagMaxLength
     val mediaTypeOptions: List<ListFilterOption> get() = part3.mediaTypeOptions
+    val mineLicenceQuery: ListQueryDeclaration get() = part3.mineLicenceQuery
     val nameTokenLimit: Long get() = part3.nameTokenLimit
     val nameTokenMaxPrefix: Long get() = part3.nameTokenMaxPrefix
     val nativeCampaignSendStatuses: List<NativeCampaignSendStatusesItem> get() = part3.nativeCampaignSendStatuses
@@ -2900,7 +2902,7 @@ class ContractValues internal constructor(
     val orderListHeaders: Map<String, String> get() = part3.orderListHeaders
     val orderListQuery: ListQueryDeclaration get() = part3.orderListQuery
     val orderListSelectFields: List<String> get() = part3.orderListSelectFields
-    val orderLocalDeliveryStatusLabels: Map<String, String> get() = part3.orderLocalDeliveryStatusLabels
+    val orderLocalDeliveryStatusLabels: Map<String, String> get() = part4.orderLocalDeliveryStatusLabels
     val orderPickupStatusLabels: Map<String, String> get() = part4.orderPickupStatusLabels
     val orderStatusColor: Map<String, OrderStatusColorValue> get() = part4.orderStatusColor
     val orderStatusLabels: Map<String, String> get() = part4.orderStatusLabels
@@ -2948,7 +2950,7 @@ class ContractValues internal constructor(
     val productListQuery: ListQueryDeclaration get() = part4.productListQuery
     val productListSelectFields: List<String> get() = part4.productListSelectFields
     val reminderWindowEndHours: Long get() = part4.reminderWindowEndHours
-    val reminderWindowStartHours: Long get() = part4.reminderWindowStartHours
+    val reminderWindowStartHours: Long get() = part5.reminderWindowStartHours
     val replyBodyMax: Long get() = part5.replyBodyMax
     val replySubjectMax: Long get() = part5.replySubjectMax
     val reservedScreenRouteSegments: List<String> get() = part5.reservedScreenRouteSegments

@@ -452,6 +452,10 @@ class ScreenModel(
       val reader = reader ?: return Triple(load.key, JsonNull, null)
       return Triple(load.key, FirestoreLoads.entitlement(reader, feature, ScreenValues.render("{org.id}", context)), null)
     }
+    if (load.takeRate == "marketplace") {
+      val reader = reader ?: return Triple(load.key, JsonNull, null)
+      return Triple(load.key, FirestoreLoads.marketplaceTakeRate(reader, ScreenValues.render("{org.id}", context)), null)
+    }
     load.switchboard?.let { level ->
       val reader = reader ?: return Triple(load.key, JsonNull, null)
       val org = FirestoreLoads.document(reader, ScreenValues.render("orgs/{org.id}", context))

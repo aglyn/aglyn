@@ -59,11 +59,13 @@ kotlin {
         implementation(project(":native-ui"))
         implementation(project(":native-contracts"))
         implementation(project(":native-screens"))
+        implementation(project(":native-site"))
       }
     }
     commonTest.dependencies {
       implementation(kotlin("test"))
       implementation(libs.kotlinx.coroutines.test)
+      implementation(libs.ktor.client.mock)
     }
   }
 }

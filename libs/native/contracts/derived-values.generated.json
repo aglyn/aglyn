@@ -4554,5 +4554,194 @@
       },
       "result": false
     }
-  ]
+  ],
+  "marketplaceFee": {
+    "byPlan": {
+      "free": 30,
+      "starter": 20,
+      "pro": 20,
+      "business": 20,
+      "scale": 20,
+      "advanced": 20,
+      "agency": 20,
+      "enterprise": 20
+    },
+    "paid": 20,
+    "cases": [
+      {
+        "org": {
+          "plan": "free"
+        },
+        "result": 30
+      },
+      {
+        "org": {
+          "plan": "starter"
+        },
+        "result": 20
+      },
+      {
+        "org": {
+          "plan": "pro"
+        },
+        "result": 20
+      },
+      {
+        "org": {
+          "plan": "business"
+        },
+        "result": 20
+      },
+      {
+        "org": {
+          "plan": "enterprise"
+        },
+        "result": 20
+      },
+      {
+        "org": {
+          "plan": "nonsense"
+        },
+        "result": 30
+      },
+      {
+        "org": {
+          "plan": "business",
+          "billingStatus": "canceled"
+        },
+        "result": 30
+      },
+      {
+        "org": {
+          "plan": "business",
+          "billingStatus": "past_due"
+        },
+        "result": 20
+      },
+      {
+        "org": {
+          "plan": "pro",
+          "subscription": {
+            "status": "unpaid"
+          }
+        },
+        "result": 30
+      },
+      {
+        "org": {
+          "plan": "free",
+          "entitlements": {
+            "planComp": {
+              "plan": "business"
+            }
+          }
+        },
+        "result": 20
+      },
+      {
+        "org": {
+          "plan": "starter",
+          "billingStatus": "active",
+          "entitlements": {
+            "planComp": {
+              "plan": "business"
+            }
+          }
+        },
+        "result": 20
+      },
+      {
+        "org": {
+          "plan": "starter",
+          "billingStatus": "canceled",
+          "entitlements": {
+            "planComp": {
+              "plan": "pro"
+            }
+          }
+        },
+        "result": 20
+      },
+      {
+        "org": {
+          "plan": "free",
+          "entitlements": {
+            "features": {
+              "abTesting": true,
+              "outreach": true
+            }
+          }
+        },
+        "result": 30
+      },
+      {
+        "org": {
+          "plan": "enterprise",
+          "entitlements": {
+            "features": {
+              "marketingOverlays": false
+            }
+          }
+        },
+        "result": 20
+      },
+      {
+        "org": {
+          "plan": "pro",
+          "entitlements": {
+            "marketplaceFeePct": 12
+          }
+        },
+        "result": 12
+      },
+      {
+        "org": {
+          "plan": "pro",
+          "entitlements": {
+            "marketplaceFeePct": 0
+          }
+        },
+        "result": 0
+      },
+      {
+        "org": {
+          "plan": "free",
+          "entitlements": {
+            "marketplaceFeePct": 150
+          }
+        },
+        "result": 30
+      },
+      {
+        "org": {
+          "plan": "business",
+          "entitlements": {
+            "marketplaceFeePct": -1
+          }
+        },
+        "result": 30
+      },
+      {
+        "org": {
+          "plan": "business",
+          "entitlements": {
+            "marketplaceFeePct": "15"
+          }
+        },
+        "result": 20
+      },
+      {
+        "org": {
+          "plan": "free",
+          "entitlements": {
+            "planComp": {
+              "plan": "business",
+              "uncapped": true
+            }
+          }
+        },
+        "result": 20
+      }
+    ]
+  }
 }
