@@ -49,7 +49,9 @@ public struct ConsoleWebView {
   /// Besigner); nil allows any path on a trusted origin.
   let allowsPath: (@MainActor (String) -> Bool)?
   /// A main-frame navigation to a path `allowsPath` refuses, handed back so
-  /// the app opens its own screen instead.
+  /// the app opens its own screen instead. A same-document navigation (the
+  /// console's client-side router) cannot be cancelled, so it is handed back
+  /// the same way once the page has moved.
   let onRefusedPath: (@MainActor (String) -> Void)?
 
   public init(
@@ -108,6 +110,9 @@ public struct ConsoleWebView {
         webView.observe(\.title) { [weak self] view, _ in MainActor.assumeIsolated { self?.parent.model.sync(view) } },
         webView.observe(\.canGoBack) { [weak self] view, _ in MainActor.assumeIsolated { self?.parent.model.sync(view) } },
         webView.observe(\.isLoading) { [weak self] view, _ in MainActor.assumeIsolated { self?.parent.model.sync(view) } },
+        // `decidePolicyFor` never sees a client-side route change (pushState),
+        // which is how the console moves between its pages; the URL does.
+        webView.observe(\.url) { [weak self] view, _ in MainActor.assumeIsolated { self?.urlChanged(view.url) } },
       ]
       let store = configuration.websiteDataStore.httpCookieStore
       let cookies = parent.cookies
@@ -119,6 +124,19 @@ public struct ConsoleWebView {
       return webView
     }
 
+    /// The path part of a console URL, with its query.
+    static func consolePath(_ url: URL) -> String {
+      (url.path.isEmpty ? "/" : url.path) + (url.query.map { "?\($0)" } ?? "")
+    }
+
+    private func urlChanged(_ url: URL?) {
+      guard let url, let allowsPath = parent.allowsPath,
+        BridgeProtocol.isTrusted(url.absoluteString, trustedOrigins: parent.trustedOrigins)
+      else { return }
+      let path = Self.consolePath(url)
+      if !allowsPath(path) { parent.onRefusedPath?(path) }
+    }
+
     public func webView(
       _ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
       decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
@@ -127,7 +145,7 @@ public struct ConsoleWebView {
       if url.scheme == "about" { return decisionHandler(.allow) }
       if BridgeProtocol.isTrusted(url.absoluteString, trustedOrigins: parent.trustedOrigins) {
         if action.targetFrame?.isMainFrame ?? true, let allowsPath = parent.allowsPath {
-          let path = (url.path.isEmpty ? "/" : url.path) + (url.query.map { "?\($0)" } ?? "")
+          let path = Self.consolePath(url)
           if !allowsPath(path) {
             parent.onRefusedPath?(path)
             return decisionHandler(.cancel)

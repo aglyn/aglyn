@@ -6,10 +6,14 @@ import androidx.compose.runtime.setValue
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.ListFilterRequest
 import com.aglyn.contracts.ListQueryDeclaration
+import com.aglyn.contracts.ListQueryPlan
 import com.aglyn.contracts.ListQueryRequest
+import com.aglyn.contracts.ListQuerySort
+import com.aglyn.contracts.ListQuerySortDirection
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.FirestoreDoc
+import com.aglyn.core.FirestoreOrder
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreReader
 import com.aglyn.core.FirestoreTimestamp
@@ -17,6 +21,7 @@ import com.aglyn.core.FirestoreWriter
 import com.aglyn.core.field
 import com.aglyn.core.firestoreNow
 import com.aglyn.core.jsonValue
+import com.aglyn.core.listquery.LIST_QUERY_ID_PATH
 import com.aglyn.core.listquery.displayNameSearchFields
 import com.aglyn.core.listquery.planListQuery
 import com.aglyn.core.listquery.toFirestoreQuery
@@ -182,16 +187,47 @@ fun sortedVersions(versions: List<ArtifactVersion>): List<ArtifactVersion> =
 fun versionToOpen(row: ArtifactRow, versions: List<ArtifactVersion>, asked: String? = null): String? =
   asked ?: row.versionId ?: sortedVersions(versions).firstOrNull()?.id
 
-/** One list view's request: the kind clause and the quick search, on the declaration's base. */
-fun artifactRequest(kind: ArtifactKind, search: String, kindFilter: String?): ListQueryRequest = ListQueryRequest(
+/** One list view's request: the kind clause, the quick search and the header sort, on the declaration's base. */
+fun artifactRequest(kind: ArtifactKind, search: String, kindFilter: String?, sort: ListQuerySort? = null): ListQueryRequest = ListQueryRequest(
   base = if (kind == ArtifactKind.TEMPLATE) Contracts.templateListBase else null,
   clauses = listOfNotNull(kindFilter?.let { ListFilterRequest("kind", "equals", it) }),
   search = search.trim().ifEmpty { null }?.let { listOf(it) },
+  sort = sort,
 )
 
-fun artifactQuery(kind: ArtifactKind, hostId: String, search: String, kindFilter: String?, startAfter: List<Any?>? = null): FirestoreQuery =
-  planListQuery(kind.declaration, artifactRequest(kind, search, kindFilter))
-    .toFirestoreQuery("hosts/$hostId/${kind.collection}", ARTIFACT_PAGE_SIZE, startAfter)
+/** The plan behind a list view: its filters, the order it settled on and the notices that say why a sort or filter was changed. */
+fun artifactPlan(kind: ArtifactKind, search: String, kindFilter: String?, sort: ListQuerySort? = null): ListQueryPlan =
+  planListQuery(kind.declaration, artifactRequest(kind, search, kindFilter, sort))
+
+fun artifactQuery(
+  kind: ArtifactKind,
+  hostId: String,
+  search: String,
+  kindFilter: String?,
+  startAfter: List<Any?>? = null,
+  sort: ListQuerySort? = null,
+): FirestoreQuery = artifactPlan(kind, search, kindFilter, sort).artifactFirestoreQuery(kind, hostId, startAfter)
+
+/**
+ * The plan as a page query. A column that two rows can share (a description, a kind, a time) is not enough for a cursor:
+ * the page after it would skip the rows tied with its last one, so the document id, in the same direction, breaks the tie.
+ */
+fun ListQueryPlan.artifactFirestoreQuery(kind: ArtifactKind, hostId: String, startAfter: List<Any?>? = null): FirestoreQuery {
+  val query = toFirestoreQuery("hosts/$hostId/${kind.collection}", ARTIFACT_PAGE_SIZE, startAfter)
+  val last = query.orderBy.lastOrNull() ?: return query
+  return if (last.field == LIST_QUERY_ID_PATH) query else query.copy(orderBy = query.orderBy + FirestoreOrder(LIST_QUERY_ID_PATH, last.descending))
+}
+
+/**
+ * The header sorts a list offers (AGL-3680): every order its declaration gives a column, but the default walk (ID
+ * ascending), which "Default order" is.
+ */
+fun artifactSortChoices(kind: ArtifactKind): List<ListQuerySort> =
+  kind.declaration.sorts.filter { it.column != null && !(it.path == LIST_QUERY_ID_PATH && it.direction == ListQuerySortDirection.ASC) }
+
+/** A sort as the menu words it: the column and an arrow for its direction. */
+fun artifactSortLabel(sort: ListQuerySort): String =
+  "${sort.label ?: sort.column ?: sort.path} ${if (sort.direction == ListQuerySortDirection.DESC) "\u2193" else "\u2191"}"
 
 /**
  * The layouts a layout may render inside (`canNestLayout`): never itself,
@@ -222,6 +258,12 @@ class ArtifactListModel(
     private set
   var kindFilter by mutableStateOf<String?>(null)
     private set
+  /** The header sort asked for; null is the default walk. */
+  var sort by mutableStateOf<ListQuerySort?>(null)
+    private set
+  /** What the plan says about the order or filters it could not serve as asked. */
+  var notices by mutableStateOf<List<String>>(emptyList())
+    private set
   var rows by mutableStateOf<Load<List<ArtifactRow>>>(Load.Loading)
     private set
   var hasMore by mutableStateOf(false)
@@ -243,6 +285,12 @@ class ArtifactListModel(
     reload()
   }
 
+  fun order(next: ListQuerySort?) {
+    if (next == sort) return
+    sort = next
+    reload()
+  }
+
   fun refresh() {
     refreshing = true
     reload(keep = true)
@@ -255,7 +303,9 @@ class ArtifactListModel(
       if (debounce) delay(300)
       if (!keep) rows = Load.Loading
       rows = try {
-        val page = firestore.page(artifactQuery(kind, hostId, search, kindFilter))
+        val plan = artifactPlan(kind, search, kindFilter, sort)
+        notices = plan.notices
+        val page = firestore.page(plan.artifactFirestoreQuery(kind, hostId))
         cursor = page.nextCursor
         hasMore = page.nextCursor != null
         Load.Ready(page.docs.mapNotNull(ArtifactRow::from))
@@ -274,7 +324,7 @@ class ArtifactListModel(
     val shown = (rows as? Load.Ready)?.value ?: return
     if (job?.isActive == true) return
     job = scope.launch {
-      runCatching { firestore.page(artifactQuery(kind, hostId, search, kindFilter, after)) }.onSuccess { page ->
+      runCatching { firestore.page(artifactQuery(kind, hostId, search, kindFilter, after, sort)) }.onSuccess { page ->
         cursor = page.nextCursor
         hasMore = page.nextCursor != null
         rows = Load.Ready(shown + page.docs.mapNotNull(ArtifactRow::from).filter { row -> shown.none { it.id == row.id } })

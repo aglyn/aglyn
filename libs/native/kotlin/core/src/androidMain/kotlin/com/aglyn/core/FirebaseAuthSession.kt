@@ -53,7 +53,17 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
       if (token == null) endImpersonation()
       return token
     }
-    return auth.currentUser?.getIdToken(forceRefresh)?.await()?.token
+    val user = auth.currentUser ?: return null
+    return try {
+      user.getIdToken(forceRefresh).await()?.token
+    } catch (failure: com.google.firebase.FirebaseException) {
+      // A token can only fail here. The session the server no longer honours (a refresh token from another project's
+      // emulator, a deleted or disabled account) is signed out, so the app asks for a sign-in instead of ending; any other
+      // failure (no connection) answers no token, which a caller reads as "sign in to continue" and the next call retries.
+      // Neither may escape: an uncaught one ends the app from whichever screen asked.
+      if (isDeadSessionError((failure as? FirebaseAuthException)?.errorCode, failure.message)) auth.signOut()
+      null
+    }
   }
 
   override suspend fun signInWithEmail(email: String, password: String) {

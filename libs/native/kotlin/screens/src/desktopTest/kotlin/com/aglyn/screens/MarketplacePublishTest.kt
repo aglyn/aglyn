@@ -215,11 +215,11 @@ class MarketplacePublishTest {
     val hub = spec("marketplace.publish")
     val context = json(
       """{"site":{"id":"h1"},"org":{"id":"o1"},"data":{
-        "components":[{"${'$'}id":"c1","displayName":"Hero","description":"Top band"},{"${'$'}id":"c2","displayName":"Gone","deletedAt":1}],
-        "layouts":[{"${'$'}id":"l1","displayName":"Main"}],
-        "emails":[{"${'$'}id":"e1","displayName":"Receipt","versionId":"v1"},{"${'$'}id":"e2","displayName":"Never saved"}],
-        "emailScreens":[{"${'$'}id":"s1","displayName":"Welcome","versionId":"v1","deletedAt":null}],
-        "datasets":[{"${'$'}id":"d1","name":"Menu items"},{"${'$'}id":"d2","displayName":"Staff"}]}}""",
+        "components":{"items":[{"${'$'}id":"c1","displayName":"Hero","description":"Top band"},{"${'$'}id":"c2","displayName":"Gone","deletedAt":1}]},
+        "layouts":{"items":[{"${'$'}id":"l1","displayName":"Main"}]},
+        "emails":{"items":[{"${'$'}id":"e1","displayName":"Receipt","versionId":"v1"},{"${'$'}id":"e2","displayName":"Never saved"}]},
+        "emailScreens":{"items":[{"${'$'}id":"s1","displayName":"Welcome","versionId":"v1","deletedAt":null}]},
+        "datasets":{"items":[{"${'$'}id":"d1","name":"Menu items"},{"${'$'}id":"d2","displayName":"Staff"}]}}}""",
     )
     fun rows(title: String): List<Triple<String, String, Map<String, String>>> {
       val block = hub.blocks.first { it.title == title }
@@ -383,5 +383,13 @@ class MarketplacePublishTest {
     assertEquals(listOf("Aglyn keeps 12% of each sale. Payment processing fees are charged separately by Stripe."), shownFee(""""fee":{"pct":12,"paid":20}"""))
     // Nothing is said before the workspace has been read: the free rate would accuse a paying publisher of the higher cut.
     assertEquals(emptyList(), shownFee(""))
+  }
+
+  @Test
+  fun everyBlockOfEveryMarketplaceScreenHasItsOwnIdentity() {
+    for (screen in ScreenSpec.parseFile(File(root, "libs/plugins/marketplace/src/android/screens/marketplace.screens.json").readText())) {
+      // Two untitled notices shown at once must be two lazy-list items; a key used twice is refused.
+      assertEquals(screen.blocks.size, screen.blocks.map { it.id }.toSet().size, screen.id)
+    }
   }
 }

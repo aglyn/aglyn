@@ -84,9 +84,11 @@ import {
   useFirestore,
   useFirestoreCollection,
   useHostResourceApi,
+  useMerchantPayments,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /** The dialog's fields, and the service it edits (`null` for a new one). */
@@ -126,6 +128,9 @@ function PaymentRiskChip({ risk }: { risk: PaymentRisk | undefined }) {
  */
 export function BookingsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, entitled, org } = props
+  // A paid service is charged through the workspace's Stripe account when a
+  // visitor books it; without one the booking is refused.
+  const payments = useMerchantPayments(hostId)
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
@@ -786,6 +791,11 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
               }
               size="small"
             />
+            {payments.blocked && (draft?.priceDisplay ?? 'fixed') === 'fixed' && Number(draft?.priceUsd ?? 0) > 0 ? (
+              <PrerequisiteNotice severity="warning" href={payments.href ?? undefined} actionLabel="Open Payments">
+                {`${payments.reason ?? ''} Visitors can't book a paid service until it is set up.`}
+              </PrerequisiteNotice>
+            ) : null}
             {/*
               A contractor who quotes at the job states the price as a label
               instead (AGL-3475). Any label books with no charge, like an

@@ -61,6 +61,7 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 const mockCreateResource = jest.fn().mockResolvedValue({ id: 'svc-new' })
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useMerchantPayments: () => ({ state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }),
   useFirestore: () => ({}),
   useFirestoreCollection: (build: () => unknown) => ({
     data: collections[build() as string] ?? [],

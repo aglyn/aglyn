@@ -73,6 +73,19 @@ const val DATA_SCHEMA_SCREEN = "data.schema"
 /** The transfer resource a dataset's records export as (`datasetTransferResourceKey`). */
 fun datasetTransferResource(datasetId: String) = "data.dataset:$datasetId"
 
+/**
+ * The import wizard every workspace import opens (the console's records import, through the `/api/transfer` routes), the screen the Imports
+ * and exports hub's Dataset records list opens for a dataset.
+ */
+const val DATA_IMPORT_SCREEN = "core.settings.data.import"
+
+/** Who may import records: the transfer routes' own rule for a workspace resource, an owner or an admin. */
+fun canImportDatasetRecords(orgRole: String?): Boolean = orgRole == "owner" || orgRole == "admin"
+
+/** The wizard's parameters for one dataset, the console's `openImport` call: the resource and the title. */
+fun datasetImportParams(id: String, name: String): Map<String, String> =
+  mapOf("resource" to datasetTransferResource(id), "title" to if (name.isEmpty()) "Import records" else "Import into $name")
+
 /** A field's type as the Schema dialog names it. */
 fun typeLabel(field: DatasetFieldDefinition): String =
   field.type?.let { Contracts.datasetFieldTypeLabels[it.raw] ?: it.raw } ?: "Text"
@@ -215,11 +228,14 @@ private fun DatasetDetail(
           }
         }
         OverflowMenu(
-          listOf(
-            MenuAction("schema", "Edit schema", "table_chart", enabled = canWrite) { context.navigate(DATA_SCHEMA_SCREEN, mapOf("dataset" to dataset.id)) },
-            MenuAction("export", "Export records", "download", enabled = (records ?: 1L) > 0) { open(DatasetDialog.Export(dataset)) },
-            MenuAction("delete", "Delete dataset", "delete", destructive = true, enabled = canWrite) { open(DatasetDialog.Delete(dataset, records)) },
-          ),
+          buildList {
+            add(MenuAction("schema", "Edit schema", "table_chart", enabled = canWrite) { context.navigate(DATA_SCHEMA_SCREEN, mapOf("dataset" to dataset.id)) })
+            if (canImportDatasetRecords(context.orgRole)) {
+              add(MenuAction("import", "Import records", "upload") { context.navigate(DATA_IMPORT_SCREEN, datasetImportParams(dataset.id, dataset.name)) })
+            }
+            add(MenuAction("export", "Export records", "download", enabled = (records ?: 1L) > 0) { open(DatasetDialog.Export(dataset)) })
+            add(MenuAction("delete", "Delete dataset", "delete", destructive = true, enabled = canWrite) { open(DatasetDialog.Delete(dataset, records)) })
+          },
         )
       }
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {

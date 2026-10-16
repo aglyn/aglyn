@@ -146,6 +146,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
     // Entitled and settled: an unentitled org renders upsells instead of
     // cards, which would measure the refusal rather than the page.
     useOrgPlan: () => mockPlan,
+    // Settled and able to charge, like the plan. The real hook is one
+    // document listen on the owner's profile.
+    useMerchantPayments: () => ({ state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }),
+    useStoreSettingsHref: () => null,
     useHostResourceApi: () => mockResourceApi,
   }
 })

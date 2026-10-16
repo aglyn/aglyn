@@ -170,6 +170,7 @@ jest.mock('firebase/firestore', () => {
 })
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useMerchantPayments: () => ({ state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }),
   useFirestore: () => ({}),
   useOrgPlan: () => ({ org: { plan: 'starter' }, ready: true }),
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
