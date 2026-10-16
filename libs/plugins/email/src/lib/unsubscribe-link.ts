@@ -52,6 +52,12 @@ import { prefersDarkInk } from '@aglyn/shared-util-tools/contrast'
 // double-quoted attributes AND into element text, so the set has to be the
 // one that covers both.
 import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
+import {
+  buildEmailPalette,
+  emailAccent,
+  emailPaletteBaseForHost,
+  PLATFORM_EMAIL_ACCENT,
+} from '@aglyn/shared-util-email/email-palette'
 // The leaf module, not the barrel: it imports `node:crypto` and nothing else,
 // which is what keeps this file free of Firestore. See `signedConfirmSubject`.
 import { confirmSignatureSubject } from '@aglyn/tenant-data-admin/server/email-unsubscribe-link'
@@ -86,8 +92,12 @@ export function suppressionKeyFor(email: string): string | null {
 /**
  * The email palette, named once (AGL-2499 / AGL-2025).
  *
- * These are TRANSCRIPTIONS of the console theme's tokens — see the note on
- * {@link page} below — not new colors. They have to be literal hex because
+ * The neutrals are TRANSCRIPTIONS of the console theme's tokens — see the
+ * note on {@link page} below — not new colors. The interactive slots (`link`,
+ * `button`, `onButton`) are not typed at all: they are the console theme's
+ * own accent, read from `PLATFORM_EMAIL_ACCENT`, so a link here is the color
+ * of a console Link and a button the color of a console contained Button.
+ * The neutrals have to be literal hex because
  * this is email-adjacent HTML served without a stylesheet: no CSS variables,
  * no theme provider, so `theme.palette.*` cannot reach the wire. Naming them
  * here keeps that unavoidable literal to ONE place per color instead of once
@@ -103,7 +113,7 @@ export const PAL = {
   pageBg: '#F5F5F5',
   /** The card itself. */
   cardBg: '#FFFFFF',
-  /** Brand slate — wordmark and primary button fill. */
+  /** Brand slate — the wordmark and the success check. */
   brand: '#404C5C',
   /** The short accent rule under the wordmark. */
   accentRule: '#e040fb',
@@ -111,12 +121,16 @@ export const PAL = {
   ink: '#212121',
   /** Body copy. */
   muted: '#616161',
-  /** Text on a filled brand/link button. */
+  /** Ink on a fill in {@link PAL.brand}. */
   onBrand: '#fff',
   /** Soft circle behind the success checkmark. */
   badgeBg: '#EEF0F2',
-  /** Links and the resubscribe button fill. */
-  link: '#00B0FF',
+  /** Links: the accent as text, `primary.dark`. */
+  link: PLATFORM_EMAIL_ACCENT.link,
+  /** A submit button's fill: `primary.main`. */
+  button: PLATFORM_EMAIL_ACCENT.fill,
+  /** The label on that fill: `primary.contrastText`. */
+  onButton: PLATFORM_EMAIL_ACCENT.label,
   /** Hairline between the preference page's topic rows. */
   divider: '#E0E0E0',
 } as const
@@ -261,6 +275,20 @@ export function resolveEmailPageBrand(
   // wants the platform's accent rather than a slate rule nobody chose.
   const primary = safeColor(scheme?.primary?.main, '')
   const brand = primary || PAL.brand
+  // The link is the site's accent AS TEXT — `primary.dark`, derived the way
+  // the site's own theme derives it — never the fill, which may be too pale
+  // to read. `safeColor` again: the derived value lands in a style attribute.
+  const link = primary
+    ? safeColor(
+        emailAccent(
+          buildEmailPalette({
+            base: emailPaletteBaseForHost(host),
+            colors: scheme as Readonly<Record<string, unknown>> | undefined,
+          }),
+        ).link,
+        PAL.link,
+      )
+    : PAL.link
   return {
     name,
     logoUrl: safeLogoUrl(host),
@@ -268,7 +296,9 @@ export function resolveEmailPageBrand(
       ...PAL,
       brand,
       onBrand: readableInkOn(brand),
-      link: brand,
+      link,
+      button: primary || PAL.button,
+      onButton: primary ? readableInkOn(primary) : PAL.onButton,
       accentRule: safeColor(
         scheme?.secondary?.main,
         primary || PAL.accentRule,
@@ -362,30 +392,29 @@ export function successBadge(pal: EmailPalette = PAL): string {
 }
 
 /**
- * A full-width submit button in either the brand or the link fill.
+ * A full-width submit button: the accent fill and its label, as a console
+ * contained Button draws them.
  *
- * The label ink is contrast-matched to the fill rather than fixed white: with
- * a host palette the fill is merchant-chosen, and a pale one would otherwise
- * hide the label on the button a recipient came here to press.
+ * With a host palette the label ink is contrast-matched to the merchant's
+ * fill ({@link resolveEmailPageBrand}), since a pale one would otherwise hide
+ * the label on the button a recipient came here to press.
  */
 export function submitButton(
   label: string,
   options?: {
     name?: string
     value?: string
-    accent?: 'brand' | 'link'
     pal?: EmailPalette
   },
 ): string {
   const pal = options?.pal ?? PAL
-  const background = options?.accent === 'link' ? pal.link : pal.brand
   return (
     '<button type="submit"' +
     (options?.name ? ` name="${escapeHtml(options.name)}"` : '') +
     (options?.value ? ` value="${escapeHtml(options.value)}"` : '') +
     ' style="font:inherit;font-size:14px;font-weight:600;' +
-    `padding:11px 20px;border:0;border-radius:8px;background:${background};` +
-    `color:${readableInkOn(background)};cursor:pointer;width:100%">${label}</button>`
+    `padding:11px 20px;border:0;border-radius:8px;background:${pal.button};` +
+    `color:${pal.onButton};cursor:pointer;width:100%">${label}</button>`
   )
 }
 

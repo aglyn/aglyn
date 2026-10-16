@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { PLATFORM_EMAIL_ACCENT } from './email-palette'
 
 /**
  * Bare URLs in escaped text, made into links (AGL-3367).
@@ -90,8 +91,8 @@ function anchor(href: string, label: string, color: string): string {
  */
 export function linkifyEscapedText(
   escaped: string,
-  /** The link color: the theme's accent text shade, when the sender has a theme. */
-  color = '#1a73e8',
+  /** The link color: the sender's accent text shade, the platform's by default. */
+  color = PLATFORM_EMAIL_ACCENT.link,
 ): string {
   return escaped.replace(BARE_LINK, (match) => {
     if (!/^https?:\/\//.test(match)) return anchor(`mailto:${match}`, match, color)

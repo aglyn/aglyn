@@ -51,7 +51,7 @@ import {
 } from '@aglyn/shared-util-http/safe-url-scheme'
 
 import { linkifyEscapedText } from './email-linkify'
-import { resolveEmailColor, type EmailPalette } from './email-palette'
+import { emailAccent, resolveEmailColor, type EmailPalette } from './email-palette'
 import { resolveEmailMediaSrc } from './email-media-src'
 
 export interface EmailRenderProduct {
@@ -319,14 +319,12 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
    */
   const colorOf = (value: unknown, fallback: string): string =>
     resolveEmailColor(value, palette) ?? fallback
-  /** The theme's accent, for what the author left unset. */
-  const accent = {
-    fill: colorOf('primary.main', '#1a73e8'),
-    label: colorOf('primary.contrastText', '#ffffff'),
-    // The accent AS TEXT: `primary.dark` is the theme's AA-checked text
-    // shade, where the fill color itself may be too pale to read as a link.
-    link: colorOf('primary.dark', '#1a73e8'),
-  }
+  /**
+   * The theme's accent, for what the author left unset: the fill, its label,
+   * and the accent AS TEXT (`primary.dark`, where the fill itself may be too
+   * pale to read as a link). The platform's stands in for a missing palette.
+   */
+  const accent = emailAccent(palette)
 
   const textParts: string[] = []
   const sub = (value: unknown): string =>
