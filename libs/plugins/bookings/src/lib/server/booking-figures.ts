@@ -22,6 +22,7 @@ import {
   registerPluginFigureReader,
   type PluginFigureReader,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
+import { figureCount, figureRanked, figureRow, figureWithChange } from '@aglyn/aglyn/app-utils/weekly-summary'
 import { BUNDLE_ID } from '../constants/bundle-common'
 
 /**
@@ -86,6 +87,24 @@ export function bookingFigureReader(firestore: () => Firestore): PluginFigureRea
     scope: 'site',
     windows: WINDOWS,
     feature: 'bookings',
+    weeklySummary: {
+      order: 60,
+      lines: (table) => {
+        const all = figureRow(table, 'service', 'All services')
+        if (!all || (!figureCount(all['booked']) && !figureCount(all['canceled']))) return []
+        const canceled = figureCount(all['canceled'])
+        const services = figureRanked(table, 'service', 'booked', '', table.rows.filter((row) => row !== all))
+        return [
+          `Bookings: ${figureWithChange(table, all, 'booked', 'change')}` +
+            (canceled ? `, ${canceled.toLocaleString('en-US')} canceled` : '') +
+            (services ? ` (${services})` : ''),
+        ]
+      },
+      headline: (table) => {
+        const count = figureCount(figureRow(table, 'service', 'All services')?.['booked'])
+        return count ? { count, one: 'booking', many: 'bookings' } : null
+      },
+    },
     read: async (request) => {
       if (!request.hostId) return { ok: false, status: 400, error: 'Open a site to read its bookings' }
       if (!WINDOWS.includes(request.days)) {

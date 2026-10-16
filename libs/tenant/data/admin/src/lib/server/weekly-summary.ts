@@ -41,14 +41,13 @@ import {
   composeWeeklySummarySubject,
   WEEKLY_SUMMARY_DAYS,
   WEEKLY_SUMMARY_DIGEST_KEY,
-  WEEKLY_SUMMARY_ORG_READERS,
-  WEEKLY_SUMMARY_SITE_READERS,
   weeklySummaryPeriod,
+  type WeeklySummaryEntry,
   type WeeklySummarySite,
-  type WeeklySummaryTable,
 } from '@aglyn/aglyn/app-utils/weekly-summary'
 import {
   normalizePluginFigureTable,
+  pluginFigureSummarySection,
   type ResolvedPluginFigureReader,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
 import { rateLimitedRetryAtMs, sendEmail } from '@aglyn/shared-util-email'
@@ -85,11 +84,12 @@ import {
  * ## What it reads
  *
  * The workspace's busiest `WEEKLY_SUMMARY_MAX_SITES` sites by last week's
- * page views, each through the readers in `WEEKLY_SUMMARY_SITE_READERS`, and
- * the workspace through `WEEKLY_SUMMARY_ORG_READERS`. Each reader is offered
- * only where its plan feature is included and its plugin runs
- * (`eligibleFigureReaders`), and read over the seven whole days before the
- * run. A reader that fails is left out; the rest are still read.
+ * page views, each through every site reader that declares a
+ * `weeklySummary`, and the workspace through every workspace reader that
+ * does. Each reader is offered only where its plan feature is included and
+ * its plugin runs (`eligibleFigureReaders`), read over the seven whole days
+ * before the run, and worded by its owner. A reader that fails is left out;
+ * the rest are still read.
  *
  * ## Once a week, and resumable
  *
@@ -156,12 +156,11 @@ export interface WeeklySummaryDeps {
   origin: string
   /** Whether a release flag is on for an org. */
   flagOn: (flag: ReleaseFlagKey, orgId: string, org: Record<string, unknown>) => boolean
-  listMembers: (orgId: string) => Promise<AglynOrgMember[]>
+  orgMembers: (orgId: string) => Promise<AglynOrgMember[]>
   /** The uids whose accounts may be mailed. */
   reachable: (uids: string[]) => Promise<string[]>
-  readers: (context: Omit<FigureReaderContext, 'accept'> & { ids: readonly string[] }) => Promise<
-    ResolvedPluginFigureReader[]
-  >
+  /** The readers that declare a `weeklySummary` and pass the gates here. */
+  readers: (context: Omit<FigureReaderContext, 'accept'>) => Promise<ResolvedPluginFigureReader[]>
   /** The member's deliverable address, or `null` when there is none or it is suppressed. */
   address: (member: AglynOrgMember, lookups: { left: number }) => Promise<string | null>
   send: (email: WeeklySummaryEmail) => Promise<WeeklySummarySendResult>
@@ -219,29 +218,39 @@ function weekDays(from: string): string[] {
   )
 }
 
-/** Reads each reader once, in the order `ids` lists them; a reader that fails or answers no table is left out. */
-async function readTables(
+/**
+ * Each reader's entry, in its declared order: read over the week, then worded
+ * by its owner. A reader that fails, answers no table or cannot be read over
+ * seven days is left out.
+ */
+async function readEntries(
   readers: readonly ResolvedPluginFigureReader[],
-  ids: readonly string[],
   base: { orgId: string; hostId: string | null; now: Date },
-): Promise<WeeklySummaryTable[]> {
-  const tables: WeeklySummaryTable[] = []
-  for (const id of ids) {
-    const resolved = readers.find(({ reader }) => reader.id === id)
-    if (!resolved) continue
-    const { reader } = resolved
+): Promise<WeeklySummaryEntry[]> {
+  const ordered = readers
+    .filter(({ reader }) => reader.weeklySummary)
+    .sort(
+      (a, b) =>
+        (a.reader.weeklySummary?.order ?? 0) - (b.reader.weeklySummary?.order ?? 0) ||
+        a.reader.id.localeCompare(b.reader.id),
+    )
+  const entries: WeeklySummaryEntry[] = []
+  for (const { reader } of ordered) {
+    const summary = reader.weeklySummary
+    if (!summary) continue
     const days = reader.windows.length ? (reader.windows.includes(WEEKLY_SUMMARY_DAYS) ? WEEKLY_SUMMARY_DAYS : null) : 0
     if (days === null) continue
     try {
       const read = await reader.read({ ...base, days, uid: null, params: {} })
       if (read.ok === false) continue
       const table = normalizePluginFigureTable(read.table)
-      if (table) tables.push({ reader: id, table })
+      if (!table) continue
+      entries.push({ lines: summary.lines(table), headline: summary.headline?.(table) ?? null })
     } catch (error) {
-      console.error('[weekly-summary] reader failed', { reader: id, orgId: base.orgId, error })
+      console.error('[weekly-summary] reader failed', { reader: reader.id, orgId: base.orgId, error })
     }
   }
-  return tables
+  return entries
 }
 
 async function summarizeOrg(
@@ -259,7 +268,7 @@ async function summarizeOrg(
   const sentAlready = ((await markerRef.get()).get('sent') ?? {}) as Record<string, unknown>
 
   // Owners and admins, not suspended, whose accounts may be mailed, who kept the switch on.
-  const managers = (await deps.listMembers(orgId)).filter(
+  const managers = (await deps.orgMembers(orgId)).filter(
     (member) => (member.role === 'owner' || member.role === 'admin') && member.orgSuspended !== true,
   )
   const reachable = new Set(await deps.reachable(managers.map((member) => member.$id)))
@@ -294,14 +303,10 @@ async function summarizeOrg(
   const sites: WeeklySummarySite[] = []
   for (const host of chosen) {
     const data = (host.data() ?? {}) as Record<string, unknown>
-    const readers = await deps.readers({
-      orgId,
-      hostId: host.id,
-      org,
-      host: data,
-      ids: WEEKLY_SUMMARY_SITE_READERS,
-    })
-    const tables = await readTables(readers, WEEKLY_SUMMARY_SITE_READERS, { orgId, hostId: host.id, now: period.now })
+    const readers = (await deps.readers({ orgId, hostId: host.id, org, host: data })).filter(
+      ({ reader }) => pluginFigureSummarySection(reader) === 'site',
+    )
+    const entries = await readEntries(readers, { orgId, hostId: host.id, now: period.now })
     const subdomain = str(data['subdomain'])
     sites.push({
       name: siteName(data, host.id),
@@ -309,11 +314,14 @@ async function summarizeOrg(
         deps.origin && orgSlug && subdomain
           ? `${deps.origin}${buildRoute(Route.HOST_DASHBOARD, { orgSlug, host: subdomain })}`
           : null,
-      tables,
+      entries,
     })
   }
-  const orgReaders = await deps.readers({ orgId, hostId: null, org, host: null, ids: WEEKLY_SUMMARY_ORG_READERS })
-  const workspaceTables = await readTables(orgReaders, WEEKLY_SUMMARY_ORG_READERS, { orgId, hostId: null, now: period.now })
+  const orgReaders = await deps.readers({ orgId, hostId: null, org, host: null })
+  const workspace = await readEntries(
+    orgReaders.filter(({ reader }) => pluginFigureSummarySection(reader) === 'workspace'),
+    { orgId, hostId: null, now: period.now },
+  )
 
   const branding = resolveBrandingProfile(org as never)
   const workspaceName = str(org['name']) || orgSlug || 'your workspace'
@@ -333,7 +341,7 @@ async function summarizeOrg(
     productName: branding.productName,
     periodLabel: period.label,
     sites,
-    workspaceTables,
+    workspace,
     settingsUrl,
   }
   report.sites = sites.length
@@ -478,10 +486,9 @@ export async function weeklySummaryDeps(options: { runAt: Date; dryRun: boolean 
         parseOrgReleaseFlagOverrides(org['releaseFlags']),
         resolveEffectivePlan(org as never),
       ),
-    listMembers: (orgId) => listOrgMembers(orgId),
+    orgMembers: (orgId) => listOrgMembers(orgId),
     reachable: (uids) => withoutMailWithheldAccounts(uids),
-    readers: ({ ids, ...context }) =>
-      eligibleFigureReaders({ ...context, accept: (reader) => ids.includes(reader.id) }),
+    readers: (context) => eligibleFigureReaders({ ...context, accept: (reader) => Boolean(reader.weeklySummary) }),
     address: async (member, lookups) => {
       let address = str(member.email).toLowerCase()
       if (!address.includes('@') && lookups.left > 0) {

@@ -20,23 +20,24 @@ import {
   pluginFigureIsoWeek,
   pluginFigureWindows,
   type PluginFigureCell,
+  type PluginFigureHeadline,
   type PluginFigureRow,
   type PluginFigureTable,
 } from '../plugin-manager/plugin-figures'
 
 /**
  * THE WEEKLY SUMMARY (AGL-3867): the free Monday email that says how each of
- * a workspace's sites did last week — visitors, top pages and sources, form
- * submissions, new leads and contacts, bookings, sales, campaigns, funnels,
- * automations — and how the workspace's deals moved.
+ * a workspace's sites did last week, and how the workspace's own figures
+ * moved.
  *
- * It spends nothing. Every figure is read through the `plugin-figures`
- * registry, so each plugin's own counting rules decide what a figure is, and
- * nothing here is generated. AI weekly insights (AGL-2915) are the paid
- * version that explains the figures, and stay opt-in because each one spends
- * the workspace's AI credits.
+ * It spends nothing. Every figure comes from a `plugin-figures` reader that
+ * declares a `weeklySummary`, and that reader's owner words its own lines, so
+ * each plugin's counting rules decide what a figure is and nothing here names
+ * one. AI weekly insights (AGL-2915) are the paid version that explains the
+ * figures, and stay opt-in because each one spends the workspace's AI credits.
  *
- * This module is the words and the arithmetic; the reads and the sends are
+ * This module is the period, the shared wording helpers the readers use, and
+ * the email's words; the reads and the sends are
  * `@aglyn/tenant-data-admin/server/weekly-summary`.
  */
 
@@ -46,32 +47,11 @@ export const WEEKLY_SUMMARY_DIGEST_KEY = 'weeklySummary'
 /** The window every figure is read over. */
 export const WEEKLY_SUMMARY_DAYS = 7
 
-/** The site readers, in the order the email lists them. */
-export const WEEKLY_SUMMARY_SITE_READERS: readonly string[] = [
-  'traffic.summary',
-  'traffic.pages',
-  'traffic.sources',
-  'forms.performance',
-  'crm.people',
-  'bookings.services',
-  'commerce.sales',
-  'commerce.products',
-  'marketing.campaigns',
-  'funnels.overview',
-  'automations.runs',
-]
-
-/** The workspace readers, read once for the whole workspace. */
-export const WEEKLY_SUMMARY_ORG_READERS: readonly string[] = ['crm.closed', 'crm.pipeline']
-
-/** Rows a ranked line names: the top pages, the top sources, the busiest forms. */
+/** Rows a ranked line names: the top three. */
 export const WEEKLY_SUMMARY_TOP_ROWS = 3
 
-/** One table as the summary holds it: the reader it came from, and what it said. */
-export interface WeeklySummaryTable {
-  reader: string
-  table: PluginFigureTable
-}
+/** Counts the subject line leads with, at most. */
+export const WEEKLY_SUMMARY_HEADLINE_COUNTS = 3
 
 /**
  * The week a run reports on: the seven whole UTC days before the day it runs,
@@ -93,38 +73,57 @@ export function weeklySummaryPeriod(runAt: Date): {
     week: pluginFigureIsoWeek(now),
     from: current.from,
     to: current.to,
-    label: `${shortDay(current.from)} – ${shortDay(current.to)}`,
+    label: `${weeklySummaryDay(current.from)} – ${weeklySummaryDay(current.to)}`,
   }
 }
 
 /** `2026-10-05` as "Oct 5". */
-function shortDay(day: string): string {
+export function weeklySummaryDay(day: string): string {
   const at = new Date(`${day}T00:00:00Z`)
   return at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
-const num = (value: PluginFigureCell | undefined): number =>
-  typeof value === 'number' && Number.isFinite(value) ? value : 0
+/** A cell as a number, `0` for anything that is not one. */
+export function figureCount(value: PluginFigureCell | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
 
-function rowWhere(table: PluginFigureTable, key: string, label: string): PluginFigureRow | undefined {
+/** The row whose `key` cell is `label`: "Visitors" in a table of figures. */
+export function figureRow(table: PluginFigureTable, key: string, label: string): PluginFigureRow | undefined {
   return table.rows.find((row) => row[key] === label)
 }
 
-/** "1,204 (+12%)": a count and, when there is an earlier week to compare with, its change. */
-function withChange(table: PluginFigureTable, row: PluginFigureRow, key: string, changeKey: string): string {
+/** Whether a table carries a column, so a reader that changed shape is noticed rather than misread. */
+export function figureHasColumn(table: PluginFigureTable, key: string): boolean {
+  return table.columns.some((column) => column.key === key)
+}
+
+/** "1,204 (+12%)": a cell and, when there is an earlier week to compare with, its change. */
+export function figureWithChange(
+  table: PluginFigureTable,
+  row: PluginFigureRow,
+  key: string,
+  changeKey: string,
+): string {
   const value = pluginFigureCellText(table, key, row[key] ?? 0)
   const change = row[changeKey]
   if (typeof change !== 'number') return value
   return `${value} (${change === 0 ? 'no change' : pluginFigureCellText(table, changeKey, change)})`
 }
 
-/** The named rows with the most of `key`, as "name 12, name 4". */
-function ranked(table: PluginFigureTable, nameKey: string, key: string, unit = ''): string | null {
-  const rows = table.rows
-    .filter((row) => typeof row[nameKey] === 'string' && num(row[key]) > 0)
+/** The named rows with the most of `key`, as "name 12 unit, name 4"; `null` when none has any. */
+export function figureRanked(
+  table: PluginFigureTable,
+  nameKey: string,
+  key: string,
+  unit = '',
+  rows: readonly PluginFigureRow[] = table.rows,
+): string | null {
+  const top = rows
+    .filter((row) => typeof row[nameKey] === 'string' && figureCount(row[key]) > 0)
     .slice(0, WEEKLY_SUMMARY_TOP_ROWS)
-  if (!rows.length) return null
-  return rows
+  if (!top.length) return null
+  return top
     .map((row, index) => {
       const amount = pluginFigureCellText(table, key, row[key] ?? 0)
       return `${row[nameKey]} ${amount}${index === 0 && unit ? ` ${unit}` : ''}`
@@ -132,172 +131,15 @@ function ranked(table: PluginFigureTable, nameKey: string, key: string, unit = '
     .join(', ')
 }
 
-/** A table nothing below knows the shape of: its first row, labeled. */
-function genericLine(table: PluginFigureTable): string | null {
-  const row = table.rows[0]
-  if (!row) return null
-  const counted = table.columns.filter((column) => column.kind !== 'text' && num(row[column.key]) !== 0)
-  if (!counted.length) return null
-  const label = table.columns.find((column) => column.kind === 'text')
-  const name = label && typeof row[label.key] === 'string' ? ` (${row[label.key]})` : ''
-  const cells = counted.map((column) => `${column.label} ${pluginFigureCellText(table, column.key, row[column.key])}`)
-  return `${table.title}${name}: ${cells.join(' · ')}`
+/** "1 order", "18 orders". */
+export function figurePlural(count: number, one: string, many: string): string {
+  return `${count.toLocaleString('en-US')} ${count === 1 ? one : many}`
 }
 
-/**
- * What one table says in the email, as lines; `[]` when it has nothing to
- * report, which is how a quiet reader drops out of a site's section.
- *
- * Each known reader is worded from its own columns. A reader whose columns
- * are not the ones expected here falls back to its first row, labeled, so a
- * reader that changes shape reads plainly rather than vanishing.
- */
-export function weeklySummaryLines({ reader, table }: WeeklySummaryTable): string[] {
-  switch (reader) {
-    case 'traffic.summary': {
-      const visitors = rowWhere(table, 'figure', 'Visitors')
-      const views = rowWhere(table, 'figure', 'Page views')
-      if (!visitors && !views) break
-      if (!num(visitors?.['current']) && !num(views?.['current'])) return []
-      const parts = [
-        visitors ? `Visitors: ${withChange(table, visitors, 'current', 'change')}` : null,
-        views ? `Page views: ${withChange(table, views, 'current', 'change')}` : null,
-      ].filter(Boolean)
-      return [parts.join(' · ')]
-    }
-    case 'traffic.pages': {
-      if (!table.columns.some((column) => column.key === 'views')) break
-      const top = ranked(table, 'page', 'views', 'views')
-      return top ? [`Top pages: ${top}`] : []
-    }
-    case 'traffic.sources': {
-      if (!table.columns.some((column) => column.key === 'views')) break
-      const top = ranked(table, 'source', 'views', 'views')
-      return top ? [`Top sources: ${top}`] : []
-    }
-    case 'forms.performance': {
-      if (!table.columns.some((column) => column.key === 'submissions')) break
-      const total = table.rows.reduce((sum, row) => sum + num(row['submissions']), 0)
-      if (!total) return []
-      // Form figures are kept by calendar month, so the line says so rather
-      // than calling a month-to-date count "last week".
-      const since = table.period ? ` since ${shortDay(table.period.from)}` : ''
-      const top = ranked(table, 'form', 'submissions')
-      return [`Form submissions${since}: ${total.toLocaleString('en-US')}${top ? ` (${top})` : ''}`]
-    }
-    case 'crm.people': {
-      const leads = rowWhere(table, 'figure', 'New leads')
-      const contacts = rowWhere(table, 'figure', 'New contacts')
-      if (!leads && !contacts) break
-      const parts = [
-        leads && num(leads['current']) ? `New leads: ${withChange(table, leads, 'current', 'change')}` : null,
-        contacts && num(contacts['current'])
-          ? `New contacts: ${withChange(table, contacts, 'current', 'change')}`
-          : null,
-      ].filter(Boolean)
-      return parts.length ? [parts.join(' · ')] : []
-    }
-    case 'bookings.services': {
-      const all = rowWhere(table, 'service', 'All services')
-      if (!all) break
-      if (!num(all['booked']) && !num(all['canceled'])) return []
-      const canceled = num(all['canceled'])
-      const services = ranked(
-        { ...table, rows: table.rows.filter((row) => row !== all) },
-        'service',
-        'booked',
-      )
-      return [
-        `Bookings: ${withChange(table, all, 'booked', 'change')}` +
-          (canceled ? `, ${canceled.toLocaleString('en-US')} canceled` : '') +
-          (services ? ` (${services})` : ''),
-      ]
-    }
-    case 'commerce.sales': {
-      const week = table.rows[0]
-      if (!week || !table.columns.some((column) => column.key === 'revenue')) break
-      if (!num(week['orders']) && !num(week['revenue'])) return []
-      const orders = num(week['orders'])
-      return [
-        `Sales: ${withChange(table, week, 'revenue', 'revenueChange')} from ` +
-          `${orders.toLocaleString('en-US')} order${orders === 1 ? '' : 's'}`,
-      ]
-    }
-    case 'commerce.products': {
-      if (!table.columns.some((column) => column.key === 'units')) break
-      const top = ranked(table, 'product', 'units', 'sold')
-      return top ? [`Top products: ${top}`] : []
-    }
-    case 'marketing.campaigns': {
-      if (!table.columns.some((column) => column.key === 'delivered')) break
-      const sent = table.rows.filter((row) => num(row['delivered']) > 0).slice(0, WEEKLY_SUMMARY_TOP_ROWS)
-      if (!sent.length) return []
-      return [
-        'Campaigns: ' +
-          sent
-            .map(
-              (row) =>
-                `${row['campaign']} reached ${pluginFigureCellText(table, 'delivered', row['delivered'] ?? 0)}` +
-                (typeof row['openRate'] === 'number'
-                  ? `, ${pluginFigureCellText(table, 'openRate', row['openRate'])} opened`
-                  : ''),
-            )
-            .join('; '),
-      ]
-    }
-    case 'funnels.overview': {
-      if (!table.columns.some((column) => column.key === 'entered')) break
-      const busy = table.rows.filter((row) => num(row['entered']) > 0).slice(0, WEEKLY_SUMMARY_TOP_ROWS)
-      if (!busy.length) return []
-      return [
-        'Funnels: ' +
-          busy
-            .map(
-              (row) =>
-                `${row['funnel']} ${pluginFigureCellText(table, 'entered', row['entered'] ?? 0)} started, ` +
-                `${pluginFigureCellText(table, 'completed', row['completed'] ?? 0)} finished`,
-            )
-            .join('; '),
-      ]
-    }
-    case 'automations.runs': {
-      const all = rowWhere(table, 'automation', 'All automations')
-      if (!all) break
-      const succeeded = num(all['succeeded'])
-      const failed = num(all['failed'])
-      if (!succeeded && !failed) return []
-      return [
-        `Automations: ${succeeded.toLocaleString('en-US')} run${succeeded === 1 ? '' : 's'} finished` +
-          (failed ? `, ${failed.toLocaleString('en-US')} failed` : ''),
-      ]
-    }
-    case 'crm.closed': {
-      const row = table.rows[0]
-      if (!row || !table.columns.some((column) => column.key === 'won')) break
-      const won = num(row['won'])
-      const lost = num(row['lost'])
-      if (!won && !lost) return []
-      return [
-        `Deals: ${won.toLocaleString('en-US')} won` +
-          (won ? ` (${pluginFigureCellText(table, 'wonValue', row['wonValue'] ?? 0)})` : '') +
-          `, ${lost.toLocaleString('en-US')} lost`,
-      ]
-    }
-    case 'crm.pipeline': {
-      const all = rowWhere(table, 'pipeline', 'All pipelines')
-      if (!all) break
-      const deals = num(all['deals'])
-      if (!deals) return []
-      return [
-        `Open pipeline: ${deals.toLocaleString('en-US')} deal${deals === 1 ? '' : 's'} worth ` +
-          pluginFigureCellText(table, 'value', all['value'] ?? 0),
-      ]
-    }
-    default:
-      break
-  }
-  const line = genericLine(table)
-  return line ? [line] : []
+/** What one reader said this week: its lines and the count it adds to the subject. */
+export interface WeeklySummaryEntry {
+  lines: string[]
+  headline: PluginFigureHeadline | null
 }
 
 /** One site's part of the email. */
@@ -305,33 +147,22 @@ export interface WeeklySummarySite {
   name: string
   /** The site's dashboard in the console, absolute; `null` with no origin to build it from. */
   url: string | null
-  tables: readonly WeeklySummaryTable[]
+  entries: readonly WeeklySummaryEntry[]
 }
 
-/** The figures a subject line leads with, summed over the sites. */
+/** The subject's counts, summed across sites by their noun, in the order the readers first gave them. */
 export function weeklySummaryHeadline(sites: readonly WeeklySummarySite[]): string {
-  let visitors = 0
-  let leads = 0
-  let bookings = 0
-  let orders = 0
+  const sums = new Map<string, PluginFigureHeadline>()
   for (const site of sites) {
-    for (const { reader, table } of site.tables) {
-      if (reader === 'traffic.summary') visitors += num(rowWhere(table, 'figure', 'Visitors')?.['current'])
-      if (reader === 'crm.people') leads += num(rowWhere(table, 'figure', 'New leads')?.['current'])
-      if (reader === 'bookings.services') bookings += num(rowWhere(table, 'service', 'All services')?.['booked'])
-      if (reader === 'commerce.sales') orders += num(table.rows[0]?.['orders'])
+    for (const { headline } of site.entries) {
+      if (!headline || headline.count <= 0) continue
+      const sum = sums.get(headline.one)
+      sums.set(headline.one, sum ? { ...sum, count: sum.count + headline.count } : { ...headline })
     }
   }
-  const plural = (count: number, one: string, many: string) =>
-    `${count.toLocaleString('en-US')} ${count === 1 ? one : many}`
-  return [
-    visitors ? plural(visitors, 'visitor', 'visitors') : null,
-    leads ? plural(leads, 'new lead', 'new leads') : null,
-    bookings ? plural(bookings, 'booking', 'bookings') : null,
-    orders ? plural(orders, 'order', 'orders') : null,
-  ]
-    .filter(Boolean)
-    .slice(0, 3)
+  return [...sums.values()]
+    .slice(0, WEEKLY_SUMMARY_HEADLINE_COUNTS)
+    .map(({ count, one, many }) => figurePlural(count, one, many))
     .join(', ')
 }
 
@@ -340,22 +171,13 @@ export function composeWeeklySummarySubject(workspaceName: string, sites: readon
   return headline ? `Your week at ${workspaceName}: ${headline}` : `Your week at ${workspaceName}`
 }
 
-/** Each site's lines; a site with nothing to report is left out. */
-export function weeklySummarySiteSections(
-  sites: readonly WeeklySummarySite[],
-): Array<{ site: WeeklySummarySite; lines: string[] }> {
-  return sites
-    .map((site) => ({ site, lines: site.tables.flatMap(weeklySummaryLines) }))
-    .filter(({ lines }) => lines.length > 0)
-}
-
 export interface WeeklySummaryEmailInput {
   workspaceName: string
   productName: string
   periodLabel: string
   sites: readonly WeeklySummarySite[]
-  /** The workspace's own figures: its deals. */
-  workspaceTables: readonly WeeklySummaryTable[]
+  /** The workspace's own figures, such as its deals. */
+  workspace: readonly WeeklySummaryEntry[]
   /** Where AI weekly insights are turned on, when the plan includes them and this person has not; else `null`. */
   aiInsightsUrl: string | null
   settingsUrl: string
@@ -366,11 +188,13 @@ export interface WeeklySummaryEmailInput {
 /**
  * The email's words, or `null` when there is nothing to report at all — a
  * week with no figures is not worth an email, and sending one anyway is how a
- * summary trains people to ignore it.
+ * summary trains people to ignore it. A site with nothing to say is left out.
  */
 export function composeWeeklySummaryEmailText(input: WeeklySummaryEmailInput): string | null {
-  const sections = weeklySummarySiteSections(input.sites)
-  const workspaceLines = input.workspaceTables.flatMap(weeklySummaryLines)
+  const sections = input.sites
+    .map((site) => ({ site, lines: site.entries.flatMap((entry) => entry.lines) }))
+    .filter(({ lines }) => lines.length > 0)
+  const workspaceLines = input.workspace.flatMap((entry) => entry.lines)
   if (!sections.length && !workspaceLines.length) return null
   const lines: string[] = [
     `Here is how ${input.workspaceName} did last week, ${input.periodLabel}. ` +
@@ -391,7 +215,10 @@ export function composeWeeklySummaryEmailText(input: WeeklySummaryEmailInput): s
     )
   }
   if (!input.omitClosing) {
-    lines.push('', `You get this summary because you manage ${input.workspaceName}. Turn it off in Notifications: ${input.settingsUrl}`)
+    lines.push(
+      '',
+      `You get this summary because you manage ${input.workspaceName}. Turn it off in Notifications: ${input.settingsUrl}`,
+    )
   }
   return lines.join('\n')
 }

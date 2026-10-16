@@ -29,6 +29,12 @@ import {
   type PluginFigureTable,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
 import { AI_PLUGIN_ID } from '../constants'
+import {
+  FORMS_WEEKLY_SUMMARY,
+  SOURCES_WEEKLY_SUMMARY,
+  TOP_PAGES_WEEKLY_SUMMARY,
+  TRAFFIC_WEEKLY_SUMMARY,
+} from './ai-figure-summaries'
 
 /**
  * The figure readers this plugin registers for records the PLATFORM keeps
@@ -185,6 +191,7 @@ export function trafficFigureReaders(firestore: AiFigureFirestore): PluginFigure
         description:
           'Page views, visitors and views a day on the site over the window, each beside the window before it and the change.',
         windows: AI_TRAFFIC_WINDOWS,
+        weeklySummary: TRAFFIC_WEEKLY_SUMMARY,
       },
       async (db, request) => {
         const ids = dayIds(request.now, request.days)
@@ -240,6 +247,7 @@ export function trafficFigureReaders(firestore: AiFigureFirestore): PluginFigure
         label: 'Top pages',
         description: `The site's ${AI_TRAFFIC_TOP_PAGES} most viewed pages over the window, with each page's share of all views and its change from the window before.`,
         windows: AI_TRAFFIC_WINDOWS,
+        weeklySummary: TOP_PAGES_WEEKLY_SUMMARY,
       },
       async (db, request) => {
         const ids = dayIds(request.now, request.days)
@@ -284,6 +292,7 @@ export function trafficFigureReaders(firestore: AiFigureFirestore): PluginFigure
         description:
           'Where visits came from over the window: the referring sites, and the campaign sources and campaigns links were tagged with, with each one’s views.',
         windows: AI_TRAFFIC_WINDOWS,
+        weeklySummary: SOURCES_WEEKLY_SUMMARY,
       },
       async (db, request) => {
         const days = await readTrafficDays(db, request.hostId, dayIds(request.now, request.days).current)
@@ -365,6 +374,7 @@ export function formsFigureReader(firestore: AiFigureFirestore): PluginFigureRea
       description:
         'Each form’s views, submissions, the share of views that became a submission, and leads, over the calendar months the window falls in.',
       windows: AI_TRAFFIC_WINDOWS,
+      weeklySummary: FORMS_WEEKLY_SUMMARY,
     },
     async (db, request) => {
       const { current } = pluginFigureWindows(request.now, request.days)

@@ -21,6 +21,7 @@ import {
   registerPluginFigureReader,
   type PluginFigureReader,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
+import { figureCount, figureRow, figureWithChange } from '@aglyn/aglyn/app-utils/weekly-summary'
 import { scopedToHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { Timestamp } from 'firebase-admin/firestore'
 import { BUNDLE_ID } from '../constants/bundle-common'
@@ -92,6 +93,26 @@ export function crmPeopleFigureReader(firestore: () => Firestore): PluginFigureR
     scope: 'org',
     windows: WINDOWS,
     feature: 'crm',
+    // Under each site: the leads a site captured are that site's news.
+    weeklySummary: {
+      per: 'site',
+      order: 50,
+      lines: (table) => {
+        const leads = figureRow(table, 'figure', 'New leads')
+        const contacts = figureRow(table, 'figure', 'New contacts')
+        const parts = [
+          leads && figureCount(leads['current']) ? `New leads: ${figureWithChange(table, leads, 'current', 'change')}` : null,
+          contacts && figureCount(contacts['current'])
+            ? `New contacts: ${figureWithChange(table, contacts, 'current', 'change')}`
+            : null,
+        ].filter(Boolean)
+        return parts.length ? [parts.join(' · ')] : []
+      },
+      headline: (table) => {
+        const count = figureCount(figureRow(table, 'figure', 'New leads')?.['current'])
+        return count ? { count, one: 'new lead', many: 'new leads' } : null
+      },
+    },
     read: async (request) => {
       if (!WINDOWS.includes(request.days)) {
         return { ok: false, status: 400, error: 'That window is not one new leads and contacts are read over' }

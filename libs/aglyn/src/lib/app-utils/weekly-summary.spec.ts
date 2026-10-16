@@ -16,18 +16,26 @@
  */
 
 import { NOTIFICATION_DIGESTS } from './notifications'
-import type { PluginFigureColumn, PluginFigureRow, PluginFigureTable } from '../plugin-manager/plugin-figures'
+import {
+  pluginFigureSummarySection,
+  type PluginFigureColumn,
+  type PluginFigureReader,
+  type PluginFigureRow,
+  type PluginFigureTable,
+} from '../plugin-manager/plugin-figures'
 import {
   composeWeeklySummaryEmailText,
   composeWeeklySummarySubject,
+  figureRanked,
+  figureWithChange,
   WEEKLY_SUMMARY_DIGEST_KEY,
-  weeklySummaryLines,
   weeklySummaryPeriod,
   type WeeklySummaryEmailInput,
+  type WeeklySummaryEntry,
   type WeeklySummarySite,
 } from './weekly-summary'
 
-function table(columns: PluginFigureColumn[], rows: PluginFigureRow[], extra: Partial<PluginFigureTable> = {}): PluginFigureTable {
+function table(columns: PluginFigureColumn[], rows: PluginFigureRow[]): PluginFigureTable {
   return {
     title: 'Figures',
     source: { label: 'Console', path: null },
@@ -36,22 +44,8 @@ function table(columns: PluginFigureColumn[], rows: PluginFigureRow[], extra: Pa
     rows,
     omitted: 0,
     notes: [],
-    ...extra,
   }
 }
-
-const SUMMARY_COLUMNS: PluginFigureColumn[] = [
-  { key: 'figure', label: 'Figure', kind: 'text' },
-  { key: 'current', label: 'This window', kind: 'count' },
-  { key: 'previous', label: 'Window before', kind: 'count' },
-  { key: 'change', label: 'Change', kind: 'change' },
-]
-
-const traffic = (visitors: number) =>
-  table(SUMMARY_COLUMNS, [
-    { figure: 'Page views', current: 3_410, previous: 3_150, change: 8.3 },
-    { figure: 'Visitors', current: visitors, previous: 1_000, change: visitors ? 20.4 : -100 },
-  ])
 
 describe('the weekly summary period (AGL-3867)', () => {
   it('covers the seven whole days before the run, Monday to Sunday', () => {
@@ -65,219 +59,108 @@ describe('the weekly summary period (AGL-3867)', () => {
   })
 })
 
-describe('the weekly summary lines', () => {
-  it('words each known reader from its own columns', () => {
-    expect(weeklySummaryLines({ reader: 'traffic.summary', table: traffic(1_204) })).toEqual([
-      'Visitors: 1,204 (+20.4%) · Page views: 3,410 (+8.3%)',
-    ])
-    expect(
-      weeklySummaryLines({
-        reader: 'traffic.pages',
-        table: table(
-          [
-            { key: 'page', label: 'Page', kind: 'text' },
-            { key: 'views', label: 'Views', kind: 'count' },
-          ],
-          [
-            { page: '/', views: 1_020 },
-            { page: '/pricing', views: 340 },
-            { page: '/contact', views: 120 },
-            { page: '/about', views: 60 },
-          ],
-        ),
-      }),
-    ).toEqual(['Top pages: / 1,020 views, /pricing 340, /contact 120'])
-    expect(
-      weeklySummaryLines({
-        reader: 'forms.performance',
-        table: table(
-          [
-            { key: 'form', label: 'Form', kind: 'text' },
-            { key: 'submissions', label: 'Submissions', kind: 'count' },
-          ],
-          [
-            { form: 'Contact us', submissions: 10 },
-            { form: 'Quote', submissions: 4 },
-            { form: 'Unused', submissions: 0 },
-          ],
-          { period: { from: '2026-10-01', to: '2026-10-11', days: 11 } },
-        ),
-      }),
-    ).toEqual(['Form submissions since Oct 1: 14 (Contact us 10, Quote 4)'])
-    expect(
-      weeklySummaryLines({
-        reader: 'crm.people',
-        table: table(SUMMARY_COLUMNS, [
-          { figure: 'New leads', current: 9, previous: 6, change: 50 },
-          { figure: 'New contacts', current: 3, previous: 0, change: null },
-        ]),
-      }),
-    ).toEqual(['New leads: 9 (+50%) · New contacts: 3'])
-    expect(
-      weeklySummaryLines({
-        reader: 'bookings.services',
-        table: table(
-          [
-            { key: 'service', label: 'Service', kind: 'text' },
-            { key: 'booked', label: 'Booked', kind: 'count' },
-            { key: 'canceled', label: 'Canceled', kind: 'count' },
-            { key: 'change', label: 'Change in bookings', kind: 'change' },
-          ],
-          [
-            { service: 'All services', booked: 6, canceled: 1, change: null },
-            { service: 'Haircut', booked: 4, canceled: 1, change: null },
-            { service: 'Color', booked: 2, canceled: 0, change: null },
-          ],
-        ),
-      }),
-    ).toEqual(['Bookings: 6, 1 canceled (Haircut 4, Color 2)'])
-    expect(
-      weeklySummaryLines({
-        reader: 'commerce.sales',
-        table: table(
-          [
-            { key: 'window', label: 'Window', kind: 'text' },
-            { key: 'revenue', label: 'Revenue', kind: 'money', currency: 'USD' },
-            { key: 'orders', label: 'Orders', kind: 'count' },
-            { key: 'revenueChange', label: 'Revenue change', kind: 'change' },
-          ],
-          [
-            { window: 'this', revenue: 1_240, orders: 18, revenueChange: 20 },
-            { window: 'before', revenue: 1_033, orders: 15, revenueChange: null },
-          ],
-        ),
-      }),
-    ).toEqual(['Sales: $1,240.00 (+20%) from 18 orders'])
-    expect(
-      weeklySummaryLines({
-        reader: 'crm.closed',
-        table: table(
-          [
-            { key: 'won', label: 'Won', kind: 'count' },
-            { key: 'lost', label: 'Lost', kind: 'count' },
-            { key: 'wonValue', label: 'Value won', kind: 'money', currency: 'USD' },
-          ],
-          [{ won: 2, lost: 1, wonValue: 5_000 }],
-        ),
-      }),
-    ).toEqual(['Deals: 2 won ($5,000.00), 1 lost'])
-    expect(
-      weeklySummaryLines({
-        reader: 'crm.pipeline',
-        table: table(
-          [
-            { key: 'pipeline', label: 'Pipeline', kind: 'text' },
-            { key: 'deals', label: 'Open deals', kind: 'count' },
-            { key: 'value', label: 'Value', kind: 'money', currency: 'USD' },
-          ],
-          [{ pipeline: 'All pipelines', deals: 12, value: 40_000 }],
-        ),
-      }),
-    ).toEqual(['Open pipeline: 12 deals worth $40,000.00'])
-    expect(
-      weeklySummaryLines({
-        reader: 'automations.runs',
-        table: table(
-          [
-            { key: 'automation', label: 'Automation', kind: 'text' },
-            { key: 'succeeded', label: 'Succeeded', kind: 'count' },
-            { key: 'failed', label: 'Failed', kind: 'count' },
-          ],
-          [{ automation: 'All automations', succeeded: 54, failed: 2 }],
-        ),
-      }),
-    ).toEqual(['Automations: 54 runs finished, 2 failed'])
+describe('the wording helpers a reader words its lines with', () => {
+  const counts = table(
+    [
+      { key: 'name', label: 'Name', kind: 'text' },
+      { key: 'views', label: 'Views', kind: 'count' },
+      { key: 'change', label: 'Change', kind: 'change' },
+    ],
+    [
+      { name: '/', views: 1_020, change: 12.5 },
+      { name: '/pricing', views: 340, change: 0 },
+      { name: '/contact', views: 120, change: null },
+      { name: '/about', views: 60, change: null },
+      { name: '/empty', views: 0, change: null },
+    ],
+  )
+
+  it('says a change only when there is an earlier week, and "no change" for none', () => {
+    expect(figureWithChange(counts, counts.rows[0], 'views', 'change')).toBe('1,020 (+12.5%)')
+    expect(figureWithChange(counts, counts.rows[1], 'views', 'change')).toBe('340 (no change)')
+    expect(figureWithChange(counts, counts.rows[2], 'views', 'change')).toBe('120')
   })
 
-  it('drops a reader with nothing to report', () => {
-    expect(
-      weeklySummaryLines({
-        reader: 'traffic.summary',
-        table: table(SUMMARY_COLUMNS, [
-          { figure: 'Page views', current: 0, previous: 10, change: -100 },
-          { figure: 'Visitors', current: 0, previous: 4, change: -100 },
-        ]),
-      }),
-    ).toEqual([])
-    expect(
-      weeklySummaryLines({
-        reader: 'bookings.services',
-        table: table(
-          [
-            { key: 'service', label: 'Service', kind: 'text' },
-            { key: 'booked', label: 'Booked', kind: 'count' },
-          ],
-          [{ service: 'All services', booked: 0 }],
-        ),
-      }),
-    ).toEqual([])
+  it('ranks the top three with anything to count, naming the unit once', () => {
+    expect(figureRanked(counts, 'name', 'views', 'views')).toBe('/ 1,020 views, /pricing 340, /contact 120')
+    expect(figureRanked(counts, 'name', 'views', '', counts.rows.slice(4))).toBeNull()
+  })
+})
+
+describe('which section lists a reader', () => {
+  const reader = (scope: 'site' | 'org', per?: 'site' | 'workspace'): PluginFigureReader => ({
+    id: 'acme.widgets',
+    label: 'Widgets',
+    description: 'Widgets.',
+    scope,
+    windows: [7],
+    read: async () => ({ ok: false, status: 404, error: 'none' }),
+    weeklySummary: { ...(per ? { per } : {}), order: 1, lines: () => [] },
   })
 
-  it('reads a reader whose shape it does not know as its first row, labeled', () => {
-    expect(
-      weeklySummaryLines({
-        reader: 'acme.widgets',
-        table: table(
-          [
-            { key: 'name', label: 'Widget', kind: 'text' },
-            { key: 'made', label: 'Made', kind: 'count' },
-          ],
-          [{ name: 'Sprocket', made: 7 }],
-          { title: 'Widgets' },
-        ),
-      }),
-    ).toEqual(['Widgets (Sprocket): Made 7'])
+  it('follows the reader’s scope unless the reader says otherwise', () => {
+    expect(pluginFigureSummarySection(reader('site'))).toBe('site')
+    expect(pluginFigureSummarySection(reader('org'))).toBe('workspace')
+    expect(pluginFigureSummarySection(reader('org', 'site'))).toBe('site')
+    expect(pluginFigureSummarySection({ ...reader('site'), weeklySummary: undefined })).toBeNull()
   })
 })
 
 describe('the weekly summary email', () => {
-  const site = (name: string, visitors: number): WeeklySummarySite => ({
+  const site = (name: string, visitors: number, extra: string[] = []): WeeklySummarySite => ({
     name,
     url: `https://app.example.com/acme/hosts/${name.toLowerCase()}`,
-    tables: [{ reader: 'traffic.summary', table: traffic(visitors) }],
+    entries: [
+      {
+        lines: visitors ? [`Visitors: ${visitors.toLocaleString('en-US')}`] : [],
+        headline: visitors ? { count: visitors, one: 'visitor', many: 'visitors' } : null,
+      },
+      ...extra.map((line): WeeklySummaryEntry => ({ lines: [line], headline: null })),
+    ],
   })
   const input: Omit<WeeklySummaryEmailInput, 'sites'> = {
     workspaceName: 'Acme',
     productName: 'Aglyn',
     periodLabel: 'Oct 5 – Oct 11',
-    workspaceTables: [],
+    workspace: [],
     aiInsightsUrl: null,
     settingsUrl: 'https://app.example.com/manage/notifications/settings',
   }
 
-  it('leads the subject with the week’s figures', () => {
-    expect(composeWeeklySummarySubject('Acme', [site('Shop', 1_204), site('Blog', 96)])).toBe(
-      'Your week at Acme: 1,300 visitors',
-    )
+  it('leads the subject with the week’s counts, summed across sites', () => {
+    const shop = site('Shop', 1_204)
+    const blog = site('Blog', 96)
+    const withLeads: WeeklySummarySite = {
+      ...blog,
+      entries: [...blog.entries, { lines: ['New leads: 1'], headline: { count: 1, one: 'new lead', many: 'new leads' } }],
+    }
+    expect(composeWeeklySummarySubject('Acme', [shop, withLeads])).toBe('Your week at Acme: 1,300 visitors, 1 new lead')
     expect(composeWeeklySummarySubject('Acme', [])).toBe('Your week at Acme')
   })
 
   it('lists each site with something to say, with its link, and leaves the rest out', () => {
-    const text = composeWeeklySummaryEmailText({ ...input, sites: [site('Shop', 1_204)] }) ?? ''
+    const text = composeWeeklySummaryEmailText({ ...input, sites: [site('Shop', 1_204, ['Top pages: / 10']), site('Quiet', 0)] }) ?? ''
     expect(text).toContain('Here is how Acme did last week, Oct 5 – Oct 11.')
-    expect(text).toContain('Shop\n- Visitors: 1,204 (+20.4%) · Page views: 3,410 (+8.3%)')
-    expect(text).toContain('Open Shop in Aglyn: https://app.example.com/acme/hosts/shop')
+    expect(text).toContain('Shop\n- Visitors: 1,204\n- Top pages: / 10\nOpen Shop in Aglyn: https://app.example.com/acme/hosts/shop')
+    expect(text).not.toContain('Quiet')
     expect(text).toContain('Turn it off in Notifications: https://app.example.com/manage/notifications/settings')
-    expect(composeWeeklySummaryEmailText({ ...input, sites: [site('Shop', 1_204)], omitClosing: true })).not.toContain(
-      'Turn it off',
-    )
+    expect(
+      composeWeeklySummaryEmailText({ ...input, sites: [site('Shop', 1_204)], omitClosing: true }),
+    ).not.toContain('Turn it off')
+  })
+
+  it('lists the workspace’s own figures once, after the sites', () => {
+    const text =
+      composeWeeklySummaryEmailText({
+        ...input,
+        sites: [site('Shop', 5)],
+        workspace: [{ lines: ['Deals: 2 won'], headline: null }],
+      }) ?? ''
+    expect(text.indexOf('Across Acme\n- Deals: 2 won')).toBeGreaterThan(text.indexOf('Shop'))
   })
 
   it('is not sent at all for a week with nothing in it', () => {
-    const quiet: WeeklySummarySite = {
-      name: 'Quiet',
-      url: null,
-      tables: [
-        {
-          reader: 'traffic.summary',
-          table: table(SUMMARY_COLUMNS, [
-            { figure: 'Page views', current: 0, previous: 0, change: null },
-            { figure: 'Visitors', current: 0, previous: 0, change: null },
-          ]),
-        },
-      ],
-    }
-    expect(composeWeeklySummaryEmailText({ ...input, sites: [quiet] })).toBeNull()
+    expect(composeWeeklySummaryEmailText({ ...input, sites: [site('Quiet', 0)] })).toBeNull()
   })
 
   it('offers AI weekly insights only when handed where to turn them on', () => {

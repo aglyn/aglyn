@@ -157,6 +157,17 @@ function setup(options: { visitors?: number; send?: WeeklySummaryDeps['send']; d
       scope: 'site',
       windows: [7, 14, 30, 90],
       plugin: null,
+      weeklySummary: {
+        order: 10,
+        lines: (table) => {
+          const visitors = table.rows.find((row) => row['figure'] === 'Visitors')
+          return visitors && visitors['current'] ? [`Visitors: ${visitors['current']}`] : []
+        },
+        headline: (table) => {
+          const count = Number(table.rows.find((row) => row['figure'] === 'Visitors')?.['current'] ?? 0)
+          return count ? { count, one: 'visitor', many: 'visitors' } : null
+        },
+      },
       read: async (request) => {
         reads.push({ hostId: request.hostId, days: request.days, now: request.now })
         return { ok: true, table: trafficTable(options.visitors ?? 120) }
@@ -169,14 +180,14 @@ function setup(options: { visitors?: number; send?: WeeklySummaryDeps['send']; d
     dryRun: options.dryRun ?? false,
     origin: 'https://app.example.com',
     flagOn: () => true,
-    listMembers: async () => [
+    orgMembers: async () => [
       member('u1', 'owner'),
       member('u2', 'admin'),
       member('u3', 'member'),
       member('u4', 'admin', { orgSuspended: true } as never),
     ],
     reachable: async (uids) => uids,
-    readers: async ({ ids }) => (ids.includes('traffic.summary') ? [traffic] : []),
+    readers: async ({ hostId }) => (hostId ? [traffic] : []),
     address: async (one) => String(one.email),
     send:
       options.send ??
@@ -197,7 +208,7 @@ describe('the weekly summary sweep (AGL-3867)', () => {
     const [email] = sent
     expect(email.subject).toBe('Your week at Acme: 120 visitors')
     expect(email.body).toContain('Shop')
-    expect(email.body).toContain('Visitors: 120 (no change) · Page views: 360 (+50%)')
+    expect(email.body).toContain('Shop\n- Visitors: 120')
     expect(email.body).toContain('https://app.example.com/acme/hosts/shop')
     expect(email.body).toContain('Oct 5 – Oct 11')
     expect(email.merge['summary.body']).toBe(email.body)
@@ -215,6 +226,33 @@ describe('the weekly summary sweep (AGL-3867)', () => {
     expect(sent).toEqual([])
     // u2 is still asked, and still has it off.
     expect(again.orgs['o1']).toMatchObject({ skipped: 'summary-off' })
+  })
+
+  it('lists a workspace reader once for the workspace, and one that asks for it under each site', async () => {
+    const { deps, sent } = setup()
+    const orgReader = (id: string, per: 'site' | 'workspace' | undefined, line: string): ResolvedPluginFigureReader => ({
+      pluginId: 'crm',
+      reader: {
+        id,
+        label: id,
+        description: 'A workspace reader.',
+        scope: 'org',
+        windows: [7],
+        weeklySummary: { ...(per ? { per } : {}), order: 5, lines: () => [line] },
+        read: async () => ({ ok: true, table: trafficTable(1) }),
+      },
+    })
+    const deals = orgReader('crm.closed', undefined, 'Deals: 2 won')
+    const leads = orgReader('crm.people', 'site', 'New leads: 4')
+    await runWeeklySummarySweep({
+      ...deps,
+      readers: async ({ hostId }) => (hostId ? [deals, leads, ...(await deps.readers({ hostId } as never))] : [deals, leads]),
+    })
+    const body = sent[0]?.body ?? ''
+    expect(body).toContain('Shop\n- New leads: 4\n- Visitors: 120')
+    expect(body).toContain('Across Acme\n- Deals: 2 won')
+    expect(body.match(/Deals: 2 won/g)).toHaveLength(1)
+    expect(body.match(/New leads: 4/g)).toHaveLength(1)
   })
 
   it('sends nothing when nothing happened', async () => {
