@@ -96,11 +96,22 @@ describe('the document.write call sites (AGL-2283)', () => {
   }
 
   const SLIP = 'order-detail-dialog.component.tsx'
+  // The slip's markup moved into a pure builder (AGL-3841) so the apps print
+  // the same page; the dialog writes what it returns.
+  const SLIP_BUILDER = '../../utils/order-packing-slip.ts'
+
+  /** The builder's body, whitespace-collapsed, from its `return` on. */
+  const builderReturn = () => {
+    const source = readFileSync(join(__dirname, SLIP_BUILDER), 'utf8')
+    const from = source.indexOf('export function buildPackingSlipHtml(')
+    expect(from).toBeGreaterThan(-1)
+    return source.slice(source.indexOf('return (', from)).replace(/\s+/g, '')
+  }
 
   it('the packing slip escapes every value it interpolates', () => {
-    // The rows are built above the `write` call, so they are checked on the
-    // whole file — but by their escaped FORM, which no other line carries.
-    const source = readFileSync(join(__dirname, SLIP), 'utf8').replace(
+    // The rows are built above the markup, so they are checked on the whole
+    // builder — but by their escaped FORM, which no other line carries.
+    const source = readFileSync(join(__dirname, SLIP_BUILDER), 'utf8').replace(
       /\s+/g,
       '',
     )
@@ -115,9 +126,11 @@ describe('the document.write call sites (AGL-2283)', () => {
 
     // The shopper-typed one, and the reason this is a security fix rather
     // than a tidy-up.
-    const written = writeArgument(SLIP)
+    const written = builderReturn()
     expect(written).toContain('.map((part)=>escapeHtml(part))')
     expect(written).not.toContain(".filter(Boolean).join('<br/>')")
+    // And the dialog writes the builder's page, nothing of its own.
+    expect(writeArgument(SLIP)).toBe('win.document.write(buildPackingSlipHtml(order,orderId))')
   })
 
   /**
@@ -158,8 +171,8 @@ describe('the document.write call sites (AGL-2283)', () => {
    * empty, every `not.toContain` above would pass vacuously — that is what a
    * check which cannot fail looks like.
    */
-  it('POSITIVE CONTROL: it is really reading the slip\'s write call', () => {
-    expect(writeArgument(SLIP)).toContain('Packingslip')
-    expect(writeArgument(SLIP).length).toBeGreaterThan(200)
+  it('POSITIVE CONTROL: it is really reading the slip\'s markup', () => {
+    expect(builderReturn()).toContain('Packingslip')
+    expect(builderReturn().length).toBeGreaterThan(200)
   })
 })
