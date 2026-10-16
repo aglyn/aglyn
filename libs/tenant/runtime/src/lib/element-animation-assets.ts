@@ -264,6 +264,11 @@ export const ELEMENT_ANIMATION_STYLE_TEXT = [
     (ease) =>
       `.${ANIMATION_EASE_CLASS_PREFIX}${ease}{${EASE_VAR}:${EASE_CURVES[ease]}}`,
   ),
+  // A sideways entrance starts 24px past its edge, which on a phone is past
+  // the page's 16px gutter: the page would scroll sideways for as long as it
+  // plays. `clip`, not `hidden`, so the root never becomes a scroll container
+  // and a sticky header stays sticky.
+  `:root:has(.${ANIMATION_PRESET_CLASS_PREFIX}slide-left,.${ANIMATION_PRESET_CLASS_PREFIX}slide-right){overflow-x:clip}`,
   // Shared timing for the keyframe triggers.
   `${TARGETS}{animation-duration:${DURATION};animation-delay:${TOTAL_DELAY};animation-timing-function:${TIMING};animation-fill-mode:both}`,
   // The stagger ladder — no-ops for every element that is not inside a host.

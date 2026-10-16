@@ -32,12 +32,18 @@ import {
  * are drawn apart by their seeds, the way their looks are.
  *
  * The moods, by the kinds `ai-site-kinds.ts` lists:
- *  - CALM — practices, health, reading: a fade, on a gentle curve, slower.
+ *  - CALM — practices, health, reading: fades and rises taken in turn, on a
+ *    gentle curve, slower.
  *  - BOLD — studios, fitness, music, events: a rise with overshoot, and
  *    pictures that zoom in.
  *  - GALLERY — portfolios and photography: pictures zoom in, one after
  *    another; the words fade or rise.
- *  - STANDARD — everything else: a smooth rise.
+ *  - STANDARD — everything else: rises and fades taken in turn.
+ *
+ * In every mood a page's later sections take the mood's presets in turn,
+ * starting where the seed says, and a column of words beside a picture comes
+ * in from its own side (Zach 2026-10-16: "some slide in ones would be cool
+ * too"). A page is never one move repeated.
  *
  * Every number stays inside the vocabulary's caps, and inside 400–800 ms for
  * a duration and 60–120 ms between staggered items: slower reads as a site
@@ -47,7 +53,7 @@ import {
 export type AiSiteMotionMood = 'calm' | 'bold' | 'gallery' | 'standard'
 
 interface AiSiteMotionRange {
-  /** The word presets the seed picks among. */
+  /** The word presets: the seed picks the first, and later sections take them in turn from there. */
   presets: readonly AnimationPreset[]
   /** The picture presets the seed picks among. */
   media: readonly AnimationPreset[]
@@ -61,7 +67,7 @@ interface AiSiteMotionRange {
 /** Each mood's range. The seed picks one character from it. */
 export const AI_SITE_MOTION_MOODS: Readonly<Record<AiSiteMotionMood, AiSiteMotionRange>> = {
   calm: {
-    presets: ['fade'],
+    presets: ['fade', 'slide-up'],
     media: ['fade'],
     eases: ['gentle-end', 'gentle-both'],
     duration: [650, 800],
@@ -85,7 +91,7 @@ export const AI_SITE_MOTION_MOODS: Readonly<Record<AiSiteMotionMood, AiSiteMotio
     hero: [110, 130],
   },
   standard: {
-    presets: ['slide-up'],
+    presets: ['slide-up', 'fade'],
     media: ['slide-up', 'fade'],
     eases: ['smooth'],
     duration: [500, 700],
@@ -138,8 +144,12 @@ const within = (next: () => number, [low, high]: readonly [number, number], step
 export function aiSiteMotion(input: { kind?: string | null; seed: number }): ElementMotionCharacter {
   const range = AI_SITE_MOTION_MOODS[aiSiteMotionMood(input.kind)]
   const next = random(input.seed >>> 0)
+  const first = Math.floor(next() * range.presets.length) % range.presets.length
+  const sectionPresets = range.presets.map((_, index) => range.presets[(first + index) % range.presets.length])
   return {
-    preset: pick(next, range.presets),
+    preset: sectionPresets[0],
+    sectionPresets,
+    sides: true,
     mediaPreset: pick(next, range.media),
     ease: pick(next, range.eases),
     durationMs: within(next, range.duration, 10),
