@@ -238,7 +238,7 @@ class MarketplacePublishTest {
     assertEquals(listOf("Menu items", "Staff"), rows("Dataset schemas").map { it.first })
     assertEquals(listOf("marketplace.publishTemplate", "marketplace.publishTheme", "marketplace.publishPlugin"), hub.blocks.first { it.type == "links" && it.whenCondition == null }.raw.arr("items").mapNotNull { it.str("screen") })
     // What it reads: this site's collections, and the workspace's datasets.
-    val paths = (hub.raw.obj("load") as JsonObject).mapValues { (_, load) -> ((load as JsonObject).obj("query") as JsonObject).str("collection") }
+    val paths = (hub.raw.obj("load") as JsonObject).filterValues { (it as JsonObject).obj("query") != null }.mapValues { (_, load) -> ((load as JsonObject).obj("query") as JsonObject).str("collection") }
     assertEquals(
       mapOf("components" to "hosts/{site.id}/components", "layouts" to "hosts/{site.id}/layouts", "emails" to "hosts/{site.id}/emailTemplates", "emailScreens" to "hosts/{site.id}/screens", "datasets" to "orgs/{org.id}/datasets"),
       paths,
