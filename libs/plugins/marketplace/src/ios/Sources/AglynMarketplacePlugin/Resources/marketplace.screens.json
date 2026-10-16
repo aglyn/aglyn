@@ -1852,13 +1852,15 @@
         {
           "type": "notice",
           "tone": "info",
-          "text": "Pick what to publish. Publishing offers the current published version so other organizations can install it; your site is unaffected."
+          "text": "Pick what to publish. Publishing offers the current published version so other organizations can install it; your site is unaffected.",
+          "id": "intro"
         },
         {
           "type": "notice",
           "tone": "warning",
           "when": "data.fee.pct > @data.fee.paid",
-          "text": "Aglyn keeps {data.fee.pct}% of each sale on your current plan. On a paid plan it is {data.fee.paid}%."
+          "text": "Aglyn keeps {data.fee.pct}% of each sale on your current plan. On a paid plan it is {data.fee.paid}%.",
+          "id": "fee-higher"
         },
         {
           "type": "links",
@@ -1875,7 +1877,8 @@
           "type": "notice",
           "tone": "info",
           "when": "data.fee.pct <= @data.fee.paid",
-          "text": "Aglyn keeps {data.fee.pct}% of each sale. Payment processing fees are charged separately by Stripe."
+          "text": "Aglyn keeps {data.fee.pct}% of each sale. Payment processing fees are charged separately by Stripe.",
+          "id": "fee"
         },
         {
           "type": "links",
@@ -1903,7 +1906,7 @@
         {
           "type": "list",
           "title": "Components",
-          "items": "data.components",
+          "items": "data.components.items",
           "count": false,
           "filter": "!item.deletedAt",
           "primary": "{item.displayName|item.name|item.$id}",
@@ -1921,7 +1924,7 @@
         {
           "type": "list",
           "title": "Layouts",
-          "items": "data.layouts",
+          "items": "data.layouts.items",
           "count": false,
           "filter": "!item.deletedAt",
           "primary": "{item.displayName|item.name|item.$id}",
@@ -1939,7 +1942,7 @@
         {
           "type": "list",
           "title": "Email templates",
-          "items": "data.emails",
+          "items": "data.emails.items",
           "count": false,
           "filter": "!item.deletedAt && item.versionId",
           "primary": "{item.displayName|item.name|item.$id}",
@@ -1957,7 +1960,7 @@
         {
           "type": "list",
           "title": "Emails",
-          "items": "data.emailScreens",
+          "items": "data.emailScreens.items",
           "count": false,
           "filter": "!item.deletedAt && item.versionId",
           "primary": "{item.displayName|item.name|item.$id}",
@@ -1975,7 +1978,7 @@
         {
           "type": "list",
           "title": "Dataset schemas",
-          "items": "data.datasets",
+          "items": "data.datasets.items",
           "count": false,
           "filter": "!item.deletedAt",
           "primary": "{item.displayName|item.name|item.$id}",

@@ -204,11 +204,11 @@ final class MarketplacePublishTests: XCTestCase {
     let context: JSONValue = [
       "site": ["id": "h1"], "org": ["id": "o1"],
       "data": [
-        "components": [["$id": "c1", "displayName": "Hero", "description": "Top band"], ["$id": "c2", "displayName": "Gone", "deletedAt": 1]],
-        "layouts": [["$id": "l1", "displayName": "Main"]],
-        "emails": [["$id": "e1", "displayName": "Receipt", "versionId": "v1"], ["$id": "e2", "displayName": "Never saved"]],
-        "emailScreens": [["$id": "s1", "displayName": "Welcome", "versionId": "v1", "deletedAt": .null]],
-        "datasets": [["$id": "d1", "name": "Menu items"], ["$id": "d2", "displayName": "Staff"]],
+        "components": ["items": [["$id": "c1", "displayName": "Hero", "description": "Top band"], ["$id": "c2", "displayName": "Gone", "deletedAt": 1]]],
+        "layouts": ["items": [["$id": "l1", "displayName": "Main"]]],
+        "emails": ["items": [["$id": "e1", "displayName": "Receipt", "versionId": "v1"], ["$id": "e2", "displayName": "Never saved"]]],
+        "emailScreens": ["items": [["$id": "s1", "displayName": "Welcome", "versionId": "v1", "deletedAt": .null]]],
+        "datasets": ["items": [["$id": "d1", "name": "Menu items"], ["$id": "d2", "displayName": "Staff"]]],
       ],
     ]
     func rows(_ title: String) throws -> [(name: String, screen: String, params: [String: String])] {
@@ -372,5 +372,16 @@ final class MarketplacePublishTests: XCTestCase {
     // Nothing is said before the workspace has been read: the free rate would accuse a paying publisher of the higher cut.
     let unread: JSONValue = ["site": ["id": "h1"], "org": ["id": "o1"], "data": [:]]
     XCTAssertEqual(texts(hub.blocks.filter { ScreenValues.condition($0.when, in: unread) }, unread).filter { $0.contains("keeps") }, [])
+  }
+
+  func testEveryBlockOfEveryMarketplaceScreenHasItsOwnIdentity() throws {
+    let url = ScreenSpecTests.screensDir.appendingPathComponent("../../plugins/marketplace/src/android/screens/marketplace.screens.json")
+      .standardizedFileURL
+    let file = try XCTUnwrap(JSONValue.decode(try Data(contentsOf: url)))
+    for raw in file["screens"].array {
+      let screen = try XCTUnwrap(ScreenSpec(raw))
+      // Two untitled notices shown at once must be two views, not one drawn twice.
+      XCTAssertEqual(Set(screen.blocks.map(\.id)).count, screen.blocks.count, screen.id)
+    }
   }
 }

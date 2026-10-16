@@ -52,7 +52,7 @@ class ScreenSpec private constructor(val raw: JsonElement) {
    */
   val cardSlot: String? = raw.str("cardSlot")
   val loads: List<LoadSpec> = raw.entries("load").map { (key, value) -> LoadSpec(key, value) }
-  val blocks: List<BlockSpec> = raw.arr("blocks").mapNotNull { block -> block.str("type")?.let { BlockSpec(it, block) } }
+  val blocks: List<BlockSpec> = BlockSpec.distinct(raw.arr("blocks").mapNotNull { block -> block.str("type")?.let { BlockSpec(it, block) } })
   val actions: List<ActionSpec> = raw.arr("actions").mapNotNull { ActionSpec.parse(it) }
   /** The `actions` entry the screen runs as it opens, once its data has loaded and the action's `when` holds (`start: { "action": "reviewLinked" }`): a link that carries a query (`?notice=`) opens the dialog it names. */
   val startAction: String? = raw.obj("start").str("action")
@@ -127,11 +127,27 @@ class LoadSpec(val key: String, json: JsonElement) {
   val from: String? = json.str("from")
 }
 
-class BlockSpec(val type: String, val raw: JsonElement) {
+class BlockSpec(val type: String, val raw: JsonElement, idOverride: String? = null) {
   val title: String? = raw.str("title")
   val footer: String? = raw.str("footer")
   val whenCondition: String? = raw.str("when")
-  val id: String = raw.str("id") ?: "$type:${title.orEmpty()}"
+  /**
+   * The block's `id`, else `type:title`; a repeat of an earlier block's gets `#2`, `#3` in spec order, so two untitled
+   * notices shown at once are two items (a lazy list refuses a key used twice), not one.
+   */
+  val id: String = idOverride ?: raw.str("id") ?: "$type:${title.orEmpty()}"
+
+  companion object {
+    /** The blocks with every id unique: a repeated one is numbered after its first. */
+    fun distinct(blocks: List<BlockSpec>): List<BlockSpec> {
+      val seen = mutableMapOf<String, Int>()
+      return blocks.map { block ->
+        val count = (seen[block.id] ?: 0) + 1
+        seen[block.id] = count
+        if (count > 1) BlockSpec(block.type, block.raw, "${block.id}#$count") else block
+      }
+    }
+  }
   operator fun get(key: String): JsonElement? = raw.obj(key)
   fun string(key: String): String? = raw.str(key)
   fun flag(key: String): Boolean = raw.isTrue(key)
