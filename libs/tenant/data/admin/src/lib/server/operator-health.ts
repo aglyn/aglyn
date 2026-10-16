@@ -38,7 +38,14 @@
  * was a write per check per instance that nothing reads.
  * The Admin SDK is loaded on the first write rather than at import, so every
  * health route can import this without initializing anything. Never throws.
+ *
+ * The edge is told once, and a check that STAYS degraded must not be
+ * forgotten after it (AGL-3860). `escalateStillDegradedHealth`, run by the
+ * operator alerts tick, raises `system.healthStillDegraded` at 1 h and every
+ * 2 h after, as Must know from 2 h on.
  */
+
+import type { OperatorAlertOutcome } from './operator-alerts'
 
 async function firestore(): Promise<any> {
   const { default: firebaseAdmin } = await import('./firebase-admin')
@@ -57,6 +64,13 @@ export interface OperatorHealthStateDoc {
   sinceMs: number
   detail: string
   updatedAtMs: number
+  /**
+   * The last still-degraded reminder told for THIS incident (AGL-3860), as
+   * its step: 1 at 1 h, 2 at 3 h, 3 at 5 h. A transition rewrites the whole
+   * document, so a new incident starts again from none.
+   */
+  escalatedStep?: number
+  lastEscalatedMs?: number
 }
 
 export type OperatorHealthTransition = 'degraded' | 'recovered' | null
@@ -161,6 +175,95 @@ export async function listHealthStates(): Promise<OperatorHealthStateDoc[]> {
     console.error('[operator-health] states unreadable', error)
     return []
   }
+}
+
+/** The first still-degraded reminder, after this long degraded. */
+export const HEALTH_ESCALATION_FIRST_MS = 60 * 60_000
+/** Each reminder after the first, this long after the one before. */
+export const HEALTH_ESCALATION_EVERY_MS = 2 * 60 * 60_000
+/** From this long degraded on, a reminder is Must know. */
+export const HEALTH_ESCALATION_MUST_AFTER_MS = 2 * 60 * 60_000
+
+/**
+ * The reminder a check degraded this long is owed: 0 before 1 h, 1 from
+ * 1 h, 2 from 3 h, 3 from 5 h. A tick that missed a step owes only the
+ * latest, so a sweep that was down for hours tells it once, not N times.
+ */
+export function healthEscalationStep(degradedForMs: number): number {
+  if (!(degradedForMs >= HEALTH_ESCALATION_FIRST_MS)) return 0
+  return 1 + Math.floor((degradedForMs - HEALTH_ESCALATION_FIRST_MS) / HEALTH_ESCALATION_EVERY_MS)
+}
+
+export interface HealthEscalation {
+  checkId: string
+  step: number
+  tier: 'should' | 'must'
+  /** What raising it did; `dry-run` when nothing was raised on purpose. */
+  outcome: OperatorAlertOutcome | 'dry-run'
+}
+
+/**
+ * Raises `system.healthStillDegraded` for every recorded check that has
+ * been degraded long enough to be owed its next reminder (AGL-3860). The
+ * step is claimed in a transaction on the check's own state document, and
+ * only while the document still holds the same incident (`sinceMs`), so any
+ * number of ticks on any number of instances tell each step once, and a
+ * check that recovered in between is not told at all. Never throws.
+ */
+export async function escalateStillDegradedHealth(
+  options: { now?: number; dryRun?: boolean; states?: readonly OperatorHealthStateDoc[] } = {},
+): Promise<HealthEscalation[]> {
+  const now = options.now ?? Date.now()
+  const states = options.states ?? (await listHealthStates())
+  const told: HealthEscalation[] = []
+  for (const state of states) {
+    if (state?.status !== 'degraded' || !state.checkId) continue
+    const sinceMs = Number(state.sinceMs)
+    if (!Number.isFinite(sinceMs)) continue
+    const degradedForMs = now - sinceMs
+    const step = healthEscalationStep(degradedForMs)
+    if (!step || (state.escalatedStep ?? 0) >= step) continue
+    const tier = degradedForMs >= HEALTH_ESCALATION_MUST_AFTER_MS ? 'must' : 'should'
+    if (options.dryRun) {
+      told.push({ checkId: state.checkId, step, tier, outcome: 'dry-run' })
+      continue
+    }
+    try {
+      const db = await firestore()
+      const ref = db.collection(OPERATOR_HEALTH_COLLECTION).doc(state.checkId)
+      const claimed = await db.runTransaction(async (transaction: any) => {
+        const snapshot = await transaction.get(ref)
+        const current = (snapshot.exists ? snapshot.data() : null) as
+          | Partial<OperatorHealthStateDoc>
+          | null
+        if (
+          current?.status !== 'degraded' ||
+          current.sinceMs !== sinceMs ||
+          (current.escalatedStep ?? 0) >= step
+        ) {
+          return false
+        }
+        transaction.update(ref, { escalatedStep: step, lastEscalatedMs: now })
+        return true
+      })
+      if (!claimed) continue
+      const { raiseOperatorAlert } = await import('./operator-alerts')
+      const result = await raiseOperatorAlert('system.healthStillDegraded', {
+        dedupeKey: `${state.checkId}:${step}`,
+        tier,
+        context: {
+          check: String(state.label ?? '').trim() || state.checkId,
+          duration: describeHealthDuration(degradedForMs),
+          detail: String(state.detail ?? '').trim(),
+        },
+      })
+      told.push({ checkId: state.checkId, step, tier, outcome: result.outcome })
+    } catch (error) {
+      // The next tick tries the same step again: it was never claimed.
+      console.error(`[operator-health] ${state.checkId} could not be escalated`, error)
+    }
+  }
+  return told
 }
 
 /**

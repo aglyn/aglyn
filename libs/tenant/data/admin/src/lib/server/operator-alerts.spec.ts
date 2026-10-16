@@ -323,6 +323,23 @@ describe('raiseOperatorAlert (AGL-3377)', () => {
     ])
   })
 
+  it('a still-degraded check is told at the tier the caller escalated it to (AGL-3860)', async () => {
+    process.env['OPERATOR_ALERT_WEBHOOK_URL'] = 'https://hooks.example.test/ops'
+    const context = { check: 'Console journeys', duration: '3 h 1 min', detail: 'Failing: sign-in (app-check-denied).' }
+    await raiseOperatorAlert('system.healthStillDegraded', { context: { ...context, duration: '1 h 1 min' } })
+    await raiseOperatorAlert('system.healthStillDegraded', { context, tier: 'must' })
+    expect(consoleWrites.map((write) => write.payload['level'])).toEqual(['warning', 'critical'])
+    expect(consoleWrites[1].payload).toMatchObject({
+      title: 'Console journeys is still degraded after 3 h 1 min',
+      body: 'Console journeys is still degraded after 3 h 1 min. Failing: sign-in (app-check-denied).',
+      link: '/admin/health',
+    })
+    const bodies = posts.map((post) => JSON.parse(post.body))
+    expect(bodies[0].text).toContain('[Should know] Console journeys is still degraded after 1 h 1 min')
+    expect(bodies[1].text).toContain('[Must know] Console journeys is still degraded after 3 h 1 min')
+    expect(bodies[1].alert).toMatchObject({ type: 'system.healthStillDegraded', tier: 'must' })
+  })
+
   it('an unregistered type is still told, never dropped', async () => {
     const result = await raiseOperatorAlert('nobody.registeredThis', { subject: 'Something broke', body: 'details' })
     expect(result.outcome).toBe('delivered')
