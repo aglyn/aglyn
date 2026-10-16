@@ -134,7 +134,10 @@ const palette = (theme) => {
   const intent = (c) => ({
     main: parseCssColor(c.main),
     contrastText: parseCssColor(c.contrastText),
-    text: parseCssColor(c.hoverText ?? c.main),
+    // The accent read AS TEXT: `ACCENT_TEXT_SHADE` (`dark`), the slot the
+    // console's links and text-button labels resolve to. `hoverText` is the
+    // deeper shade a text button turns on hover, not the resting link color.
+    text: parseCssColor(c.dark ?? c.main),
     pressed: parseCssColor(c.hover ?? c.dark ?? c.main),
   })
   return {

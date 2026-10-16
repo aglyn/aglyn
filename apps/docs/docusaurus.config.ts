@@ -403,7 +403,7 @@ const config: Config = {
           ? { trackingID: docsGaTrackingId, anonymizeIP: true }
           : undefined,
         theme: {
-          customCss: './src/css/custom.css',
+          customCss: ['./src/css/theme-tokens.generated.css', './src/css/custom.css'],
         },
       } satisfies Preset.Options,
     ],

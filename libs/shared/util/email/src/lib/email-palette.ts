@@ -938,3 +938,47 @@ export function emailPaletteBaseForHost(
     : normalized
   return PLATFORM_BRAND_HOSTS.has(bare) ? 'platform' : 'tenant'
 }
+
+// ── The accent an email paints with ────────────────────────────────────────
+
+/** The three accent slots an email draws its links and buttons with. */
+export interface EmailAccent {
+  /** A filled button: `primary.main`. */
+  fill: string
+  /** The label on that fill: `primary.contrastText`. */
+  label: string
+  /**
+   * The accent AS TEXT, a link: `primary.dark`, the theme's AA-checked text
+   * shade (`ACCENT_TEXT_SHADE`), the slot a console Link reads.
+   */
+  link: string
+}
+
+function accentOf(palette: EmailPalette): Partial<EmailAccent> {
+  return {
+    fill: resolveEmailColor('primary.main', palette),
+    label: resolveEmailColor('primary.contrastText', palette),
+    link: resolveEmailColor('primary.dark', palette),
+  }
+}
+
+/**
+ * The platform's accent, resolved once: what every email falls back to when
+ * its own palette cannot answer, so no renderer types a color of its own.
+ */
+export const PLATFORM_EMAIL_ACCENT: Readonly<EmailAccent> = Object.freeze(
+  accentOf(PLATFORM_EMAIL_PALETTE) as EmailAccent,
+)
+
+/**
+ * The accent for `palette`, slot by slot, with the platform's standing in for
+ * any slot the palette lacks or cannot resolve.
+ */
+export function emailAccent(palette?: EmailPalette | null): EmailAccent {
+  const own = palette ? accentOf(palette) : {}
+  return {
+    fill: own.fill ?? PLATFORM_EMAIL_ACCENT.fill,
+    label: own.label ?? PLATFORM_EMAIL_ACCENT.label,
+    link: own.link ?? PLATFORM_EMAIL_ACCENT.link,
+  }
+}

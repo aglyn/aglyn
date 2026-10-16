@@ -637,8 +637,11 @@ describe('one Free page fits the Free taste, end to end', () => {
     const form = aiPageSectionNodeId('job-free-page', FIXTURE.plan.screens[0].sections.length - 1)
     expect(FIXTURE.plan.screens[0].sections.at(-1)?.name).toBe('consultation request form')
     expect(page[form]?.componentId).toBe('section')
-    const button = Object.values(page).find((node) => node.props?.['children'] === 'Request a Consultation') as { props?: unknown; interactions?: unknown }
-    expect([button.props, button.interactions]).toEqual([
+    const button = Object.values(page).find((node) => node.props?.['children'] === 'Request a Consultation') as { props?: Record<string, unknown>; interactions?: unknown }
+    // It climbs in with the rest of the hero as the page opens (AGL-3838).
+    expect(button.props).toMatchObject({ aglynAnimation: 'slide-up', aglynAnimationTrigger: 'load' })
+    const settings = Object.fromEntries(Object.entries(button.props ?? {}).filter(([name]) => !name.startsWith('aglynAnimation')))
+    expect([settings, button.interactions]).toEqual([
       { children: 'Request a Consultation', color: 'primary', variant: 'contained', size: 'large' },
       [
         {

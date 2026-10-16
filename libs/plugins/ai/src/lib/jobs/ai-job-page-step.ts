@@ -35,7 +35,7 @@ import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-job
 import { aiModelForStep } from '../providers/routing'
 import { aiDoctrineNeedsInputMessage, runValidatedGeneration } from '../runtime/ai-doctrine'
 import {
-  aiDanglingWord,
+  aiClipAtWord,
   aiSettleMechanicalRules,
   aiSettlePlaceholderItems,
   aiSettleUnrelatedScreenLinks,
@@ -112,9 +112,11 @@ import {
   aiLayoutListingContext,
   aiLayoutPageTargets,
   aiLayoutLeftOutNote,
+  aiLayoutMotionSiteOf,
   aiRunLayoutPage,
   type AiLayoutStartPage,
 } from './ai-job-page-language'
+import { aiWithSiteMotion } from '../layout-language/ai-layout-motion'
 import {
   aiCreationUnit,
   aiRunJobUnit,
@@ -344,32 +346,6 @@ export function aiPageDraftLayoutId(
 ): string | null {
   if (screen.layout && inventory.layouts.some((row) => row.id === screen.layout)) return screen.layout
   return aiSiteDefaultLayoutId(inventory)
-}
-
-/** Punctuation that joins a phrase to the next one, left at a cut line's end. */
-const LISTING_TRAILING_JOINERS = /[\s,;:|/&—–-]+$/
-
-/**
- * A plan's listing value held to the length the SEO editor guides it to, cut
- * at a word. A cut that leaves a joining word or mark at the end ("…Practice
- * Areas and", "…across Springfield,") takes it off too, so a search result
- * never shows a phrase that stops mid-thought (AGL-3813), in the plan's
- * language (AGL-3828): a Spanish title cut to "Pan dulce y" reads "Pan dulce".
- */
-function clip(value: string, max: number, language?: string): string {
-  const text = value.trim()
-  if (text.length <= max) return text
-  const cut = text.slice(0, max + 1)
-  const space = cut.lastIndexOf(' ')
-  let clipped = (space > max / 2 ? cut.slice(0, space) : text.slice(0, max)).replace(LISTING_TRAILING_JOINERS, '').trim()
-  for (let guard = 0; guard < 6; guard += 1) {
-    const word = aiDanglingWord(clipped, language)
-    if (!word) break
-    const shorter = clipped.slice(0, clipped.length - word.length).replace(LISTING_TRAILING_JOINERS, '').trim()
-    if (!shorter) break
-    clipped = shorter
-  }
-  return clipped
 }
 
 /** The site's name as its visitors see it, read the way the SEO step reads it. */
@@ -731,8 +707,12 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // Portfolio page whose opening photos all loaded eagerly was (2026-10-10).
       // And a link sent home for nothing is sent to the site's form, or left out (AGL-3729),
       // and an item of a list that shows only placeholders is taken out where the list keeps a real one (AGL-3827).
-      const settle = <T extends AiDoctrineTree>(tree: T): T =>
-        aiSettleUnrelatedScreenLinks(
+      // And the site's entrance motion is written on a page built a section at
+      // a time, as on one built whole (AGL-3838); a page that already moves —
+      // by this pass or by its author — comes back as it is, and is not written.
+      const motion = aiLayoutMotionSiteOf(job, screen.slug)
+      const settle = <T extends AiDoctrineTree>(tree: T): T => {
+        const settled = aiSettleUnrelatedScreenLinks(
           aiSettlePlaceholderItems(aiSettleMechanicalRules(tree, 'page'), 'page', context),
           'page',
           {
@@ -740,6 +720,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
             ownScreenIds: [screen.id, draftId],
           },
         )
+        const moved = aiWithSiteMotion(settled.nodes, motion, { sectionIds })
+        return moved === settled.nodes ? settled : { ...settled, nodes: moved }
+      }
       const settled = settle({ rootId: CANVAS_ROOT_ELEMENT_ID, nodes: page as unknown as AiDoctrineTree['nodes'] })
       if (settled.nodes !== (page as unknown as AiDoctrineTree['nodes'])) {
         // Never written once the job is canceled (AGL-3616).
@@ -815,8 +798,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         // listing cannot be written inside this pass's time on the model the
         // job runs.
         let values = {
-          title: clip(screen.seoTitle, SCREEN_SEO_TEXT_GUIDANCE.title, plan.language),
-          description: clip(screen.seoDescription, SCREEN_SEO_TEXT_GUIDANCE.description, plan.language),
+          title: aiClipAtWord(screen.seoTitle, SCREEN_SEO_TEXT_GUIDANCE.title, plan.language),
+          description: aiClipAtWord(screen.seoDescription, SCREEN_SEO_TEXT_GUIDANCE.description, plan.language),
         }
         if (
           // A listing is written from the page's own text, with no inventory
