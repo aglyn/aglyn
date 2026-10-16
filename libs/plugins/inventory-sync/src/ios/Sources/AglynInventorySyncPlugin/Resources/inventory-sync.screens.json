@@ -12,6 +12,7 @@
       "zones": [
         "commerceSettings"
       ],
+      "showWhen": "data.conn.offered || data.conn.connection",
       "load": {
         "conn": "/api/inventory-sync/connection?hostId={site.id}",
         "locations": {

@@ -12,6 +12,7 @@
       "zones": [
         "commerceSettings"
       ],
+      "showWhen": "data.avail.available",
       "load": {
         "s": "/api/shipping/settings?hostId={site.id}",
         "avail": "/api/shipping/availability?hostId={site.id}"

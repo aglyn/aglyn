@@ -12,6 +12,7 @@
       "zones": [
         "commerceSettings"
       ],
+      "showWhen": "data.stores.offered",
       "load": {
         "stores": "/api/delivery-apps/stores?hostId={site.id}"
       },
