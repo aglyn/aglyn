@@ -34,8 +34,11 @@ the window first asks **Leave without your answers?**, because what you typed is
 saved. Once the site is being planned, closing only closes the window; the job carries on.
 
 If your role cannot create sites, or your plan has no site left, **Create site** says so
-before asking anything. If the site is created but its planning cannot start, the window
-says why; leaving then gives that site the starter home page, so it is never left empty.
+before asking anything. **Plan my site** checks that planning can start before it creates
+the site. If it cannot, the window says why and no site is made. On the Free plan, a start
+that may need more credits than you have left asks first, and the site is created only once
+you choose. If planning still cannot start after the site is created, the window says why;
+leaving then gives that site the starter home page, so it is never left empty.
 
 ## Your business {#your-business}
 

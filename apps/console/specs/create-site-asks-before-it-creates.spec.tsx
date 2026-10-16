@@ -386,14 +386,15 @@ describe('AGL-3761 · a workspace with no start to offer gets the plain dialog',
     })
   }
 
-  it('creates the site on Create site, and lands on it', async () => {
+  it('creates the site with the starter on Create site, and lands on it', async () => {
     mockWidgets = []
     mockCreateAnswer.body.guidedStart = false
     render(<CreateHostDialog open onClose={() => undefined} />)
     await flush()
     expect(screen.getByText('Create a new site')).toBeTruthy()
     await submit()
-    expect(createBody()).not.toHaveProperty('start')
+    // Never empty for a start this dialog did not offer (AGL-3859).
+    expect(createBody()).toMatchObject({ start: 'starter' })
     expect(mockPush).toHaveBeenCalledWith('/acme/hosts/royal-styles')
   })
 
@@ -403,8 +404,10 @@ describe('AGL-3761 · a workspace with no start to offer gets the plain dialog',
     act(() => mockZone?.pendingSite.ready(false))
     expect(screen.getByText('Create a new site')).toBeTruthy()
     await submit()
-    // A site the server still born for the guided start is offered it where it lands.
-    expect(mockPush).toHaveBeenCalledWith('/acme/hosts/royal-styles?start=site')
+    // With the starter (AGL-3859): the site is offered the start on its own
+    // page, and has its starter until that is answered.
+    expect(createBody()).toMatchObject({ start: 'starter' })
+    expect(mockPush).toHaveBeenCalledWith('/acme/hosts/royal-styles')
   })
 
   it('hard-navigates to the console host when it runs on the auth host (AGL-3742)', async () => {
@@ -414,7 +417,7 @@ describe('AGL-3761 · a workspace with no start to offer gets the plain dialog',
     await flush()
     await submit()
     expect(mockHardNavigate).toHaveBeenCalledWith(
-      'https://app.aglyn.com/acme/hosts/royal-styles?start=site',
+      'https://app.aglyn.com/acme/hosts/royal-styles',
     )
     expect(mockPush).not.toHaveBeenCalled()
   })
