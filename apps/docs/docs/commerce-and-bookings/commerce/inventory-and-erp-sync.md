@@ -1,15 +1,15 @@
 ---
 sidebar_position: 4.65
 title: Inventory and ERP sync (Cin7 Core, inFlow, Brightpearl, Ordoro)
-description: Keep stock counts, products and paid orders in step with your own Cin7 Core, inFlow Inventory, Brightpearl or Ordoro account. Rolling out.
+description: Keep stock counts, products and paid orders in step with your own Cin7 Core, inFlow Inventory, Brightpearl or Ordoro account.
 ---
 
 # Inventory and ERP sync: Cin7 Core, inFlow, Brightpearl and Ordoro
 
-:::note Rolling out
-Inventory sync appears in your console only once it is available on the
-platform you use. Until then, no **Inventory and ERP** card appears on
-**Products → Integrations**, and your stock is counted the way it is today.
+:::note Brightpearl is rolling out
+Cin7 Core, inFlow and Ordoro are available now. Brightpearl appears on the
+**Inventory and ERP** card only once it is available on the platform you use;
+until then, the card offers the other three.
 :::
 
 If you run your stock in **Cin7 Core** (formerly DEAR Inventory), **inFlow

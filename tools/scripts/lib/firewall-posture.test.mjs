@@ -301,6 +301,9 @@ function healthyTenantConfig() {
  * without any test noticing.
  */
 const NATIVE_BEARER_RE = '^Bearer [A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'
+const PLUGIN_WEBHOOKS_RE =
+  '^/api/(fulfillment-networks/webhooks/(shipbob|shipmonk|flexport)|print-on-demand/webhooks/(printful|printify)|shipping/webhooks/(shippo|easypost|easyship|sendcloud)|couriers/webhooks/doordash|delivery-apps/webhooks/(doordash|uber-eats|grubhub))$'
+
 const NATIVE_DOORS_RE =
   '^/api/auth/(native-handoff/redeem|sso-lookup|resolve-identifier|send-password-reset|passkeys/signin/(options|verify))$'
 
@@ -457,6 +460,14 @@ function healthyConsoleConfig() {
           },
           { conditions: [{ type: 'path', op: 're', value: NATIVE_DOORS_RE }] },
         ],
+      },
+      {
+        name: 'Plugin webhook bypass',
+        id: 'rule_plugin_webhooks',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [{ conditions: [{ type: 'path', op: 're', value: PLUGIN_WEBHOOKS_RE }] }],
       },
     ],
   }
@@ -1416,4 +1427,14 @@ test('the shipping connector bypass needs both connectors, each by its own prefi
   const widened = healthyConsoleConfig()
   ruleNamed(widened, 'Shipping connector bypass').conditionGroup[0].conditions[0].value = '/api/commerce'
   assert.match(evalConsole(widened).findings.join('\n'), /Shipping connector bypass/)
+})
+
+test('the plugin webhook bypass names each webhook route exactly (AGL-3846)', () => {
+  const missing = healthyConsoleConfig()
+  missing.rules = missing.rules.filter((rule) => rule.name !== 'Plugin webhook bypass')
+  assert.match(evalConsole(missing).findings.join('\n'), /Plugin webhook bypass/)
+
+  const widened = healthyConsoleConfig()
+  ruleNamed(widened, 'Plugin webhook bypass').conditionGroup[0].conditions[0].value = '^/api/[a-z-]+/webhooks/'
+  assert.match(evalConsole(widened).findings.join('\n'), /Plugin webhook bypass/)
 })
