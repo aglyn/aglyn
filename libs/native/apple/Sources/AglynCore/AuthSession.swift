@@ -195,6 +195,12 @@ public final class AuthSession {
     transport = rest == nil ? .sdk : .rest
     if let rest {
       Task { @MainActor in
+        // A sign-in that began before this task ran owns the stored session: restoring it now would refresh the fresh
+        // tokens a second time, and a refused refresh would clear them.
+        guard !self.signedInOrOutSinceLaunch else {
+          self.ready = true
+          return
+        }
         let restored = await rest.restore()
         if !self.signedInOrOutSinceLaunch { self.user = restored }
         self.ready = true
