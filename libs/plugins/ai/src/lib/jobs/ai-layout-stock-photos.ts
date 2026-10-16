@@ -154,6 +154,14 @@ import { aiStockBusinessNoun } from './ai-stock-business-nouns'
  *    ("wedding" of "a wedding and portrait photographer") is not the craft;
  *    and a hero whose second tag names the world too leads one whose first
  *    alone does.
+ * 9. **A world from the name** (the beta.261 Synchronicity Gym start,
+ *    AGL-3856: its business type "a local service business" named no world,
+ *    so its hero searched nothing and was left a black scrim, and its
+ *    closing band's "Ready to train" took a subway train). A business type
+ *    that names no world takes the craft its name, else its audience, names
+ *    where this module lists it ("gym" of "Synchronicity Gym"); and a
+ *    training word's other senses (a railway's train, an elevator's lift, a
+ *    newspaper's press, a boat's row) never fill a gym's picture.
  *
  * A slot the library could not fill because it never answered — down, or
  * out of time before its first answer — or because the site's library
@@ -745,6 +753,12 @@ const CRAFT_KIN: ReadonlyArray<{
    * down unless the slot or the brief names them.
    */
   shunLead?: readonly string[]
+  /**
+   * Whether its pictures are of people at a moment and a place, searched by
+   * them ({@link aiStockScene}): a photographer's "Mountain Wedding Day" is a
+   * couple in the mountains, never a close-up of roses (AGL-3856).
+   */
+  scenes?: boolean
 }> = [
   {
     match: [
@@ -1026,8 +1040,22 @@ const CRAFT_KIN: ReadonlyArray<{
     making: ['coach training athlete', 'barbell training'],
     shunLead: [
       'yoga', 'pilates', 'meditation', 'ballet', 'ballerina', 'dance', 'dancer', 'karate', 'kickboxing', 'boxing', 'boxer', 'beach', 'circus',
-      // Another sport's ball, never "medicine ball": a basketball court covered a deadlift night (AGL-3864).
+      // Another sport's ball, never "medicine ball": a basketball court covered a deadlift night (AGL-3864),
+      // a cricket ball on a wooden court another (AGL-3856).
       'basketball', 'football', 'soccer', 'baseball', 'volleyball', 'tennis', 'golf', 'rugby', 'hockey',
+      'cricket', 'squash', 'badminton', 'shuttlecock', 'bowling', 'billiards', 'snooker', 'pool', 'lacrosse', 'softball',
+      'handball', 'pingpong', 'pong',
+    ],
+    // A training word's other senses (AGL-3856): "train" is a railway's, "lift"
+    // an elevator's or a ski lift's, "press" a newspaper's, "row" a boat's. The
+    // beta.261 Synchronicity Gym's closing band, "Ready to train", took a
+    // subway train at a station.
+    shun: [
+      'railway', 'railroad', 'rail', 'locomotive', 'subway', 'metro', 'tram', 'tramway', 'commuter', 'freight',
+      'transport', 'transportation', 'traffic', 'vehicle', 'bus', 'truck', 'airplane', 'aircraft',
+      'elevator', 'escalator', 'chairlift', 'forklift', 'crane',
+      'newspaper', 'journalism', 'journalist', 'printing',
+      'boat', 'ship', 'canoe', 'kayak', 'sailboat',
     ],
   },
   {
@@ -1035,6 +1063,7 @@ const CRAFT_KIN: ReadonlyArray<{
     // movie's word too, and "western film" a horse (the beta.259 Juniper and
     // Rye Photography "Film" card).
     match: ['photographer', 'photography', 'photo', 'photograph'],
+    scenes: true,
     kin: ['photographer', 'photography', 'photo', 'photograph', 'photoshoot', 'camera', 'lens'],
     broad: ['photographer camera', 'photography'],
     making: ['photographer at work', 'photographer camera'],
@@ -1160,6 +1189,8 @@ export interface AiStockSiteTerms {
   broad: string[]
   /** The searches for its maker at work, for a story of the craft (AGL-3660); empty for a craft not listed. */
   making: string[]
+  /** Whether a picture naming people at a moment is searched by its scene ({@link aiStockScene}, AGL-3856). */
+  scenes?: boolean
   /** Every stem of the business type or brief: what lets a sensitive topic in ({@link SENSITIVE_TOPICS}). */
   named: string[]
   /** Rival crafts' words, each with the words that must then be named too ({@link CRAFT_KIN}). */
@@ -1276,6 +1307,7 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
     domain: [...domain].filter((stem) => stem.length > 1),
     broad: [...new Set(broad.map((query) => query.trim()).filter(Boolean))],
     making: [...new Set(makingSearches)],
+    ...(groups.some((group) => group.scenes) ? { scenes: true } : {}),
     named: [...new Set(stemList(businessType))],
     rivals,
     core: [...core],
@@ -1363,6 +1395,14 @@ export interface AiStockSearch extends StockPhotoSearchRequest {
   first?: boolean
   /** Phrases (as stems) of which one must be among the hit's first tags: a borrowed photo is OF the product's category (AGL-3660). */
   leadAny?: readonly string[]
+  /** Whether its hits must name its object, whatever the slot's role: a scene's people (AGL-3856). */
+  strict?: boolean
+  /** Words its hits never carry, whatever the brief names: a bride in a family session ({@link aiStockScene}). */
+  refuse?: readonly string[]
+  /** Stems of which every hit names one, whatever else it names: a scene's people, never roses alone ({@link aiStockScene}). */
+  needs?: readonly string[]
+  /** Stems its own words name, which let a topic in as the brief's do: a family session's children ({@link aiStockScene}). */
+  allow?: readonly string[]
   /** Whether it fills a product: no room, no scene, no fragrance bottle ({@link PRODUCT_SCENES}, AGL-3660). */
   product?: boolean
   /** Words its hits never carry unless the slot or the brief names them ({@link AiStockSiteTerms.shun}). */
@@ -1398,6 +1438,94 @@ export function aiStockSlotPart(
   )
     return 'story'
   return undefined
+}
+
+/**
+ * The people a picture of a moment shows (AGL-3856): what its words name, the
+ * search that asks for them, the words a photo of them leads with, those of
+ * which it must name one anywhere, and what it never carries unless the
+ * words name it. A family session is never a bride.
+ */
+const PEOPLE_SCENES: ReadonlyArray<{
+  words: readonly string[]
+  query: (named: ReadonlySet<string>) => string
+  subject: string
+  lead: readonly string[]
+  people: readonly string[]
+  shun: readonly string[]
+}> = [
+  {
+    words: ['family', 'families', 'kid', 'kids', 'child', 'children', 'newborn', 'baby', 'parent', 'parents', 'mother', 'father'],
+    query: () => 'family',
+    subject: 'family',
+    lead: ['family', 'families', 'child', 'children', 'kid', 'kids', 'mother', 'father', 'parents', 'daughter', 'son', 'baby', 'toddler'],
+    people: ['family', 'child', 'children', 'kid', 'kids', 'mother', 'father', 'parent', 'parents', 'daughter', 'son', 'baby', 'toddler', 'mom', 'dad'],
+    shun: ['bride', 'groom', 'bridal', 'wedding', 'newlywed', 'newlyweds', 'marriage'],
+  },
+  {
+    words: ['wedding', 'weddings', 'elopement', 'elopements', 'elope', 'eloping', 'bride', 'groom', 'engagement', 'engaged', 'couple', 'couples', 'newlywed', 'newlyweds', 'honeymoon'],
+    query: (named) => (['wedding', 'bride', 'groom'].some((word) => named.has(word)) ? 'wedding couple' : 'couple'),
+    subject: 'couple',
+    lead: ['couple', 'couples', 'bride', 'groom', 'wedding', 'newlyweds', 'lovers', 'elopement', 'bride and groom'],
+    people: ['couple', 'bride', 'groom', 'newlywed', 'newlyweds', 'lovers', 'husband', 'wife', 'man', 'woman'],
+    shun: [],
+  },
+]
+
+/** Where a picture of a moment is set, by the words that name it, and the word a search and a photo say it with. */
+const SCENE_SETTINGS: ReadonlyArray<{ words: readonly string[]; said: string }> = [
+  { words: ['mountain', 'mountains', 'ridgetop', 'ridge', 'summit', 'peak', 'alpine', 'overlook', 'parkway'], said: 'mountains' },
+  { words: ['fall', 'autumn', 'foliage'], said: 'autumn' },
+  { words: ['winter', 'snow', 'snowy'], said: 'winter' },
+  { words: ['beach', 'coast', 'seaside', 'shore', 'ocean'], said: 'beach' },
+  { words: ['forest', 'woods', 'woodland'], said: 'forest' },
+  { words: ['spring', 'blossom', 'blossoms'], said: 'spring' },
+  { words: ['city', 'urban', 'downtown'], said: 'city' },
+]
+
+/** What a picture of a moment shows ({@link aiStockScene}). */
+export interface AiStockScene {
+  /** The searches that ask for it, the people and their setting first. */
+  queries: string[]
+  /** The words its photo is scored by: the people, and the setting. */
+  subject: string
+  /** The thing a photo of it leads with, and its kin. */
+  object: string
+  lead: string[]
+  /** Words of which a photo of it names one. */
+  people: string[]
+  shun: string[]
+  /** The stems of its words, which let in what they name: a family's children. */
+  named: string[]
+}
+
+/**
+ * The scene a picture's words name (AGL-3856): the people at a moment, and
+ * where — "Ridgetop Elopement" a couple in the mountains, "Mountain Wedding
+ * Day" a wedding couple in the mountains, "Family Session in the Fall" a
+ * family in autumn — read from every word, never only the first clause.
+ * `null` where it names no people.
+ */
+export function aiStockScene(text: string): AiStockScene | null {
+  const named = new Set(
+    text
+      .toLowerCase()
+      .split(/[^a-zÀ-ɏ]+/)
+      .filter(Boolean),
+  )
+  const scene = PEOPLE_SCENES.find((entry) => entry.words.some((word) => named.has(word)))
+  if (!scene) return null
+  const setting = SCENE_SETTINGS.find((entry) => entry.words.some((word) => named.has(word)))?.said ?? ''
+  const query = scene.query(named)
+  return {
+    queries: [...new Set([setting ? `${query} ${setting}` : '', query].filter(Boolean))],
+    subject: [scene.subject, setting].filter(Boolean).join(' '),
+    object: scene.subject,
+    lead: scene.lead.map((phrase) => stemList(phrase).join(' ')),
+    people: scene.people.map(aiStockStem),
+    shun: scene.shun.filter((word) => !named.has(word)).map(aiStockStem),
+    named: [...new Set(stemList(text))],
+  }
 }
 
 /** An object's kin phrases as stems, or none. */
@@ -1606,7 +1734,7 @@ export function aiStockProductSearches(
 export function aiStockSearchesFor(
   slot: Pick<AiLayoutPictureSlot, 'role' | 'alt' | 'aspect'>,
   terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'domain' | 'broad'> &
-    Partial<Pick<AiStockSiteTerms, 'making' | 'core'>>,
+    Partial<Pick<AiStockSiteTerms, 'making' | 'core' | 'scenes'>>,
   subject: string,
   part?: AiStockSlotPart,
 ): AiStockSearch[] {
@@ -1656,6 +1784,8 @@ export function aiStockSearchesFor(
     broad: true,
     category: true,
   }))
+  // A scene's people are read from every word of the picture's, never its first clause alone.
+  const scene = terms.scenes && slot.role !== 'hero' && part !== 'collection' ? aiStockScene(slot.alt) : null
   const thing: Query[] = subject
     ? [
         { query: qualify(subject), held: true },
@@ -1679,9 +1809,28 @@ export function aiStockSearchesFor(
             ...(part === 'story' ? [] : making),
             ...broad,
           ]
-        : [...(part === 'story' ? making : []), ...thing, ...broad]
+        : [...(part === 'story' ? making : []), ...(scene ? [] : thing), ...broad]
   const seen = new Set<string>()
   const searches: AiStockSearch[] = []
+  // A picture of people at a moment asks for them, and where, before anything
+  // else, and takes only a photo leading with them (AGL-3856): never the
+  // roses of a "Mountain Wedding Day", nor a bride for a family session.
+  for (const query of scene?.queries ?? []) {
+    seen.add(`${query}|false`)
+    searches.push({
+      query,
+      orientation,
+      ...size,
+      strict: true,
+      subject: (scene as AiStockScene).subject,
+      object: (scene as AiStockScene).object,
+      kin: (scene as AiStockScene).lead,
+      lead: true,
+      needs: (scene as AiStockScene).people,
+      allow: (scene as AiStockScene).named,
+      ...((scene as AiStockScene).shun.length ? { refuse: (scene as AiStockScene).shun } : {}),
+    })
+  }
   for (const raw of queries) {
     const query = clip(raw.query)
     const key = `${query}|${raw.people === true}`
@@ -1747,6 +1896,10 @@ export interface AiStockJudgement {
   shun?: readonly string[]
   /** Words a hit's first tags never carry unless the subject or the brief names them ({@link AiStockSiteTerms.shunLead}). */
   shunLead?: readonly string[]
+  /** Words a hit never carries, whatever the brief names ({@link AiStockSearch.refuse}). */
+  refuse?: readonly string[]
+  /** Stems of which a hit names one ({@link AiStockSearch.needs}). */
+  needs?: readonly string[]
 }
 
 /** The words of a photo's page address at its library, its id dropped: "robin-bird-songbird-garden-winter". */
@@ -1849,6 +2002,11 @@ export function aiStockRelevance(
   // A dispenser is not a soapmaker's, nor a pump a bar's (AGL-3660).
   if ((judgement.shun ?? []).some((word) => hit.all.has(word) && !owned.has(word)))
     return 0
+  // A family session is never a bride, however the photographer's brief names weddings.
+  if ((judgement.refuse ?? []).some((word) => hit.all.has(word))) return 0
+  // A wedding day shows its people: a close-up of roses tagged "wedding" never fills it.
+  const needs = judgement.needs ?? []
+  if (needs.length && !needs.some((word) => hit.all.has(word))) return 0
   // What the photo is OF: a typewriter's terms of service are not a law firm's.
   if ((judgement.shunLead ?? []).some((word) => hit.lead.has(word) && !owned.has(word)))
     return 0
@@ -2039,31 +2197,109 @@ const AI_STOCK_ALT_MAX = 160
  */
 const DESCRIBING = words(
   'love romance romantic luxury luxurious fancy extravagant happiness happy beauty emotion emotions mood lifestyle ' +
-    'concept aesthetic wallpaper background retro vintage antique old young cute sexy fun funny sad positive healthy fit ' +
+    'concept aesthetic wallpaper background retro vintage antique old young cute sexy fun funny sad positive negative healthy fit ' +
     'strong powerful homemade tasty yummy sweet sweetness nice dark bw monochrome macro sporty active married bridal ' +
-    'female male',
+    'female male adult good bad poc bipoc',
 )
 
-/** What a tag names that takes no article: "law" of "hammer, books, law". */
-const MASS_NOUNS = words(
-  'food coffee tea bread wood water law fitness wax soap clay nature money fabric yarn wool furniture jewelry jewellery ' +
-    'pottery glass paper music art sport health business meat grass snow sand gold silver leather cotton hair makeup ' +
-    'skincare justice equipment technology work architecture decor fashion wildlife marriage photography exercise ' +
-    'scenery weather traffic education advocacy wine beer chocolate rice sugar flour milk cheese honey oil ice fire ' +
-    'light sunlight dough sourdough pastry dessert strength crossfit people',
+/**
+ * Words a tag uses for what a person or a thing is like, said before it
+ * rather than as a thing of its own (AGL-3856): "a confident lawyer", never
+ * "a lawyer, law and a confident".
+ */
+const QUALITIES = words(
+  'confident professional successful serious smart busy creative proud skilled experienced determined focused ' +
+    'senior junior expert friendly cheerful smiling',
 )
+
+/** What a tag names that takes no article: "chalk" of "board, chalk". */
+const MASS_NOUNS = words(
+  'food coffee tea bread wood water fitness wax soap clay nature money fabric yarn wool furniture jewelry jewellery ' +
+    'pottery glass paper music art sport hair makeup chalk paint ink dust stone marble concrete steel metal ' +
+    'skincare equipment decor fashion wildlife scenery weather traffic wine beer chocolate rice sugar flour milk ' +
+    'cheese honey oil ice fire light sunlight dough sourdough pastry dessert crossfit people foliage greenery ' +
+    'autumn winter spring summer',
+)
+
+/**
+ * What a tag names that no photo shows as a thing of its own (AGL-3856): "law"
+ * of "lawyer, law", "feedback" of "board, chalk, feedback". Left out, never
+ * said with an article.
+ */
+const ABSTRACT_NOUNS = words(
+  'law justice advocacy business feedback review news return communication communicate discussion dialog conversation ' +
+    'success career work job satisfaction quality concept idea strategy marketing education technology health support ' +
+    'confirmation opinion rating evaluation planning project presentation optimization information internet finance ' +
+    'management leadership teamwork motivation growth strength service services help advice consulting consultation ' +
+    'marriage photography architecture travel transport transportation industry company corporate social e-business',
+)
+
+/** Stopwords a description still says, as the people a photo shows: "a family", "a person". */
+const SAID_PEOPLE = words('people person family')
 
 /** Words ending in "-ing" that are things, and take an article: "a wedding", "a ring". */
 const COUNTED_ING = words('wedding ring earring building painting drawing ceiling string swing king sibling wing')
 
+/** People a photo shows; the generic ones give way to a role ("man" to "businessman"). */
+const PEOPLE_NOUNS = words(
+  'man men woman women person people boy girl guy lady child children kid kids baby family couple bride groom ' +
+    'businessman businesswoman businessmen lawyer attorney doctor dentist nurse chef cook baker barista athlete ' +
+    'trainer coach student students teacher worker entrepreneur model photographer potter artist florist mother ' +
+    'father parent parents grandmother grandfather',
+)
+const GENERIC_PEOPLE = words('man men woman women person people guy lady adult')
+
+/**
+ * Places a photo is set in, each with how a phrase says it is there: "a
+ * train at a station", "a lawyer in court".
+ */
+const PLACES: Readonly<Record<string, string>> = {
+  station: 'at',
+  market: 'at',
+  desk: 'at',
+  table: 'at',
+  counter: 'at',
+  beach: 'on',
+  court: 'in',
+  courtroom: 'in',
+  office: 'in',
+  kitchen: 'in',
+  gym: 'in',
+  studio: 'in',
+  classroom: 'in',
+  room: 'in',
+  garden: 'in',
+  park: 'in',
+  shop: 'in',
+  store: 'in',
+  bakery: 'in',
+  cafe: 'in',
+  restaurant: 'in',
+  workshop: 'in',
+  library: 'in',
+  salon: 'in',
+  clinic: 'in',
+  forest: 'in',
+  city: 'in',
+  church: 'in',
+  field: 'in',
+}
+
+/** Places said without an article: "in court". */
+const BARE_PLACES = words('court')
+
 /**
  * A tag as a phrase of an English description (AGL-3856): "a wedding dress",
- * "an attorney", "books", "law", "Columbus"; `null` for a tag that names no
- * thing ("extravagant", "beautiful") or is too long to be one.
+ * "an attorney", "books", "chalk", "Columbus"; `null` for a tag that names no
+ * thing ("extravagant", "beautiful", "feedback") or is too long to be one.
  */
 function describedTag(tag: string, proper: ReadonlySet<string>): string | null {
   const describing = (word: string) =>
-    FILLER.has(word) || DESCRIBING.has(word) || /(?:ous|ful)$/.test(word) || (word.length > 4 && /[^e]ed$/.test(word))
+    FILLER.has(word) ||
+    DESCRIBING.has(word) ||
+    QUALITIES.has(word) ||
+    /(?:ous|ful)$/.test(word) ||
+    (word.length > 4 && /[^e]ed$/.test(word))
   const all = tag
     .toLowerCase()
     .replace(/[^a-zÀ-ɏ\s'-]/g, ' ')
@@ -2073,43 +2309,109 @@ function describedTag(tag: string, proper: ReadonlySet<string>): string | null {
   const list = all.filter((word) => !describing(word))
   if (!list.length || all.length > 3) return null
   // A phrase of no thing ("up close") or a doing ("take pictures", "to lift", "work out") is not what it shows.
-  if (list.every((word) => STOPWORDS.has(word) && word !== 'people' && word !== 'person')) return null
+  if (list.every((word) => STOPWORDS.has(word) && !SAID_PEOPLE.has(word))) return null
   if (/^(?:to|take|taking|make|making|get|do|go|lie)$/.test(list[0] as string)) return null
   if (/^(?:out|up|off|down|away|on|in)$/.test(list[list.length - 1] as string)) return null
   if (list.every((word) => proper.has(word)))
     return list.map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join(' ')
-  const phrase = list.join(' ')
   const last = list[list.length - 1] as string
+  // An idea, never a thing: "law", "feedback", "customer satisfaction".
+  if (ABSTRACT_NOUNS.has(last)) return null
+  const phrase = list.join(' ')
   const plural = aiStockStem(last) !== last && !/^(?:lens|canvas|atlas|gas|bus)$/.test(last)
   const uncounted = MASS_NOUNS.has(last) || (last.endsWith('ing') && !COUNTED_ING.has(last))
-  if (plural || uncounted || (STOPWORDS.has(list[0] as string) && list[0] !== 'person')) return phrase
-  return `${/^(?:[aeio]|u(?!ni|s[eu]))/.test(phrase) ? 'an' : 'a'} ${phrase}`
+  if (plural || uncounted || (STOPWORDS.has(list[0] as string) && !SAID_PEOPLE.has(list[0] as string))) return phrase
+  return `${articleFor(phrase)} ${phrase}`
+}
+
+/** "a" or "an" before a phrase. */
+const articleFor = (phrase: string) => (/^(?:[aeio]|u(?!ni|s[eu]))/.test(phrase) ? 'an' : 'a')
+
+/** One thing a photo's tags name, as {@link aiStockTagsAlt} says it. */
+interface AiStockAltPart {
+  said: string
+  stems: string[]
+  /** Its last word: what it is. */
+  head: string
+  kind: 'person' | 'place' | 'thing'
+}
+
+/** Whether two words name one thing, one inside the other: "law" and "lawyer", "man" and "businessman". */
+function nearSynonyms(a: string, b: string): boolean {
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a]
+  return short.length >= 3 && short !== long && (long.startsWith(short) || long.endsWith(short))
 }
 
 /**
- * A photo described from its own tags (AGL-3856): its first few that name a
- * thing, a phrase another one holds dropped ("wedding" beside "wedding
- * dress"), as an English phrase — "A wedding dress and a bride", "A hammer,
- * books and law" — never the comma-separated list the library keeps. `null`
- * where none names a thing.
+ * A photo described from its own tags (AGL-3856): a short English phrase of
+ * what its first tags show — one or two things, or a thing and where it is,
+ * one person at most — never the library's comma-separated list: "A train at
+ * a station", "A confident lawyer in court", "A portrait of a businessman",
+ * "A board and chalk". A tag of how it looks is said before the thing it
+ * qualifies; an idea ("law", "feedback") is left out; a word inside another
+ * ("law" of "lawyer", "man" of "businessman") gives way to it; a mass noun
+ * takes no article. `null` where no tag names a thing.
  */
 export function aiStockTagsAlt(tags: readonly string[], proper: ReadonlySet<string> = new Set()): string | null {
-  const kept: Array<{ stems: string[]; said: string }> = []
+  const parts: AiStockAltPart[] = []
+  let quality = ''
+  let portrait = false
   for (const tag of tags.slice(0, 6)) {
-    if (kept.length >= 3) break
+    const lower = tag.toLowerCase().trim()
+    if (lower === 'portrait' || lower === 'portraits') {
+      portrait = true
+      continue
+    }
+    if (QUALITIES.has(lower)) {
+      quality ||= lower
+      continue
+    }
     const said = describedTag(tag, proper)
     if (!said) continue
-    const stems = stemList(said.replace(/^an?\s+/, ''))
-    if (kept.some((entry) => stems.every((stem) => entry.stems.includes(stem)))) continue
-    // A longer phrase takes the place of one it holds: "wedding dress" for "wedding".
-    const within = kept.findIndex((entry) => entry.stems.every((stem) => stems.includes(stem)))
-    if (within >= 0) kept.splice(within, 1, { stems, said })
-    else kept.push({ stems, said })
+    const bare = said.replace(/^an?\s+/, '')
+    const stems = stemList(bare)
+    const head = bare.split(/\s+/).pop()?.toLowerCase() ?? ''
+    if (!head) continue
+    const kind: AiStockAltPart['kind'] = PEOPLE_NOUNS.has(head) ? 'person' : PLACES[head] ? 'place' : 'thing'
+    if (parts.some((part) => stems.every((stem) => part.stems.includes(stem)))) continue
+    // A longer phrase, or a word holding another, takes its place: "wedding dress" for "wedding", "lawyer" for "law".
+    const within = parts.findIndex(
+      (part) => part.stems.every((stem) => stems.includes(stem)) || nearSynonyms(part.head, head),
+    )
+    const part = { said, stems, head, kind }
+    if (within >= 0) {
+      const held = parts[within] as AiStockAltPart
+      const fuller = nearSynonyms(held.head, head) ? head.length > held.head.length : stems.length > held.stems.length
+      if (fuller) parts.splice(within, 1, part)
+      continue
+    }
+    parts.push(part)
   }
-  if (!kept.length) return null
-  const said = kept.map((entry) => entry.said)
-  const joined = said.length > 1 ? `${said.slice(0, -1).join(', ')} and ${said[said.length - 1]}` : (said[0] as string)
-  const out = `${joined.charAt(0).toUpperCase()}${joined.slice(1)}`
+  // One person: a role over a man or a woman ("businessman" over "man"), else the first.
+  const people = parts.filter((part) => part.kind === 'person')
+  const person = people.find((part) => !GENERIC_PEOPLE.has(part.head)) ?? people[0]
+  const place = parts.find((part) => part.kind === 'place')
+  const things = parts.filter((part) => part.kind === 'thing')
+  const shown = (person ? [person] : []).concat(things)
+  if (!shown.length && !place) return null
+  let phrase: string
+  if (portrait && person) phrase = `a portrait of ${person.said}`
+  else {
+    const chosen = shown
+      .sort((a, b) => parts.indexOf(a) - parts.indexOf(b))
+      .slice(0, place ? 1 : 2)
+      .map((part) => part.said)
+    // A quality is said before a single counted thing: "a confident lawyer".
+    if (quality && chosen[0] && /^an? \S+$/.test(chosen[0]))
+      chosen[0] = `${articleFor(quality)} ${quality} ${chosen[0].replace(/^an?\s+/, '')}`
+    phrase = chosen.join(' and ')
+  }
+  if (place) {
+    const preposition = PLACES[place.head] ?? 'in'
+    const where = BARE_PLACES.has(place.head) && /^an? \S+$/.test(place.said) ? place.head : place.said
+    phrase = phrase ? `${phrase} ${preposition} ${where}` : where
+  }
+  const out = `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}`
   return out.length > AI_STOCK_ALT_MAX ? out.slice(0, AI_STOCK_ALT_MAX).replace(/[\s,]+\S*$/, '') : out
 }
 
@@ -2145,7 +2447,8 @@ function describedObject(text: string, sectionName: string): string {
  * description, and are never kept. Otherwise the photo is described by the
  * library's own words: its description where it writes one (a Pexels hit's
  * `alt`), else its first tags as an English phrase ({@link aiStockTagsAlt}),
- * never the library's tag list. The libraries write in English, and no model
+ * never the library's tag list, and where no tag names a thing, the slot's
+ * own subject: its words, else its section's name. The libraries write in English, and no model
  * translates them, so a site in another language takes the platform's own
  * words for an illustrative photo in its language (`aiLayoutLabel`), true of
  * any photo, as does a hit whose words name no thing.
@@ -2163,7 +2466,12 @@ export function aiStockPhotoAlt(
   }
   const own = (photo.alt ?? '').replace(/\s+/g, ' ').trim()
   if (own) return own.length > AI_STOCK_ALT_MAX ? `${own.slice(0, AI_STOCK_ALT_MAX).replace(/\s+\S*$/, '')}…` : own
-  return aiStockTagsAlt(photo.tags ?? [], input.proper) ?? aiLayoutLabel('illustrativePhoto', input.language)
+  // No tag names a thing: the slot's own subject, as its words or its section's name say it, never a tag list.
+  const subject = [slot.alt, input.sectionName ?? '']
+    .map((text) => text.replace(/\s+/g, ' ').trim())
+    .find((text) => /[A-Za-zÀ-ɏ]/.test(text))
+  const fallback = subject ? `${subject.charAt(0).toUpperCase()}${subject.slice(1)}`.slice(0, AI_STOCK_ALT_MAX) : ''
+  return aiStockTagsAlt(photo.tags ?? [], input.proper) ?? (fallback || aiLayoutLabel('illustrativePhoto', input.language))
 }
 
 /** The names a business type writes with a capital, lowercased: "columbus", "ohio" (AGL-3856). */
@@ -2204,6 +2512,15 @@ export interface AiLayoutStockPhotoSourceInput {
    * gave no photo words, rather than its business type in its own language.
    */
   kindWords?: string
+  /**
+   * The business's name, as the person typed it (AGL-3856): what an English
+   * site is searched by when its business type names no world ("a local
+   * service business") and its name names a craft this module lists
+   * ("Synchronicity Gym"). Never its world otherwise.
+   */
+  name?: string
+  /** Who the site is for, as the person typed it: searched as the name is, after it (AGL-3856). */
+  audience?: string
   /** The page's section names, by plan index. */
   sectionNames: readonly string[]
   /**
@@ -2233,21 +2550,30 @@ interface AiStockChoice {
 }
 
 /**
- * A job's language and English photo words (AGL-3760), and the English name
- * of its kind of site (AGL-3771), as a stock photo source takes them.
+ * A job's language and English photo words (AGL-3760), the English name of
+ * its kind of site (AGL-3771), and the business's name and audience as the
+ * person typed them (AGL-3856), as a stock photo source takes them.
  */
 export function aiStockPhotoWordsOf(job: {
   plan?: Pick<AiBuildPlan, 'language' | 'photoWords'> | null
   inputs?: Readonly<Record<string, unknown>> | null
-}): Pick<AiLayoutStockPhotoSourceInput, 'language' | 'photoWords' | 'kindWords'> {
+}): Pick<AiLayoutStockPhotoSourceInput, 'language' | 'photoWords' | 'kindWords' | 'name' | 'audience'> {
   const plan = job.plan
   const kind = job.inputs ? aiSiteKindOfInputs(job.inputs) : null
   // "Restaurant & café" searches as "restaurant cafe".
   const kindWords = kind ? kind.label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase() : ''
+  const said = (key: string) => {
+    const value = job.inputs?.[key]
+    return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
+  }
+  const name = said('businessName')
+  const audience = said('audience')
   return {
     ...(plan?.language ? { language: plan.language } : {}),
     ...(plan?.photoWords ? { photoWords: plan.photoWords } : {}),
     ...(kindWords ? { kindWords } : {}),
+    ...(name ? { name } : {}),
+    ...(audience ? { audience } : {}),
   }
 }
 
@@ -2280,9 +2606,34 @@ export function aiStockPhotoWordsSubject(photoWords: string): string {
  * post — so no slot searches by words another slot is held against.
  */
 export function aiStockSourceTerms(
-  input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords' | 'kindWords'>,
+  input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords' | 'kindWords' | 'name' | 'audience'>,
 ): AiStockSiteTerms {
-  return aiStockSiteTerms(aiStockSourceSubject(input) || input.business)
+  const terms = aiStockSiteTerms(aiStockSourceSubject(input) || input.business)
+  if (terms.domain.length) return terms
+  // A business type that names no world ("a local service business") is
+  // searched by the craft its name, else its audience, names (AGL-3856): the
+  // beta.261 Synchronicity Gym hero searched nothing at all and was left a
+  // black scrim, and its closing band, held to no world, took a subway train
+  // for "Ready to train".
+  const craft = aiStockListedCraft(input.name ?? '') || aiStockListedCraft(input.audience ?? '')
+  if (!craft) return terms
+  const named = aiStockSiteTerms(craft)
+  return { ...named, named: [...new Set([...terms.named, ...named.named])] }
+}
+
+/**
+ * The first word of a text that names a craft {@link CRAFT_KIN} lists, as
+ * its table writes it: "gym" of "Synchronicity Gym", "law" of "Hartwell
+ * Reyes Family Law". Empty where it names none, so a name that is only a
+ * name ("Hillside") never becomes a world.
+ */
+export function aiStockListedCraft(text: string): string {
+  for (const stem of stemList(text))
+    for (const group of CRAFT_KIN) {
+      const word = group.match.find((match) => aiStockStem(match) === stem)
+      if (word) return word
+    }
+  return ''
 }
 
 /**
@@ -2375,6 +2726,10 @@ export function aiLayoutStockPhotoSource(
       delete (request as AiStockSearch).leadWorld
       delete (request as AiStockSearch).first
       delete (request as AiStockSearch).category
+      delete (request as AiStockSearch).strict
+      delete (request as AiStockSearch).refuse
+      delete (request as AiStockSearch).needs
+      delete (request as AiStockSearch).allow
       const key = JSON.stringify([
         request.query,
         request.orientation,
@@ -2500,8 +2855,8 @@ export function aiLayoutStockPhotoSource(
       subject: request.subject ?? (request.broad ? '' : subject),
       domain: terms.domain,
       strict:
-        (slot.role === 'gallery' && !request.broad) || !!request.requires,
-      named: terms.named,
+        (slot.role === 'gallery' && !request.broad) || !!request.requires || !!request.strict,
+      named: request.allow?.length ? [...new Set([...terms.named, ...request.allow])] : terms.named,
       rivals: terms.rivals,
       ...(terms.shun.length || request.shun?.length
         ? { shun: [...new Set([...terms.shun, ...(request.shun ?? [])])] }
@@ -2516,6 +2871,8 @@ export function aiLayoutStockPhotoSource(
       ...(request.lead ? { lead: true } : {}),
       ...(request.leadWorld ? { leadWorld: true } : {}),
       ...(request.first ? { first: true } : {}),
+      ...(request.refuse?.length ? { refuse: request.refuse } : {}),
+      ...(request.needs?.length ? { needs: request.needs } : {}),
     })
     /**
      * The craft's own photos, the last thing a slot of a craft's site is
