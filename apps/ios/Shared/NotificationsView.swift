@@ -344,7 +344,7 @@ struct NotificationsView: View {
               if !filter.isDefault { Button("Clear filters") { filter = NotificationFilter() } }
             }
           } else {
-            List(selection: wide ? $selection : nil) {
+            List {
               ForEach(rows) { row in
                 rowView(row, wide: wide)
               }
@@ -359,7 +359,7 @@ struct NotificationsView: View {
                 Task { try? await NotificationActions.markRead(row.id, model: model) }
               }
             }
-            .aglynListBackground()
+            .modifier(NotificationListLook(wide: wide, ids: rows.map(\.id), selection: $selection))
             .accessibilityIdentifier("notifications-list")
           }
         } else {
@@ -374,14 +374,14 @@ struct NotificationsView: View {
   private func rowView(_ row: FeedNotification, wide: Bool) -> some View {
     Group {
       if wide {
-        NotificationRow(row: row).tag(row.id)
+        NotificationRow(row: row).aglynSelectableRow(row.id, selection: $selection)
       } else {
         // A phone follows the link at once, as the console's bell does.
         Button { openNotification(row, model: model, navigation: navigation) } label: { NotificationRow(row: row) }
           .buttonStyle(.plain)
+          .aglynListRow()
       }
     }
-    .aglynListRow()
     .accessibilityIdentifier("notification-\(row.id)")
     .swipeActions(edge: .leading) {
       if !row.read {
@@ -544,6 +544,21 @@ struct InviteReviewSheet: View {
         self.error = error.localizedDescription
       }
       busy = false
+    }
+  }
+}
+
+/// The feed's list: selectable rows on paper beside the detail in a wide window, the kit's grouped look on a phone.
+private struct NotificationListLook: ViewModifier {
+  let wide: Bool
+  let ids: [String]
+  @Binding var selection: String?
+
+  func body(content: Content) -> some View {
+    if wide {
+      content.aglynSelectableListStyle().aglynSelectionKeys(ids, selection: $selection)
+    } else {
+      content.aglynListBackground()
     }
   }
 }

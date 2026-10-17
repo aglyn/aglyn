@@ -79,20 +79,42 @@ public enum AglynFonts {
 #endif
 
 /// The app's text styles, each a step of the console's type scale (Roboto
-/// Flex, scaled with Dynamic Type), named for where SwiftUI uses them.
+/// Flex, scaled with Dynamic Type), named for where SwiftUI uses them. On the
+/// Mac each step is set at the Mac's own size (body 13 pt, as the HIG's macOS
+/// table has it, against the phone's 16), so a Mac window reads as a Mac app.
 public enum AglynFont {
   public typealias Scale = AglynTokens.Typography
-  public static var largeTitle: Font { Scale.h1.font }
-  public static var title: Font { Scale.h3.font }
-  public static var title2: Font { Scale.h5.font }
-  public static var headline: Font { Scale.h6.font }
-  public static var body: Font { Scale.body1.font }
-  public static var subheadline: Font { Scale.body2.font }
-  public static var strongSubheadline: Font { Scale.subtitle2.font }
-  public static var caption: Font { Scale.caption.font }
-  public static var button: Font { Scale.button.font }
+  public static var largeTitle: Font { sized(Scale.h1) }
+  public static var title: Font { sized(Scale.h3) }
+  public static var title2: Font { sized(Scale.h5) }
+  public static var headline: Font { sized(Scale.h6) }
+  public static var body: Font { sized(Scale.body1) }
+  public static var subheadline: Font { sized(Scale.body2) }
+  public static var strongSubheadline: Font { sized(Scale.subtitle2) }
+  public static var caption: Font { sized(Scale.caption) }
+  public static var button: Font { sized(Scale.button) }
   /// A big figure on a dashboard card.
-  public static var figure: Font { Scale.h2.font }
+  public static var figure: Font { sized(Scale.h2) }
+
+  /// The point size a step is set at on this platform.
+  public static func size(_ style: AglynTextStyle) -> CGFloat {
+    #if os(macOS)
+      max(10, (style.size * macScale).rounded(.toNearestOrAwayFromZero))
+    #else
+      style.size
+    #endif
+  }
+
+  /// The Mac's body size over the phone's: 13 / 16.
+  public static let macScale: CGFloat = 13.0 / 16.0
+
+  static func sized(_ style: AglynTextStyle) -> Font {
+    #if os(macOS)
+      .custom(AglynTokens.fontPostScriptName, size: size(style), relativeTo: style.relativeTo).weight(style.weight)
+    #else
+      style.font
+    #endif
+  }
 }
 
 /// The brand artwork from the console's brand kit (generated into Brand.xcassets), with dark appearances.
