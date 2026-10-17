@@ -294,6 +294,17 @@ A screen gets a `NativePluginContext`, the twin of `MobilePluginContext`:
   accepts third-party cookies for the canvas and the auth frames, and only a
   main-frame navigation is ever routed out of the view.
 
+  Every web view also appends `AglynApp/<version> (<platform>)` to its user
+  agent (AGL-3894): WKWebView's `applicationNameForUserAgent` after WebKit's
+  own `Mobile/…`, Android's `userAgentString`, and WebView2's
+  `ICoreWebView2Settings2.UserAgent`. `BesignerEntry.userAgent…` builds it on
+  both platforms. The console reads it, or the entry page's session mark,
+  through `@aglyn/aglyn/app-utils/native-app-web-view` and leaves out what an
+  app screen does not need: the web notification prompt, the editor's back
+  arrow, and the unread count and trailing brand in the page title. The
+  marker decides presentation only, never auth. The app names the screen
+  itself ("Besigner"), so the Mac window title never comes from the page.
+
 ### Generated native manifest
 
 A plugin's `mobile` block in `plugins.config.json` names its native
