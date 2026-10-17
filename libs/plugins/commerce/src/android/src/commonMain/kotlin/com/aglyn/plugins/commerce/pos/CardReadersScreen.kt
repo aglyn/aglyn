@@ -202,15 +202,15 @@ private fun DeviceReaderSection(context: NativePluginContext, hostId: String, co
         Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), modifier = Modifier.fillMaxWidth()) {
           if (CardCollectorKind.TAP_TO_PAY in controls.kinds) {
             Button(
-              onClick = { run { controls.discover(CardCollectorKind.TAP_TO_PAY, hostId, sessions) } },
-              enabled = !busy,
+              onClick = { scope.launch { controls.discover(CardCollectorKind.TAP_TO_PAY, hostId, sessions) } },
+              enabled = !busy && discovery !is ReaderDiscovery.Searching,
               modifier = Modifier.testTag("device-reader-tap-to-pay"),
             ) { Text("Set up Tap to Pay") }
           }
           if (CardCollectorKind.BLUETOOTH in controls.kinds) {
             OutlinedButton(
-              onClick = { run { controls.discover(CardCollectorKind.BLUETOOTH, hostId, sessions) } },
-              enabled = !busy,
+              onClick = { scope.launch { controls.discover(CardCollectorKind.BLUETOOTH, hostId, sessions) } },
+              enabled = !busy && discovery !is ReaderDiscovery.Searching,
               modifier = Modifier.testTag("device-reader-bluetooth"),
             ) { Text("Find Bluetooth readers") }
           }
@@ -221,7 +221,8 @@ private fun DeviceReaderSection(context: NativePluginContext, hostId: String, co
         is ReaderDiscovery.Failed -> NoticeBanner(found.message, StatusTone.ERROR)
         is ReaderDiscovery.Searching -> {
           LinearProgressIndicator(modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Looking for card readers" })
-          ReaderChoices(found.found, enabled = false) {}
+          // A search lasts until Stop or its timeout; a reader it lists can be connected meanwhile.
+          ReaderChoices(found.found, enabled = !busy) { reader -> run { controls.connectTo(reader, hostId, sessions) } }
           TextButton(onClick = { scope.launch { controls.cancelDiscovery() } }) { Text("Stop looking") }
         }
         is ReaderDiscovery.Found -> {

@@ -204,6 +204,7 @@ class StripeTerminalCollector(
       mutableDiscovery.value = ReaderDiscovery.Failed("Find the reader again, then connect.")
     }
     val location = locationId ?: return false
+    cancelDiscovery()
     val config = when (reader.kind) {
       CardCollectorKind.TAP_TO_PAY -> ConnectionConfiguration.TapToPayConnectionConfiguration(location, true, tapToPayListener)
       else -> ConnectionConfiguration.BluetoothConnectionConfiguration(location, true, mobileListener)
