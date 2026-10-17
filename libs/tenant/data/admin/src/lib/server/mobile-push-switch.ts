@@ -41,7 +41,11 @@ export type MobilePushPayload = Omit<AglynNotification, '$id' | 'createdAt' | 'r
 export type MobilePushSender = (
   uids: readonly string[],
   payload: MobilePushPayload,
-  context: { db: Firestore },
+  context: {
+    db: Firestore
+    /** Each recipient's picked sound id (`users/{uid}.notificationSound`), read with their preferences. */
+    sounds?: Readonly<Record<string, string>>
+  },
 ) => Promise<void>
 
 /*
