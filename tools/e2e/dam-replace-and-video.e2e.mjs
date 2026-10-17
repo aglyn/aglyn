@@ -70,7 +70,6 @@ import { putMediaDocument } from '../scripts/lib/media-counter.mjs'
 import {
   adminFirestore,
   BASE_URL,
-  chromeExecutable,
   HOST_ID,
   hostUrl,
   idTokenFor,
@@ -83,6 +82,7 @@ import {
   verdicts,
   waitFor,
 } from './lib/console-session.mjs'
+import { chromeExecutable } from './lib/chrome-executable.mjs'
 
 const TENANT_URL = process.env.E2E_TENANT_URL ?? 'http://localhost:4500'
 const BUCKET =

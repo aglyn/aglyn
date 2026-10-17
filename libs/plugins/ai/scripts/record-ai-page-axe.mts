@@ -70,6 +70,7 @@ import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 import { pluginBundleEntries } from '../../../../tools/scripts/lib/plugin-bundle-entries.mjs'
+import { chromeExecutable } from '../../../../tools/e2e/lib/chrome-executable.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
 const PAGES_OUT = join(ROOT, 'libs/plugins/ai/src/lib/jobs/fixtures/ai-page-axe.generated.json')
@@ -175,21 +176,6 @@ function installWindow(): void {
   }
   // jiti compiles JSX to the classic runtime, which reads a global React.
   globals['React'] = require('react')
-}
-
-/** The Chrome the e2e tools use: `E2E_CHROME_PATH`, else the first flavor installed. */
-function chromeExecutable(): Dict {
-  if (process.env['E2E_CHROME_PATH']) return { executablePath: process.env['E2E_CHROME_PATH'] }
-  if (process.platform === 'darwin') {
-    for (const executablePath of [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ]) {
-      if (existsSync(executablePath)) return { executablePath }
-    }
-  }
-  return { channel: 'chrome' }
 }
 
 /** A stand-in definition for an inventory component row, from its declared props. */
