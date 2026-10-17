@@ -125,20 +125,7 @@ import { publishAiJob } from './ai-jobs-store'
  * ready-made home page with a header and footer — or AI. The starter card is
  * the zone's `startBlank`, which gives a site born for the guided start the
  * starter every other new site is born with. The AI card moves on to the
- * questions.
- *
- * ── The questions, one decision a step (AGL-3898) ────────────────────────
- *
- * What kind of site it is (typed, or a card), who it is for, the style (cards
- * that show each one, "Pick for me" first and picked), the details, and a
- * review that plans the site (`ai-site-start-steps.component.tsx`). Back and
- * Next walk them and keep every answer; Enter in a text answer is Next; each
- * step's heading takes the focus when it is drawn; a step that cannot go
- * forward says why beside the field and puts the cursor in it. The answers
- * are the same object the single form held, and only the review turns them
- * into the job, through the same `aiSiteStartBrief` and `aiSiteStartInputs`.
- * Each step is reported as a funnel, with where people struggle
- * (`ai-site-start-tracking.ts`).
+ * questions, one decision a step (AGL-3898; see {@link AiSiteStartCard}).
  *
  * ── A full screen dialog, and therefore three ways out ───────────────────
  *
@@ -354,6 +341,18 @@ export type AiSiteStartCardProps = ConsoleHostFirstRunZoneProps & {
   initialAnswers?: AiSiteStartAnswers | null
 }
 
+/**
+ * The questions are one decision a step (AGL-3898): what kind of site it is
+ * (typed, or a card), who it is for, the style (cards that show each one,
+ * "Pick for me" first and picked), the details, and a review that plans the
+ * site (`ai-site-start-steps.component.tsx`). Back and Next keep every
+ * answer; Enter in a text answer is Next; each step's heading takes the focus
+ * when it is drawn; a step that cannot go forward says why beside the field
+ * and puts the cursor in it. The answers are the same object the single form
+ * held, and only the review turns them into the job, through the same
+ * `aiSiteStartBrief` and `aiSiteStartInputs`. Each step is reported as a
+ * funnel, with where people struggle (`ai-site-start-tracking.ts`).
+ */
 export function AiSiteStartCard({
   hostId,
   orgId,
