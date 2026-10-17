@@ -59,6 +59,8 @@ struct RootView<Shell: View>: View {
     }
     .tint(AglynColor.tint)
     .font(AglynFont.body)
+    // Every plain web page (a live site, a preview, a docs or legal link) opens in the in-app web sheet (AGL-3893).
+    .aglynWebSheetHost()
     .onChange(of: model.auth?.user, initial: true) { _, user in
       model.userChanged(user)
       openPendingPush()

@@ -190,6 +190,8 @@ describe('AGL-3491 · /api/hosts/create announces what it creates', () => {
         slug: 'dongare',
         owner: { uid: 'u-new', email: 'owner@example.com', displayName: 'Dongare Enterprises' },
         origin: 'https://app.aglyn.com',
+        // Which door made the workspace, for the staff email (AGL-3897).
+        via: 'first-site',
       }),
     )
     expect(mockAnnounceNewSite).toHaveBeenCalledWith({
@@ -198,6 +200,8 @@ describe('AGL-3491 · /api/hosts/create announces what it creates', () => {
       subdomain: 'paperlink',
       orgSlug: 'dongare',
       createdBy: 'owner@example.com',
+      // How it was started, for the staff email (AGL-3897).
+      start: 'starter',
     })
   })
 

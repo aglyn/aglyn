@@ -805,6 +805,15 @@
         "NOTIFICATION_SOUNDS",
         "DEFAULT_NOTIFICATION_SOUND"
       ]
+    },
+    "libs/plugins/commerce/src/lib/model/commerce-printers.ts": {
+      "values": [
+        "PRINTER_BRANDS",
+        "PRINTER_BRAND_LABELS",
+        "PRINTER_MODEL_SUGGESTIONS",
+        "PRINTER_STATE_LABELS",
+        "PRINTER_OFFLINE_AFTER_MS"
+      ]
     }
   },
   "ints": [

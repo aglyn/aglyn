@@ -970,6 +970,41 @@ export const NOTIFICATION_TYPE_CHANNEL_DEFAULTS: Partial<
   'staff.siteCreated': { email: true },
 }
 
+/**
+ * What a notification email's button says it opens (AGL-3897), by type: the
+ * record the notification links to, named, rather than "Open in Aglyn" on
+ * every one. A type with no entry keeps that general label.
+ */
+const NOTIFICATION_EMAIL_ACTIONS: Partial<Record<AglynNotificationType, string>> = {
+  'content.formSubmission': 'View submission',
+  'content.booking': 'View booking',
+  'content.order': 'View order',
+  'content.lowStock': 'View product',
+  'content.taskAssigned': 'Open task',
+  'content.taskReminder': 'Open task',
+  'content.contactAssigned': 'Open contact',
+  'content.leadAssigned': 'Open lead',
+  'billing.invoice': 'Open billing',
+  'billing.paymentFailed': 'Update payment method',
+  'billing.subscriptionCanceled': 'Open billing',
+  'billing.usage': 'Open billing',
+  'support.ticketOpened': 'Open ticket',
+  'support.ticketReply': 'Open ticket',
+  'marketplace.review': 'Open listing',
+  'staff.userSignedUp': 'Open account',
+  'staff.orgCreated': 'Open workspace',
+  'staff.siteCreated': 'Open site',
+  'staff.subscriptionStarted': 'Open workspace',
+  'staff.subscriptionCanceled': 'Open workspace',
+  'staff.planChanged': 'Open workspace',
+  'staff.paymentFailed': 'Open workspace',
+}
+
+/** The words on a notification email's button: the record it opens, else "Open in {product}". */
+export function notificationEmailAction(type: AglynNotificationType | string, productName: string): string {
+  return NOTIFICATION_EMAIL_ACTIONS[type as AglynNotificationType] ?? `Open in ${productName}`
+}
+
 /** What a type does on a channel when nobody has answered for it or its category. */
 export function notificationTypeChannelDefault(
   type: AglynNotificationType | string,

@@ -97,21 +97,13 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         ORDER_STATUS_URL_TOKEN,
       ],
       defaultBody: [
-        { block: 'text', text: 'Thanks for your purchase!', variant: 'heading' },
-        {
-          block: 'text',
-          text: 'Here is the receipt for your order from {{host.businessName}}.',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
-        { block: 'text', text: 'Total charged: {{order.total}}', variant: 'body' },
+        { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Thanks for your order', variant: 'heading' },
+        { block: 'text', text: 'Here is the receipt for your order from {{host.businessName}}. We will email you again as your order moves along, and the order page always shows where it is.', variant: 'body' },
+        { block: 'text', text: '{{order.summary}}\nTotal charged: {{order.total}}', variant: 'details' },
         { block: 'text', text: '{{store.receiptFooter}}', variant: 'body' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
-        {
-          block: 'text',
-          text: 'Order reference: {{order.ref}}',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'Order {{order.number}} · payment reference {{order.ref}}. Questions about your order? Reply to this email and {{host.businessName}} will get back to you.', variant: 'caption' },
       ],
       footerReason: ORDER_FOOTER_REASON,
     },
@@ -161,16 +153,14 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         ORDER_STATUS_URL_TOKEN,
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your order is on its way', variant: 'heading' },
-        {
-          block: 'text',
-          text: '{{host.businessName}} shipped items from order {{order.number}}.',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{shipment.summary}}', variant: 'body' },
+        { block: 'text', text: '{{host.businessName}} shipped these items from order {{order.number}}.', variant: 'body' },
+        { block: 'text', text: '{{shipment.summary}}', variant: 'details' },
         { block: 'text', text: '{{shipment.tracking}}', variant: 'body' },
         { block: 'text', text: '{{shipment.remaining}}', variant: 'body' },
         { block: 'button', label: 'Track your order', href: '{{order.statusUrl}}' },
+        { block: 'text', text: 'The order page shows every shipment and its tracking as it moves. Questions about your order? Reply to this email and {{host.businessName}} will get back to you.', variant: 'caption' },
       ],
       footerReason: ORDER_FOOTER_REASON,
     },
@@ -192,22 +182,12 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         ORDER_STATUS_URL_TOKEN,
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your order was delivered', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            '{{host.businessName}} marked order {{order.number}} as delivered.',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
+        { block: 'text', text: '{{host.businessName}} marked order {{order.number}} as delivered. We hope you enjoy it.', variant: 'body' },
+        { block: 'text', text: '{{order.summary}}', variant: 'details' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
-        {
-          block: 'text',
-          text:
-            'If something is missing or not right, reply to this email or ' +
-            'contact {{host.businessName}}.',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'Something missing or not right? Reply to this email and {{host.businessName}} will sort it out.', variant: 'caption' },
       ],
       footerReason: ORDER_FOOTER_REASON,
     },
@@ -244,24 +224,13 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         ORDER_STATUS_URL_TOKEN,
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your refund is on its way', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            '{{host.businessName}} refunded {{refund.amount}} on order ' +
-            '{{order.number}}.',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{refund.summary}}', variant: 'body' },
+        { block: 'text', text: '{{host.businessName}} refunded {{refund.amount}} on order {{order.number}}.', variant: 'body' },
+        { block: 'text', text: '{{refund.summary}}\nTotal refunded: {{refund.amount}}', variant: 'details' },
         { block: 'text', text: '{{refund.note}}', variant: 'body' },
-        {
-          block: 'text',
-          text:
-            'Refunds go back to the original payment method and usually ' +
-            'appear within 5 to 10 business days, depending on your bank.',
-          variant: 'caption',
-        },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+        { block: 'text', text: 'Refunds go back to the original payment method and usually appear within 5 to 10 business days, depending on your bank.', variant: 'caption' },
       ],
       footerReason: ORDER_FOOTER_REASON,
     },
@@ -292,15 +261,13 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         ORDER_STATUS_URL_TOKEN,
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your order was canceled', variant: 'heading' },
-        {
-          block: 'text',
-          text: '{{host.businessName}} canceled order {{order.number}}.',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
+        { block: 'text', text: '{{host.businessName}} canceled order {{order.number}}. These items will not be sent.', variant: 'body' },
+        { block: 'text', text: '{{order.summary}}', variant: 'details' },
         { block: 'text', text: '{{cancel.note}}', variant: 'body' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+        { block: 'text', text: 'Questions about your order? Reply to this email and {{host.businessName}} will get back to you.', variant: 'caption' },
       ],
       footerReason: ORDER_FOOTER_REASON,
     },
@@ -336,21 +303,14 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         ORDER_STATUS_URL_TOKEN,
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your order is ready for pickup', variant: 'heading' },
-        {
-          block: 'text',
-          text: 'Order {{order.number}} is ready at {{pickup.location}}.',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
+        { block: 'text', text: 'Order {{order.number}} is packed and waiting for you at {{pickup.location}}.', variant: 'body' },
+        { block: 'text', text: '{{order.summary}}\nPick up at: {{pickup.location}}', variant: 'details' },
         { block: 'text', text: '{{pickup.hours}}', variant: 'body' },
         { block: 'text', text: '{{pickup.instructions}}', variant: 'body' },
-        {
-          block: 'text',
-          text: 'Bring your order number, {{order.number}}.',
-          variant: 'caption',
-        },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+        { block: 'text', text: 'Bring your order number, {{order.number}}. Questions about your order? Reply to this email and {{host.businessName}} will get back to you.', variant: 'caption' },
       ],
       footerReason: ORDER_FOOTER_REASON,
     },
@@ -373,20 +333,12 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         ORDER_STATUS_URL_TOKEN,
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Thanks for picking up your order', variant: 'heading' },
-        {
-          block: 'text',
-          text: 'Order {{order.number}} was picked up from {{pickup.location}}.',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
-        {
-          block: 'text',
-          text:
-            'If something is missing or not right, reply to this email or ' +
-            'contact {{host.businessName}}.',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'Order {{order.number}} was picked up from {{pickup.location}}. Enjoy it.', variant: 'body' },
+        { block: 'text', text: '{{order.summary}}\nPicked up at: {{pickup.location}}', variant: 'details' },
+        { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+        { block: 'text', text: 'Something missing or not right? Reply to this email and {{host.businessName}} will sort it out.', variant: 'caption' },
       ],
       footerReason: ORDER_FOOTER_REASON,
     },
@@ -415,16 +367,12 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         ORDER_STATUS_URL_TOKEN,
       ],
       defaultBody: [
-        { block: 'text', text: 'Your order is on its way', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            '{{host.businessName}} is out delivering order {{order.number}}. ' +
-            'Your window: {{delivery.window}}.',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
+        { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Your order is out for delivery', variant: 'heading' },
+        { block: 'text', text: '{{host.businessName}} is on the way with order {{order.number}}.', variant: 'body' },
+        { block: 'text', text: '{{order.summary}}\nDelivery window: {{delivery.window}}', variant: 'details' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+        { block: 'text', text: 'Questions about your order? Reply to this email and {{host.businessName}} will get back to you.', variant: 'caption' },
       ],
       footerReason: ORDER_FOOTER_REASON,
     },
@@ -458,21 +406,15 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
           description: 'Order reference id',
           sample: 'cs_test_123',
         },
+        { name: 'orders.url', description: 'The site’s Orders page in the console', sample: 'https://app.example.com/northwind/hosts/northwind/products/orders' },
       ],
       defaultBody: [
+        { block: 'text', text: '{{site.name}} · New order', variant: 'eyebrow' },
         { block: 'text', text: 'You made a sale', variant: 'heading' },
-        {
-          block: 'text',
-          text: 'A new order came in on {{site.name}}.',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
-        { block: 'text', text: 'Total: {{order.total}}', variant: 'body' },
-        {
-          block: 'text',
-          text: 'Buyer: {{buyer.email}} · Order {{order.ref}}',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'A new paid order came in on {{site.name}}. Here is what was bought and who bought it.', variant: 'body' },
+        { block: 'text', text: '{{order.summary}}\nTotal: {{order.total}}\nBuyer: {{buyer.email}}\nPayment reference: {{order.ref}}', variant: 'details' },
+        { block: 'button', label: 'Open orders', href: '{{orders.url}}' },
+        { block: 'text', text: 'Fulfill it from Orders: as you mark it shipped, ready for pickup or delivered, the buyer is emailed at each step.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you manage {{host.businessName}}.',
@@ -518,29 +460,12 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
-        { block: 'text', text: 'Reservation confirmed', variant: 'heading' },
-        {
-          block: 'text',
-          text: 'Your stay at {{host.businessName}} is confirmed.',
-          variant: 'body',
-        },
-        {
-          block: 'text',
-          text: 'Check-in: {{reservation.checkIn}}',
-          variant: 'body',
-        },
-        { block: 'text', text: 'Nights: {{reservation.nights}}', variant: 'body' },
-        {
-          block: 'text',
-          text: 'Paid today: {{reservation.paid}}',
-          variant: 'body',
-        },
+        { block: 'text', text: '{{host.businessName}} · Reservation', variant: 'eyebrow' },
+        { block: 'text', text: 'Your stay is confirmed', variant: 'heading' },
+        { block: 'text', text: 'Your reservation at {{host.businessName}} is booked. Here are the details to keep.', variant: 'body' },
+        { block: 'text', text: 'Check-in: {{reservation.checkIn}}\nNights: {{reservation.nights}}\nPaid today: {{reservation.paid}}\nReference: {{reservation.ref}}', variant: 'details' },
         { block: 'text', text: '{{reservation.balance}}', variant: 'body' },
-        {
-          block: 'text',
-          text: 'Reference: {{reservation.ref}}',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'Questions before you arrive? Reply to this email and {{host.businessName}} will get back to you.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you made a reservation with {{host.businessName}}.',
@@ -573,28 +498,14 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
-        { block: 'text', text: 'Your gift card', variant: 'heading' },
-        {
-          block: 'text',
-          text: 'You have a {{giftcard.value}} gift card for {{host.businessName}}.',
-          variant: 'body',
-        },
+        { block: 'text', text: '{{host.businessName}} · Gift card', variant: 'eyebrow' },
+        { block: 'text', text: 'Your {{giftcard.value}} gift card', variant: 'heading' },
+        { block: 'text', text: 'You have a {{giftcard.value}} gift card for {{host.businessName}}.', variant: 'body' },
         { block: 'text', text: '{{giftcard.note}}', variant: 'body' },
-        {
-          block: 'text',
-          text: 'Gift card code: {{giftcard.code}}',
-          variant: 'body',
-        },
-        {
-          block: 'text',
-          text: 'Enter the code at checkout on {{host.url}} to use its balance.',
-          variant: 'body',
-        },
-        {
-          block: 'button',
-          label: 'Visit {{host.businessName}}',
-          href: '{{host.url}}',
-        },
+        { block: 'text', text: 'Value: {{giftcard.value}}\nGift card code: {{giftcard.code}}', variant: 'details' },
+        { block: 'text', text: 'Enter the code at checkout on {{host.url}} to use its balance.', variant: 'body' },
+        { block: 'button', label: 'Shop {{host.businessName}}', href: '{{host.url}}' },
+        { block: 'text', text: 'Keep this email: the code is what you spend the card with.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because a gift card from {{host.businessName}} was sent to this address.',
@@ -628,12 +539,11 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
-        {
-          block: 'text',
-          text: '{{product.name}} is back in stock at {{host.businessName}}.',
-          variant: 'body',
-        },
-        { block: 'button', label: 'View product', href: '{{product.url}}' },
+        { block: 'text', text: '{{host.businessName}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{product.name}} is back in stock', variant: 'heading' },
+        { block: 'text', text: 'You asked to hear when {{product.name}} was back at {{host.businessName}}. It is, and you can order it now.', variant: 'body' },
+        { block: 'button', label: 'Shop {{product.name}}', href: '{{product.url}}' },
+        { block: 'text', text: 'You asked {{host.businessName}} to tell you when it was back. Nothing is held for you.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you asked {{host.businessName}} to tell you when this was back.',
@@ -657,19 +567,11 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
-        {
-          block: 'text',
-          text:
-            'You left items in your cart at {{host.businessName}}. Pick up ' +
-            'where you left off.',
-          variant: 'body',
-        },
-        { block: 'button', label: 'Return to cart', href: '{{cart.url}}' },
-        {
-          block: 'text',
-          text: 'Nothing in your cart is held for you.',
-          variant: 'caption',
-        },
+        { block: 'text', text: '{{host.businessName}}', variant: 'eyebrow' },
+        { block: 'text', text: 'You left something in your cart', variant: 'heading' },
+        { block: 'text', text: 'Your cart at {{host.businessName}} still has your items in it. Pick up where you left off whenever you are ready.', variant: 'body' },
+        { block: 'button', label: 'Return to your cart', href: '{{cart.url}}' },
+        { block: 'text', text: 'Nothing in your cart is held for you.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you started a checkout with {{host.businessName}}.',
@@ -708,22 +610,12 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'How did we do?', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            'Thanks again for your order {{order.number}} from ' +
-            '{{host.businessName}}. Would you tell other shoppers what you ' +
-            'think? Each link opens the product with a review form.',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{review.products}}', variant: 'body' },
+        { block: 'text', text: 'Thanks again for your order {{order.number}} from {{host.businessName}}. Would you tell other shoppers what you think? Each link opens the product with a review form ready.', variant: 'body' },
+        { block: 'text', text: '{{review.products}}', variant: 'links' },
         { block: 'button', label: 'Write a review', href: '{{review.url}}' },
-        {
-          block: 'text',
-          text: 'Each link works once, for 60 days.',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'Each link works once, for 60 days.', variant: 'caption' },
       ],
       footerReason: ORDER_FOOTER_REASON,
     },
@@ -744,8 +636,10 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Members', variant: 'eyebrow' },
         { block: 'text', text: '{{post.title}}', variant: 'heading' },
         { block: 'text', text: '{{post.body}}', variant: 'body' },
+        { block: 'button', label: 'Visit {{host.businessName}}', href: '{{host.url}}' },
       ],
       footerReason: 'You’re receiving this because you’re a member of {{host.businessName}}.',
     },
@@ -781,6 +675,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
+        { block: 'text', text: '{{site.name}} · Account security', variant: 'eyebrow' },
         { block: 'text', text: 'Reset your password', variant: 'heading' },
         { block: 'text', text: '{{reset.intro}}', variant: 'body' },
         { block: 'button', label: 'Set a new password', href: '{{resetUrl}}' },
@@ -809,22 +704,11 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
+        { block: 'text', text: '{{site.name}} · Account security', variant: 'eyebrow' },
         { block: 'text', text: 'Your password was changed', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            'An administrator of {{site.name}} set a new password on your ' +
-            'account and signed you out on every device. To sign back in, ' +
-            'get the new password from them, or choose "Forgot password?" on ' +
-            'the sign-in page to set your own.',
-          variant: 'body',
-        },
+        { block: 'text', text: 'An administrator of {{site.name}} set a new password on your account and signed you out on every device. To sign back in, get the new password from them, or choose "Forgot password?" on the sign-in page to set your own.', variant: 'body' },
         { block: 'button', label: 'Sign in', href: '{{signInUrl}}' },
-        {
-          block: 'text',
-          text: 'If you did not expect this, contact the site owner.',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'If you did not expect this, contact the site owner straight away.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because the password on your ' +
@@ -853,22 +737,12 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}}', variant: 'eyebrow' },
         { block: 'text', text: 'Confirm your subscription', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            'Please confirm that you want to get {{stream.name}} emails from ' +
-            '{{host.businessName}} at this address.',
-          variant: 'body',
-        },
+        { block: 'text', text: 'Please confirm that you want {{stream.name}} emails from {{host.businessName}} at this address. Nothing is sent until you do.', variant: 'body' },
+        { block: 'text', text: 'List: {{stream.name}}\nFrom: {{host.businessName}}', variant: 'details' },
         { block: 'button', label: 'Confirm my subscription', href: '{{confirmUrl}}' },
-        {
-          block: 'text',
-          text:
-            'The link works for three days. If you did not sign up, ignore this ' +
-            'message — nothing will be sent.',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'The link works for three days. If you did not sign up, ignore this message and nothing will be sent.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because this address was entered on ' +
@@ -922,21 +796,16 @@ function returnTenantEmails(): readonly TenantEmailEntry[] {
           description: 'What the buyer wrote; empty when they wrote nothing',
           sample: 'The lid was cracked.',
         },
+        { name: 'return.url', description: 'The return in the console, to approve or decline', sample: 'https://app.example.com/northwind/hosts/northwind/products/returns?return=ret_123' },
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'A buyer asked for a return', variant: 'heading' },
-        {
-          block: 'text',
-          text: '{{buyer.email}} wants to return items from order {{order.number}}.',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{return.items}}', variant: 'body' },
+        { block: 'text', text: '{{buyer.email}} wants to return items from order {{order.number}}. Approve or decline it, and the buyer is emailed your answer.', variant: 'body' },
+        { block: 'text', text: '{{return.items}}\nBuyer: {{buyer.email}}', variant: 'details' },
         { block: 'text', text: '{{return.customerNote}}', variant: 'body' },
-        {
-          block: 'text',
-          text: 'Approve or decline it under Products → Returns.',
-          variant: 'caption',
-        },
+        { block: 'button', label: 'Review the return', href: '{{return.url}}' },
+        { block: 'text', text: 'Returns are under Products → Returns, beside the order they are for.', variant: 'caption' },
       ],
       footerReason: 'You’re receiving this because you manage {{host.businessName}}.',
     },
@@ -964,16 +833,15 @@ function returnTenantEmails(): readonly TenantEmailEntry[] {
         ORDER_STATUS_URL_TOKEN,
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your return is approved', variant: 'heading' },
-        {
-          block: 'text',
-          text: '{{host.businessName}} approved the return of:',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{return.items}}', variant: 'body' },
+        { block: 'text', text: '{{host.businessName}} approved the return of these items from order {{order.number}}.', variant: 'body' },
+        { block: 'text', text: '{{return.items}}', variant: 'details' },
+        { block: 'text', text: 'What to do next', variant: 'subheading' },
         { block: 'text', text: '{{return.note}}', variant: 'body' },
         { block: 'text', text: '{{return.label}}', variant: 'body' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+        { block: 'text', text: 'Your refund is sent once {{host.businessName}} receives the items, and you will get an email when it is.', variant: 'caption' },
       ],
       footerReason: ORDER_FOOTER_REASON,
     },
@@ -987,15 +855,13 @@ function returnTenantEmails(): readonly TenantEmailEntry[] {
       defaultSubject: 'About your return for order {{order.number}}',
       mergeTokens: [ORDER_NUMBER_TOKEN, RETURN_ITEMS_TOKEN, RETURN_NOTE_TOKEN, ORDER_STATUS_URL_TOKEN],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'We could not accept this return', variant: 'heading' },
-        {
-          block: 'text',
-          text: '{{host.businessName}} declined the return of:',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{return.items}}', variant: 'body' },
+        { block: 'text', text: '{{host.businessName}} declined the return of these items from order {{order.number}}.', variant: 'body' },
+        { block: 'text', text: '{{return.items}}', variant: 'details' },
         { block: 'text', text: '{{return.note}}', variant: 'body' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+        { block: 'text', text: 'Questions about it? Reply to this email and {{host.businessName}} will get back to you.', variant: 'caption' },
       ],
       footerReason: ORDER_FOOTER_REASON,
     },
@@ -1018,16 +884,12 @@ function returnTenantEmails(): readonly TenantEmailEntry[] {
         ORDER_STATUS_URL_TOKEN,
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your return is refunded', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            '{{host.businessName}} received your return and refunded ' +
-            '{{return.refundTotal}} to your original payment method.',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{return.items}}', variant: 'body' },
+        { block: 'text', text: '{{host.businessName}} received your return and refunded {{return.refundTotal}} to your original payment method.', variant: 'body' },
+        { block: 'text', text: '{{return.items}}\nTotal refunded: {{return.refundTotal}}', variant: 'details' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
+        { block: 'text', text: 'Refunds usually appear within 5 to 10 business days, depending on your bank.', variant: 'caption' },
       ],
       footerReason: ORDER_FOOTER_REASON,
     },

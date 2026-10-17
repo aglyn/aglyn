@@ -144,6 +144,7 @@ import {
   normalizeOperatorAlertSettings,
   OPERATOR_ALERT_SETTINGS_COLLECTION,
   OPERATOR_ALERT_SETTINGS_DOC,
+  operatorAlertEmailFrame,
   raiseOperatorAlert,
   sendOperatorAlertDigest,
 } from './operator-alerts'
@@ -437,6 +438,24 @@ describe('normalizeOperatorAlertSettings', () => {
         digestHourUtc: 99,
       }),
     ).toEqual({ types: { a: { enabled: false } }, digestHourUtc: 14 })
+  })
+})
+
+describe('operatorAlertEmailFrame (AGL-3897)', () => {
+  it('names the level and area above the title, and which alert, workspace and site', () => {
+    const frame = operatorAlertEmailFrame(
+      { label: 'Card testing', tier: 'must', category: 'payments', orgId: 'org-1', hostId: 'host-1' },
+      new Date('2026-09-28T14:03:30Z'),
+    )
+    expect(frame.eyebrow).toBe('Must know · Payments & payouts')
+    expect(frame.details).toBe(
+      'Alert: Card testing\nLevel: Must know\nWorkspace id: org-1\nSite id: host-1\nRaised: 2026-09-28 14:03 UTC',
+    )
+  })
+
+  it('leaves out the workspace and site an alert is not about', () => {
+    const frame = operatorAlertEmailFrame({ label: 'Backup failed', tier: 'should', category: 'ops' })
+    expect(frame.details).not.toMatch(/Workspace id|Site id/)
   })
 })
 

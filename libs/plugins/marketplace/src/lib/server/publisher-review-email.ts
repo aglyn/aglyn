@@ -34,6 +34,7 @@ import {
   systemEmailBrand,
 } from '@aglyn/tenant-data-admin/server/render-system-email'
 import { sendEmail } from '@aglyn/shared-util-email'
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 
 /**
  * Emails a publisher's owners and admins about a review outcome (AGL-972).
@@ -72,8 +73,14 @@ export async function emailPublisher(
   orgId: string,
   subject: string,
   text: string,
-  /** Injectable for tests; the list read defaults to the admin Firestore. */
-  options?: { firestore?: any },
+  /**
+   * `firestore` is injectable for tests; the list read defaults to the admin
+   * Firestore. `frame` is the verdict as the designed email's details panel.
+   */
+  options?: {
+    firestore?: any
+    frame?: { plugin: string; version?: string; outcome: string }
+  },
 ): Promise<void> {
   try {
     const members = await listOrgMembers(orgId)
@@ -97,9 +104,34 @@ export async function emailPublisher(
     if (!recipients.length) return
     // The `plugin-review-update` system email (AGL-3367), in the platform's
     // brand: review is the platform talking about its own marketplace.
+    // The publisher's Marketplace page, where the listing and its versions are.
+    let slug = ''
+    try {
+      const org = await (options?.firestore ?? firebaseAdmin.app().firestore())
+        .collection('orgs')
+        .doc(orgId)
+        .get()
+      slug = String(org.get('slug') ?? '').trim()
+    } catch {
+      // Unread, the button opens the console home instead.
+    }
+    const frame = options?.frame
     const content = await renderSystemEmailContent(
       'plugin-review-update',
-      { 'review.subject': subject, 'review.body': text },
+      {
+        'review.subject': subject,
+        'review.body': text,
+        'review.details': frame
+          ? [
+              `Plugin: ${frame.plugin}`,
+              frame.version ? `Version: ${frame.version}` : '',
+              `Outcome: ${frame.outcome}`,
+            ]
+              .filter(Boolean)
+              .join('\n')
+          : '',
+        'review.url': `${platformConsoleOrigin()}${slug ? `/${slug}/marketplace` : ''}`,
+      },
       systemEmailBrand(null),
       { subject, text },
     )
