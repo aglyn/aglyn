@@ -1795,6 +1795,22 @@ public struct NativeCrmPicklist: Codable, Hashable, Sendable {
   }
 }
 
+public struct NotificationSound: Codable, Hashable, Sendable {
+  public var android: String
+  public var apple: String
+  public var id: String
+  public var label: String
+  public var web: String
+
+  public init(android: String, apple: String, id: String, label: String, web: String) {
+    self.android = android
+    self.apple = apple
+    self.id = id
+    self.label = label
+    self.web = web
+  }
+}
+
 public struct OrderAddress: Codable, Hashable, Sendable {
   public var city: String?
   public var country: String?
@@ -3904,6 +3920,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let datasetFilterPrefixMax: Int
   public let dealListDeclaration: ListQueryDeclaration
   public let defaultDealStages: [CrmDealStage]
+  public let defaultNotificationSound: String
   public let defaultTitlePattern: String
   public let dropOffMaxHours: Double
   public let dropOffWaitHours: [Double]
@@ -3998,6 +4015,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let nativeSiteCampaignsQuery: ListQueryDeclaration
   public let nativeSiteEmailsQuery: ListQueryDeclaration
   public let nothingMoved: String
+  public let notificationSoundField: String
+  public let notificationSounds: [NotificationSound]
   public let openDisputeClause: ListFilterClause
   public let orderChannelLabels: [String: String]
   public let orderChannelOptions: [ListFilterOption]
@@ -4146,6 +4165,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case datasetFilterPrefixMax = "DATASET_FILTER_PREFIX_MAX"
     case dealListDeclaration = "DEAL_LIST_DECLARATION"
     case defaultDealStages = "DEFAULT_DEAL_STAGES"
+    case defaultNotificationSound = "DEFAULT_NOTIFICATION_SOUND"
     case defaultTitlePattern = "DEFAULT_TITLE_PATTERN"
     case dropOffMaxHours = "DROP_OFF_MAX_HOURS"
     case dropOffWaitHours = "DROP_OFF_WAIT_HOURS"
@@ -4240,6 +4260,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case nativeSiteCampaignsQuery = "NATIVE_SITE_CAMPAIGNS_QUERY"
     case nativeSiteEmailsQuery = "NATIVE_SITE_EMAILS_QUERY"
     case nothingMoved = "NOTHING_MOVED"
+    case notificationSoundField = "NOTIFICATION_SOUND_FIELD"
+    case notificationSounds = "NOTIFICATION_SOUNDS"
     case openDisputeClause = "OPEN_DISPUTE_CLAUSE"
     case orderChannelLabels = "ORDER_CHANNEL_LABELS"
     case orderChannelOptions = "ORDER_CHANNEL_OPTIONS"
