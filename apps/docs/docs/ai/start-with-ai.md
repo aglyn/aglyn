@@ -49,7 +49,7 @@ are kept either way. Pressing Enter in a text answer is the same as **Next**. If
 cannot move on, the reason shows under the field and the cursor goes to it. **Skip** and
 the close control stay in the bar at the top on every step.
 
-### Your site {#your-business}
+## Your site {#your-business}
 
 **What kind of site are you creating?** is the one required answer. A few words is
 enough, such as *a neighborhood dog groomer that takes bookings*, or pick the closest
@@ -62,7 +62,7 @@ practice**, **Trades business**, **Shop**, **Nonprofit**, **Personal portfolio**
 What you write here picks the site's [style](./site-looks.md#choose-a-style), unless you
 choose one yourself, and decides which pages it usually has and what each page says.
 
-### Audience {#audience}
+## Audience {#audience}
 
 **Who is it for?** is optional. It is who every page and every search listing is written
 for, and it decides which questions the contact form asks. For example, *local dog owners
@@ -71,7 +71,7 @@ who want a regular groom booked online*.
 Both answers also fill your site's [business profile](./business-profile.md), which every
 later AI job for the site reads.
 
-### Style {#style}
+## Style {#style}
 
 The **Style** step shows each style as a card with a picture: the starter home page drawn
 in that style, so you can see its colors, fonts, buttons and corners before you pick.
@@ -84,7 +84,7 @@ same style still look different, and yours will not match the picture exactly. S
 
 ![The Style step: Pick for me chosen, naming the style the answer suggests, beside cards for Business & services, Home services & trades and more, each with a picture of the starter home page drawn in that style and a line about the look](/img/ai/start-with-ai-style.png)
 
-### Details {#details}
+## Details {#details}
 
 - **Where do form submissions go?** decides where messages from the site's contact form
   land:
@@ -100,7 +100,7 @@ same style still look different, and yours will not match the picture exactly. S
   design. Nothing sends it until you put it in an automation or a campaign. Free starts
   do not draft one.
 
-### Review {#review}
+## Review {#review}
 
 The last step lists every answer: the kind of site, who it is for, the style, where form
 submissions go, the pages and, on a paid plan, the welcome email. **Edit** beside an answer
@@ -120,8 +120,7 @@ On the Free plan it also shows how many of your free credits are left this month
 they renew. If the start will likely use more than you have left, the review says so and
 offers **Build what fits** (it builds what your credits cover, then pauses until you
 **Resume**), **Build the home page first** (a one-page start), and **Upgrade**. **Plan my
-site** waits until you choose. If you have no free credits left at all, every step says
-so, with when they renew. See [Before a job starts](./ai-credits.md#before-a-job-starts).
+site** waits until you choose. See [Before a job starts](./ai-credits.md#before-a-job-starts).
 
 ## What gets built {#what-gets-built}
 
