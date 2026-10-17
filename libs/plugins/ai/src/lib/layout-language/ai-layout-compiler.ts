@@ -1498,7 +1498,10 @@ function group(
     // columns (AGL-3676): the beta.237 Willow Wick home, on a paid plan, drew
     // every other group compact — four bands of a title and a sentence.
     const variant = design && block.kind === 'cards' && block.style !== 'quiet' ? aiLayoutGroupVariant(design.input, design.choices, scope.words ?? '') : null
-    if (variant === 'icons') return iconColumns(scope, items, room)
+    // Icon columns side by side, where rule 1 knows them by their cells; any
+    // site's groups may take them (AGL-3899), and one to a row outside a
+    // store they are drawn compact.
+    if (variant === 'icons' && (retail || perRow > 1)) return iconColumns(scope, items, room)
     const pictured = (variant === 'pictures' || variant === 'articles') && room === 'full' && picturesLeft(scope.page) >= items.length
     return (pictured && designedGroup(scope, variant, items, room)) || compactGroup(scope, block, items, perRow)
   }
