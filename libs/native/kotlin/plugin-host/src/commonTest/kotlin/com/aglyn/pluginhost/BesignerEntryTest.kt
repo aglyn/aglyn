@@ -51,4 +51,21 @@ class BesignerEntryTest {
     assertEquals(BesignerEntry.Exit.SessionEnded, BesignerEntry.exit(editor, "/verify-email"))
     assertEquals(BesignerEntry.Exit.Open("/signup-later"), BesignerEntry.exit(editor, "/signup-later"))
   }
+
+  // The console's `native-app-web-view` (libs/aglyn app-utils) reads exactly this shape (AGL-3894).
+  @Test
+  fun theUserAgentMarkerNamesTheAppItsVersionAndPlatform() {
+    assertEquals("AglynApp/1.4.0 (android)", BesignerEntry.userAgentMarker("1.4.0", "android"))
+    assertEquals("AglynApp/0 (windows)", BesignerEntry.userAgentMarker(null, "windows"))
+    assertEquals("AglynApp/1.4beta (android)", BesignerEntry.userAgentMarker("1.4 beta", "android"))
+  }
+
+  @Test
+  fun theMarkerFollowsTheEnginesOwnUserAgent() {
+    val webView = "Mozilla/5.0 (Linux; Android 13; sdk_gphone64_arm64; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/109.0.5414.123 Mobile Safari/537.36"
+    assertEquals("$webView AglynApp/0.1.0 (android)", BesignerEntry.userAgent(webView, "0.1.0", "android"))
+    assertEquals("AglynApp/0.1.0 (windows)", BesignerEntry.userAgent(null, "0.1.0", "windows"))
+    // A view that already carries it is not marked twice.
+    assertEquals("$webView AglynApp/0.1.0 (android)", BesignerEntry.userAgent("$webView AglynApp/0.1.0 (android)", "0.2.0", "android"))
+  }
 }

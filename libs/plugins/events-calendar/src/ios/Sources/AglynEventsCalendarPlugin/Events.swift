@@ -231,8 +231,9 @@ struct EventsScreen: View {
             "No events yet", systemImage: "calendar",
             message: "Create events here, then drop an Event List element on any page; published events show with SEO event markup.")
         } else if selectable {
-          List(rows, selection: $selection) { row in EventListRow(row: row).tag(row.id) }
-            .aglynListBackground()
+          List(rows) { row in EventListRow(row: row).aglynSelectableRow(row.id, selection: $selection) }
+            .aglynSelectableListStyle()
+            .aglynSelectionKeys(rows.map(\.id), selection: $selection)
             .accessibilityIdentifier("events-list")
         } else {
           List(rows) { row in
@@ -259,7 +260,7 @@ struct EventsScreen: View {
     } else if let row = events.rows?.first(where: { $0.id == selection }) {
       editor(for: row).id(row.id)
     } else {
-      AglynEmptyState("Pick an event to see it here", systemImage: "calendar")
+      AglynSelectionPlaceholder("No event selected", systemImage: "calendar")
     }
   }
 

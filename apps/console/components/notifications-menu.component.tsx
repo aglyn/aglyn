@@ -46,6 +46,7 @@ import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useIsNativeAppWebView } from '@aglyn/aglyn/app-utils/native-app-web-view'
 import { buildRoute, Route } from '../constants/route-links'
 import {
   NOTIFICATION_LEVEL_COLORS,
@@ -193,6 +194,9 @@ export function NotificationsMenu() {
   // ---- Alerts (AGL-650): sound, desktop notification, tab badge ----------
   const [alertPrefs] = useNotificationAlertPrefs()
   const [sound] = useNotificationSound()
+  // The Besigner inside the native apps: the app keeps its own unread count,
+  // and the web view's title is what the app names the page by (AGL-3894).
+  const inNativeApp = useIsNativeAppWebView()
 
   // `useOrgHosts` above only covers the org currently open, so a notification
   // from any other org had no subdomain and fell through to its stored
@@ -315,7 +319,8 @@ export function NotificationsMenu() {
   // one would silently start leaking again.
   useEffect(() => {
     if (typeof document === 'undefined') return
-    const badge = alertPrefs.tabBadge ? unreadBadge(unreadCount) : ''
+    const badge =
+      alertPrefs.tabBadge && !inNativeApp ? unreadBadge(unreadCount) : ''
     const apply = () => {
       const base = stripUnreadBadge(document.title)
       const next = badge ? `${badge} ${base}` : base
@@ -332,7 +337,7 @@ export function NotificationsMenu() {
       observer.disconnect()
       document.title = stripUnreadBadge(document.title)
     }
-  }, [unreadCount, alertPrefs.tabBadge])
+  }, [unreadCount, alertPrefs.tabBadge, inNativeApp])
 
   if (!uid) return null
 

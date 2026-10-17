@@ -541,3 +541,19 @@ export function aiLayoutEventsPlacements(
   }
   return placements
 }
+
+/**
+ * A field whose name says it holds what a record's photo shows (AGL-3856):
+ * the alt text of the record's Image, never words of its card.
+ */
+const RECORD_IMAGE_ALT = /^(?:image|photo|picture) (?:description|alt(?: text)?)$/i
+
+/** Whether a field's name says it holds what a record's photo shows (AGL-3856). */
+export function aiLayoutIsRecordImageAlt(name: string): boolean {
+  return RECORD_IMAGE_ALT.test(name.trim())
+}
+
+/** The field holding what a record's photo shows, by id, or `null` (AGL-3856). */
+export function aiLayoutRecordImageAltField(fields: readonly { id: string; name: string }[]): string | null {
+  return fields.find((field) => aiLayoutIsRecordImageAlt(field.name))?.id ?? null
+}

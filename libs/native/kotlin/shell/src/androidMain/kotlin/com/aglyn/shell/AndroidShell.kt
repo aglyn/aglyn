@@ -63,7 +63,7 @@ object AndroidShell {
       besigner = { path, onExit, onConsoleLink -> BesignerWebView(config.consoleOrigin, path, auth, config.brandName, onExit, onConsoleLink) },
       debugSignIn = debugSignIn,
       peripherals = peripherals,
-      push = com.aglyn.core.FcmPushRegistrar(firebase, prefs, config.app, appVersion),
+      push = if (config.app.receivesPushes) com.aglyn.core.FcmPushRegistrar(firebase, prefs, config.app, appVersion) else com.aglyn.core.NoPush,
       writer = SwitchingFirestoreWriter(
         com.aglyn.core.FirebaseFirestoreWriter(firebase.firestore), { com.aglyn.core.FirebaseFirestoreWriter(support.firestore()) }, supporting,
       ),
