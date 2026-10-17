@@ -4,6 +4,7 @@
 import AglynContracts
 import AglynHardware
 import AglynPluginHost
+import AglynSite
 import AglynUI
 import SwiftUI
 
@@ -193,7 +194,10 @@ struct RegisterScreen: View {
       ForEach(Array(items.enumerated()), id: \.offset) { _, item in
         if let item {
           AglynItemTile(
-            item.name, subtitle: priceLine(item), imageURL: item.imageURL.flatMap(URL.init(string:)),
+            item.name, subtitle: priceLine(item),
+            // A product's picture is stored as a media reference (or, from the kiosk, a CDN path on the console):
+            // served from the console's media CDN for this site, never read as an address.
+            imageURL: item.imageURL.flatMap { mediaPreviewURL($0, origin: context.api.origin, hostID: context.hostID) },
             badge: item.variants.allSatisfy(\.soldOut) ? ("Sold out", .warning) : nil
           ) { model.tap(item) }
           .accessibilityIdentifier("tile-\(item.id)")
