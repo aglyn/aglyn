@@ -497,3 +497,93 @@ export function composeCrmDigestEmailText(input: CrmDigestEmailInput): string {
   )
   return lines.join('\n') + (input.supportLine ?? '')
 }
+
+/** The digest in the parts the designed email lays out. */
+export interface CrmDigestEmailParts {
+  /** The workspace and the day: "Acme Co · Friday, October 16". */
+  eyebrow: string
+  /** "2 tasks due today, 1 overdue, 3 unworked leads." */
+  summary: string
+  /** Each list's heading with its count, or empty when the list is. */
+  overdueHeading: string
+  todayHeading: string
+  leadsHeading: string
+  /** Each list as "Title — when" detail rows. */
+  overdue: string
+  today: string
+  leads: string
+  nurturing: string
+  /** Where the reader starts: the Tasks section, else the first leads list. */
+  url: string
+  urlLabel: string
+  /** The other places to go, one "Label — URL" line each. */
+  links: string
+}
+
+/**
+ * The digest for the `crm-daily-digest` system email: the same facts as
+ * {@link composeCrmDigestEmailText}, cut into an eyebrow, a summary, a
+ * details panel per list and the links, so the email can draw each.
+ */
+export function composeCrmDigestEmailParts(input: CrmDigestEmailInput): CrmDigestEmailParts {
+  const { digest, nowMs, timeZone } = input
+  const counts = crmDigestCounts(digest)
+  const day = new Date(nowMs).toLocaleDateString('en-US', {
+    timeZone,
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
+  const rows = (lines: string[]): string => {
+    const shown = lines.slice(0, CRM_DIGEST_LIST_MAX)
+    const rest = lines.length - shown.length
+    return [...shown, ...(rest > 0 ? [`More — ${rest} more in the CRM`] : [])].join('\n')
+  }
+  const taskRow = (task: CrmDigestTask) =>
+    `${task.title} — ` +
+    [task.hostId ? input.hostName(task.hostId) : '', whenInZone(task.dueAtMs, timeZone)]
+      .filter(Boolean)
+      .join(' · ')
+  const leadRow = (lead: CrmMemberDigest['leads'][number]) =>
+    `${lead.name ? `${lead.name} <${lead.email}>` : lead.email} — ` +
+    `${input.hostName(lead.hostId)} · first seen ${dateInZone(lead.firstSeenAtMs, timeZone)}`
+  const heading = (label: string, count: number) => (count > 0 ? `${label} (${count})` : '')
+  const leadHosts = [...new Set(digest.leads.map((lead) => lead.hostId))].slice(0, 3)
+  const hasTasks = counts.overdue + counts.today > 0
+  const leadLinks = leadHosts.map(
+    (hostId) => `Leads on ${input.hostName(hostId)} — ${input.leadsUrl(hostId)}`,
+  )
+  const firstLeads = leadHosts[0]
+  return {
+    eyebrow: [input.workspaceName?.trim(), day].filter(Boolean).join(' · '),
+    summary: `${composeCrmDigestSummary(counts)}.`.replace(/^\./, ''),
+    overdueHeading: heading('Overdue', counts.overdue),
+    todayHeading: heading('Due today', counts.today),
+    leadsHeading: heading('Unworked leads', counts.leads),
+    overdue: rows(digest.overdue.map(taskRow)),
+    today: rows(digest.today.map(taskRow)),
+    leads: rows(digest.leads.map(leadRow)),
+    nurturing: composeCrmDigestNurturingLine(counts),
+    url: hasTasks || !firstLeads ? input.tasksUrl : input.leadsUrl(firstLeads),
+    urlLabel: hasTasks || !firstLeads ? 'Open your tasks' : 'Open your leads',
+    links: (hasTasks ? leadLinks : leadLinks.slice(1)).join('\n'),
+  }
+}
+
+/** {@link CrmDigestEmailParts} as the `crm-daily-digest` email's merge tokens. */
+export function crmDigestMergeValues(parts: CrmDigestEmailParts): Record<string, string> {
+  return {
+    'digest.eyebrow': parts.eyebrow,
+    'digest.summary': parts.summary,
+    'digest.overdueHeading': parts.overdueHeading,
+    'digest.overdue': parts.overdue,
+    'digest.todayHeading': parts.todayHeading,
+    'digest.today': parts.today,
+    'digest.leadsHeading': parts.leadsHeading,
+    'digest.leads': parts.leads,
+    'digest.nurturing': parts.nurturing,
+    'digest.url': parts.url,
+    'digest.action': parts.urlLabel,
+    'digest.links': parts.links,
+  }
+}

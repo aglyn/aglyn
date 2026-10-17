@@ -83,8 +83,9 @@ fun QuickActionGrid(
     val columns = (items.size + rowsNeeded - 1) / rowsNeeded
     Column(verticalArrangement = Arrangement.spacedBy(gap)) {
       for (row in items.chunked(columns)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-          for (item in row) QuickActionTile(item, Modifier.weight(1f))
+        // Every tile in a row as tall as the tallest, so a two-line label never leaves its row ragged.
+        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(gap)) {
+          for (item in row) QuickActionTile(item, Modifier.weight(1f).fillMaxHeight())
           repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
         }
       }

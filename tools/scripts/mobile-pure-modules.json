@@ -382,6 +382,10 @@
       "why": "The register's payment ledger, display and receipt shapes and their pure helpers, imports nothing; the native contracts emit an order's payments from it (AGL-3651)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/commerce-printers.ts",
+      "why": "The register's receipt printers (AGL-3619): brands, model suggestions and status labels, so Aglyn POS adds and shows a printer the way the console's printer card does (AGL-3909); a type-only import of commerce-receipt."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/commerce-receipt.ts",
       "why": "The receipt data an order makes, so the app's printed and shared receipt matches the register's (AGL-3621)."
     },

@@ -188,6 +188,16 @@ export async function copyManagerOnTicket(
         .filter(Boolean)
         .join('\n\n'),
       'ticket.url': link,
+      'ticket.opening': opening,
+      'ticket.message': details.body,
+      'ticket.details': [
+        `Workspace: ${who}`,
+        details.fromEmail ? `From: ${details.fromEmail}` : '',
+        `Subject: ${details.subject}`,
+        `Ticket id: ${details.ticketId}`,
+      ]
+        .filter(Boolean)
+        .join('\n'),
       'manager.name': manager.name,
       'org.name': who,
     },

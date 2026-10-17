@@ -536,6 +536,9 @@ export function MainLayout(props: MainLayoutProps) {
   const narrow = useMediaQuery(theme.breakpoints.down('md'))
   // Only the editor folds its bar: a console page's bar already fits a phone.
   const compact = Boolean(besigner) && narrow
+  // The native apps keep their own notifications (push, an inbox screen), so
+  // the web bell and its unread count stay out of their web view (AGL-3894).
+  const inNativeApp = useIsNativeAppWebView()
   return (
     <Stack
       {...rest}
@@ -588,7 +591,7 @@ export function MainLayout(props: MainLayoutProps) {
                 on the reader — beside the bell, on the same persistent
                 chrome. Draws nothing when no plugin has anything to say. */}
             <ConsoleTopBarSlot />
-            {compact ? null : <NotificationsMenu />}
+            {compact || inNativeApp ? null : <NotificationsMenu />}
             {/* Pre-permission ask (AGL-663): the browser allows exactly one
                 native prompt per origin, so we offer in-app first where a
                 decline is reversible. Renders nothing unless it applies. */}

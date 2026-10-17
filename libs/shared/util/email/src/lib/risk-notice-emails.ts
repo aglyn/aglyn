@@ -84,6 +84,21 @@ export const RISK_NOTICE_EMAIL_TOKENS: readonly SystemEmailMergeToken[] = [
     sample: 'https://app.example.com/test-org/settings/holds',
   },
   {
+    name: 'notice.otherActions',
+    description: 'The actions besides the main one, one per line, as label and link',
+    sample: 'View holds and reviews: https://app.example.com/test-org/settings/holds',
+  },
+  {
+    name: 'notice.eyebrow',
+    description: 'Whose notice it is, above the title',
+    sample: 'Test Org · Account safety',
+  },
+  {
+    name: 'notice.details',
+    description: 'The workspace, the case reference and any message from our team',
+    sample: 'Workspace: Test Org\nReference: HS-0A1B2C3D4E',
+  },
+  {
     name: 'workspace.name',
     description: 'The workspace the notice is about',
     sample: 'Test Org',
@@ -112,16 +127,18 @@ export const RISK_NOTICE_EMAIL_TOKENS: readonly SystemEmailMergeToken[] = [
 
 /** The content every risk notice email starts from. */
 export const RISK_NOTICE_DEFAULT_BODY: readonly SystemEmailDefaultBlock[] = [
+  { block: 'text', text: '{{notice.eyebrow}}', variant: 'eyebrow' },
   { block: 'text', text: '{{notice.title}}', variant: 'heading' },
   { block: 'text', text: '{{notice.summary}}', variant: 'body' },
   { block: 'text', text: '{{notice.meaning}}', variant: 'body' },
+  { block: 'text', text: '{{notice.details}}', variant: 'details' },
   { block: 'text', text: 'What to do next', variant: 'subheading' },
   { block: 'text', text: '{{notice.steps}}', variant: 'body' },
   { block: 'button', label: '{{notice.primaryActionLabel}}', href: '{{notice.primaryActionUrl}}' },
-  { block: 'text', text: '{{notice.actions}}', variant: 'caption' },
+  { block: 'text', text: '{{notice.otherActions}}', variant: 'links' },
   {
     block: 'text',
-    text: 'Reference {{reference}}. Why was something held or flagged? {{help.url}}',
+    text: 'Why was something held or flagged? The help page explains each kind of notice: {{help.url}}',
     variant: 'caption',
   },
 ]

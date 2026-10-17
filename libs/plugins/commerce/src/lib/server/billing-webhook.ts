@@ -30,6 +30,7 @@ import {
   hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { paymentProvider } from '@aglyn/tenant-data-admin/server/payment-provider'
+import { hostConsoleUrl } from '@aglyn/tenant-data-admin/server/host-console-link'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { formatOperatorAlertAmount } from '@aglyn/aglyn/app-utils/operator-alerts'
 import { resolveSiteTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
@@ -5334,6 +5335,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   'order.total': orderTotal,
                   'buyer.email': String(buyerEmail ?? ''),
                   'order.ref': String(object.id),
+                  'orders.url': await hostConsoleUrl(String(hostId), `/${hostId}/products/orders`),
                 },
               )
               await sendEmail({

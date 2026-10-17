@@ -98,7 +98,13 @@ public struct SpecScreenView: View {
   /// Whether the split list has a row to pick: an empty list folds the detail column away (spec 4), so a short Team or
   /// Roles list never sits beside half a window of "Nothing selected".
   private func splitListHasRows(_ model: ScreenModel) -> Bool {
-    guard model.phase == .ready, let block = splitBlock else { return true }
+    guard let block = splitBlock else { return true }
+    switch model.phase {
+    case .loading: return true
+    // A failure or an upsell is the whole screen's answer: nothing to pick beside it.
+    case .failed, .planRefused: return false
+    case .ready: break
+    }
     let items = block["items"]?.stringValue ?? ""
     if let through = block["flatten"]?.stringValue {
       return !ScreenValues.flatten(ScreenValues.rows(ScreenValues.lookup(items, in: model.context)), through: through).isEmpty
@@ -518,11 +524,9 @@ struct SpecScreenBody: View {
     if let link = action.link {
       let rendered = ScreenValues.render(link, in: scope)
       guard let url = URL(string: rendered.hasPrefix("/") ? session.origin + rendered : rendered) else { return }
-      if url.scheme == "https" || url.scheme == "http" {
-        await webAuthentication.openHostedPage(url)
-      } else {
-        openURL(url)
-      }
+      // A plain page (the live site, a preview, a docs link) shows in the in-app web sheet the app's root installs;
+      // the sign-in session is for OAuth and hosted payment steps only.
+      openURL(url)
       return
     }
     // A route is asked first what the action would do; its answer is `preview` in the confirmation.

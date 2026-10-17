@@ -123,7 +123,7 @@ final class ArtifactTests: XCTestCase {
     XCTAssertEqual(ArtifactKind.template.quotaKey, "templatesPerHost")
     XCTAssertEqual(AglynQuotaReadout.text(ready: true, used: 3, limit: 10, noun: "layout"), "3/10 layouts on your plan")
     XCTAssertEqual(AglynQuotaReadout.text(ready: true, used: 3, limit: nil, noun: "component"), "3/\u{221E} components on your plan")
-    XCTAssertEqual(AglynQuotaReadout.text(ready: false, used: 1, limit: nil, noun: "template"), "1 template \u{00B7} checking your plan\u{2026}")
+    XCTAssertEqual(AglynQuotaReadout.text(ready: false, used: 1, limit: nil, noun: "template"), "1 template")
 
     // Components and layouts: everything less the tombstones. Templates: everything that is not a starter's page.
     let layouts = artifactCountQueries(.layout, hostID: "h")
