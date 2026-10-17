@@ -9,14 +9,18 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,11 +33,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.NotificationCatalog
 import com.aglyn.contracts.NotificationCatalogCategory
 import com.aglyn.contracts.NotificationChannel
@@ -141,6 +148,10 @@ internal fun NotificationSettingsScreen(
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        NotificationSoundCard(
+          picked = (pending["sound"] as? String) ?: data?.get(Contracts.notificationSoundField) as? String,
+          onPick = { id -> write("sound", id, mapOf(Contracts.notificationSoundField to id)) },
+        )
         // What you are told about.
         catalog.categories.forEach { category ->
           AccountCategoryCard(
@@ -231,6 +242,63 @@ internal fun NotificationSettingsScreen(
     }
   }
 }
+
+/**
+ * The sound notifications make (AGL-3890), the console's Notification sound: the nine sounds, Xylophone first and the
+ * default; choosing one plays it and saves it to `users/{uid}.notificationSound`, which push then names as the channel
+ * to post on. Shown only where the app carries the sounds (the Aglyn app on a phone or tablet).
+ */
+@Composable
+private fun NotificationSoundCard(picked: String?, onPick: (String) -> Unit) {
+  val preview = rememberSoundPreview() ?: return
+  val sounds = Contracts.notificationSounds
+  val current = sounds.firstOrNull { it.id == picked } ?: sounds.firstOrNull { it.id == Contracts.defaultNotificationSound } ?: return
+  SectionCard(
+    "Notification sound",
+    Modifier.fillMaxWidth().testTag("notification-sound"),
+    action = {
+      TextButton(onClick = { preview(current.android) }, modifier = Modifier.testTag("notification-sound-play")) {
+        Icon(AglynIcons.named("play_arrow"), contentDescription = null)
+        Text("Play", Modifier.padding(start = space(1f)))
+      }
+    },
+  ) {
+    Text(
+      "The sound your notifications make on this device, and in the console and the other apps.",
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Column(Modifier.selectableGroup()) {
+      for (sound in sounds) {
+        val selected = sound.id == current.id
+        Row(
+          Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.large)
+            .selectable(selected = selected, role = Role.RadioButton) {
+              preview(sound.android)
+              if (!selected) onPick(sound.id)
+            }
+            .padding(horizontal = space(1f))
+            .testTag("notification-sound-${sound.id}"),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(space(1.5f)),
+        ) {
+          RadioButton(selected = selected, onClick = null)
+          Text(sound.label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+          if (sound.id == Contracts.defaultNotificationSound) {
+            Text("Default", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          }
+        }
+      }
+    }
+  }
+}
+
+/** Plays one of the app's notification sounds by its raw resource name; null where the app carries none. */
+@Composable
+internal expect fun rememberSoundPreview(): ((resource: String) -> Unit)?
 
 /** Every site the person holds, across workspaces: id to name. */
 internal object WorkspaceStoreSites {
