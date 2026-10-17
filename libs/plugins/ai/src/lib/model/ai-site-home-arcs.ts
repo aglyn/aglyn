@@ -178,7 +178,7 @@ const ARCS: Readonly<Record<string, readonly AiSiteHomeArc[]>> = {
   nonprofit: [
     { id: 'work-first', sections: [s('offer', 'what the organization does'), s('facts', 'its impact, only as the brief gives it'), s('steps', 'how to help, as steps'), CTA] },
     { id: 'story-first', sections: [s('story', 'the story of the cause'), s('offer', 'the programs'), s('steps', 'how to help, as steps'), FAQ] },
-    { id: 'help-first', sections: [s('steps', 'how to help, as steps'), s('offer', 'what the organization does'), s('gallery', 'the community in pictures'), CTA] },
+    { id: 'help-first', sections: [s('steps', 'how to help, as steps'), s('offer', 'what the organization does'), s('gallery', 'the people it serves, in pictures'), CTA] },
   ],
   music: [
     { id: 'listen-first', sections: [s('listen', 'a listen section'), s('work', 'releases or shows, only as the brief gives them'), s('story', 'a short bio'), CTA] },
