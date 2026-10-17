@@ -63,6 +63,44 @@ public enum BesignerEntry {
     return .stay
   }
 
+  /// The product token the web view adds to its user agent (AGL-3894).
+  ///
+  /// The console reads `AglynApp/<version> (<platform>)` to leave out what a
+  /// browser tab needs and an app screen does not: the web notification
+  /// prompt, the editor's back arrow, the unread count and brand in the page
+  /// title. It is there from the first request, whichever page the view opens
+  /// first. Presentation only: the console never grants anything on it.
+  public static let userAgentProduct = "AglynApp"
+
+  /// `AglynApp/<version> (<platform>)`.
+  public static func userAgentMarker(version: String, platform: String) -> String {
+    let shown = version.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: " ", with: "")
+    return "\(userAgentProduct)/\(shown.isEmpty ? "0" : shown) (\(platform))"
+  }
+
+  /// The web view's `applicationNameForUserAgent`: WebKit's own (`Mobile/15E148`
+  /// on iOS, which pages read as "a phone") kept, the marker after it.
+  public static func applicationNameForUserAgent(base: String?, version: String, platform: String) -> String {
+    let marker = userAgentMarker(version: version, platform: platform)
+    let kept = (base ?? "").trimmingCharacters(in: .whitespaces)
+    if kept.contains("\(userAgentProduct)/") { return kept }
+    return kept.isEmpty ? marker : "\(kept) \(marker)"
+  }
+
+  /// This build's marker platform.
+  public static var userAgentPlatform: String {
+    #if os(macOS)
+      "macos"
+    #else
+      "ios"
+    #endif
+  }
+
+  /// This build's version, for the marker.
+  public static var appVersion: String {
+    Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+  }
+
   private static func bareOf(_ path: String) -> String {
     let noFragment = path.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
     return String(noFragment.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")

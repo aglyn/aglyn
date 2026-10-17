@@ -411,10 +411,12 @@ staff can be granted to any account, on any domain, in any pool. The only sign-i
 refuses is an address on a domain you listed that arrives with no SSO tenant at all.
 
 An account outside your company that has to sign in with an address on that domain,
-such as the demo login you give an app store reviewer, can be named exactly:
+such as the demo login you give an app store reviewer, can be named exactly. A check
+that signs up a fresh plus-addressed account every run is named by its plus tag and a
+trailing `*`, which never reaches the mailbox itself or any other tag:
 
 ```bash
-AGLYN_SSO_EXEMPT_EMAILS="reviewer@example.com"
+AGLYN_SSO_EXEMPT_EMAILS="reviewer@example.com ops+signup-canary*@example.com"
 ```
 
 Set the same three values in `cloud/functions/.env` and deploy the functions. The

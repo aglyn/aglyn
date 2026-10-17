@@ -95,6 +95,27 @@ describe('NotificationPrompt gating (AGL-663)', () => {
     }
   })
 
+  it('stays hidden on a direct open in the apps, from the user-agent marker alone (AGL-3894)', () => {
+    // A round-4 build reached the editor without the entry page, so the tab
+    // carries no session mark: the marker every app web view appends is what
+    // keeps the browser's prompt out of the app.
+    const original = window.navigator.userAgent
+    Object.defineProperty(window.navigator, 'userAgent', {
+      value: `${original} AglynApp/1.4.0 (ios)`,
+      configurable: true,
+    })
+    try {
+      expect(window.sessionStorage.length).toBe(0)
+      renderAndSettle()
+      expect(screen.queryByText('Enable notifications')).toBeNull()
+    } finally {
+      Object.defineProperty(window.navigator, 'userAgent', {
+        value: original,
+        configurable: true,
+      })
+    }
+  })
+
   it('stays hidden when nobody is signed in', () => {
     mockUser = undefined
     renderAndSettle()

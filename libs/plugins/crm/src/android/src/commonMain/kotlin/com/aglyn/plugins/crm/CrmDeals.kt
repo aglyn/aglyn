@@ -41,11 +41,13 @@ import com.aglyn.ui.BoardColumn
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.LiveQueryList
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.WidthClass
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.currentWidthClass
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
@@ -106,7 +108,7 @@ fun DealsBoard(context: NativePluginContext, scope: CrmScope, api: CrmApi, refer
     error?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.padding(horizontal = space(2f))) }
     when (val rows = list.rows) {
       Live.Loading -> SkeletonList(rows = 6)
-      is Live.Failed -> EmptyState("Could not load the pipeline", body = rows.error.message, icon = AglynIcons.named("error"))
+      is Live.Failed -> EmptyState("Could not load the pipeline", body = rows.error.message, icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
       is Live.Ready -> if (rows.value.isEmpty()) {
         EmptyState("No deals in ${pipeline.name} yet", body = "Add a deal from the list, or convert a lead with one.", icon = AglynIcons.named("handshake"))
       } else {
@@ -153,9 +155,9 @@ private fun DealCard(deal: CrmRow, pipeline: Pipeline, columnKey: String, canMov
       }
       if (canMove) {
         Box {
-          IconButton(onClick = { menu = true }, modifier = Modifier.semantics { contentDescription = "Move ${deal.title}" }.testTag("deal-move-${deal.id}")) {
+          WithTooltip("Move ${deal.title}") { IconButton(onClick = { menu = true }, modifier = Modifier.semantics { contentDescription = "Move ${deal.title}" }.testTag("deal-move-${deal.id}")) {
             Icon(AglynIcons.named("more_vert"), contentDescription = null, Modifier.size(20.dp))
-          }
+          } }
           DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             pipeline.stages.filter { it.id != columnKey }.forEach { stage ->
               DropdownMenuItem(text = { Text("Move to ${stage.name}") }, onClick = { menu = false; onMove(stage.id) })

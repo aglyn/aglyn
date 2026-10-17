@@ -178,17 +178,14 @@ private struct RecordsBody: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
-          Divider()
-          Group {
-            if let selection {
-              detail(selection, titled: false).id(selection)
-            } else {
-              AglynEmptyState("Pick a \(noun) to see it here", systemImage: DataSymbols.record)
-            }
+        AglynListDetailColumns(listWidth: 360) {
+          list(selectable: true)
+        } detail: {
+          if let selection {
+            detail(selection, titled: false).id(selection)
+          } else {
+            AglynSelectionPlaceholder("No \(noun) selected", systemImage: DataSymbols.record)
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       } else {
         list(selectable: false)
@@ -292,9 +289,9 @@ private struct RecordsBody: View {
         model.filtering ? "No records match these filters" : "No records yet", systemImage: DataSymbols.records,
         message: model.filtering ? "Try another search or remove a filter." : "Add the first \(noun).")
     } else if selectable {
-      List(selection: $selection) { rows(selectable: true) }
+      List { rows(selectable: true) }
         .sensoryFeedback(.selection, trigger: selection)
-        .aglynListBackground()
+        .aglynSelectableListStyle().aglynSelectionKeys(model.rows.map(\.id), selection: $selection)
         .refreshable { model.retry() }
         .accessibilityIdentifier("records-list")
     } else {
@@ -310,7 +307,7 @@ private struct RecordsBody: View {
     ForEach(model.rows) { row in
       Group {
         if selectable {
-          recordRow(row).tag(row.id)
+          recordRow(row).aglynSelectableRow(row.id, selection: $selection)
         } else {
           Button {
             pushed = row.id

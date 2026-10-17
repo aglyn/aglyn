@@ -9,6 +9,7 @@ import com.aglyn.contracts.Contracts
 import com.aglyn.site.media.MediaChooserDialog
 import com.aglyn.site.media.MediaPickField
 import com.aglyn.site.media.mediaPreviewUrl
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
@@ -174,7 +175,7 @@ private fun ListingsSection(context: NativePluginContext, orgId: String, canMana
   runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS) }
   runner.error?.let { if (editing == null) NoticeBanner(it, StatusTone.ERROR) }
   when {
-    live is Live.Failed -> EmptyState("Could not load your listings", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    live is Live.Failed -> EmptyState("Could not load your listings", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     listings == null -> SkeletonList(rows = 4)
     listings.isEmpty() -> Text("Publish a reusable component from a site’s Setup page to list it here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
     else -> SectionCard("Your listings") {

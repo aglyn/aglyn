@@ -152,7 +152,9 @@ struct BesignerScreen: View {
         }
       }
     }
-    .navigationTitle(webModel.title.isEmpty ? "Besigner" : webModel.title)
+    // The screen's own name, never the web page's: the page title carried an
+    // unread count and the brand into the Mac window title (AGL-3894).
+    .navigationTitle("Besigner")
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
       // The editor takes the whole screen: on a phone the tab bar covered the bottom of its canvas.

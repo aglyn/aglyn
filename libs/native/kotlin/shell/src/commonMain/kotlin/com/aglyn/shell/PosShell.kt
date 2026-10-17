@@ -50,6 +50,7 @@ import com.aglyn.ui.AglynLogo
 import com.aglyn.ui.AglynTheme
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.SkeletonList
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 import kotlinx.coroutines.launch
 
@@ -244,13 +245,13 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
         },
         navigationIcon = {
           if (route != null) {
-            IconButton(onClick = { navigator.back() }) { Icon(AglynIcons.named("arrow_back"), contentDescription = "Back") }
+            WithTooltip("Back") { IconButton(onClick = { navigator.back() }) { Icon(AglynIcons.named("arrow_back"), contentDescription = "Back") } }
           }
         },
         actions = {
           for (screen in menu) {
             val open = (route as? Route.Screen)?.screenId == screen.id
-            IconButton(
+            WithTooltip(screen.title) { IconButton(
               onClick = { if (open) navigator.back() else navigator.push(Route.Screen(screen.id)) },
               modifier = Modifier.testTag("pos-menu-${screen.id}"),
             ) {
@@ -259,14 +260,14 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
                 contentDescription = screen.title,
                 tint = if (open) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
               )
-            }
+            } }
           }
-          IconButton(onClick = onSwitchStore, modifier = Modifier.testTag("switch-store")) {
+          WithTooltip("Switch store") { IconButton(onClick = onSwitchStore, modifier = Modifier.testTag("switch-store")) {
             Icon(AglynIcons.named("storefront"), contentDescription = "Switch store")
-          }
-          IconButton(onClick = { scope.launch { services.signOut() } }) {
+          } }
+          WithTooltip("Sign out") { IconButton(onClick = { scope.launch { services.signOut() } }) {
             Icon(AglynIcons.named("logout"), contentDescription = "Sign out")
-          }
+          } }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
       )

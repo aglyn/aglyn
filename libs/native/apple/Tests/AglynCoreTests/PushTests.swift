@@ -101,3 +101,21 @@ final class NotificationCatalogTests: XCTestCase {
     XCTAssertEqual(catalog.level(stamped: "bogus", type: nil), "info")
   }
 }
+
+final class PushAudienceTests: XCTestCase {
+  /// Aglyn POS asks for notification permission only when the server pushes
+  /// it something: `POS_PUSH_TYPES` in the server's push delivery.
+  func testOnlyAnAppTheServerPushesAsksForPermission() throws {
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let source = try String(
+      contentsOf: root.appendingPathComponent("libs/tenant/data/admin/src/lib/server/push-delivery.ts"), encoding: .utf8)
+    let declaration = try XCTUnwrap(
+      source.range(of: #"POS_PUSH_TYPES[^=]*= new Set<string>\((\[[^\]]*\])?\)"#, options: .regularExpression),
+      "POS_PUSH_TYPES moved; update this test and AglynAppID.receivesPushes together")
+    let posIsPushed = source[declaration].contains("[")
+    XCTAssertEqual(AglynAppID.pos.receivesPushes, posIsPushed)
+    XCTAssertTrue(AglynAppID.aglyn.receivesPushes)
+  }
+}
