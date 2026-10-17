@@ -150,9 +150,10 @@ jest.mock('../hooks/use-firestore-collection', () => {
   return { __esModule: true, default: useFirestoreCollection, useFirestoreCollection }
 })
 jest.mock('../hooks/use-host-index-entries', () => ({ __esModule: true, default: () => new Map() }))
+let mockTabBadge = false
 jest.mock('../hooks/use-notification-prefs', () => ({
   __esModule: true,
-  default: () => [{ sound: false, desktop: false, tabBadge: false }],
+  default: () => [{ sound: false, desktop: false, tabBadge: mockTabBadge }],
 }))
 jest.mock('../hooks/use-org-hosts', () => ({ __esModule: true, default: () => ({ hosts: [] }) }))
 jest.mock('../hooks/use-pending-invites', () => ({
@@ -205,6 +206,7 @@ const scrollToEnd = (element: HTMLElement) => {
 }
 
 beforeEach(() => {
+  mockTabBadge = false
   mockStore.clear()
   mockListeners.clear()
   mockWrites.length = 0
@@ -302,5 +304,33 @@ describe('the View all feed marks a row read on the first click (AGL-3720)', () 
     )
     expect(screen.getByText('Read')).toBeTruthy()
     expect(screen.queryByText('New')).toBeNull()
+  })
+})
+
+describe('the unread badge in the tab title', () => {
+  const PAGE = 'Home · Page besigner · demo.aglyn.app'
+  const original = window.navigator.userAgent
+  const setUserAgent = (value: string) =>
+    Object.defineProperty(window.navigator, 'userAgent', { value, configurable: true })
+
+  beforeEach(() => {
+    mockTabBadge = true
+    document.title = PAGE
+  })
+
+  afterEach(() => setUserAgent(original))
+
+  it('counts the unread in a browser tab', async () => {
+    seed(3)
+    render(<NotificationsMenu />)
+    await waitFor(() => expect(document.title).toBe(`(3) ${PAGE}`))
+  })
+
+  it('is left off inside the apps, so the window title stays the page (AGL-3894)', async () => {
+    setUserAgent(`${original} AglynApp/1.4.0 (macos)`)
+    seed(3)
+    render(<NotificationsMenu />)
+    await waitFor(() => expect(badge()?.textContent).toBe('3'))
+    expect(document.title).toBe(PAGE)
   })
 })

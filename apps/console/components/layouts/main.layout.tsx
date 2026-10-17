@@ -23,6 +23,7 @@ import { ScrollReaction } from '@aglyn/shared-ui-jsx/components/scroll-reaction'
 // not here either — it arrives as `wordmark` from the editor shells that draw
 // it, so a page carries only the mark it renders.
 import { AglynConsoleLogoFull } from '@aglyn/shared-ui-jsx/const/aglyn-console-logo-full'
+import { useIsNativeAppWebView } from '@aglyn/aglyn/app-utils/native-app-web-view'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { _isArrEmpty } from '@aglyn/shared-util-tools'
 import {
@@ -184,6 +185,12 @@ const TopAppBar = (props: TopAppBarProps) => {
   // White-label chrome (White-Label Phase 2): swap the Aglyn wordmark for the
   // current org's brand when it is white-label entitled.
   const { branding, whiteLabel } = useBranding()
+  // Inside the native apps the editor is a screen of the app, and the app's
+  // own Done button is the way out (AGL-3894). The web arrow there led to the
+  // console page the app hands straight back, a second control for the same
+  // exit.
+  const inNativeApp = useIsNativeAppWebView()
+  const showBackButton = Boolean(backButton) && !inNativeApp
 
   return (
     <ScrollReaction>
@@ -222,7 +229,7 @@ const TopAppBar = (props: TopAppBarProps) => {
               <Divider orientation="vertical" variant="middle" flexItem sx={{ opacity: 0.5 }} />
             }
           >
-            {backButton && (
+            {backButton && !inNativeApp && (
               <Button
                 // AGL-752: every caller passes `component: AppLink`, which
                 // resolves to an <a>; declare it so MUI v7's button-root check
@@ -259,7 +266,7 @@ const TopAppBar = (props: TopAppBarProps) => {
                 justifyContent: "flex-start",
                 color: "inherit",
                 maxWidth: { xs: '100%' },
-                paddingLeft: backButton ? 0.5 : undefined,
+                paddingLeft: showBackButton ? 0.5 : undefined,
                 ...(compact && { display: 'none' }),
 
                 // The wordmark is a fixed-size brand mark, so it is never what
