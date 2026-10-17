@@ -63,7 +63,7 @@ struct ListAssignmentSheet: View {
         do { options = try await actions.listOptions(row.id) } catch { loadError = inboxMessage(error) }
       }
     }
-    .frame(minWidth: 360, minHeight: 300)
+    .aglynSheetMinimumSize(width: 360, height: 300)
   }
 
   private func add() async {

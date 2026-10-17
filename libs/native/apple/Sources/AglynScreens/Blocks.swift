@@ -738,7 +738,7 @@ struct ActionInputSheet: View {
         }
       }
     }
-    .frame(minWidth: 360, minHeight: 280)
+    .aglynSheetMinimumSize(width: 360, height: 280)
     .presentationDetents([.medium, .large])
   }
 }
@@ -827,7 +827,7 @@ struct LookupSheet: View {
         await load()
       }
     }
-    .frame(minWidth: 360, minHeight: 360)
+    .aglynSheetMinimumSize(width: 360, height: 360)
   }
 
   private func load() async {
@@ -885,7 +885,7 @@ struct ReauthSheet: View {
         }
       }
     }
-    .frame(minWidth: 360, minHeight: 260)
+    .aglynSheetMinimumSize(width: 360, height: 260)
   }
 }
 

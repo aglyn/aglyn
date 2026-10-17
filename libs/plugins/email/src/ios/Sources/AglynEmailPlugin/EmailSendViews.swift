@@ -386,7 +386,7 @@ struct CountedConfirmSheet: View {
         }
       }
     }
-    .frame(minWidth: 360, minHeight: 240)
+    .aglynSheetMinimumSize(width: 360, height: 240)
   }
 }
 

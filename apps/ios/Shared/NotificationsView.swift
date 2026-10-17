@@ -490,7 +490,7 @@ struct NotificationTypePicker: View {
         }
       }
     }
-    .frame(minWidth: 360, minHeight: 480)
+    .aglynSheetMinimumSize(width: 360, height: 480)
   }
 }
 
@@ -528,7 +528,7 @@ struct InviteReviewSheet: View {
         Button("Decline", role: .destructive) { respond("decline") }
       }
     }
-    .frame(minWidth: 360, minHeight: 320)
+    .aglynSheetMinimumSize(width: 360, height: 320)
   }
 
   private func respond(_ action: String) {
