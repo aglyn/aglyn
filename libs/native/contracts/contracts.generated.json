@@ -6108,7 +6108,7 @@
         },
         {
           "block": "text",
-          "text": "Here is your receipt from {{host.businessName}}. We will email you again as your order moves along, and the order page always shows where it is.",
+          "text": "Here is the receipt for your order from {{host.businessName}}. We will email you again as your order moves along, and the order page always shows where it is.",
           "variant": "body"
         },
         {
@@ -6828,8 +6828,13 @@
         },
         {
           "block": "text",
-          "text": "You have a {{giftcard.value}} gift card",
+          "text": "Your {{giftcard.value}} gift card",
           "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "You have a {{giftcard.value}} gift card for {{host.businessName}}.",
+          "variant": "body"
         },
         {
           "block": "text",
