@@ -1855,12 +1855,18 @@ Every scaffold opens with a look unit, its own row on the build page
 site's own theme from their first draft. It never builds a theme change through
 the `theme` kind's proposal, and no site plan may propose one.
 
-- **The kind.** The guided start asks for the style of site in a grid of 21
-  kinds (`model/ai-site-kinds.ts`: business, trades, law and finance, health and
-  wellness, restaurant, store, portfolio, studio, photography, blog, events,
-  fitness, yoga, beauty, real estate, education, nonprofit, music, personal,
-  landing page, coming soon), the one its first answer suggests selected until
-  the person picks another; the job carries it as `inputs.siteKind`. A kind is
+- **The kind.** The guided start asks for the style of site on its own step,
+  in a grid of 21 kinds (`model/ai-site-kinds.ts`: business, trades, law and
+  finance, health and wellness, restaurant, store, portfolio, studio,
+  photography, blog, events, fitness, yoga, beauty, real estate, education,
+  nonprofit, music, personal, landing page, coming soon), each card a picture
+  of the starter home page in that kind's look (AGL-3898,
+  `scripts/render-site-style-previews.mts`, no model call), after "Pick for
+  me", which leaves the kind unset so the one the first answer suggests is
+  used; the job carries it as `inputs.siteKind`. The steps (kind of site,
+  audience, style, details, review) hold the same answers object the single
+  form did, so the brief and inputs a job is created with are unchanged
+  (`ai-site-start-card.spec.tsx` pins them). A kind is
   not a template: it is a LOOK FAMILY the code bounds the theme to (base themes,
   hue ranges, palette strength, grounds, font pairings, corners, button style,
   heading scale, density) and two lines the model reads — how its pages are
@@ -2378,6 +2384,22 @@ beside them.
 ⛔ Run it before promoting a change to the site job, its prompts or its rules,
 after the live plan eval. A run costs a few hundred credits, well under a
 dollar of model time.
+
+**Without a live model:** `--stub-model` (AGL-3910) serves the console with one
+provider, a loopback OpenAI-compatible stub that answers every call with a 503.
+The Anthropic key is held empty, and the preflight allows the stub's key alone.
+The run walks the start through workspace creation, sign-in, Create site, the
+answers and Plan my site. It ends on the "Building your site" page without
+starting the beat, which makes it the check for the harness itself and for
+everything before the model's first word.
+
+A checkout without the gitignored app env files still serves. Beside an
+emulator, `serve-emulated.mjs` fills the Firebase web config that no file set
+(the project id, from `FIREBASE_PROJECT_ID` or else `aglyn-main`, then the
+auth domain, bucket, database URL and a placeholder web API key) and says
+which values it filled. Without that config, the Admin SDK never started and
+`/api/orgs/create` answered 500 with `app/no-app`. It still needs the service
+account from the repo `.env`, and it warns at startup when that is missing.
 
 ## The `seo` kind
 

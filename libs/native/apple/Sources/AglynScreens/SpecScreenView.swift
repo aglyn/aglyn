@@ -58,7 +58,7 @@ public struct SpecScreenView: View {
         if !embedded, splitBlock != nil {
           WideLayoutReader { wide in
             if wide {
-              ListDetailLayout(listWidth: 380) {
+              ListDetailLayout(listWidth: 380, showsDetail: splitListHasRows(model)) {
                 SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: true)
               } detail: {
                 detail
@@ -93,6 +93,25 @@ public struct SpecScreenView: View {
       selection = nil
       await fresh.load()
     }
+  }
+
+  /// Whether the split list has a row to pick: an empty list folds the detail column away (spec 4), so a short Team or
+  /// Roles list never sits beside half a window of "Nothing selected".
+  private func splitListHasRows(_ model: ScreenModel) -> Bool {
+    guard let block = splitBlock else { return true }
+    switch model.phase {
+    case .loading: return true
+    // A failure or an upsell is the whole screen's answer: nothing to pick beside it.
+    case .failed, .planRefused: return false
+    case .ready: break
+    }
+    let items = block["items"]?.stringValue ?? ""
+    if let through = block["flatten"]?.stringValue {
+      return !ScreenValues.flatten(ScreenValues.rows(ScreenValues.lookup(items, in: model.context)), through: through).isEmpty
+    }
+    return !ScreenValues.scopes(
+      items: items, within: block["within"]?.stringValue, filter: block["filter"]?.stringValue, in: model.context
+    ).isEmpty
   }
 
   private var splitBlock: BlockSpec? {
@@ -264,6 +283,12 @@ struct SpecScreenBody: View {
     case .failed(let message):
       AglynEmptyState("This did not load", systemImage: "exclamationmark.triangle", message: message) {
         Button("Try again") { Task { await model.load() } }
+      }
+    case .planRefused(let message):
+      AglynUpsellState(
+        "Add this to your plan", message: message, systemImage: "sparkles", actionTitle: "See add-ons"
+      ) {
+        plugin.navigate("core.billing.addons", [:])
       }
     case .ready:
       let blocks = model.spec.blocks.filter { ScreenValues.condition($0.when, in: context) }
@@ -499,11 +524,9 @@ struct SpecScreenBody: View {
     if let link = action.link {
       let rendered = ScreenValues.render(link, in: scope)
       guard let url = URL(string: rendered.hasPrefix("/") ? session.origin + rendered : rendered) else { return }
-      if url.scheme == "https" || url.scheme == "http" {
-        await webAuthentication.openHostedPage(url)
-      } else {
-        openURL(url)
-      }
+      // A plain page (the live site, a preview, a docs link) shows in the in-app web sheet the app's root installs;
+      // the sign-in session is for OAuth and hosted payment steps only.
+      openURL(url)
       return
     }
     // A route is asked first what the action would do; its answer is `preview` in the confirmation.

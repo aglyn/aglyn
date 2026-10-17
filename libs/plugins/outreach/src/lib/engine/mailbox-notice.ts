@@ -52,6 +52,15 @@ export interface OutreachMailboxNotice {
 export interface OutreachMailboxNoticeEmail {
   subject: string
   text: string
+  /** What happened and what to do, without the link: the designed email's body. */
+  lead: string
+  /** "Label: value" lines for the designed email's details panel. */
+  details: string
+  /** The Mailboxes page, when there is one to link. */
+  url: string | null
+  urlLabel: string
+  /** Why this reader is getting it. */
+  reason: string
 }
 
 /** The mailbox as the notice names it: `Avery Quinn <avery@example.com>`, the send-as beside it when it differs. */
@@ -106,14 +115,24 @@ export function composeOutreachMailboxNotice(
   const where = options.mailboxesUrl
     ? `${action}\n\n${options.mailboxesUrl}`
     : `${action} Mailboxes is under Sequences in your workspace’s console.`
-  const text = [
-    paused ? `Sequences paused the mailbox ${name}.` : `The mailbox ${name} needs reconnecting.`,
-    String(notice.message ?? '').trim(),
-    waitingSentence(notice.waiting),
-    where,
-    'You are getting this because the mailbox is yours, or you manage the organization it belongs to.',
-  ]
-    .filter(Boolean)
-    .join('\n\n')
-  return { subject, text }
+  const reason = 'You are getting this because the mailbox is yours, or you manage the organization it belongs to.'
+  const opening = paused ? `Sequences paused the mailbox ${name}.` : `The mailbox ${name} needs reconnecting.`
+  const message = String(notice.message ?? '').trim()
+  const text = [opening, message, waitingSentence(notice.waiting), where, reason].filter(Boolean).join('\n\n')
+  const waiting = Math.max(0, Math.floor(Number(notice.waiting) || 0))
+  const details = [
+    `Mailbox: ${notice.mailbox.email}`,
+    `Status: ${paused ? 'Paused by Sequences' : 'Needs reconnecting'}`,
+    `Enrollments waiting: ${waiting.toLocaleString('en-US')}`,
+  ].join('\n')
+  const lead = [message || opening, waitingSentence(notice.waiting), action].join(' ')
+  return {
+    subject,
+    text,
+    lead,
+    details,
+    url: options.mailboxesUrl,
+    urlLabel: paused ? 'Open Mailboxes to resume' : 'Open Mailboxes to reconnect',
+    reason,
+  }
 }

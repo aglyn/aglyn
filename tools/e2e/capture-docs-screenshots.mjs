@@ -33,7 +33,7 @@
 // Each shot waits for seeded content, strips the emulator warning
 // banner and the Next dev indicator, and lets images/fonts settle.
 
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
@@ -43,6 +43,7 @@ import {
   preflightStaffOnlyChrome,
 } from './lib/staff-only-chrome.mjs'
 import { optimizePng } from './lib/optimize-png.mjs'
+import { chromeExecutable } from './lib/chrome-executable.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img')
@@ -101,6 +102,32 @@ const pickTeamDataset = [
   { click: 'role=combobox[name="Dataset"]' },
   { click: 'role=option[name="Team"]', waitFor: 'Avery Quinn', settleMs: 800 },
 ]
+
+/**
+ * Sites → Create site → Start with AI, then Next to `step` (AGL-3898), with a
+ * site name and a kind of site typed in. Plan my site is never pressed.
+ */
+function guidedStartTo(step) {
+  const next = (heading) => ({ click: 'role=button[name="Next"]', waitFor: heading, settleMs: 600 })
+  const actions = [
+    { click: 'role=button[name=/Create site/] >> nth=0', waitFor: 'How do you want to start?', settleMs: 1500 },
+    { fill: ['role=textbox[name=/Site name/]', 'Hillside Dog Grooming'], settleMs: 600 },
+    { click: 'role=button[name="Start with AI"]', waitFor: 'What are you building?', settleMs: 600 },
+    {
+      fill: ['role=textbox[name=/What kind of site are you creating/]', 'a neighborhood dog groomer that takes bookings'],
+      settleMs: 400,
+    },
+  ]
+  if (step === 'kind') return actions
+  actions.push(next('Who is it for?'))
+  actions.push({ fill: ['role=textbox[name=/Who is it for/]', 'local dog owners who want a regular groom booked online'], settleMs: 400 })
+  actions.push(next('Choose a style'))
+  if (step === 'style') return [...actions, { settleMs: 2500 }]
+  actions.push({ click: 'role=radio[name=/^Photography:/]', settleMs: 400 })
+  actions.push(next('A few details'))
+  actions.push(next('Review your site'))
+  return [...actions, { settleMs: 1500 }]
+}
 
 const shots = [
   {
@@ -430,6 +457,31 @@ const shots = [
     waitFor: 'Basic details',
     settleMs: 2500,
     actions: [{ scroll: 'text=Languages', settleMs: 1000 }],
+  },
+  // The guided start's steps (AGL-3898): Sites → Create site → Start with AI,
+// walked with Next to the style step and to the review. It stops there:
+// nothing presses Plan my site, and the emulated console holds no AI key.
+// The jobs route admits the seeded org only with the AI release flag on.
+  {
+    out: 'ai/start-with-ai-kind.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_ai_generative: true },
+    actions: guidedStartTo('kind'),
+  },
+  {
+    out: 'ai/start-with-ai-style.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_ai_generative: true },
+    actions: guidedStartTo('style'),
+  },
+  {
+    out: 'ai/start-with-ai-review.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_ai_generative: true },
+    actions: guidedStartTo('review'),
   },
   {
     out: 'ai/business-profile.png',
@@ -1206,30 +1258,6 @@ const shots = [
     settleMs: 3000,
   },
 ]
-
-// Chrome-flavor fallback, mirroring tools/e2e/console.e2e.mjs: the first
-// installed flavor wins so a Chrome update/uninstall can't break captures.
-function chromeExecutable() {
-  if (process.env.E2E_CHROME_PATH) {
-    return { executablePath: process.env.E2E_CHROME_PATH }
-  }
-  if (process.platform === 'darwin') {
-    const candidates = [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ]
-    for (const executablePath of candidates) {
-      try {
-        readFileSync(executablePath)
-        return { executablePath }
-      } catch {
-        // Not installed — try the next flavor.
-      }
-    }
-  }
-  return { channel: 'chrome' }
-}
 
 // `--only=` takes a comma-separated list of `out` substrings, so re-shooting
 // a scattered handful of images is one signed-in run rather than one per

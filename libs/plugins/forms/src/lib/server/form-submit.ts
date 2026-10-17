@@ -1063,7 +1063,11 @@ export async function POST(request: Request): Promise<Response> {
         ].join(' '),
         ...submissionsLink(hostId, submissionRef.id),
       },
-      { emailDetails: submissionEmailDetails(sanitizedFields, formFieldDecls) },
+      {
+        emailDetails: submissionEmailDetails(sanitizedFields, formFieldDecls),
+        // A reply from the manager's inbox goes to the visitor (AGL-3897).
+        ...(contactEmail ? { replyTo: contactEmail } : {}),
+      },
     )
     /*
      * THE LEAD, FOR THE SITE OWNER'S OWN AD ACCOUNTS (AGL-3694). Handed to

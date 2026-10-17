@@ -640,21 +640,18 @@ struct FormBlock: View {
           value: Binding(get: { values[field.key] ?? initialValue(field, in: scope) }, set: { values[field.key] = $0 }))
       }
       if let action = block["submit"].flatMap(ActionSpec.init), ScreenValues.condition(action.when, in: scope) {
-        Button {
-          submit(action, visibleOnly(filled, fields))
-        } label: {
-          HStack {
-            Spacer()
-            if busy { ProgressView().controlSize(.small) }
-            Text(action.label).font(AglynFont.button)
-            Spacer()
+        // One Save per form at the standard control size, trailing (spec 8): never a full-width bar per form.
+        HStack(spacing: AglynSpace.one) {
+          Spacer(minLength: 0)
+          if busy { ProgressView().controlSize(.small) }
+          Button(action.label) {
+            submit(action, visibleOnly(filled, fields))
           }
+          .buttonStyle(.borderedProminent)
+          .controlSize(.regular)
+          .disabled(busy || missing)
+          .accessibilityIdentifier("submit-\(block.id)")
         }
-        .buttonStyle(.borderedProminent)
-        .disabled(busy || missing)
-        .listRowBackground(Color.clear)
-        .listRowInsets(EdgeInsets())
-        .accessibilityIdentifier("submit-\(block.id)")
       }
     }
     .onAppear(perform: seed)

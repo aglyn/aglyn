@@ -149,6 +149,8 @@ export interface AiInsightDigestDeps {
     /** The site the digest is about, and the org whose brand it wears (AGL-3367). */
     siteName: string
     org: Record<string, unknown>
+    /** The designed email's merge values, from {@link aiInsightDigestEmailParts}. */
+    merge?: Record<string, string>
   }) => Promise<AiInsightDigestSendResult>
   /** The console's absolute origin for an email link, or `''` when none is configured. */
   consoleOrigin: string
@@ -222,6 +224,39 @@ export function aiInsightDigestEmailText(input: {
       ? `You asked for weekly insights for ${forWhom}. Turn them off in Notifications: ${input.settingsUrl}`
       : `You asked for weekly insights for ${forWhom}. Turn them off in your Notifications settings.`,
   ].join('\n')
+}
+
+/**
+ * The same digest as {@link aiInsightDigestEmailText}, cut into the parts the
+ * `ai-insights-digest` system email draws: the workspace and week above the
+ * heading, the insights as a numbered list, a button to the site's
+ * Analytics page, and why it came.
+ */
+export function aiInsightDigestEmailParts(
+  input: Parameters<typeof aiInsightDigestEmailText>[0],
+): Record<
+  'digest.eyebrow' | 'digest.intro' | 'digest.insights' | 'digest.analyticsUrl' | 'digest.why',
+  string
+> {
+  const workspace = input.workspaceName?.trim() || ''
+  const credits = Math.max(0, Math.round(Number(input.creditsSpent) || 0))
+  const forWhom = workspace || 'this workspace'
+  return {
+    'digest.eyebrow': [workspace, input.periodLabel?.trim()].filter(Boolean).join(' · '),
+    'digest.intro':
+      `What ${input.siteName}'s figures showed ${input.periodLabel ? 'last week' : 'this week'}. ` +
+      'Each one is traced to the figures it cites, so you can check it on the Analytics page.',
+    'digest.insights': input.insights.map((insight, index) => `${index + 1}. ${insight.text}`).join('\n\n'),
+    'digest.analyticsUrl': input.analyticsUrl ?? '',
+    'digest.why':
+      `You asked for weekly insights for ${forWhom}.` +
+      (credits
+        ? ` Writing these used ${credits.toLocaleString('en-US')} of ${workspace ? `${workspace}’s` : 'the workspace’s'} AI credits.`
+        : '') +
+      (input.settingsUrl
+        ? ` Turn them off in Notifications: ${input.settingsUrl}`
+        : ' Turn them off in your Notifications settings.'),
+  }
 }
 
 async function readUsers(firestore: Firestore, uids: readonly string[]) {
@@ -385,22 +420,24 @@ async function deliverOrgDigest(
       }
       const address = str(member.email ?? user?.get('email')).toLowerCase()
       if (address.includes('@')) {
+        const emailInput = {
+          siteName: site.name,
+          productName: branding.productName,
+          insights: record.insights,
+          analyticsUrl,
+          settingsUrl: origin ? `${origin}/manage/notifications` : null,
+          workspaceName: str(org['name']),
+          creditsSpent: job.creditsSpent,
+          periodLabel: aiInsightDigestPeriod(job.inputs, new Date(Number(marker.createdAtMs) || now.getTime())).label,
+        }
         const sent = await deps.send({
           to: address,
           subject: `Your weekly insights for ${site.name}`,
-          text: aiInsightDigestEmailText({
-            siteName: site.name,
-            productName: branding.productName,
-            insights: record.insights,
-            analyticsUrl,
-            settingsUrl: origin ? `${origin}/manage/notifications` : null,
-            workspaceName: str(org['name']),
-            creditsSpent: job.creditsSpent,
-            periodLabel: aiInsightDigestPeriod(job.inputs, new Date(Number(marker.createdAtMs) || now.getTime())).label,
-          }),
+          text: aiInsightDigestEmailText(emailInput),
           fromName: branding.fromName,
           siteName: site.name,
           org,
+          merge: aiInsightDigestEmailParts(emailInput),
         })
         if (sent.rateLimited) {
           // Nothing is marked, so the next run delivers this site whole.

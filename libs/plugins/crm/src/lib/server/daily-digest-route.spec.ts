@@ -455,21 +455,23 @@ describe('POST /api/crm/daily-digest (AGL-2619)', () => {
       priority: 'bulk',
       fromName: 'Aglyn',
     })
+    // The designed email (AGL-3897): the workspace and day, the summary,
+    // each list as a details panel, the button, and the other sites' leads.
     expect(annMail.text).toMatch(
-      /^Here is your Aglyn CRM in Acme for Saturday, September 5: 1 task due today, 1 overdue, 1 unworked lead\./,
+      /^Acme · Saturday, September 5\n\nYour day in the CRM\n\n1 task due today, 1 overdue, 1 unworked lead\./,
     )
-    expect(annMail.text).toContain('Overdue (1)\n- Call Jane · Main site · Thu, Sep 3, 8:00 AM CDT\n')
-    expect(annMail.text).toContain('Due today (1)\n- Send proposal · Main site · Sat, Sep 5, 9:00 AM CDT\n')
-    expect(annMail.text).toContain('- jane@example.com · Main site · first seen Sep 2')
+    expect(annMail.text).toContain('Overdue (1)\n\nCall Jane — Main site · Thu, Sep 3, 8:00 AM CDT\n')
+    expect(annMail.text).toContain('Due today (1)\n\nSend proposal — Main site · Sat, Sep 5, 9:00 AM CDT\n')
+    expect(annMail.text).toContain('jane@example.com — Main site · first seen Sep 2')
     expect(annMail.text).toContain(
       'Open your tasks: https://app.aglyn.com/acme/hosts/main/crm/tasks',
     )
     expect(annMail.text).toContain(
-      'Leads on Main site: https://app.aglyn.com/acme/hosts/main/crm/leads',
+      'Leads on Main site — https://app.aglyn.com/acme/hosts/main/crm/leads',
     )
     expect(annMail.text).toContain('https://app.aglyn.com/manage/notifications')
     expect(bobMail.to).toEqual(['bob@acme.com'])
-    expect(bobMail.text).toContain('- Joe <joe@example.com> · Shop · first seen Sep 1')
+    expect(bobMail.text).toContain('Joe <joe@example.com> — Shop · first seen Sep 1')
     expect(bobMail.text).not.toContain('jane@example.com')
     // The nurturing lead is counted for whoever it is for, and never listed.
     expect(annMail.text).toContain('1 lead is in sequences or campaigns.')

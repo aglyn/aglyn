@@ -123,12 +123,14 @@ func checkProductDraft(_ draft: ProductDraft) -> String? {
   if draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Product name is required" }
   if let problem = checkOptions(draft.options) { return problem }
   var skus = Set<String>()
+  // A product with no options has one variant, which a person knows only as "the price".
+  let named = !draft.options.isEmpty && draft.variants.count > 1
   for variant in draft.variants {
-    guard let price = centsFromText(variant.price) else { return "Enter a price for \(variant.label)" }
+    guard let price = centsFromText(variant.price) else { return named ? "Enter a price for \(variant.label)" : "Enter a price" }
     if price > maxPriceCents { return "Prices are capped at $\(maxPriceCents / 100)" }
     if !variant.compareAt.trimmingCharacters(in: .whitespaces).isEmpty {
       guard let compareAt = centsFromText(variant.compareAt) else {
-        return "Enter a compare-at price for \(variant.label), or leave it empty"
+        return named ? "Enter a compare-at price for \(variant.label), or leave it empty" : "Enter a compare-at price, or leave it empty"
       }
       if compareAt <= price { return "Compare-at price must exceed the price" }
     }

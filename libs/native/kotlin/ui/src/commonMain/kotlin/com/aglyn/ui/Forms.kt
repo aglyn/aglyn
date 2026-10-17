@@ -17,6 +17,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -75,23 +79,32 @@ fun ActionDialog(
   dismissLabel: String = "Cancel",
   content: (@Composable () -> Unit)? = null,
 ) {
+  // A screen's error outlives its dialogs: one already showing when this dialog opened (a refused publish behind a
+  // delete) is not this dialog's, so it waits for this dialog's own confirm before showing an error (AGL-3903).
+  val openedWith = remember { error }
+  var confirmed by remember { mutableStateOf(false) }
+  val shownError = if (confirmed) error else error?.takeIf { it != openedWith }
   AlertDialog(
     onDismissRequest = { if (!busy) onDismiss() },
     modifier = modifier.testTag("action-dialog"),
-    icon = icon?.let { name -> { Icon(AglynIcons.named(name), contentDescription = null) } },
+    // The glyph says what kind of act it is: the error color for a destructive one, else the brand primary.
+    icon = icon?.let { name -> { Icon(AglynIcons.named(name), contentDescription = null, tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) } },
     title = { Text(title) },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
         if (body != null) Text(body, style = MaterialTheme.typography.bodyMedium)
         content?.invoke()
-        if (error != null) NoticeBanner(error, StatusTone.ERROR)
+        if (shownError != null) NoticeBanner(shownError, StatusTone.ERROR, Modifier.testTag("action-dialog-error"))
       }
     },
     confirmButton = {
       // Material dialogs act through text buttons at the end; a destructive one is said in the error color, never as "OK".
       val tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
       TextButton(
-        onClick = onConfirm,
+        onClick = {
+          confirmed = true
+          onConfirm()
+        },
         enabled = confirmEnabled && !busy,
         colors = ButtonDefaults.textButtonColors(contentColor = tint),
         modifier = Modifier.testTag("action-dialog-confirm"),

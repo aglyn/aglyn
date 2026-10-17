@@ -9,6 +9,33 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.264 — 2026-10-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.263...v1.0.0-beta.264)
+
+### Added
+
+- **apple:** product header + grouped toolbar, upsells, alerts, one Save, polished sign-in ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **native:** mark the apps' web views and name the Besigner natively ([AGL-3894](https://linear.app/aglyn/issue/AGL-3894))
+- **native-android:** material 3 list rows, quiet placeholders, tooltips, dialogs ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **apple:** one soft selection on every list; quiet pick placeholders ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **apple:** shared selection style, sidebar lockup + switcher footer ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+
+### Fixed
+
+- **e2e:** stop headless Chrome leaving 1.4 GB code_sign_clone copies ([AGL-3904](https://linear.app/aglyn/issue/AGL-3904))
+- **console:** /auth/native reads its query when used, not at render ([AGL-3902](https://linear.app/aglyn/issue/AGL-3902))
+- **ai:** a nonprofit's photo words say charity, never community ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856), [AGL-975](https://linear.app/aglyn/issue/AGL-975))
+- **native:** the register never asks for notifications it is never sent ([AGL-3901](https://linear.app/aglyn/issue/AGL-3901))
+- **auth:** let the sign-up canary pass the SSO domain rule by plus tag ([AGL-3877](https://linear.app/aglyn/issue/AGL-3877))
+- **pos:** the register's orders zone takes no room when it draws nothing ([AGL-3900](https://linear.app/aglyn/issue/AGL-3900))
+- **console:** keep the Besigner's browser chrome out of the apps ([AGL-3894](https://linear.app/aglyn/issue/AGL-3894))
+- **e2e:** the guided-start run loads again; products start at the default price ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **ai:** no empty picture card ships; an unknown business is searched by its kind ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+- **ai:** a record's cover alt says what its photo shows, never its title ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+- **ai:** stock photos read a gym by its name, never a railway; alts are phrases ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+- **ai:** take a photo cover with no photo out, so its section shows its band ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+
 ## v1.0.0-beta.263 — 2026-10-17
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.262...v1.0.0-beta.263)

@@ -541,7 +541,7 @@ async function handler(request: Request): Promise<Response> {
               // AGL-2139, as on the invite beside it.
               ...brandMergeTokens(branding),
               'org.name': String(orgName),
-              'member.role': role,
+              'member.role': role.charAt(0).toUpperCase() + role.slice(1),
               signInUrl: origin,
             },
             {
