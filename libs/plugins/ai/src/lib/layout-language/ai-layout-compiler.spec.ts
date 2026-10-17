@@ -899,6 +899,41 @@ describe('repeats (rule 1)', () => {
     expect(compiled.itemIds[1]).toEqual([])
   })
 
+  /*
+   * Live on forge-line-strength-club.aglyn.app (beta.261, AGL-3886): a
+   * "How your first week works" band in the olive brand color drew its steps
+   * compact, and each step's words under its title in the muted text color,
+   * about 1.6:1 on the band. On a brand band they take the band's own color.
+   */
+  it('draws a compact group’s secondary words in a brand band’s own color, and leaves them muted elsewhere', () => {
+    const steps: AiLayoutBlock = {
+      kind: 'steps',
+      items: [
+        { title: 'Tell us about you', text: 'Share your goals and your experience.' },
+        { title: 'Meet your coach', text: 'A first session to learn the lifts.' },
+        { title: 'Train', text: 'Three classes in your first week.' },
+      ],
+    }
+    const pairsOn = (band: AiLayoutSection['band']) => {
+      const { stored, report } = build(
+        [
+          { blocks: [{ kind: 'heading', text: 'Strength for everyone' }] },
+          { band, blocks: [{ kind: 'heading', text: 'How your first week works' }, steps] },
+        ],
+        { ...pagePlan, sections: pagePlan.sections.map((entry) => ({ ...entry, uses: [] })) },
+        true,
+      )
+      expect(report.violations).toEqual([])
+      return Object.values(stored.nodes).filter((node) => node.componentId === 'muiListItemText')
+    }
+    const onBrand = pairsOn('brand')
+    expect(onBrand).toHaveLength(3)
+    for (const pair of onBrand) expect(pair.props).toMatchObject({ secondaryColor: 'inherit' })
+    const onPlain = pairsOn('plain')
+    expect(onPlain).toHaveLength(3)
+    for (const pair of onPlain) expect(pair.props?.['secondaryColor']).toBeUndefined()
+  })
+
   it('draws the same cards in full on a workspace that keeps none', () => {
     const { compiled, report } = build(
       [

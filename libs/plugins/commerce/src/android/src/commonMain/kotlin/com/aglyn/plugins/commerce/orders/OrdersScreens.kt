@@ -85,10 +85,12 @@ import com.aglyn.ui.AmountRow
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.MetricCard
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -139,7 +141,7 @@ fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null) {
     list = { selected, onSelect -> OrdersList(context, model, selected, onSelect) },
     detail = { selected ->
       if (selected == null) {
-        EmptyState("Pick an order to see it here", icon = AglynIcons.named("receipt"))
+        SelectionPlaceholder("Pick an order to see it here", icon = AglynIcons.named("receipt"))
       } else {
         OrderDetailPane(context, selected, onChanged = { model.reload() })
       }
@@ -281,7 +283,7 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
       is Load.Failed -> EmptyState(
         "Could not load orders",
         body = rows.message,
-        icon = AglynIcons.named("error"),
+        icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
         action = { OutlinedButton(onClick = { model.reload() }) { Text("Try again") } },
       )
       is Load.Ready -> if (rows.value.isEmpty()) {
@@ -383,7 +385,7 @@ fun OrderDetailPane(context: NativePluginContext, orderId: String, onChanged: ()
   LaunchedEffect(actions.done) { if (actions.done != null) onChanged() }
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this order", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this order", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val doc = value.value
       if (doc == null) {

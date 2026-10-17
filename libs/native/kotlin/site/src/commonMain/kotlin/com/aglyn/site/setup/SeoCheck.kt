@@ -51,6 +51,7 @@ import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
@@ -215,9 +216,9 @@ internal fun SeoTargetKeywords(rows: List<SeoTargetKeywordRow>, onChange: (List<
             enabled = enabled,
             allowEmpty = false,
           )
-          IconButton(onClick = { onChange(rows.filterIndexed { at, _ -> at != index }) }, enabled = enabled) {
+          WithTooltip("Remove this page's keywords") { IconButton(onClick = { onChange(rows.filterIndexed { at, _ -> at != index }) }, enabled = enabled) {
             Icon(AglynIcons.named("close"), contentDescription = "Remove this page's keywords")
-          }
+          } }
         }
         if (row.keywords.isNotEmpty()) {
           FlowRow(horizontalArrangement = Arrangement.spacedBy(space(0.5f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {

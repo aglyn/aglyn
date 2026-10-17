@@ -80,7 +80,7 @@ describe('RETENTION_SYSTEM_EMAIL_TEMPLATES', () => {
       const copy = [
         entry.defaultSubject,
         ...(entry.defaultBody ?? []).map((block) =>
-          block.block === 'text' ? block.text : block.label,
+          block.block === 'text' ? block.text : block.block === 'html' ? block.html : block.label,
         ),
       ].join('\n')
       expect(copy).not.toMatch(/screen/i)
@@ -171,7 +171,7 @@ describe('the getting-started emails’ docs links', () => {
       expect(declared.length).toBeGreaterThanOrEqual(1)
       expect(declared.length).toBeLessThanOrEqual(2)
       const copy = (entry.defaultBody ?? [])
-        .map((block) => (block.block === 'text' ? block.text : block.href))
+        .map((block) => (block.block === 'text' ? block.text : block.block === 'html' ? block.html : block.href))
         .join('\n')
       for (const name of declared) expect(copy).toContain(`{{${name}}}`)
       // No docs token in the copy that the email does not declare: a token

@@ -1,6 +1,8 @@
 package com.aglyn.plugins.redirects
 
 import androidx.compose.foundation.layout.Arrangement
+import com.aglyn.ui.EmptyTone
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SwitchRow
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.ChoiceChipRow
@@ -83,7 +85,7 @@ fun RedirectsListScreen(context: NativePluginContext) {
           is Live.Failed -> EmptyState(
             "Could not load this site's redirects",
             body = "Check the connection and try again.",
-            icon = AglynIcons.named("error"),
+            icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
           )
           is Live.Ready -> LazyColumn(Modifier.fillMaxSize().testTag("redirects-list")) {
             if (live.value.isEmpty()) {
@@ -111,7 +113,7 @@ fun RedirectsListScreen(context: NativePluginContext) {
       // A deleted redirect leaves the list, and its detail closes with it.
       CloseWhenGone((live as? Live.Ready)?.let { row != null })
       if (row == null) {
-        EmptyState("Pick a redirect to see it here", icon = AglynIcons.named("alt_route"))
+        SelectionPlaceholder("Pick a redirect to see it here", icon = AglynIcons.named("alt_route"))
       } else {
         RedirectDetail(row, editor)
       }

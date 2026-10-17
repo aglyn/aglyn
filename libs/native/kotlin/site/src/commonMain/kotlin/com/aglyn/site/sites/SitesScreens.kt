@@ -55,6 +55,7 @@ import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.ListHeader
 import com.aglyn.ui.LoadContent
 import com.aglyn.ui.LoadMoreEffect
@@ -63,6 +64,7 @@ import com.aglyn.ui.RefreshableBox
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -137,7 +139,7 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null) {
       }
     },
     detail = { selected ->
-      if (selected == null) EmptyState("Pick a site to see it here", icon = AglynIcons.named("public"))
+      if (selected == null) SelectionPlaceholder("Pick a site to see it here", icon = AglynIcons.named("public"))
       else SiteOverview(context, selected)
     },
   )
@@ -175,7 +177,7 @@ fun SiteOverview(context: NativePluginContext, hostId: String) {
   val uri = LocalUriHandler.current
   when (live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this site", body = "You may no longer have access to it.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this site", body = "You may no longer have access to it.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val doc = live.value ?: return EmptyState("This site is gone", icon = AglynIcons.named("public"))
       val now = remember(doc) { nowMillis() }

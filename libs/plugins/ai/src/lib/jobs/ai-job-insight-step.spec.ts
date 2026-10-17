@@ -376,6 +376,25 @@ describe('the weekly digest', () => {
     // A digest reports the week's figures; the site's status is not one of them.
     expect(record.tables.map((table) => table.reader)).not.toContain('site.status')
   })
+
+  it('reads a digest over the Monday-to-Sunday week it was made for, whenever it runs (AGL-3867)', async () => {
+    mockRunAiRequest.mockResolvedValueOnce(
+      called(AI_INSIGHT_ANSWER_TOOL_NAME, { insights: [{ text: 'Page views rose 14.7%.', cites: [{ table: 't1', rows: [0] }] }], gap: null }),
+    )
+    const asked: Date[] = []
+    const read = traffic.read
+    traffic.read = async (request) => {
+      asked.push(request.now)
+      return read(request)
+    }
+    try {
+      // NOW is the Wednesday after: a late beat still reads the week it was made for.
+      await run({ inputs: { surface: 'digest', week: '2026-W38', through: '2026-09-13' }, brief: 'Weekly insights for Acme' })
+    } finally {
+      traffic.read = read
+    }
+    expect(asked).toEqual([new Date('2026-09-13T23:59:59.999Z')])
+  })
 })
 
 describe('admission', () => {

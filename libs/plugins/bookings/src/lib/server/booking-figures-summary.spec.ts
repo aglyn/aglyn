@@ -48,11 +48,20 @@ describe('bookings in the weekly summary (AGL-3867)', () => {
       { service: 'Haircut', booked: 4, canceled: 1, change: null },
       { service: 'Color', booked: 2, canceled: 0, change: null },
     ])
-    expect(summary?.lines(bookings)).toEqual(['Bookings: 6 (+20%), 1 canceled (Haircut 4, Color 2)'])
-    expect(summary?.headline?.(bookings)).toEqual({ count: 6, one: 'booking', many: 'bookings' })
+    expect(summary?.summarize(bookings)).toEqual({
+      title: 'Bookings',
+      stats: [
+        { label: 'Booked', value: '6', change: 20, total: { count: 6, one: 'booking', many: 'bookings' } },
+        { label: 'Canceled', value: '1' },
+      ],
+      rows: [
+        { label: 'Haircut', value: '4' },
+        { label: 'Color', value: '2' },
+      ],
+    })
   })
 
   it('says nothing for a week with none', () => {
-    expect(summary?.lines(table(columns, [{ service: 'All services', booked: 0, canceled: 0, change: null }]))).toEqual([])
+    expect(summary?.summarize(table(columns, [{ service: 'All services', booked: 0, canceled: 0, change: null }]))).toBeNull()
   })
 })

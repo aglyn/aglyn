@@ -106,13 +106,15 @@ fun trafficDayOf(id: String, data: Map<String, Any?>?): TrafficDay = TrafficDay(
 )
 
 /**
- * The newest documents of `hosts/{id}/analytics`, by id (a UTC day): a day
- * with no visits has no document, so the newest `2 × range` documents always
- * hold every day of both windows, and the rest are dropped by id.
+ * Both windows' documents of `hosts/{id}/analytics`, by id (a UTC day) from the oldest day of the two on: a day with no
+ * visits has no document, so at most `2 × range` documents hold every day of both windows, and the rest are dropped by
+ * id. Ascending from that day, which the Firestore emulator answers too: it refuses a descending scan of ids, so the
+ * card never loaded on the local stack (AGL-3863 on the Apple app).
  */
-fun trafficQuery(hostId: String, range: Int) = FirestoreQuery(
+fun trafficQuery(hostId: String, range: Int, nowMs: Long) = FirestoreQuery(
   "hosts/$hostId/analytics",
-  orderBy = listOf(FirestoreOrder("__name__", descending = true)),
+  filters = listOf(FirestoreFilter("__name__", FilterOp.GTE, "hosts/$hostId/analytics/${recentDayIds(nowMs, range * 2).last()}")),
+  orderBy = listOf(FirestoreOrder("__name__")),
   limit = range * 2,
 )
 
@@ -173,7 +175,7 @@ internal fun AnalyticsScreen(services: ShellServices, context: ShellPluginContex
   val hostId = context.hostId ?: return EmptyState("Pick a site first", body = "Analytics are one site's.", icon = AglynIcons.named("public"))
   var range by remember { mutableStateOf(14) }
   val now = remember(range) { nowMillis() }
-  val traffic by remember(hostId, range) { services.firestore.observe(trafficQuery(hostId, range)) }.collectAsState(Live.Loading)
+  val traffic by remember(hostId, range) { services.firestore.observe(trafficQuery(hostId, range, now)) }.collectAsState(Live.Loading)
   val version by services.registry.version.collectAsState()
   val slot = remember(version) { services.registry.widgets(NativeApp.AGLYN, HOST_ANALYTICS_SLOT) }
 

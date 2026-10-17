@@ -19,7 +19,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.VerticalDivider
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -88,33 +94,54 @@ fun AglynNavigationSuite(
   val colors = MaterialTheme.colorScheme
   if (widthClass == WidthClass.EXPANDED || widthClass == WidthClass.LARGE) {
     Row(modifier.fillMaxSize().testTag("nav-drawer")) {
-      PermanentDrawerSheet(Modifier.width(264.dp), drawerContainerColor = colors.surfaceContainerLow) {
+      PermanentDrawerSheet(Modifier.width(280.dp), drawerContainerColor = colors.surfaceContainerLow) {
         Column(Modifier.fillMaxHeight()) {
-          drawerHeader()
-          Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
-            for (destination in destinations) {
-              destination.section?.let {
-                Text(
-                  it,
-                  Modifier.padding(start = 16.dp, top = 16.dp, bottom = 6.dp),
-                  style = MaterialTheme.typography.labelMedium,
-                  color = colors.onSurfaceVariant,
+          // The lockup scrolls with the rows, so it never sits over them; the switcher stays put at the foot.
+          Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            drawerHeader()
+            Column(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+              for (destination in destinations) {
+                destination.section?.let {
+                  if (it.isEmpty()) {
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                  } else {
+                    Text(
+                      it,
+                      Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp).semantics { heading() },
+                      style = MaterialTheme.typography.titleSmall,
+                      color = colors.onSurfaceVariant,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                    )
+                  }
+                }
+                val isSelected = destination.key == selected
+                NavigationDrawerItem(
+                  modifier = Modifier.height(56.dp).testTag("nav-${destination.key}"),
+                  selected = isSelected,
+                  onClick = { onSelect(destination.key) },
+                  icon = { Icon(destination.icon, contentDescription = null) },
+                  label = {
+                    Text(
+                      destination.label,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                      fontWeight = if (isSelected) FontWeight.SemiBold else null,
+                    )
+                  },
+                  colors = NavigationDrawerItemDefaults.colors(
+                    unselectedContainerColor = Color.Transparent,
+                    selectedContainerColor = colors.primaryContainer,
+                    selectedIconColor = colors.onPrimaryContainer,
+                    selectedTextColor = colors.onPrimaryContainer,
+                    unselectedIconColor = colors.onSurfaceVariant,
+                    unselectedTextColor = colors.onSurface,
+                  ),
                 )
               }
-              NavigationDrawerItem(
-                modifier = Modifier.testTag("nav-${destination.key}"),
-                selected = destination.key == selected,
-                onClick = { onSelect(destination.key) },
-                icon = { Icon(destination.icon, contentDescription = null) },
-                label = { Text(destination.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                colors = NavigationDrawerItemDefaults.colors(
-                  selectedContainerColor = colors.primaryContainer,
-                  selectedIconColor = colors.onPrimaryContainer,
-                  selectedTextColor = colors.onPrimaryContainer,
-                ),
-              )
             }
           }
+          HorizontalDivider()
           drawerFooter()
         }
       }

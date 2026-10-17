@@ -139,11 +139,13 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#generate-for-several-sites-at-once': 'On the Sites page of your organization, Generate for several sites runs one brief across many of your sites, changing the business name, the city and the brand for each.',
   },
   aiSiteLooks: {
-    '#choose-a-style': 'The Style step of Start your site offers these styles. One is picked for you from what you said the site is; choose another to change it.',
+    '#choose-a-style': 'The Style step of Start your site offers these styles, each as a card with a picture of the starter home page drawn in it.',
   },
   aiStart: {
+    '#audience': 'Who is it for? is optional. It is who every page and every search listing is written for, and it decides which questions the contact form asks.',
     '#details': 'Where do form submissions go? decides where messages from the site\'s contact form land: You can change this on the form itself afterwards.',
     '#how-do-you-want-to-start': 'The first step asks for the site\'s Site name and Subdomain, its free address on Aglyn.',
+    '#review': 'The last step lists every answer: the kind of site, who it is for, the style, where form submissions go, the pages and, on a paid plan, the welcome email.',
     '#the-sites-search-listing': 'The site\'s own search title and description, the fallback for every page without its own, are not saved for you.',
     '#your-business': 'What kind of site are you creating? is the one required answer.',
   },
@@ -248,7 +250,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#alerts-on-this-device': 'At the foot of the Settings section, three switches control how a new notification reaches you in this browser: Unread count in tab title — badges the browser tab, e.g.',
     '#all-notifications': 'The All notifications card is your whole feed, newest first, across every workspace you belong to: Mark all read clears it, and Filters narrows it by type or status.',
     '#choose-a-workspace': 'If you belong to more than one organization, signing in opens Workspaces: one card per workspace, with its name, its workspace address underneath, and Open, which takes you to its sites.',
-    '#daily-digests': 'Weekly summary is on by default, for every workspace you own or are an admin of.',
+    '#daily-digests': 'Weekly summary is on by default. Each Monday morning it emails you how the week before went, Monday to Sunday, for up to five of a workspace\'s busiest sites.',
     '#notification-settings': 'Everything about what reaches you lives on the second section, Settings.',
     '#organization-general': 'The General card renames the organization, changes its workspace URL and sets the time zone its sites inherit — "workspace" is the console\'s word for your organization\'s home.',
     '#organization-settings': 'Organization → Settings is where you run the workspace itself: its name and workspace URL under General, then — for owners and admins — Profile, Plugins, API keys, Branding, Single sign-on, Privacy, Holds & reviews…',

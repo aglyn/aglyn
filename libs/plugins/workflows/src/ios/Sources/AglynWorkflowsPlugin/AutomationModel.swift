@@ -141,13 +141,16 @@ func isDeleted(_ data: [String: Any]) -> Bool {
 /// `a.name.localeCompare(b.name)`.
 func byName(_ a: String, _ b: String) -> Bool { a.localizedCompare(b) == .orderedAscending }
 
-/// Step labels joined as the lists caption them: `Send an email → Wait`.
+/// Step labels joined as the lists caption them: `Send an email → Wait`; a step with no label is left out.
 func stepLabels(_ steps: [Any]?) -> String {
   (steps ?? []).map { step in
     let type = (step as? [String: Any])?["type"] as? String ?? ""
     return hostActionStepLabel(type) ?? type
-  }.joined(separator: " → ")
+  }.filter { !$0.isEmpty }.joined(separator: " → ")
 }
+
+/// A row's caption parts joined with ` · `, an empty one left out rather than leaving a dangling separator.
+func captionOf(_ parts: String?...) -> String { parts.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ") }
 
 // MARK: - Rows
 
@@ -168,8 +171,9 @@ struct WorkflowRow: Identifiable, Equatable {
   /// `2 steps · on Form submitted · double → quote`.
   var caption: String {
     let count = steps.count
-    let names = steps.map { (($0 as? [String: Any])?["functionName"] as? String) ?? "" }.joined(separator: " → ")
-    return "\(count) step\(count == 1 ? "" : "s")\(triggerEvent.map { " · on \(hostEventLabel($0))" } ?? "") · \(names)"
+    // An Actions step calls no function, so it names none.
+    let names = steps.compactMap { ($0 as? [String: Any])?["functionName"] as? String }.filter { !$0.isEmpty }.joined(separator: " → ")
+    return captionOf("\(count) step\(count == 1 ? "" : "s")", triggerEvent.map { "on \(hostEventLabel($0))" }, names)
   }
 
   static func == (a: Self, b: Self) -> Bool { a.id == b.id && a.caption == b.caption && a.name == b.name }
@@ -193,7 +197,7 @@ struct ActionRow: Identifiable {
 
   var enabled: Bool { !looseIsFalseValue(data["enabled"]) }
   var event: String { ((data["trigger"] as? [String: Any])?["event"] as? String) ?? "" }
-  var caption: String { "on \(hostEventLabel(event)) · \(stepLabels(data["steps"] as? [Any]))" }
+  var caption: String { captionOf("on \(hostEventLabel(event))", stepLabels(data["steps"] as? [Any])) }
   var placeholders: [InteractionPlaceholder] { interactionPlaceholders(data) }
   var testable: Bool { isSiteEventType(event) }
 }
@@ -276,7 +280,7 @@ struct OrgAutomationRow: Identifiable {
 
   var enabled: Bool { !looseIsFalseValue(data["enabled"]) }
   var event: String { ((data["trigger"] as? [String: Any])?["event"] as? String) ?? "" }
-  var caption: String { "on \(hostEventLabel(event)) · \(stepLabels(data["steps"] as? [Any]))" }
+  var caption: String { captionOf("on \(hostEventLabel(event))", stepLabels(data["steps"] as? [Any])) }
   var visibleTo: [String] { (data["visibleTo"] as? [Any] ?? []).compactMap { $0 as? String } }
   var orgWide: Bool { visibleTo.contains("org") }
   var placedHostIDs: [String] { visibleTo.compactMap { $0.hasPrefix("host:") ? String($0.dropFirst(5)) : nil } }

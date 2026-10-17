@@ -279,4 +279,22 @@ final class SetupTests: XCTestCase {
     XCTAssertFalse(rows.isEmpty)
     XCTAssertEqual(ContractValues.shared.tenantEmailCollection, "emailTemplates")
   }
+
+  func testTheThemeLibraryListsOnlyTheSitesOwnAndInstalledThemesEachByItsKind() {
+    func entry(_ id: String, _ kind: String?, _ name: String) -> FirestoreDocument {
+      var data: [String: Any] = ["name": name]
+      if let kind { data["kind"] = kind }
+      return FirestoreDocument(id: id, data: data)
+    }
+    let listed = libraryThemes([
+      entry("default", "default", "Platform default"),
+      entry("installed--harvest", "installed", "Harvest"),
+      entry("preset--mui", "preset", "Material UI"),
+      entry("theme-cool", "custom", "Cool"),
+      entry("theme-warm", "custom", "Warm"),
+      entry("unknown", nil, "No kind"),
+    ])
+    XCTAssertEqual(listed.map(\.id), ["theme-cool", "theme-warm", "installed--harvest"])
+    XCTAssertEqual(listed.map(\.kind), ["custom", "custom", "installed"])
+  }
 }

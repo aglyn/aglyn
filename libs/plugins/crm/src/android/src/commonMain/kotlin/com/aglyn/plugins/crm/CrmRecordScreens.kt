@@ -51,6 +51,7 @@ import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.FormSheet
 import com.aglyn.ui.Busy
 import com.aglyn.ui.ActionDialog
@@ -72,9 +73,11 @@ import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.PropertyRow
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.fieldDisplay
 import com.aglyn.ui.fieldProblems
 import com.aglyn.ui.isoDayMillis
@@ -153,7 +156,7 @@ fun RecordsSection(
         ) { row ->
           AglynListItem(
             title = row.title,
-            supporting = row.subtitle.ifBlank { null },
+            supporting = row.listSubtitle(reference).ifBlank { null },
             icon = AglynIcons.named(kind.icon),
             selected = row.id == selected,
             trailing = row.chip?.let { { StatusChip(it, chipTone(kind, row)) } },
@@ -165,7 +168,7 @@ fun RecordsSection(
     },
     detail = { selected ->
       if (selected == null) {
-        EmptyState("Pick a ${kind.singular.lowercase()} to see it here", icon = AglynIcons.named(kind.icon))
+        SelectionPlaceholder("Pick a ${kind.singular.lowercase()} to see it here", icon = AglynIcons.named(kind.icon))
       } else {
         RecordDetail(context, kind, selected, scope, api, reference)
       }
@@ -206,7 +209,7 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, scope:
   CloseWhenGone((live as? Live.Ready)?.let { it.value != null })
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this ${kind.singular.lowercase()}", body = value.error.message, icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this ${kind.singular.lowercase()}", body = value.error.message, icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val doc = value.value
       if (doc == null) {
@@ -373,7 +376,7 @@ private fun RelatedCard(context: NativePluginContext, kind: CrmKind, id: String,
       rows.forEach { item ->
         AglynListItem(
           item.title,
-          supporting = item.subtitle.ifBlank { null },
+          supporting = item.listSubtitle(reference).ifBlank { null },
           icon = AglynIcons.named(relatedKind.icon),
           trailing = item.chip?.let { { StatusChip(it, chipTone(relatedKind, item)) } },
           onClick = { context.navigate(relatedKind.detailScreen, mapOf(relatedKind.param to item.id)) },
@@ -429,7 +432,7 @@ private fun TimelineCard(context: NativePluginContext, kind: CrmKind, id: String
         ).joinToString("\n"),
         icon = AglynIcons.named(when (activityKind) { "call" -> "call"; "email" -> "mail"; "meeting" -> "groups"; else -> "sticky_note" }),
         trailing = if (scope.canWrite && doc.string("byUid") == scope.uid && activityKind != "email") ({
-          IconButton(onClick = { deleting = doc.id }) { Icon(AglynIcons.named("delete"), contentDescription = "Delete this entry") }
+          WithTooltip("Delete this entry") { IconButton(onClick = { deleting = doc.id }) { Icon(AglynIcons.named("delete"), contentDescription = "Delete this entry") } }
         }) else null,
       )
     }

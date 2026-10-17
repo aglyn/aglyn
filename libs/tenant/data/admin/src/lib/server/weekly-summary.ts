@@ -16,7 +16,6 @@
  */
 
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
-import { brandSupportLine } from '@aglyn/aglyn/app-utils/brand-support-line'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { writeCronBeat } from '@aglyn/aglyn/app-utils/health-report'
 import {
@@ -25,6 +24,8 @@ import {
   INSIGHT_DIGESTS_FIELD,
   insightDigestSubscribed,
 } from '@aglyn/aglyn/app-utils/notifications'
+import { liveCustomDomain, TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
+import { hostRoleFor } from '@aglyn/aglyn/app-utils/organizations'
 import {
   checkEntitlement,
   resolveBrandingProfile,
@@ -37,20 +38,29 @@ import {
   type ReleaseFlagKey,
 } from '@aglyn/aglyn/app-utils/release-flags'
 import {
-  composeWeeklySummaryEmailText,
-  composeWeeklySummarySubject,
+  composeWeeklySummaryOverviewEmail,
+  composeWeeklySummarySiteEmail,
   WEEKLY_SUMMARY_DAYS,
   WEEKLY_SUMMARY_DIGEST_KEY,
+  weeklySummaryHasNews,
   weeklySummaryPeriod,
-  type WeeklySummaryEntry,
+  type WeeklySummaryColors,
+  type WeeklySummaryEmail,
   type WeeklySummarySite,
 } from '@aglyn/aglyn/app-utils/weekly-summary'
 import {
   normalizePluginFigureTable,
   pluginFigureSummarySection,
+  type PluginFigureSummaryPart,
   type ResolvedPluginFigureReader,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
-import { rateLimitedRetryAtMs, sendEmail } from '@aglyn/shared-util-email'
+import {
+  emailAccent,
+  PLATFORM_EMAIL_PALETTE,
+  rateLimitedRetryAtMs,
+  resolveEmailColor,
+  sendEmail,
+} from '@aglyn/shared-util-email'
 import { withoutMailWithheldAccounts } from './account-mail'
 import { findUserByUidAcrossPools } from './auth-pools'
 import { isCronAuthorized, isCronDryRun } from './cron-auth'
@@ -65,6 +75,7 @@ import {
   renderLoadedSystemEmail,
   systemEmailBrand,
   systemEmailContent,
+  systemEmailTheme,
   type LoadedSystemEmail,
 } from './render-system-email'
 
@@ -72,14 +83,23 @@ import {
  * THE WEEKLY SUMMARY'S SENDS (AGL-3867): `POST /api/admin/weekly-summary`,
  * Mondays at 13:00 UTC (08:00 Central) from `scheduled-crons.yml`.
  *
- * ## Who is told
+ * ## What is sent, and to whom
  *
- * A workspace's owners and admins: the people who reach every site and every
- * figure, so one set of figures per workspace is true for each of them. The
- * **Weekly summary** switch on their own account
- * (`users/{uid}.digestPrefs.weeklySummary`, on until turned off) governs it.
- * A locked or disabled account, a suppressed address and a suspended member
- * are not mailed.
+ * One email for each of a workspace's sites that had something to report,
+ * and a workspace overview that adds them up: totals across the sites, a line
+ * for each, and the workspace's own figures, such as its deals.
+ *
+ *  - The workspace's owners and admins get the overview and every site's
+ *    email. In a workspace where only one site had anything to report, the
+ *    overview would repeat it, so that site's email carries the workspace's
+ *    own figures instead and no overview is sent.
+ *  - A member who is an admin of a site, without being one of the
+ *    workspace's, gets that site's email: they run it.
+ *
+ * The **Weekly summary** switch on each person's account
+ * (`users/{uid}.digestPrefs.weeklySummary`, on until turned off) governs all
+ * of it. A locked or disabled account, a suppressed address and a suspended
+ * member are not mailed.
  *
  * ## What it reads
  *
@@ -88,21 +108,22 @@ import {
  * `weeklySummary`, and the workspace through every workspace reader that
  * does. Each reader is offered only where its plan feature is included and
  * its plugin runs (`eligibleFigureReaders`), read over the seven whole days
- * before the run, and worded by its owner. A reader that fails is left out;
- * the rest are still read.
+ * before the run, and summarized by its owner. A reader that fails is left
+ * out; the rest are still read. Every figure is read once per workspace, and
+ * every recipient is sent the same figures.
  *
  * ## Once a week, and resumable
  *
- * `orgs/{orgId}/weeklySummaries/{week}` records each person sent, stamped
- * after each send, so a run that dies mid-workspace re-sends only to those it
- * never reached and a second run in the same week sends nothing. Workspaces
- * are swept in id order behind a cursor, the `done: false` loop the workflow
- * already runs for the CRM digest.
+ * `orgs/{orgId}/weeklySummaries/{week}.sent.{uid}.{email}` records each
+ * email sent — `overview`, or a site's id — stamped after each send, so a run
+ * that dies mid-workspace sends only what never went, and a second run in the
+ * same week sends nothing. Workspaces are swept in id order behind a cursor,
+ * the `done: false` loop the workflow already runs for the CRM digest.
  *
  * The email is a `bulk` send under the platform send-rate governor: a refusal
- * stops the run and answers `done: true`, and the unsent are picked up by a
- * manual re-run in the same week. Metered as PLATFORM mail, not the
- * workspace's: it is the platform reporting to the people who run it.
+ * stops the run and answers `done: true`, and a manual re-run in the same week
+ * picks up the rest. Metered as PLATFORM mail, not the workspace's: it is the
+ * platform reporting to the people who run it.
  */
 
 type Firestore = FirebaseFirestore.Firestore
@@ -114,13 +135,20 @@ export const WEEKLY_SUMMARY_JOB_ID = 'weekly-summary'
 /** `orgs/{orgId}/weeklySummaries/{week}` — server-written, matched by no rule. */
 export const WEEKLY_SUMMARY_MARKERS = 'weeklySummaries'
 
+/** The marker key of the overview; a site's email is keyed by the site's id. */
+export const WEEKLY_SUMMARY_OVERVIEW = 'overview'
+
+/** The system emails: the overview, and one site's. */
+export const WEEKLY_SUMMARY_TEMPLATE = 'weekly-summary'
+export const WEEKLY_SUMMARY_SITE_TEMPLATE = 'weekly-summary-site'
+
 /** Workspaces per invocation; a chunk that times out never advances its cursor. */
 export const WEEKLY_SUMMARY_ORG_CHUNK = 20
 
 /** Sites a workspace's sweep ranks, by document id. */
 export const WEEKLY_SUMMARY_HOST_READ_LIMIT = 50
 
-/** Sites one summary reports on: the busiest by last week's page views. */
+/** Sites a week's summary reports on: the busiest by last week's page views. */
 export const WEEKLY_SUMMARY_MAX_SITES = 5
 
 /** Members per workspace whose address is chased through the auth pools when their member document has none. */
@@ -129,6 +157,18 @@ export const WEEKLY_SUMMARY_MAX_UID_LOOKUPS = 5
 /** How long one call works before it stops and leaves the rest to the next. */
 export const WEEKLY_SUMMARY_RUN_BUDGET_MS = 45_000
 
+/** The theme tokens each color of the layout is drawn from. */
+const COLOR_TOKENS: Record<keyof WeeklySummaryColors, string> = {
+  text: 'text.primary',
+  muted: 'text.secondary',
+  border: 'divider',
+  surface: 'grey.50',
+  accent: 'primary.main',
+  link: 'primary.main',
+  up: 'success.dark',
+  down: 'error.dark',
+}
+
 export interface WeeklySummarySendResult {
   sent: boolean
   /** The platform's send rate refused it for now. */
@@ -136,13 +176,10 @@ export interface WeeklySummarySendResult {
   reason?: string
 }
 
-export interface WeeklySummaryEmail {
+export interface WeeklySummaryMessage {
   to: string
-  subject: string
-  /** The body token: the figures without the closing line the footer carries. */
-  body: string
-  /** The plain fallback, closing line included. */
-  text: string
+  template: typeof WEEKLY_SUMMARY_TEMPLATE | typeof WEEKLY_SUMMARY_SITE_TEMPLATE
+  email: WeeklySummaryEmail
   org: Record<string, unknown>
   merge: Record<string, string>
 }
@@ -161,9 +198,11 @@ export interface WeeklySummaryDeps {
   reachable: (uids: string[]) => Promise<string[]>
   /** The readers that declare a `weeklySummary` and pass the gates here. */
   readers: (context: Omit<FigureReaderContext, 'accept'>) => Promise<ResolvedPluginFigureReader[]>
+  /** The org's email colors, from its theme. */
+  colors: (org: Record<string, unknown>) => WeeklySummaryColors
   /** The member's deliverable address, or `null` when there is none or it is suppressed. */
   address: (member: AglynOrgMember, lookups: { left: number }) => Promise<string | null>
-  send: (email: WeeklySummaryEmail) => Promise<WeeklySummarySendResult>
+  send: (message: WeeklySummaryMessage) => Promise<WeeklySummarySendResult>
   budgetMs?: number
 }
 
@@ -219,14 +258,14 @@ function weekDays(from: string): string[] {
 }
 
 /**
- * Each reader's entry, in its declared order: read over the week, then worded
- * by its owner. A reader that fails, answers no table or cannot be read over
- * seven days is left out.
+ * Each reader's part, in its declared order: read over the week, then
+ * summarized by its owner. A reader that fails, answers no table, has nothing
+ * to say or cannot be read over seven days is left out.
  */
-async function readEntries(
+async function readParts(
   readers: readonly ResolvedPluginFigureReader[],
   base: { orgId: string; hostId: string | null; now: Date },
-): Promise<WeeklySummaryEntry[]> {
+): Promise<PluginFigureSummaryPart[]> {
   const ordered = readers
     .filter(({ reader }) => reader.weeklySummary)
     .sort(
@@ -234,7 +273,7 @@ async function readEntries(
         (a.reader.weeklySummary?.order ?? 0) - (b.reader.weeklySummary?.order ?? 0) ||
         a.reader.id.localeCompare(b.reader.id),
     )
-  const entries: WeeklySummaryEntry[] = []
+  const parts: PluginFigureSummaryPart[] = []
   for (const { reader } of ordered) {
     const summary = reader.weeklySummary
     if (!summary) continue
@@ -245,12 +284,37 @@ async function readEntries(
       if (read.ok === false) continue
       const table = normalizePluginFigureTable(read.table)
       if (!table) continue
-      entries.push({ lines: summary.lines(table), headline: summary.headline?.(table) ?? null })
+      const part = summary.summarize(table)
+      if (part && (part.stats?.length || part.rows?.length)) parts.push(part)
     } catch (error) {
       console.error('[weekly-summary] reader failed', { reader: reader.id, orgId: base.orgId, error })
     }
   }
-  return entries
+  return parts
+}
+
+/** The emails one person is owed this week, by marker key, in the order they are sent. */
+function emailsFor(
+  member: AglynOrgMember,
+  manager: boolean,
+  sites: ReadonlyArray<{ hostId: string; site: WeeklySummarySite }>,
+  workspace: readonly PluginFigureSummaryPart[],
+): Array<{ key: string; hostId: string | null; withWorkspace: boolean }> {
+  const active = sites.filter(({ site }) => weeklySummaryHasNews(site))
+  if (!manager) {
+    return active
+      .filter(({ hostId }) => hostRoleFor(member, hostId) === 'admin')
+      .map(({ hostId }) => ({ key: hostId, hostId, withWorkspace: false }))
+  }
+  // One active site: its email carries the workspace's figures, and an
+  // overview would only say it again.
+  if (active.length === 1) {
+    return [{ key: active[0].hostId, hostId: active[0].hostId, withWorkspace: true }]
+  }
+  return [
+    ...(active.length || workspace.length ? [{ key: WEEKLY_SUMMARY_OVERVIEW, hostId: null, withWorkspace: false }] : []),
+    ...active.map(({ hostId }) => ({ key: hostId, hostId, withWorkspace: false })),
+  ]
 }
 
 async function summarizeOrg(
@@ -265,22 +329,21 @@ async function summarizeOrg(
   const report: WeeklySummaryOrgReport = { sites: 0, recipients: 0, sent: 0 }
 
   const markerRef = orgDoc.ref.collection(WEEKLY_SUMMARY_MARKERS).doc(period.week)
-  const sentAlready = ((await markerRef.get()).get('sent') ?? {}) as Record<string, unknown>
+  const sentAlready = ((await markerRef.get()).get('sent') ?? {}) as Record<string, Record<string, unknown>>
 
-  // Owners and admins, not suspended, whose accounts may be mailed, who kept the switch on.
-  const managers = (await deps.orgMembers(orgId)).filter(
-    (member) => (member.role === 'owner' || member.role === 'admin') && member.orgSuspended !== true,
+  // Who could be told: owners and admins, and each site's own admins. Not
+  // suspended, an account that may be mailed, the switch kept on.
+  const members = (await deps.orgMembers(orgId)).filter((member) => member.orgSuspended !== true)
+  const isManager = (member: AglynOrgMember) => member.role === 'owner' || member.role === 'admin'
+  const candidates = members.filter(
+    (member) => isManager(member) || Object.values(member.hostAccess ?? {}).includes('admin'),
   )
-  const reachable = new Set(await deps.reachable(managers.map((member) => member.$id)))
-  const candidates = managers
-    .filter((member) => reachable.has(member.$id) && !sentAlready[member.$id])
-    .sort((a, b) => a.$id.localeCompare(b.$id))
-  if (!candidates.length) return { ...report, skipped: managers.length ? 'nobody-left' : 'no-managers' }
-  const userDocs = await firestore.getAll(
-    ...candidates.map((member) => firestore.collection('users').doc(member.$id)),
-  )
+  const reachable = new Set(await deps.reachable(candidates.map((member) => member.$id)))
+  const reached = candidates.filter((member) => reachable.has(member.$id)).sort((a, b) => a.$id.localeCompare(b.$id))
+  if (!reached.length) return { ...report, skipped: candidates.length ? 'nobody-reachable' : 'no-managers' }
+  const userDocs = await firestore.getAll(...reached.map((member) => firestore.collection('users').doc(member.$id)))
   const users = new Map(userDocs.map((doc) => [doc.id, doc]))
-  const recipients = candidates.filter((member) =>
+  const recipients = reached.filter((member) =>
     digestEnabled(users.get(member.$id)?.get(DIGEST_PREFS_FIELD), WEEKLY_SUMMARY_DIGEST_KEY),
   )
   report.recipients = recipients.length
@@ -300,99 +363,120 @@ async function summarizeOrg(
     .slice(0, WEEKLY_SUMMARY_MAX_SITES)
 
   const orgSlug = str(org['slug'])
-  const sites: WeeklySummarySite[] = []
+  const sites: Array<{ hostId: string; site: WeeklySummarySite; subdomain: string }> = []
   for (const host of chosen) {
     const data = (host.data() ?? {}) as Record<string, unknown>
     const readers = (await deps.readers({ orgId, hostId: host.id, org, host: data })).filter(
       ({ reader }) => pluginFigureSummarySection(reader) === 'site',
     )
-    const entries = await readEntries(readers, { orgId, hostId: host.id, now: period.now })
+    const parts = await readParts(readers, { orgId, hostId: host.id, now: period.now })
     const subdomain = str(data['subdomain'])
+    const domain = liveCustomDomain(data as never) ?? (subdomain ? `${subdomain}.${TENANT_APEX}` : '')
     sites.push({
-      name: siteName(data, host.id),
-      url:
-        deps.origin && orgSlug && subdomain
-          ? `${deps.origin}${buildRoute(Route.HOST_DASHBOARD, { orgSlug, host: subdomain })}`
-          : null,
-      entries,
+      hostId: host.id,
+      subdomain,
+      site: {
+        name: siteName(data, host.id),
+        address: domain ? { label: domain, url: `https://${domain}` } : null,
+        url:
+          deps.origin && orgSlug && subdomain
+            ? `${deps.origin}${buildRoute(Route.HOST_DASHBOARD, { orgSlug, host: subdomain })}`
+            : null,
+        parts,
+      },
     })
   }
   const orgReaders = await deps.readers({ orgId, hostId: null, org, host: null })
-  const workspace = await readEntries(
+  const workspace = await readParts(
     orgReaders.filter(({ reader }) => pluginFigureSummarySection(reader) === 'workspace'),
     { orgId, hostId: null, now: period.now },
   )
+  report.sites = sites.filter(({ site }) => weeklySummaryHasNews(site)).length
+  if (!report.sites && !workspace.length) return { ...report, skipped: 'nothing-to-report' }
 
   const branding = resolveBrandingProfile(org as never)
   const workspaceName = str(org['name']) || orgSlug || 'your workspace'
   const settingsUrl = `${deps.origin}${buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS)}`
+  const colors = deps.colors(org)
   // AI weekly insights, pointed to only where the plan includes them and they are released.
   const offersInsights =
     checkEntitlement(org as never, 'aiGenerative') && deps.flagOn('release_ai_generative', orgId, org)
-  const busiest = chosen[0]
-  const analyticsUrl =
-    offersInsights && deps.origin && orgSlug && busiest && str(busiest.get('subdomain'))
-      ? `${deps.origin}${buildRoute(Route.HOST_ANALYTICS, { orgSlug, host: str(busiest.get('subdomain')) })}`
+  const analyticsUrl = (subdomain: string) =>
+    offersInsights && deps.origin && orgSlug && subdomain
+      ? `${deps.origin}${buildRoute(Route.HOST_ANALYTICS, { orgSlug, host: subdomain })}`
       : null
-  const supportLine = brandSupportLine(branding)
-  const subject = composeWeeklySummarySubject(workspaceName, sites)
-  const input = {
+  const common = {
     workspaceName,
     productName: branding.productName,
     periodLabel: period.label,
-    sites,
-    workspace,
+    colors,
     settingsUrl,
   }
-  report.sites = sites.length
   const lookups = { left: WEEKLY_SUMMARY_MAX_UID_LOOKUPS }
-
-  if (!composeWeeklySummaryEmailText({ ...input, aiInsightsUrl: null })) {
-    return { ...report, skipped: 'nothing-to-report' }
-  }
+  const busiest = sites.find(({ site }) => weeklySummaryHasNews(site)) ?? sites[0]
 
   for (const member of recipients) {
-    if (overBudget()) return { ...report, deferred: 'time' }
+    const owed = emailsFor(member, isManager(member), sites, workspace).filter(
+      ({ key }) => !sentAlready[member.$id]?.[key],
+    )
+    if (!owed.length) continue
     const subscribed = insightDigestSubscribed(users.get(member.$id)?.get(INSIGHT_DIGESTS_FIELD), orgId)
-    const aiInsightsUrl = analyticsUrl && !subscribed ? analyticsUrl : null
-    const body = composeWeeklySummaryEmailText({ ...input, aiInsightsUrl, omitClosing: true }) ?? ''
-    if (deps.dryRun) {
-      report.sent += 1
-      continue
-    }
-    const to = await deps.address(member, lookups)
-    if (!to) continue
-    const text = [composeWeeklySummaryEmailText({ ...input, aiInsightsUrl }) ?? body, supportLine]
-      .filter(Boolean)
-      .join('\n\n')
-    const result = await deps.send({
-      to,
-      subject,
-      body,
-      text,
-      org,
-      merge: {
-        'summary.subject': subject,
-        'org.name': workspaceName,
-        'summary.period': period.label,
-        'summary.body': body,
-        settingsUrl,
-      },
-    })
-    if (result.sent) {
-      report.sent += 1
-      await markerRef.set(
-        {
-          week: period.week,
-          sent: { [member.$id]: true },
-          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    const to = deps.dryRun ? '' : await deps.address(member, lookups)
+    if (!deps.dryRun && !to) continue
+    for (const { key, hostId, withWorkspace } of owed) {
+      if (overBudget()) return { ...report, deferred: 'time' }
+      const entry = hostId ? sites.find((site) => site.hostId === hostId) : null
+      const aiInsightsUrl = subscribed ? null : analyticsUrl(entry?.subdomain ?? busiest?.subdomain ?? '')
+      const email = entry
+        ? composeWeeklySummarySiteEmail({
+            ...common,
+            aiInsightsUrl,
+            site: entry.site,
+            ...(withWorkspace ? { workspace } : {}),
+          })
+        : composeWeeklySummaryOverviewEmail({
+            ...common,
+            aiInsightsUrl,
+            sites: sites.map(({ site }) => site),
+            workspace,
+            url: deps.origin && orgSlug ? `${deps.origin}${buildRoute(Route.ORG_HOME, { orgSlug })}` : '',
+          })
+      if (!email) continue
+      if (deps.dryRun) {
+        report.sent += 1
+        continue
+      }
+      const result = await deps.send({
+        to: to as string,
+        template: entry ? WEEKLY_SUMMARY_SITE_TEMPLATE : WEEKLY_SUMMARY_TEMPLATE,
+        email,
+        org,
+        merge: {
+          'summary.subject': email.subject,
+          'summary.title': email.title,
+          'summary.period': email.period,
+          'summary.html': email.html,
+          'summary.buttonLabel': email.buttonLabel,
+          'summary.url': email.url,
+          'org.name': workspaceName,
+          settingsUrl,
         },
-        { merge: true },
-      )
-    } else if (result.rateLimited) {
-      return { ...report, deferred: 'rate' }
-    } else {
-      report.failed = (report.failed ?? 0) + 1
+      })
+      if (result.sent) {
+        report.sent += 1
+        await markerRef.set(
+          {
+            week: period.week,
+            sent: { [member.$id]: { [key]: true } },
+            updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+      } else if (result.rateLimited) {
+        return { ...report, deferred: 'rate' }
+      } else {
+        report.failed = (report.failed ?? 0) + 1
+      }
     }
   }
   return report
@@ -468,11 +552,12 @@ export async function runWeeklySummarySweep(
 }
 
 /** The sweep's reach into the real platform: Firestore, the flags, the roster, the mail. */
+/** The sweep's reach into the real platform: Firestore, the flags, the roster, the mail. */
 export async function weeklySummaryDeps(options: { runAt: Date; dryRun: boolean }): Promise<WeeklySummaryDeps> {
   const firestore = firebaseAdmin.app().firestore()
   const flags = await getServerReleaseFlagValues()
-  // The designed email is read once per call and rendered per recipient.
-  let loaded: Promise<LoadedSystemEmail | null> | undefined
+  // Each designed email is read once per call and rendered per recipient.
+  const loaded = new Map<string, Promise<LoadedSystemEmail | null>>()
   return {
     firestore,
     runAt: options.runAt,
@@ -489,6 +574,22 @@ export async function weeklySummaryDeps(options: { runAt: Date; dryRun: boolean 
     orgMembers: (orgId) => listOrgMembers(orgId),
     reachable: (uids) => withoutMailWithheldAccounts(uids),
     readers: (context) => eligibleFigureReaders({ ...context, accept: (reader) => Boolean(reader.weeklySummary) }),
+    colors: (org) => {
+      const { palette } = systemEmailTheme(systemEmailBrand(org as never).options)
+      const colors = {} as WeeklySummaryColors
+      for (const key of Object.keys(COLOR_TOKENS) as Array<keyof WeeklySummaryColors>) {
+        // A brand palette that cannot resolve a token falls back to the
+        // platform's, which resolves every one of them.
+        colors[key] =
+          resolveEmailColor(COLOR_TOKENS[key], palette) ??
+          resolveEmailColor(COLOR_TOKENS[key], PLATFORM_EMAIL_PALETTE) ??
+          'inherit'
+      }
+      // Links take the color the renderer gives every other link in the
+      // email, not the raw primary, which is too light to read as text.
+      colors.link = emailAccent(palette).link
+      return colors
+    },
     address: async (member, lookups) => {
       let address = str(member.email).toLowerCase()
       if (!address.includes('@') && lookups.left > 0) {
@@ -500,18 +601,19 @@ export async function weeklySummaryDeps(options: { runAt: Date; dryRun: boolean 
       const [kept] = await filterSuppressedEmails([address], firestore)
       return kept ?? null
     },
-    send: async (email) => {
-      loaded ??= loadSystemEmail('weekly-summary').catch(() => null)
-      const template = await loaded
-      const brand = systemEmailBrand(email.org as never)
-      const rendered = template
-        ? renderLoadedSystemEmail(template, { ...brand.merge, ...email.merge }, brand.options)
-        : null
+    send: async ({ to, template, email, org, merge }) => {
+      if (!loaded.has(template)) loaded.set(template, loadSystemEmail(template).catch(() => null))
+      const design = await loaded.get(template)
+      const brand = systemEmailBrand(org as never)
+      const rendered = design ? renderLoadedSystemEmail(design, { ...brand.merge, ...merge }, brand.options) : null
+      const content = systemEmailContent(rendered, { subject: email.subject, text: email.text })
       const result = await sendEmail({
-        to: [email.to],
-        ...systemEmailContent(rendered, { subject: email.subject, text: email.text }),
-        fromName: resolveBrandingProfile(email.org as never).fromName,
-        context: 'weekly-summary',
+        to: [to],
+        ...content,
+        // The figures' plain text, rather than the drawn block with its tags stripped.
+        text: email.text,
+        fromName: resolveBrandingProfile(org as never).fromName,
+        context: template,
         priority: 'bulk',
       })
       if (result.sent) {

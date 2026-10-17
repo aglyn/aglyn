@@ -208,10 +208,10 @@ const mount = async (node: ReactNode) => {
 /**
  * The name cell of every rendered row, top to bottom.
  *
- * The variables card renders `{{name}}` and the functions card renders the
- * bare name, so the braces are stripped rather than matched — a selector that
- * only knew one of the two would report the other list as empty and pass every
- * "did not contain" assertion for the wrong reason.
+ * Both cards render the bare name; braces a card might wrap it in are
+ * stripped rather than matched — a selector that only knew one form would
+ * report the other list as empty and pass every "did not contain" assertion
+ * for the wrong reason.
  */
 const renderedNames = () =>
   Array.from(document.querySelectorAll('p'))

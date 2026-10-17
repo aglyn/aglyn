@@ -49,6 +49,7 @@ import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 
 /*
@@ -259,5 +260,5 @@ fun RecordPicker(
 /** A list row's trailing remove button. */
 @Composable
 fun RemoveButton(description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-  IconButton(onClick = onClick, modifier = modifier) { Icon(AglynIcons.named("close"), contentDescription = description) }
+  WithTooltip(description) { IconButton(onClick = onClick, modifier = modifier) { Icon(AglynIcons.named("close"), contentDescription = description) } }
 }

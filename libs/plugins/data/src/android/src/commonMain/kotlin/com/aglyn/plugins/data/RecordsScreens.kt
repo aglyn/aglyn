@@ -63,6 +63,7 @@ import com.aglyn.ui.ChoiceField
 import com.aglyn.ui.DateTimeField
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.InputChoice
 import com.aglyn.ui.ListHeader
 import com.aglyn.ui.LoadContent
@@ -74,6 +75,7 @@ import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.RefreshableBox
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.space
@@ -135,7 +137,7 @@ fun RecordsScreen(context: NativePluginContext, datasetId: String, initialRecord
   val live by remember(orgId, datasetId, context.firestore) { context.firestore.observeDoc("${datasetsPath(orgId)}/$datasetId") }.collectAsState(Live.Loading)
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this dataset", body = "It may no longer be shared with you.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this dataset", body = "It may no longer be shared with you.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val doc = value.value ?: return EmptyState("This dataset is gone", icon = AglynIcons.named("dataset"))
       Records(context, orgId, DatasetRow.from(doc), initialRecordId, startNew)
@@ -226,7 +228,7 @@ private fun Records(context: NativePluginContext, orgId: String, dataset: Datase
     },
     detail = { selected ->
       if (selected == null) {
-        EmptyState("Pick a $noun to see it here", icon = AglynIcons.named("article"))
+        SelectionPlaceholder("Pick a $noun to see it here", icon = AglynIcons.named("article"))
       } else {
         RecordDetail(context, orgId, dataset, selected, references, canWrite) { dialog = it }
       }
@@ -281,7 +283,7 @@ private fun RecordDetail(
   CloseWhenGone((live as? Live.Ready)?.let { it.value != null })
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this record", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this record", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val doc = value.value ?: return EmptyState("This record is gone", icon = AglynIcons.named("article"))
       val record = RecordRow.from(doc)
