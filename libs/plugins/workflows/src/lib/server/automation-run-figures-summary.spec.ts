@@ -45,7 +45,17 @@ describe('automations in the weekly summary (AGL-3867)', () => {
       ],
       [{ automation: 'All automations', succeeded: 54, failed: 2 }],
     )
-    expect(summary?.lines(runs)).toEqual(['Automations: 54 runs finished, 2 failed'])
-    expect(summary?.lines(table(runs.columns, [{ automation: 'All automations', succeeded: 0, failed: 0 }]))).toEqual([])
+    expect(summary?.summarize(runs)).toEqual({
+      title: 'Automations',
+      stats: [
+        { label: 'Runs finished', value: '54' },
+        { label: 'Runs failed', value: '2' },
+      ],
+    })
+    // A tile for failures only when there were any.
+    expect(summary?.summarize(table(runs.columns, [{ automation: 'All automations', succeeded: 3, failed: 0 }]))?.stats).toEqual([
+      { label: 'Runs finished', value: '3' },
+    ])
+    expect(summary?.summarize(table(runs.columns, [{ automation: 'All automations', succeeded: 0, failed: 0 }]))).toBeNull()
   })
 })

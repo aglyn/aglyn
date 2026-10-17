@@ -23,6 +23,7 @@ import {
   AI_INSIGHT_QUESTION_MAX_CHARS,
   AI_INSIGHTS_COLLECTION,
   aiInsightDays,
+  aiInsightDigestPeriod,
   aiInsightOutput,
   aiInsightSurface,
   aiInsightSurfaceNeedsSite,
@@ -123,7 +124,7 @@ export const AI_INSIGHT_UNREADABLE_COPY = 'The AI did not answer with insights. 
 
 /** The digest's question: what a week's insights cover, in the order a person reads them. */
 export const AI_INSIGHT_DIGEST_QUESTION =
-  'What changed on this site this week? Write the week’s insights: the change in traffic, the most viewed page, the form that turned the most views into submissions, a campaign that did better than the rest, and any day that stood out — only those the tables support.'
+  'What changed on this site last week, Monday to Sunday? Write the week’s insights: the change in traffic, the most viewed page, the form that turned the most views into submissions, a campaign that did better than the rest, and any day that stood out — only those the tables support.'
 
 /** The rules both calls are sent: static, byte-identical for every workspace. */
 export const AI_INSIGHT_RULES = [
@@ -284,7 +285,9 @@ export const runAiJobInsightStep: AiJobStepRunner = async (context: AiJobStepCon
     })
 
   // 1. The reads.
-  const base = { orgId: job.orgId, hostId, uid: digest ? null : job.createdBy, now }
+  // A digest reads last Monday to Sunday, whatever minute the beat runs it.
+  const readNow = digest ? aiInsightDigestPeriod(job.inputs, now).now : now
+  const base = { orgId: job.orgId, hostId, uid: digest ? null : job.createdBy, now: readNow }
   let requests: AiInsightReadRequest[]
   if (digest) {
     requests = defaultReads(readers, days)

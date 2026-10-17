@@ -22,7 +22,7 @@ import {
   registerPluginFigureReader,
   type PluginFigureReader,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
-import { figureCount, figurePlural, figureRow } from '@aglyn/aglyn/app-utils/weekly-summary'
+import { figureCount, figureRow, figureStat } from '@aglyn/aglyn/app-utils/weekly-summary'
 import { BUNDLE_ID } from '../constants/bundle-common'
 
 /**
@@ -107,15 +107,16 @@ export function automationRunFigureReader(firestore: () => Firestore): PluginFig
     windows: WINDOWS,
     weeklySummary: {
       order: 110,
-      lines: (table) => {
+      summarize: (table) => {
         const all = figureRow(table, 'automation', 'All automations')
-        const succeeded = figureCount(all?.['succeeded'])
-        const failed = figureCount(all?.['failed'])
-        if (!succeeded && !failed) return []
-        return [
-          `Automations: ${figurePlural(succeeded, 'run', 'runs')} finished` +
-            (failed ? `, ${failed.toLocaleString('en-US')} failed` : ''),
-        ]
+        if (!all || (!figureCount(all['succeeded']) && !figureCount(all['failed']))) return null
+        return {
+          title: 'Automations',
+          stats: [
+            figureStat(table, all, 'succeeded', 'Runs finished', { change: 'change' }),
+            ...(figureCount(all['failed']) ? [figureStat(table, all, 'failed', 'Runs failed')] : []),
+          ],
+        }
       },
     },
     read: async (request) => {

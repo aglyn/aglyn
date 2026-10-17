@@ -36,21 +36,29 @@ describe('sales in the weekly summary (AGL-3867)', () => {
     throw new Error('not read')
   })
 
-  it('says the week’s revenue and orders, and leads the subject with orders', () => {
+  it('tiles the week’s revenue, orders and average order, and offers orders to the totals', () => {
     const week = table(
       [
         { key: 'window', label: 'Window', kind: 'text' },
         { key: 'revenue', label: 'Revenue', kind: 'money', currency: 'USD' },
         { key: 'orders', label: 'Orders', kind: 'count' },
+        { key: 'averageOrder', label: 'Average order', kind: 'money', currency: 'USD' },
         { key: 'revenueChange', label: 'Revenue change', kind: 'change' },
+        { key: 'ordersChange', label: 'Orders change', kind: 'change' },
       ],
       [
-        { window: 'this', revenue: 1_240, orders: 18, revenueChange: 20 },
-        { window: 'before', revenue: 1_033, orders: 15, revenueChange: null },
+        { window: 'this', revenue: 1_240, orders: 18, averageOrder: 68.89, revenueChange: 20, ordersChange: 20 },
+        { window: 'before', revenue: 1_033, orders: 15, averageOrder: 68.87, revenueChange: null, ordersChange: null },
       ],
     )
-    expect(sales.weeklySummary?.lines(week)).toEqual(['Sales: $1,240.00 (+20%) from 18 orders'])
-    expect(sales.weeklySummary?.headline?.(week)).toEqual({ count: 18, one: 'order', many: 'orders' })
+    expect(sales.weeklySummary?.summarize(week)).toEqual({
+      title: 'Sales',
+      stats: [
+        { label: 'Revenue', value: '$1,240.00', change: 20 },
+        { label: 'Orders', value: '18', change: 20, total: { count: 18, one: 'order', many: 'orders' } },
+        { label: 'Average order', value: '$68.89' },
+      ],
+    })
   })
 
   it('names the top products', () => {
@@ -64,6 +72,12 @@ describe('sales in the weekly summary (AGL-3867)', () => {
         { product: 'Tee', units: 5 },
       ],
     )
-    expect(products.weeklySummary?.lines(top)).toEqual(['Top products: Mug 12 sold, Tee 5'])
+    expect(products.weeklySummary?.summarize(top)).toEqual({
+      title: 'Top products',
+      rows: [
+        { label: 'Mug', value: '12 sold' },
+        { label: 'Tee', value: '5 sold' },
+      ],
+    })
   })
 })

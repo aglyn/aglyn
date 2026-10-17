@@ -21,7 +21,9 @@ import { hostRoleFor } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement, resolveBrandingProfile, resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { isReleaseFlagOnForOrg, parseOrgReleaseFlagOverrides, type ReleaseFlagValue } from '@aglyn/aglyn/app-utils/release-flags'
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
+import { weeklySummaryPeriod } from '@aglyn/aglyn/app-utils/weekly-summary'
 import {
+  aiInsightDigestPeriod,
   AI_INSIGHTS_COLLECTION,
   aiInsightIsoWeek,
   type AiInsightRecord,
@@ -195,6 +197,8 @@ export function aiInsightDigestEmailText(input: {
   workspaceName?: string
   /** The AI credits the digest's job drew; 0 or absent says nothing. */
   creditsSpent?: number
+  /** The week the figures cover, "Oct 5 – Oct 11"; absent says "this week". */
+  periodLabel?: string
 }): string {
   const workspace = input.workspaceName?.trim() || ''
   const credits = Math.max(0, Math.round(Number(input.creditsSpent) || 0))
@@ -204,7 +208,9 @@ export function aiInsightDigestEmailText(input: {
     : ''
   const forWhom = workspace || 'this workspace'
   return [
-    `Here is what ${input.siteName}'s figures showed this week.${drew}`,
+    input.periodLabel
+      ? `Here is what ${input.siteName}'s figures showed last week, ${input.periodLabel}.${drew}`
+      : `Here is what ${input.siteName}'s figures showed this week.${drew}`,
     '',
     ...input.insights.map((insight, index) => `${index + 1}. ${insight.text}`),
     '',
@@ -292,7 +298,7 @@ async function createOrgDigest(
         hostId: site.hostId,
         kind: 'insight',
         brief: `Weekly insights for ${site.name}`,
-        inputs: { surface: 'digest', week },
+        inputs: { surface: 'digest', week, through: weeklySummaryPeriod(now).to },
         createdBy: site.creator,
       },
       now,
@@ -390,6 +396,7 @@ async function deliverOrgDigest(
             settingsUrl: origin ? `${origin}/manage/notifications` : null,
             workspaceName: str(org['name']),
             creditsSpent: job.creditsSpent,
+            periodLabel: aiInsightDigestPeriod(job.inputs, new Date(Number(marker.createdAtMs) || now.getTime())).label,
           }),
           fromName: branding.fromName,
           siteName: site.name,

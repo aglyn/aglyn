@@ -8359,8 +8359,15 @@
           },
           {
             "key": "weekly-summary",
-            "name": "Weekly summary",
-            "description": "Each Monday, how a workspace’s sites did the week before — visitors, top pages, form submissions, new leads, bookings, sales and deals — for its owners and admins. Free: nothing is generated.",
+            "name": "Weekly summary · workspace",
+            "description": "Each Monday, how a workspace did the week before: its totals across sites, a line for each site, and its deals. For its owners and admins. Free: nothing is generated.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "weekly-summary-site",
+            "name": "Weekly summary · site",
+            "description": "Each Monday, how one site did the week before — visitors, top pages, sources, forms, new leads, bookings, sales, campaigns and more — for the workspace’s owners and admins and the site’s own admins. Free: nothing is generated.",
             "deliveredBy": "resend",
             "editable": true
           },
@@ -9591,19 +9598,91 @@
               "sample": "Your week at Test Org: 1,204 visitors, 9 new leads, 6 bookings"
             },
             {
+              "name": "summary.title",
+              "description": "The heading",
+              "sample": "Test Org last week"
+            },
+            {
+              "name": "summary.period",
+              "description": "The week the figures cover",
+              "sample": "Oct 5 – Oct 11, compared with the week before"
+            },
+            {
+              "name": "summary.html",
+              "description": "The figures, drawn as tiles and ranked lists in the email’s theme",
+              "sample": "<div style=\"padding:16px 0 8px;\"><div style=\"font-family:Helvetica, Arial, sans-serif;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;\">Traffic</div></div>"
+            },
+            {
+              "name": "summary.buttonLabel",
+              "description": "The button’s words",
+              "sample": "Open Test Org"
+            },
+            {
+              "name": "summary.url",
+              "description": "Where the button goes",
+              "sample": "https://app.aglyn.com/test-org"
+            },
+            {
               "name": "org.name",
               "description": "The workspace the summary is for",
               "sample": "Test Org"
             },
             {
-              "name": "summary.period",
-              "description": "The week the figures cover",
-              "sample": "Oct 5 – Oct 11"
+              "name": "settingsUrl",
+              "description": "Notification settings, where the summary is turned off",
+              "sample": "https://app.aglyn.com/manage/notifications/settings"
             },
             {
-              "name": "summary.body",
-              "description": "Each site’s figures, one per line, with its link",
-              "sample": "Test Site\n- Visitors: 1,204 (+12%) · Page views: 3,410 (+8%)\n- Top pages: / 1,020 views, /pricing 340, /contact 120\n- New leads: 9 (+50%) · New contacts: 3"
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "weekly-summary-site": [
+            {
+              "name": "summary.subject",
+              "description": "The subject line, leading with the week’s figures",
+              "sample": "Test Site last week: 1,204 visitors, 9 new leads"
+            },
+            {
+              "name": "summary.title",
+              "description": "The heading",
+              "sample": "Test Site last week"
+            },
+            {
+              "name": "summary.period",
+              "description": "The week the figures cover",
+              "sample": "Oct 5 – Oct 11, compared with the week before"
+            },
+            {
+              "name": "summary.html",
+              "description": "The figures, drawn as tiles and ranked lists in the email’s theme",
+              "sample": "<div style=\"padding:16px 0 8px;\"><div style=\"font-family:Helvetica, Arial, sans-serif;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;\">Traffic</div></div>"
+            },
+            {
+              "name": "summary.buttonLabel",
+              "description": "The button’s words",
+              "sample": "Open Test Site"
+            },
+            {
+              "name": "summary.url",
+              "description": "Where the button goes",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-site"
+            },
+            {
+              "name": "org.name",
+              "description": "The workspace the summary is for",
+              "sample": "Test Org"
             },
             {
               "name": "settingsUrl",
