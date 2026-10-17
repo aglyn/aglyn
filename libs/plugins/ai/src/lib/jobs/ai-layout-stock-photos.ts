@@ -2325,7 +2325,7 @@ const DESCRIBING = words(
     'female male adult good bad poc bipoc moody sunny rainy foggy misty snowy cloudy stormy dreamy shiny trendy messy ' +
     'casual blonde blond brunette muscular athletic clever intelligent concentrated curious lonely sleepy heavy ' +
     'nature outdoors outdoor indoors indoor scenery scenic autumn fall winter spring summer ' +
-    'physical teenage traveling travelling ' +
+    'physical teenage traveling ' +
     'indian asian african american european caucasian vietnamese japanese chinese korean thai latino latina hispanic ' +
     'japan vietnam viet nam thailand india china korea germany france italy spain england britain uk usa america ' +
     'canada mexico brazil australia africa europe asia',
