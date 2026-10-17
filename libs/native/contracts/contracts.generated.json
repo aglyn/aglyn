@@ -4403,11 +4403,11 @@
       "web": "/sounds/notifications/xylophone.wav"
     },
     {
-      "android": "aglyn_sound_aglyn",
-      "apple": "aglyn-aglyn.caf",
-      "id": "aglyn",
-      "label": "Aglyn",
-      "web": "/sounds/notifications/aglyn.wav"
+      "android": "aglyn_sound_signature",
+      "apple": "aglyn-signature.caf",
+      "id": "signature",
+      "label": "Signature",
+      "web": "/sounds/notifications/signature.wav"
     },
     {
       "android": "aglyn_sound_tada",

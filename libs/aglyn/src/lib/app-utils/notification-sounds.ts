@@ -58,7 +58,7 @@ function sound(id: string, label: string): NotificationSound {
 /** In the order the picker lists them; the first is the default. */
 export const NOTIFICATION_SOUNDS: readonly NotificationSound[] = [
   sound('xylophone', 'Xylophone'),
-  sound('aglyn', 'Aglyn'),
+  sound('signature', 'Signature'),
   sound('tada', 'Ta-da'),
   sound('plink', 'Plink'),
   sound('arcade', 'Arcade'),

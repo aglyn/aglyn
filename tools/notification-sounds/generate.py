@@ -299,7 +299,7 @@ def cash_register():
 # id -> synth. Keep in step with NOTIFICATION_SOUNDS (notification-sounds.ts).
 SOUNDS = {
     'xylophone': xylophone,
-    'aglyn': a_glyn,
+    'signature': a_glyn,
     'tada': ta_da,
     'plink': plink,
     'arcade': arcade,
