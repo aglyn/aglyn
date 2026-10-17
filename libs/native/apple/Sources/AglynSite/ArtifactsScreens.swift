@@ -74,7 +74,7 @@ struct ArtifactsScreen: View {
                   }
                   .id(selection)
                 } else {
-                  AglynEmptyState("Pick a \(kind.singular) to see it here", systemImage: kind.systemImage)
+                  AglynSelectionPlaceholder("No \(kind.singular) selected", systemImage: kind.systemImage)
                 }
               }
               .frame(maxWidth: .infinity, maxHeight: .infinity)

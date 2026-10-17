@@ -39,26 +39,22 @@ struct SetupScreen: View {
       if context.hostID == nil {
         AglynEmptyState("Pick a site first", systemImage: SiteSymbols.site)
       } else if wide {
-        HStack(spacing: 0) {
-          List(selection: $selection) {
+        AglynListDetailColumns(listWidth: 320) {
+          List {
             ForEach(sections) { section in
               AglynRow(section.title, subtitle: section.supporting, systemImage: section.systemImage)
-                .tag(section)
-                .aglynListRow()
+                .aglynSelectableRow(section, selection: $selection)
                 .accessibilityIdentifier("setup-\(section.id)")
             }
           }
-          .aglynListBackground()
-          .frame(minWidth: 280, idealWidth: 320, maxWidth: 380)
-          Divider()
-          Group {
-            if let selection {
-              SetupDetail(context: context, section: selection, integrations: integrations).id(selection)
-            } else {
-              AglynEmptyState("Pick a section to set it up", systemImage: "gearshape")
-            }
+          .aglynSelectableListStyle()
+          .aglynSelectionKeys(sections, selection: $selection)
+        } detail: {
+          if let selection {
+            SetupDetail(context: context, section: selection, integrations: integrations).id(selection)
+          } else {
+            AglynSelectionPlaceholder("No section selected", systemImage: "gearshape")
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear { if selection == nil { selection = SetupSection.of(initialSection ?? "details") } }
       } else {

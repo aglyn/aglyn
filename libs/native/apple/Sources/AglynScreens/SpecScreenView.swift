@@ -107,7 +107,7 @@ public struct SpecScreenView: View {
           .id(selection)
       }
     } else {
-      AglynEmptyState("Nothing selected", systemImage: "sidebar.right", message: "Pick a row to see it here.")
+      AglynSelectionPlaceholder("Nothing selected")
     }
   }
 }

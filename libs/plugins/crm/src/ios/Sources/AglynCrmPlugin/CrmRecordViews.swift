@@ -44,17 +44,14 @@ struct RecordsSection: View {
     WideLayoutReader { wide in
       Group {
         if wide {
-          HStack(spacing: 0) {
-            listPane(selectable: true).frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
-            Divider()
-            Group {
-              if let selection {
-                RecordDetail(context: context, kind: kind, id: selection, scope: scope, api: api, reference: reference).id(selection)
-              } else {
-                AglynEmptyState("Pick a \(kind.singular.lowercased()) to see it here", systemImage: kind.symbol)
-              }
+          AglynListDetailColumns(listWidth: 380) {
+            listPane(selectable: true)
+          } detail: {
+            if let selection {
+              RecordDetail(context: context, kind: kind, id: selection, scope: scope, api: api, reference: reference).id(selection)
+            } else {
+              AglynSelectionPlaceholder("No \(kind.singular.lowercased()) selected", systemImage: kind.symbol)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
           }
         } else {
           listPane(selectable: false)
@@ -125,8 +122,8 @@ struct RecordsSection: View {
             search.isEmpty ? "No \(kind.plural.lowercased()) yet" : "No \(kind.plural.lowercased()) match", systemImage: kind.symbol,
             message: search.isEmpty ? "\(kind.plural) you add, and the ones your forms capture, show up here." : "Try another search or filter.")
         } else if selectable {
-          List(selection: $selection) { rows(list, selectable: true) }
-            .aglynListBackground()
+          List { rows(list, selectable: true) }
+            .aglynSelectableListStyle().aglynSelectionKeys(list.rows.map(\.id), selection: $selection)
             .accessibilityIdentifier("crm-list")
         } else {
           List { rows(list, selectable: false) }
@@ -146,7 +143,7 @@ struct RecordsSection: View {
     ForEach(list.rows) { row in
       Group {
         if selectable {
-          CrmRowView(row: row).tag(row.id)
+          CrmRowView(row: row).aglynSelectableRow(row.id, selection: $selection)
         } else {
           NavigationLink {
             RecordDetail(context: context, kind: kind, id: row.id, scope: scope, api: api, reference: reference)

@@ -236,7 +236,7 @@ struct NotificationsView: View {
           if let row = feed.rows?.first(where: { $0.id == selection }) {
             NotificationDetail(row: row)
           } else {
-            AglynEmptyState("Pick a notification to read it here", systemImage: "bell")
+            AglynSelectionPlaceholder("No notification selected", systemImage: "bell")
           }
         }
       } else {

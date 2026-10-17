@@ -60,17 +60,14 @@ struct SubmissionsScreen: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 300, idealWidth: 380, maxWidth: 440)
-          Divider()
-          Group {
-            if let selection {
-              detail(selection, titled: false).id(selection)
-            } else {
-              AglynEmptyState("Pick a submission to read it", systemImage: InboxSymbols.inbox)
-            }
+        AglynListDetailColumns(listWidth: 380) {
+          list(selectable: true)
+        } detail: {
+          if let selection {
+            detail(selection, titled: false).id(selection)
+          } else {
+            AglynSelectionPlaceholder("No submission selected", systemImage: InboxSymbols.inbox)
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       } else {
         list(selectable: false)
@@ -202,12 +199,12 @@ struct SubmissionsScreen: View {
         filtered ? "No submissions match" : "No submissions yet", systemImage: InboxSymbols.inbox,
         message: filtered ? "Try another filter or search." : "What visitors send through your forms shows up here.")
     } else if selectable {
-      List(selection: $selection) { rows(selectable: true) }
+      List { rows(selectable: true) }
         .onChange(of: model.rows, initial: true) { _, rows in
           if selection == nil { selection = rows.first?.id }
         }
         .sensoryFeedback(.selection, trigger: selection)
-        .aglynListBackground()
+        .aglynSelectableListStyle().aglynSelectionKeys(model.rows.map(\.id), selection: $selection)
         .accessibilityIdentifier("submissions-list")
     } else {
       List { rows(selectable: false) }
@@ -222,7 +219,7 @@ struct SubmissionsScreen: View {
     ForEach(model.rows) { row in
       Group {
         if selectable {
-          SubmissionListRow(row: row, showForm: formID == nil, now: now).tag(row.id)
+          SubmissionListRow(row: row, showForm: formID == nil, now: now).aglynSelectableRow(row.id, selection: $selection)
         } else {
           Button {
             pushed = row.id

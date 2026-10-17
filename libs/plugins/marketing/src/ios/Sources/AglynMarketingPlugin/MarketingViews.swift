@@ -165,7 +165,7 @@ struct CampaignsSection: View {
           if let selection {
             CampaignDetail(context: context, actions: actions, access: access, campaignID: selection).id(selection)
           } else {
-            AglynEmptyState("Pick a campaign to see its emails", systemImage: "megaphone").frame(maxWidth: .infinity, maxHeight: .infinity)
+            AglynSelectionPlaceholder("No campaign selected", systemImage: "megaphone").frame(maxWidth: .infinity, maxHeight: .infinity)
           }
         }
       } else {
@@ -212,11 +212,11 @@ struct CampaignsSection: View {
   private func pane(_ rollups: [String: CampaignRollup], selectable: Bool) -> some View {
     let listNames = Dictionary(uniqueKeysWithValues: lists.rows.map { ($0.id, $0.name) })
     if selectable && list.ready && list.failure == nil && !list.rows.isEmpty {
-      List(selection: $selection) {
-        ForEach(list.rows) { row in CampaignRowView(row: row, rollup: rollups[row.id], listNames: listNames).tag(row.id).aglynListRow() }
+      List {
+        ForEach(list.rows) { row in CampaignRowView(row: row, rollup: rollups[row.id], listNames: listNames).aglynSelectableRow(row.id, selection: $selection) }
         if list.hasMore { Button("Show more") { list.loadMore() }.frame(maxWidth: .infinity) }
       }
-      .aglynListBackground()
+      .aglynSelectableListStyle().aglynSelectionKeys(list.rows.map(\.id), selection: $selection)
     } else {
       AglynLiveList(
         rows: list.rows, ready: list.ready, failure: list.failure, hasMore: list.hasMore, failedTitle: "Could not load campaigns",

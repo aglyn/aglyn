@@ -202,17 +202,14 @@ struct DatasetsScreen: View {
   private func layout(_ orgID: String) -> some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
-          Divider()
-          Group {
-            if let selection {
-              detail(selection, titled: false).id(selection)
-            } else {
-              AglynEmptyState("Pick a dataset to see it here", systemImage: DataSymbols.dataset)
-            }
+        AglynListDetailColumns(listWidth: 360) {
+          list(selectable: true)
+        } detail: {
+          if let selection {
+            detail(selection, titled: false).id(selection)
+          } else {
+            AglynSelectionPlaceholder("No dataset selected", systemImage: DataSymbols.dataset)
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       } else {
         list(selectable: false)
@@ -302,9 +299,9 @@ struct DatasetsScreen: View {
         if !scoped && canWrite { Button("New dataset") { sheet = .create }.buttonStyle(.borderedProminent) }
       }
     } else if selectable {
-      List(selection: $selection) { rows(selectable: true) }
+      List { rows(selectable: true) }
         .sensoryFeedback(.selection, trigger: selection)
-        .aglynListBackground()
+        .aglynSelectableListStyle().aglynSelectionKeys(model.rows.map(\.id), selection: $selection)
         .accessibilityIdentifier("datasets-list")
     } else {
       List { rows(selectable: false) }
@@ -318,7 +315,7 @@ struct DatasetsScreen: View {
     ForEach(model.rows) { row in
       Group {
         if selectable {
-          DatasetListRow(row: row).tag(row.id)
+          DatasetListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
         } else {
           Button {
             pushed = row.id

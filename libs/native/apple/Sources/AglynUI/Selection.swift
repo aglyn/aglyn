@@ -149,10 +149,10 @@ public struct AglynSelectableRowStyle: ButtonStyle {
   }
 
   public func makeBody(configuration: Configuration) -> some View {
-    Body(configuration: configuration, selected: selected, density: density)
+    RowBody(configuration: configuration, selected: selected, density: density)
   }
 
-  struct Body: View {
+  struct RowBody: View {
     let configuration: Configuration
     let selected: Bool
     let density: AglynRowDensity

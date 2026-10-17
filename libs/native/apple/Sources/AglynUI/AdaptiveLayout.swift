@@ -36,7 +36,7 @@ public struct ListDetailLayout<List: View, Detail: View>: View {
   let showsDetail: Bool
 
   public init(
-    listWidth: CGFloat = 340, showsDetail: Bool = true, @ViewBuilder list: () -> List, @ViewBuilder detail: () -> Detail
+    listWidth: CGFloat = 360, showsDetail: Bool = true, @ViewBuilder list: () -> List, @ViewBuilder detail: () -> Detail
   ) {
     self.list = list()
     self.detail = detail()
@@ -47,19 +47,47 @@ public struct ListDetailLayout<List: View, Detail: View>: View {
   public var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          if showsDetail {
-            list.frame(minWidth: listWidth - 40, idealWidth: listWidth, maxWidth: listWidth + 60, maxHeight: .infinity, alignment: .top)
-            Divider()
-            detail.frame(maxWidth: .infinity, maxHeight: .infinity)
-          } else {
-            list.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-          }
-        }
-        .animation(.snappy(duration: 0.2), value: showsDetail)
+        AglynListDetailColumns(listWidth: listWidth, showsDetail: showsDetail) { list } detail: { detail }
       } else {
         list
       }
     }
+  }
+}
+
+/// A wide window's list column and detail column side by side (spec 4: the
+/// list 320–440 points wide, a hairline between, the list's header pinned to
+/// its top). With `showsDetail` false (an empty list, nothing to pick) the
+/// detail column folds away and the list, its empty state centered, takes
+/// the width.
+public struct AglynListDetailColumns<List: View, Detail: View>: View {
+  let list: List
+  let detail: Detail
+  let listWidth: CGFloat
+  let showsDetail: Bool
+
+  public init(
+    listWidth: CGFloat = 360, showsDetail: Bool = true, @ViewBuilder list: () -> List, @ViewBuilder detail: () -> Detail
+  ) {
+    self.list = list()
+    self.detail = detail()
+    self.listWidth = listWidth
+    self.showsDetail = showsDetail
+  }
+
+  public var body: some View {
+    HStack(spacing: 0) {
+      if showsDetail {
+        list
+          .frame(
+            minWidth: max(320, listWidth - 40), idealWidth: listWidth, maxWidth: max(440, listWidth), maxHeight: .infinity,
+            alignment: .top)
+        Divider()
+        detail.frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        list.aglynListColumn()
+      }
+    }
+    .animation(.snappy(duration: 0.2), value: showsDetail)
   }
 }

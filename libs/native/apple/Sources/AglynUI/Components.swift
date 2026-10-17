@@ -126,10 +126,10 @@ public struct AglynSelectionPlaceholder: View {
   public var body: some View {
     VStack(spacing: AglynSpace.one) {
       if let systemImage {
-        Image(systemName: systemImage).font(.system(size: 26, weight: .regular)).foregroundStyle(.tertiary)
+        Image(systemName: systemImage).font(.system(size: 22, weight: .regular)).foregroundStyle(.tertiary)
           .accessibilityHidden(true)
       }
-      Text(title).font(AglynFont.title2).foregroundStyle(.secondary)
+      Text(title).font(AglynFont.title3).foregroundStyle(.secondary)
     }
     .multilineTextAlignment(.center)
     .padding(AglynSpace.three)

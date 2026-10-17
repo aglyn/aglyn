@@ -60,17 +60,14 @@ struct BrowseScreen: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          shelf(selectable: true).frame(minWidth: 320, idealWidth: 400, maxWidth: 460)
-          Divider()
-          Group {
-            if let selection {
-              ListingDetail(context: context, listingID: selection).id(selection)
-            } else {
-              AglynEmptyState("Pick a listing to see it here", systemImage: "storefront")
-            }
+        AglynListDetailColumns(listWidth: 400) {
+          shelf(selectable: true)
+        } detail: {
+          if let selection {
+            ListingDetail(context: context, listingID: selection).id(selection)
+          } else {
+            AglynSelectionPlaceholder("No listing selected", systemImage: "storefront")
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       } else {
         shelf(selectable: false)
@@ -140,9 +137,9 @@ struct BrowseScreen: View {
     } else if list.rows.isEmpty {
       AglynEmptyState("Nothing matches", systemImage: "storefront", message: "Try another search or category.")
     } else if selectable {
-      List(selection: $selection) { rows(selectable: true) }
+      List { rows(selectable: true) }
         .sensoryFeedback(.selection, trigger: selection)
-        .aglynListBackground()
+        .aglynSelectableListStyle().aglynSelectionKeys(list.rows.map(\.id), selection: $selection)
         .accessibilityIdentifier("listings")
     } else {
       List { rows(selectable: false) }
@@ -156,7 +153,7 @@ struct BrowseScreen: View {
     ForEach(list.rows) { row in
       Group {
         if selectable {
-          ListingListRow(row: row).tag(row.id)
+          ListingListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
         } else {
           Button { pushed = row.id } label: {
             HStack {

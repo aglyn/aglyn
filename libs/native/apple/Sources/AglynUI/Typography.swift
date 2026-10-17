@@ -87,6 +87,14 @@ public enum AglynFont {
   public static var largeTitle: Font { sized(Scale.h1) }
   public static var title: Font { sized(Scale.h3) }
   public static var title2: Font { sized(Scale.h5) }
+  /// A quiet heading a step under `title2`: a detail column's "No product selected".
+  public static var title3: Font {
+    #if os(macOS)
+      .custom(AglynTokens.fontPostScriptName, size: 15, relativeTo: .title3)
+    #else
+      .custom(AglynTokens.fontPostScriptName, size: 20, relativeTo: .title3)
+    #endif
+  }
   public static var headline: Font { sized(Scale.h6) }
   public static var body: Font { sized(Scale.body1) }
   public static var subheadline: Font { sized(Scale.body2) }
