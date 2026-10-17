@@ -187,7 +187,8 @@ describe('emulatedServeEnvironment', () => {
       assert.equal(env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, 'repo-project.firebaseapp.com')
       assert.equal(env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, 'repo-project.appspot.com')
       assert.equal(env.NEXT_PUBLIC_FIREBASE_DATABASE_URL, 'https://repo-project-default-rtdb.firebaseio.com')
-      assert.equal(identityFilled.length, 5)
+      assert.equal(identityFilled.length, 7)
+      assert.equal(env.NEXT_PUBLIC_FIREBASE_APP_ID, '1:000000000000:web:emulator')
       assert.deepEqual(adminSdkMissing, [])
     })
 
@@ -205,7 +206,12 @@ describe('emulatedServeEnvironment', () => {
       assert.equal(env.NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY, 'file-key')
       assert.equal(env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, 'shell.example')
       assert.equal(env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, 'file-project.appspot.com')
-      assert.deepEqual(identityFilled, ['NEXT_PUBLIC_FIREBASE_DATABASE_URL', 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'])
+      assert.deepEqual(identityFilled, [
+        'NEXT_PUBLIC_FIREBASE_APP_ID',
+        'NEXT_PUBLIC_FIREBASE_DATABASE_URL',
+        'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+        'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+      ])
     })
 
     it('fills nothing for a server that names no emulator', () => {

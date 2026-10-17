@@ -2396,7 +2396,9 @@ everything before the model's first word.
 A checkout without the gitignored app env files still serves. Beside an
 emulator, `serve-emulated.mjs` fills the Firebase web config that no file set
 (the project id, from `FIREBASE_PROJECT_ID` or else `aglyn-main`, then the
-auth domain, bucket, database URL and a placeholder web API key) and says
+auth domain, bucket, database URL, a placeholder web API key, and a
+placeholder sender and app id, without which Remote Config fails at boot and
+the sign-in page reloads instead of drawing its form) and says
 which values it filled. Without that config, the Admin SDK never started and
 `/api/orgs/create` answered 500 with `app/no-app`. It still needs the service
 account from the repo `.env`, and it warns at startup when that is missing.
