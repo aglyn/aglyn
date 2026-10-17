@@ -53,8 +53,13 @@ describe('the CRM in the weekly summary (AGL-3867)', () => {
       ],
     )
     expect(summary?.per).toBe('site')
-    expect(summary?.lines(people)).toEqual(['New leads: 9 (+50%) · New contacts: 3'])
-    expect(summary?.headline?.(people)).toEqual({ count: 9, one: 'new lead', many: 'new leads' })
+    expect(summary?.summarize(people)).toEqual({
+      title: 'New people',
+      stats: [
+        { label: 'New leads', value: '9', change: 50, total: { count: 9, one: 'new lead', many: 'new leads' } },
+        { label: 'New contacts', value: '3' },
+      ],
+    })
   })
 
   it('lists deals won and lost and the open pipeline once for the workspace', () => {
@@ -62,7 +67,7 @@ describe('the CRM in the weekly summary (AGL-3867)', () => {
     const pipeline = crmPipelineFigureReader(unused)
     expect(closed.weeklySummary?.per).toBeUndefined()
     expect(
-      closed.weeklySummary?.lines(
+      closed.weeklySummary?.summarize(
         table(
           [
             { key: 'won', label: 'Won', kind: 'count' },
@@ -72,18 +77,33 @@ describe('the CRM in the weekly summary (AGL-3867)', () => {
           [{ won: 2, lost: 1, wonValue: 5_000 }],
         ),
       ),
-    ).toEqual(['Deals: 2 won ($5,000.00), 1 lost'])
+    ).toEqual({
+      title: 'Deals closed',
+      stats: [
+        { label: 'Won', value: '2', total: { count: 2, one: 'deal won', many: 'deals won' } },
+        { label: 'Value won', value: '$5,000.00' },
+        { label: 'Lost', value: '1' },
+      ],
+    })
     expect(
-      pipeline.weeklySummary?.lines(
+      pipeline.weeklySummary?.summarize(
         table(
           [
             { key: 'pipeline', label: 'Pipeline', kind: 'text' },
             { key: 'deals', label: 'Open deals', kind: 'count' },
             { key: 'value', label: 'Value', kind: 'money', currency: 'USD' },
+            { key: 'weighted', label: 'Weighted value', kind: 'money', currency: 'USD' },
           ],
-          [{ pipeline: 'All pipelines', deals: 12, value: 40_000 }],
+          [{ pipeline: 'All pipelines', deals: 12, value: 40_000, weighted: 12_500 }],
         ),
       ),
-    ).toEqual(['Open pipeline: 12 deals worth $40,000.00'])
+    ).toEqual({
+      title: 'Open pipeline',
+      stats: [
+        { label: 'Open deals', value: '12' },
+        { label: 'Value', value: '$40,000.00' },
+        { label: 'Weighted value', value: '$12,500.00' },
+      ],
+    })
   })
 })

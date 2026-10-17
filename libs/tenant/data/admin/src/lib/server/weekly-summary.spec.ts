@@ -42,11 +42,12 @@ jest.mock('./render-system-email', () => ({
 
 import type { AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import type { PluginFigureTable, ResolvedPluginFigureReader } from '@aglyn/aglyn/plugin-manager/plugin-figures'
+import type { WeeklySummaryColors } from '@aglyn/aglyn/app-utils/weekly-summary'
 import {
   runWeeklySummarySweep,
   WEEKLY_SUMMARY_MARKERS,
   type WeeklySummaryDeps,
-  type WeeklySummaryEmail,
+  type WeeklySummaryMessage,
 } from './weekly-summary'
 
 /**
@@ -68,15 +69,14 @@ function memoryFirestore(seed: Record<string, Record<string, unknown>>) {
       get: async () => snapshot(path),
       set: async (data: Record<string, unknown>, options?: { merge?: boolean }) => {
         const before = options?.merge ? (docs.get(path) ?? {}) : {}
-        const merged: Record<string, unknown> = { ...before }
-        for (const [key, value] of Object.entries(data)) {
-          const prior = merged[key]
-          merged[key] =
-            options?.merge && value && typeof value === 'object' && prior && typeof prior === 'object'
-              ? { ...(prior as object), ...(value as object) }
-              : value
+        // Merged the way Firestore merges: maps all the way down.
+        const deep = (prior: unknown, value: unknown): unknown => {
+          if (!value || typeof value !== 'object' || !prior || typeof prior !== 'object') return value
+          const out: Record<string, unknown> = { ...(prior as Record<string, unknown>) }
+          for (const [key, next] of Object.entries(value as Record<string, unknown>)) out[key] = deep(out[key], next)
+          return out
         }
-        docs.set(path, merged)
+        docs.set(path, options?.merge ? (deep(before, data) as Record<string, unknown>) : { ...data })
       },
     }
   }
@@ -113,6 +113,18 @@ function memoryFirestore(seed: Record<string, Record<string, unknown>>) {
 
 /** Monday 2026-10-12 at 13:00 UTC: the run covers Monday 10/5 to Sunday 10/11. */
 const RUN_AT = new Date('2026-10-12T13:00:00Z')
+const MARKER = `orgs/o1/${WEEKLY_SUMMARY_MARKERS}/2026-W41`
+
+const COLORS: WeeklySummaryColors = {
+  text: '#212121',
+  muted: '#666666',
+  border: '#e0e0e0',
+  surface: '#fafafa',
+  accent: '#00b0ff',
+  link: '#0077ad',
+  up: '#357a38',
+  down: '#9e1e1b',
+}
 
 function trafficTable(visitors: number): PluginFigureTable {
   return {
@@ -122,13 +134,8 @@ function trafficTable(visitors: number): PluginFigureTable {
     columns: [
       { key: 'figure', label: 'Figure', kind: 'text' },
       { key: 'current', label: 'This window', kind: 'count' },
-      { key: 'previous', label: 'Window before', kind: 'count' },
-      { key: 'change', label: 'Change', kind: 'change' },
     ],
-    rows: [
-      { figure: 'Page views', current: visitors * 3, previous: visitors * 2, change: 50 },
-      { figure: 'Visitors', current: visitors, previous: visitors, change: 0 },
-    ],
+    rows: [{ figure: 'Visitors', current: visitors }],
     omitted: 0,
     notes: [],
   }
@@ -138,125 +145,154 @@ function member(uid: string, role: string, extra: Partial<AglynOrgMember> = {}):
   return { $id: uid, role, email: `${uid}@example.com`, ...extra } as AglynOrgMember
 }
 
-function setup(options: { visitors?: number; send?: WeeklySummaryDeps['send']; dryRun?: boolean } = {}) {
-  const firestore = memoryFirestore({
-    'orgs/o1': { name: 'Acme', slug: 'acme' },
-    'hosts/h1': { orgId: 'o1', subdomain: 'shop', name: 'Shop' },
-    'hosts/h2': { orgId: 'other', subdomain: 'theirs', name: 'Theirs' },
-    'hosts/h1/analytics/2026-10-06': { total: 40 },
-    'users/u2': { digestPrefs: { weeklySummary: false } },
-  })
-  const sent: WeeklySummaryEmail[] = []
+/** A site reader whose visitors are set per site, and a workspace reader of deals. */
+function readers(visitorsBySite: Record<string, number>, deals: boolean) {
   const reads: Array<{ hostId: string | null; days: number; now: Date }> = []
   const traffic: ResolvedPluginFigureReader = {
     pluginId: 'ai',
     reader: {
       id: 'traffic.summary',
       label: 'Traffic',
-      description: 'Page views and visitors.',
+      description: 'Visitors.',
       scope: 'site',
-      windows: [7, 14, 30, 90],
+      windows: [7, 14],
       plugin: null,
       weeklySummary: {
         order: 10,
-        lines: (table) => {
-          const visitors = table.rows.find((row) => row['figure'] === 'Visitors')
-          return visitors && visitors['current'] ? [`Visitors: ${visitors['current']}`] : []
-        },
-        headline: (table) => {
-          const count = Number(table.rows.find((row) => row['figure'] === 'Visitors')?.['current'] ?? 0)
-          return count ? { count, one: 'visitor', many: 'visitors' } : null
+        summarize: (table) => {
+          const count = Number(table.rows[0]?.['current'] ?? 0)
+          return count
+            ? { title: 'Traffic', stats: [{ label: 'Visitors', value: String(count), total: { count, one: 'visitor', many: 'visitors' } }] }
+            : null
         },
       },
       read: async (request) => {
         reads.push({ hostId: request.hostId, days: request.days, now: request.now })
-        return { ok: true, table: trafficTable(options.visitors ?? 120) }
+        return { ok: true, table: trafficTable(visitorsBySite[request.hostId ?? ''] ?? 0) }
       },
     },
   }
+  const closed: ResolvedPluginFigureReader = {
+    pluginId: 'crm',
+    reader: {
+      id: 'crm.closed',
+      label: 'Deals',
+      description: 'Deals won.',
+      scope: 'org',
+      windows: [7],
+      weeklySummary: {
+        order: 10,
+        summarize: () => (deals ? { title: 'Deals closed', stats: [{ label: 'Won', value: '2' }] } : null),
+      },
+      read: async () => ({ ok: true, table: trafficTable(1) }),
+    },
+  }
+  return {
+    reads,
+    deps: async ({ hostId }: { hostId: string | null }) => (hostId ? [traffic, closed] : [closed]),
+  }
+}
+
+function setup(
+  options: {
+    visitors?: Record<string, number>
+    deals?: boolean
+    members?: AglynOrgMember[]
+    send?: WeeklySummaryDeps['send']
+    dryRun?: boolean
+  } = {},
+) {
+  const firestore = memoryFirestore({
+    'orgs/o1': { name: 'Acme', slug: 'acme' },
+    'hosts/h1': { orgId: 'o1', subdomain: 'shop', name: 'Shop' },
+    'hosts/h2': { orgId: 'o1', subdomain: 'blog', name: 'Blog', cname: 'blog.acme.test' },
+    'hosts/h3': { orgId: 'other', subdomain: 'theirs', name: 'Theirs' },
+    'hosts/h1/analytics/2026-10-06': { total: 40 },
+    'users/u2': { digestPrefs: { weeklySummary: false } },
+  })
+  const sent: WeeklySummaryMessage[] = []
+  const { reads, deps: readersDep } = readers(options.visitors ?? { h1: 120, h2: 30 }, options.deals ?? false)
   const deps: WeeklySummaryDeps = {
     firestore: firestore as never,
     runAt: RUN_AT,
     dryRun: options.dryRun ?? false,
     origin: 'https://app.example.com',
     flagOn: () => true,
-    orgMembers: async () => [
-      member('u1', 'owner'),
-      member('u2', 'admin'),
-      member('u3', 'member'),
-      member('u4', 'admin', { orgSuspended: true } as never),
-    ],
+    orgMembers: async () =>
+      options.members ?? [
+        member('u1', 'owner'),
+        member('u2', 'admin'),
+        member('u3', 'editor'),
+        member('u4', 'admin', { orgSuspended: true } as never),
+      ],
     reachable: async (uids) => uids,
-    readers: async ({ hostId }) => (hostId ? [traffic] : []),
+    readers: readersDep,
+    colors: () => COLORS,
     address: async (one) => String(one.email),
     send:
       options.send ??
-      (async (email) => {
-        sent.push(email)
+      (async (message) => {
+        sent.push(message)
         return { sent: true, rateLimited: false }
       }),
   }
   return { firestore, deps, sent, reads }
 }
 
+const summary = (message: WeeklySummaryMessage) => `${message.to} ${message.template} ${message.email.subject}`
+
 describe('the weekly summary sweep (AGL-3867)', () => {
-  it('emails each owner and admin who kept it on, once, with the site’s figures', async () => {
+  it('sends each owner and admin who kept it on the overview and each active site’s email, once a week', async () => {
     const { deps, sent, reads, firestore } = setup()
     const report = await runWeeklySummarySweep(deps)
-    // u2 switched it off, u3 is not a manager, u4 is suspended.
-    expect(sent.map((email) => email.to)).toEqual(['u1@example.com'])
-    const [email] = sent
-    expect(email.subject).toBe('Your week at Acme: 120 visitors')
-    expect(email.body).toContain('Shop')
-    expect(email.body).toContain('Shop\n- Visitors: 120')
-    expect(email.body).toContain('https://app.example.com/acme/hosts/shop')
-    expect(email.body).toContain('Oct 5 – Oct 11')
-    expect(email.merge['summary.body']).toBe(email.body)
-    // The closing line rides in the footer of the designed email, and in the plain text.
-    expect(email.body).not.toContain('Turn it off in Notifications')
-    expect(email.text).toContain('Turn it off in Notifications')
+    // u2 switched it off, u3 is not a manager of any site, u4 is suspended.
+    expect(sent.map(summary)).toEqual([
+      'u1@example.com weekly-summary Your week at Acme: 150 visitors',
+      'u1@example.com weekly-summary-site Shop last week: 120 visitors',
+      'u1@example.com weekly-summary-site Blog last week: 30 visitors',
+    ])
+    const [overview, shop, blog] = sent
+    expect(overview.email.html).toContain('Across 2 sites')
+    expect(overview.merge).toMatchObject({ 'summary.url': 'https://app.example.com/acme', 'org.name': 'Acme' })
+    // Each site's email says which site it is: its custom domain when it has one.
+    expect(shop.email.html).toContain('<a href="https://shop.aglyn.app"')
+    expect(blog.email.html).toContain('<a href="https://blog.acme.test"')
+    expect(shop.merge).toMatchObject({
+      'summary.title': 'Shop last week',
+      'summary.buttonLabel': 'Open Shop',
+      'summary.url': 'https://app.example.com/acme/hosts/shop',
+      'summary.html': shop.email.html,
+    })
     // The seven whole days before the run, never a part of Monday.
-    expect(reads).toEqual([{ hostId: 'h1', days: 7, now: new Date('2026-10-11T23:59:59.999Z') }])
-    expect(report).toMatchObject({ week: '2026-W41', swept: 1, sent: 1, done: true, deferred: false })
-    expect(firestore.docs.get(`orgs/o1/${WEEKLY_SUMMARY_MARKERS}/2026-W41`)?.['sent']).toEqual({ u1: true })
+    expect(reads[0]).toEqual({ hostId: 'h1', days: 7, now: new Date('2026-10-11T23:59:59.999Z') })
+    expect(report).toMatchObject({ week: '2026-W41', swept: 1, sent: 3, done: true, deferred: false })
+    expect(firestore.docs.get(MARKER)?.['sent']).toEqual({ u1: { overview: true, h1: true, h2: true } })
 
-    // A second run in the same week reaches nobody new.
+    // A second run in the same week sends nothing new.
     sent.length = 0
-    const again = await runWeeklySummarySweep(deps)
+    await runWeeklySummarySweep(deps)
     expect(sent).toEqual([])
-    // u2 is still asked, and still has it off.
-    expect(again.orgs['o1']).toMatchObject({ skipped: 'summary-off' })
   })
 
-  it('lists a workspace reader once for the workspace, and one that asks for it under each site', async () => {
-    const { deps, sent } = setup()
-    const orgReader = (id: string, per: 'site' | 'workspace' | undefined, line: string): ResolvedPluginFigureReader => ({
-      pluginId: 'crm',
-      reader: {
-        id,
-        label: id,
-        description: 'A workspace reader.',
-        scope: 'org',
-        windows: [7],
-        weeklySummary: { ...(per ? { per } : {}), order: 5, lines: () => [line] },
-        read: async () => ({ ok: true, table: trafficTable(1) }),
-      },
+  it('folds the workspace into the one site’s email when only one site had anything, and sends no overview', async () => {
+    const { deps, sent } = setup({ visitors: { h1: 120 }, deals: true })
+    await runWeeklySummarySweep(deps)
+    expect(sent.map(summary)).toEqual(['u1@example.com weekly-summary-site Shop last week: 120 visitors'])
+    expect(sent[0].email.html).toContain('Acme · Deals closed')
+  })
+
+  it('sends a site’s own admin that site’s email, and nothing about the workspace', async () => {
+    const { deps, sent } = setup({
+      deals: true,
+      members: [member('u5', 'editor', { hostAccess: { h1: 'editor', h2: 'admin' } } as never)],
     })
-    const deals = orgReader('crm.closed', undefined, 'Deals: 2 won')
-    const leads = orgReader('crm.people', 'site', 'New leads: 4')
-    await runWeeklySummarySweep({
-      ...deps,
-      readers: async ({ hostId }) => (hostId ? [deals, leads, ...(await deps.readers({ hostId } as never))] : [deals, leads]),
-    })
-    const body = sent[0]?.body ?? ''
-    expect(body).toContain('Shop\n- New leads: 4\n- Visitors: 120')
-    expect(body).toContain('Across Acme\n- Deals: 2 won')
-    expect(body.match(/Deals: 2 won/g)).toHaveLength(1)
-    expect(body.match(/New leads: 4/g)).toHaveLength(1)
+    await runWeeklySummarySweep(deps)
+    expect(sent.map(summary)).toEqual(['u5@example.com weekly-summary-site Blog last week: 30 visitors'])
+    expect(sent[0].email.html).not.toContain('Deals closed')
   })
 
   it('sends nothing when nothing happened', async () => {
-    const { deps, sent } = setup({ visitors: 0 })
+    const { deps, sent } = setup({ visitors: {} })
     const report = await runWeeklySummarySweep(deps)
     expect(sent).toEqual([])
     expect(report.orgs['o1']).toMatchObject({ skipped: 'nothing-to-report' })
@@ -266,8 +302,8 @@ describe('the weekly summary sweep (AGL-3867)', () => {
     const { deps, sent, firestore } = setup({ dryRun: true })
     const report = await runWeeklySummarySweep(deps)
     expect(sent).toEqual([])
-    expect(report).toMatchObject({ dryRun: true, sent: 1 })
-    expect(firestore.docs.has(`orgs/o1/${WEEKLY_SUMMARY_MARKERS}/2026-W41`)).toBe(false)
+    expect(report).toMatchObject({ dryRun: true, sent: 3 })
+    expect(firestore.docs.has(MARKER)).toBe(false)
   })
 
   it('stops the run, finished, when the send rate refuses, and stamps nobody', async () => {
@@ -276,27 +312,21 @@ describe('the weekly summary sweep (AGL-3867)', () => {
     })
     const report = await runWeeklySummarySweep(deps)
     expect(report).toMatchObject({ deferred: 'rate', done: true, nextCursor: null, sent: 0 })
-    expect(firestore.docs.has(`orgs/o1/${WEEKLY_SUMMARY_MARKERS}/2026-W41`)).toBe(false)
+    expect(firestore.docs.has(MARKER)).toBe(false)
   })
 
   it('points to AI weekly insights only where the plan includes them, they are released, and the person has not turned them on', async () => {
-    const withAi = (flag: boolean, subscribed: boolean) => {
-      const { deps, sent, firestore } = setup()
+    const withAi = async (flag: boolean, subscribed: boolean) => {
+      const { deps, sent, firestore } = setup({ visitors: { h1: 120 } })
       firestore.docs.set('orgs/o1', { name: 'Acme', slug: 'acme', plan: 'free' })
       if (subscribed) firestore.docs.set('users/u1', { insightDigests: { o1: true } })
-      return runWeeklySummarySweep({ ...deps, flagOn: () => flag }).then(() => sent)
+      await runWeeklySummarySweep({ ...deps, flagOn: () => flag })
+      return sent
     }
     const offered = await withAi(true, false)
     expect(offered).toHaveLength(1)
-    expect(offered[0].body).toContain('AI weekly insights')
-    expect(offered[0].body).toContain('https://app.example.com/acme/hosts/shop/analytics')
-
-    const unreleased = await withAi(false, false)
-    expect(unreleased).toHaveLength(1)
-    expect(unreleased[0].body).not.toContain('AI weekly insights')
-
-    const alreadyOn = await withAi(true, true)
-    expect(alreadyOn).toHaveLength(1)
-    expect(alreadyOn[0].body).not.toContain('AI weekly insights')
+    expect(offered[0].email.html).toContain('https://app.example.com/acme/hosts/shop/analytics')
+    expect((await withAi(false, false))[0].email.html).not.toContain('AI weekly insights')
+    expect((await withAi(true, true))[0].email.html).not.toContain('AI weekly insights')
   })
 })

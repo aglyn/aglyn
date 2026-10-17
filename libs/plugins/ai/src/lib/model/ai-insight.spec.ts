@@ -16,6 +16,7 @@
  */
 
 import {
+  aiInsightDigestPeriod,
   AI_INSIGHT_ASK_SURFACES,
   AI_INSIGHT_SURFACE_READERS,
   aiInsightSurface,
@@ -88,5 +89,20 @@ describe('the readers each surface offers', () => {
     expect(aiInsightSurfaceNeedsSite('workspace')).toBe(false)
     expect(aiInsightSurfaceNeedsSite('automations')).toBe(true)
     expect(aiInsightSurfaceNeedsSite('marketing')).toBe(true)
+  })
+})
+
+describe('aiInsightDigestPeriod (AGL-3867)', () => {
+  it('reads the week the sweep stamped, Monday to Sunday', () => {
+    expect(aiInsightDigestPeriod({ through: '2026-09-13' }, new Date('2026-09-16T12:00:00Z'))).toMatchObject({
+      from: '2026-09-07',
+      to: '2026-09-13',
+      now: new Date('2026-09-13T23:59:59.999Z'),
+    })
+  })
+
+  it('reads the week before now for a digest made before the week was stamped', () => {
+    expect(aiInsightDigestPeriod({}, new Date('2026-09-14T06:05:00Z'))).toMatchObject({ from: '2026-09-07', to: '2026-09-13' })
+    expect(aiInsightDigestPeriod({ through: 'last week' }, new Date('2026-09-14T06:05:00Z'))).toMatchObject({ to: '2026-09-13' })
   })
 })

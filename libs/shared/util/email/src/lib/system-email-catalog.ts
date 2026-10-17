@@ -138,6 +138,14 @@ export type SystemEmailDefaultBlock =
       variant?: 'heading' | 'subheading' | 'body' | 'caption' | 'eyebrow' | 'details'
     }
   | { block: 'button'; label: string; href: string }
+  /**
+   * Markup composed per send, carried in whole by one token (AGL-3867): a
+   * layout that text blocks cannot draw, such as the weekly summary's tiles.
+   * Rendered as an `emailHtml` block, so it passes the same sanitizer as any
+   * author's HTML, and its colors are the email theme's, resolved by the
+   * sender.
+   */
+  | { block: 'html'; html: string }
 
 export interface SystemEmailTemplateDefinition {
   /** Stable storage key — the Firestore document id. Never rename. */
@@ -1511,11 +1519,11 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
     },
     {
       key: 'weekly-summary',
-      name: 'Weekly summary',
+      name: 'Weekly summary · workspace',
       description:
-        'Each Monday, how a workspace’s sites did the week before — visitors, ' +
-        'top pages, form submissions, new leads, bookings, sales and deals — ' +
-        'for its owners and admins. Free: nothing is generated.',
+        'Each Monday, how a workspace did the week before: its totals across ' +
+        'sites, a line for each site, and its deals. For its owners and ' +
+        'admins. Free: nothing is generated.',
       deliveredBy: 'resend',
       defaultSubject: '{{summary.subject}}',
       mergeTokens: [
@@ -1525,22 +1533,34 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: 'Your week at Test Org: 1,204 visitors, 9 new leads, 6 bookings',
         },
         {
-          name: 'org.name',
-          description: 'The workspace the summary is for',
-          sample: 'Test Org',
+          name: 'summary.title',
+          description: 'The heading',
+          sample: 'Test Org last week',
         },
         {
           name: 'summary.period',
           description: 'The week the figures cover',
-          sample: 'Oct 5 – Oct 11',
+          sample: 'Oct 5 – Oct 11, compared with the week before',
         },
         {
-          name: 'summary.body',
-          description: 'Each site’s figures, one per line, with its link',
-          sample:
-            'Test Site\n- Visitors: 1,204 (+12%) · Page views: 3,410 (+8%)\n' +
-            '- Top pages: / 1,020 views, /pricing 340, /contact 120\n' +
-            '- New leads: 9 (+50%) · New contacts: 3',
+          name: 'summary.html',
+          description: 'The figures, drawn as tiles and ranked lists in the email’s theme',
+          sample: '<div style="padding:16px 0 8px;"><div style="font-family:Helvetica, Arial, sans-serif;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Traffic</div></div>',
+        },
+        {
+          name: 'summary.buttonLabel',
+          description: 'The button’s words',
+          sample: 'Open Test Org',
+        },
+        {
+          name: 'summary.url',
+          description: 'Where the button goes',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org`,
+        },
+        {
+          name: 'org.name',
+          description: 'The workspace the summary is for',
+          sample: 'Test Org',
         },
         {
           name: 'settingsUrl',
@@ -1549,8 +1569,78 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
       ],
       defaultBody: [
-        { block: 'text', text: 'Your week at {{org.name}}', variant: 'heading' },
-        { block: 'text', text: '{{summary.body}}', variant: 'body' },
+        { block: 'text', text: '{{summary.title}}', variant: 'heading' },
+        { block: 'text', text: '{{summary.period}}', variant: 'caption' },
+        { block: 'html', html: '{{summary.html}}' },
+        { block: 'button', label: '{{summary.buttonLabel}}', href: '{{summary.url}}' },
+        {
+          block: 'text',
+          text: 'Change what you are emailed about: {{settingsUrl}}',
+          variant: 'caption',
+        },
+      ],
+      footerReason:
+        'You’re receiving this each Monday because you manage {{org.name}} and ' +
+        'the Weekly summary is on in your {{brand.productName}} notification settings.',
+      source: 'libs/tenant/data/admin/src/lib/server/weekly-summary.ts',
+    },
+    {
+      key: 'weekly-summary-site',
+      name: 'Weekly summary · site',
+      description:
+        'Each Monday, how one site did the week before — visitors, top pages, ' +
+        'sources, forms, new leads, bookings, sales, campaigns and more — for ' +
+        'the workspace’s owners and admins and the site’s own admins. Free: ' +
+        'nothing is generated.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{summary.subject}}',
+      mergeTokens: [
+        {
+          name: 'summary.subject',
+          description: 'The subject line, leading with the week’s figures',
+          sample: 'Test Site last week: 1,204 visitors, 9 new leads',
+        },
+        {
+          name: 'summary.title',
+          description: 'The heading',
+          sample: 'Test Site last week',
+        },
+        {
+          name: 'summary.period',
+          description: 'The week the figures cover',
+          sample: 'Oct 5 – Oct 11, compared with the week before',
+        },
+        {
+          name: 'summary.html',
+          description: 'The figures, drawn as tiles and ranked lists in the email’s theme',
+          sample: '<div style="padding:16px 0 8px;"><div style="font-family:Helvetica, Arial, sans-serif;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Traffic</div></div>',
+        },
+        {
+          name: 'summary.buttonLabel',
+          description: 'The button’s words',
+          sample: 'Open Test Site',
+        },
+        {
+          name: 'summary.url',
+          description: 'Where the button goes',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/hosts/test-site`,
+        },
+        {
+          name: 'org.name',
+          description: 'The workspace the summary is for',
+          sample: 'Test Org',
+        },
+        {
+          name: 'settingsUrl',
+          description: 'Notification settings, where the summary is turned off',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/notifications/settings`,
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: '{{summary.title}}', variant: 'heading' },
+        { block: 'text', text: '{{summary.period}}', variant: 'caption' },
+        { block: 'html', html: '{{summary.html}}' },
+        { block: 'button', label: '{{summary.buttonLabel}}', href: '{{summary.url}}' },
         {
           block: 'text',
           text: 'Change what you are emailed about: {{settingsUrl}}',
@@ -1773,7 +1863,15 @@ export function buildDefaultEmailNodeMap(
             parentId: sectionId,
             props: { children: block.label, href: block.href },
           }
-        : {
+        : block.block === 'html'
+          ? {
+              $id: id,
+              componentId: 'emailHtml',
+              pluginId: 'email',
+              parentId: sectionId,
+              props: { html: block.html },
+            }
+          : {
             $id: id,
             componentId: 'emailText',
             pluginId: 'email',
