@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **ai:** "your site is live" names the site and gives its address ([AGL-3889](https://linear.app/aglyn/issue/AGL-3889))
 - **notifications:** native push is immediate, never cut off, and sent once ([AGL-3888](https://linear.app/aglyn/issue/AGL-3888))
 - **native-apple:** the launch restore never refreshes behind a fresh sign-in ([AGL-3885](https://linear.app/aglyn/issue/AGL-3885))
 - **auth:** refuse an @aglyn.com account outside SSO before it is created ([AGL-3877](https://linear.app/aglyn/issue/AGL-3877), [AGL-1993](https://linear.app/aglyn/issue/AGL-1993))
