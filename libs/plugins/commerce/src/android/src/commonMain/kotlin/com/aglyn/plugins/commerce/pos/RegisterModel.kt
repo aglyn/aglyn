@@ -71,6 +71,8 @@ class RegisterModel(
   displayApi: PosDisplayApi = OfflinePosDisplay,
   /** The kiosks' "pay at counter" queue. */
   kioskQueueApi: PosKioskQueueApi = OfflinePosKioskQueue,
+  /** The receipt printers route. */
+  printersApi: PosPrintersApi = OfflinePosPrinters,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -84,6 +86,11 @@ class RegisterModel(
   val customers = PosCustomerModel(customersApi, scope)
   /** The last sale this register finished, and its receipt. */
   val lastReceipt = PosLastReceiptModel(firestore, api, store, hostId, scope, { receiptContext() })
+
+  /** This register's receipt printers (AGL-3909); the last receipt offers its printer button from them. */
+  val printers = PosPrintersModel(firestore, printersApi, hostId, scope).also { model ->
+    model.onRows = { rows -> lastReceipt.noteCloudPrinter(rows.isNotEmpty()) }
+  }
 
   /** The cash sales rung while offline, and their sync. */
   val offline = PosOfflineModel(
@@ -254,6 +261,7 @@ class RegisterModel(
     cart = store.cart(next.id)
     holds = store.holds(next.id)
     lastReceipt.watch(next.id)
+    printers.watch(next.id)
     display.reset()
     displayShowsBasket = false
     displayShowsProcessing = false

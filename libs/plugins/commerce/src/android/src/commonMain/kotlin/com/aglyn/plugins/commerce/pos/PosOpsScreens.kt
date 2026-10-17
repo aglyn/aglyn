@@ -65,6 +65,7 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
   val shift = model.shift
   var switching by remember { mutableStateOf(false) }
   var returning by remember { mutableStateOf(false) }
+  var printersOpen by remember { mutableStateOf(false) }
   AlertDialog(
     onDismissRequest = onDismiss,
     modifier = Modifier.testTag("pos-ops"),
@@ -88,7 +89,8 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
         }
         SectionCard("Shift") { ShiftControls(model) }
         DisplayDevicesSection(model)
-        SectionCard("Last receipt") { LastReceiptControls(model) }
+        SectionCard("Last receipt") { LastReceiptControls(model) { printersOpen = true } }
+        ReceiptPrintersSection(model) { printersOpen = true }
         SectionCard("Returns") {
           OutlinedButton(onClick = { returning = true }, enabled = model.register != null, modifier = Modifier.testTag("pos-return")) { Text("Return items") }
         }
@@ -104,12 +106,36 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
     }
   }
   if (returning) PosReturnDialog(model) { returning = false }
+  if (printersOpen) ReceiptPrintersDialog(model.printers, model.register?.name) { printersOpen = false }
   ShiftDialogs(model)
+}
+
+/** The register's receipt printers at a glance, and the way in to add and manage them. */
+@Composable
+private fun ReceiptPrintersSection(model: RegisterModel, onOpen: () -> Unit) {
+  val printers = model.printers
+  SectionCard("Receipt printers") {
+    val rows = printers.rows
+    Text(
+      when {
+        !printers.ready -> "Reading this register's printers…"
+        rows.isEmpty() -> "Print receipts, kitchen tickets and reports on a Star or Epson printer, and open its cash drawer on cash sales."
+        else -> rows.joinToString(" · ") { row ->
+          row.name + " (" + printerStateChip(printerDisplayState(row.statusState, row.statusAtMs, nowMs().toDouble())).first.lowercase() + ")"
+        }
+      },
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    OutlinedButton(onClick = onOpen, enabled = model.register != null, modifier = Modifier.testTag("pos-printers-open")) {
+      Text(if (rows.isEmpty()) "Add a receipt printer" else "Manage printers")
+    }
+  }
 }
 
 /** The last sale's receipt: shown, printed again here or as a gift receipt, and sent to the register's receipt printer. */
 @Composable
-private fun LastReceiptControls(model: RegisterModel) {
+private fun LastReceiptControls(model: RegisterModel, onAddPrinter: () -> Unit) {
   val last = model.lastReceipt
   last.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { last.notice = null }) { Text("Dismiss") } }) }
   last.error?.let { NoticeBanner(it, StatusTone.WARNING) }
@@ -122,10 +148,11 @@ private fun LastReceiptControls(model: RegisterModel) {
   val direct = model.peripherals.printers.isNotEmpty()
   if (!direct && !last.hasPrinter) {
     Text(
-      "This register has no receipt printer. Add one in the console, or connect one to this device, to print receipts here.",
+      "This register has no receipt printer. Add one, or connect one to this device, to print receipts here.",
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    TextButton(onClick = onAddPrinter, enabled = model.register != null, modifier = Modifier.testTag("pos-last-receipt-add-printer")) { Text("Add a receipt printer") }
     return
   }
   FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
