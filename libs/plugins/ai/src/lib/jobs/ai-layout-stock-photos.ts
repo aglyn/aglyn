@@ -1206,6 +1206,8 @@ export interface AiStockSiteTerms {
   shun: string[]
   /** Words no photo of the site's craft is OF, among its first tags, unless the slot or the brief names them ({@link CRAFT_KIN}). */
   shunLead: string[]
+  /** Whether the site is for adults alone, so no photo of a child is placed on it ({@link aiStockAdultsOnly}, AGL-3856). */
+  adults?: boolean
 }
 
 /** The site's terms, read from its business type. */
@@ -1472,6 +1474,106 @@ const PEOPLE_SCENES: ReadonlyArray<{
   },
 ]
 
+/**
+ * Words a photo of a child is tagged with (AGL-3856), as stems. Pixabay tags
+ * a schoolgirl "girl", "schoolgirl" or "school girl" far more often than
+ * "child", so a site for adults that names a school let children in: the
+ * beta.264 Brightpath Adult Learning Center's "Meet your teachers" showed a
+ * teen graduate, a schoolgirl and kids.
+ */
+const CHILD_STEMS = [
+  ...new Set(
+    (
+      'child children childhood kid kids baby babies toddler toddlers infant infants newborn boy boys girl girls ' +
+      'schoolgirl schoolgirls schoolboy schoolboys schoolchild schoolchildren schoolkid schoolkids pupil pupils ' +
+      'teen teens teenager teenagers teenage preteen youth kindergarten preschool'
+    )
+      .split(' ')
+      .map(aiStockStem),
+  ),
+]
+
+/** Words of which a photo of one of the business's people names one: an adult, at work or in their role. */
+const ADULT_PEOPLE_STEMS = [
+  ...new Set(
+    (
+      'man men woman women adult adults businessman businesswoman businessmen professional ' +
+      'professionals staff worker workers employee employees team colleague colleagues coworker coworkers ' +
+      'teacher teachers instructor instructors tutor tutors lecturer professor educator faculty coach coaches ' +
+      'trainer trainers chef chefs cook baker barista doctor doctors dentist nurse nurses hygienist therapist ' +
+      'physician stylist hairdresser barber artist musician photographer entrepreneur founder owner manager ' +
+      'leader speaker volunteer volunteers mechanic electrician plumber carpenter craftsman technician'
+    )
+      .split(' ')
+      .map(aiStockStem),
+  ),
+]
+
+/**
+ * The roles a list of the business's people names (AGL-3856): the words that
+ * name each, the words a photo of someone in it is tagged with, and the word
+ * a search for them leads with, where the libraries know one. A teacher is
+ * shown teaching, a coach coaching, never a student or a whistle. A team or
+ * a staff is anyone at work: its words are preferred, never required.
+ */
+const PEOPLE_ROLES: ReadonlyArray<{ words: readonly string[]; kin: readonly string[]; query?: string; loose?: boolean }> = [
+  {
+    words: ['instructor', 'teacher', 'tutor', 'educator', 'faculty', 'professor', 'lecturer', 'mentor'],
+    kin: ['teacher', 'instructor', 'tutor', 'educator', 'professor', 'lecturer', 'teaching', 'lecture', 'faculty'],
+    query: 'teacher',
+  },
+  { words: ['coach', 'trainer'], kin: ['coach', 'coaching', 'trainer', 'instructor'], query: 'coach' },
+  { words: ['chef', 'cook', 'baker'], kin: ['chef', 'cook', 'cooking', 'baker', 'baking'], query: 'chef' },
+  { words: ['stylist', 'barber', 'hairdresser', 'colorist'], kin: ['stylist', 'barber', 'hairdresser', 'hairstylist', 'haircut'], query: 'hairdresser' },
+  {
+    words: ['doctor', 'dentist', 'hygienist', 'nurse', 'therapist', 'practitioner', 'physician'],
+    kin: ['doctor', 'dentist', 'hygienist', 'nurse', 'therapist', 'physician', 'medical'],
+  },
+  {
+    words: ['staff', 'team', 'crew', 'member', 'manager', 'founder', 'owner', 'partner', 'associate', 'employee'],
+    kin: ['staff', 'team', 'worker', 'employee', 'colleague', 'coworker', 'professional', 'businessman', 'businesswoman', 'owner', 'manager'],
+    loose: true,
+  },
+]
+
+/** A role {@link aiStockPeopleRole} reads: its kin's stems, its search word, and whether a photo must name it. */
+export interface AiStockPeopleRole {
+  kin: string[]
+  query: string
+  required: boolean
+}
+
+/**
+ * The role a person's words say, else the first of the other texts that names
+ * one (their list's name): "Online learning coach" of the "Instructors" list
+ * is a coach. `null` where none names a listed role.
+ */
+export function aiStockPeopleRole(...texts: readonly string[]): AiStockPeopleRole | null {
+  for (const text of texts) {
+    const named = new Set(stemList(text))
+    const role = PEOPLE_ROLES.find((entry) => entry.words.some((word) => named.has(aiStockStem(word))))
+    if (role) return { kin: [...new Set(role.kin.map(aiStockStem))], query: role.query ?? '', required: !role.loose }
+  }
+  return null
+}
+
+/** A site's audience in its own words, when it is adults: "Adults finishing a high school diploma". */
+const ADULT_AUDIENCE = /\b(?:adults?|grown[- ]?ups?|seniors?|retirees?|older (?:adults|people)|professionals|employees|workforce|job ?seekers)\b/i
+/** Words that say a site is for children too, whatever else it says. */
+const YOUNG_AUDIENCE =
+  /\b(?:kids?|child(?:ren)?|teens?|teenagers?|youth|young people|famil(?:y|ies)|boys?|girls?|bab(?:y|ies)|toddlers?|k-12|elementary|middle school|preschool|kindergarten|pupils?)\b/i
+
+/**
+ * Whether a site is for adults alone (AGL-3856), as its audience, its name
+ * or its business type says: "Adults finishing a high school diploma",
+ * "Brightpath Adult Learning Center". Then no photo of a child is placed
+ * anywhere on it, whatever else its words name ("school").
+ */
+export function aiStockAdultsOnly(texts: ReadonlyArray<string | undefined>): boolean {
+  const said = texts.filter(Boolean).join(' . ')
+  return ADULT_AUDIENCE.test(said) && !YOUNG_AUDIENCE.test(said)
+}
+
 /** Where a picture of a moment is set, by the words that name it, and the word a search and a photo say it with. */
 const SCENE_SETTINGS: ReadonlyArray<{ words: readonly string[]; said: string }> = [
   { words: ['mountain', 'mountains', 'ridgetop', 'ridge', 'summit', 'peak', 'alpine', 'overlook', 'parkway'], said: 'mountains' },
@@ -1730,13 +1832,19 @@ export function aiStockProductSearches(
   return searches
 }
 
-/** The searches a slot tries, in order, most specific first, each distinct. */
+/**
+ * The searches a slot tries, in order, most specific first, each distinct.
+ * A portrait of one of the business's people ({@link AiLayoutPictureSlot.people})
+ * asks first for the role its words or its list's name (`sectionName`) say,
+ * in the site's world: "teacher classroom" for a "Math instructor" (AGL-3856).
+ */
 export function aiStockSearchesFor(
-  slot: Pick<AiLayoutPictureSlot, 'role' | 'alt' | 'aspect'>,
+  slot: Pick<AiLayoutPictureSlot, 'role' | 'alt' | 'aspect' | 'people'>,
   terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'domain' | 'broad'> &
     Partial<Pick<AiStockSiteTerms, 'making' | 'core' | 'scenes'>>,
   subject: string,
   part?: AiStockSlotPart,
+  sectionName = '',
 ): AiStockSearch[] {
   const orientation = aiStockOrientation(slot.aspect)
   const size =
@@ -1784,6 +1892,9 @@ export function aiStockSearchesFor(
     broad: true,
     category: true,
   }))
+  // A portrait in its role, in the site's world, where the libraries know a word for it.
+  const roleWord = slot.people ? (aiStockPeopleRole(slot.alt, sectionName)?.query ?? '') : ''
+  const role = roleWord ? (stemList(terms.business).includes(roleWord) ? terms.business : `${roleWord} ${terms.business}`.trim()) : ''
   // A scene's people are read from every word of the picture's, never its first clause alone.
   const scene = terms.scenes && slot.role !== 'hero' && part !== 'collection' ? aiStockScene(slot.alt) : null
   const thing: Query[] = subject
@@ -1799,6 +1910,7 @@ export function aiStockSearchesFor(
       ? [{ query: terms.business, broad: true }, ...broad]
       : slot.role === 'about'
         ? [
+            ...(role ? [{ query: role, broad: true, people: true }] : []),
             ...(part === 'story' ? making : []),
             {
               query: `${terms.business} ${subject}`,
@@ -1900,6 +2012,10 @@ export interface AiStockJudgement {
   refuse?: readonly string[]
   /** Stems of which a hit names one ({@link AiStockSearch.needs}). */
   needs?: readonly string[]
+  /** Stems no hit's first tags carry: a child, for a portrait of one of the business's people (AGL-3856). */
+  refuseLead?: readonly string[]
+  /** Stems naming the role a portrait shows, which a hit is preferred for naming, most of all first (AGL-3856). */
+  roles?: readonly string[]
 }
 
 /** The words of a photo's page address at its library, its id dropped: "robin-bird-songbird-garden-winter". */
@@ -2004,6 +2120,8 @@ export function aiStockRelevance(
     return 0
   // A family session is never a bride, however the photographer's brief names weddings.
   if ((judgement.refuse ?? []).some((word) => hit.all.has(word))) return 0
+  // A teacher's portrait is never OF a child, whatever else it names.
+  if ((judgement.refuseLead ?? []).some((word) => hit.lead.has(word))) return 0
   // A wedding day shows its people: a close-up of roses tagged "wedding" never fills it.
   const needs = judgement.needs ?? []
   if (needs.length && !needs.some((word) => hit.all.has(word))) return 0
@@ -2087,6 +2205,10 @@ export function aiStockRelevance(
   for (const word of new Set(subject))
     if (word !== object && hit.all.has(word)) score += 1
   if (world) score += worldLead ? 1.25 : 1
+  // A portrait in its role: a teacher at the board over a woman in a classroom.
+  const roles = judgement.roles ?? []
+  if (roles.some((word) => hit.lead.has(word))) score += 4
+  else if (roles.some((word) => hit.all.has(word))) score += 2
   // A hero is most of all what its first tags say: "law office, lawyer,
   // attorney" over "lawyers, personal injury, accident" (AGL-3856): a second
   // of them naming its world says it is of that world, not of something else.
@@ -2193,65 +2315,113 @@ const AI_STOCK_ALT_MAX = 160
 
 /**
  * Words a tag uses for how a photo looks or feels, never a thing it shows
- * (AGL-3856): "extravagant" of "wedding dress, bride, extravagant".
+ * (AGL-3856): "extravagant" of "wedding dress, bride, extravagant", "moody"
+ * of "forest, human, photographer", a season or a people's name.
  */
 const DESCRIBING = words(
   'love romance romantic luxury luxurious fancy extravagant happiness happy beauty emotion emotions mood lifestyle ' +
     'concept aesthetic wallpaper background retro vintage antique old young cute sexy fun funny sad positive negative healthy fit ' +
     'strong powerful homemade tasty yummy sweet sweetness nice dark bw monochrome macro sporty active married bridal ' +
-    'female male adult good bad poc bipoc',
+    'female male adult good bad poc bipoc moody sunny rainy foggy misty snowy cloudy stormy dreamy shiny trendy messy ' +
+    'casual blonde blond brunette muscular athletic clever intelligent concentrated curious lonely sleepy heavy ' +
+    'nature outdoors outdoor indoors indoor scenery scenic autumn fall winter spring summer ' +
+    'physical teenage traveling travelling ' +
+    'indian asian african american european caucasian vietnamese japanese chinese korean thai latino latina hispanic ' +
+    'japan vietnam viet nam thailand india china korea germany france italy spain england britain uk usa america ' +
+    'canada mexico brazil australia africa europe asia',
 )
 
 /**
  * Words a tag uses for what a person or a thing is like, said before it
- * rather than as a thing of its own (AGL-3856): "a confident lawyer", never
- * "a lawyer, law and a confident".
+ * rather than as a thing of its own (AGL-3856): "a confident lawyer", "an
+ * elderly couple", "an analog camera", never "a lawyer, law and a confident".
  */
 const QUALITIES = words(
   'confident professional successful serious smart busy creative proud skilled experienced determined focused ' +
-    'senior junior expert friendly cheerful smiling',
+    'senior junior expert friendly cheerful smiling elderly analog analogue digital mirrorless',
 )
 
 /** What a tag names that takes no article: "chalk" of "board, chalk". */
 const MASS_NOUNS = words(
-  'food coffee tea bread wood water fitness wax soap clay nature money fabric yarn wool furniture jewelry jewellery ' +
-    'pottery glass paper music art sport hair makeup chalk paint ink dust stone marble concrete steel metal ' +
-    'skincare equipment decor fashion wildlife scenery weather traffic wine beer chocolate rice sugar flour milk ' +
-    'cheese honey oil ice fire light sunlight dough sourdough pastry dessert crossfit people foliage greenery ' +
-    'autumn winter spring summer',
+  'food coffee tea bread wood water wax soap clay money fabric yarn wool furniture jewelry jewellery ' +
+    'pottery glass paper music art hair makeup chalk paint ink dust stone marble concrete steel metal ' +
+    'skincare equipment decor fashion wildlife weather traffic wine beer chocolate rice sugar flour milk ' +
+    'cheese honey oil ice fire light sunlight dough sourdough pastry dessert people foliage greenery faculty staff ' +
+    'clothing bedding frosting icing flooring',
 )
 
+/** Nouns plural without an "-s": said without an article, "women in a classroom". */
+const PLURAL_NOUNS = words('men women people children feet teeth mice geese sheep fish')
+
 /**
- * What a tag names that no photo shows as a thing of its own (AGL-3856): "law"
- * of "lawyer, law", "feedback" of "board, chalk, feedback". Left out, never
- * said with an article.
+ * What a tag names that no photo shows as a thing of its own (AGL-3856): an
+ * idea ("law" of "lawyer, law", "feedback" of "board, chalk, feedback"), a
+ * doing ("read", "lift", "fitness", "a workout"), a word for the photo itself
+ * ("photo", "spot"). Left out, never said with an article: "A bookwork and a
+ * read", "A kettlebell and fitness", "A board and training" said nothing.
  */
 const ABSTRACT_NOUNS = words(
   'law justice advocacy business feedback review news return communication communicate discussion dialog conversation ' +
     'success career work job satisfaction quality concept idea strategy marketing education technology health support ' +
     'confirmation opinion rating evaluation planning project presentation optimization information internet finance ' +
     'management leadership teamwork motivation growth strength service services help advice consulting consultation ' +
-    'marriage photography architecture travel transport transportation industry company corporate social e-business',
+    'marriage photography architecture travel transport transportation industry company corporate social e-business ' +
+    'fitness workout workouts exercise exercises crossfit sport sports skill skills knowledge exam exams lecture ' +
+    'session lesson course class hobby leisure power energy wellness talent formation participation community ' +
+    'photo photos picture pictures image images shot shots shoot shoots spot spots ' +
+    'read write learn study lift move remove focus relax think sit smile laugh eat swim teach enjoy celebrate explore ' +
+    'hike can',
+)
+
+/** Words ending as an idea does that are things: "a station", "a city", "a ship". */
+const CONCRETE_ABSTRACT_ENDINGS = words(
+  'station mansion lotion potion ornament instrument apartment monument pavement basement garment compartment ' +
+    'equipment cement city university facility ship warship spaceship airship',
+)
+
+/** Whether a word is an idea or a doing by how it ends: "participation", "community", "empowerment". */
+const saysAnIdea = (word: string) =>
+  /(?:tion|sion|ment|ness|ity|ship|ism)s?$/.test(word) && !CONCRETE_ABSTRACT_ENDINGS.has(aiStockStem(word))
+
+/**
+ * Makers' names a tag gives, never what a photo shows to someone who cannot
+ * see it (AGL-3856): "A photo-camera and a sony".
+ */
+const BRANDS = words(
+  'sony canon cannon nikon fujifilm fuji leica olympus panasonic kodak polaroid hasselblad pentax gopro dji ' +
+    'apple iphone ipad macbook imac samsung huawei android google microsoft windows dell lenovo nintendo playstation ' +
+    'xbox nike adidas puma reebok peloton bmw mercedes audi porsche ferrari lamborghini tesla ford toyota honda ' +
+    'volkswagen vw jeep chevrolet coca-cola pepsi starbucks mcdonalds ikea lego barbie disney altman',
 )
 
 /** Stopwords a description still says, as the people a photo shows: "a family", "a person". */
 const SAID_PEOPLE = words('people person family')
 
 /** Words ending in "-ing" that are things, and take an article: "a wedding", "a ring". */
-const COUNTED_ING = words('wedding ring earring building painting drawing ceiling string swing king sibling wing')
+const COUNTED_ING = words(
+  'wedding ring earring building painting drawing ceiling string swing king sibling wing dumpling pudding sapling',
+)
+
+/** "-ing" words that are things, and take no article: "clothing". */
+const UNCOUNTED_ING = words('clothing bedding frosting icing flooring stuffing seasoning filling')
 
 /** People a photo shows; the generic ones give way to a role ("man" to "businessman"). */
 const PEOPLE_NOUNS = words(
-  'man men woman women person people boy girl guy lady child children kid kids baby family couple bride groom ' +
-    'businessman businesswoman businessmen lawyer attorney doctor dentist nurse chef cook baker barista athlete ' +
-    'trainer coach student students teacher worker entrepreneur model photographer potter artist florist mother ' +
-    'father parent parents grandmother grandfather',
+  'man men woman women person people human humans boy boys girl girls guy guys lady ladies child children kid kids ' +
+    'baby family couple bride groom schoolgirl schoolboy teen teenager student students graduate athlete athletes ' +
+    'businessman businesswoman businessmen lawyer attorney doctor dentist nurse chef cook baker barista ' +
+    'trainer coach teacher teachers instructor lecturer professor tutor worker workers entrepreneur model ' +
+    'photographer potter artist florist mother father parent parents grandmother grandfather grandparents ' +
+    'faculty staff team participants volunteer volunteers musician dancer leader manager owner founder',
 )
-const GENERIC_PEOPLE = words('man men woman women person people guy lady adult')
+const GENERIC_PEOPLE = words('man men woman women person people human humans guy guys lady ladies adult boy boys girl girls')
+
+/** What a person in a photo wears, said "in": "a bride in a wedding dress". */
+const CLOTHING = words('dress gown suit uniform costume coat jacket robe apron')
 
 /**
  * Places a photo is set in, each with how a phrase says it is there: "a
- * train at a station", "a lawyer in court".
+ * train at a station", "a lawyer in court", "a couple at a wedding".
  */
 const PLACES: Readonly<Record<string, string>> = {
   station: 'at',
@@ -2259,7 +2429,15 @@ const PLACES: Readonly<Record<string, string>> = {
   desk: 'at',
   table: 'at',
   counter: 'at',
+  school: 'at',
+  college: 'at',
+  university: 'at',
+  wedding: 'at',
   beach: 'on',
+  trail: 'on',
+  path: 'on',
+  bridge: 'on',
+  street: 'on',
   court: 'in',
   courtroom: 'in',
   office: 'in',
@@ -2267,6 +2445,7 @@ const PLACES: Readonly<Record<string, string>> = {
   gym: 'in',
   studio: 'in',
   classroom: 'in',
+  hall: 'in',
   room: 'in',
   garden: 'in',
   park: 'in',
@@ -2285,13 +2464,32 @@ const PLACES: Readonly<Record<string, string>> = {
   field: 'in',
 }
 
+/** Places that are things too, a photo's subject where nothing else is: "a desk in a classroom". */
+const OBJECT_PLACES = words('desk table counter bridge')
+
 /** Places said without an article: "in court". */
 const BARE_PLACES = words('court')
+
+/** How many of a photo's first tags its description reads: the things and people it is OF. */
+const ALT_TAGS_READ = 8
+/** How far a photo's tags are read for where it is set, said last: "in a gym" of a kettlebell's seventh tag. */
+const ALT_PLACE_TAGS_READ = 10
+
+/** A tag's words, a word for the photo itself taken off a compound: "photo-camera" is a camera. */
+function tagWords(tag: string): string[] {
+  return tag
+    .toLowerCase()
+    .replace(/[^a-zÀ-ɏ\s'-]/g, ' ')
+    .replace(/\b(?:photo|picture|image)-(?=[a-z])/g, '')
+    .split(/\s+/)
+    .filter(Boolean)
+}
 
 /**
  * A tag as a phrase of an English description (AGL-3856): "a wedding dress",
  * "an attorney", "books", "chalk", "Columbus"; `null` for a tag that names no
- * thing ("extravagant", "beautiful", "feedback") or is too long to be one.
+ * thing ("extravagant", "feedback", "training", "sony") or is too long to be
+ * one.
  */
 function describedTag(tag: string, proper: ReadonlySet<string>): string | null {
   const describing = (word: string) =>
@@ -2300,27 +2498,34 @@ function describedTag(tag: string, proper: ReadonlySet<string>): string | null {
     QUALITIES.has(word) ||
     /(?:ous|ful)$/.test(word) ||
     (word.length > 4 && /[^e]ed$/.test(word))
-  const all = tag
-    .toLowerCase()
-    .replace(/[^a-zÀ-ɏ\s'-]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-  // "Beautiful flowers" shows flowers; "roasted" shows nothing.
-  const list = all.filter((word) => !describing(word))
+  const all = tagWords(tag)
+  // "Beautiful flowers" shows flowers; "roasted" shows nothing; "photo model"
+  // is a model and "traveling couples" are couples: a word before the last
+  // that is a doing says what they do, never what they are.
+  const list = all.filter(
+    (word, index) =>
+      !describing(word) &&
+      !(all.length > 1 && /^(?:photo|picture|image)$/.test(word)) &&
+      !(index < all.length - 1 && index > 0 && word.endsWith('ing') && !COUNTED_ING.has(word)),
+  )
   if (!list.length || all.length > 3) return null
   // A phrase of no thing ("up close") or a doing ("take pictures", "to lift", "work out") is not what it shows.
   if (list.every((word) => STOPWORDS.has(word) && !SAID_PEOPLE.has(word))) return null
-  if (/^(?:to|take|taking|make|making|get|do|go|lie)$/.test(list[0] as string)) return null
+  if (/^(?:to|take|taking|make|making|get|do|go|lie|in|on|at|for|with|by|of)$/.test(list[0] as string)) return null
   if (/^(?:out|up|off|down|away|on|in)$/.test(list[list.length - 1] as string)) return null
+  if (list.some((word) => BRANDS.has(word))) return null
   if (list.every((word) => proper.has(word)))
     return list.map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join(' ')
   const last = list[list.length - 1] as string
-  // An idea, never a thing: "law", "feedback", "customer satisfaction".
-  if (ABSTRACT_NOUNS.has(last)) return null
+  // An idea or a doing, never a thing: "law", "feedback", "customer satisfaction", "participation", "weightlifting".
+  if (ABSTRACT_NOUNS.has(last) || ABSTRACT_NOUNS.has(aiStockStem(last)) || saysAnIdea(last)) return null
+  const doing = last.endsWith('ing') && !COUNTED_ING.has(aiStockStem(last)) && !UNCOUNTED_ING.has(last)
+  if (doing) return null
   const phrase = list.join(' ')
-  const plural = aiStockStem(last) !== last && !/^(?:lens|canvas|atlas|gas|bus)$/.test(last)
-  const uncounted = MASS_NOUNS.has(last) || (last.endsWith('ing') && !COUNTED_ING.has(last))
-  if (plural || uncounted || (STOPWORDS.has(list[0] as string) && !SAID_PEOPLE.has(list[0] as string))) return phrase
+  const plural =
+    PLURAL_NOUNS.has(last) || (aiStockStem(last) !== last && !/^(?:lens|canvas|atlas|gas|bus)$/.test(last))
+  if (plural || MASS_NOUNS.has(last) || (STOPWORDS.has(list[0] as string) && !SAID_PEOPLE.has(list[0] as string)))
+    return phrase
   return `${articleFor(phrase)} ${phrase}`
 }
 
@@ -2334,9 +2539,11 @@ interface AiStockAltPart {
   /** Its last word: what it is. */
   head: string
   kind: 'person' | 'place' | 'thing'
+  /** The position of the tag that first named it. */
+  index: number
 }
 
-/** Whether two words name one thing, one inside the other: "law" and "lawyer", "man" and "businessman". */
+/** Whether two words name one thing, one inside the other: "law" and "lawyer", "cam" and "camera". */
 function nearSynonyms(a: string, b: string): boolean {
   const [short, long] = a.length <= b.length ? [a, b] : [b, a]
   return short.length >= 3 && short !== long && (long.startsWith(short) || long.endsWith(short))
@@ -2344,26 +2551,40 @@ function nearSynonyms(a: string, b: string): boolean {
 
 /**
  * A photo described from its own tags (AGL-3856): a short English phrase of
- * what its first tags show — one or two things, or a thing and where it is,
- * one person at most — never the library's comma-separated list: "A train at
- * a station", "A confident lawyer in court", "A portrait of a businessman",
- * "A board and chalk". A tag of how it looks is said before the thing it
- * qualifies; an idea ("law", "feedback") is left out; a word inside another
- * ("law" of "lawyer", "man" of "businessman") gives way to it; a mass noun
- * takes no article. `null` where no tag names a thing.
+ * concrete things, never the library's comma-separated list: "A train at a
+ * station", "A confident lawyer in court", "A portrait of a businessman", "A
+ * photographer with a camera on a beach", "A kettlebell in a gym", "An analog
+ * camera". It says one person at most (a role over a man or a woman, an adult
+ * over a girl), what they hold or wear, or one or two things, and where:
+ *
+ * - an idea or a doing ("law", "feedback", "training", "a read",
+ *   "participation"), a maker's name ("sony"), a word for the photo itself
+ *   ("photo", "spot") and a look ("moody", "analog" alone, a season) are left
+ *   out; a quality ("elderly", "analog") is said before the one thing it
+ *   qualifies;
+ * - of two words for one thing the first tag's stays ("book" over
+ *   "bookwork", "camera" over "photo-camera"), unless the later phrase holds
+ *   it whole ("wedding dress" over "wedding");
+ * - a second thing comes only from the first two tags and where no place is
+ *   said, what a person holds only from the first three, where it is set
+ *   from the first ten;
+ * - no word is said twice: never "an elderly couple and an elderly".
+ *
+ * `null` where no tag names a thing.
  */
 export function aiStockTagsAlt(tags: readonly string[], proper: ReadonlySet<string> = new Set()): string | null {
   const parts: AiStockAltPart[] = []
   let quality = ''
   let portrait = false
-  for (const tag of tags.slice(0, 6)) {
+  for (const [index, tag] of tags.slice(0, ALT_PLACE_TAGS_READ).entries()) {
     const lower = tag.toLowerCase().trim()
-    if (lower === 'portrait' || lower === 'portraits') {
+    const reading = index < ALT_TAGS_READ
+    if (reading && (lower === 'portrait' || lower === 'portraits')) {
       portrait = true
       continue
     }
     if (QUALITIES.has(lower)) {
-      quality ||= lower
+      if (reading) quality ||= lower
       continue
     }
     const said = describedTag(tag, proper)
@@ -2372,45 +2593,68 @@ export function aiStockTagsAlt(tags: readonly string[], proper: ReadonlySet<stri
     const stems = stemList(bare)
     const head = bare.split(/\s+/).pop()?.toLowerCase() ?? ''
     if (!head) continue
-    const kind: AiStockAltPart['kind'] = PEOPLE_NOUNS.has(head) ? 'person' : PLACES[head] ? 'place' : 'thing'
+    const headStem = aiStockStem(head)
+    const kind: AiStockAltPart['kind'] =
+      PEOPLE_NOUNS.has(head) || PEOPLE_NOUNS.has(headStem) ? 'person' : PLACES[headStem] ? 'place' : 'thing'
+    // Past the first tags only where it is set is read.
+    if (!reading && kind !== 'place') continue
     if (parts.some((part) => stems.every((stem) => part.stems.includes(stem)))) continue
-    // A longer phrase, or a word holding another, takes its place: "wedding dress" for "wedding", "lawyer" for "law".
-    const within = parts.findIndex(
-      (part) => part.stems.every((stem) => stems.includes(stem)) || nearSynonyms(part.head, head),
-    )
-    const part = { said, stems, head, kind }
-    if (within >= 0) {
-      const held = parts[within] as AiStockAltPart
-      const fuller = nearSynonyms(held.head, head) ? head.length > held.head.length : stems.length > held.stems.length
-      if (fuller) parts.splice(within, 1, part)
+    const part = { said, stems, head: headStem, kind, index }
+    // A longer phrase of the same thing takes its place: "elderly couple" for "couple".
+    const holds = parts.findIndex((held) => held.head === headStem && held.stems.every((stem) => stems.includes(stem)))
+    if (holds >= 0) {
+      parts.splice(holds, 1, { ...part, index: (parts[holds] as AiStockAltPart).index })
       continue
     }
+    // Two words for one thing ("book" and "bookwork", "cam" and "camera"): the
+    // first tag's stays; a person's are told apart by their role below.
+    if (kind !== 'person' && parts.some((held) => held.kind !== 'person' && nearSynonyms(held.head, headStem))) continue
     parts.push(part)
   }
-  // One person: a role over a man or a woman ("businessman" over "man"), else the first.
+  // One person: a role over a man, a woman, a girl ("businessman" over "man"), else the first.
   const people = parts.filter((part) => part.kind === 'person')
   const person = people.find((part) => !GENERIC_PEOPLE.has(part.head)) ?? people[0]
-  const place = parts.find((part) => part.kind === 'place')
-  const things = parts.filter((part) => part.kind === 'thing')
-  const shown = (person ? [person] : []).concat(things)
-  if (!shown.length && !place) return null
-  let phrase: string
-  if (portrait && person) phrase = `a portrait of ${person.said}`
-  else {
-    const chosen = shown
-      .sort((a, b) => parts.indexOf(a) - parts.indexOf(b))
-      .slice(0, place ? 1 : 2)
-      .map((part) => part.said)
-    // A quality is said before a single counted thing: "a confident lawyer".
-    if (quality && chosen[0] && /^an? \S+$/.test(chosen[0]))
-      chosen[0] = `${articleFor(quality)} ${quality} ${chosen[0].replace(/^an?\s+/, '')}`
-    phrase = chosen.join(' and ')
+  let places = parts.filter((part) => part.kind === 'place')
+  let things = parts.filter((part) => part.kind === 'thing')
+  // Nothing but places: a desk is the thing in a classroom; "a school in a classroom" says one place.
+  if (!person && !things.length && places.length > 1) {
+    const object = places.find((part) => OBJECT_PLACES.has(part.head))
+    if (object) {
+      things = [object]
+      places = places.filter((part) => part !== object)
+    } else places = places.slice(0, 1)
   }
-  if (place) {
+  const place = places[0]
+  if (!person && !things.length && !place) return null
+  /** Every word said so far, so none is said twice. */
+  const said = new Set<string>()
+  const fresh = (part: AiStockAltPart) => {
+    const list = stemList(part.said.replace(/^an?\s+/, ''))
+    if (list.some((stem) => said.has(stem))) return false
+    for (const stem of list) said.add(stem)
+    return true
+  }
+  /** A quality before a single counted word: "a confident lawyer", "an analog camera". */
+  const qualified = (part: AiStockAltPart) =>
+    quality && /^an? \S+$/.test(part.said) && !said.has(aiStockStem(quality))
+      ? `${articleFor(quality)} ${quality} ${part.said.replace(/^an?\s+/, '')}`
+      : part.said
+  let phrase = ''
+  if (person && fresh(person)) {
+    phrase = portrait ? `a portrait of ${person.said}` : qualified(person)
+    const held = things.find((part) => part.index <= 2)
+    if (!portrait && held && fresh(held)) phrase += ` ${CLOTHING.has(held.head) ? 'in' : 'with'} ${held.said}`
+  } else if (things[0] && fresh(things[0])) {
+    phrase = qualified(things[0])
+    const second = things[1]
+    if (second && second.index <= 1 && !place && fresh(second)) phrase += ` and ${second.said}`
+  }
+  if (place && fresh(place)) {
     const preposition = PLACES[place.head] ?? 'in'
     const where = BARE_PLACES.has(place.head) && /^an? \S+$/.test(place.said) ? place.head : place.said
     phrase = phrase ? `${phrase} ${preposition} ${where}` : where
   }
+  if (!phrase) return null
   const out = `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}`
   return out.length > AI_STOCK_ALT_MAX ? out.slice(0, AI_STOCK_ALT_MAX).replace(/[\s,]+\S*$/, '') : out
 }
@@ -2609,9 +2853,18 @@ export function aiStockPhotoWordsSubject(photoWords: string): string {
  * its business named in English, else its plan's photo words' subject, else
  * its kind of site), every other site by its business type. One reading for
  * every slot of every source — hero, background, gallery, card, product,
- * post — so no slot searches by words another slot is held against.
+ * post — so no slot searches by words another slot is held against. A site for
+ * adults alone ({@link aiStockAdultsOnly}) is told so, whatever its world.
  */
 export function aiStockSourceTerms(
+  input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords' | 'kindWords' | 'name' | 'audience' | 'kind'>,
+): AiStockSiteTerms {
+  const terms = sourceWorldTerms(input)
+  return aiStockAdultsOnly([input.audience, input.name, input.business]) ? { ...terms, adults: true } : terms
+}
+
+/** What a source's photos are searched by: its world, as {@link aiStockSourceTerms} reads it. */
+function sourceWorldTerms(
   input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords' | 'kindWords' | 'name' | 'audience' | 'kind'>,
 ): AiStockSiteTerms {
   const english = aiStockSourceSubject(input)
@@ -3010,8 +3263,33 @@ export function aiLayoutStockPhotoSource(
       return null
     }
 
-    /** How a search's hits are judged for a slot. */
+    /**
+     * How a search's hits are judged for a slot. On a site for adults alone no
+     * hit names a child; a portrait of one of the business's people names an
+     * adult, never leads with a child, and is preferred in its role (AGL-3856).
+     */
     const judgementFor = (
+      slot: AiLayoutPictureSlot,
+      request: AiStockSearch,
+      subject: string,
+    ): AiStockJudgement => {
+      const refuse = [...(request.refuse ?? []), ...(terms.adults ? CHILD_STEMS : [])]
+      const role = slot.people ? aiStockPeopleRole(slot.alt, input.sectionNames[slot.sectionIndex] ?? '') : null
+      return {
+        ...judgementOf(slot, request, subject),
+        ...(refuse.length ? { refuse: [...new Set(refuse)] } : {}),
+        // An occupation is shown in it (a teacher, a coach); a team is any adult at work.
+        ...(slot.people
+          ? {
+              needs: request.needs?.length ? request.needs : role?.required ? role.kin : ADULT_PEOPLE_STEMS,
+              refuseLead: CHILD_STEMS,
+              ...(role ? { roles: role.kin } : {}),
+            }
+          : {}),
+      }
+    }
+    /** A search's own judgement, as its words set it. */
+    const judgementOf = (
       slot: AiLayoutPictureSlot,
       request: AiStockSearch,
       subject: string,
@@ -3085,6 +3363,7 @@ export function aiLayoutStockPhotoSource(
               terms,
               subject,
               aiStockSlotPart(slot, sectionName),
+              sectionName,
             )),
         ...craftSearches(slot),
       ]

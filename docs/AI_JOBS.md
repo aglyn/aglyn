@@ -2698,13 +2698,50 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   words (`aiStockPhotoAlt`): the slot's words are kept on an English site when a word of
   their subject is among the hit's first tags or its page's address; otherwise the photo
   is described by the library's own description where it writes one (Pexels' `alt`),
-  else its first three tags ("Cake, homemade, dessert"). The libraries write in English
+  else by a short English phrase built from its own tags (`aiStockTagsAlt`), never the
+  library's tag list. The libraries write in English
   and no model translates them, so a site in another language takes the platform's own
   phrase in its language (`illustrativePhoto` in `ai-layout-labels.ts`: "Foto
   ilustrativa"), true of any photo. The library's asset keeps the same words. The
   beta.253 Panadería La Concha Dorada start (job eg4maZMGtN) captioned a round cake
   dusted "HOME MADE" as conchas on a tray, and none of its nine photos showed what its
   words said. `ai-stock-photo-alt.spec.ts` replays its recorded "bakery" answer.
+- **The phrase a photo's tags make (AGL-3856).** `aiStockTagsAlt` reads a hit's first
+  eight tags for the things and the person it shows, and its first ten for where it is
+  set. It says one person at most (a role over a man, a woman or a girl), what that
+  person holds or wears from the first three tags ("A photographer with a camera on a
+  bridge", "A bride in a wedding dress"), or one thing, with a second from the first
+  two tags only where no place is said, and then the place ("A kettlebell in a gym",
+  "An aisle at a wedding"). It leaves out ideas and doings ("law", "feedback",
+  "training", "read", "fitness", any word ending "-tion", "-ment", "-ity" and the
+  like), makers' names ("sony", "canon"), words for the photo itself ("photo",
+  "spot"), seasons, peoples and countries, and says a quality only before the one
+  thing it qualifies ("An analog camera", "An elderly couple"). Of two words for one
+  thing the first tag's stays ("book" over "bookwork", "camera" over "photo-camera"),
+  and no word is said twice. The beta.264 Brightpath, Ironwood Barbell and Silver Fir
+  starts shipped "A kettlebell and fitness", "A bookwork and a read", "A participation
+  in a classroom", "A photo-camera and a sony" and "An elderly couple and an elderly";
+  `ai-stock-photo-alt.spec.ts` replays each placed photo's recorded tags
+  (`fixtures/ai-stock-photo-agl3856-people-recordings.ts`) and holds the phrase each
+  now makes.
+- **People show adults in their role, and a site for adults shows no child
+  (AGL-3856).** A dataset of the business's people (a team, staff, instructors,
+  coaches) marks each record's picture `people` (`aiSiteDatasetRecordPhotos`). Its
+  role is read from the record's name, else the list's name (`aiStockPeopleRole`):
+  an occupation (a teacher, a coach, a chef, a stylist, a doctor) is searched first
+  as the role in the site's world ("teacher classroom"), and a photo must name it; a
+  team or a staff takes any adult at work, its role preferred. A people picture is
+  never a photo whose first tags or page address name a child, a girl, a boy or a
+  teen, and one naming the role among its first tags ranks first. A record no photo
+  fits takes a starter of people (the team, the owner), never the workbench or the
+  houseplants. A site whose audience, name or business type says adults and nothing
+  younger (`aiStockAdultsOnly`: "Adults finishing a high school diploma", "Brightpath
+  Adult Learning Center") is told so in its terms (`adults`), and no slot on it takes a
+  photo naming a child anywhere in its tags, whatever else its words name ("school"
+  lets children in otherwise). The kind of site alone never says adults. The beta.264
+  Brightpath Adult Learning Center (job Ysli21sB6K) showed a teen graduate, a
+  schoolgirl and kids as its instructors; `ai-stock-photo-brightpath-people.spec.ts`
+  replays its recorded searches. Nothing the model sees changed.
 - **The cap.** The compiler's per-page picture cap is unchanged; the resolver
   only fills the slots the compiler wrote.
 
