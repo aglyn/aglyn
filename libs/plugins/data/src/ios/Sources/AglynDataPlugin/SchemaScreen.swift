@@ -443,7 +443,7 @@ private struct FieldEditorSheet: View {
         }
       }
     }
-    .frame(minWidth: 420, minHeight: 520)
+    .aglynSheetMinimumSize(width: 420, height: 520)
     .accessibilityIdentifier("field-editor")
   }
 

@@ -226,7 +226,7 @@ private struct AddClauseSheet: View {
         picked = []
       }
     }
-    .frame(minWidth: 380, minHeight: 320)
+    .aglynSheetMinimumSize(width: 380, height: 320)
     .presentationDetents([.medium])
   }
 }
