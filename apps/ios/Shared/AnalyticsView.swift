@@ -87,6 +87,7 @@ final class AnalyticsModel {
   private(set) var screenDocs: [FirestoreDocument]?
   private(set) var screens: [String: String] = [:]
   private(set) var entitled: Bool?
+  private(set) var entitlementFailed = false
   @ObservationIgnored private var listeners: [FirestoreListening] = []
   @ObservationIgnored private var pagesListener: FirestoreListening?
 
@@ -113,9 +114,15 @@ final class AnalyticsModel {
         }
       })
     if entitled == nil, let api {
+      entitlementFailed = false
       Task {
-        let body = try? await api.request("/api/orgs/entitlements", query: [("hostId", hostID)])
-        if case .bool(let value)? = body?["features"]?["screenAnalytics"] { entitled = value } else { entitled = false }
+        // A failed lookup is not a plan without the feature: it says so, and a refresh retries.
+        do {
+          let body = try await api.request("/api/orgs/entitlements", query: [("hostId", hostID)])
+          if case .bool(let value)? = body["features"]?["screenAnalytics"] { entitled = value } else { entitled = false }
+        } catch {
+          entitlementFailed = true
+        }
       }
     }
   }
@@ -268,7 +275,13 @@ struct AnalyticsView: View {
         .pickerStyle(.segmented)
       }
       switch analytics.entitled {
-      case nil: SkeletonRows(count: 2)
+      case nil:
+        if analytics.entitlementFailed {
+          AglynNotice("Your plan could not be checked. Check the connection and pull to refresh.", tone: .error)
+            .accessibilityIdentifier("analytics-pages-failed")
+        } else {
+          SkeletonRows(count: 2)
+        }
       case false?:
         AglynNotice("Per-page traffic is part of the Pro plan. Upgrade in Billing to see each page's views, devices and referrers.", tone: .info)
           .accessibilityIdentifier("analytics-pages-upgrade")

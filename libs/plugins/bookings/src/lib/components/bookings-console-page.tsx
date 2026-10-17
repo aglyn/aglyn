@@ -317,7 +317,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
       } else {
         // New service rides the quota-enforcing resources API (AGL-473) —
         // it also re-checks the `bookings` entitlement server-side.
-        await createHostResource({ hostId, resource: 'service', data: fields })
+        await createHostResource({ hostId, resource: 'service', data: { ...fields } })
       }
       setDraft(null)
       enqueueSnackbar('Service saved', { variant: 'success', persist: false })
