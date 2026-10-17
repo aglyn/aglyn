@@ -4,6 +4,7 @@
 import AglynContracts
 import AglynCore
 import AglynPluginHost
+import AglynSite
 import AglynUI
 import Observation
 import SwiftUI
@@ -231,8 +232,9 @@ struct EventsScreen: View {
             "No events yet", systemImage: "calendar",
             message: "Create events here, then drop an Event List element on any page; published events show with SEO event markup.")
         } else if selectable {
-          List(rows, selection: $selection) { row in EventListRow(row: row).tag(row.id) }
-            .aglynListBackground()
+          List(rows) { row in EventListRow(row: row).aglynSelectableRow(row.id, selection: $selection) }
+            .aglynSelectableListStyle()
+            .aglynSelectionKeys(rows.map(\.id), selection: $selection)
             .accessibilityIdentifier("events-list")
         } else {
           List(rows) { row in
@@ -259,12 +261,12 @@ struct EventsScreen: View {
     } else if let row = events.rows?.first(where: { $0.id == selection }) {
       editor(for: row).id(row.id)
     } else {
-      AglynEmptyState("Pick an event to see it here", systemImage: "calendar")
+      AglynSelectionPlaceholder("No event selected", systemImage: "calendar")
     }
   }
 
   private func editor(for row: EventRow?) -> some View {
-    EventEditor(initial: row.map(EventDraft.init) ?? EventDraft(), onDelete: row.map { row in { deleting = row } }) { draft in
+    EventEditor(context: context, initial: row.map(EventDraft.init) ?? EventDraft(), onDelete: row.map { row in { deleting = row } }) { draft in
       guard let hostID = context.hostID, let merge = eventMerge(draft) else { return }
       let id = draft.id ?? newEventID()
       if draft.id == nil {
@@ -291,11 +293,13 @@ struct EventListRow: View {
 
 struct EventEditor: View {
   @Environment(\.dismiss) private var dismiss
+  let context: NativePluginContext
   let onDelete: (() -> Void)?
   let onSave: (EventDraft) -> Void
   @State private var draft: EventDraft
 
-  init(initial: EventDraft, onDelete: (() -> Void)?, onSave: @escaping (EventDraft) -> Void) {
+  init(context: NativePluginContext, initial: EventDraft, onDelete: (() -> Void)?, onSave: @escaping (EventDraft) -> Void) {
+    self.context = context
     _draft = State(initialValue: initial)
     self.onDelete = onDelete
     self.onSave = onSave
@@ -339,12 +343,13 @@ struct EventEditor: View {
         .accessibilityIdentifier("event-description")
       }
       Section("Cover") {
-        TextField("Cover image URL", text: $draft.coverImage)
-          #if os(iOS)
-            .textInputAutocapitalization(.never)
-            .keyboardType(.URL)
-          #endif
-          .accessibilityIdentifier("event-cover")
+        // The cover is picked from the site's media library (or a link pasted), never a typed address field.
+        MediaPickField(
+          context: context, label: "Cover image", value: draft.coverImage,
+          onPick: { chosen in draft.coverImage = chosen.item.url ?? chosen.item.cdnPath ?? "" },
+          onClear: { draft.coverImage = "" }, onLink: { draft.coverImage = $0 }
+        )
+        .accessibilityIdentifier("event-cover")
         if !draft.coverImage.trimmingCharacters(in: .whitespaces).isEmpty {
           TextField(
             "Cover image description", text: Binding(get: { draft.coverImageAlt }, set: { draft.coverImageAlt = String($0.prefix(values.eventCoverAltMaxLength)) }),

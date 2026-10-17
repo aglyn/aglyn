@@ -30,6 +30,7 @@ private const val IID_WEB_MESSAGE_RECEIVED = "57213f19-00e6-49fa-8e07-898ea01ecb
 private const val IID_ADD_SCRIPT_COMPLETED = "b99369f3-9b11-47b5-bc6f-8e7895fcea17"
 private const val IID_EXECUTE_SCRIPT_COMPLETED = "49511172-cc67-4bca-9923-137112f4c4cc"
 private val IID_ICOREWEBVIEW2_2 = guidBytes("9E8F0CF8-E670-4B5E-B2BC-73E061E3184C")
+private val IID_ICOREWEBVIEW2_SETTINGS_2 = guidBytes("EE9A0F68-F46C-4E32-AC23-EF8CAC224D2A")
 
 /** Vtable slots, from WebView2.h. */
 private object Slot {
@@ -58,6 +59,9 @@ private object Slot {
   // ICoreWebView2Settings
   const val PUT_IS_STATUS_BAR_ENABLED = 10
   const val PUT_ARE_DEV_TOOLS_ENABLED = 12
+  // ICoreWebView2Settings2
+  const val GET_USER_AGENT = 21
+  const val PUT_USER_AGENT = 22
   // ICoreWebView2NavigationStartingEventArgs
   const val NAV_GET_URI = 3
   const val NAV_PUT_CANCEL = 8
@@ -180,6 +184,8 @@ class WebView2View(
   private val parentHwnd: Pointer,
   private val listener: WebView2Listener,
   private val bridgeScript: String? = null,
+  /** Makes the view's user agent from WebView2's own (AGL-3894); null leaves it alone. */
+  private val userAgent: ((base: String?) -> String)? = null,
 ) {
   private var controller: ComRef? = null
   private var webview: ComRef? = null
@@ -217,6 +223,17 @@ class WebView2View(
     view.get(Slot.GET_SETTINGS, "get_Settings").also { settings ->
       settings.call(Slot.PUT_IS_STATUS_BAR_ENABLED, 0)
       settings.call(Slot.PUT_ARE_DEV_TOOLS_ENABLED, 0)
+      // ICoreWebView2Settings2 (runtime 86+): the app's marker after WebView2's own agent. A
+      // runtime without it keeps its default agent; the console then shows its browser chrome.
+      userAgent?.let { make ->
+        settings.queryInterface(IID_ICOREWEBVIEW2_SETTINGS_2)?.let { two ->
+          runCatching {
+            val base = two.string(Slot.GET_USER_AGENT, "get_UserAgent")
+            two.call(Slot.PUT_USER_AGENT, wide(make(base))).check("put_UserAgent")
+          }
+          two.release()
+        }
+      }
       settings.release()
     }
     val navigating = eventHandler(IID_NAVIGATION_STARTING) { args ->

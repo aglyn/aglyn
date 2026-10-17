@@ -69,7 +69,7 @@ struct FunnelsScreen: View {
             FunnelDetail(row: row, editor: editor, canManage: access.state.canManage).id(row.id)
               .frame(maxWidth: .infinity, maxHeight: .infinity)
           } else {
-            AglynEmptyState("Pick a funnel to see its results", systemImage: FunnelsSymbols.funnel)
+            AglynSelectionPlaceholder("No funnel selected", systemImage: FunnelsSymbols.funnel)
               .frame(maxWidth: .infinity, maxHeight: .infinity)
           }
         }
@@ -138,13 +138,14 @@ struct FunnelsScreen: View {
         }
       }
     } else if selectable {
-      List(model.rows, selection: $selection) { row in
-        FunnelListRow(row: row).tag(row.id)
+      List(model.rows) { row in
+        FunnelListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
       }
       .onChange(of: model.rows, initial: true) { _, rows in
         if selection == nil || !rows.contains(where: { $0.id == selection }) { selection = rows.first?.id }
       }
-      .aglynListBackground()
+      .aglynSelectableListStyle()
+      .aglynSelectionKeys(model.rows.map(\.id), selection: $selection)
       .accessibilityIdentifier("funnels-list")
     } else {
       List(model.rows) { row in

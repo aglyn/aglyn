@@ -106,6 +106,37 @@ public struct AglynEmptyState<Actions: View>: View {
     } actions: {
       actions
     }
+    // Fill the space it is given and center in it, so an empty list never floats mid-column with its filters.
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+}
+
+/// What a detail column shows while nothing in its list is picked: quiet
+/// secondary text, the way Mail says "No Message Selected" (never a full-size
+/// empty state with a big symbol).
+public struct AglynSelectionPlaceholder: View {
+  let title: String
+  let systemImage: String?
+
+  public init(_ title: String, systemImage: String? = nil) {
+    self.title = title
+    self.systemImage = systemImage
+  }
+
+  public var body: some View {
+    VStack(spacing: AglynSpace.one) {
+      if let systemImage {
+        Image(systemName: systemImage).font(.system(size: 22, weight: .regular)).foregroundStyle(.tertiary)
+          .accessibilityHidden(true)
+      }
+      Text(title).font(AglynFont.title3).foregroundStyle(.secondary)
+    }
+    .multilineTextAlignment(.center)
+    .padding(AglynSpace.three)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(AglynColor.paper)
+    .accessibilityElement(children: .combine)
+    .accessibilityIdentifier("selection-placeholder")
   }
 }
 

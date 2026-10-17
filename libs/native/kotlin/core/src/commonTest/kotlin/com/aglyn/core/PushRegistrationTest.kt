@@ -45,4 +45,11 @@ class PushRegistrationTest {
   fun rowsLiveUnderTheMembersDevices() {
     assertEquals("users/u1/devices/i1", deviceRowPath("u1", "i1"))
   }
+
+  @Test
+  fun onlyAnAppTheServerPushesRegistersForPush() {
+    // The server's POS_PUSH_TYPES (push-delivery.ts) lists no type, so the register is pushed nothing.
+    assertTrue(AglynAppId.AGLYN.receivesPushes)
+    assertFalse(AglynAppId.POS.receivesPushes)
+  }
 }

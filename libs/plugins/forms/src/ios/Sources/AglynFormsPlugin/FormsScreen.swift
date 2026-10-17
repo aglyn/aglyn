@@ -63,17 +63,14 @@ struct FormsScreen: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
-          Divider()
-          Group {
-            if let selection {
-              detail(selection, titled: false).id(selection)
-            } else {
-              AglynEmptyState("Pick a form to see it here", systemImage: FormsSymbols.form)
-            }
+        AglynListDetailColumns(listWidth: 360) {
+          list(selectable: true)
+        } detail: {
+          if let selection {
+            detail(selection, titled: false).id(selection)
+          } else {
+            AglynSelectionPlaceholder("No form selected", systemImage: FormsSymbols.form)
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       } else {
         list(selectable: false)
@@ -206,12 +203,12 @@ struct FormsScreen: View {
         if model.search.isEmpty && model.status == .inUse { SlotWidgets(context: context, slot: ListCreateZone.forms) }
       }
     } else if selectable {
-      List(selection: $selection) { rows(selectable: true) }
+      List { rows(selectable: true) }
         .onChange(of: model.rows, initial: true) { _, rows in
           if selection == nil { selection = rows.first?.id }
         }
         .sensoryFeedback(.selection, trigger: selection)
-        .aglynListBackground()
+        .aglynSelectableListStyle().aglynSelectionKeys(model.rows.map(\.id), selection: $selection)
         .accessibilityIdentifier("forms-list")
     } else {
       List { rows(selectable: false) }
@@ -226,7 +223,7 @@ struct FormsScreen: View {
     ForEach(model.rows) { row in
       Group {
         if selectable {
-          FormListRow(row: row, now: now).tag(row.id)
+          FormListRow(row: row, now: now).aglynSelectableRow(row.id, selection: $selection)
         } else {
           Button {
             pushed = row.id

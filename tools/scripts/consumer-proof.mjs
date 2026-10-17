@@ -87,6 +87,7 @@ import { basename, dirname, extname, join, normalize, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { caretAdmits, readPackageMap } from './lib/lib-boundaries.mjs'
+import { chromeExecutable } from '../e2e/lib/chrome-executable.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -456,7 +457,10 @@ export async function launchBrowser(work, rootManifest) {
   }
   const { chromium } = playwright.chromium ? playwright : playwright.default
   try {
-    return await chromium.launch({ headless: true, ...chromeExecutable() })
+    return await chromium.launch({
+      headless: true,
+      ...chromeExecutable({ explicit: process.env.CONSUMER_PROOF_CHROME }),
+    })
   } catch (error) {
     throw new Error(
       `no Chrome to open the examples in (${String(error.message).split('\n')[0]}). ` +
@@ -464,21 +468,6 @@ export async function launchBrowser(work, rootManifest) {
       { cause: error },
     )
   }
-}
-
-/** Where Chrome is: an explicit path, a macOS install, or Playwright's `chrome` channel. */
-function chromeExecutable() {
-  const explicit = process.env.CONSUMER_PROOF_CHROME || process.env.E2E_CHROME_PATH
-  if (explicit) return { executablePath: explicit }
-  if (process.platform === 'darwin') {
-    const found = [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ].find((path) => existsSync(path))
-    if (found) return { executablePath: found }
-  }
-  return { channel: 'chrome' }
 }
 
 const CONTENT_TYPES = {

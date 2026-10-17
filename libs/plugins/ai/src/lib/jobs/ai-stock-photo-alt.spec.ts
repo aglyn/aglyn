@@ -171,13 +171,13 @@ describe("a stock photo's alt text says what the photo shows (AGL-3805)", () => 
   })
 
   it("describes the photo by its first tags when the slot's words do not, and by the library's own description where it writes one", () => {
-    expect(aiStockPhotoAlt(CAKE, slot('Fresh conchas on a tray at the bakery counter'))).toBe('A cake, dessert and a bakery')
+    expect(aiStockPhotoAlt(CAKE, slot('Fresh conchas on a tray at the bakery counter'))).toBe('A cake in a bakery')
     expect(aiStockPhotoAlt(BAKERY[3] as StockPhoto, slot('The family kneading pan dulce in the kitchen', 'about'))).toBe(
-      'A bithday cake, birthday candles and flowers',
+      'A bithday cake and birthday candles',
     )
     const pexels = { ...CAKE, alt: 'Round cake dusted with powdered sugar on a white cloth' }
     expect(aiStockPhotoAlt(pexels, slot('Fresh conchas on a tray'))).toBe('Round cake dusted with powdered sugar on a white cloth')
-    expect(aiStockPhotoAlt({ ...CAKE, tags: [] }, slot('Fresh conchas on a tray'))).toBe('Illustrative photo')
+    expect(aiStockPhotoAlt({ ...CAKE, tags: [] }, slot('Fresh conchas on a tray'))).toBe('Fresh conchas on a tray')
   })
 
   it("never keeps a slot's words on a site in another language: the libraries' words are English, so its own phrase stands in", () => {
@@ -185,5 +185,59 @@ describe("a stock photo's alt text says what the photo shows (AGL-3805)", () => 
     expect(aiStockPhotoAlt(CAKE, slot('Pastel casero espolvoreado con azúcar'), { language: 'es-MX' })).toBe('Foto ilustrativa')
     expect(aiStockPhotoAlt(CAKE, slot('Gâteau maison'), { language: 'fr' })).toBe('Photo d’illustration')
     expect(aiStockPhotoAlt(CAKE, slot('A homemade cake'), { language: 'en-US' })).toBeNull()
+  })
+})
+
+describe('a stock photo described by a phrase, never a tag list wearing articles (AGL-3856, beta.262)', () => {
+  // Pixabay's own tags for the photos placed on the Whitmore Lane Family Law and Synchronicity Gym starts.
+  const tagged = (id: number, slug: string, tags: string) => hit(id, 1280, 853, slug, tags)
+  const LAWYER = tagged(7123797, 'lawyer-law-confident-court-7123797', 'lawyer, law, confident, court, lawyer, lawyer, lawyer, lawyer, lawyer')
+  const BUSINESSMAN = tagged(6857244, 'man-businessman-lawyer-portrait-6857244', 'man, businessman, lawyer, portrait, black man, poc, bipoc')
+  const CHALKBOARD = tagged(
+    3700116,
+    'board-chalk-feedback-review-study-3700116',
+    'board, chalk, feedback, review, study, school, university, training, blackboard, good, smiley, job, business, work, positive, negative, write a review, social, communication, office',
+  )
+  const SUBWAY = tagged(
+    8517089,
+    'train-station-subway-metro-8517089',
+    'train, station, subway, metro, architecture, cityscape, transport, modern, futuristic, building, steel construction, germany, hamburg',
+  )
+  const stand = { ...slot('Family law consultation in Columbus', 'gallery'), standIn: true }
+
+  it('says a quality before its thing, and leaves out an idea and a word inside another', () => {
+    expect(aiStockTagsAlt(LAWYER.tags)).toBe('A confident lawyer in court')
+  })
+
+  it('says one person, a role over a man, and a portrait as a portrait of them', () => {
+    expect(aiStockTagsAlt(BUSINESSMAN.tags)).toBe('A portrait of a businessman')
+  })
+
+  it('says a mass noun without an article, and no feedback at all', () => {
+    expect(aiStockTagsAlt(CHALKBOARD.tags)).toBe('A board and chalk')
+  })
+
+  it('says where a thing is, not three nouns in a row', () => {
+    expect(aiStockTagsAlt(SUBWAY.tags)).toBe('A train at a station')
+  })
+
+  it('describes each placed photo the same way, never as a list', () => {
+    for (const [photo, said] of [
+      [LAWYER, 'A confident lawyer in court'],
+      [BUSINESSMAN, 'A portrait of a businessman'],
+      [CHALKBOARD, 'A board and chalk'],
+      [SUBWAY, 'A train at a station'],
+    ] as const) {
+      const alt = aiStockPhotoAlt(photo, stand)
+      expect(alt).toBe(said)
+      expect(alt).not.toContain(',')
+    }
+  })
+
+  it("falls back to the slot's own subject where no tag names a thing, never empty", () => {
+    const ideas = tagged(1977987, 'feedback-customer-satisfaction-1977987', 'feedback, customer satisfaction, review, opinion, good, positive')
+    expect(aiStockTagsAlt(ideas.tags)).toBeNull()
+    expect(aiStockPhotoAlt(ideas, stand)).toBe('Family law consultation in Columbus')
+    expect(aiStockPhotoAlt(ideas, { ...stand, alt: '' }, { sectionName: 'consultation call to action' })).toBe('Consultation call to action')
   })
 })
