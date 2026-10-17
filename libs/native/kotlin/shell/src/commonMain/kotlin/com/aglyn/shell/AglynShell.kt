@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import com.aglyn.ui.WithTooltip
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -229,7 +230,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     destinations, navigator.top, onSelect = navigator::select,
     drawerHeader = {
       AglynLogo(
-        Modifier.padding(horizontal = 24.dp, vertical = 16.dp).height(28.dp).semantics { heading() },
+        Modifier.padding(start = 26.dp, end = 24.dp, top = 24.dp, bottom = 12.dp).height(28.dp).semantics { heading() },
         contentDescription = services.config.brandName,
       )
     },
@@ -259,9 +260,9 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
           },
           navigationIcon = {
             if (route != null) {
-              IconButton(onClick = { navigator.back() }) {
+              WithTooltip("Back") { IconButton(onClick = { navigator.back() }) {
                 Icon(AglynIcons.named("arrow_back"), contentDescription = "Back")
-              }
+              } }
             }
           },
           actions = {

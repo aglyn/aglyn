@@ -10,6 +10,7 @@ import androidx.compose.material.icons.automirrored.outlined.Notes
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.AlternateEmail
@@ -288,6 +289,7 @@ object AglynIcons {
     "percent" to Icons.Outlined.Percent,
     "history" to Icons.Outlined.History,
     "refresh" to Icons.Outlined.Refresh,
+    "share" to Icons.Outlined.Share,
     "schedule" to Icons.Outlined.Schedule,
     "wifi_off" to Icons.Outlined.WifiOff,
     "more_vert" to Icons.Outlined.MoreVert,

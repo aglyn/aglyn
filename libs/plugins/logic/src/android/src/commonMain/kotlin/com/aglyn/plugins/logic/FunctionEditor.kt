@@ -26,6 +26,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.aglyn.ui.EmptyTone
+import com.aglyn.ui.WithTooltip
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,7 +85,7 @@ fun FunctionEditorScreen(context: NativePluginContext, functionId: String?) {
   val live by remember(hostId, functionId, context.firestore) { context.firestore.observeDoc("${functionsPath(hostId)}/$functionId") }.collectAsState(Live.Loading)
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this function", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this function", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val doc = value.value?.takeIf { it.data["deletedAt"] == null } ?: return EmptyState("This function is gone", icon = AglynIcons.named("functions"))
       // Seeded once from the stored function; Save writes the whole definition, as the card does.
@@ -169,9 +171,9 @@ private fun FunctionEditor(context: NativePluginContext, hostId: String, functio
         Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
           OutlinedTextField(parameter.name.orEmpty(), { put(parameter.copy(name = nameInput(it))) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.weight(1f))
           ChoiceField("Type", (parameter.type ?: FunctionValueType.NUMBER).raw, typeChoices(), { put(parameter.copy(type = typeOf(it))) }, Modifier.weight(1f), allowEmpty = false)
-          IconButton(onClick = { draft = draft.copy(parameters = parameters.filterIndexed { at, _ -> at != index }) }) {
+          WithTooltip("Remove parameter ${parameter.name}") { IconButton(onClick = { draft = draft.copy(parameters = parameters.filterIndexed { at, _ -> at != index }) }) {
             Icon(AglynIcons.named("delete"), contentDescription = "Remove parameter ${parameter.name}")
-          }
+          } }
         }
         SwitchRow("Required", parameter.required == true, { put(parameter.copy(required = it)) })
         // What a visitor sees for this parameter: empty fields are left off the definition.
@@ -188,9 +190,9 @@ private fun FunctionEditor(context: NativePluginContext, hostId: String, functio
         Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
           OutlinedTextField(variable.name.orEmpty(), { put(variable.copy(name = nameInput(it))) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.weight(1f))
           ChoiceField("Type", (variable.type ?: FunctionValueType.NUMBER).raw, typeChoices(), { put(variable.copy(type = typeOf(it))) }, Modifier.weight(1f), allowEmpty = false)
-          IconButton(onClick = { draft = draft.copy(variables = variables.filterIndexed { at, _ -> at != index }) }) {
+          WithTooltip("Remove variable ${variable.name}") { IconButton(onClick = { draft = draft.copy(variables = variables.filterIndexed { at, _ -> at != index }) }) {
             Icon(AglynIcons.named("delete"), contentDescription = "Remove variable ${variable.name}")
-          }
+          } }
         }
       }
     }
@@ -289,7 +291,7 @@ private fun OperationEditor(
   Column(verticalArrangement = Arrangement.spacedBy(space(1f)), modifier = Modifier.testTag("operation-$index")) {
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text("If", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-      IconButton(onClick = onRemove) { Icon(AglynIcons.named("delete"), contentDescription = "Remove operation ${index + 1}") }
+      WithTooltip("Remove operation ${index + 1}") { IconButton(onClick = onRemove) { Icon(AglynIcons.named("delete"), contentDescription = "Remove operation ${index + 1}") } }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
       OutlinedTextField(condition.left, { onChange(operation.copy(`if` = condition.copy(left = it))) }, placeholder = { Text("P1") }, singleLine = true, modifier = Modifier.weight(2f))
@@ -322,7 +324,7 @@ private fun SetRows(title: String, rows: List<FunctionSetOperation>, names: List
       Text("=", style = MaterialTheme.typography.labelLarge)
       OutlinedTextField(row.expression.orEmpty(), { put(row.copy(expression = it)) }, placeholder = { Text("P1 + P2") }, singleLine = true, modifier = Modifier.weight(2f))
       FormulaBuilderButton(row.expression.orEmpty(), formulaNames, { put(row.copy(expression = it)) }, onOpen = loadSiteVariables)
-      IconButton(onClick = { onChange(rows.filterIndexed { at, _ -> at != index }) }) { Icon(AglynIcons.named("close"), contentDescription = "Remove this row") }
+      WithTooltip("Remove this row") { IconButton(onClick = { onChange(rows.filterIndexed { at, _ -> at != index }) }) { Icon(AglynIcons.named("close"), contentDescription = "Remove this row") } }
     }
   }
   TextButton(onClick = { onChange(rows + FunctionSetOperation(set = "", expression = "")) }) { Text("Add set") }

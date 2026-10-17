@@ -24,6 +24,7 @@ import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.FieldOption
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.space
@@ -159,7 +160,7 @@ fun CrmGate(context: NativePluginContext, content: @Composable (CrmScope, CrmApi
   val flow = remember(orgId, hostId, context.uid, context.firestore) { observeCrmScope(context.firestore, orgId, hostId, context.uid) }
   when (val live = flow.collectAsState(Live.Loading).value) {
     Live.Loading -> SkeletonList(rows = 6)
-    is Live.Failed -> EmptyState("Could not open the CRM", body = live.error.message ?: "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not open the CRM", body = live.error.message ?: "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val scope = live.value
       if (!scope.suite) {

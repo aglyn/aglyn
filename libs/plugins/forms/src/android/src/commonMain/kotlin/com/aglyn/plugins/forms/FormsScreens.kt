@@ -58,10 +58,12 @@ import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.ListHeader
 import com.aglyn.ui.LoadContent
 import com.aglyn.ui.LoadMoreEffect
 import com.aglyn.ui.MenuAction
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.StatTile
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OverflowMenu
@@ -178,7 +180,7 @@ fun FormsScreen(context: NativePluginContext, initialFormId: String? = null) {
     },
     detail = { selected ->
       if (selected == null) {
-        EmptyState("Pick a form to see it here", icon = AglynIcons.named("dynamic_form"))
+        SelectionPlaceholder("Pick a form to see it here", icon = AglynIcons.named("dynamic_form"))
       } else {
         FormDetail(context, hostId, selected, api, runner, canEdit, context.siteRole in PUBLISH_ROLES) { dialog = it }
       }
@@ -203,7 +205,7 @@ private fun FormDetail(
   CloseWhenGone((live as? Live.Ready)?.let { it.value != null })
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this form", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this form", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val doc = value.value ?: return EmptyState("This form is gone", icon = AglynIcons.named("dynamic_form"))
       val form = FormRow.from(doc)

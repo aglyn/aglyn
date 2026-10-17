@@ -59,12 +59,15 @@ import com.aglyn.ui.AglynListDetail
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.WidthClass
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.currentWidthClass
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
@@ -213,7 +216,7 @@ internal fun NotificationsScreen(services: ShellServices, uid: String, context: 
           visible == null && live is Live.Failed -> EmptyState(
             "Could not load notifications",
             body = "Check the connection and try again.",
-            icon = AglynIcons.named("error"),
+            icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
             modifier = Modifier.testTag("notifications-error"),
           )
           visible == null -> SkeletonList(rows = 6)
@@ -249,10 +252,10 @@ internal fun NotificationsScreen(services: ShellServices, uid: String, context: 
                     modifier = Modifier.weight(1f).testTag("notification-${row.id}"),
                   )
                   if (!row.read) {
-                    IconButton(
+                    WithTooltip("Mark ${row.title} read") { IconButton(
                       onClick = { scope.launch { runCatching { markNotificationRead(services.writer, uid, row.id) } } },
                       modifier = Modifier.testTag("mark-read-${row.id}"),
-                    ) { Icon(AglynIcons.named("done"), contentDescription = "Mark ${row.title} read") }
+                    ) { Icon(AglynIcons.named("done"), contentDescription = "Mark ${row.title} read") } }
                   }
                 }
               }
@@ -271,7 +274,7 @@ internal fun NotificationsScreen(services: ShellServices, uid: String, context: 
     detail = { selected ->
       val row = visible?.firstOrNull { it.id == selected }
       if (row == null) {
-        EmptyState("Pick a notification to read it here", icon = AglynIcons.named("notifications"))
+        SelectionPlaceholder("Pick a notification to read it here", icon = AglynIcons.named("notifications"))
       } else {
         NotificationDetail(row, catalog, context.workspaceName(row), onOpen = { open(row) })
       }
