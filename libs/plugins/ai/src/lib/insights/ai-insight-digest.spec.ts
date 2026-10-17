@@ -173,7 +173,8 @@ describe('Monday', () => {
         hostId: 'host-1',
         kind: 'insight',
         brief: 'Weekly insights for Acme Roofing',
-        inputs: { surface: 'digest', week: '2026-W38' },
+        // The week before that Monday, which the free Weekly summary reports too.
+        inputs: { surface: 'digest', week: '2026-W38', through: '2026-09-13' },
         createdBy: 'asker',
       }),
     ])
@@ -262,6 +263,18 @@ describe('delivery', () => {
       /^Here is what Acme Roofing's figures showed this week\. Writing it used 4 of Acme Co’s AI credits\.\n/,
     )
     expect(text).toContain('You asked for weekly insights for Acme Co.')
+  })
+
+  it('names the week the figures cover when it is told it (AGL-3867)', () => {
+    const text = aiInsightDigestEmailText({
+      siteName: 'Acme Roofing',
+      productName: 'Aglyn',
+      insights: [{ text: 'Page views rose 14.7%.' }],
+      analyticsUrl: null,
+      settingsUrl: null,
+      periodLabel: 'Sep 7 – Sep 13',
+    })
+    expect(text).toMatch(/^Here is what Acme Roofing's figures showed last week, Sep 7 – Sep 13\.\n/)
   })
 
   it('gives up a digest parked for credits, silently', async () => {

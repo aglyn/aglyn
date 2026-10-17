@@ -12,6 +12,7 @@
       "zones": [
         "commerceSettings"
       ],
+      "showWhen": "data.conn.offered || data.conn.connections",
       "load": {
         "conn": "/api/marketplaces/connections?hostId={site.id}"
       },

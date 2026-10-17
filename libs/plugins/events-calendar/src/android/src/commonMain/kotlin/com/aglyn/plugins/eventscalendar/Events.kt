@@ -175,6 +175,12 @@ suspend fun saveEvent(writer: FirestoreWriter, hostId: String, draft: EventDraft
   return id
 }
 
+/** An event's status as the editor's chips name it: Draft or Published. */
+fun eventStatusLabel(status: String): String = when (status) {
+  EventStatus.PUBLISHED.raw -> "Published"
+  else -> "Draft"
+}
+
 /** The page's delete: `deletedAt`, and `status: deleted`, which the public listing's query reads. */
 suspend fun deleteEvent(writer: FirestoreWriter, hostId: String, id: String) =
   writer.merge("${eventsPath(hostId)}/$id", mapOf("deletedAt" to firestoreNow(), "status" to "deleted"))
@@ -241,7 +247,7 @@ fun EventsScreen(context: NativePluginContext) {
                 supporting = formatLocalDay(row.startsAtMs, "EEE, MMM d, yyyy") + " · " + formatClock(row.startsAtMs) + (if (row.location.isNotEmpty()) " · ${row.location}" else ""),
                 icon = AglynIcons.named("event"),
                 selected = row.id == selected,
-                trailing = { StatusChip(row.status, if (row.status == "published") StatusTone.SUCCESS else StatusTone.NEUTRAL) },
+                trailing = { StatusChip(eventStatusLabel(row.status), if (row.status == "published") StatusTone.SUCCESS else StatusTone.NEUTRAL) },
                 onClick = { onSelect(row.id) },
                 modifier = Modifier.testTag("event-${row.id}"),
               )

@@ -729,8 +729,8 @@ const CORE_NOTIFICATION_DIGESTS: readonly NotificationDigestDeclaration[] = [
     key: 'weeklySummary',
     label: 'Weekly summary',
     description:
-      'Each Monday by email, for the workspaces you own or manage: last week’s visitors, top pages, ' +
-      'form submissions, new leads, bookings, sales and deals. Free, and nothing is generated.',
+      'Each Monday by email: how each of your sites did last week — visitors, top pages, form ' +
+      'submissions, new leads, bookings, sales — and an overview of each workspace you run. Free, and nothing is generated.',
   },
 ]
 

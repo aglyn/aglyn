@@ -12,6 +12,7 @@
       "zones": [
         "commerceSettings"
       ],
+      "showWhen": "data.nets.offered || data.nets.connections",
       "links": [],
       "load": {
         "nets": "/api/fulfillment-networks/connections?hostId={site.id}"

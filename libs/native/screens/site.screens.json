@@ -1056,7 +1056,7 @@
         {
           "type": "list",
           "items": "data.activity.items",
-          "primary": "{item.action:title}",
+          "primary": "{item.action:activity}",
           "secondary": "{item.target.name|item.target.label|item.target.title|item.target.type:title}",
           "tertiary": "{item.actorEmail|item.apiKeyName|'System'} · {item.createdAt:datetime}",
           "icon": "clock|schedule",

@@ -462,13 +462,19 @@ func crmRow(_ kind: CrmKind, _ doc: FirestoreDocument, _ scope: CrmScope, stages
         .joined(separator: " · "),
       chip: s("type"), data: data)
   case .deal:
-    let amount = (data["amountCents"] as? NSNumber).map { formatCents($0.int64Value, currency: s("currency")) }
-    let stage = s("stageId").map { stages[$0] ?? $0 }
     let status = s("status")
     return CrmRow(
-      id: doc.id, kind: kind, title: s("title") ?? "Deal", subtitle: [amount, stage].compactMap { $0 }.joined(separator: " · "),
+      id: doc.id, kind: kind, title: s("title") ?? "Deal", subtitle: dealSubtitle(data) { _, stageID in stages[stageID] ?? stageID },
       chip: status == "won" ? "Won" : status == "lost" ? "Lost" : nil, data: data)
   }
+}
+
+/// A deal's line under its title: the amount, then its stage's name (`stageName` of its pipeline and stage ids).
+func dealSubtitle(_ data: [String: Any], stageName: (_ pipelineID: String?, _ stageID: String) -> String) -> String {
+  func s(_ key: String) -> String? { (data[key] as? String).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } }
+  let amount = (data["amountCents"] as? NSNumber).map { formatCents($0.int64Value, currency: s("currency")) }
+  let stage = s("stageId").map { stageName(s("pipelineId"), $0) }
+  return [amount, stage].compactMap { $0 }.joined(separator: " · ")
 }
 
 // MARK: Pipelines

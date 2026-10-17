@@ -681,6 +681,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit rental",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "prompt": [
                 {

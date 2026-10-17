@@ -353,6 +353,11 @@
         "REPLY_BODY_MAX"
       ]
     },
+    "libs/aglyn/src/lib/app-utils/duplicate-resource.ts": {
+      "values": [
+        "DUPLICATE_ACTIVITY_ACTION_LABELS"
+      ]
+    },
     "libs/aglyn/src/lib/app-utils/crm.ts": {
       "types": [
         "CrmDealStage",
@@ -6663,6 +6668,20 @@
             },
             "resume": {
               "remaining": 3
+            }
+          }
+        ],
+        [
+          {
+            "status": "canceled"
+          }
+        ],
+        [
+          {
+            "status": "failed",
+            "stats": {
+              "sent": 0,
+              "audienceSize": 25
             }
           }
         ],

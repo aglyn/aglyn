@@ -890,6 +890,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#choose-a-workspace': 'Choose a workspace',
     '#daily-digests': 'Daily digests',
     '#notification-settings': 'Notification settings',
+    '#notification-sound': 'Notification sound',
     '#organization-general': 'General',
     '#organization-settings': 'Organization settings',
     '#recent-activity': 'Recent activity',

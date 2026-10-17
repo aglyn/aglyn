@@ -391,10 +391,10 @@ private fun DatasetDialogs(
       }
     }
     is DatasetDialog.Delete -> ActionDialog(
-      title = "Delete this collection?",
+      title = "Delete this dataset?",
       body = "\"${dialog.dataset.name}\"" +
-        (dialog.records?.takeIf { it > 0 }?.let { " and its $it document${if (it == 1L) "" else "s"}" } ?: "") +
-        " stop resolving in repeatable components and bindings that reference it.",
+        (dialog.records?.takeIf { it > 0 }?.let { " and its ${groupedCount(it)} record${if (it == 1L) "" else "s"}" } ?: "") +
+        " will be deleted. Repeatable components and bindings that use it stop showing its data.",
       icon = "delete",
       confirmLabel = "Delete",
       destructive = true,
@@ -421,3 +421,6 @@ private fun DatasetDialogs(
     }
   }
 }
+
+/** A whole number as the console's `toLocaleString` writes it in English: `40,000`. */
+internal fun groupedCount(value: Long): String = value.toString().reversed().chunked(3).joinToString(",").reversed().replace("-,", "-")

@@ -670,6 +670,11 @@ const ManageNotificationSettings: NextPageWithLayout<
 
       <CardDisplay
         header={'Notification sound'}
+        help={docsHelp('consoleTour', {
+          anchor: '#notification-sound',
+          excerpt:
+            'The sound your notifications make, here and in the apps.',
+        })}
         contentGutterX
         contentGutterY
         contentBordered="all"

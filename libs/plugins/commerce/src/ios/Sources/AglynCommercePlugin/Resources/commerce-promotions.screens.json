@@ -82,6 +82,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit discount",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "prompt": [
                 {
