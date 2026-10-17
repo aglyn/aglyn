@@ -6731,7 +6731,7 @@
         {
           "description": "The site’s Orders page in the console",
           "name": "orders.url",
-          "sample": "https://app.aglyn.com/northwind/hosts/northwind/products/orders"
+          "sample": "https://app.example.com/northwind/hosts/northwind/products/orders"
         }
       ],
       "name": "New sale",
@@ -7311,7 +7311,7 @@
         {
           "description": "The return in the console, to approve or decline",
           "name": "return.url",
-          "sample": "https://app.aglyn.com/northwind/hosts/northwind/products/returns?return=ret_123"
+          "sample": "https://app.example.com/northwind/hosts/northwind/products/returns?return=ret_123"
         }
       ],
       "name": "Return requested",

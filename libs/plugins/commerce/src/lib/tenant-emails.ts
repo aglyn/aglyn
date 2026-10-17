@@ -99,7 +99,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
       defaultBody: [
         { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },
         { block: 'text', text: 'Thanks for your order', variant: 'heading' },
-        { block: 'text', text: 'Here is your receipt from {{host.businessName}}. We will email you again as your order moves along, and the order page always shows where it is.', variant: 'body' },
+        { block: 'text', text: 'Here is the receipt for your order from {{host.businessName}}. We will email you again as your order moves along, and the order page always shows where it is.', variant: 'body' },
         { block: 'text', text: '{{order.summary}}\nTotal charged: {{order.total}}', variant: 'details' },
         { block: 'text', text: '{{store.receiptFooter}}', variant: 'body' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
@@ -406,7 +406,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
           description: 'Order reference id',
           sample: 'cs_test_123',
         },
-        { name: 'orders.url', description: 'The site’s Orders page in the console', sample: 'https://app.aglyn.com/northwind/hosts/northwind/products/orders' },
+        { name: 'orders.url', description: 'The site’s Orders page in the console', sample: 'https://app.example.com/northwind/hosts/northwind/products/orders' },
       ],
       defaultBody: [
         { block: 'text', text: '{{site.name}} · New order', variant: 'eyebrow' },
@@ -499,7 +499,8 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
       ],
       defaultBody: [
         { block: 'text', text: '{{host.businessName}} · Gift card', variant: 'eyebrow' },
-        { block: 'text', text: 'You have a {{giftcard.value}} gift card', variant: 'heading' },
+        { block: 'text', text: 'Your {{giftcard.value}} gift card', variant: 'heading' },
+        { block: 'text', text: 'You have a {{giftcard.value}} gift card for {{host.businessName}}.', variant: 'body' },
         { block: 'text', text: '{{giftcard.note}}', variant: 'body' },
         { block: 'text', text: 'Value: {{giftcard.value}}\nGift card code: {{giftcard.code}}', variant: 'details' },
         { block: 'text', text: 'Enter the code at checkout on {{host.url}} to use its balance.', variant: 'body' },
@@ -795,7 +796,7 @@ function returnTenantEmails(): readonly TenantEmailEntry[] {
           description: 'What the buyer wrote; empty when they wrote nothing',
           sample: 'The lid was cracked.',
         },
-        { name: 'return.url', description: 'The return in the console, to approve or decline', sample: 'https://app.aglyn.com/northwind/hosts/northwind/products/returns?return=ret_123' },
+        { name: 'return.url', description: 'The return in the console, to approve or decline', sample: 'https://app.example.com/northwind/hosts/northwind/products/returns?return=ret_123' },
       ],
       defaultBody: [
         { block: 'text', text: '{{host.businessName}} · Order {{order.number}}', variant: 'eyebrow' },

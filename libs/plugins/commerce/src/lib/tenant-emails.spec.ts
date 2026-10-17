@@ -99,7 +99,7 @@ describe('commerce site emails name the store and say only what is true (AGL-343
       'store.receiptFooter': 'Returns are accepted within 30 days.',
     })
     expect(withFooter).toContain(
-      'Here is your receipt from Northwind Coffee.',
+      'Here is the receipt for your order from Northwind Coffee.',
     )
     expect(withFooter).toContain('Returns are accepted within 30 days.')
     expect(render('order-receipt', { ...merge, 'store.receiptFooter': '' })).not.toContain(
@@ -114,7 +114,7 @@ describe('commerce site emails name the store and say only what is true (AGL-343
       'giftcard.note': '',
     })
     expect(text).toContain('Northwind Coffee · Gift card')
-    expect(text).toContain('You have a $25.00 gift card')
+    expect(text).toContain('You have a $25.00 gift card for Northwind Coffee.')
     expect(text).toContain('Gift card code: GC-ABC123DEF456')
     expect(text).toContain(
       'Enter the code at checkout on https://northwind.example to use its balance.',

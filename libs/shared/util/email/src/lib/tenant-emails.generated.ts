@@ -266,7 +266,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "Here is your receipt from {{host.businessName}}. We will email you again as your order moves along, and the order page always shows where it is.",
+        "text": "Here is the receipt for your order from {{host.businessName}}. We will email you again as your order moves along, and the order page always shows where it is.",
         "variant": "body"
       },
       {
@@ -832,7 +832,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "name": "orders.url",
         "description": "The site’s Orders page in the console",
-        "sample": "https://app.aglyn.com/northwind/hosts/northwind/products/orders"
+        "sample": "https://app.example.com/northwind/hosts/northwind/products/orders"
       }
     ],
     "defaultBody": [
@@ -971,8 +971,13 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "You have a {{giftcard.value}} gift card",
+        "text": "Your {{giftcard.value}} gift card",
         "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "You have a {{giftcard.value}} gift card for {{host.businessName}}.",
+        "variant": "body"
       },
       {
         "block": "text",
@@ -1407,7 +1412,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "name": "return.url",
         "description": "The return in the console, to approve or decline",
-        "sample": "https://app.aglyn.com/northwind/hosts/northwind/products/returns?return=ret_123"
+        "sample": "https://app.example.com/northwind/hosts/northwind/products/returns?return=ret_123"
       }
     ],
     "defaultBody": [
