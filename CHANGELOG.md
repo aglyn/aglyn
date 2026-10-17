@@ -15,11 +15,15 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **mui:** a secondary text color setting for List Item Text ([AGL-3886](https://linear.app/aglyn/issue/AGL-3886))
 - **notifications:** one weekly summary per site plus a workspace overview ([AGL-3867](https://linear.app/aglyn/issue/AGL-3867))
 - **ai:** weekly insights cover last Monday to Sunday, like the free summary ([AGL-3867](https://linear.app/aglyn/issue/AGL-3867))
 
 ### Fixed
 
+- **ai:** list text on a colored band reads in the band's own color ([AGL-3886](https://linear.app/aglyn/issue/AGL-3886))
+- **ai:** a site start plans no customer-words section it cannot fill ([AGL-3887](https://linear.app/aglyn/issue/AGL-3887))
+- **ai:** a built section that promises its content later is settled ([AGL-3887](https://linear.app/aglyn/issue/AGL-3887))
 - **notifications:** weekly summary colors come only from the email palette ([AGL-3867](https://linear.app/aglyn/issue/AGL-3867))
 - **native:** pin the POS change due; an owner never reads as a raw uid ([AGL-3895](https://linear.app/aglyn/issue/AGL-3895))
 - **console,native:** smoke-walk copy that read as code or dangled ([AGL-3884](https://linear.app/aglyn/issue/AGL-3884))
