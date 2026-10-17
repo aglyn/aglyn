@@ -85,8 +85,8 @@ struct RedirectsListScreen: View {
         Button("Add redirect") { editor?.add() }.buttonStyle(.borderedProminent)
       }
     } else if selectable {
-      List(model.rows, selection: $selection) { row in
-        RedirectListRow(row: row).tag(row.id)
+      List(model.rows) { row in
+        RedirectListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
           .contextMenu { rowActions(row) }
       }
       // A wide window never shows an empty detail pane while there are rules.
@@ -94,7 +94,8 @@ struct RedirectsListScreen: View {
         if selection == nil || !rows.contains(where: { $0.id == selection }) { selection = rows.first?.id }
       }
       .sensoryFeedback(.selection, trigger: selection)
-      .aglynListBackground()
+      .aglynSelectableListStyle()
+      .aglynSelectionKeys(model.rows.map(\.id), selection: $selection)
       .accessibilityIdentifier("redirects-list")
     } else {
       List(model.rows) { row in
@@ -257,7 +258,7 @@ struct RedirectDetail: View {
       .aglynListBackground()
       .navigationTitle(titled ? row.source : "Redirects")
     } else {
-      AglynEmptyState("Pick a redirect to see it here", systemImage: RedirectsSymbols.rule)
+      AglynSelectionPlaceholder("No redirect selected", systemImage: RedirectsSymbols.rule)
     }
   }
 }

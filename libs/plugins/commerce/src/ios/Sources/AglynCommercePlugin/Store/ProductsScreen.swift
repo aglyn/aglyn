@@ -23,17 +23,14 @@ struct ProductsScreen: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
-          Divider()
-          Group {
-            if let selection {
-              ProductDetailView(context: context, productID: selection, titled: false).id(selection)
-            } else {
-              AglynEmptyState("Pick a product", systemImage: "shippingbox")
-            }
+        AglynListDetailColumns(listWidth: 380) {
+          list(selectable: true)
+        } detail: {
+          if let selection {
+            ProductDetailView(context: context, productID: selection, titled: false).id(selection)
+          } else {
+            AglynSelectionPlaceholder("No product selected", systemImage: "shippingbox")
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       } else {
         list(selectable: false)
@@ -152,12 +149,12 @@ struct ProductsScreen: View {
         message: model.status == nil && model.search.isEmpty
           ? "Products you sell on this site show up here." : "Try another status or search.")
     } else if selectable {
-      List(selection: $selection) { rows(selectable: true) }
+      List { rows(selectable: true) }
         .onChange(of: model.rows, initial: true) { _, rows in
           if selection == nil || !rows.contains(where: { $0.id == selection }) { selection = rows.first?.id }
         }
         .sensoryFeedback(.selection, trigger: selection)
-        .aglynListBackground()
+        .aglynSelectableListStyle().aglynSelectionKeys(model.rows.map(\.id), selection: $selection)
         .accessibilityIdentifier("products-list")
     } else {
       List { rows(selectable: false) }
@@ -171,7 +168,7 @@ struct ProductsScreen: View {
     ForEach(model.rows) { row in
       Group {
         if selectable {
-          ProductListRow(row: row).tag(row.id)
+          ProductListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
         } else {
           NavigationLink {
             ProductDetailView(context: context, productID: row.id, titled: true)
