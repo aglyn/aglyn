@@ -343,13 +343,19 @@ export function OrgAutomationsCard(props: OrgAutomationsCardProps) {
                   {row.name}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" noWrap>
-                  {`on ${hostEventLabel(row.trigger?.event)} · ${(row.steps ?? [])
-                    .map(
-                      (step) =>
-                        HOST_ACTION_STEP_LABELS[step.type as HostActionStepType] ??
-                        step.type,
-                    )
-                    .join(' → ')}`}
+                  {[
+                    `on ${hostEventLabel(row.trigger?.event)}`,
+                    (row.steps ?? [])
+                      .map(
+                        (step) =>
+                          HOST_ACTION_STEP_LABELS[step.type as HostActionStepType] ??
+                          step.type,
+                      )
+                      .filter(Boolean)
+                      .join(' → '),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" noWrap>
                   {placementLine(row, mount)}

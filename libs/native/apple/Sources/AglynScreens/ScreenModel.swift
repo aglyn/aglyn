@@ -207,6 +207,9 @@ public final class ScreenModel {
     case loading
     case ready
     case failed(String)
+    /// The route refused because the workspace's plan or add-ons do not include this (a 402, or a 403 naming the
+    /// entitlement): an upsell, never a failure.
+    case planRefused(String)
   }
 
   public let spec: ScreenSpec
@@ -439,7 +442,11 @@ public final class ScreenModel {
     } catch is CancellationError {
       return
     } catch {
-      phase = .failed((error as? ConsoleAPIError)?.message ?? error.localizedDescription)
+      if let refusal = error as? ConsoleAPIError, Self.isPlanRefusal(refusal) {
+        phase = .planRefused(refusal.message)
+      } else {
+        phase = .failed((error as? ConsoleAPIError)?.message ?? error.localizedDescription)
+      }
       return
     }
     for load in wanted where load.derive != nil {
@@ -1117,6 +1124,14 @@ public final class ScreenModel {
     } catch {
       return .failed(ScreenPasskeys.message(for: error, in: passkey, scope: scope))
     }
+  }
+
+  /// A route's "your plan does not include this" answer: payment required, or a refusal naming an entitlement.
+  nonisolated public static func isPlanRefusal(_ error: ConsoleAPIError) -> Bool {
+    if error.status == 402 { return true }
+    guard error.status == 403 else { return false }
+    let words = [error.body?["error"], error.body?["code"], error.body?["reason"]].compactMap { $0?.stringValue }
+    return words.contains { $0.lowercased().contains("entitlement") }
   }
 
   /// A route's "sign in again first" answer, in any of the shapes the routes use.

@@ -63,10 +63,12 @@ import com.aglyn.ui.CalendarHeader
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.MetricCard
 import com.aglyn.ui.MonthGrid
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -232,7 +234,7 @@ fun BookingsCalendarScreen(context: NativePluginContext, params: NativeParams) {
         rows == null && live is Live.Failed -> EmptyState(
           "Could not load bookings",
           body = "Check the connection and try again.",
-          icon = AglynIcons.named("error"),
+          icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
           modifier = Modifier.testTag("bookings-error"),
         )
         rows == null -> SkeletonList(rows = 6)
@@ -262,7 +264,7 @@ fun BookingsCalendarScreen(context: NativePluginContext, params: NativeParams) {
       Box(Modifier.weight(0.38f).fillMaxHeight()) {
         val id = selected
         if (id == null) {
-          EmptyState("Pick a booking to see it here", icon = AglynIcons.named("event"))
+          SelectionPlaceholder("Pick a booking to see it here", icon = AglynIcons.named("event"))
         } else {
           BookingDetail(context, id, onBooker = { email -> booker = email; selected = null })
         }
@@ -450,7 +452,7 @@ fun BookingDetail(context: NativePluginContext, bookingId: String, onBooker: (St
 
   val doc = when (val value = live) {
     Live.Loading -> return SkeletonList(rows = 5)
-    is Live.Failed -> return EmptyState("Could not load this booking", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> return EmptyState("Could not load this booking", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> value.value ?: return EmptyState("This booking is gone", icon = AglynIcons.named("event_busy"))
   }
   val row = bookingRowOf(doc)

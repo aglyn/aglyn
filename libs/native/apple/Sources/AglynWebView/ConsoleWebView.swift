@@ -101,6 +101,10 @@ public struct ConsoleWebView {
       }
       configuration.userContentController = controller
       configuration.websiteDataStore = .default()
+      // The console leaves its browser-only chrome out of the app (AGL-3894).
+      configuration.applicationNameForUserAgent = BesignerEntry.applicationNameForUserAgent(
+        base: configuration.applicationNameForUserAgent, version: BesignerEntry.appVersion,
+        platform: BesignerEntry.userAgentPlatform)
       let webView = WKWebView(frame: .zero, configuration: configuration)
       webView.navigationDelegate = self
       webView.uiDelegate = self

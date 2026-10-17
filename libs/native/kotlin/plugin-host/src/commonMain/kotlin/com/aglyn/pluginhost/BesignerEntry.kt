@@ -56,6 +56,32 @@ object BesignerEntry {
 
   private fun bareOf(path: String): String = path.substringBefore('#').substringBefore('?')
 
+  /**
+   * The product token the web view adds to its user agent (AGL-3894).
+   *
+   * The console reads `AglynApp/<version> (<platform>)` to leave out what a
+   * browser tab needs and an app screen does not: the web notification
+   * prompt, the editor's back arrow, the unread count and brand in the page
+   * title. It is there from the first request, whichever page the view opens
+   * first. Presentation only: the console never grants anything on it. The
+   * Swift kit's `BesignerEntry` appends the same marker.
+   */
+  const val USER_AGENT_PRODUCT = "AglynApp"
+
+  /** `AglynApp/<version> (<platform>)`. */
+  fun userAgentMarker(version: String?, platform: String): String {
+    val shown = version.orEmpty().filterNot { it.isWhitespace() }.ifEmpty { "0" }
+    return "$USER_AGENT_PRODUCT/$shown ($platform)"
+  }
+
+  /** The web view's whole user agent: the engine's own [base] kept, the marker after it. */
+  fun userAgent(base: String?, version: String?, platform: String): String {
+    val kept = base.orEmpty().trim()
+    if ("$USER_AGENT_PRODUCT/" in kept) return kept
+    val marker = userAgentMarker(version, platform)
+    return if (kept.isEmpty()) marker else "$kept $marker"
+  }
+
   /** `encodeURIComponent`: everything but the unreserved characters is percent-encoded as UTF-8. */
   private fun encodeComponent(value: String): String = buildString {
     for (byte in value.encodeToByteArray()) {

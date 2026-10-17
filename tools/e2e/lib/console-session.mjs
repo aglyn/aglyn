@@ -50,13 +50,14 @@
 // docs capture harness does. Unset, no shot is taken and nothing else
 // changes.
 
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
 import { chromium } from 'playwright-core'
+import { chromeExecutable } from './chrome-executable.mjs'
 
 export const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 
@@ -145,27 +146,6 @@ export async function postAsUser(uid, path, body) {
     body: JSON.stringify(body),
   })
   return { status: response.status, body: await response.json().catch(() => ({})) }
-}
-
-export function chromeExecutable() {
-  if (process.env.E2E_CHROME_PATH) return { executablePath: process.env.E2E_CHROME_PATH }
-  if (process.platform === 'darwin') {
-    // First installed Chrome flavor wins — a Chrome update/uninstall must
-    // not break the suite (it did once: only Beta was installed).
-    for (const executablePath of [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ]) {
-      try {
-        readFileSync(executablePath)
-        return { executablePath }
-      } catch {
-        // Not installed — try the next flavor.
-      }
-    }
-  }
-  return { channel: 'chrome' }
 }
 
 /**

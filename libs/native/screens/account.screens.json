@@ -129,11 +129,10 @@
           "fields": [
             {
               "key": "photoUrl",
-              "label": "Image URL",
-              "kind": "url",
+              "label": "Profile image",
+              "kind": "media",
               "initial": "{item.photoUrl}",
-              "placeholder": "https://",
-              "help": "An https:// link to an image."
+              "help": "Choose from the workspace media library. Recommended: a square PNG or JPG, at least 400×400."
             }
           ],
           "submit": {

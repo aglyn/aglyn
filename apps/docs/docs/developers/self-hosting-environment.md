@@ -375,7 +375,7 @@ server-only, and none of them may ever be prefixed `NEXT_PUBLIC_`.
 | --- | --- | --- | --- |
 | `AGLYN_SSO_REQUIRED_DOMAINS` | Feature | Runtime | `domain=gcipTenantId` pairs, comma- or space-separated: `example.com=bramble-tenant-a1b2c`. Empty governs nothing, which is the right default. Anything unparseable is dropped rather than throwing — this sits on the sign-in path and a malformed value must not take authentication down. |
 | `AGLYN_SSO_DOMAIN_ENFORCEMENT` | Feature | Runtime | Exactly `on` starts **refusing** sign-ins that violate the rule above. Anything else is off. Both halves are needed: this switch alone governs nothing. |
-| `AGLYN_SSO_EXEMPT_EMAILS` | Feature | Runtime | Exact addresses on a listed domain that may still sign in without SSO, comma- or space-separated, such as an app store reviewer's demo login. Empty by default. |
+| `AGLYN_SSO_EXEMPT_EMAILS` | Feature | Runtime | Addresses on a listed domain that may still sign in without SSO, comma- or space-separated, such as an app store reviewer's demo login. `name+tag*@domain` also admits every address extending that plus tag, for a check that signs up a fresh account each run; a `*` anywhere else is ignored. Empty by default. |
 
 :::warning Keep an account the rule cannot refuse
 A wrong tenant id here locks you out of your own console. The rule is about a

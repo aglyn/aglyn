@@ -1464,7 +1464,7 @@ Two settings, both empty/off by default:
 | --- | --- |
 | `AGLYN_SSO_REQUIRED_DOMAINS` | `domain=tenantId` pairs, e.g. `example.com=example-tenant`. Empty means no domain is governed. |
 | `AGLYN_SSO_DOMAIN_ENFORCEMENT` | `on` to refuse non-compliant sign-ins. Anything else is off. |
-| `AGLYN_SSO_EXEMPT_EMAILS` | Exact addresses on a governed domain that may still sign in without SSO, such as an app store reviewer's demo login. Empty by default. |
+| `AGLYN_SSO_EXEMPT_EMAILS` | Addresses on a governed domain that may still sign in without SSO, such as an app store reviewer's demo login. `name+tag*@domain` also admits every address extending that plus tag, such as the sign-up canary's stamped addresses. Empty by default. |
 
 Both must be set for anything to be refused, and only one case is ever refused: an
 address on a governed domain signing in with **no SSO tenant at all**. An identity on a

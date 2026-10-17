@@ -26,6 +26,9 @@ final class AutomationTests: XCTestCase {
     XCTAssertEqual(rows.map(\.id), ["a", "b", "d"])
     XCTAssertEqual(rows[0].caption, "1 step · double")
     XCTAssertEqual(rows[1].caption, "2 steps · on New lead · double → quote")
+    // Nothing to call: no dangling separator.
+    XCTAssertEqual(rows[2].caption, "0 steps")
+    XCTAssertEqual(visibleWorkflows([doc("e", ["name": "Mixed", "steps": [["functionName": "double"], ["type": "notifyAdmins"]]])])[0].caption, "2 steps · double")
   }
 
   func testActionsSetElementInteractionsApartAndCountPlaceholders() {

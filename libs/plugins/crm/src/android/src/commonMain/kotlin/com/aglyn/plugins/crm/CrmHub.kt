@@ -24,6 +24,7 @@ import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.FieldOption
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.space
@@ -94,11 +95,13 @@ class CrmReference(
   val contacts: List<FieldOption>,
 ) {
   fun fields(kind: CrmKind): List<CrmField> = standardFields(kind, picklists, members, companies, contacts) + customFields(kind, customFields)
-  fun memberLabel(uid: String?): String? = uid?.let { id -> members.firstOrNull { it.uid == id }?.label ?: id }
+  /** A teammate's name; one the roster does not hold (yet) reads `Member 4f2a9c`, as the console's `labelFor` does, never a raw uid. */
+  fun memberLabel(uid: String?): String? = uid?.takeIf { it.isNotEmpty() }?.let { id -> members.firstOrNull { it.uid == id }?.label ?: "Member ${id.takeLast(6)}" }
   val activePipelines: List<Pipeline> get() = pipelines.filter { !it.archived }.ifEmpty { listOf(defaultPipeline()) }
   fun pipeline(id: String?): Pipeline = activePipelines.firstOrNull { it.id == id } ?: activePipelines.firstOrNull { it.isDefault } ?: activePipelines.first()
+  /** A stage's name in its pipeline (an archived one too), else in the pipeline a deal without one falls back to; the id itself when neither has it. */
   fun stageName(pipelineId: String?, stageId: String?): String? =
-    stageId?.let { sid -> (pipelines + defaultPipeline()).firstOrNull { it.id == pipelineId }?.stages?.firstOrNull { it.id == sid }?.name ?: sid }
+    stageId?.let { sid -> ((pipelines + defaultPipeline()).firstOrNull { it.id == pipelineId } ?: pipeline(pipelineId)).stages.firstOrNull { it.id == sid }?.name ?: sid }
 }
 
 @Composable
@@ -110,10 +113,16 @@ private fun <T> live(key: Any?, flow: () -> Flow<Live<T>>): Live<T> {
 @Composable
 fun rememberCrmReference(context: NativePluginContext, scope: CrmScope, api: CrmApi): CrmReference {
   var members by remember(scope.orgId) { mutableStateOf<List<CrmMember>>(emptyList()) }
+  // The roster names every owner; a read that fails (a slow first request on a cold server) is asked again, not left empty.
   LaunchedEffect(scope.orgId) {
-    members = try { api.members() } catch (error: Throwable) {
-      if (error is CancellationException) throw error
-      emptyList()
+    for (attempt in 0 until 3) {
+      try {
+        members = api.members()
+        break
+      } catch (error: Throwable) {
+        if (error is CancellationException) throw error
+        kotlinx.coroutines.delay(2_000L * (attempt + 1))
+      }
     }
   }
   val reader = context.firestore
@@ -151,7 +160,7 @@ fun CrmGate(context: NativePluginContext, content: @Composable (CrmScope, CrmApi
   val flow = remember(orgId, hostId, context.uid, context.firestore) { observeCrmScope(context.firestore, orgId, hostId, context.uid) }
   when (val live = flow.collectAsState(Live.Loading).value) {
     Live.Loading -> SkeletonList(rows = 6)
-    is Live.Failed -> EmptyState("Could not open the CRM", body = live.error.message ?: "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not open the CRM", body = live.error.message ?: "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val scope = live.value
       if (!scope.suite) {

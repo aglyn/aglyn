@@ -1107,7 +1107,7 @@
           "type": "list",
           "title": "Recent changes",
           "items": "data.detail.audit",
-          "primary": "{item.action:title}",
+          "primary": "{item.action:activity}",
           "secondary": "{item.actorEmail|item.actorUid} · {item.at|item.createdAt:datetime}",
           "count": false,
           "empty": "—"
@@ -1119,7 +1119,7 @@
           "load": "activity",
           "search": true,
           "items": "data.activity.entries",
-          "primary": "{item.action:title}",
+          "primary": "{item.action:activity}",
           "secondary": "{item.target.name|item.target.label|item.target.title|item.target.type:title}",
           "tertiary": "{item.actorEmail|item.actorEmailNow|item.apiKeyName|'System'} · {item.createdAt:datetime}",
           "icon": "clock|schedule",
@@ -5239,7 +5239,20 @@
           "items": "const.features",
           "primary": "{item.label}",
           "secondary": "{item.key}",
-          "tertiary": "{data.locks.records[id=item.lockId].reason} {data.locks.records[id=item.lockId].untilMs:date} set by {data.locks.records[id=item.lockId].actorUid}",
+          "tertiary": [
+            {
+              "text": "{data.locks.records[id=item.lockId].reason|'manual'}",
+              "when": "data.locks.records[id=item.lockId]"
+            },
+            {
+              "text": "until {data.locks.records[id=item.lockId].untilMs:date}",
+              "when": "data.locks.records[id=item.lockId].untilMs"
+            },
+            {
+              "text": "set by {data.locks.records[id=item.lockId].actorUid}",
+              "when": "data.locks.records[id=item.lockId].actorUid"
+            }
+          ],
           "icon": "switch.2|toggle_on",
           "badges": [
             {
@@ -6328,7 +6341,16 @@
           "items": "data.locks.records",
           "primary": "{item.scope:title} · {item.targetId|item.id}",
           "secondary": "{item.reason} · {item.message}",
-          "tertiary": "{item.atMs:datetime} · set by {item.actorUid}",
+          "tertiary": [
+            {
+              "text": "since {item.atMs:datetime}",
+              "when": "item.atMs"
+            },
+            {
+              "text": "set by {item.actorUid}",
+              "when": "item.actorUid"
+            }
+          ],
           "icon": "lock|lock",
           "badges": [
             {
@@ -15203,15 +15225,29 @@
           "type": "notice",
           "tone": "success",
           "title": "Audit archive",
-          "text": "Scheduled · {data.crons.checks.audit-archive.schedule} · last report {data.crons.checks.audit-archive.lastBeatAgeMinutes|'never'} min ago",
-          "when": "data.crons.checks.audit-archive.ok"
+          "text": "Scheduled · {data.crons.checks.audit-archive.schedule} · last ran {data.crons.checks.audit-archive.lastBeatAgeMinutes} min ago",
+          "when": "data.crons.checks.audit-archive.ok && data.crons.checks.audit-archive.lastBeatAgeMinutes != ''"
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "title": "Audit archive",
+          "text": "Scheduled · {data.crons.checks.audit-archive.schedule} · it has never reported a run",
+          "when": "data.crons.checks.audit-archive.ok && data.crons.checks.audit-archive.lastBeatAgeMinutes == ''"
         },
         {
           "type": "notice",
           "tone": "error",
           "title": "Audit archive",
-          "text": "NOT RUNNING {data.crons.checks.audit-archive.code|'no reading'} · {data.crons.checks.audit-archive.schedule} · last report {data.crons.checks.audit-archive.lastBeatAgeMinutes|'never'} min ago",
-          "when": "data.crons.checks.audit-archive && !data.crons.checks.audit-archive.ok"
+          "text": "NOT RUNNING {data.crons.checks.audit-archive.code|'no reading'} · {data.crons.checks.audit-archive.schedule} · last ran {data.crons.checks.audit-archive.lastBeatAgeMinutes} min ago",
+          "when": "data.crons.checks.audit-archive && !data.crons.checks.audit-archive.ok && data.crons.checks.audit-archive.lastBeatAgeMinutes != ''"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "title": "Audit archive",
+          "text": "NOT RUNNING {data.crons.checks.audit-archive.code|'no reading'} · {data.crons.checks.audit-archive.schedule} · it has never reported a run",
+          "when": "data.crons.checks.audit-archive && !data.crons.checks.audit-archive.ok && data.crons.checks.audit-archive.lastBeatAgeMinutes == ''"
         },
         {
           "type": "notice",
@@ -15395,15 +15431,29 @@
           "type": "notice",
           "tone": "success",
           "title": "Plugin artifact reaper",
-          "text": "Scheduled · {data.crons.checks.reap-plugin-artifacts.schedule} · last report {data.crons.checks.reap-plugin-artifacts.lastBeatAgeMinutes|'never'} min ago",
-          "when": "data.crons.checks.reap-plugin-artifacts.ok"
+          "text": "Scheduled · {data.crons.checks.reap-plugin-artifacts.schedule} · last ran {data.crons.checks.reap-plugin-artifacts.lastBeatAgeMinutes} min ago",
+          "when": "data.crons.checks.reap-plugin-artifacts.ok && data.crons.checks.reap-plugin-artifacts.lastBeatAgeMinutes != ''"
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "title": "Plugin artifact reaper",
+          "text": "Scheduled · {data.crons.checks.reap-plugin-artifacts.schedule} · it has never reported a run",
+          "when": "data.crons.checks.reap-plugin-artifacts.ok && data.crons.checks.reap-plugin-artifacts.lastBeatAgeMinutes == ''"
         },
         {
           "type": "notice",
           "tone": "error",
           "title": "Plugin artifact reaper",
-          "text": "NOT RUNNING {data.crons.checks.reap-plugin-artifacts.code|'no reading'} · {data.crons.checks.reap-plugin-artifacts.schedule} · last report {data.crons.checks.reap-plugin-artifacts.lastBeatAgeMinutes|'never'} min ago",
-          "when": "data.crons.checks.reap-plugin-artifacts && !data.crons.checks.reap-plugin-artifacts.ok"
+          "text": "NOT RUNNING {data.crons.checks.reap-plugin-artifacts.code|'no reading'} · {data.crons.checks.reap-plugin-artifacts.schedule} · last ran {data.crons.checks.reap-plugin-artifacts.lastBeatAgeMinutes} min ago",
+          "when": "data.crons.checks.reap-plugin-artifacts && !data.crons.checks.reap-plugin-artifacts.ok && data.crons.checks.reap-plugin-artifacts.lastBeatAgeMinutes != ''"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "title": "Plugin artifact reaper",
+          "text": "NOT RUNNING {data.crons.checks.reap-plugin-artifacts.code|'no reading'} · {data.crons.checks.reap-plugin-artifacts.schedule} · it has never reported a run",
+          "when": "data.crons.checks.reap-plugin-artifacts && !data.crons.checks.reap-plugin-artifacts.ok && data.crons.checks.reap-plugin-artifacts.lastBeatAgeMinutes == ''"
         },
         {
           "type": "notice",
@@ -15587,15 +15637,29 @@
           "type": "notice",
           "tone": "success",
           "title": "Plugin verdict re-verification",
-          "text": "Scheduled · {data.crons.checks.reverify-plugin-versions.schedule} · last report {data.crons.checks.reverify-plugin-versions.lastBeatAgeMinutes|'never'} min ago",
-          "when": "data.crons.checks.reverify-plugin-versions.ok"
+          "text": "Scheduled · {data.crons.checks.reverify-plugin-versions.schedule} · last ran {data.crons.checks.reverify-plugin-versions.lastBeatAgeMinutes} min ago",
+          "when": "data.crons.checks.reverify-plugin-versions.ok && data.crons.checks.reverify-plugin-versions.lastBeatAgeMinutes != ''"
+        },
+        {
+          "type": "notice",
+          "tone": "success",
+          "title": "Plugin verdict re-verification",
+          "text": "Scheduled · {data.crons.checks.reverify-plugin-versions.schedule} · it has never reported a run",
+          "when": "data.crons.checks.reverify-plugin-versions.ok && data.crons.checks.reverify-plugin-versions.lastBeatAgeMinutes == ''"
         },
         {
           "type": "notice",
           "tone": "error",
           "title": "Plugin verdict re-verification",
-          "text": "NOT RUNNING {data.crons.checks.reverify-plugin-versions.code|'no reading'} · {data.crons.checks.reverify-plugin-versions.schedule} · last report {data.crons.checks.reverify-plugin-versions.lastBeatAgeMinutes|'never'} min ago",
-          "when": "data.crons.checks.reverify-plugin-versions && !data.crons.checks.reverify-plugin-versions.ok"
+          "text": "NOT RUNNING {data.crons.checks.reverify-plugin-versions.code|'no reading'} · {data.crons.checks.reverify-plugin-versions.schedule} · last ran {data.crons.checks.reverify-plugin-versions.lastBeatAgeMinutes} min ago",
+          "when": "data.crons.checks.reverify-plugin-versions && !data.crons.checks.reverify-plugin-versions.ok && data.crons.checks.reverify-plugin-versions.lastBeatAgeMinutes != ''"
+        },
+        {
+          "type": "notice",
+          "tone": "error",
+          "title": "Plugin verdict re-verification",
+          "text": "NOT RUNNING {data.crons.checks.reverify-plugin-versions.code|'no reading'} · {data.crons.checks.reverify-plugin-versions.schedule} · it has never reported a run",
+          "when": "data.crons.checks.reverify-plugin-versions && !data.crons.checks.reverify-plugin-versions.ok && data.crons.checks.reverify-plugin-versions.lastBeatAgeMinutes == ''"
         },
         {
           "type": "notice",
@@ -16427,7 +16491,7 @@
         {
           "type": "list",
           "items": "data.file.rows",
-          "primary": "{item.action:title}",
+          "primary": "{item.action:activity}",
           "secondary": "{item.actorEmail|item.actorUid} · {item.scopePath|item.path|item.target.type}",
           "tertiary": "{item.at|item.createdAt:datetime}",
           "count": false,

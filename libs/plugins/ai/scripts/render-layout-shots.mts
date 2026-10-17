@@ -87,6 +87,7 @@ import { createRequire } from 'node:module'
 import { basename, dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { chromeExecutable } from '../../../../tools/e2e/lib/chrome-executable.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
 const require = createRequire(join(ROOT, 'package.json'))
@@ -144,20 +145,6 @@ function readAliases(): Record<string, string> {
     else alias[key] = join(ROOT, target)
   }
   return alias
-}
-
-function chromeExecutable(): Dict {
-  if (process.env['E2E_CHROME_PATH']) return { executablePath: process.env['E2E_CHROME_PATH'] }
-  if (process.platform === 'darwin') {
-    for (const executablePath of [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ]) {
-      if (existsSync(executablePath)) return { executablePath }
-    }
-  }
-  return { channel: 'chrome' }
 }
 
 /**

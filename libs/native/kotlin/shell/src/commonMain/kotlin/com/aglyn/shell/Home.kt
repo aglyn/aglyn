@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import com.aglyn.ui.EmptyTone
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -279,7 +280,7 @@ private fun RecentActivityCard(
           Live.Loading -> Column(Modifier.padding(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
             repeat(3) { Skeleton(height = 44.dp) }
           }
-          is Live.Failed -> EmptyState("Could not load notifications", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+          is Live.Failed -> EmptyState("Could not load notifications", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
           is Live.Ready -> if (feed.value.isEmpty()) {
             EmptyState("You're all caught up", body = "New orders, form entries and alerts show up here.", icon = AglynIcons.named("notifications"))
           } else {

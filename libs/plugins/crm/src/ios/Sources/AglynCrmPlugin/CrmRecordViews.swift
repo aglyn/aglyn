@@ -44,17 +44,14 @@ struct RecordsSection: View {
     WideLayoutReader { wide in
       Group {
         if wide {
-          HStack(spacing: 0) {
-            listPane(selectable: true).frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
-            Divider()
-            Group {
-              if let selection {
-                RecordDetail(context: context, kind: kind, id: selection, scope: scope, api: api, reference: reference).id(selection)
-              } else {
-                AglynEmptyState("Pick a \(kind.singular.lowercased()) to see it here", systemImage: kind.symbol)
-              }
+          AglynListDetailColumns(listWidth: 380) {
+            listPane(selectable: true)
+          } detail: {
+            if let selection {
+              RecordDetail(context: context, kind: kind, id: selection, scope: scope, api: api, reference: reference).id(selection)
+            } else {
+              AglynSelectionPlaceholder("No \(kind.singular.lowercased()) selected", systemImage: kind.symbol)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
           }
         } else {
           listPane(selectable: false)
@@ -125,8 +122,8 @@ struct RecordsSection: View {
             search.isEmpty ? "No \(kind.plural.lowercased()) yet" : "No \(kind.plural.lowercased()) match", systemImage: kind.symbol,
             message: search.isEmpty ? "\(kind.plural) you add, and the ones your forms capture, show up here." : "Try another search or filter.")
         } else if selectable {
-          List(selection: $selection) { rows(list, selectable: true) }
-            .aglynListBackground()
+          List { rows(list, selectable: true) }
+            .aglynSelectableListStyle().aglynSelectionKeys(list.rows.map(\.id), selection: $selection)
             .accessibilityIdentifier("crm-list")
         } else {
           List { rows(list, selectable: false) }
@@ -146,12 +143,12 @@ struct RecordsSection: View {
     ForEach(list.rows) { row in
       Group {
         if selectable {
-          CrmRowView(row: row).tag(row.id)
+          CrmRowView(row: row, reference: reference).aglynSelectableRow(row.id, selection: $selection)
         } else {
           NavigationLink {
             RecordDetail(context: context, kind: kind, id: row.id, scope: scope, api: api, reference: reference)
           } label: {
-            CrmRowView(row: row)
+            CrmRowView(row: row, reference: reference)
           }
         }
       }
@@ -166,9 +163,17 @@ struct RecordsSection: View {
 
 struct CrmRowView: View {
   let row: CrmRow
+  /// The workspace's pipelines, which load beside the list: a deal's row names its stage from them.
+  var reference: CrmReference? = nil
+
+  private var subtitle: String {
+    guard row.kind == .deal, let reference, let stageID = row.data["stageId"] as? String else { return row.subtitle }
+    let name = reference.stageName(row.data["pipelineId"] as? String, stageID)
+    return dealSubtitle(row.data) { _, _ in name }
+  }
 
   var body: some View {
-    AglynRow(row.title, subtitle: row.subtitle.isEmpty ? nil : row.subtitle, systemImage: row.kind.symbol) {
+    AglynRow(row.title, subtitle: subtitle.isEmpty ? nil : subtitle, systemImage: row.kind.symbol) {
       if let chip = row.chip { StatusChip(chip, tone: row.tone) }
     }
   }
@@ -177,6 +182,8 @@ struct CrmRowView: View {
 private enum RecordAction: String, Identifiable {
   case edit, delete, log, email, task, status, unqualify, convert, stage, move, won, lost
   var id: String { rawValue }
+  /// A one-sentence confirmation with nothing to fill in: an alert, never a sheet (HIG alerts).
+  var confirmsInAlert: Bool { self == .delete || self == .won }
 }
 
 /// One record: header and actions, its properties, what it is linked to, open tasks and activity.
@@ -313,7 +320,57 @@ struct RecordDetail: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(row.title)
-    .sheet(item: $action) { action in sheet(action, row: row, fields: fields, values: values) }
+    .sheet(item: Binding(get: { action.flatMap { $0.confirmsInAlert ? nil : $0 } }, set: { action = $0 })) { action in
+      sheet(action, row: row, fields: fields, values: values)
+    }
+    .alert(
+      alertTitle(row), isPresented: Binding(get: { action?.confirmsInAlert == true }, set: { if !$0 { action = nil } })
+    ) {
+      Button("Cancel", role: .cancel) { action = nil }
+      Button(action == .won ? "Mark won" : kind == .contact ? "Remove" : "Delete", role: action == .won ? nil : .destructive) {
+        let confirmed = action
+        action = nil
+        Task { await confirm(confirmed, row: row) }
+      }
+      .accessibilityIdentifier("crm-alert-confirm")
+    } message: {
+      Text(alertMessage)
+    }
+  }
+
+  private func alertTitle(_ row: CrmRow) -> String {
+    if action == .won { return "Mark \(row.title) won?" }
+    return kind == .contact ? "Remove \(row.title)?" : "Delete \(row.title)?"
+  }
+
+  private var alertMessage: String {
+    if action == .won { return "It moves to the pipeline's won stage and counts as closed today." }
+    switch kind {
+    case .contact:
+      return "They leave this site's CRM. If no other site holds them, the contact is deleted; marketing refusals they gave are kept."
+    case .company: return "Its contacts are unlinked first, then the company is deleted."
+    default: return "This cannot be undone."
+    }
+  }
+
+  private func confirm(_ confirmed: RecordAction?, row: CrmRow) async {
+    do {
+      switch confirmed {
+      case .won:
+        try await api.closeDeal(id, won: true)
+        notice = "Won. Nice work."
+      case .delete:
+        switch kind {
+        case .contact: try await api.removeContact(id)
+        case .company: try await api.deleteCompany(id)
+        default: try await api.deleteRecord(kind, id)
+        }
+        notice = "\(row.title) is gone."
+      default: break
+      }
+    } catch {
+      self.error = (error as? LocalizedError)?.errorDescription ?? "Something went wrong. Try again."
+    }
   }
 
   private func actionButtons(_ row: CrmRow) -> some View {
@@ -383,7 +440,7 @@ struct RecordDetail: View {
             Button {
               context.navigate(relatedKind.detailScreen, [relatedKind.param: item.id])
             } label: {
-              CrmRowView(row: item)
+              CrmRowView(row: item, reference: reference)
             }
             .buttonStyle(.plain)
           }
@@ -471,11 +528,6 @@ struct RecordDetail: View {
         try await api.setLeadStatus(id, status: "unqualified", label: leadStatusLabel("unqualified"), reason: reason)
         done("Unqualified.")
       }
-    case .won:
-      ReasonSheet(title: "Mark \(row.title) won?", message: "It moves to the pipeline's won stage and counts as closed today.", confirm: "Mark won", asksReason: false) { _ in
-        try await api.closeDeal(id, won: true)
-        done("Won. Nice work.")
-      }
     case .lost:
       ReasonSheet(title: "Mark \(row.title) lost?", message: "Say why, if you know.", confirm: "Mark lost") { reason in
         try await api.closeDeal(id, won: false, lostReason: reason)
@@ -486,21 +538,9 @@ struct RecordDetail: View {
         try await api.convertLead(id, draft)
         done("\(row.title) is converted.")
       }
-    case .delete:
-      ReasonSheet(
-        title: kind == .contact ? "Remove \(row.title)?" : "Delete \(row.title)?",
-        message: kind == .contact
-          ? "They leave this site's CRM. If no other site holds them, the contact is deleted; marketing refusals they gave are kept."
-          : kind == .company ? "Its contacts are unlinked first, then the company is deleted." : "This cannot be undone.",
-        confirm: kind == .contact ? "Remove" : "Delete", destructive: true, asksReason: false
-      ) { _ in
-        switch kind {
-        case .contact: try await api.removeContact(id)
-        case .company: try await api.deleteCompany(id)
-        default: try await api.deleteRecord(kind, id)
-        }
-        done("\(row.title) is gone.")
-      }
+    case .delete, .won:
+      // Confirmed in an alert (see `confirmsInAlert`), never a sheet.
+      EmptyView()
     }
   }
 

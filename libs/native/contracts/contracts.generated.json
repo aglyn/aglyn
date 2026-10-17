@@ -1779,6 +1779,17 @@
     168
   ],
   "DROP_OFF_WATCHES_MAX": 12,
+  "DUPLICATE_ACTIVITY_ACTION_LABELS": {
+    "campaign.duplicated": "Duplicated a campaign",
+    "component.duplicated": "Duplicated a component",
+    "emailDesign.duplicated": "Duplicated an email design",
+    "emailTemplate.duplicated": "Duplicated an email template",
+    "form.duplicated": "Duplicated a form",
+    "layout.duplicated": "Duplicated a layout",
+    "screen.duplicated": "Duplicated a page",
+    "template.duplicated": "Duplicated a template",
+    "workflow.duplicated": "Duplicated a workflow"
+  },
   "EMAIL_BLOCK_STARTER_TREES_JSON": "{\"header\":{\"$id\":null,\"componentId\":\"emailSection\",\"pluginId\":\"email\",\"props\":{\"align\":\"center\",\"padding\":24,\"emailRole\":\"header\"},\"nodes\":[{\"$id\":null,\"componentId\":\"emailImage\",\"pluginId\":\"email\",\"props\":{\"alt\":\"Your company logo\",\"width\":160,\"align\":\"center\"}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"Your company\",\"variant\":\"subheading\",\"align\":\"center\"}}]},\"footer\":{\"$id\":null,\"componentId\":\"emailSection\",\"pluginId\":\"email\",\"props\":{\"align\":\"center\",\"padding\":24,\"emailRole\":\"footer\"},\"nodes\":[{\"$id\":null,\"componentId\":\"emailDivider\",\"pluginId\":\"email\",\"props\":{}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"Your company · 123 Main St, City\",\"variant\":\"caption\",\"align\":\"center\",\"color\":\"#6b6b6b\"}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"You're receiving this because you're a customer of Your company.\",\"variant\":\"caption\",\"align\":\"center\",\"color\":\"#6b6b6b\"}}]}}",
   "EMAIL_LIST_QUERY": {
     "fields": [

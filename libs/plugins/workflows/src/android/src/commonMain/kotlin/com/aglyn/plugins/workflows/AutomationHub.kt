@@ -38,11 +38,13 @@ import com.aglyn.pluginhost.NativeParams
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.ListPager
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.SectionItem
 import com.aglyn.ui.SectionNav
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.WidthClass
 import com.aglyn.ui.currentWidthClass
@@ -153,7 +155,7 @@ fun AutomationScreen(context: NativePluginContext, params: NativeParams) {
         Box(Modifier.weight(0.54f).fillMaxHeight().testTag("automation-detail")) {
           val current = target
           if (current == null) {
-            EmptyState("Pick one to see it here", body = "Its editor or its run history opens beside the list.", icon = AglynIcons.named("bolt"))
+            SelectionPlaceholder("Pick one to see it here", icon = AglynIcons.named("bolt"))
           } else {
             TargetPane(context, current) { message ->
               target = null
@@ -226,7 +228,7 @@ fun <T> SectionList(
     when (live) {
       Live.Loading -> item { SkeletonList(rows = 4) }
       is Live.Failed -> item {
-        EmptyState(failedText, body = failureMessage(live.error), icon = AglynIcons.named("error"), modifier = Modifier.padding(vertical = space(2f)))
+        EmptyState(failedText, body = failureMessage(live.error), icon = AglynIcons.named("error"), tone = EmptyTone.ERROR, modifier = Modifier.padding(vertical = space(2f)))
       }
       is Live.Ready -> {
         if (all.isEmpty() && emptyText != null) {

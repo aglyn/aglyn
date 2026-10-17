@@ -582,4 +582,21 @@ class SiteTest {
     assertEquals(0.5, com.aglyn.site.media.posterTimeSeconds(5.0))
     assertEquals(1.0, com.aglyn.site.media.posterTimeSeconds(600.0))
   }
+
+  @Test
+  fun theThemeLibraryListsOnlyTheSitesOwnAndInstalledThemesEachByItsKind() {
+    fun entry(id: String, kind: String?, name: String) =
+      FirestoreDoc(id, "hosts/h/themes/$id", listOfNotNull("name" to name, kind?.let { "kind" to it }).toMap())
+    val listed = com.aglyn.site.setup.libraryThemes(
+      listOf(
+        entry("default", "default", "Platform default"),
+        entry("installed--harvest", "installed", "Harvest"),
+        entry("preset--mui", "preset", "Material UI"),
+        entry("theme-cool", "custom", "Cool"),
+        entry("theme-warm", "custom", "Warm"),
+        entry("unknown", null, "No kind"),
+      ),
+    )
+    assertEquals(listOf("theme-cool" to "custom", "theme-warm" to "custom", "installed--harvest" to "installed"), listed.map { it.id to it.kind })
+  }
 }

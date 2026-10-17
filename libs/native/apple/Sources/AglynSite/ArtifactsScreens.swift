@@ -74,7 +74,7 @@ struct ArtifactsScreen: View {
                   }
                   .id(selection)
                 } else {
-                  AglynEmptyState("Pick a \(kind.singular) to see it here", systemImage: kind.systemImage)
+                  AglynSelectionPlaceholder("No \(kind.singular) selected", systemImage: kind.systemImage)
                 }
               }
               .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -233,15 +233,17 @@ struct ArtifactsScreen: View {
       }
     case .ready(let rows):
       if selectable {
-        List(selection: $selection) {
+        List {
           ForEach(rows) { row in
-            ArtifactListRow(kind: kind, row: row).tag(row.id).aglynListRow().accessibilityIdentifier("\(kind.singular)-\(row.id)")
+            ArtifactListRow(kind: kind, row: row).aglynSelectableRow(row.id, selection: $selection)
+              .accessibilityIdentifier("\(kind.singular)-\(row.id)")
           }
           if model.hasMore { AglynLoadMoreRow("Show more \(kind.title.lowercased())") { model.loadMore() } }
         }
         .sensoryFeedback(.selection, trigger: selection)
         .refreshable { model.refresh() }
-        .aglynListBackground()
+        .aglynSelectableListStyle()
+        .aglynSelectionKeys(rows.map(\.id), selection: $selection)
         .accessibilityIdentifier("\(kind.collection)-list")
       } else {
         List {

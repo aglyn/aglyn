@@ -57,3 +57,10 @@ test('nothing is refused unless the switch is exactly on', () => {
     false,
   )
 })
+
+test('a plus-tag entry admits the stamped canary and nothing wider', () => {
+  const env = { ...ON, AGLYN_SSO_EXEMPT_EMAILS: 'ops+signup-canary*@example.com, *@example.com' }
+  assert.equal(ssoDomainCreationRefused({ email: 'ops+signup-canary-1729123456@example.com', tenantId: null }, env), false)
+  assert.equal(ssoDomainCreationRefused({ email: 'ops@example.com', tenantId: null }, env), true)
+  assert.equal(ssoDomainCreationRefused({ email: 'person@example.com', tenantId: null }, env), true)
+})
