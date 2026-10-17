@@ -3908,6 +3908,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let dropOffMaxHours: Double
   public let dropOffWaitHours: [Double]
   public let dropOffWatchesMax: Int
+  public let duplicateActivityActionLabels: [String: String]
   public let emailBlockStarterTreesJson: String
   public let emailListQuery: ListQueryDeclaration
   public let emailTemplateQuery: ListQueryDeclaration
@@ -4149,6 +4150,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case dropOffMaxHours = "DROP_OFF_MAX_HOURS"
     case dropOffWaitHours = "DROP_OFF_WAIT_HOURS"
     case dropOffWatchesMax = "DROP_OFF_WATCHES_MAX"
+    case duplicateActivityActionLabels = "DUPLICATE_ACTIVITY_ACTION_LABELS"
     case emailBlockStarterTreesJson = "EMAIL_BLOCK_STARTER_TREES_JSON"
     case emailListQuery = "EMAIL_LIST_QUERY"
     case emailTemplateQuery = "EMAIL_TEMPLATE_QUERY"

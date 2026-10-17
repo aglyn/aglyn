@@ -102,8 +102,6 @@ export async function seedPos({ put, hostId, now: date, nameSearchFields }) {
       categoryIds: ['retail', 'coffee'],
       variants: [variant('default', 16.5, { barcode: '0098765432109', inventory: 22 })],
     }),
-    [`hosts/${hostId}/services/class`, { name: 'Pastry class', priceUsd: 45, priceDisplay: 'fixed' }],
-    [`hosts/${hostId}/services/consult`, { name: 'Custom cake consultation', priceUsd: 0, priceDisplay: 'varies' }],
   ]
 
   const hour = 60 * 60 * 1000
@@ -113,18 +111,22 @@ export async function seedPos({ put, hostId, now: date, nameSearchFields }) {
   docs.push(
     [
       `hosts/${hostId}/bookings/pos-ada`,
-      { serviceId: 'class', serviceName: 'Pastry class', name: 'Elise Carter', email: 'elise@example.test', startsAtMs: at(1), endsAtMs: at(2), status: 'confirmed' },
+      { serviceId: 's-cut', serviceName: 'Pastry class', name: 'Elise Carter', email: 'elise@example.test', startsAtMs: at(1), endsAtMs: at(2), status: 'confirmed' },
     ],
     [
       `hosts/${hostId}/bookings/pos-grace`,
-      { serviceId: 'consult', serviceName: 'Custom cake consultation', name: 'Noah Bennett', email: 'noah@example.test', startsAtMs: at(3), endsAtMs: at(3.5), status: 'confirmed' },
+      { serviceId: 's-color', serviceName: 'Custom cake consultation', name: 'Noah Bennett', email: 'noah@example.test', startsAtMs: at(3), endsAtMs: at(3.5), status: 'confirmed' },
     ],
     [
       `hosts/${hostId}/bookings/pos-alan`,
-      { serviceId: 'class', serviceName: 'Pastry class', name: 'Zoe Ramirez', email: 'zoe@example.test', startsAtMs: at(5), endsAtMs: at(6), status: 'confirmed', paidAmountCents: 4860 },
+      { serviceId: 's-cut', serviceName: 'Pastry class', name: 'Zoe Ramirez', email: 'zoe@example.test', startsAtMs: at(5), endsAtMs: at(6), status: 'confirmed', paidAmountCents: 4860 },
     ],
   )
 
   for (const [path, data] of docs) await put(path, data)
+  // The register sells the site's own services (seeded with the store), priced for the counter: a merge, so the same two
+  // services are listed once wherever services are, never as twins under other ids.
+  await put(`hosts/${hostId}/services/s-cut`, { priceUsd: 45, priceDisplay: 'fixed' }, { merge: true })
+  await put(`hosts/${hostId}/services/s-color`, { priceUsd: 0, priceDisplay: 'varies' }, { merge: true })
   return `a register, 3 categories, 9 register products with modifiers and quick keys, 2 services, 3 bookings`
 }

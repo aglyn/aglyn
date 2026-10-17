@@ -240,6 +240,21 @@ object ScreenValues {
     else -> null
   }
 
+  /** `activityActionLabel` and `humanizeActivityCode`: what a stored activity action reads as. */
+  fun activityActionLabel(stored: String): String {
+    val action = stored.trim()
+    com.aglyn.contracts.Contracts.duplicateActivityActionLabels[action]?.let { return it }
+    if (!ACTIVITY_CODE.matches(action)) return action.replaceFirstChar { it.uppercase() }
+    val segments = action.split('.').filter { it.isNotEmpty() }
+    fun words(segment: String) = segment.replace(Regex("([a-z0-9])([A-Z])"), "$1 $2").replace(Regex("[-_]+"), " ").lowercase().trim()
+    val head = segments.first()
+    val lead = ACTIVITY_NAMESPACES[head] ?: words(head).replaceFirstChar { it.uppercase() }
+    return if (segments.size == 1) lead else "$lead: ${segments.drop(1).joinToString(" ") { words(it) }}"
+  }
+
+  private val ACTIVITY_CODE = Regex("^[a-z][\\w-]*(\\.[\\w-]+)+$", RegexOption.IGNORE_CASE)
+  private val ACTIVITY_NAMESPACES = mapOf("org" to "Organization", "orgs" to "Organizations", "user" to "Account", "host" to "Site")
+
   fun truthy(value: JsonElement?): Boolean = when (value) {
     null, JsonNull -> false
     is JsonPrimitive -> when {
@@ -1166,6 +1181,9 @@ object ScreenValues {
       "present" -> if (value != null && value != JsonNull) "true" else ""
       "yesno" -> if (truthy(value)) "Yes" else "No"
       "title" -> text(value).replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
+      // An activity row's action in words (`activityActionLabel`): a duplicate's code is its sentence, a dotted code nobody
+      // named reads from its segments (`billing.invoice.paid` is `Billing: invoice paid`), and a stored sentence is itself.
+      "activity" -> activityActionLabel(text(value))
       // `upper/2` also keeps at most that many characters (a country or state code).
       "upper" -> text(value).uppercase().let { upper -> parts.getOrNull(1)?.toIntOrNull()?.let { upper.take(it) } ?: upper }
       "facts" -> facts(value)

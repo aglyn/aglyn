@@ -79,6 +79,9 @@ fun campaignSendProgress(send: Map<String, Any?>?): SendProgress {
       SendProgress("sending", reached, audience, remaining, batch, nextAtMs, "Sending — reached ${grouped(reached)}$of")
     (status == "scheduled" || status == "sending") && reached == 0L ->
       SendProgress("pending", 0, audience, remaining, batch, 0, if (status == "sending") "Sending" else "Scheduled")
+    // Canceled, or failed, before a single message went out, with nobody left waiting: it never sent.
+    (status == "canceled" || status == "failed") && reached == 0L && remaining == 0L ->
+      SendProgress("stopped", 0, audience, 0, batch, 0, if (status == "canceled") "Canceled before it was sent" else "Failed before it was sent")
     remaining > 0 -> {
       val why = when (status) { "canceled" -> "canceled"; "failed" -> "stopped by an error"; else -> "stopped" }
       SendProgress("stopped", reached, audience, remaining, batch, 0, "Reached ${grouped(reached)}$of — $why with ${grouped(remaining)} not addressed")
@@ -216,6 +219,44 @@ data class EmailSend(
   val canFollowUp: Boolean get() = !held && status == "sent"
   val canCancel: Boolean get() = status == "scheduled" && !midFlight
   val canCompose: Boolean get() = (status == "draft" || status == "scheduled") && !midFlight && !held
+}
+
+/** The sender a message actually left with, as the send recorded it (`emailSentAs`): the address is what makes it a record. */
+data class SentAs(val from: String, val fromName: String?, val replyTo: String?)
+
+fun emailSentAs(data: Map<String, Any?>): SentAs? {
+  val stamp = data["sentAs"] as? Map<*, *> ?: return null
+  fun text(key: String) = (stamp[key] as? String)?.trim()?.ifEmpty { null }
+  val from = text("from") ?: return null
+  return SentAs(from, text("fromName"), text("replyTo"))
+}
+
+/** Not yet mailed to anybody (`emailIsUnsent`): a draft, or a send waiting for its time or under way. */
+fun emailIsUnsent(data: Map<String, Any?>): Boolean = (data["status"] as? String) in setOf("draft", "scheduled", "sending")
+
+/** Canceled or failed before it went to anybody (`emailNeverSent`): it never will be, and has no report. */
+fun emailNeverSent(data: Map<String, Any?>): Boolean {
+  @Suppress("UNCHECKED_CAST") val sent = count((data["stats"] as? Map<String, Any?>)?.get("sent"))
+  return (data["status"] as? String) in setOf("canceled", "failed") && sent == 0L
+}
+
+/** What "Sent as" says where the send recorded no sender: not sent yet, never sent, or sent before senders were recorded. */
+fun sentAsMissing(data: Map<String, Any?>): String = when {
+  emailIsUnsent(data) -> "Not sent yet"
+  emailNeverSent(data) -> "Not sent"
+  else -> "Not recorded"
+}
+
+/** The Delivery report's stand-in for an email with nothing to report, as the console words it; null when there is a report. */
+fun deliveryPlaceholder(data: Map<String, Any?>): String? {
+  val status = data["status"] as? String
+  return when {
+    emailNeverSent(data) -> "This email was not sent to anybody, so there is nothing to report."
+    status == "sending" -> "This email is being sent right now. Its figures appear here once the send finishes."
+    status == "draft" -> "This email has not been sent, so there is nothing to report yet."
+    emailIsUnsent(data) -> "This email has not been sent yet. Its figures appear here once it goes out."
+    else -> null
+  }
 }
 
 fun millisOf(raw: Any?): Long? = when (raw) {

@@ -213,6 +213,25 @@ public enum ScreenValues {
   }
 
   /// Whether a value reads as present: not null, false, 0, "", or empty.
+  /// `activityActionLabel` and `humanizeActivityCode`: what a stored activity action reads as.
+  public static func activityActionLabel(_ stored: String) -> String {
+    let action = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let label = ContractValues.shared.duplicateActivityActionLabels[action] { return label }
+    guard action.range(of: #"^[a-z][\w-]*(\.[\w-]+)+$"#, options: [.regularExpression, .caseInsensitive]) != nil else {
+      return action.prefix(1).uppercased() + action.dropFirst()
+    }
+    func words(_ segment: String) -> String {
+      segment.replacingOccurrences(of: #"([a-z0-9])([A-Z])"#, with: "$1 $2", options: .regularExpression)
+        .replacingOccurrences(of: #"[-_]+"#, with: " ", options: .regularExpression)
+        .lowercased().trimmingCharacters(in: .whitespaces)
+    }
+    let segments = action.split(separator: ".").map(String.init).filter { !$0.isEmpty }
+    let namespaces = ["org": "Organization", "orgs": "Organizations", "user": "Account", "host": "Site"]
+    let head = segments[0]
+    let lead = namespaces[head] ?? { let w = words(head); return w.prefix(1).uppercased() + w.dropFirst() }()
+    return segments.count == 1 ? lead : "\(lead): \(segments.dropFirst().map(words).joined(separator: " "))"
+  }
+
   public static func truthy(_ value: JSONValue?) -> Bool {
     switch value {
     case nil, .null?: false
@@ -1271,6 +1290,10 @@ public enum ScreenValues {
     case "title":
       let raw = text(value).replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " ")
       return raw.prefix(1).uppercased() + raw.dropFirst()
+    case "activity":
+      // An activity row's action in words (`activityActionLabel`): a duplicate's code is its sentence, a dotted code nobody
+      // named reads from its segments (`billing.invoice.paid` is `Billing: invoice paid`), and a stored sentence is itself.
+      return activityActionLabel(text(value))
     case "upper":
       // `upper/2` also keeps at most that many characters (a country or state code).
       let upper = text(value).uppercased()

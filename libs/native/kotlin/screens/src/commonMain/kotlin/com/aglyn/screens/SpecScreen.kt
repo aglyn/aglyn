@@ -100,6 +100,23 @@ internal fun toneFor(spec: JsonElement, value: String, context: JsonElement): St
   return tone(spec.str("tone")?.let { ScreenValues.render(it, context) })
 }
 
+/**
+ * A list row's line: a template, or a list of parts (a template, or `{ text, when }` shown while its condition holds) joined
+ * with ` · `, a part that holds nothing left out, so a row never ends on a dangling `set by `.
+ */
+internal fun rowLine(spec: JsonElement?, scope: JsonElement): String? = when (spec) {
+  is JsonArray -> spec.mapNotNull { part ->
+    val template = when {
+      part is JsonPrimitive && part.isString -> part.content
+      ScreenValues.condition(part.str("when"), scope) -> part.str("text")
+      else -> null
+    }
+    template?.let { ScreenValues.render(it, scope).trim() }?.takeIf { it.isNotEmpty() }
+  }.joinToString(" \u00b7 ")
+  is JsonPrimitive -> if (spec.isString) ScreenValues.render(spec.content, scope) else null
+  else -> null
+}?.takeIf { it.isNotEmpty() }
+
 internal fun renderParams(params: JsonElement?, context: JsonElement): NativeParams =
   ((params as? JsonObject) ?: JsonObject(emptyMap())).mapValues { (_, value) ->
     ScreenValues.render((value as? JsonPrimitive)?.takeIf { it.isString }?.content ?: ScreenValues.text(value), context)
@@ -538,9 +555,9 @@ private fun PromptDialog(pending: Pending, search: suspend (LookupGroup, String)
   val visible = filled()
   val missing = inputs.any { ScreenValues.condition(it.whenCondition, visible) && it.unmet(fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)), pending.scope) }
   ActionDialog(
-    title = ScreenValues.render(pending.action.label, pending.scope),
+    title = ScreenValues.render(pending.action.promptTitle ?: pending.action.label, pending.scope),
     body = pending.action.confirmText(pending.scope),
-    confirmLabel = ScreenValues.render(pending.action.label, pending.scope),
+    confirmLabel = ScreenValues.render(pending.action.submitLabel ?: pending.action.label, pending.scope),
     destructive = pending.action.destructive,
     confirmEnabled = !missing,
     dismissLabel = "Cancel",
@@ -935,8 +952,8 @@ private fun ListRow(
     openSpec.str("screen")?.let { Selection(it, renderParams(openSpec.obj("params"), scope)) }
   }
   val primary = ScreenValues.render(block.string("primary") ?: "{item.name|item.\$id}", scope).ifEmpty { "—" }
-  val secondary = block.string("secondary")?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() }
-  val tertiary = block.string("tertiary")?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() }
+  val secondary = rowLine(block["secondary"], scope)
+  val tertiary = rowLine(block["tertiary"], scope)
   val trailingText = block.string("trailing")?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() }
   val badges = block.raw.arr("badges").mapNotNull { badge ->
     if (!ScreenValues.condition(badge.str("when"), scope)) return@mapNotNull null

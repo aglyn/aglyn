@@ -153,7 +153,7 @@ fun RecordsSection(
         ) { row ->
           AglynListItem(
             title = row.title,
-            supporting = row.subtitle.ifBlank { null },
+            supporting = row.listSubtitle(reference).ifBlank { null },
             icon = AglynIcons.named(kind.icon),
             selected = row.id == selected,
             trailing = row.chip?.let { { StatusChip(it, chipTone(kind, row)) } },
@@ -373,7 +373,7 @@ private fun RelatedCard(context: NativePluginContext, kind: CrmKind, id: String,
       rows.forEach { item ->
         AglynListItem(
           item.title,
-          supporting = item.subtitle.ifBlank { null },
+          supporting = item.listSubtitle(reference).ifBlank { null },
           icon = AglynIcons.named(relatedKind.icon),
           trailing = item.chip?.let { { StatusChip(it, chipTone(relatedKind, item)) } },
           onClick = { context.navigate(relatedKind.detailScreen, mapOf(relatedKind.param to item.id)) },
