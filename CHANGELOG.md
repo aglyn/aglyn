@@ -9,6 +9,27 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.263 — 2026-10-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.262...v1.0.0-beta.263)
+
+### Fixed
+
+- **notifications:** native push is immediate, never cut off, and sent once ([AGL-3888](https://linear.app/aglyn/issue/AGL-3888))
+- **native-apple:** the launch restore never refreshes behind a fresh sign-in ([AGL-3885](https://linear.app/aglyn/issue/AGL-3885))
+- **auth:** refuse an @aglyn.com account outside SSO before it is created ([AGL-3877](https://linear.app/aglyn/issue/AGL-3877), [AGL-1993](https://linear.app/aglyn/issue/AGL-1993))
+- **native-apple:** a notice's trailing closure is its close button again ([AGL-3876](https://linear.app/aglyn/issue/AGL-3876))
+- **native-apple:** a notification opens the screen the console opens ([AGL-3875](https://linear.app/aglyn/issue/AGL-3875))
+- **native-android:** bookings open on Upcoming; list header titles keep their width ([AGL-3874](https://linear.app/aglyn/issue/AGL-3874))
+- **native-screens:** a spec screen's refusal stays until dismissed or the next action ([AGL-3873](https://linear.app/aglyn/issue/AGL-3873))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **functions:** run the SSO domain creation test with test:functions ([AGL-3877](https://linear.app/aglyn/issue/AGL-3877))
+
+</details>
+
 ## v1.0.0-beta.262 — 2026-10-16
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.261...v1.0.0-beta.262)
