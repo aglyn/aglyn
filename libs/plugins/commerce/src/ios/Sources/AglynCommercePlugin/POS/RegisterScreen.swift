@@ -17,6 +17,7 @@ struct RegisterScreen: View {
   @State private var showDiscount = false
   @State private var scanCode = ""
   @State private var showOps = false
+  @State private var showPrinters = false
   @State private var showOfflineCash = false
   let context: NativePluginContext
 
@@ -71,6 +72,7 @@ struct RegisterScreen: View {
     .onChange(of: query) { _, text in if text.isEmpty { model.search("") } }
     .sheet(item: $model.sheet) { _ in ItemSheetView(model: model) }
     .sheet(isPresented: $showOps) { RegisterOpsSheet(model: model) }
+    .sheet(isPresented: $showPrinters) { RegisterPrintersSheet(model: model) }
     .sheet(isPresented: $showOfflineCash) { OfflineCashSheet(model: model) }
     .overlay { if model.cashier.locked { LockedRegister(model: model) } }
     // Any touch is the register in use: it keeps the idle lock away.
@@ -123,6 +125,9 @@ struct RegisterScreen: View {
         Button("Cashier and shift", systemImage: "person.badge.clock") { showOps = true }
           .accessibilityIdentifier("pos-ops-open")
         Button("Card readers", systemImage: "creditcard") { context.navigate(commerceCardReadersScreen) }
+        Button("Receipt printers", systemImage: "printer") { showPrinters = true }
+          .disabled(model.register == nil)
+          .accessibilityIdentifier("pos-printers-open")
         Button("Clear basket", systemImage: "xmark.bin", role: .destructive) { model.clearCart() }
           .disabled(model.cart.isEmpty)
       } label: {

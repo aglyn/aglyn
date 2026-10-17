@@ -5179,6 +5179,37 @@
     "gift_card": "Gift card"
   },
   "PRICE_RANGE_MAX_LENGTH": 100,
+  "PRINTER_BRAND_LABELS": {
+    "epson": "Epson (Server Direct Print)",
+    "star": "Star Micronics (CloudPRNT)"
+  },
+  "PRINTER_BRANDS": [
+    "star",
+    "epson"
+  ],
+  "PRINTER_MODEL_SUGGESTIONS": {
+    "epson": [
+      "TM-m30III",
+      "TM-m30II",
+      "TM-m50II",
+      "TM-T88VII"
+    ],
+    "star": [
+      "mC-Print3",
+      "TSP143IV",
+      "TSP100IV SK",
+      "mC-Label3"
+    ]
+  },
+  "PRINTER_OFFLINE_AFTER_MS": 120000,
+  "PRINTER_STATE_LABELS": {
+    "cover_open": "Cover open",
+    "error": "Printer error",
+    "online": "Online",
+    "paper_low": "Paper low",
+    "paper_out": "Out of paper",
+    "unknown": "Waiting for the printer"
+  },
   "PRODUCT_LIST_BASE": [
     {
       "op": "==",
