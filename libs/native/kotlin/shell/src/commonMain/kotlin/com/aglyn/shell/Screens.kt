@@ -54,6 +54,7 @@ import com.aglyn.pluginhost.WidgetSize
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.LocalAglynPalette
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.Skeleton
@@ -77,8 +78,8 @@ internal fun WorkspaceChip(workspace: WorkspaceState, onClick: () -> Unit) {
 internal fun WorkspaceFooter(workspace: WorkspaceState, onClick: () -> Unit) {
   androidx.compose.material3.Surface(
     onClick = onClick,
-    modifier = Modifier.fillMaxWidth().padding(10.dp).testTag("sidebar-switcher").semantics { contentDescription = "Switch workspace or site" },
-    shape = RoundedCornerShape(10.dp),
+    modifier = Modifier.fillMaxWidth().padding(12.dp).testTag("sidebar-switcher").semantics { contentDescription = "Switch workspace or site" },
+    shape = MaterialTheme.shapes.medium,
     color = MaterialTheme.colorScheme.surface,
   ) {
     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -143,7 +144,7 @@ internal fun SectionHeader(text: String) {
   Text(
     text,
     Modifier.padding(start = space(2f), end = space(2f), top = space(2f), bottom = space(1f)).semantics { heading() },
-    style = MaterialTheme.typography.labelLarge,
+    style = MaterialTheme.typography.titleSmall,
     color = MaterialTheme.colorScheme.primary,
   )
 }
@@ -211,7 +212,7 @@ internal fun PluginScreenHost(
 ) {
   val screen = services.registry.screen(screenId)
   when {
-    screen == null -> EmptyState("This page is not available", body = "Update the app to open it.", icon = AglynIcons.named("error"))
+    screen == null -> EmptyState("This page is not available", body = "Update the app to open it.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     screen.requiresSite && !hasSite -> EmptyState("Pick a site first", body = "This page shows one site's data.", icon = AglynIcons.named("public"))
     screen.upcoming -> EmptyState(
       "${screen.title} is coming to the app",

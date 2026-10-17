@@ -35,6 +35,7 @@ import com.aglyn.ui.AmountRow
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.MetricCard
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SectionCard
@@ -97,7 +98,7 @@ fun SalesScreen(context: NativePluginContext) {
         is Load.Failed -> EmptyState(
           "Could not load sales",
           body = report.message,
-          icon = AglynIcons.named("error"),
+          icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
           action = { OutlinedButton(onClick = { refresh++ }) { Text("Try again") } },
         )
         is Load.Ready -> report.value.report?.let { SalesReportView(it) }

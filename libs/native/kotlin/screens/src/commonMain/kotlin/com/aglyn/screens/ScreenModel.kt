@@ -21,6 +21,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.put
@@ -203,7 +204,8 @@ class ScreenModel(
   sealed interface Phase {
     data object Loading : Phase
     data object Ready : Phase
-    data class Failed(val message: String) : Phase
+    /** [upsell]: the workspace's plan or add-ons do not include what the screen reads, which is an offer, not a failure. */
+    data class Failed(val message: String, val upsell: Boolean = false) : Phase
   }
 
   var phase: Phase by mutableStateOf(Phase.Loading)
@@ -407,7 +409,7 @@ class ScreenModel(
     } catch (error: CancellationException) {
       throw error
     } catch (error: ConsoleApiError) {
-      phase = Phase.Failed(error.message)
+      phase = Phase.Failed(error.message, upsell = isPlanRefusal(error))
       return
     } catch (error: Throwable) {
       phase = Phase.Failed(error.message ?: "This did not load.")
@@ -1118,4 +1120,15 @@ class ScreenModel(
       return words.any { it in setOf("reauth-required", "recent-login-required", "requires-recent-login") }
     }
   }
+}
+
+/**
+ * Whether a route refused because the workspace's plan or add-ons leave the feature out (`reason: "entitlement"` on a 403,
+ * or a 402), as against a real failure: the screen offers the add-on instead of an error.
+ */
+internal fun isPlanRefusal(error: ConsoleApiError): Boolean {
+  if (error.status == 402) return true
+  if (error.status != 403) return false
+  val reason = ((error.body as? kotlinx.serialization.json.JsonObject)?.get("reason") as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
+  return reason == "entitlement" || reason == "plan" || reason == "addon"
 }

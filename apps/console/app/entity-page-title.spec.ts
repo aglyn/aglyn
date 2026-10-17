@@ -30,7 +30,11 @@
  * not fire.
  */
 
-import { entityPageTitle, renameTitleSubject } from './entity-page-title'
+import {
+  dropTitleBrand,
+  entityPageTitle,
+  renameTitleSubject,
+} from './entity-page-title'
 
 describe('entityPageTitle', () => {
   it('puts the subject first, where a truncated tab can still show it', () => {
@@ -116,5 +120,33 @@ describe('renameTitleSubject', () => {
 
   it('does nothing when the name IS the id', () => {
     expect(renameTitleSubject(SERVED, '4L_o499p_p', '4L_o499p_p')).toBe(SERVED)
+  })
+})
+
+describe('dropTitleBrand (AGL-3894)', () => {
+  it('drops the brand the title template appends', () => {
+    expect(
+      dropTitleBrand('Home · Page besigner · demo.aglyn.app · Aglyn', 'Aglyn'),
+    ).toBe('Home · Page besigner · demo.aglyn.app')
+  })
+
+  it('is idempotent, so the title observer settles', () => {
+    const once = dropTitleBrand('Home · Page besigner · Aglyn', 'Aglyn')
+    expect(dropTitleBrand(once, 'Aglyn')).toBe(once)
+  })
+
+  it('leaves a bare brand, which is the whole title before a route has one', () => {
+    expect(dropTitleBrand('Aglyn', 'Aglyn')).toBe('Aglyn')
+  })
+
+  it('leaves a brand that is not the trailing segment', () => {
+    expect(dropTitleBrand('Aglyn shop · Page besigner', 'Aglyn')).toBe(
+      'Aglyn shop · Page besigner',
+    )
+    expect(dropTitleBrand('Home · MyAglyn', 'Aglyn')).toBe('Home · MyAglyn')
+  })
+
+  it('does nothing without a brand', () => {
+    expect(dropTitleBrand('Home · Aglyn', '')).toBe('Home · Aglyn')
   })
 })
