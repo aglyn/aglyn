@@ -64,6 +64,7 @@ import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.ChoiceField
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.InputChoice
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
@@ -73,6 +74,7 @@ import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -110,7 +112,7 @@ fun SchemaScreen(context: NativePluginContext, datasetId: String) {
   val access = rememberOrgAccess(context, orgId)
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this dataset", body = "It may no longer be shared with you.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this dataset", body = "It may no longer be shared with you.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val doc = value.value ?: return EmptyState("This dataset is gone", icon = AglynIcons.named("dataset"))
       // Seeded once from the stored dataset; the save writes what is edited here.
@@ -210,8 +212,8 @@ private fun SchemaEditor(context: NativePluginContext, orgId: String, dataset: D
           trailing = {
             Row(verticalAlignment = Alignment.CenterVertically) {
               if (field.required == true) StatusChip("Required", StatusTone.INFO)
-              IconButton(onClick = { model = moveField(model, id, -1) }, enabled = canWrite && index > 0) { Icon(Icons.Outlined.ArrowUpward, contentDescription = "Move ${field.label(id)} up") }
-              IconButton(onClick = { model = moveField(model, id, 1) }, enabled = canWrite && index < fields.size - 1) { Icon(Icons.Outlined.ArrowDownward, contentDescription = "Move ${field.label(id)} down") }
+              WithTooltip("Move ${field.label(id)} up") { IconButton(onClick = { model = moveField(model, id, -1) }, enabled = canWrite && index > 0) { Icon(Icons.Outlined.ArrowUpward, contentDescription = "Move ${field.label(id)} up") } }
+              WithTooltip("Move ${field.label(id)} down") { IconButton(onClick = { model = moveField(model, id, 1) }, enabled = canWrite && index < fields.size - 1) { Icon(Icons.Outlined.ArrowDownward, contentDescription = "Move ${field.label(id)} down") } }
               OverflowMenu(
                 listOf(
                   MenuAction("edit-$id", "Edit", "edit", enabled = canWrite) {

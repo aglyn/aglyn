@@ -175,9 +175,9 @@ fun DateTimeField(
     supportingText = { Text(supporting ?: "UTC") },
     singleLine = true,
     trailingIcon = {
-      androidx.compose.material3.IconButton(onClick = { step = 1 }, enabled = enabled) {
+      WithTooltip("Pick a date and time") { androidx.compose.material3.IconButton(onClick = { step = 1 }, enabled = enabled) {
         Icon(Icons.Outlined.CalendarMonth, contentDescription = "Pick a date and time")
-      }
+      } }
     },
     modifier = modifier.fillMaxWidth(),
   )
@@ -238,9 +238,9 @@ fun DateField(
     supportingText = supporting?.let { { Text(it) } },
     singleLine = true,
     trailingIcon = {
-      androidx.compose.material3.IconButton(onClick = { picking = true }, enabled = enabled) {
+      WithTooltip("Pick a date") { androidx.compose.material3.IconButton(onClick = { picking = true }, enabled = enabled) {
         Icon(Icons.Outlined.CalendarMonth, contentDescription = "Pick a date")
-      }
+      } }
     },
     modifier = modifier.fillMaxWidth(),
   )

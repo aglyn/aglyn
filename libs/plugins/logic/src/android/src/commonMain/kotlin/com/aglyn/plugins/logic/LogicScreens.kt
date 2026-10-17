@@ -47,6 +47,7 @@ import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.ChoiceField
 import com.aglyn.ui.DateField
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.InputChoice
 import com.aglyn.ui.ListHeader
 import com.aglyn.ui.MenuAction
@@ -130,7 +131,7 @@ fun LogicScreen(context: NativePluginContext, initialTab: String? = null) {
     val failed = when (tab) { LogicTab.VARIABLES -> variablesLive; LogicTab.FUNCTIONS -> functionsLive; LogicTab.HEALTH -> null } is Live.Failed
     when {
       tab == LogicTab.HEALTH -> ReferenceHealth(context)
-      failed -> EmptyState("Could not load this list", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+      failed -> EmptyState("Could not load this list", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
       tab == LogicTab.VARIABLES && variables == null -> SkeletonList(rows = 5, modifier = Modifier.padding(space(2f)))
       tab == LogicTab.FUNCTIONS && functions == null -> SkeletonList(rows = 5, modifier = Modifier.padding(space(2f)))
       tab == LogicTab.VARIABLES -> VariableList(variables!!.first, canEdit, onEdit = { row ->
