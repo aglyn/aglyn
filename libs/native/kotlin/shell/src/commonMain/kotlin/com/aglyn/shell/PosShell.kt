@@ -71,6 +71,8 @@ internal const val POS_DEVICE_MODE_KEY = "aglyn.pos.deviceMode"
 @Composable
 fun PosShell(services: ShellServices, autoSignIn: Boolean = false, dark: Boolean? = null) {
   AglynTheme(dark = dark ?: androidx.compose.foundation.isSystemInDarkTheme()) {
+    // Remote pictures (product photos on the register and the kiosk) load through the app's image loader, as in the Aglyn app.
+    androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalImageLoader provides services.imageLoader) {
     val version by services.registry.version.collectAsState()
     var deviceMode by remember { mutableStateOf(services.prefs.get(POS_DEVICE_MODE_KEY)) }
     val deviceScreens = remember(version) { services.registry.screens(NativeApp.POS).filter { it.placement == PosPlacement.DEVICE } }
@@ -99,6 +101,7 @@ fun PosShell(services: ShellServices, autoSignIn: Boolean = false, dark: Boolean
         is AuthState.SignedIn -> PosSignedIn(services, state.user.uid)
       }
     }
+  }
   }
 }
 

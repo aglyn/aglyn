@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,6 +35,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -65,6 +67,7 @@ import com.aglyn.contracts.PosKioskProduct
 import com.aglyn.contracts.PosKioskSale
 import com.aglyn.contracts.PosKioskSaleStatus
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.site.media.mediaPreviewUrl
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.KeepScreenOn
@@ -91,6 +94,15 @@ const val COMMERCE_KIOSK_SCREEN = "commerce.kiosk"
 
 @Composable
 fun PosKioskScreen(context: NativePluginContext) {
+  // The kiosk's products name their pictures by a path on the console (`/api/media/cdn/…`), read from its origin.
+  val pictures = remember(context.api.origin, context.hostId) {
+    { value: String? -> value?.let { mediaPreviewUrl(it, context.api.origin, context.hostId) } }
+  }
+  CompositionLocalProvider(LocalPosPictures provides pictures) { PosKioskScreenBody(context) }
+}
+
+@Composable
+private fun PosKioskScreenBody(context: NativePluginContext) {
   val model = remember {
     PosKioskModel(
       device = ConsolePosDeviceApi(context.api),
@@ -276,7 +288,7 @@ private fun KioskMenu(model: PosKioskModel, onProduct: (PosKioskProduct) -> Unit
             val soldOut = kioskProductSoldOut(product)
             Card(Modifier.fillMaxWidth().clickable(enabled = !soldOut) { onProduct(product) }.alpha(if (soldOut) 0.5f else 1f).testTag("kiosk-tile-${product.id}")) {
               Column(Modifier.padding(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
-                product.imageUrl?.let { RemoteImage(it, product.name, Modifier.fillMaxWidth().heightIn(max = 110.dp), contentScale = ContentScale.Crop, icon = "image") }
+                LocalPosPictures.current(product.imageUrl)?.let { RemoteImage(it, product.name, Modifier.fillMaxWidth().height(110.dp).testTag("kiosk-photo-${product.id}"), contentScale = ContentScale.Crop, icon = "image") }
                 Text(product.name, style = MaterialTheme.typography.titleMedium)
                 Text(
                   if (soldOut) "Sold out" else "${if (product.variants.size > 1) "From " else ""}${model.money(kioskFromCents(product))}",
