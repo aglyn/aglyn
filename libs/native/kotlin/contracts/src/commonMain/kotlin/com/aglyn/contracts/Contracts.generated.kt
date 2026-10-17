@@ -2218,6 +2218,17 @@ enum class PosTenderMethod(val raw: String) {
 internal object PosTenderMethodSerializer :
     RawEnumSerializer<PosTenderMethod>("com.aglyn.contracts.PosTenderMethod", PosTenderMethod.entries, PosTenderMethod.UNKNOWN, { it.raw })
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PrinterBrandSerializer::class)
+enum class PrinterBrand(val raw: String) {
+    EPSON("epson"),
+    STAR("star"),
+    UNKNOWN(""),
+}
+
+internal object PrinterBrandSerializer :
+    RawEnumSerializer<PrinterBrand>("com.aglyn.contracts.PrinterBrand", PrinterBrand.entries, PrinterBrand.UNKNOWN, { it.raw })
+
 @Serializable
 data class ProductChannelFacts(
     val brand: String? = null,
@@ -2763,6 +2774,11 @@ internal data class ContractValuesPart5(
     @SerialName("POS_OFFLINE_SYNC_ROUTE") val posOfflineSyncRoute: String,
     @SerialName("POS_TENDER_LABELS") val posTenderLabels: Map<String, String>,
     @SerialName("PRICE_RANGE_MAX_LENGTH") val priceRangeMaxLength: Long,
+    @SerialName("PRINTER_BRAND_LABELS") val printerBrandLabels: Map<String, String>,
+    @SerialName("PRINTER_BRANDS") val printerBrands: List<PrinterBrand>,
+    @SerialName("PRINTER_MODEL_SUGGESTIONS") val printerModelSuggestions: Map<String, List<String>>,
+    @SerialName("PRINTER_OFFLINE_AFTER_MS") val printerOfflineAfterMs: Double,
+    @SerialName("PRINTER_STATE_LABELS") val printerStateLabels: Map<String, String>,
     @SerialName("PRODUCT_LIST_BASE") val productListBase: List<ListQueryFilter>,
     @SerialName("PRODUCT_LIST_HEADERS") val productListHeaders: Map<String, String>,
     @SerialName("PRODUCT_LIST_OPTIONS") val productListOptions: Map<String, List<ListFilterOption>>,
@@ -2799,6 +2815,10 @@ internal data class ContractValuesPart5(
     @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
     @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
+)
+
+@Serializable
+internal data class ContractValuesPart6(
     @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
     @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
     @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
@@ -2817,6 +2837,7 @@ class ContractValues internal constructor(
     private val part3: ContractValuesPart3,
     private val part4: ContractValuesPart4,
     private val part5: ContractValuesPart5,
+    private val part6: ContractValuesPart6,
 ) {
     val areaServedMax: Long get() = part1.areaServedMax
     val areaServedNameMaxLength: Long get() = part1.areaServedNameMaxLength
@@ -3017,6 +3038,11 @@ class ContractValues internal constructor(
     val posOfflineSyncRoute: String get() = part5.posOfflineSyncRoute
     val posTenderLabels: Map<String, String> get() = part5.posTenderLabels
     val priceRangeMaxLength: Long get() = part5.priceRangeMaxLength
+    val printerBrandLabels: Map<String, String> get() = part5.printerBrandLabels
+    val printerBrands: List<PrinterBrand> get() = part5.printerBrands
+    val printerModelSuggestions: Map<String, List<String>> get() = part5.printerModelSuggestions
+    val printerOfflineAfterMs: Double get() = part5.printerOfflineAfterMs
+    val printerStateLabels: Map<String, String> get() = part5.printerStateLabels
     val productListBase: List<ListQueryFilter> get() = part5.productListBase
     val productListHeaders: Map<String, String> get() = part5.productListHeaders
     val productListOptions: Map<String, List<ListFilterOption>> get() = part5.productListOptions
@@ -3053,15 +3079,15 @@ class ContractValues internal constructor(
     val templateKindOptions: List<ListFilterOption> get() = part5.templateKindOptions
     val templateListBase: List<ListQueryFilter> get() = part5.templateListBase
     val templateListQuery: ListQueryDeclaration get() = part5.templateListQuery
-    val tenantEmailCollection: String get() = part5.tenantEmailCollection
-    val tenantEmails: List<TenantEmailEntry> get() = part5.tenantEmails
-    val timeZoneChoices: List<String> get() = part5.timeZoneChoices
-    val timeZoneDefaultLabel: String get() = part5.timeZoneDefaultLabel
-    val workflowMaxSteps: Long get() = part5.workflowMaxSteps
+    val tenantEmailCollection: String get() = part6.tenantEmailCollection
+    val tenantEmails: List<TenantEmailEntry> get() = part6.tenantEmails
+    val timeZoneChoices: List<String> get() = part6.timeZoneChoices
+    val timeZoneDefaultLabel: String get() = part6.timeZoneDefaultLabel
+    val workflowMaxSteps: Long get() = part6.workflowMaxSteps
 
-    override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4 && part5 == other.part5)
+    override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4 && part5 == other.part5 && part6 == other.part6)
 
-    override fun hashCode(): Int = listOf<Any>(part1, part2, part3, part4, part5).hashCode()
+    override fun hashCode(): Int = listOf<Any>(part1, part2, part3, part4, part5, part6).hashCode()
 
     companion object {
         /** Decodes every part from one JSON text; the format must ignore unknown keys. */
@@ -3073,6 +3099,7 @@ class ContractValues internal constructor(
                 json.decodeFromJsonElement(ContractValuesPart3.serializer(), tree),
                 json.decodeFromJsonElement(ContractValuesPart4.serializer(), tree),
                 json.decodeFromJsonElement(ContractValuesPart5.serializer(), tree),
+                json.decodeFromJsonElement(ContractValuesPart6.serializer(), tree),
             )
         }
     }
