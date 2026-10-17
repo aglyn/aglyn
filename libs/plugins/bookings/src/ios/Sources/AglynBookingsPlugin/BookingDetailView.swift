@@ -289,7 +289,7 @@ struct RescheduleSheet: View {
       }
       .task { load(nil) }
     }
-    .frame(minWidth: 420, minHeight: 480)
+    .aglynSheetMinimumSize(width: 420, height: 480)
   }
 
   private func load(_ from: Int?) {
@@ -376,7 +376,7 @@ struct PaySheet: View {
         }
       }
     }
-    .frame(minWidth: 360, minHeight: 300)
+    .aglynSheetMinimumSize(width: 360, height: 300)
   }
 
   private func charge() {

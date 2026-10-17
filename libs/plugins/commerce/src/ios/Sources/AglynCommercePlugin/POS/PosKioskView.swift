@@ -613,7 +613,7 @@ private struct KioskStaffSheet: View {
       try? await Task.sleep(for: .milliseconds(wait))
       if !Task.isCancelled { staff.close() }
     }
-    .frame(minWidth: 380, minHeight: 360)
+    .aglynSheetMinimumSize(width: 380, height: 360)
   }
 }
 

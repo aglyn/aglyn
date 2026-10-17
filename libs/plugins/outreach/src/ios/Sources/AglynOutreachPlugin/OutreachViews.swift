@@ -418,7 +418,7 @@ struct SequenceEditor: View {
         }
       }
     }
-    .frame(minWidth: 440, minHeight: 600)
+    .aglynSheetMinimumSize(width: 440, height: 600)
   }
 
   private func save() async {
@@ -520,7 +520,7 @@ struct EnrollSheet: View {
       .task(id: kind) { reload() }
       .onDisappear { results.stop() }
     }
-    .frame(minWidth: 420, minHeight: 520)
+    .aglynSheetMinimumSize(width: 420, height: 520)
   }
 
   private var ready: [PreviewPerson] {

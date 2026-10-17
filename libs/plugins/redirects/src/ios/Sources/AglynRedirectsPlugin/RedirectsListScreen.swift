@@ -192,7 +192,7 @@ struct RedirectEditorSheet: View {
         }
       }
     }
-    .frame(minWidth: 420, minHeight: 420)
+    .aglynSheetMinimumSize(width: 420, height: 420)
   }
 
   private func binding<Value>(_ key: WritableKeyPath<RedirectDraft, Value>) -> Binding<Value> {

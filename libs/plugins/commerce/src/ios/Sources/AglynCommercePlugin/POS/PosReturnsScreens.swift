@@ -42,7 +42,7 @@ struct PosReturnSheet: View {
         }
       }
     }
-    .frame(minWidth: 460, minHeight: 560)
+    .aglynSheetMinimumSize(width: 460, height: 560)
     .interactiveDismissDisabled(returns.busy)
     .sheet(isPresented: Binding(get: { returns.managerPrompt != nil }, set: { if !$0 { returns.cancelApproval() } })) {
       PinPadSheet(

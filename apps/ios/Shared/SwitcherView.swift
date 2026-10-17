@@ -76,7 +76,7 @@ struct SwitcherView: View {
       }
     }
     #if os(macOS)
-      .frame(minWidth: 380, minHeight: 420)
+      .aglynSheetMinimumSize(width: 380, height: 420)
     #endif
   }
 

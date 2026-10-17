@@ -75,7 +75,7 @@ public struct AglynActionSheet<Fields: View>: View {
       }
       .interactiveDismissDisabled(busy)
     }
-    .frame(minWidth: 420, minHeight: 320)
+    .aglynSheetMinimumSize(width: 420, height: 320)
   }
 }
 
@@ -113,4 +113,17 @@ public enum AglynClipboard {
 extension String {
   /// At most `limit` characters, for a capped field's binding.
   public func capped(_ limit: Int) -> String { count > limit ? String(prefix(limit)) : self }
+}
+
+public extension View {
+  /// A sheet's smallest size on the Mac, where a sheet is only as large as its content. iOS sizes its sheets itself,
+  /// and a phone is narrower than these minimums: the sheet would run past both edges and clip its Cancel and Done.
+  @ViewBuilder
+  func aglynSheetMinimumSize(width: CGFloat, height: CGFloat) -> some View {
+    #if os(macOS)
+      frame(minWidth: width, minHeight: height)
+    #else
+      self
+    #endif
+  }
 }

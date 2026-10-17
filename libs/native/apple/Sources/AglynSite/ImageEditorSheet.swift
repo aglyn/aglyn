@@ -72,7 +72,7 @@ struct ImageEditorSheet: View {
       }
       .interactiveDismissDisabled(busy || rendering)
     }
-    .frame(minWidth: 460, minHeight: 560)
+    .aglynSheetMinimumSize(width: 460, height: 560)
     .task { await open() }
   }
 

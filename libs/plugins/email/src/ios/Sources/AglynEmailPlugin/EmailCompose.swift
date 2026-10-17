@@ -338,7 +338,7 @@ struct ComposeSheet: View {
       }
       .onDisappear { options.stop() }
     }
-    .frame(minWidth: 420, minHeight: 560)
+    .aglynSheetMinimumSize(width: 420, height: 560)
   }
 
   @ViewBuilder

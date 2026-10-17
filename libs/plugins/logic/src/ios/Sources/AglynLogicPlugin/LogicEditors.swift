@@ -215,7 +215,7 @@ private struct FormulaBuilderSheet: View {
         }
       }
     }
-    .frame(minWidth: 420, minHeight: 420)
+    .aglynSheetMinimumSize(width: 420, height: 420)
     .accessibilityIdentifier("formula-builder")
   }
 
