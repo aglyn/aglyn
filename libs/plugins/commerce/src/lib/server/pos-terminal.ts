@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { createHash } from 'node:crypto'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { merchantAccountIsReady } from '@aglyn/tenant-data-admin/server/payment-provider'
 import {
@@ -171,6 +172,30 @@ export function posTerminalAddressProblem(address: Partial<PosTerminalAddress> |
 }
 
 /**
+ * The idempotency key of a site's Location request. Two presses with the same
+ * address share it, so a double tap makes one Location; a corrected address
+ * gets its own, since Stripe refuses a key reused with other parameters for a
+ * day (a merchant fixing a typo would otherwise read that refusal).
+ */
+export function posTerminalLocationKey(hostId: string, displayName: string, address: PosTerminalAddress): string {
+  const fingerprint = createHash('sha256')
+    .update(
+      JSON.stringify([
+        displayName.slice(0, 100),
+        address.line1,
+        address.line2 ?? '',
+        address.city,
+        address.state ?? '',
+        address.postalCode,
+        address.country,
+      ]),
+    )
+    .digest('hex')
+    .slice(0, 16)
+  return `pos-location:${hostId}:${fingerprint}`
+}
+
+/**
  * The site's Terminal Location, created on first use (on the PLATFORM, with
  * the merchant named in metadata). Its address is the store's, because Stripe
  * uses it to configure the reader for the right country.
@@ -189,7 +214,7 @@ export async function ensurePosTerminalLocation(options: {
   if (problem) return { ok: false, status: 400, error: problem }
   const address = options.address as PosTerminalAddress
   const created = await posStripe('POST', 'terminal/locations', {
-    idempotencyKey: `pos-location:${options.hostId}`,
+    idempotencyKey: posTerminalLocationKey(options.hostId, options.displayName, address),
     params: {
       display_name: options.displayName.slice(0, 100) || 'Store',
       'address[line1]': address.line1,
