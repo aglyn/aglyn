@@ -139,7 +139,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#generate-for-several-sites-at-once': 'On the Sites page of your organization, Generate for several sites runs one brief across many of your sites, changing the business name, the city and the brand for each.',
   },
   aiSiteLooks: {
-    '#choose-a-style': 'The Style step of Start your site offers these styles, each as a card with a picture of the starter home page drawn in it.',
+    '#choose-a-style': 'The Style step of Start your site offers these styles, each as a card with a picture of an example home page of that kind, drawn in its style.',
   },
   aiStart: {
     '#audience': 'Who is it for? is optional. It is who every page and every search listing is written for, and it decides which questions the contact form asks.',
