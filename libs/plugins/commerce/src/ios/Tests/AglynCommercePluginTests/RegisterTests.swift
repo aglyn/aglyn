@@ -164,8 +164,13 @@ final class ScriptedSaleAPI: PosSaleAPI, @unchecked Sendable {
   var creditAccounts: Result<[PosCreditAccount], Error> = .success([])
   private(set) var lookups: [String] = []
 
+  /// The publishable key the context answers with.
+  var contextKey = ""
+
   func context() async throws -> PosContext {
-    PosContext(settings: PosRegisterSettings(), terminalAvailable: true, testMode: true, readers: [], smsReceipts: false)
+    var context = PosContext(settings: PosRegisterSettings(), terminalAvailable: true, testMode: true, readers: [], smsReceipts: false)
+    context.publishableKey = contextKey
+    return context
   }
   func openSale(registerID: String, locationID: String?, cart: Cart, attemptKey: String) async throws -> PosOpenedSale {
     PosOpenedSale(orderID: "o1", subtotalCents: 1000, discountCents: 0, taxCents: 80, totalCents: 1080, dueCents: 1080, stockWarnings: [])

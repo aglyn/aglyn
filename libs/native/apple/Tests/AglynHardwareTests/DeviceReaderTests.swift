@@ -139,4 +139,24 @@ final class DeviceReaderTests: XCTestCase {
       deviceReaderLabel(kind: .tapToPay, deviceType: "", label: nil, serial: nil, simulated: false),
       "Tap to Pay on iPhone")
   }
+
+  func testAnUpdateIsDueOnlyOnceItsDeadlineHasPassed() {
+    let now = Date(timeIntervalSince1970: 1_000)
+    XCTAssertFalse(updateIsDue(requiredAt: nil, now: now))
+    XCTAssertFalse(updateIsDue(requiredAt: now.addingTimeInterval(60), now: now))
+    XCTAssertTrue(updateIsDue(requiredAt: now.addingTimeInterval(-60), now: now))
+  }
+
+  func testABatteryReadsAsAPercentage() {
+    XCTAssertNil(readerBatteryText(nil))
+    XCTAssertEqual(readerBatteryText(0.824), "Battery 82%")
+    XCTAssertEqual(readerBatteryText(1.2, charging: true), "Battery 100% · charging")
+  }
+
+  func testDiscoveryListsWhatItFoundSoFar() {
+    let reader = DeviceReader(id: "STRM2-1", label: "Stripe Reader M2 STRM2-1", kind: .bluetooth, simulated: true)
+    XCTAssertEqual(ReaderDiscovery.searching(.bluetooth, [reader]).readers, [reader])
+    XCTAssertEqual(ReaderDiscovery.found(.bluetooth, [reader]).readers, [reader])
+    XCTAssertEqual(ReaderDiscovery.failed("no").readers, [])
+  }
 }

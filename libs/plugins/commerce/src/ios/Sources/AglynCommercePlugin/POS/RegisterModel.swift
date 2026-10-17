@@ -54,16 +54,30 @@ final class RegisterModel {
   private(set) var checkout: Checkout?
   private(set) var charging = false
   var toast: CheckoutNotice?
-  private(set) var readers: [any CardReaderService] = []
+  /// The card readers a tender can use: this device's reader while it is
+  /// connected (it follows the readers screen live), then the site's online
+  /// smart readers.
+  var readers: [any CardReaderService] {
+    var all: [any CardReaderService] = []
+    if let deviceService, collector?.state.isConnected == true { all.append(deviceService) }
+    return all + smartReaders
+  }
+  private(set) var smartReaders: [SmartReaderService] = []
+  @ObservationIgnored private let deviceService: DeviceReaderService?
   /// The checked-in stays a sale can be charged to.
   private(set) var stays: [PosStay] = []
 
-  /// "Type card", as the console offers it with the site's publishable key,
-  /// where this app has Stripe's card form. Not offered while offline: a card
-  /// needs the server's intent.
+  /// A card typed in (the console's "Type card"), in this app's own card
+  /// fields. Offered even before the register's context has loaded: the
+  /// tender reads the publishable key again at the press, so a context read
+  /// that failed never hides it. Not offered while offline: a card needs
+  /// the server.
   var keyedCard: KeyedCardService? {
-    guard online, let entry = keyedEntry, let key = context?.publishableKey, !key.isEmpty else { return nil }
-    return KeyedCardService(entry: entry, publishableKey: key, merchantName: storeName)
+    guard online, let entry = keyedEntry else { return nil }
+    return KeyedCardService(
+      entry: entry, publishableKey: context?.publishableKey ?? "", merchantName: storeName, money: { [currency] in
+        posMoney($0, currency: currency)
+      })
   }
 
   /// The card tender a payment step names by label, to cancel or to read what it asks for.
@@ -77,7 +91,7 @@ final class RegisterModel {
   @ObservationIgnored private let api: PosSaleAPI
   @ObservationIgnored let terminal: CommerceTerminalConnection
   @ObservationIgnored let collector: CardCollector?
-  /// Stripe's card form, where this app carries it (Aglyn POS on iPhone and iPad): a typed card.
+  /// This app's own card fields (Aglyn POS on iPhone, iPad and Mac): a typed card.
   @ObservationIgnored let keyedEntry: KeyedCardEntry?
   @ObservationIgnored private let store: RegisterStore
   @ObservationIgnored private var openAttempt = AttemptKeys()
@@ -132,6 +146,7 @@ final class RegisterModel {
     self.opsAPI = opsAPI ?? ConsolePosOpsAPI(api: api, hostID: hostID)
     terminal = CommerceTerminalConnection(api: api)
     self.collector = collector
+    deviceService = collector.map { DeviceReaderService($0) }
     self.keyedEntry = keyedEntry
     store = RegisterStore(defaults: defaults, hostID: hostID)
     customers = PosCustomerModel(api: customersAPI ?? ConsolePosCustomersAPI(api: api, hostID: hostID))
@@ -271,15 +286,12 @@ final class RegisterModel {
       let loaded = try await api.context()
       context = loaded
       online = true
-      var next: [any CardReaderService] = []
-      if let collector {
-        if !collector.state.isConnected, let kind = collector.kinds.first {
-          await collector.connect(hostID: hostID, kind: kind, sessions: terminal)
-        }
-        if collector.state.isConnected { next.append(DeviceReaderService(collector)) }
+      smartReaders = loaded.readers.filter(\.online).map { SmartReaderService($0) }
+      // The reader connected last time comes back on its own; nothing is
+      // asked of the cashier here (connecting one is the readers screen's job).
+      if let controls = collector?.deviceReaders, collector?.state.isConnected == false {
+        await controls.reconnectRemembered(hostID: hostID, sessions: terminal)
       }
-      next += loaded.readers.filter(\.online).map { SmartReaderService($0) }
-      readers = next
       // The console answered: get the offline rules, then send whatever was rung while it did not.
       if offline.kitIsStale { await offline.refreshKit() }
       await offline.syncNow()

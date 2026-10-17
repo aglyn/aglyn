@@ -44,6 +44,8 @@ import com.aglyn.hardware.deviceReaders
 import com.aglyn.hardware.CardReaderSetupError
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
+import com.aglyn.ui.SelectField
+import com.aglyn.ui.SelectOption
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.NoticeBanner
@@ -82,6 +84,15 @@ fun CardReadersScreen(context: NativePluginContext) {
     }
     pos = runCatching { ConsolePosSaleApi(context.api, hostId).context() }.getOrNull()
   }
+  var registers by remember { mutableStateOf<List<PosRegister>>(emptyList()) }
+  LaunchedEffect(hostId) {
+    registers = try {
+      sortRegisters(context.firestore.page(registersQuery(hostId)).docs.map(::posRegisterFrom))
+    } catch (error: Throwable) {
+      if (error is CancellationException) throw error
+      emptyList()
+    }
+  }
   val collector = context.peripherals.cardCollector
   val device by (collector?.state ?: remember { MutableStateFlow<CardCollectorState?>(null) }).collectAsState()
 
@@ -106,6 +117,7 @@ fun CardReadersScreen(context: NativePluginContext) {
       SmartReadersSection(
         api = remember(context.api, hostId) { ConsoleSmartReadersApi(context.api, hostId) },
         readers = pos?.readers.orEmpty(),
+        registers = registers,
         loading = pos == null && readiness is Load.Loading,
         needsAddress = (readiness as? Load.Ready)?.value?.locationReady == false,
         onChanged = { refresh++ },
@@ -185,19 +197,20 @@ private fun DeviceReaderSection(context: NativePluginContext, hostId: String, co
           )
         }
       }
-      if (device !is CardCollectorState.Connected && device !is CardCollectorState.Unavailable && controls.kinds.isNotEmpty()) {
+      // A store that was not ready (no reader address yet) can try again once it is.
+      if (device !is CardCollectorState.Connected && controls.kinds.isNotEmpty()) {
         Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), modifier = Modifier.fillMaxWidth()) {
           if (CardCollectorKind.TAP_TO_PAY in controls.kinds) {
             Button(
-              onClick = { run { controls.discover(CardCollectorKind.TAP_TO_PAY, hostId, sessions) } },
-              enabled = !busy,
+              onClick = { scope.launch { controls.discover(CardCollectorKind.TAP_TO_PAY, hostId, sessions) } },
+              enabled = !busy && discovery !is ReaderDiscovery.Searching,
               modifier = Modifier.testTag("device-reader-tap-to-pay"),
-            ) { Text("Use Tap to Pay") }
+            ) { Text("Set up Tap to Pay") }
           }
           if (CardCollectorKind.BLUETOOTH in controls.kinds) {
             OutlinedButton(
-              onClick = { run { controls.discover(CardCollectorKind.BLUETOOTH, hostId, sessions) } },
-              enabled = !busy,
+              onClick = { scope.launch { controls.discover(CardCollectorKind.BLUETOOTH, hostId, sessions) } },
+              enabled = !busy && discovery !is ReaderDiscovery.Searching,
               modifier = Modifier.testTag("device-reader-bluetooth"),
             ) { Text("Find Bluetooth readers") }
           }
@@ -208,7 +221,8 @@ private fun DeviceReaderSection(context: NativePluginContext, hostId: String, co
         is ReaderDiscovery.Failed -> NoticeBanner(found.message, StatusTone.ERROR)
         is ReaderDiscovery.Searching -> {
           LinearProgressIndicator(modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Looking for card readers" })
-          ReaderChoices(found.found, enabled = false) {}
+          // A search lasts until Stop or its timeout; a reader it lists can be connected meanwhile.
+          ReaderChoices(found.found, enabled = !busy) { reader -> run { controls.connectTo(reader, hostId, sessions) } }
           TextButton(onClick = { scope.launch { controls.cancelDiscovery() } }) { Text("Stop looking") }
         }
         is ReaderDiscovery.Found -> {
@@ -259,6 +273,7 @@ private fun Check(title: String, ok: Boolean, detail: String?) {
 private fun SmartReadersSection(
   api: SmartReadersApi,
   readers: List<PosSmartReader>,
+  registers: List<PosRegister>,
   loading: Boolean,
   needsAddress: Boolean,
   onChanged: () -> Unit,
@@ -266,6 +281,7 @@ private fun SmartReadersSection(
   val scope = rememberCoroutineScope()
   var pairing by remember { mutableStateOf(false) }
   var removing by remember { mutableStateOf<PosSmartReader?>(null) }
+  var editing by remember { mutableStateOf<PosSmartReader?>(null) }
   var busy by remember { mutableStateOf(false) }
   var error by remember { mutableStateOf<String?>(null) }
   fun run(call: suspend () -> Unit) {
@@ -276,6 +292,7 @@ private fun SmartReadersSection(
         call()
         pairing = false
         removing = null
+        editing = null
         onChanged()
       } catch (failure: Throwable) {
         if (failure is CancellationException) throw failure
@@ -298,11 +315,17 @@ private fun SmartReadersSection(
       for (reader in readers) {
         AglynListItem(
           title = reader.label,
-          supporting = if (reader.livemode) "Live" else "Test mode",
+          supporting = listOf(
+            registers.firstOrNull { it.id == reader.registerId }?.name ?: "Any register",
+            if (reader.livemode) "Live" else "Test mode",
+          ).joinToString(" · "),
           icon = AglynIcons.named("point_of_sale"),
           trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
               StatusChip(if (reader.online) "Online" else "Offline", if (reader.online) StatusTone.SUCCESS else StatusTone.NEUTRAL)
+              IconButton(onClick = { error = null; editing = reader }, Modifier.testTag("edit-reader-${reader.id}")) {
+                Icon(AglynIcons.named("edit"), contentDescription = "Edit ${reader.label}")
+              }
               IconButton(onClick = { error = null; removing = reader }, Modifier.testTag("remove-reader-${reader.id}")) {
                 Icon(AglynIcons.named("delete"), contentDescription = "Remove ${reader.label}")
               }
@@ -322,6 +345,7 @@ private fun SmartReadersSection(
     var state by remember { mutableStateOf("") }
     var postal by remember { mutableStateOf("") }
     var country by remember { mutableStateOf("US") }
+    var registerId by remember { mutableStateOf("") }
     val address = if (needsAddress) ReaderAddress(line1, city, state, postal, country) else null
     val problem = checkReaderPairing(code, address)
     ActionDialog(
@@ -333,10 +357,20 @@ private fun SmartReadersSection(
       busy = busy,
       error = error,
       onDismiss = { if (!busy) pairing = false },
-      onConfirm = { run { api.pair(code, label, address) } },
+      onConfirm = { run { api.pair(code, label, address, registerId) } },
     ) {
       OutlinedTextField(code, { code = it }, label = { Text("Pairing code") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("reader-code"))
       OutlinedTextField(label, { label = it }, label = { Text("Name (optional)") }, placeholder = { Text("Front counter") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+      if (registers.isNotEmpty()) {
+        SelectField(
+          label = "Register",
+          options = registers.map { SelectOption(it.id, it.name) },
+          selected = registerId.ifEmpty { null },
+          onSelect = { registerId = it.orEmpty() },
+          noneLabel = "Any register",
+          modifier = Modifier.fillMaxWidth(),
+        )
+      }
       if (needsAddress) {
         Text("Where the reader is used", style = MaterialTheme.typography.labelLarge)
         OutlinedTextField(line1, { line1 = it }, label = { Text("Street") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -346,6 +380,42 @@ private fun SmartReadersSection(
           OutlinedTextField(postal, { postal = it }, label = { Text("Postal code") }, singleLine = true, modifier = Modifier.weight(1f))
           OutlinedTextField(country, { country = it.take(2) }, label = { Text("Country") }, singleLine = true, modifier = Modifier.weight(0.7f))
         }
+      }
+    }
+  }
+
+  editing?.let { reader ->
+    var name by remember(reader.id) { mutableStateOf(reader.label) }
+    var registerId by remember(reader.id) { mutableStateOf(reader.registerId.orEmpty()) }
+    ActionDialog(
+      title = "Edit ${reader.label}",
+      body = "Rename the reader, or choose the register it takes payments for.",
+      icon = "edit",
+      confirmLabel = "Save",
+      confirmEnabled = name.isNotBlank(),
+      busy = busy,
+      error = error,
+      onDismiss = { if (!busy) editing = null },
+      onConfirm = {
+        run {
+          api.update(
+            reader.id,
+            label = name.takeIf { it.trim() != reader.label },
+            registerId = registerId.takeIf { it != reader.registerId.orEmpty() },
+          )
+        }
+      },
+    ) {
+      OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("reader-name"))
+      if (registers.isNotEmpty()) {
+        SelectField(
+          label = "Register",
+          options = registers.map { SelectOption(it.id, it.name) },
+          selected = registerId.ifEmpty { null },
+          onSelect = { registerId = it.orEmpty() },
+          noneLabel = "Any register",
+          modifier = Modifier.fillMaxWidth(),
+        )
       }
     }
   }

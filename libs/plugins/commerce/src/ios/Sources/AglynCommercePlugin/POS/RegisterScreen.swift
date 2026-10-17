@@ -24,7 +24,7 @@ struct RegisterScreen: View {
     _model = State(
       initialValue: RegisterModel(
         hostID: context.hostID ?? "", reader: context.firestore, api: context.api,
-        collector: DeviceCardCollector.make(), keyedEntry: DeviceKeyedCardEntry.shared, uid: context.uid))
+        collector: DeviceCardCollector.make(), keyedEntry: CardFieldsPresenter(), uid: context.uid))
   }
 
   var body: some View {
