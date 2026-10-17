@@ -33,7 +33,7 @@
 // Each shot waits for seeded content, strips the emulator warning
 // banner and the Next dev indicator, and lets images/fonts settle.
 
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
@@ -43,6 +43,7 @@ import {
   preflightStaffOnlyChrome,
 } from './lib/staff-only-chrome.mjs'
 import { optimizePng } from './lib/optimize-png.mjs'
+import { chromeExecutable } from './lib/chrome-executable.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img')
@@ -1206,30 +1207,6 @@ const shots = [
     settleMs: 3000,
   },
 ]
-
-// Chrome-flavor fallback, mirroring tools/e2e/console.e2e.mjs: the first
-// installed flavor wins so a Chrome update/uninstall can't break captures.
-function chromeExecutable() {
-  if (process.env.E2E_CHROME_PATH) {
-    return { executablePath: process.env.E2E_CHROME_PATH }
-  }
-  if (process.platform === 'darwin') {
-    const candidates = [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ]
-    for (const executablePath of candidates) {
-      try {
-        readFileSync(executablePath)
-        return { executablePath }
-      } catch {
-        // Not installed — try the next flavor.
-      }
-    }
-  }
-  return { channel: 'chrome' }
-}
 
 // `--only=` takes a comma-separated list of `out` substrings, so re-shooting
 // a scattered handful of images is one signed-in run rather than one per

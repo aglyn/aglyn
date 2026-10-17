@@ -48,6 +48,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { optimizePng } from './lib/optimize-png.mjs'
+import { chromeExecutable } from './lib/chrome-executable.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const README_ASSETS = join(repoRoot, 'docs/assets/readme')
@@ -128,11 +129,6 @@ const composites = [
       <div class="window"><img src="${capture}" alt=""></div>`,
   },
 ]
-
-function chromeExecutable() {
-  if (process.env.E2E_CHROME_PATH) return { executablePath: process.env.E2E_CHROME_PATH }
-  return { channel: 'chrome' }
-}
 
 // The example plugin's element, rendered by its bundle. The target date is a
 // fixed distance ahead of the render so every run shows a running timer.
