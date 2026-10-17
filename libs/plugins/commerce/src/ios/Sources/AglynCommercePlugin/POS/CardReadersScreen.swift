@@ -332,7 +332,9 @@ private struct DeviceReaderSection: View {
         }
         ForEach(collector.kinds, id: \.self) { kind in
           Button {
-            run { await controls.discover(kind, hostID: hostID, sessions: sessions) }
+            // Not `run`: a search lasts until Stop or its timeout, and the readers it
+            // lists must be connectable meanwhile (connecting ends the search).
+            Task { await controls.discover(kind, hostID: hostID, sessions: sessions) }
           } label: {
             AglynRow(
               kind == .tapToPay ? "Set up Tap to Pay on iPhone" : "Find Bluetooth readers",
