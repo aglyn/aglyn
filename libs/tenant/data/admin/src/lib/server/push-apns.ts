@@ -196,7 +196,9 @@ export function createApnsTransport(options: ApnsTransportOptions): PushTranspor
                     authorization: `bearer ${providerToken()}`,
                     'apns-topic': target.topic,
                     'apns-push-type': 'alert',
-                    'apns-priority': message.urgent ? '10' : '5',
+                    // 10 for every alert: 5 lets the device hold, batch or drop it to save power, which is
+                    // why native pushes arrived late or never while the console showed them at once.
+                    'apns-priority': '10',
                     'content-type': 'application/json',
                   },
                   apnsPayload(message, target.sound),

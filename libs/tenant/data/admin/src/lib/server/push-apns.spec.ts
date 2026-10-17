@@ -101,6 +101,14 @@ describe('APNs transport (AGL-3651)', () => {
     expect(JSON.parse(apnsPayload(MESSAGE)).aps.sound).toBe('default')
   })
 
+  it('asks for immediate delivery of every alert, not only the urgent ones', async () => {
+    const { calls, request } = fakeRequest(() => ({ status: 200 }))
+    const transport = createApnsTransport({ credentials: apnsCredentials(ENV)!, request, now: () => 0 })
+    await transport.send([PHONE], { ...MESSAGE, urgent: false })
+    // Priority 5 lets the device hold, batch or drop it, so native pushes lagged the console.
+    expect(calls[0].headers['apns-priority']).toBe('10')
+  })
+
   it('sends the alert with the tap data beside aps, to each device’s own gateway and topic', async () => {
     const { calls, request } = fakeRequest(() => ({ status: 200 }))
     const transport = createApnsTransport({ credentials: apnsCredentials(ENV)!, request, now: () => 0 })

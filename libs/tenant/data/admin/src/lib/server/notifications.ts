@@ -36,6 +36,7 @@ import { findUserByUidAcrossPools, listStaffUidsAcrossPools } from './auth-pools
 import { filterSuppressedEmails } from './email-suppression'
 import { meterOrgEmail, meterPlatformEmail } from './email-metering'
 import firebaseAdmin from './firebase-admin'
+import { keepAlive } from './keep-alive'
 import { mobilePushEnabled, mobilePushSenders } from './mobile-push-switch'
 import { listOrgMembers } from './organizations'
 import {
@@ -314,7 +315,7 @@ function notificationEmailUrl(
  * (AGL-3224) — sends one email beside it. Never throws: a notification miss,
  * or a send that failed, must not break the mutation that emitted it.
  */
-export async function notifyUsers(
+async function notifyUsersNow(
   uids: Iterable<string>,
   payload: NotificationPayload,
   options: NotifyUsersOptions = {},
@@ -462,7 +463,7 @@ async function listStaffUids(): Promise<string[]> {
  * instead: the same console notification, plus staff's switches, the
  * operator email or digest, and the webhook. See `raiseOperatorAlert`.
  */
-export async function notifyStaff(payload: NotificationPayload): Promise<void> {
+async function notifyStaffNow(payload: NotificationPayload): Promise<void> {
   try {
     const alert = operatorAlertForNotificationType(payload.type)
     if (alert) {
@@ -488,7 +489,7 @@ export async function notifyStaff(payload: NotificationPayload): Promise<void> {
  * it carries: what `notifyStaff` did before the registry, and what
  * `raiseOperatorAlert` writes as its first step. Never throws.
  */
-export async function notifyStaffConsole(
+async function notifyStaffConsoleNow(
   payload: NotificationPayload,
   options: { skipEmail?: boolean } = {},
 ): Promise<void> {
@@ -509,7 +510,7 @@ export async function notifyStaffConsole(
  * itself — the usage alerts do (AGL-3431) — so an admin who switched the
  * email channel on is not sent it twice.
  */
-export async function notifyOrgAdmins(
+async function notifyOrgAdminsNow(
   orgId: string,
   payload: NotificationPayload,
   options: Pick<NotifyUsersOptions, 'skipEmail'> = {},
@@ -581,7 +582,7 @@ export function withSiteName(text: string, site: string): string {
  * read. Spread conditionally: the field is optional on the host model and
  * Firestore rejects `undefined`.
  */
-export async function notifyHostManagers(
+async function notifyHostManagersNow(
   hostId: string,
   payload: NotificationPayload,
   options: {
@@ -628,4 +629,36 @@ export async function notifyHostManagers(
   } catch (error) {
     console.error('host manager notification failed', error)
   }
+}
+
+/*
+ * The fan-out's public doors. Most callers start a notification with
+ * `void notify…()` beside the mutation it reports, so each door hands its
+ * work to the platform's `waitUntil` (`keep-alive.ts`): the push and the email
+ * after the feed write are no longer cut off when the response goes out.
+ */
+
+/** {@link notifyUsersNow}, kept alive past the response. */
+export function notifyUsers(...args: Parameters<typeof notifyUsersNow>): Promise<void> {
+  return keepAlive(notifyUsersNow(...args))
+}
+
+/** {@link notifyStaffNow}, kept alive past the response. */
+export function notifyStaff(...args: Parameters<typeof notifyStaffNow>): Promise<void> {
+  return keepAlive(notifyStaffNow(...args))
+}
+
+/** {@link notifyStaffConsoleNow}, kept alive past the response. */
+export function notifyStaffConsole(...args: Parameters<typeof notifyStaffConsoleNow>): Promise<void> {
+  return keepAlive(notifyStaffConsoleNow(...args))
+}
+
+/** {@link notifyOrgAdminsNow}, kept alive past the response. */
+export function notifyOrgAdmins(...args: Parameters<typeof notifyOrgAdminsNow>): Promise<void> {
+  return keepAlive(notifyOrgAdminsNow(...args))
+}
+
+/** {@link notifyHostManagersNow}, kept alive past the response. */
+export function notifyHostManagers(...args: Parameters<typeof notifyHostManagersNow>): Promise<void> {
+  return keepAlive(notifyHostManagersNow(...args))
 }
