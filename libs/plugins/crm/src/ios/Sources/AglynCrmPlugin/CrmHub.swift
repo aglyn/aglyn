@@ -58,7 +58,17 @@ final class CrmReference {
     pipelineDocs.show(reader) { _ in scopedQuery(scope, "pipelines", limit: 20) }
     companyDocs.show(reader) { _ in scopedQuery(scope, "companies", order: [.init("nameLower")], limit: 200) }
     contactDocs.show(reader) { _ in scopedQuery(scope, "contacts", order: [.init("updatedAt", descending: true)], limit: 200) }
-    Task { members = await api.members() }
+    // The roster names every owner; a read that comes back empty (a slow first request on a cold server) is asked again.
+    Task {
+      for attempt in 0..<3 {
+        let answer = await api.members()
+        if !answer.isEmpty {
+          members = answer
+          break
+        }
+        try? await Task.sleep(nanoseconds: UInt64(2_000_000_000 * (attempt + 1)))
+      }
+    }
   }
 
   func stop() {
@@ -77,7 +87,8 @@ final class CrmReference {
 
   func memberLabel(_ uid: String?) -> String? {
     guard let uid, !uid.isEmpty else { return nil }
-    return members.first { $0.uid == uid }?.label ?? uid
+    // One the roster does not hold (yet) reads `Member 4f2a9c`, as the console's `labelFor` does, never a raw uid.
+    return members.first { $0.uid == uid }?.label ?? "Member \(uid.suffix(6))"
   }
 
   var activePipelines: [Pipeline] {

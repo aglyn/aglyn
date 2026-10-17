@@ -311,7 +311,7 @@ private fun VariableEditor(
             when {
               nameTaken -> "A variable with this name already exists"
               draft.name.isNotEmpty() && !validName -> "Start with a letter or _; letters, numbers and _ only, up to 40"
-              else -> "The name Insert data lists it by in the Besigner"
+              else -> "Pick it by this name from Insert data in the Besigner"
             },
           )
         },

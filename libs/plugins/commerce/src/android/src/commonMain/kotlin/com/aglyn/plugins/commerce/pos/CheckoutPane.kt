@@ -76,15 +76,49 @@ internal fun CheckoutPane(model: RegisterModel, checkout: Checkout, onOpenReader
   val receiptStep = state.step as? CheckoutStep.Receipt
   LaunchedEffect(receiptStep != null) { if (receiptStep != null) model.loadReceipt(state.opened.orderId) }
 
-  Column(
-    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("pos-checkout"),
-    verticalArrangement = Arrangement.spacedBy(space(2f)),
-  ) {
-    Text(
-      if (receiptStep != null) "Paid" else "Checkout",
-      style = MaterialTheme.typography.titleLarge,
-      modifier = Modifier.semantics { heading() },
-    )
+  // The heading, and once paid the total and the change to hand back, stay put above what scrolls: the change due is what
+  // the cashier reads while counting it out, so it never scrolls away under the header.
+  Column(Modifier.fillMaxSize().testTag("pos-checkout")) {
+    Column(
+      Modifier.fillMaxWidth().padding(start = space(2f), end = space(2f), top = space(2f), bottom = space(1f)),
+      verticalArrangement = Arrangement.spacedBy(space(1f)),
+    ) {
+      Text(
+        if (receiptStep != null) "Paid" else "Checkout",
+        style = MaterialTheme.typography.titleLarge,
+        modifier = Modifier.semantics { heading() },
+      )
+      receiptStep?.let { PaidSummary(state, it, fmt) }
+    }
+    Column(
+      Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = space(2f), end = space(2f), bottom = space(2f)),
+      verticalArrangement = Arrangement.spacedBy(space(2f)),
+    ) {
+      CheckoutBody(model, checkout, state, receiptStep, fmt, onOpenReaders)
+    }
+  }
+}
+
+@Composable
+private fun PaidSummary(state: CheckoutState, step: CheckoutStep.Receipt, fmt: (Long) -> String) {
+  Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(space(1f))) {
+    Icon(AglynIcons.named("check_circle"), null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
+    Text(fmt(state.sale.totalCents), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+    if (step.changeCents > 0) {
+      Text("Change due ${fmt(step.changeCents)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("pos-change"))
+    }
+  }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.ColumnScope.CheckoutBody(
+  model: RegisterModel,
+  checkout: Checkout,
+  state: CheckoutState,
+  receiptStep: CheckoutStep.Receipt?,
+  fmt: (Long) -> String,
+  onOpenReaders: () -> Unit,
+) {
     if (receiptStep == null) {
       SectionCard(null, Modifier.fillMaxWidth()) {
         state.opened.subtotalCents?.let { AmountRow("Subtotal", fmt(it), muted = true) }
@@ -118,7 +152,6 @@ internal fun CheckoutPane(model: RegisterModel, checkout: Checkout, onOpenReader
       is CheckoutStep.Card -> CardStep(model, checkout, state, step, fmt)
       is CheckoutStep.Receipt -> ReceiptStep(model, checkout, state, step, fmt)
     }
-  }
 }
 
 @Composable
@@ -532,13 +565,6 @@ private fun ReceiptStep(model: RegisterModel, checkout: Checkout, state: Checkou
   LaunchedEffect(checkout, model.receipt != null, model.lastReceipt.hasPrinter) { model.printReceiptByDefault(checkout) }
   if (model.display.asking == com.aglyn.contracts.PosDisplayMode.RECEIPT) {
     NoticeBanner("The customer is choosing a receipt on the display…", StatusTone.INFO)
-  }
-  Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(space(1f))) {
-    Icon(AglynIcons.named("check_circle"), null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
-    Text(fmt(state.sale.totalCents), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-    if (step.changeCents > 0) {
-      Text("Change due ${fmt(step.changeCents)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("pos-change"))
-    }
   }
   SectionCard("Receipt", Modifier.fillMaxWidth()) {
     val receipt = model.receipt

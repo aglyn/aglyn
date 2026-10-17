@@ -26,4 +26,12 @@ class CrmDealStageTest {
     // A stage no pipeline has keeps its id rather than vanishing.
     assertEquals("$12,500 · gone", deal("pipelineId" to "default", "stageId" to "gone").listSubtitle(withPipelines))
   }
+
+  @Test
+  fun anOwnerTheRosterDoesNotHoldReadsAsAMemberNeverAUid() {
+    val roster = CrmReference(listOf(CrmMember("u1", "Hannah Reyes", "h@x.test")), Picklists(emptyMap()), emptyList(), emptyList(), emptyList(), emptyList())
+    assertEquals("Hannah Reyes", roster.memberLabel("u1"))
+    assertEquals("Member 7n2xYz", reference(emptyList()).memberLabel("UCTTmJX1YAbgXoVjcIC4TlgF7n2xYz"))
+    assertEquals(null, roster.memberLabel(null))
+  }
 }

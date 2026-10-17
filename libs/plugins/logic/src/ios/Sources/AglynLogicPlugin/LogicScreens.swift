@@ -368,7 +368,7 @@ private struct VariableEditorSheet: View {
           Text(
             nameTaken
               ? "A variable with this name already exists"
-              : (!draft.name.isEmpty && !validName ? "Start with a letter or _; letters, numbers and _ only, up to 40" : "The name Insert data lists it by in the Besigner"))
+              : (!draft.name.isEmpty && !validName ? "Start with a letter or _; letters, numbers and _ only, up to 40" : "Pick it by this name from Insert data in the Besigner"))
         }
         Section {
           Picker("Type", selection: Binding(get: { draft.type }, set: { type in
