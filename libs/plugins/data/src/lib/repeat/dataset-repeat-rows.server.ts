@@ -31,6 +31,8 @@ import {
   withRenderCache,
 } from '@aglyn/tenant-data-admin/render-cache'
 import { repeatRecordsFromPages } from './repeat-record-pages'
+import { goneSitesOfRecords } from './gone-site-photos.server'
+import { datasetRecordWithoutGonePhotos } from '../model/dataset-image-field'
 import { FieldPath } from 'firebase-admin/firestore'
 import { effectiveDatasetModel, repeatRowsModelOf } from '../model/dataset-models'
 import type { HostDataset, HostDatasetRecord } from '../model/datasets'
@@ -185,7 +187,42 @@ async function readDatasets(
   } catch (error) {
     console.error(error)
   }
-  return datasets
+  return withoutGonePhotos(hostId, datasets)
+}
+
+/**
+ * The loaded datasets with no photo of a site that no longer exists
+ * (AGL-3912): each such field is left out of its record, so the card that
+ * binds it draws no broken picture. One dataset loaded under several keys is
+ * one object, rewritten once.
+ */
+async function withoutGonePhotos(
+  hostId: string,
+  datasets: Record<string, RepeatableDataset>,
+): Promise<Record<string, RepeatableDataset>> {
+  const loaded = [...new Set(Object.values(datasets))]
+  const gone = await goneSitesOfRecords(
+    hostId,
+    loaded.flatMap((dataset) => dataset.records),
+  )
+  if (!gone.size) return datasets
+  const rewritten = new Map(
+    loaded.map((dataset) => [
+      dataset,
+      {
+        ...dataset,
+        records: dataset.records.map((record) =>
+          datasetRecordWithoutGonePhotos(record, gone),
+        ),
+      },
+    ]),
+  )
+  return Object.fromEntries(
+    Object.entries(datasets).map(([key, dataset]) => [
+      key,
+      rewritten.get(dataset) ?? dataset,
+    ]),
+  )
 }
 
 /**

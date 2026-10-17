@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { parseMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
+import { MEDIA_CDN_ROUTE, mediaRefFromCdnPath, parseMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
 import type { CustomFieldType } from '@aglyn/aglyn/plugin-manager/custom-fields'
 import { BUNDLE_ID } from '../constants/bundle-common'
 
@@ -50,6 +50,59 @@ export function isDatasetImageValue(value: unknown): value is string {
   if (value.startsWith('media:')) return parseMediaRef(value) !== null
   if (value.startsWith('/')) return !value.startsWith('//')
   return /^https:\/\/[^/]+/.test(value)
+}
+
+/**
+ * The site whose own media library a photo address is in (AGL-3912): the
+ * `{hostId}` scope of a site-relative CDN path (`/api/media/cdn/{hostId}/…`)
+ * or of a `media:{hostId}/…` reference. `null` for an organization-library
+ * photo (`org:…`), which outlives any one site, and for any other address.
+ */
+export function datasetImageSiteOf(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const ref = value.startsWith('media:')
+    ? parseMediaRef(value)
+    : value.startsWith(`${MEDIA_CDN_ROUTE}/`)
+      ? parseMediaRef(mediaRefFromCdnPath(value))
+      : null
+  return ref && !ref.scope.startsWith('org:') ? ref.scope : null
+}
+
+/**
+ * The sites a record's photos are in the libraries of (AGL-3912), by host id:
+ * every value of the record that is a site-library photo
+ * ({@link datasetImageSiteOf}).
+ */
+export function datasetRecordPhotoSites(record: Readonly<Record<string, unknown>>): string[] {
+  const sites = new Set<string>()
+  for (const value of Object.values(record)) {
+    const site = datasetImageSiteOf(value)
+    if (site) sites.add(site)
+  }
+  return [...sites]
+}
+
+/**
+ * A record without the photos whose site no longer exists (AGL-3912). A
+ * site's library goes with the site, so such a photo answers 404 under
+ * every address, and a page would draw it broken. The field is left out
+ * instead, as a record that never had a photo: a published page prints
+ * nothing for it, and a card binding it as its picture leaves the picture
+ * out. Returns the record itself when it holds none.
+ */
+export function datasetRecordWithoutGonePhotos<T extends Readonly<Record<string, unknown>>>(
+  record: T,
+  goneSites: ReadonlySet<string>,
+): T {
+  if (!goneSites.size) return record
+  const gone = Object.entries(record).filter(([, value]) => {
+    const site = datasetImageSiteOf(value)
+    return site !== null && goneSites.has(site)
+  })
+  if (!gone.length) return record
+  const next: Record<string, unknown> = { ...record }
+  for (const [key] of gone) delete next[key]
+  return next as T
 }
 
 export const DATASET_IMAGE_FIELD: CustomFieldType = {
