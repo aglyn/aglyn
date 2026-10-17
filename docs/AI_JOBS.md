@@ -1262,6 +1262,19 @@ consultation screen.
   it names no color. A paper surface such as a Card, and any other background, is
   not a band. The re-ask: give it `"color": "inherit"` under a band whose sx color is
   the family's contrast text, or set its own sx color to it.
+- **Rule 5, `page-text-on-band`** (`detectPageTextOnBands`, AGL-3886). A theme's
+  `text.*` colors are made for its page background. On a band in a family's main or
+  dark shade (as `bandOf` reads it; the light shade sits close to the page and is left
+  alone) an element whose `sx` color is `text.primary`, `text.secondary` or
+  `text.disabled` is refused, and so is a List Item Text with secondary words whose
+  `secondaryColor` is not `inherit`: MUI draws those words in `text.secondary`
+  whatever they sit on. A live gym site's olive "How your first week works" band
+  (beta.261) drew each step's words at about 1.6:1. The settle gives such an element
+  the family's contrast text as its `sx` color, and such a List Item Text
+  `secondaryColor: inherit`, so its secondary words take the row's own color as its
+  primary words do. The layout compiler writes `secondaryColor: inherit` on a compact
+  group's and a question list's List Item Text on a brand band or over a photo, and a
+  quiet card there takes the band's own colors for its icon and its words.
 - **Rule 10, `link-unrelated-screen`** (`detectUnrelatedScreenLinks`), and a sentence
   of rule 10: "A link goes to a screen that does what its words say, or is left out."
   The inventory cannot say what each screen is for, but it can name the screen a
@@ -2861,8 +2874,10 @@ the same way, in a Grid with a row direction and no container.
   (`multiple-h1`, `skipped-heading`; a heading before the h1 and a page with no h1 are
   still re-asked); a `main` landmark after the first, or in a fragment, is unset
   (`multiple-main`, `landmark-in-fragment`); a Grid container's `sx` gap becomes its
-  `spacing` (`grid-gap`); and a link drawn in its band's own family takes the band's
-  contrast text (`link-color-on-band`). The tree check, the page section check (on the
+  `spacing` (`grid-gap`); a link drawn in its band's own family takes the band's
+  contrast text (`link-color-on-band`); and words on a band in a page text color take
+  the band's contrast text, a List Item Text's secondary words the row's own color
+  (`page-text-on-band`). The tree check, the page section check (on the
   page with the section added, since the first image and the one h1 are the page's),
   the layout language's page and layout checks, and the page's last pass all settle;
   the last pass also stores what it settled, since it asks no model and a page it
