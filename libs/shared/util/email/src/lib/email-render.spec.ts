@@ -17,9 +17,10 @@
 
 import {
   renderEmailHtml,
+  splitEmailDetailLine,
   substituteMergeTokens,
 } from './email-render'
-import { PLATFORM_EMAIL_ACCENT } from './email-palette'
+import { PLATFORM_EMAIL_ACCENT, PLATFORM_EMAIL_PALETTE, resolveEmailColor } from './email-palette'
 
 const NODES = {
   root: { componentId: 'div', nodes: ['section'] },
@@ -987,5 +988,110 @@ describe('render safety', () => {
     expect(html).not.toContain('href="#"')
     expect(html).not.toContain('{{')
     expect(text).toContain('Widget — $29')
+  })
+})
+
+describe('the polished blocks (AGL-3897)', () => {
+  const one = (props: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+    renderEmailHtml({
+      nodes: {
+        root: { componentId: 'div', nodes: ['section'] },
+        section: { componentId: 'emailSection', nodes: ['block'] },
+        block: { componentId: 'emailText', props },
+      } as never,
+      merge: { location: '' },
+      sanitize: SANITIZE,
+      palette: PLATFORM_EMAIL_PALETTE,
+      ...extra,
+    })
+
+  it('splits a detail line at its label, else at its price', () => {
+    expect(splitEmailDetailLine('Device: Chrome on macOS')).toEqual({ label: 'Device', value: 'Chrome on macOS' })
+    expect(splitEmailDetailLine('House Blend × 2 — $24.00')).toEqual({ label: 'House Blend × 2', value: '$24.00' })
+    expect(splitEmailDetailLine('2× House Blend')).toBeNull()
+  })
+
+  it('draws details as a panel of rows, the total bold, a blank row dropped, a run-over line kept with its row', () => {
+    const { html, text } = one({
+      variant: 'details',
+      children: 'House Blend × 2 — $24.00\nLocation: {{location}}\nNote: Leave it\nat the door\nTotal charged: $24.00',
+    })
+    expect(html).toContain(`background-color:${resolveEmailColor('tint.primary', PLATFORM_EMAIL_PALETTE)};`)
+    expect(html).toMatch(/>House Blend × 2<\/td><td [^>]*font-weight:600;[^>]*>\$24\.00<\/td>/)
+    // A value that runs over lines, or a long one, stacks under its label.
+    expect(html).toMatch(/>Note<\/div><div [^>]*>Leave it<br \/>at the door<\/div>/)
+    expect(html).toMatch(/font-weight:700;padding-right:16px;">Total charged<\/td><td [^>]*font-weight:700;/)
+    expect(html).not.toContain('Location')
+    // The plain-text part keeps the lines as written.
+    expect(text).toContain('Total charged: $24.00')
+  })
+
+  it('draws an eyebrow small, uppercase and in the brand’s text shade', () => {
+    const { html } = one({ variant: 'eyebrow', children: 'Copper Kettle · Acme' })
+    expect(html).toContain('text-transform:uppercase')
+    expect(html).toContain(`color:${resolveEmailColor('primary.dark', PLATFORM_EMAIL_PALETTE)};`)
+  })
+
+  it('drops an eyebrow’s separator when a token beside it is empty', () => {
+    const text = (children: string, merge: Record<string, string>) =>
+      one({ variant: 'eyebrow', children }, { merge }).text
+    expect(text('{{site}} · Order {{n}}', { site: '', n: '#7' })).toBe('Order #7')
+    expect(text('{{a}} · {{b}} · {{c}}', { a: 'Acme', b: '', c: 'Rewards' })).toBe('Acme · Rewards')
+  })
+
+  it('draws a links list, each "Label — address" line a link', () => {
+    const { html } = one({
+      variant: 'links',
+      children: 'Invite your team — https://x.test/team\nRead the guide',
+    })
+    expect(html).toContain('href="https://x.test/team"')
+    expect(html).toContain('Invite your team&nbsp;&rarr;')
+    // A line with no address stays words.
+    expect(html).toContain('>Read the guide</span>')
+  })
+
+  it('leaves out a button whose link a token left empty, and keeps one with a written link', () => {
+    const button = (props: Record<string, unknown>, merge: Record<string, string>) =>
+      renderEmailHtml({
+        nodes: {
+          root: { componentId: 'div', nodes: ['section'] },
+          section: { componentId: 'emailSection', nodes: ['button'] },
+          button: { componentId: 'emailButton', props },
+        } as never,
+        merge,
+        sanitize: SANITIZE,
+      })
+    expect(button({ children: 'Review it', href: '{{alert.url}}' }, { 'alert.url': '' }).html).not.toContain(
+      'Review it',
+    )
+    expect(button({ children: '{{label}}', href: 'https://x.test' }, { label: '' }).html).not.toContain('href=')
+    expect(button({ children: 'Review it', href: '{{alert.url}}' }, { 'alert.url': 'https://x.test/a' }).html).toContain(
+      'href="https://x.test/a"',
+    )
+  })
+
+  it('draws a caption in the theme’s muted text', () => {
+    const { html } = one({ variant: 'caption', children: 'Order reference: 123' })
+    expect(html).toContain(`color:${resolveEmailColor('text.secondary', PLATFORM_EMAIL_PALETTE)};`)
+  })
+
+  it('sets a button’s label the way its theme sets one, and asks inboxes not to recolor the email', () => {
+    const { html } = renderEmailHtml({
+      nodes: NODES as never,
+      merge: {},
+      sanitize: SANITIZE,
+      buttonText: { transform: 'uppercase', weight: 700, letterSpacing: '0.06em' },
+    })
+    expect(html).toContain('font-weight:700;text-decoration:none;text-transform:uppercase;letter-spacing:0.06em;')
+    expect(html).toContain('<meta name="color-scheme" content="light only" />')
+    // A value that is not a case, a weight or a length is not written.
+    const unsafe = renderEmailHtml({
+      nodes: NODES as never,
+      merge: {},
+      sanitize: SANITIZE,
+      buttonText: { transform: 'x;color:red' as never, weight: 1, letterSpacing: '1em;color:red' },
+    }).html
+    expect(unsafe).not.toContain('color:red')
+    expect(unsafe).toContain('font-weight:600;text-decoration:none;"')
   })
 })

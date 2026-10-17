@@ -71,6 +71,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
+import { createServer } from 'node:http'
 import net from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -144,6 +145,9 @@ if (flag('help')) {
   --timeout-min <n>       Give up on a job after this long (default 25)
   --shot-every-s <n>      Build page screenshot interval (default 20)
   --warm-min <n>          Give up on a cold dev-server compile after this long (default 15)
+  --stub-model            No live model: the console's only provider is a local stub that
+                          refuses every call, so a run walks the start through Plan my
+                          site to the "Building your site" page and ends there (AGL-3910)
   --keep                  Leave what this run started running`)
   process.exit(0)
 }
@@ -178,6 +182,7 @@ const timeoutMs = Number(option('timeout-min', '25')) * 60_000
 const shotEveryMs = Number(option('shot-every-s', '20')) * 1000
 const warmMs = Number(option('warm-min', '15')) * 60_000
 const keep = flag('keep')
+const stubModel = flag('stub-model')
 const TENANT_PORT = 4500
 const PASSWORD = 'E2e-Password-1'
 
@@ -425,6 +430,48 @@ async function warm(url, what, name) {
 
 const revalidateSecret = `local-${randomBytes(6).toString('hex')}`
 
+/*
+ * THE MODEL STUB (--stub-model, AGL-3910).
+ *
+ * Plan my site runs the job's first step inline, so the start cannot reach
+ * its build page without a provider that is ready. The stub is that
+ * provider: an OpenAI-compatible endpoint on loopback that answers every
+ * call with a 503 and counts it. The console's Anthropic key is held empty,
+ * and the preflight allows the stub's key alone, so no call can reach a
+ * real model.
+ */
+const STUB_KEY_NAME = 'AI_OPENAI_COMPAT_API_KEY'
+
+async function startModelStub() {
+  let calls = 0
+  const server = createServer((request, response) => {
+    calls += 1
+    request.resume()
+    response.writeHead(503, { 'content-type': 'application/json' })
+    response.end(
+      JSON.stringify({ error: { message: 'model stub: no live model on this run' } }),
+    )
+  })
+  await new Promise((done) => server.listen(0, '127.0.0.1', done))
+  // In this process, so it ends with the run (and `--keep` leaves the
+  // console pointed at a stub that no longer answers: still no model).
+  server.unref()
+  const { port } = server.address()
+  log(`model stub on http://127.0.0.1:${port}; no live model this run`)
+  return {
+    calls: () => calls,
+    env: {
+      AI_PROVIDER: 'openai-compatible',
+      AI_OPENAI_COMPAT_BASE_URL: `http://127.0.0.1:${port}/v1`,
+      [STUB_KEY_NAME]: 'local-model-stub',
+      // Present and empty: neither serve-emulated nor Next refills it.
+      ANTHROPIC_API_KEY: '',
+    },
+  }
+}
+
+const modelStub = stubModel ? await startModelStub() : null
+
 async function ensureServers(hosts) {
   let consoleUrl = consoleUrlArg
   if (!consoleUrl) {
@@ -450,6 +497,7 @@ async function ensureServers(hosts) {
         env: serveEnv(hosts, {
           CRON_SECRET: LOCAL_CRON_SECRET,
           REVALIDATE_SECRET: revalidateSecret,
+          ...(modelStub ? modelStub.env : {}),
         }),
       },
     )
@@ -486,9 +534,16 @@ async function ensureServers(hosts) {
 
   // Nothing but the AI provider key on the console, nothing at all on the
   // tenant: the same refusal the DAM spec makes, with the one allowance.
+  // Under --stub-model the allowance is the stub's key alone, so a console
+  // that still holds a real model's key is refused.
   const verdict = serversHoldNoCredential(
     { console: consoleUrl, tenant: tenantUrl },
-    { repoRoot: appRoot, allow: { console: [...LIVE_AI_CREDENTIALS.keys()] } },
+    {
+      repoRoot: appRoot,
+      allow: {
+        console: modelStub ? [STUB_KEY_NAME] : [...LIVE_AI_CREDENTIALS.keys()],
+      },
+    },
   )
   if (!verdict.ok) throw new Error(`credential preflight: ${verdict.detail}`)
   log(`credential preflight: ${verdict.detail}`)
@@ -800,6 +855,36 @@ async function runOnce(context, index) {
         Object.keys(born.data?.screens ?? {}).length === 0,
       `${bornScreens.length} page(s), ${born.layouts.length} layout(s), ${born.forms.length} form(s), routes ${JSON.stringify(born.data?.screens ?? {})}`,
     )
+
+    // Under --stub-model the run ends on the build page, before the beat
+    // that runs the job's steps.
+    if (modelStub) {
+      record(run, {
+        jobId: decodeURIComponent(new URL(page.url()).pathname.split('/').pop()),
+      })
+      await page.waitForTimeout(4000)
+      await shot(page, '10-build-stub', { fullPage: true })
+      const view = await readBuildPage(page).catch(() => null)
+      const job =
+        (
+          await firestore
+            .collection('orgs')
+            .doc(run.orgId)
+            .collection('aiJobs')
+            .doc(run.jobId)
+            .get()
+        ).data() ?? null
+      record(run, { job, stubCalls: modelStub.calls() })
+      // A first step longer than the inline budget is left queued for the
+      // beat and calls nothing; one that fits was refused by the stub.
+      check(
+        'build page reached',
+        Boolean(view?.heading),
+        `heading ${JSON.stringify(view?.heading ?? null)}, job ${job?.status ?? 'missing'}, ` +
+          `${modelStub.calls()} call(s) to the model stub`,
+      )
+      return settleVerdict(run)
+    }
 
     // The beat runs from here on, as the scheduler would.
     pump = startAiJobsBeatPump({
@@ -1153,6 +1238,11 @@ async function runOnce(context, index) {
     if (pump) await pump.stop()
     await browser.close().catch(() => undefined)
   }
+  return settleVerdict(run)
+}
+
+/** The run's verdict from its checks, recorded on it. */
+function settleVerdict(run) {
   const failed = Object.values(run.checks).filter(
     (entry) => entry.ok === false,
   ).length

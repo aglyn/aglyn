@@ -63,12 +63,23 @@ describe('AGL-3491 · announceNewSite', () => {
   it('tells staff, linking the staff site page and the live site', async () => {
     await announceNewSite(SITE)
 
-    expect(mockNotifyStaff).toHaveBeenCalledWith({
-      type: 'staff.siteCreated',
-      title: 'New site: Paperlink',
-      body: `owner@example.com created Paperlink (paperlink).\nLive site: https://paperlink.${TENANT_APEX}`,
-      link: '/admin/sites/host-1',
-    })
+    expect(mockNotifyStaff).toHaveBeenCalledWith(
+      {
+        type: 'staff.siteCreated',
+        title: 'New site: Paperlink',
+        body: `owner@example.com created Paperlink (paperlink).\nLive site: https://paperlink.${TENANT_APEX}`,
+        link: '/admin/sites/host-1',
+      },
+      // The email's details (AGL-3897): what the site is, where it lives, whose it is.
+      {
+        emailDetails: expect.arrayContaining([
+          { label: 'Site', value: 'Paperlink' },
+          { label: 'Live site', value: `https://paperlink.${TENANT_APEX}` },
+          { label: 'Created by', value: 'owner@example.com' },
+          { label: 'Site id', value: 'host-1' },
+        ]),
+      },
+    )
   })
 
   it("is silent for the canary's own, by workspace slug or by address", async () => {
@@ -100,12 +111,22 @@ describe('AGL-3491 · announceNewWorkspace', () => {
   it('tells staff with the slug and the owner', async () => {
     await announceNewWorkspace(WORKSPACE)
 
-    expect(mockNotifyStaff).toHaveBeenCalledWith({
-      type: 'staff.orgCreated',
-      title: 'New workspace: Dongare Enterprises',
-      body: 'owner@example.com created Dongare Enterprises (/dongare).',
-      link: '/admin/orgs/org-1',
-    })
+    expect(mockNotifyStaff).toHaveBeenCalledWith(
+      {
+        type: 'staff.orgCreated',
+        title: 'New workspace: Dongare Enterprises',
+        body: 'owner@example.com created Dongare Enterprises (/dongare). No acquisition record.',
+        link: '/admin/orgs/org-1',
+      },
+      {
+        emailDetails: expect.arrayContaining([
+          { label: 'Workspace', value: 'Dongare Enterprises (/dongare)' },
+          { label: 'Owner', value: 'owner@example.com' },
+          { label: 'How they found us', value: 'No acquisition record' },
+          { label: 'Workspace id', value: 'org-1' },
+        ]),
+      },
+    )
   })
 
   it("is silent for a workspace the canary's address made", async () => {

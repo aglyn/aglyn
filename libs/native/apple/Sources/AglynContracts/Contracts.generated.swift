@@ -3356,6 +3356,18 @@ public enum PosTenderMethod: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PrinterBrand: String, Codable, CaseIterable, Hashable, Sendable {
+  case epson = "epson"
+  case star = "star"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct ProductChannelFacts: Codable, Hashable, Sendable {
   public var brand: String?
   public var condition: ProductChannelFactsCondition?
@@ -4052,6 +4064,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let posOfflineSyncRoute: String
   public let posTenderLabels: [String: String]
   public let priceRangeMaxLength: Int
+  public let printerBrandLabels: [String: String]
+  public let printerBrands: [PrinterBrand]
+  public let printerModelSuggestions: [String: [String]]
+  public let printerOfflineAfterMs: Double
+  public let printerStateLabels: [String: String]
   public let productListBase: [ListQueryFilter]
   public let productListHeaders: [String: String]
   public let productListOptions: [String: [ListFilterOption]]
@@ -4294,6 +4311,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case posOfflineSyncRoute = "POS_OFFLINE_SYNC_ROUTE"
     case posTenderLabels = "POS_TENDER_LABELS"
     case priceRangeMaxLength = "PRICE_RANGE_MAX_LENGTH"
+    case printerBrandLabels = "PRINTER_BRAND_LABELS"
+    case printerBrands = "PRINTER_BRANDS"
+    case printerModelSuggestions = "PRINTER_MODEL_SUGGESTIONS"
+    case printerOfflineAfterMs = "PRINTER_OFFLINE_AFTER_MS"
+    case printerStateLabels = "PRINTER_STATE_LABELS"
     case productListBase = "PRODUCT_LIST_BASE"
     case productListHeaders = "PRODUCT_LIST_HEADERS"
     case productListOptions = "PRODUCT_LIST_OPTIONS"

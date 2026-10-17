@@ -140,6 +140,7 @@ const areas = [
   ['notifications', 'seedNotifications'],
   ['content', 'seedContent'],
   ['account', 'seedAccount'],
+  ['pages', 'seedPages'],
 ]
 let staff = null
 for (const [file, name] of areas) {

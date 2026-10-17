@@ -3,6 +3,7 @@ package com.aglyn.webview
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.util.Log
+import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
@@ -109,6 +110,9 @@ actual fun BesignerWebView(
       modifier = Modifier.fillMaxSize(),
       factory = { context ->
         WebView(context).apply {
+          // AndroidView gives a view WRAP_CONTENT, and a WebView laid out that way resolves CSS `vh`/`dvh` to 0, so the
+          // Besigner's full-height shell (height: 100dvh, overflow: hidden) collapsed and the editor showed blank (AGL-3850).
+          layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
           settings.javaScriptEnabled = true
           settings.domStorageEnabled = true
           // The console leaves its browser-only chrome out of the app (AGL-3894).

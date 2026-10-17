@@ -27,6 +27,7 @@ import {
   notifyHostManagers,
   renderHostEmailWithTokens,
 } from '@aglyn/tenant-data-admin'
+import { hostConsoleUrl } from '@aglyn/tenant-data-admin/server/host-console-link'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import * as CommerceModel from '../model'
 import {
@@ -593,6 +594,10 @@ async function tellStoreOfRequest(hostId: string, returnId: string, entry: Comme
       'return.items': items,
       'buyer.email': String(entry.customerEmail ?? ''),
       'return.customerNote': String(entry.customerNote ?? ''),
+      'return.url': await hostConsoleUrl(
+        hostId,
+        `/${hostId}/products/returns?return=${encodeURIComponent(returnId)}`,
+      ),
     },
     {
       subject: `Return requested for order ${entry.orderNumber}`,
