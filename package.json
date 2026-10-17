@@ -103,6 +103,7 @@
     "test:jsx-barrel": "node --test tools/scripts/lib/jsx-barrel.test.mjs",
     "test:emulated-env": "node --test tools/scripts/lib/emulated-env.test.mjs",
     "test:ai-guided-start-local": "node --test tools/scripts/lib/ai-jobs-beat-pump.test.mjs tools/e2e/lib/ai-guided-start-report.test.mjs",
+    "test:chrome-executable": "node --test tools/e2e/lib/chrome-executable.test.mjs",
     "test:core-namespace-pin": "node --test tools/scripts/lib/core-namespace-pin.test.mjs",
     "test:browser-shim-aliases": "node --test tools/scripts/lib/browser-shim-aliases.test.mjs",
     "test:chunk-attribution": "node --test tools/scripts/lib/chunk-attribution.test.mjs",
