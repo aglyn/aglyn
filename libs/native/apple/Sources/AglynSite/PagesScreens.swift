@@ -235,6 +235,12 @@ struct PagesScreen: View {
       AglynEmptyState(
         "Could not load this site's pages", systemImage: SiteSymbols.error,
         message: "Check the connection and try again.")
+    case .ready(let rows) where rows.isEmpty && searching:
+      if model.tree?.loading == true || model.hasMore {
+        List { SkeletonRows(count: 4) }.aglynListBackground()
+      } else {
+        AglynEmptyState("No pages match", systemImage: "magnifyingglass", message: "Try another name or address.")
+      }
     case .ready(let rows) where rows.isEmpty:
       AglynEmptyState(
         "No pages yet", systemImage: SiteSymbols.page, message: "Add a page, then design it in the Besigner."
@@ -247,9 +253,9 @@ struct PagesScreen: View {
         if selectable {
           List {
             ForEach(rows) { row in
-              PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true) {
+              PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
                 Task { await model.toggle(row.id) }
-              }
+              })
               .aglynSelectableRow(row.id, selection: $selection)
               .accessibilityIdentifier("page-\(row.id)")
             }
@@ -278,9 +284,9 @@ struct PagesScreen: View {
                 )
                 .navigationTitle(row.page.name)
               } label: {
-                PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true) {
+                PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
                   Task { await model.toggle(row.id) }
-                }
+                })
               }
               .aglynListRow()
               .accessibilityIdentifier("page-\(row.id)")
@@ -308,6 +314,8 @@ struct PagesScreen: View {
       .accessibilityIdentifier("pages-list")
     }
   }
+
+  private var searching: Bool { !model.search.trimmingCharacters(in: .whitespaces).isEmpty }
 
   /// The next 25 top-level pages as the list scrolls to its end.
   @ViewBuilder
