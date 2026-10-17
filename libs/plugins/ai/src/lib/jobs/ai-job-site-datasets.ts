@@ -17,7 +17,17 @@
 
 import { checkDatasetQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
-import { isAiPlanNewRef, type AiBuildPlanCreate, type AiBuildPlanScreen } from '../model/ai-build-plan'
+import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import {
+  AI_BUILD_PLAN_LIMITS,
+  AI_PLAN_NEW_REF_PREFIX,
+  isAiPlanNewRef,
+  type AiBuildPlan,
+  type AiBuildPlanCreate,
+  type AiBuildPlanScreen,
+} from '../model/ai-build-plan'
+import type { AiInventoryDataset, AiSiteInventory } from '../model/ai-site-inventory'
+import { AI_TYPED_LIST_MIN_ITEMS } from '../runtime/ai-doctrine-validators'
 import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
 import type { AiPlanCapabilities } from '../model/ai-plan-capabilities'
 import { AI_SITE_DATASETS_MAX } from '../model/ai-site-job'
@@ -774,6 +784,189 @@ export function aiSiteReusedDatasetListings(input: {
     .filter((entry) => entry.kind === 'dataset' && !submissions.has(entry.id) && !listed.has(entry.id))
     .map((entry) => ({ id: entry.id, name: input.plan.labels?.[entry.id] || entry.id }))
   return aiDatasetListingsOf(datasets, input.screens)
+}
+
+/**
+ * A SITE START NEVER SHOWS ANOTHER SITE'S RECORDS (AGL-3912).
+ *
+ * Datasets belong to the organization, and so do their records: neither
+ * names the site it was written for, and a dataset outlives the site that
+ * filled it (the data plugin keeps `visibleTo` and nothing else of a site). A
+ * gym's start reused the workspace's "Session packages", "Coaches" and "Gym
+ * FAQs", and published a deleted photographer's wedding packages and a
+ * deleted studio's coach bio ("Leads coaching at Ironline Strength Studio")
+ * with four broken photos; a photographer's start reused another
+ * photographer's gallery and drew six broken covers.
+ *
+ * So a site start reuses a dataset only when its records are this site's to
+ * show ({@link aiSiteDatasetIsThisSites}):
+ *  - it holds no records at all — an empty list, such as the one a form
+ *    writes its submissions to, is the same list on any site; or
+ *  - its scope names this site alone (`siteOnly`), so it was made for it; or
+ *  - this site already serves its records pages of their own (`recordBase`).
+ * Anything else — records in a dataset shared with the workspace or with
+ * other sites, and a dataset whose records could not be counted — was filled
+ * for something else, and the plan is settled in code before the rules read
+ * it ({@link aiSettleSiteForeignDatasets}): the reuse becomes a creation of
+ * the same name and fields, designed from this site's brief with photos of
+ * its own, and every section, record template and form that named it names
+ * the creation. Where this job may create no dataset, the reuse comes off
+ * instead and each section writes its items out. Never a refusal, and
+ * nothing a member is asked.
+ *
+ * An Assist change to a site that exists keeps reusing what the site lists:
+ * this is a site start's rule, and only its plan is settled by it.
+ */
+export function aiSiteDatasetIsThisSites(row: Pick<AiInventoryDataset, 'records' | 'siteOnly' | 'recordBase'>): boolean {
+  return row.records === 0 || row.siteOnly === true || Boolean(row.recordBase)
+}
+
+/** A planned field that is a record's page address, which the writer adds itself. */
+const ADDRESS_FIELD_NAME = /^(?:page )?(?:address|slug|url|link)$/i
+
+/** The fields a dataset is made again with: its own, less the photo, its description and the page address the writer adds. */
+function remadeFields(row: AiInventoryDataset): string[] {
+  const ids = row.fieldIds ?? []
+  return row.fields
+    .filter((name, index) => {
+      const id = ids[index]
+      if (id && (id === row.imageField || id === row.addressField)) return false
+      if (IMAGE_FIELD_NAME.test(name.trim()) || ADDRESS_FIELD_NAME.test(name.trim())) return false
+      return name.trim().toLowerCase() !== AI_SITE_DATASET_IMAGE_ALT_FIELD.toLowerCase()
+    })
+    .slice(0, AI_BUILD_PLAN_LIMITS.fields)
+}
+
+/**
+ * A site start's plan with every dataset it reuses that holds another
+ * site's records made again for this one (AGL-3912): each the inventory marks
+ * `foreign` ({@link aiSiteInventoryWithRecordCounts}, by
+ * {@link aiSiteDatasetIsThisSites}). The creation keeps the dataset's name,
+ * which rule 7 does not hold against it as a duplicate. Pure; a plan that
+ * reuses none comes back as it was.
+ */
+export function aiSettleSiteForeignDatasets(
+  plan: AiBuildPlan,
+  inventory: Pick<AiSiteInventory, 'datasets'> | null,
+  capabilities: AiPlanCapabilities | null = null,
+): AiBuildPlan {
+  const rows = new Map((inventory?.datasets ?? []).map((row) => [row.id, row]))
+  const foreign = plan.reuse.filter((entry) => entry.kind === 'dataset' && rows.get(entry.id)?.foreign === true)
+  if (!foreign.length) return plan
+  const creatable = !capabilities || capabilities.create.dataset.allowed
+  const taken = new Map<string, AiBuildPlanCreate | null>([
+    ...plan.create.map((entry) => [entry.name.trim().toLowerCase(), entry] as const),
+    ...(plan.items ?? []).map((item) => [item.name.trim().toLowerCase(), null] as const),
+  ])
+  // Each foreign dataset's id → the `new:` reference that replaces it, or `null` where it comes off.
+  const replaced = new Map<string, string | null>()
+  const added: AiBuildPlanCreate[] = []
+  for (const entry of foreign) {
+    const row = rows.get(entry.id) as AiInventoryDataset
+    const base = row.name.trim() || 'Records'
+    if (!creatable) {
+      replaced.set(entry.id, null)
+      continue
+    }
+    // The plan already makes one of that name: that one is this site's.
+    const same = taken.get(base.toLowerCase())
+    if (same?.kind === 'dataset') {
+      replaced.set(entry.id, `${AI_PLAN_NEW_REF_PREFIX}${same.name}`)
+      continue
+    }
+    let name = base
+    for (let n = 2; taken.has(name.toLowerCase()); n += 1) name = `${base} ${n}`
+    const creation: AiBuildPlanCreate = {
+      kind: 'dataset',
+      name,
+      why: entry.purpose || `Lists ${base} on this site.`,
+      duplicateOf: null,
+      fields: remadeFields(row),
+    }
+    added.push(creation)
+    taken.set(name.toLowerCase(), creation)
+    replaced.set(entry.id, `${AI_PLAN_NEW_REF_PREFIX}${name}`)
+  }
+  const swap = (ref: string): string | null => (replaced.has(ref) ? (replaced.get(ref) ?? null) : ref)
+  return {
+    ...plan,
+    reuse: plan.reuse.filter((entry) => !(entry.kind === 'dataset' && replaced.has(entry.id))),
+    create: [
+      ...plan.create.map((entry) => {
+        if (entry.kind !== 'form' || !entry.writesTo || !replaced.has(entry.writesTo)) return entry
+        const writesTo = swap(entry.writesTo)
+        if (writesTo) return { ...entry, writesTo }
+        // A form whose dataset comes off sends its submissions to the Inbox only.
+        const rest = { ...entry }
+        delete rest.writesTo
+        return rest
+      }),
+      ...added,
+    ],
+    screens: plan.screens.map((screen) => {
+      // A record template of a dataset made again shows the new one; of one that comes off, it is a page of its own.
+      const record =
+        screen.record && replaced.has(screen.record.dataset) ? { record: swap(screen.record.dataset) } : null
+      const sections = screen.sections.map((section) => {
+        if (!section.uses.some((ref) => replaced.has(ref))) return section
+        const uses = section.uses.flatMap((ref) => {
+          const next = swap(ref)
+          return next ? [next] : []
+        })
+        // A list that comes off is written out on the page, as fewer items than a dataset binds.
+        const dropped = section.uses.some((ref) => replaced.has(ref) && !replaced.get(ref))
+        return { ...section, uses, ...(dropped ? { items: Math.min(section.items, AI_TYPED_LIST_MIN_ITEMS - 1) } : {}) }
+      })
+      return {
+        ...screen,
+        ...(record && screen.record ? { record: record.record ? { ...screen.record, dataset: record.record } : null } : {}),
+        sections,
+      }
+    }),
+  }
+}
+
+/** How a dataset's records are counted: the data plugin's index, which answers `facts.records`. */
+export type AiDatasetRecordCounter = (request: { orgId: string; id: string }) => Promise<number | null>
+
+/** The production counter: the data plugin's `dataset` index, read one dataset at a time. */
+export const aiDatasetRecordCount: AiDatasetRecordCounter = async ({ orgId, id }) => {
+  const index = pluginRecordIndex('dataset')?.index
+  if (!index) return null
+  const found = await index.get({ orgId, id })
+  const records = found?.facts['records']
+  return typeof records === 'number' && Number.isFinite(records) ? records : null
+}
+
+/**
+ * A site start's inventory with how many records each dataset holds
+ * (AGL-3912), and each whose records are not this site's to show
+ * ({@link aiSiteDatasetIsThisSites}) marked `foreign`. The count is asked
+ * once per plan, of every dataset the site sees, all at once; a count that
+ * fails leaves `records` out, which reads as another site's. Never throws.
+ */
+export async function aiSiteInventoryWithRecordCounts(
+  inventory: AiSiteInventory | null,
+  orgId: string,
+  count: AiDatasetRecordCounter = aiDatasetRecordCount,
+): Promise<AiSiteInventory | null> {
+  if (!inventory?.datasets.length) return inventory
+  const counts = await Promise.all(
+    inventory.datasets.map((row) =>
+      count({ orgId, id: row.id }).catch((error: unknown) => {
+        console.warn('ai site plan: a dataset’s records could not be counted', { orgId, id: row.id, error: String(error) })
+        return null
+      }),
+    ),
+  )
+  return {
+    ...inventory,
+    datasets: inventory.datasets.map((row, index) => {
+      const records = counts[index]
+      const counted = typeof records === 'number' ? { ...row, records } : row
+      return aiSiteDatasetIsThisSites(counted) ? counted : { ...counted, foreign: true as const }
+    }),
+  }
 }
 
 /**

@@ -45,7 +45,12 @@ import {
   type AiPlanJobScope,
 } from '../model/ai-plan-capabilities'
 import type { AiSiteInventory } from '../model/ai-site-inventory'
-import { aiSitePlanDatasetCapability } from './ai-job-site-datasets'
+import {
+  aiSettleSiteForeignDatasets,
+  aiSiteInventoryWithRecordCounts,
+  aiSitePlanDatasetCapability,
+  type AiDatasetRecordCounter,
+} from './ai-job-site-datasets'
 import {
   AI_FREE_SITE_WORST_CASE_CREDITS,
   AI_SITE_CREATE_KINDS,
@@ -83,6 +88,7 @@ import { AI_STEP_TIERS, aiCatalogEntry, aiDefaultModelFor } from '../providers/c
 import {
   AI_FREE_PAGE_WORST_CASE_CREDITS,
   aiPlanEmbedBriefViolations,
+  aiSettlePlanDatasets,
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
@@ -938,6 +944,12 @@ export interface AiJobPlanStepDeps {
    * their own, and `null` turns it off.
    */
   readSiteEvents?: typeof readAiSiteEventPlanning | null
+  /**
+   * How a site start counts the records of each dataset its site sees
+   * (AGL-3912), which decides whether its plan may reuse one; specs hand in
+   * their own.
+   */
+  countDatasetRecords?: AiDatasetRecordCounter
 }
 
 /** What a job's site context is read with (AGL-3661). */
@@ -1020,8 +1032,15 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
   const readSiteEvents = deps.readSiteEvents === undefined ? readAiSiteEventPlanning : deps.readSiteEvents
   return async ({ job, now, signal, firestore, modelFor, org: orgDocument }) => {
     const org = (orgDocument ?? null) as Partial<AglynOrgBilling> | null
+    // A site start counts each dataset's records (AGL-3912): it reuses only
+    // one whose records are its own to show.
+    const readPlanInventory = async () => {
+      if (!job.hostId) return null
+      const read = await readInventory(job.orgId, job.hostId, { firestore })
+      return job.kind === 'site' ? aiSiteInventoryWithRecordCounts(read, job.orgId, deps.countDatasetRecords) : read
+    }
     const [inventory, workspace, siteContext] = await Promise.all([
-      job.hostId ? readInventory(job.orgId, job.hostId, { firestore }) : Promise.resolve(null),
+      readPlanInventory(),
       readCapabilities({ job, org, firestore }),
       job.hostId && readContext ? readContext({ job, firestore }) : Promise.resolve(null),
     ])
@@ -1138,10 +1157,12 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       : null
     if (reused) {
       // The reused plan's draft ids name the other job's drafts; this job's are its own.
+      // Settled again against what the datasets hold now (AGL-3912).
+      const kept = site ? aiSettlePlanDatasets(aiSettleSiteForeignDatasets(reused.plan, inventory, capabilities), capabilities) : reused.plan
       const plan: AiJobPlan = aiPlanWithStorePages(job.kind, ops, inventory, aiPlanWithItemCredits(itemOps, aiPlanWithDraftIds(job.kind, {
-        ...reused.plan,
+        ...kept,
         status: 'proposed',
-        labels: aiPlanLabels(reused.plan, inventory),
+        labels: aiPlanLabels(kept, inventory),
         proposedAt: now as unknown as AiJobPlan['proposedAt'],
         confirmedAt: null,
         confirmedBy: null,
@@ -1188,7 +1209,8 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       // A build's events are listed on a page (AGL-3755): on the one it makes
       // about them, else on an Events page of its own where there is room.
       // No section is named a placeholder, and a site start plans no section
-      // of customer words it has none of (AGL-3887).
+      // of customer words it has none of (AGL-3887). A site start's plan
+      // makes again each dataset it reuses that another site filled (AGL-3912).
       settle: (answered: AiBuildPlan) =>
         aiPlanSaidSettle(job, inventory, site ? aiSitePlanHomeRule(inventory, capabilities).min : 0)(
           ops
@@ -1198,7 +1220,9 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
                 pageLimit: aiBuildPageLimit(freeTaste),
                 siteLayout: aiSiteLayoutOf(inventory),
               })
-            : answered,
+            : site
+              ? aiSettleSiteForeignDatasets(answered, inventory, capabilities)
+              : answered,
         ),
       extend: aiSiteWithEventItemsCheck(
         planViolations(
