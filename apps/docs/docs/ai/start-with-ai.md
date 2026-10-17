@@ -142,8 +142,8 @@ Each row reads **In progress**, **Waiting**, **Done**, **Paused**, **Not built**
 far** adds them up. **What we're building** opens the plan: every page and its sections.
 If one part fails, its row says so and the rest of the site keeps building.
 
-You can leave the page: the job keeps going, the notification you get when it finishes
-opens the page again, and the **AI** chip in the top bar says what it is doing.
+You can leave the page: the job keeps going, the notification you get when it finishes —
+which names the site and, by email, gives its address — opens the page again, and the **AI** chip in the top bar says what it is doing.
 
 When it is done the page says **Your site is live**, with the credits the site used,
 **View your site**, which opens it in a new tab, and **Edit your pages**. If some pages
