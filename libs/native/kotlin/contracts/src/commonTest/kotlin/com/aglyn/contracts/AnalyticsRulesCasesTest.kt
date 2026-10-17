@@ -67,5 +67,8 @@ class AnalyticsRulesCasesTest {
     cases("topReferrer").forEach { (args, result) ->
       assertEquals(result.jsonPrimitive.content, topReferrer(ContractJsonFormat.decodeFromJsonElement(ScreenTrafficRow.serializer(), args[0])))
     }
+    cases("referrerLabel").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.content, referrerLabel(args[0].jsonPrimitive.content))
+    }
   }
 }

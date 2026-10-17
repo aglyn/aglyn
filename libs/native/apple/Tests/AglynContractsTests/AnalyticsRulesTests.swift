@@ -51,5 +51,6 @@ final class AnalyticsRulesTests: XCTestCase {
     }
     for c in cases("topDevice") { XCTAssertEqual(topDevice(decode(ScreenTrafficRow.self, c.args[0])), c.result as? String) }
     for c in cases("topReferrer") { XCTAssertEqual(topReferrer(decode(ScreenTrafficRow.self, c.args[0])), c.result as? String) }
+    for c in cases("referrerLabel") { XCTAssertEqual(referrerLabel(c.args[0] as! String), c.result as? String) }
   }
 }

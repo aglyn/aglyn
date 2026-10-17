@@ -36,6 +36,7 @@ import com.aglyn.contracts.deviceSplitValue
 import com.aglyn.contracts.recentDayIds
 import com.aglyn.contracts.rollUp
 import com.aglyn.contracts.topDevice
+import com.aglyn.contracts.referrerLabel
 import com.aglyn.contracts.topReferrer
 import com.aglyn.contracts.trafficDeltaPct
 import com.aglyn.core.FilterOp
@@ -153,7 +154,7 @@ fun trafficSummary(days: List<TrafficDay>, range: Int): TrafficSummary {
     avgPerDay = kotlin.math.floor(total / maxOf(1, current.size) + 0.5).toLong(),
     devices = deviceSplit(deviceTotals),
     topPaths = rollUp(current.map { it.paths }),
-    topReferrers = rollUp(current.map { it.referrers }),
+    topReferrers = rollUp(current.map { it.referrers }).map { (key, views) -> referrerLabel(key) to views },
     topUtmSources = utm("source"),
     topUtmCampaigns = utm("campaign"),
   )
@@ -336,7 +337,7 @@ private fun PageRow(row: ScreenTrafficRow, path: String, sum: Long) {
     Text(count(row.total.toDouble()), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
     Text("${kotlin.math.floor(row.total * 100.0 / sum + 0.5).toLong()}%", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
     Text(topDevice(row).replaceFirstChar { it.uppercaseChar() }, Modifier.weight(1.4f), style = MaterialTheme.typography.bodyMedium)
-    Text(topReferrer(row).ifEmpty { "—" }, Modifier.weight(2f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+    Text(referrerLabel(topReferrer(row)).ifEmpty { "—" }, Modifier.weight(2f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
   }
 }
 
