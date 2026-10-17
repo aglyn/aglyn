@@ -2722,8 +2722,8 @@ const KIND_SUBJECTS: Readonly<Record<string, { subject: string; kin?: readonly s
   },
   nonprofit: {
     subject: 'volunteers',
-    kin: ['volunteer', 'volunteers', 'community', 'charity', 'helping', 'donation', 'nonprofit', 'team', 'people'],
-    broad: ['community volunteers', 'volunteers helping'],
+    kin: ['volunteer', 'volunteers', 'charity', 'helping', 'donation', 'nonprofit', 'team', 'people'],
+    broad: ['charity volunteers', 'volunteers helping'],
   },
   music: {
     subject: 'musician',
