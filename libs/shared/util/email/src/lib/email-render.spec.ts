@@ -1018,7 +1018,8 @@ describe('the polished blocks (AGL-3897)', () => {
     })
     expect(html).toContain(`background-color:${resolveEmailColor('tint.primary', PLATFORM_EMAIL_PALETTE)};`)
     expect(html).toMatch(/>House Blend × 2<\/td><td [^>]*font-weight:600;[^>]*>\$24\.00<\/td>/)
-    expect(html).toMatch(/>Note<\/td><td [^>]*>Leave it<br \/>at the door<\/td>/)
+    // A value that runs over lines, or a long one, stacks under its label.
+    expect(html).toMatch(/>Note<\/div><div [^>]*>Leave it<br \/>at the door<\/div>/)
     expect(html).toMatch(/font-weight:700;padding-right:16px;">Total charged<\/td><td [^>]*font-weight:700;/)
     expect(html).not.toContain('Location')
     // The plain-text part keeps the lines as written.

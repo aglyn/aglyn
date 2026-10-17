@@ -1115,6 +1115,16 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: 'Copper Kettle Catering · Test Org',
         },
         {
+          name: 'notification.action',
+          description: 'What the button opens: "View submission", "View order", or "Open in" the product',
+          sample: 'View submission',
+        },
+        {
+          name: 'notification.replyNote',
+          description: 'Who a reply reaches, when it reaches the person who wrote in',
+          sample: 'Reply to this email to answer maria.delgado@example.com.',
+        },
+        {
           name: 'notification.url',
           description: 'Where the notification opens in the console',
           sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/notifications`,
@@ -1130,7 +1140,8 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: '{{notification.title}}', variant: 'heading' },
         { block: 'text', text: '{{notification.body}}', variant: 'body' },
         { block: 'text', text: '{{notification.details}}', variant: 'details' },
-        { block: 'button', label: 'Open in {{brand.productName}}', href: '{{notification.url}}' },
+        { block: 'button', label: '{{notification.action}}', href: '{{notification.url}}' },
+        { block: 'text', text: '{{notification.replyNote}}', variant: 'caption' },
         {
           block: 'text',
           text: 'Change what you are emailed about: {{settingsUrl}}',

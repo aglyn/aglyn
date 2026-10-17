@@ -519,6 +519,31 @@ describe('the notification email is a system email (AGL-3367)', () => {
     expect(sends[0]['text']).toContain('https://app.example.com/manage/notifications/settings')
   })
 
+  it('lets a manager reply straight to the person who wrote in (AGL-3897)', async () => {
+    userDocs.set('uid-a', ON)
+    directory.set('uid-a', 'a@example.com')
+    hostDocs.set('hosts/host-1', { orgId: 'org-1', memberRoles: { 'uid-a': 'admin' } })
+    await notifyHostManagers(
+      'host-1',
+      { type: 'content.formSubmission', title: 'New form submission', body: 'Someone filled in Contact us.' },
+      { replyTo: 'maria@example.com' },
+    )
+    expect(sends).toHaveLength(1)
+    expect(sends[0]['replyTo']).toBe('maria@example.com')
+    expect(String(sends[0]['html'])).toContain('Reply to this email to answer <a href="mailto:maria@example.com"')
+  })
+
+  it('never sets a reply address on a staff email', async () => {
+    userDocs.set('uid-a', ON)
+    directory.set('uid-a', 'a@example.com')
+    await notifyUsers(
+      ['uid-a'],
+      { type: 'content.formSubmission', title: 'New form submission' },
+      { audience: 'staff', replyTo: 'maria@example.com' },
+    )
+    expect(sends[0]?.['replyTo']).toBeUndefined()
+  })
+
   it('lists the details the caller hands it, in the email and nowhere else', async () => {
     userDocs.set('uid-a', ON)
     directory.set('uid-a', 'a@example.com')
@@ -546,7 +571,8 @@ describe('the notification email is a system email (AGL-3367)', () => {
     // Escaped, a row each in the details panel (AGL-3897), an answer that ran
     // over two lines kept in its own row, and a blank answer left out.
     expect(html).toMatch(/>Name<\/td><td [^>]*>Jane &lt;Doe&gt;<\/td>/)
-    expect(html).toMatch(/>Message<\/td><td [^>]*>Two lines<br \/>of question<\/td>/)
+    // An answer that runs over lines reads as a paragraph under its label.
+    expect(html).toMatch(/>Message<\/div><div [^>]*>Two lines<br \/>of question<\/div>/)
     expect(html).not.toContain('>Phone<')
     expect(html).not.toContain('Phone')
     expect(sends[0]['text']).toContain('Name: Jane <Doe>\nMessage: Two lines\nof question')
@@ -608,7 +634,9 @@ describe('the notification email is a system email (AGL-3367)', () => {
     })
     expect(sends[0]['fromName']).toBe('Acme Sites')
     const html = String(sends[0]['html'])
-    expect(html).toContain('Open in Acme Sites')
+    // The button names what it opens (AGL-3897); the brand is the org's throughout.
+    expect(html).toContain('>View submission</a>')
+    expect(html).toContain('your Acme Sites settings')
     expect(html).not.toContain('Aglyn')
     expect(metered).toEqual(['org:org-1'])
   })

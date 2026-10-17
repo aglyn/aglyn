@@ -9263,6 +9263,16 @@
               "sample": "Copper Kettle Catering · Test Org"
             },
             {
+              "name": "notification.action",
+              "description": "What the button opens: \"View submission\", \"View order\", or \"Open in\" the product",
+              "sample": "View submission"
+            },
+            {
+              "name": "notification.replyNote",
+              "description": "Who a reply reaches, when it reaches the person who wrote in",
+              "sample": "Reply to this email to answer maria.delgado@example.com."
+            },
+            {
               "name": "notification.url",
               "description": "Where the notification opens in the console",
               "sample": "https://app.aglyn.com/manage/notifications"

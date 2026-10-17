@@ -309,6 +309,9 @@ const TEXT_PADDING: Record<string, string> = {
   details: 'padding:10px 0;',
 }
 
+/** A details value longer than this reads as a paragraph under its label rather than beside it. */
+const DETAIL_INLINE_MAX = 48
+
 /** The styles whose words are secondary, drawn in the theme's muted text color unless a color is set. */
 const MUTED_TEXT_STYLES: ReadonlySet<string> = new Set(['caption'])
 
@@ -414,6 +417,16 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
       const base = `font-family:${FONT};${style};padding:9px 0;vertical-align:top;${border}`
       if (!entry.label) {
         return `<tr><td colspan="2" style="${base}color:${valueColor};">${cell(entry.value)}</td></tr>`
+      }
+      // A long answer — a message, a note — reads as a paragraph under its
+      // label, not as a bold run squeezed against the right edge.
+      if (!total && (entry.value.length > DETAIL_INLINE_MAX || entry.value.includes('\n'))) {
+        return (
+          `<tr><td colspan="2" style="${base}">` +
+          `<div style="color:${muted};padding-bottom:2px;">${cell(entry.label)}</div>` +
+          `<div style="color:${valueColor};">${cell(entry.value)}</div>` +
+          `</td></tr>`
+        )
       }
       return (
         `<tr>` +

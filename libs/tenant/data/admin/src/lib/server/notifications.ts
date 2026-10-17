@@ -28,7 +28,8 @@ import {
 import { operatorAlertForNotificationType } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { notificationPushEnabled } from '@aglyn/aglyn/app-utils/notification-push'
-import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
+import { notificationEmailAction } from '@aglyn/aglyn/app-utils/notifications'
+import { PLATFORM_BRANDING_PROFILE, platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { FieldValue } from 'firebase-admin/firestore'
 import { withoutMailWithheldAccounts } from './account-mail'
 import { findUserByUidAcrossPools, listStaffUidsAcrossPools } from './auth-pools'
@@ -97,6 +98,12 @@ export interface NotifyUsersOptions {
    * place the visitor's answers are kept.
    */
   emailDetails?: readonly NotificationEmailDetail[]
+  /**
+   * Who a reply to the email reaches (AGL-3897): the visitor who filled in a
+   * form, so a manager answers an inquiry from the inbox it landed in. Never
+   * set on a staff fan-out.
+   */
+  replyTo?: string
 }
 
 /** One labeled line of a notification email's details. */
@@ -170,6 +177,7 @@ async function emailNotification(
   known: Readonly<Record<string, string | null | undefined>>,
   audience: NotifyUsersOptions['audience'],
   emailDetails: NotifyUsersOptions['emailDetails'],
+  replyTo?: string,
 ): Promise<void> {
   /*
    * `platformConsoleOrigin`, never `NEXT_PUBLIC_CONSOLE_URL` read bare: this
@@ -217,6 +225,11 @@ async function emailNotification(
             'notification.details': details,
             'notification.url': url,
             'notification.context': context.line ?? '',
+            'notification.replyNote': replyTo ? `Reply to this email to answer ${replyTo}.` : '',
+            'notification.action': notificationEmailAction(
+              payload.type,
+              context.brand.merge['brand.productName'] || PLATFORM_BRANDING_PROFILE.productName,
+            ),
             settingsUrl,
           },
           context.brand.options,
@@ -230,6 +243,7 @@ async function emailNotification(
       }),
       ...(context.brand.fromName ? { fromName: context.brand.fromName } : {}),
       context: 'notification',
+      ...(replyTo ? { replyTo } : {}),
       headers: { 'List-Unsubscribe': `<${settingsUrl}>` },
     })
     if (!result.sent) continue
@@ -432,6 +446,7 @@ async function notifyUsersNow(
         options.emails ?? {},
         options.audience,
         options.emailDetails,
+        options.audience === 'staff' ? undefined : options.replyTo,
       )
     }
   } catch (error) {
@@ -609,6 +624,8 @@ async function notifyHostManagersNow(
     skipOwnerEmail?: boolean
     /** What the email alone carries; see {@link NotifyUsersOptions.emailDetails}. */
     emailDetails?: readonly NotificationEmailDetail[]
+    /** Who a reply reaches; see {@link NotifyUsersOptions.replyTo}. */
+    replyTo?: string
   } = {},
 ): Promise<void> {
   try {
@@ -640,6 +657,7 @@ async function notifyHostManagersNow(
       {
         ...(ownerUid ? { skipEmailFor: [ownerUid] } : {}),
         ...(options.emailDetails ? { emailDetails: options.emailDetails } : {}),
+        ...(options.replyTo ? { replyTo: options.replyTo } : {}),
       },
     )
   } catch (error) {
