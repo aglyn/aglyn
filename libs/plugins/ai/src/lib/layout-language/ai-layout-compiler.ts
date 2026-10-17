@@ -51,8 +51,10 @@ import {
 import {
   AI_LAYOUT_FEATURED_RECORDS,
   AI_LAYOUT_LISTING_ELEMENTS,
+  aiLayoutIsRecordImageAlt,
   aiLayoutListingAt,
   aiLayoutRecordHref,
+  aiLayoutRecordImageAltField,
   type AiLayoutListing,
   type AiLayoutListingRole,
 } from './ai-layout-listings'
@@ -2940,7 +2942,7 @@ const RECORD_PEOPLE = /\b(team|staff|people|crew|instructors?|teachers?|stylists
 export function aiLayoutRecordCardFields(
   fields: readonly { id: string; name: string; type: string }[],
 ): { title: string | null; kicker: string | null; body: string | null } {
-  const texts = fields.filter((field) => field.type === 'text' || field.type === 'sorted')
+  const texts = fields.filter((field) => (field.type === 'text' || field.type === 'sorted') && !aiLayoutIsRecordImageAlt(field.name))
   const title = texts.find((field) => field.type === 'text')?.id ?? null
   const rest = texts.filter((field) => field.id !== title)
   const body = rest.find((field) => field.type === 'text' && RECORD_BODY.test(field.name))?.id ?? null
@@ -2985,6 +2987,7 @@ function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: nu
     ? tree.add('muiTypography', { children: `{{item.${fields.body}}}`, variant: 'body2', ...textAlign }, muted(scope), null, 'recordBody')
     : null
   const photoField = !questions && listing.imageField ? listing.imageField : null
+  const altField = photoField ? aiLayoutRecordImageAltField(listing.fields ?? []) : null
   const opens = Boolean(photoField) && aiOpensGalleriesInLightbox(page)
   // Each card opens its record's own page where the dataset has one (AGL-3727):
   // `/{base}/{{item.<address>}}`, filled per record as the card repeats.
@@ -2995,7 +2998,12 @@ function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: nu
         'image',
         {
           src: `{{item.${photoField}}}`,
-          alt: fields.title ? `{{item.${fields.title}}}` : aiLayoutFitText(listing.name, 'alt', scope.page.options.language) || 'A photo',
+          // What the photo shows, where the dataset keeps it; a record's name is what it is called (AGL-3856).
+          alt: altField
+            ? `{{item.${altField}}}`
+            : fields.title
+              ? `{{item.${fields.title}}}`
+              : aiLayoutFitText(listing.name, 'alt', scope.page.options.language) || 'A photo',
           objectFit: 'cover',
           width: '100%',
           loading: 'lazy',
