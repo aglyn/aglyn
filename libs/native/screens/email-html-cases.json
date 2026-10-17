@@ -72,7 +72,14 @@
       "text": [
         "New device sign-in",
         "Your Aglyn account was just signed in to from a device it has not used before.",
-        "Device: Chrome on macOS\nLocation: Denver, CO, US\nIP address: 203.0.113.7\nWhen: 2026-08-08 14:03 UTC",
+        "Device",
+        "Chrome on macOS",
+        "Location",
+        "Denver, CO, US",
+        "IP address",
+        "203.0.113.7",
+        "When",
+        "2026-08-08 14:03 UTC",
         "Manage your devices",
         "If this was you, no action is needed. If it was not, sign this device out from Recent sign-ins and change your password right away."
       ],
@@ -144,7 +151,12 @@
       "text": [
         "Usage summary for Test Org",
         "Here is how Test Org used Aglyn in June 2026.",
-        "Plan: Starter\nPage views: 12,400\nMetered usage beyond your plan: none, so nothing extra is billed for it."
+        "Plan",
+        "Starter",
+        "Page views",
+        "12,400",
+        "Metered usage beyond your plan",
+        "none, so nothing extra is billed for it."
       ],
       "links": [
         "https://example.com/",

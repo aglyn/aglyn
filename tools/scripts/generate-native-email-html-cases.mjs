@@ -160,11 +160,28 @@ export async function emailHtmlCases() {
     })
     const merged = (value) => render.substituteMergeTokens(value, merge)
     const blocks = template.defaultBody ?? []
+    // What one block reads as. A details panel (AGL-3897) draws each line as
+    // a label cell and a value cell, so it reads label then value, without
+    // the colon; a blank line, or one a token left blank, draws no row.
+    const words = (block) => {
+      if (block.block === 'button') return [merged(block.label)]
+      if (block.block === 'html') return []
+      const text = merged(block.text)
+      if (block.variant !== 'details') return [text]
+      return text
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line && !line.endsWith(':'))
+        .flatMap((line) => {
+          const split = render.splitEmailDetailLine(line)
+          return split ? [split.label, split.value] : [line]
+        })
+    }
     cases.push({
       name: `system email: ${key}`,
       html,
       // Every paragraph and button label, merged, in the order they draw.
-      text: blocks.map((block) => (block.block === 'button' ? merged(block.label) : merged(block.text))).filter(Boolean),
+      text: blocks.flatMap(words).filter(Boolean),
       // Every address a recipient could open, as the renderer wrote it: the header, the buttons, links inside a
       // paragraph, and the support line.
       links: [...new Set([...html.matchAll(/<a\b[^>]*\bhref="([^"]*)"/gi)].map((match) => match[1].replaceAll('&amp;', '&')))].filter(
