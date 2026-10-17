@@ -151,7 +151,9 @@ fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null) {
 private fun OrdersList(context: NativePluginContext, model: OrdersListModel, selected: String?, onSelect: (String) -> Unit) {
   val listState = rememberLazyListState()
   // A new chip, filter or sort is a new list: it starts at its first row, not at the row that was on top before.
-  LaunchedEffect(model.filter, model.clauses, model.sort) { listState.scrollToItem(0) }
+  // Coming back to the list (from an order, or Back) keeps where it was.
+  var arrived by remember { mutableStateOf(false) }
+  LaunchedEffect(model.filter, model.clauses, model.sort) { if (arrived) listState.scrollToItem(0) else arrived = true }
   val scope = rememberCoroutineScope()
   // Select mode: tick orders, then mark them all fulfilled in one go (the console's bulk action on the orders list).
   var selecting by remember { mutableStateOf(false) }

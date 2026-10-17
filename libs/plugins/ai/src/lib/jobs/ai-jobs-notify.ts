@@ -19,7 +19,9 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { notifyUsers } from '@aglyn/tenant-data-admin/server/notifications'
 import { raiseOperatorAlert } from '@aglyn/tenant-data-admin/server/operator-alerts'
 import { AI_BUILD_PARTLY_FAILED, AI_JOB_FAILED } from '../operator-alerts'
-import { aiJobNotice } from '../model/ai-job-notice'
+import { liveCustomDomain } from '@aglyn/aglyn/app-utils/host-naming'
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/tenant-apex'
+import { aiJobNotice, type AiJobNoticeSite } from '../model/ai-job-notice'
 import { aiBusinessProfilePrefiller } from './ai-business-profile-prefill'
 import { aiJobAutoConfirms } from './ai-job-auto-confirm'
 import { registerAiJobTransitionListener, type AiJobTransitionListener } from './ai-jobs'
@@ -42,13 +44,45 @@ import { registerAiJobTransitionListener, type AiJobTransitionListener } from '.
  */
 export function aiJobTransitionNotifier(
   notify: typeof notifyUsers = notifyUsers,
+  readSite: (hostId: string) => Promise<AiJobNoticeSite | null> = readJobSite,
 ): AiJobTransitionListener {
   return async ({ job, to }) => {
     if (!job.createdBy) return
     // A guided site start's plan is confirmed for it the moment it is kept
     // (AGL-3594): there is nothing for the person to confirm.
     if (to === 'needs-review' && job.review?.reason === 'plan' && aiJobAutoConfirms(job)) return
-    await notify([job.createdBy], aiJobNotice(job, to))
+    // The site a job worked on, by name and address (AGL-3889): the email is
+    // read away from the console, often by someone with several sites.
+    const site = job.hostId ? await readSite(job.hostId).catch(() => null) : null
+    const notice = aiJobNotice(job, to, site)
+    if (!site) {
+      await notify([job.createdBy], notice)
+      return
+    }
+    await notify([job.createdBy], notice, {
+      emailDetails: [
+        { label: 'Site', value: site.name },
+        ...(site.url ? [{ label: 'Address', value: site.url }] : []),
+      ],
+    })
+  }
+}
+
+/**
+ * A job's site as its notice names it: the name its managers gave it, else
+ * its address, and where it is live — its custom domain once that serves,
+ * else its platform subdomain. `null` for a site that is gone.
+ */
+export async function readJobSite(hostId: string): Promise<AiJobNoticeSite | null> {
+  const host = await firebaseAdmin.app().firestore().collection('hosts').doc(hostId).get()
+  if (!host.exists) return null
+  const data = (host.data() ?? {}) as Record<string, unknown>
+  const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+  const subdomain = text(data['subdomain'])
+  const domain = liveCustomDomain(data as never)
+  return {
+    name: text(data['displayName']) || text(data['name']) || subdomain || hostId,
+    url: domain ? `https://${domain}` : subdomain ? `https://${subdomain}.${TENANT_APEX}` : null,
   }
 }
 

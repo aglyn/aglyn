@@ -49,6 +49,7 @@ import com.aglyn.core.plainJson
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.jsString
 import com.aglyn.pluginhost.ActionRunner
+import com.aglyn.pluginhost.RunnerBanners
 import com.aglyn.pluginhost.ClauseFilterBar
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.pluginhost.ORG_WRITER_ROLES
@@ -56,6 +57,7 @@ import com.aglyn.pluginhost.TransferExportDialog
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChoiceField
 import com.aglyn.ui.DateTimeField
@@ -155,6 +157,8 @@ private fun Records(context: NativePluginContext, orgId: String, dataset: Datase
 
   AglynListDetail(
     initialSelected = initialRecordId,
+    // A phone shows a record without the list, so the record carries the list's banners.
+    detailBanner = { if (dialog == null) RunnerBanners(runner) },
     list = { selected, onSelect ->
       val listState = rememberLazyListState()
       LoadMoreEffect(listState, model.hasMore, onLoadMore = model::loadMore)
@@ -273,6 +277,8 @@ private fun RecordDetail(
   open: (RecordDialog) -> Unit,
 ) {
   val live by remember(orgId, dataset.id, recordId, context.firestore) { context.firestore.observeDoc("${recordsPath(orgId, dataset.id)}/$recordId") }.collectAsState(Live.Loading)
+  // A deleted record closes its detail; the delete refreshes the list.
+  CloseWhenGone((live as? Live.Ready)?.let { it.value != null })
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this record", body = "Check the connection and try again.", icon = AglynIcons.named("error"))

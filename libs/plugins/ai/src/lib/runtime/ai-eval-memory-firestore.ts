@@ -102,6 +102,8 @@ export function aiEvalMemoryFirestore(seed: Record<string, Data> = {}): AiEvalMe
       path,
       doc: (id: string) => docRef(`${path}/${id}`),
       select: () => query,
+      // A site's remembered preferences are read a capped page at a time.
+      limit: query.limit,
       get: query.get,
     }
   }

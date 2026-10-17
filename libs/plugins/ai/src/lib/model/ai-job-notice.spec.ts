@@ -99,7 +99,19 @@ describe('a finished job', () => {
       }),
       'done',
     )
-    expect(someDrafts.body).toBe('Your pages are published, except one that stayed a draft. Open it to see why.')
+    expect(someDrafts.body).toBe('Your pages are published, except one that stayed a draft. Open the build page to see why.')
+  })
+
+  it('names the site that went live and where it is (AGL-3889)', () => {
+    const live = source({ kind: 'site', sitePublish: { published: [{ id: 'home', label: 'Home', path: '/' }], drafts: [] } })
+    const notice = aiJobNotice(live, 'done', { name: 'Acme Roofing', url: 'https://acme.aglyn.app' })
+    expect(notice.title).toBe('Acme Roofing is live')
+    expect(notice.body).toBe(
+      'Your pages are published at https://acme.aglyn.app. Visit your site there, or open it in the console to edit your pages.',
+    )
+    expect(aiJobNotice(live, 'done', { name: 'Acme Roofing', url: null }).body).toBe(
+      'Your pages are published. Open it to view your site or edit your pages.',
+    )
   })
 
   /** The 2026-10-07 production guided start: Home failed on our side and was given back; Contact was built and put live. */

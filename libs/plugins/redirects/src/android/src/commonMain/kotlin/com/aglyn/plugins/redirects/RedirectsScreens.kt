@@ -36,6 +36,7 @@ import com.aglyn.core.Live
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.MetricCard
@@ -61,6 +62,7 @@ fun RedirectsListScreen(context: NativePluginContext) {
     RedirectsEditor(ConsoleRedirectsWriteApi(context.api, context.writer, hostId), context.uid, scope)
   }
   AglynListDetail(
+    detailBanner = { if (editor.draft == null && editor.deleting == null) RedirectBanners(editor) },
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
         Row(
@@ -74,10 +76,7 @@ fun RedirectsListScreen(context: NativePluginContext) {
           }
         }
         if (editor.draft == null && editor.deleting == null) {
-          editor.error?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.padding(horizontal = space(2f))) }
-          editor.notice?.let { message ->
-            NoticeBanner(message, StatusTone.SUCCESS, Modifier.padding(horizontal = space(2f)), action = { TextButton(onClick = { editor.notice = null }) { Text("Dismiss") } })
-          }
+          Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) { RedirectBanners(editor) }
         }
         when (live) {
           Live.Loading -> SkeletonList(rows = 4)
@@ -109,6 +108,8 @@ fun RedirectsListScreen(context: NativePluginContext) {
     },
     detail = { selected ->
       val row = (live as? Live.Ready)?.value?.firstOrNull { it.id == selected }
+      // A deleted redirect leaves the list, and its detail closes with it.
+      CloseWhenGone((live as? Live.Ready)?.let { row != null })
       if (row == null) {
         EmptyState("Pick a redirect to see it here", icon = AglynIcons.named("alt_route"))
       } else {
@@ -117,6 +118,15 @@ fun RedirectsListScreen(context: NativePluginContext) {
     },
   )
   RedirectDialogs(editor)
+}
+
+/** The editor's last refusal and notice, the notice dismissible. */
+@Composable
+private fun RedirectBanners(editor: RedirectsEditor) {
+  editor.error?.let { NoticeBanner(it, StatusTone.ERROR) }
+  editor.notice?.let { message ->
+    NoticeBanner(message, StatusTone.SUCCESS, action = { TextButton(onClick = { editor.notice = null }) { Text("Dismiss") } })
+  }
 }
 
 @Composable

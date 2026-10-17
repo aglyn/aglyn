@@ -1495,6 +1495,59 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       source: 'libs/plugins/ai/src/lib/insights/ai-insight-digest.ts',
     },
     {
+      key: 'weekly-summary',
+      name: 'Weekly summary',
+      description:
+        'Each Monday, how a workspace’s sites did the week before — visitors, ' +
+        'top pages, form submissions, new leads, bookings, sales and deals — ' +
+        'for its owners and admins. Free: nothing is generated.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{summary.subject}}',
+      mergeTokens: [
+        {
+          name: 'summary.subject',
+          description: 'The subject line, leading with the week’s figures',
+          sample: 'Your week at Test Org: 1,204 visitors, 9 new leads, 6 bookings',
+        },
+        {
+          name: 'org.name',
+          description: 'The workspace the summary is for',
+          sample: 'Test Org',
+        },
+        {
+          name: 'summary.period',
+          description: 'The week the figures cover',
+          sample: 'Oct 5 – Oct 11',
+        },
+        {
+          name: 'summary.body',
+          description: 'Each site’s figures, one per line, with its link',
+          sample:
+            'Test Site\n- Visitors: 1,204 (+12%) · Page views: 3,410 (+8%)\n' +
+            '- Top pages: / 1,020 views, /pricing 340, /contact 120\n' +
+            '- New leads: 9 (+50%) · New contacts: 3',
+        },
+        {
+          name: 'settingsUrl',
+          description: 'Notification settings, where the summary is turned off',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/notifications/settings`,
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: 'Your week at {{org.name}}', variant: 'heading' },
+        { block: 'text', text: '{{summary.body}}', variant: 'body' },
+        {
+          block: 'text',
+          text: 'Change what you are emailed about: {{settingsUrl}}',
+          variant: 'caption',
+        },
+      ],
+      footerReason:
+        'You’re receiving this each Monday because you manage {{org.name}} and ' +
+        'the Weekly summary is on in your {{brand.productName}} notification settings.',
+      source: 'libs/tenant/data/admin/src/lib/server/weekly-summary.ts',
+    },
+    {
       key: 'legal-intake-receipt',
       name: 'Report and notice receipt',
       description:

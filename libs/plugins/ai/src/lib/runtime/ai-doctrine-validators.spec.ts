@@ -716,6 +716,28 @@ describe('rule 5 — colors, spacing and type come from the theme', () => {
     })
     expect(detectPlanLiteralColors(themed)).toEqual([])
   })
+
+  it('in a plan: a color WORD in prose is a name, not a value (AGL-3864)', () => {
+    // The live 2026-10-16 photographer start was refused for its audience's own "Blue Ridge".
+    const named = planOf({
+      screens: [
+        screen({
+          sections: [
+            { name: 'Blue Ridge elopements', uses: [], items: 0 },
+            { name: 'Black and white portraits', uses: [], items: 0 },
+            { name: 'Golden hour sessions', uses: [], items: 0 },
+          ],
+        }),
+      ],
+      create: [{ kind: 'form', name: 'Booking', why: 'Couples ask about white-glove wedding days.', duplicateOf: null, fields: ['email'] }],
+    })
+    expect(detectPlanLiteralColors(named)).toEqual([])
+    // A value still is one, wherever the prose writes it.
+    const valued = planOf({ screens: [screen({ sections: [{ name: 'Hero on #1a1a1a', uses: [], items: 0 }] })] })
+    expect(codes(detectPlanLiteralColors(valued))).toEqual(['plan-literal-color'])
+    const fn = planOf({ screens: [screen({ sections: [{ name: 'Band in rgb(10, 20, 30)', uses: [], items: 0 }] })] })
+    expect(codes(detectPlanLiteralColors(fn))).toEqual(['plan-literal-color'])
+  })
 })
 
 describe('rule 5 — a link on a colored band draws its words in a color the band does not have (AGL-3056)', () => {
@@ -970,6 +992,21 @@ describe('rule 8 — data is bound, not typed', () => {
     expect(codes(detectPlanTypedData(copied, INVENTORY))).toEqual(['plan-existing-data-unbound'])
     const bound = planOf({ screens: [screen({ sections: [{ name: 'Team members', uses: ['ds-team', 'cmp-card'], items: 12 }] })] })
     expect(detectPlanTypedData(bound, INVENTORY)).toEqual([])
+  })
+
+  it('in a plan: a form section collects its data, so a dataset of the same name is not one it copies (AGL-3864)', () => {
+    // The workspace's other site's form made "Consultation requests"; a new law firm's form section is named the same.
+    const inventory = { ...INVENTORY, datasets: [...INVENTORY.datasets, { id: 'ds-consult', name: 'Consultation requests', fields: ['email'] }] }
+    const byName = planOf({ screens: [screen({ sections: [{ name: 'Consultation request form', uses: [], items: 0 }] })] })
+    expect(detectPlanTypedData(byName, inventory as never)).toEqual([])
+    const byForm = planOf({
+      create: [{ kind: 'form', name: 'Consultation requests', why: 'Visitors ask for a consultation.', duplicateOf: null, fields: ['email'] }],
+      screens: [screen({ sections: [{ name: 'Consultation requests', uses: ['new:Consultation requests'], items: 0 }] })],
+    })
+    expect(detectPlanTypedData(byForm, inventory as never)).toEqual([])
+    // A section that LISTS what the dataset holds is still told to bind to it.
+    const listed = planOf({ screens: [screen({ sections: [{ name: 'Consultation requests', uses: [], items: 4 }] })] })
+    expect(codes(detectPlanTypedData(listed, inventory as never))).toEqual(['plan-existing-data-unbound'])
   })
 
   it('in a plan: asks for a shorter list, not a dataset, where the job may not create one (AGL-3030)', () => {

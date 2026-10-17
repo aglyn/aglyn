@@ -273,6 +273,12 @@ describe('scheduled-crons.yml wiring', () => {
           'add the row once a beat exists. Best-effort dispatch is acceptable ' +
           'for a morning summary.',
       ],
+      [
+        '0 13 * * 1 /api/admin/weekly-summary',
+        'AGL-3867: the same as the CRM digest above. A new inventory row reds ' +
+          '/api/health/crons before the first Monday fires; the route beats on ' +
+          'every POST, so the row is added once a beat exists.',
+      ],
     ])
 
     it('watches EVERY schedule in the workflow, or says in writing why not', () => {

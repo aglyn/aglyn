@@ -148,22 +148,53 @@ internal fun SectionHeader(text: String) {
   )
 }
 
-/** Every plugin screen the app has, on phones (wide windows show them in the rail). */
+/** A plugin screen the shell lists as a place of its own: in the drawer on wide windows, in Apps on phones. */
+internal data class ShellPlace(val id: String, val title: String, val icon: String, val screen: String, val requiresSite: Boolean)
+
+/**
+ * Each plugin tab, then each quick action that opens a screen, one place per screen (the iOS shell's `SidebarScreen.all`).
+ * A quick action that carries params (New product, Ship orders) is an action rather than a place: it stays on Home.
+ */
+internal fun shellPlaces(registry: com.aglyn.pluginhost.NativePluginRegistry, app: NativeApp): List<ShellPlace> {
+  val seen = mutableSetOf<String>()
+  val tabs = registry.tabs(app).filter { seen.add(it.screen) }.map { tab ->
+    ShellPlace(tab.id, tab.title, tab.icon, tab.screen, registry.screen(tab.screen)?.requiresSite ?: false)
+  }
+  val actions = registry.quickActions(app).filter { it.params.isEmpty() && seen.add(it.screen) }.map { action ->
+    ShellPlace(action.id, action.title, action.icon, action.screen, action.requiresSite)
+  }
+  return tabs + actions
+}
+
+/** Every place the plugins add, on phones (wide windows list them in the drawer), with the site's Analytics first. */
 @Composable
-internal fun MoreScreen(services: ShellServices, context: NativePluginContext) {
+internal fun MoreScreen(services: ShellServices, context: NativePluginContext, siteName: String?, onAnalytics: () -> Unit) {
   val version by services.registry.version.collectAsState()
-  val actions = remember(version) { services.registry.quickActions(NativeApp.AGLYN).filter { it.screen != null } }
-  if (actions.isEmpty()) {
+  val places = remember(version) { shellPlaces(services.registry, NativeApp.AGLYN) }
+  if (places.isEmpty() && siteName == null) {
     EmptyState("Nothing here yet", body = "Features you turn on show up here.", icon = AglynIcons.named("apps"))
     return
   }
   LazyColumn(Modifier.fillMaxSize()) {
-    items(actions, key = { it.id }) { action ->
+    item { SectionHeader(siteName ?: "Site") }
+    if (siteName != null) {
+      item {
+        AglynListItem(
+          title = "Analytics",
+          icon = AglynIcons.named("bar_chart"),
+          trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+          onClick = onAnalytics,
+          modifier = Modifier.testTag("more-analytics"),
+        )
+      }
+    }
+    items(places, key = { it.id }) { place ->
       AglynListItem(
-        title = action.title,
-        icon = AglynIcons.named(action.icon),
-        onClick = { context.navigate(action.screen, action.params) },
-        modifier = Modifier.testTag("more-${action.id}"),
+        title = place.title,
+        icon = AglynIcons.named(place.icon),
+        trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+        onClick = { context.navigate(place.screen, emptyMap()) },
+        modifier = Modifier.testTag("more-${place.id}"),
       )
     }
   }

@@ -89,6 +89,16 @@
  */
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 
+/**
+ * The block below runs in two places: here, at the session mint, and in the
+ * `cloud/functions` account-creation blocking function, which refuses the
+ * account before it exists. `cloud/functions` is a plain npm package that can
+ * import only firebase-admin and firebase-functions, so it holds a verbatim
+ * copy (`cloud/functions/src/sso-domain-policy.ts`), and
+ * `apps/console/specs/sso-domain-creation-wiring.spec.ts` fails if the two
+ * differ by a single character. Change it here, then copy the region across.
+ */
+// #region sso-domain-policy
 export const SSO_REQUIRED_DOMAINS_ENV = 'AGLYN_SSO_REQUIRED_DOMAINS'
 
 export type SsoRequiredDomains = Readonly<Record<string, string>>
@@ -125,6 +135,39 @@ export function ssoRequiredDomains(
   return parseSsoRequiredDomains(env[SSO_REQUIRED_DOMAINS_ENV])
 }
 
+/**
+ * Addresses on a governed domain that may still sign in OUTSIDE its tenant.
+ *
+ * For accounts that cannot use the IdP at all because someone outside the
+ * company has to sign in with them: the demo login an app store reviewer is
+ * given, for example. Exact addresses only, never a pattern, so every
+ * exception is named and can be read back from configuration:
+ *
+ * ```
+ * AGLYN_SSO_EXEMPT_EMAILS="reviewer@example.com"
+ * ```
+ *
+ * Comma or whitespace separated, compared lower-cased. Empty by default.
+ */
+export const SSO_EXEMPT_EMAILS_ENV = 'AGLYN_SSO_EXEMPT_EMAILS'
+
+export function parseSsoExemptEmails(
+  raw: string | null | undefined,
+): ReadonlySet<string> {
+  const emails = new Set<string>()
+  for (const entry of String(raw ?? '').split(/[,\s]+/)) {
+    const email = entry.trim().toLowerCase()
+    if (email.includes('@')) emails.add(email)
+  }
+  return emails
+}
+
+export function ssoExemptEmails(
+  env: Record<string, string | undefined> = process.env,
+): ReadonlySet<string> {
+  return parseSsoExemptEmails(env[SSO_EXEMPT_EMAILS_ENV])
+}
+
 export type SsoDomainVerdict =
   /** Domain is not governed. Any pool is fine — this is most of the world. */
   | 'allow-ungoverned'
@@ -136,6 +179,11 @@ export type SsoDomainVerdict =
    * nobody asked for — but surfaced so a staff-access review can see it.
    */
   | 'allow-foreign-tenant'
+  /**
+   * Governed domain, no tenant, but the address is named in
+   * {@link SSO_EXEMPT_EMAILS_ENV}. Allowed and reviewable.
+   */
+  | 'allow-exempt'
   /**
    * Governed domain with NO tenant at all: a project-pool password or consumer
    * Google sign-in. The only refusal this policy ever produces.
@@ -191,6 +239,7 @@ export function domainOf(email: string | null | undefined): string | null {
 export function evaluateSsoDomainPolicy(
   identity: SsoDomainIdentity,
   domains: SsoRequiredDomains = ssoRequiredDomains(),
+  exempt: ReadonlySet<string> = ssoExemptEmails(),
 ): SsoDomainDecision {
   const domain = domainOf(identity.email)
   const tenantId = identity.tenantId ?? null
@@ -241,6 +290,17 @@ export function evaluateSsoDomainPolicy(
     }
   }
 
+  if (exempt.has(String(identity.email ?? '').trim().toLowerCase())) {
+    return {
+      verdict: 'allow-exempt',
+      refused: false,
+      domain,
+      requiredTenantId,
+      tenantId: null,
+      reviewable: true,
+    }
+  }
+
   return {
     verdict: 'refuse-sso-required',
     refused: true,
@@ -270,12 +330,10 @@ export function evaluateSsoDomainPolicy(
  * **Precondition for flipping it — written down so it is not re-litigated:**
  *  1. SSO staff access verified working through a REAL sign-in (not a token
  *     inspection): a staff account reaches `/admin/*` via the SAML tenant.
- *  2. Every identity on a governed domain has been migrated into its tenant or
- *     retired. Measured on aglyn-main 2026-08-18: TWO would have been refused,
- *     neither of them staff — one on a consumer `google.com` provider, and the
- *     e2e smoke account on `password`. Flipping before migrating breaks the
- *     e2e smoke sign-in, which is the one that bites without warning: it is an
- *     AUTOMATION account, so nobody is watching a sign-in page when it fails.
+ *  2. Every identity on a governed domain has been migrated into its tenant,
+ *     retired, or named in {@link SSO_EXEMPT_EMAILS_ENV}. An automation or
+ *     reviewer account is the one that bites without warning: nobody is
+ *     watching a sign-in page when it fails.
  *
  * A second staff identity is NOT a precondition: the permanent break-glass
  * account is on an ungoverned domain, so this rule can never refuse it.
@@ -287,6 +345,25 @@ export function ssoDomainEnforcementEnabled(
 ): boolean {
   return env[SSO_DOMAIN_ENFORCEMENT_ENV] === 'on'
 }
+
+/**
+ * Whether an account about to be CREATED must be refused. Same switch, same
+ * domains, same exemptions as the session mint, so an address the mint would
+ * turn away is never created in the first place, and an address it admits
+ * is never refused here.
+ */
+export function ssoDomainCreationRefused(
+  identity: SsoDomainIdentity,
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  if (!ssoDomainEnforcementEnabled(env)) return false
+  return evaluateSsoDomainPolicy(
+    identity,
+    ssoRequiredDomains(env),
+    ssoExemptEmails(env),
+  ).refused
+}
+// #endregion sso-domain-policy
 
 /**
  * What the refused person is told. Names the fix, not the mechanism.
@@ -315,7 +392,11 @@ export function ssoDomainRefusal(
   identity: SsoDomainIdentity,
   env: Record<string, string | undefined> = process.env,
 ): { decision: SsoDomainDecision; response: Response } | null {
-  const decision = evaluateSsoDomainPolicy(identity, ssoRequiredDomains(env))
+  const decision = evaluateSsoDomainPolicy(
+    identity,
+    ssoRequiredDomains(env),
+    ssoExemptEmails(env),
+  )
   if (!decision.refused) return null
   if (!ssoDomainEnforcementEnabled(env)) return null
   return {

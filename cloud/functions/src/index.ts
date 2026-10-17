@@ -17,6 +17,7 @@ import * as logger from 'firebase-functions/logger'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { signupsCreationVerdict } from './signups-lock'
+import { domainOf, ssoDomainCreationRefused } from './sso-domain-policy'
 import { fetchPastEdgeChallenge, isEdgeChallenge } from './edge-challenge'
 import { rateLimitRetryDelayMs } from './rate-limit-retry'
 
@@ -1212,6 +1213,46 @@ async function recordSignupsLockEvent(
 }
 
 /**
+ * The marker a client looks for to tell this refusal from any other. Identity
+ * Platform hands every blocking-function error to the client as one generic
+ * code, so the text is the only thing that carries which rule refused.
+ */
+const SSO_DOMAIN_REQUIRED_MARKER = 'sso-domain-required'
+
+/**
+ * REFUSE A GOVERNED-DOMAIN ACCOUNT OUTSIDE ITS SSO TENANT (AGL-1993, AGL-3877).
+ *
+ * An `@aglyn.com` address that signs in with "Continue with Google" or a
+ * password lands in the PROJECT pool, which is a different user database from
+ * the domain's SSO tenant. Nothing links the two, so the person ends up with a
+ * second account under the same address, outside Workspace MFA and
+ * offboarding. The session mint already refuses such an account; this stops
+ * it being created at all.
+ *
+ * A separate gate from the signups lock below, on purpose. The lock must stay
+ * blind to pool, provider and address so it can never be made to skip a door;
+ * this rule is ABOUT the pool and the address, and it is configuration
+ * (`AGLYN_SSO_REQUIRED_DOMAINS`, `AGLYN_SSO_EXEMPT_EMAILS`,
+ * `AGLYN_SSO_DOMAIN_ENFORCEMENT` in this package's `.env`), empty and off by
+ * default. Its decision is the shared region in `./sso-domain-policy`.
+ */
+function refuseSsoDomainCreation(
+  user: { email?: string | null; tenantId?: string | null } | undefined,
+): void {
+  if (!ssoDomainCreationRefused({ email: user?.email, tenantId: user?.tenantId })) {
+    return
+  }
+  logger.warn('account refused at creation: SSO required for this domain', {
+    domain: domainOf(user?.email),
+  })
+  throw new HttpsError(
+    'permission-denied',
+    'This address has to sign in with single sign-on (SSO). Accounts on ' +
+      `its domain cannot use a password or Google sign-in. (${SSO_DOMAIN_REQUIRED_MARKER})`,
+  )
+}
+
+/**
  * REFUSE ACCOUNT CREATION WHILE THE SIGNUPS LOCK IS ENGAGED (AGL-1531).
  *
  * The lock already refused the session mint, the legal-acceptance recorder
@@ -1252,7 +1293,9 @@ async function recordSignupsLockEvent(
  * whether the trigger is registered, so the gap is visible rather than
  * assumed.
  */
-export const beforeSignupCreate = beforeUserCreated(async () => {
+export const beforeSignupCreate = beforeUserCreated(async (event) => {
+  refuseSsoDomainCreation(event.data)
+
   const verdict = await signupsCreationVerdict(async () => {
     // The warm-up answers at most one creation, and only if it succeeded;
     // clearing it first means a second creation cannot be served a stale

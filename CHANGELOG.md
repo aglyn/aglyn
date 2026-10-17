@@ -9,6 +9,82 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.263 — 2026-10-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.262...v1.0.0-beta.263)
+
+### Fixed
+
+- **ai:** "your site is live" names the site and gives its address ([AGL-3889](https://linear.app/aglyn/issue/AGL-3889))
+- **notifications:** native push is immediate, never cut off, and sent once ([AGL-3888](https://linear.app/aglyn/issue/AGL-3888))
+- **native-apple:** the launch restore never refreshes behind a fresh sign-in ([AGL-3885](https://linear.app/aglyn/issue/AGL-3885))
+- **auth:** refuse an @aglyn.com account outside SSO before it is created ([AGL-3877](https://linear.app/aglyn/issue/AGL-3877), [AGL-1993](https://linear.app/aglyn/issue/AGL-1993))
+- **native-apple:** a notice's trailing closure is its close button again ([AGL-3876](https://linear.app/aglyn/issue/AGL-3876))
+- **native-apple:** a notification opens the screen the console opens ([AGL-3875](https://linear.app/aglyn/issue/AGL-3875))
+- **native-android:** bookings open on Upcoming; list header titles keep their width ([AGL-3874](https://linear.app/aglyn/issue/AGL-3874))
+- **native-screens:** a spec screen's refusal stays until dismissed or the next action ([AGL-3873](https://linear.app/aglyn/issue/AGL-3873))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **functions:** run the SSO domain creation test with test:functions ([AGL-3877](https://linear.app/aglyn/issue/AGL-3877))
+
+</details>
+
+## v1.0.0-beta.262 — 2026-10-16
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.261...v1.0.0-beta.262)
+
+### Added
+
+- **notifications:** free weekly summary email for every workspace ([AGL-3867](https://linear.app/aglyn/issue/AGL-3867))
+- **notifications:** email on by default for AI jobs, billing and alerts ([AGL-3866](https://linear.app/aglyn/issue/AGL-3866))
+- **ops:** a health check still degraded keeps paging, Must know from 2 h ([AGL-3860](https://linear.app/aglyn/issue/AGL-3860), [AGL-3857](https://linear.app/aglyn/issue/AGL-3857))
+- **native:** order and product filters, sorts, the customer CRM link and products zones ([AGL-3841](https://linear.app/aglyn/issue/AGL-3841))
+- **native:** create with AI beside Create on the site's lists ([AGL-3854](https://linear.app/aglyn/issue/AGL-3854))
+- **ai:** the apps' door and follow view for Create with AI ([AGL-3854](https://linear.app/aglyn/issue/AGL-3854))
+- **native:** orders and products match the console's dialogs and row actions ([AGL-3841](https://linear.app/aglyn/issue/AGL-3841))
+- **commerce:** the order dialog's rules and the product row routes for the apps ([AGL-3841](https://linear.app/aglyn/issue/AGL-3841))
+- **native:** print slips, invoices, shipping and product labels; Import opens the hub ([AGL-3841](https://linear.app/aglyn/issue/AGL-3841))
+
+### Fixed
+
+- **notifications:** native push reaches the senders boot registered ([AGL-3868](https://linear.app/aglyn/issue/AGL-3868))
+- **figures:** read referring hosts back with their dots; reword the site link ([AGL-3867](https://linear.app/aglyn/issue/AGL-3867))
+- **native-apple:** delete the redirect or funnel the dialog showed ([AGL-3865](https://linear.app/aglyn/issue/AGL-3865))
+- **ai:** a strength gym's photos never show another sport's ball ([AGL-3864](https://linear.app/aglyn/issue/AGL-3864))
+- **ai:** a plan isn't refused for color words in names or for a form named like a dataset ([AGL-3864](https://linear.app/aglyn/issue/AGL-3864))
+- **ios:** read the Analytics traffic days by id ascending ([AGL-3863](https://linear.app/aglyn/issue/AGL-3863))
+- **ios:** the sidebar leaves out quick actions that carry params ([AGL-3862](https://linear.app/aglyn/issue/AGL-3862))
+- **native-apple:** a stored null is no value, never the text "<null>" ([AGL-3861](https://linear.app/aglyn/issue/AGL-3861))
+- **native:** what the iPhone and iPad smoke test of Create with AI found ([AGL-3854](https://linear.app/aglyn/issue/AGL-3854))
+- **native:** what driving orders and products on devices turned up ([AGL-3841](https://linear.app/aglyn/issue/AGL-3841))
+- **native:** what the Android smoke test of Create with AI found ([AGL-3854](https://linear.app/aglyn/issue/AGL-3854))
+- **ai:** open a drafted form through the record-route seam ([AGL-3854](https://linear.app/aglyn/issue/AGL-3854))
+- **native:** the Kotlin label sheet reads the contract values through Contracts ([AGL-3841](https://linear.app/aglyn/issue/AGL-3841))
+
+### Performance
+
+- **commerce:** the order dialog's own rules stay out of the storefront's bundle ([AGL-3841](https://linear.app/aglyn/issue/AGL-3841))
+
+### Changed
+
+- **figures:** each reader words its own weekly summary line ([AGL-3867](https://linear.app/aglyn/issue/AGL-3867))
+
+### Documentation
+
+- **mobile:** tick Orders, products, stock, sales on Apple and Kotlin ([AGL-3841](https://linear.app/aglyn/issue/AGL-3841))
+- **native:** create with AI in the console parity checklist ([AGL-3854](https://linear.app/aglyn/issue/AGL-3854))
+
+<details>
+<summary>Also in this release: 3 test</summary>
+
+- **ai:** the eval's in-memory collection takes a limit, so site context reads ([AGL-3661](https://linear.app/aglyn/issue/AGL-3661))
+- **tenant:** a Weglot site admits Weglot's hosts in connect-src and img-src ([AGL-3700](https://linear.app/aglyn/issue/AGL-3700))
+- **commerce:** the packing slip's escaping guard reads the shared builder ([AGL-3841](https://linear.app/aglyn/issue/AGL-3841))
+
+</details>
+
 ## v1.0.0-beta.261 — 2026-10-16
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.260...v1.0.0-beta.261)
