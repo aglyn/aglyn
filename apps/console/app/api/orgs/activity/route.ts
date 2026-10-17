@@ -45,6 +45,7 @@ import {
   activityTargetBase,
   splitWhereClause,
 } from '../../../../utils/activity-list-query'
+import { withActivityLabels } from '../../../../utils/server/activity-row-labels'
 import { applyListQuery } from '../../../../utils/server/list-filter'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -190,7 +191,7 @@ async function handler(request: Request): Promise<Response> {
         paths: await orgActivityScopePaths(orgId),
       })
       return Response.json(
-        { ...page, entries: await withResolvedActors(page.entries, { staff: isStaff }) },
+        { ...page, entries: withActivityLabels(await withResolvedActors(page.entries, { staff: isStaff })) },
         { status: 200 },
       )
     }
@@ -232,7 +233,7 @@ async function handler(request: Request): Promise<Response> {
       return Response.json(
         {
           ...page,
-          entries: await withResolvedActors(page.entries, { staff: isStaff }),
+          entries: withActivityLabels(await withResolvedActors(page.entries, { staff: isStaff })),
           refused: [...refused, ...page.refused],
           ...(facets ? { facets } : {}),
         },
@@ -295,7 +296,7 @@ async function handler(request: Request): Promise<Response> {
     })
     return Response.json(
       {
-        entries: await withResolvedActors(entries, { staff: isStaff }),
+        entries: withActivityLabels(await withResolvedActors(entries, { staff: isStaff })),
         nextCursor:
           snapshot.docs.length > pageSize
             ? (pageDocs[pageDocs.length - 1]?.id ?? null)
