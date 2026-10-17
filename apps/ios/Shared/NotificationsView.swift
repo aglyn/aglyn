@@ -268,6 +268,7 @@ struct NotificationsView: View {
         Label(markingAll ? "Marking…" : "Mark all read", systemImage: "checkmark.circle")
       }
       .disabled(markingAll)
+      .help("Mark every notification read")
       .accessibilityIdentifier("notifications-mark-all")
     }
     ToolbarItem(placement: .secondaryAction) {
@@ -276,6 +277,7 @@ struct NotificationsView: View {
       } label: {
         Label("Notification settings", systemImage: "gearshape")
       }
+      .help("Choose what reaches you, and the sound it plays")
       .accessibilityIdentifier("notifications-settings")
     }
   }

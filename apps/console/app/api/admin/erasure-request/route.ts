@@ -21,6 +21,7 @@ import { brandMergeTokens, resolveBrandingProfile } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
+  ERASURE_HOLD_MS,
   emailUnverifiedResponse,
   findUserByUidAcrossPools,
   firebaseAdmin,
@@ -97,6 +98,11 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // The day the hold ends, which is the last day support can cancel it.
+    const erasureDate = new Date(Date.now() + ERASURE_HOLD_MS).toLocaleDateString(
+      'en-US',
+      { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' },
+    )
     const fallbackText =
       `We have recorded a request to erase ${orgName} and all of its data ` +
       `from ${branding.productName}. Deletion is permanent and happens after ` +
@@ -104,7 +110,11 @@ async function handler(request: Request): Promise<Response> {
       'to cancel.'
     const designed = await renderSystemEmail(
       'erasure-requested',
-      { ...brandMergeTokens(branding), 'org.name': String(orgName) },
+      {
+        ...brandMergeTokens(branding),
+        'org.name': String(orgName),
+        'erasure.date': erasureDate,
+      },
       {
               brandLogoUrl: branding.emailLogoUrl,
               brandHomeUrl: branding.homeUrl,

@@ -16,6 +16,7 @@
  */
 
 import { sendEmail, type SendEmailResult } from '@aglyn/shared-util-email'
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 
 /**
  * Staff alerts by email, from LIBRARY code (AGL-2925).
@@ -122,6 +123,10 @@ export async function sendStaffAlertEmail(input: {
   text: string
   /** Resend tag / log label. */
   context: string
+  /** Absolute link to where it is handled; the staff console when absent. */
+  url?: string | null
+  /** The button's words for {@link url}. */
+  urlLabel?: string | null
 }): Promise<SendEmailResult> {
   try {
     // In the platform's header and footer, as the `staff-alert` system email
@@ -131,7 +136,13 @@ export async function sendStaffAlertEmail(input: {
     )
     const content = await renderSystemEmailContent(
       'staff-alert',
-      { 'alert.subject': input.subject, 'alert.body': input.text },
+      {
+        'alert.subject': input.subject,
+        'alert.body': input.text,
+        'alert.url':
+          String(input.url ?? '').trim() || `${platformConsoleOrigin()}/admin/overview`,
+        'alert.urlLabel': String(input.urlLabel ?? '').trim() || 'Open the staff console',
+      },
       systemEmailBrand(null),
       // The last resort reads as the built-in copy does: subject, then body.
       { subject: input.subject, text: `${input.subject}\n\n${input.text}` },
@@ -154,6 +165,12 @@ export async function sendOperatorAlertEmail(input: {
   body?: string | null
   /** Absolute link to the item, when there is one. */
   url?: string | null
+  /** Its level and area, as "Must know · Payments". */
+  eyebrow?: string | null
+  /** "Label: value" lines: which alert, which workspace or site, when. */
+  details?: string | null
+  /** Absolute link to Staff → Operator alerts. */
+  settingsUrl?: string | null
   context: string
 }): Promise<SendEmailResult> {
   try {
@@ -164,7 +181,16 @@ export async function sendOperatorAlertEmail(input: {
     const url = String(input.url ?? '').trim()
     const content = await renderSystemEmailContent(
       'operator-alert',
-      { 'alert.title': input.title, 'alert.body': body, 'alert.url': url },
+      {
+        'alert.title': input.title,
+        'alert.body': body,
+        'alert.url': url,
+        'alert.eyebrow': String(input.eyebrow ?? '').trim() || 'Operator alert',
+        'alert.details': String(input.details ?? '').trim(),
+        settingsUrl:
+          String(input.settingsUrl ?? '').trim() ||
+          `${platformConsoleOrigin()}/admin/operator-alerts`,
+      },
       systemEmailBrand(null),
       { subject: input.title, text: [input.title, body, url].filter(Boolean).join('\n\n') },
     )

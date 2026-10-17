@@ -230,7 +230,8 @@ class PagesApi(private val api: ConsoleApiClient, private val writer: FirestoreW
   }
 
   /** A new group at the top of the list, as the hub's New group adds one. */
-  suspend fun createGroup(name: String, topOrder: Double) {
+  /** A new empty group at the top of the list; answers its id. */
+  suspend fun createGroup(name: String, topOrder: Double): String {
     val id = newDocumentId()
     api.request(
       HOST_RESOURCES_ROUTE,
@@ -238,6 +239,7 @@ class PagesApi(private val api: ConsoleApiClient, private val writer: FirestoreW
       jsonValue(mapOf("hostId" to hostId, "resource" to "screen", "id" to id, "data" to mapOf("displayName" to name.trim(), "kind" to SCREEN_KIND_GROUP))),
     )
     writer.update(path(id), mapOf("order" to minOf(0.0, topOrder) - 1))
+    return id
   }
 
   /** A draft copy with a unique slug and no address; answers its id. */
@@ -300,3 +302,66 @@ class PagesApi(private val api: ConsoleApiClient, private val writer: FirestoreW
   }
 }
 
+
+/** How many top-level rows (each with whatever of its subtree is open) the list draws before it asks for more. */
+const val PAGES_TOP_LEVEL_PAGE = 25
+
+/** The rows the collapsed tree draws, and whether more top-level rows are left to page in. */
+data class VisiblePageRows(val rows: List<PageTreeRow>, val hasMore: Boolean)
+
+/**
+ * The tree as the console's Pages hub draws it (AGL-2501's expanded-ids model): every parent starts collapsed, a row
+ * shows only when each of its ancestors is in [expanded], and the top level is paged [PAGES_TOP_LEVEL_PAGE] at a time
+ * ([topLevelLimit]). A search ([query]) skips the tree and lists every page whose name or address matches, flat.
+ */
+fun visiblePageRows(tree: List<PageTreeRow>, expanded: Set<String>, topLevelLimit: Int, query: String = ""): VisiblePageRows {
+  val words = query.trim().lowercase()
+  if (words.isNotEmpty()) {
+    val matches = tree.filter { row ->
+      row.page.name.lowercase().contains(words) || row.page.slug?.lowercase()?.contains(words) == true ||
+        row.livePath?.lowercase()?.contains(words) == true
+    }
+    return VisiblePageRows(matches.map { it.copy(depth = 0) }, false)
+  }
+  val out = mutableListOf<PageTreeRow>()
+  // The open ancestors of the row being read, by depth: a row shows when every level above it is open.
+  val openAt = mutableListOf<Boolean>()
+  var topLevel = 0
+  var hasMore = false
+  for (row in tree) {
+    while (openAt.size > row.depth) openAt.removeAt(openAt.lastIndex)
+    if (row.depth == 0) {
+      if (topLevel == topLevelLimit) {
+        hasMore = true
+        break
+      }
+      topLevel++
+    }
+    val shown = openAt.all { it }
+    if (shown) out += row
+    openAt += shown && row.page.id in expanded
+  }
+  return VisiblePageRows(out, hasMore)
+}
+
+/** The ids to open so [pageId] shows in the collapsed tree: each of its ancestors (a link or a new page lands on it). */
+fun pageAncestors(tree: List<PageTreeRow>, pageId: String): Set<String> {
+  val stack = mutableListOf<String>()
+  for (row in tree) {
+    while (stack.size > row.depth) stack.removeAt(stack.lastIndex)
+    if (row.page.id == pageId) return stack.toSet()
+    stack += row.page.id
+  }
+  return emptySet()
+}
+
+/** Which parents are open, per site, for as long as the app runs: coming back to Pages finds the tree as it was left. */
+object PagesTreeMemory {
+  private val expanded = mutableMapOf<String, Set<String>>()
+
+  fun expanded(hostId: String): Set<String> = expanded[hostId].orEmpty()
+
+  fun remember(hostId: String, ids: Set<String>) {
+    expanded[hostId] = ids
+  }
+}

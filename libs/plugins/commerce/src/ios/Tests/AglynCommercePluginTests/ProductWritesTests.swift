@@ -100,7 +100,7 @@ final class ProductWritesTests: XCTestCase {
     var draft = ProductDraft(productID: "p", create: true)
     XCTAssertEqual(checkProductDraft(draft), "Product name is required")
     draft.name = "Mug"
-    XCTAssertEqual(checkProductDraft(draft), "Enter a price for Default")
+    XCTAssertEqual(checkProductDraft(draft), "Enter a price")
     draft.variants[0].price = "5"
     draft.variants[0].compareAt = "five"
     XCTAssertNotNil(checkProductDraft(draft))

@@ -75,6 +75,7 @@ public struct AglynActionSheet<Fields: View>: View {
       }
       .interactiveDismissDisabled(busy)
     }
+    .aglynWebSheetHost()
     .frame(minWidth: 420, minHeight: 320)
   }
 }

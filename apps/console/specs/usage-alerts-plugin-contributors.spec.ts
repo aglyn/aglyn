@@ -310,6 +310,8 @@ describe('the sweep delivers a contributor’s alert (AGL-2984)', () => {
       {
         subject: 'bounceRate crossed 2',
         text: 'The bounceRate reading passed 2.\n\nOrg: https://app.aglyn.com/admin/orgs',
+        url: 'https://app.aglyn.com/admin/orgs',
+        urlLabel: 'Open in the staff console',
         context: 'deliverability',
       },
     ])

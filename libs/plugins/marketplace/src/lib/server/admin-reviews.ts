@@ -1329,6 +1329,13 @@ async function handler(request: Request): Promise<Response> {
             ? `${listing.displayName} v${version} passed review`
             : `${listing.displayName} v${version} was not approved`,
           verdict,
+          {
+            frame: {
+              plugin: String(listing.displayName ?? ''),
+              version,
+              outcome: approving ? 'Approved' : 'Not approved',
+            },
+          },
         )
       }
 
@@ -1723,6 +1730,19 @@ async function handler(request: Request): Promise<Response> {
                 : `${listing.displayName} was removed from the marketplace`
               : `${listing.displayName} is now ${nextStatus}`,
           verdict,
+          {
+            frame: {
+              plugin: String(listing.displayName ?? ''),
+              outcome:
+                action === 'reject'
+                  ? 'Rejected'
+                  : action === 'delist'
+                    ? isPrivate
+                      ? 'Back in review'
+                      : 'Removed from the marketplace'
+                    : `Now ${nextStatus}`,
+            },
+          },
         )
       }
     }

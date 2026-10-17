@@ -1,6 +1,7 @@
 package com.aglyn.app
 
 import android.app.Application
+import android.webkit.WebView
 import com.aglyn.core.AglynEnv
 import com.aglyn.hardware.AndroidSystemPrinter
 import com.aglyn.hardware.StaticPeripherals
@@ -10,6 +11,12 @@ import com.aglyn.shell.AndroidShell
 import com.aglyn.shell.ShellServices
 
 class AglynApplication : Application() {
+  override fun onCreate() {
+    super.onCreate()
+    // Debug builds expose their web views (the Besigner) to chrome://inspect, as the console tab is in a desktop browser.
+    if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
+  }
+
   val services: ShellServices by lazy {
     AndroidShell.services(
       context = this,

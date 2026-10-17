@@ -281,8 +281,10 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
     it('heads the pass-through notices with their subject, above the body (AGL-3432)', () => {
       // These two print only what their caller wrote. With the subject as a
       // heading, a body that leans on the subject line still has its topic.
+      // A notice's designed body is its lead, which the sender fills from the
+      // whole text when it composed none.
       const cases = [
-        ['workspace-notice', 'notice.subject', 'notice.body'],
+        ['workspace-notice', 'notice.subject', 'notice.lead'],
         ['staff-alert', 'alert.subject', 'alert.body'],
       ] as const
       for (const [key, subjectToken, bodyToken] of cases) {
