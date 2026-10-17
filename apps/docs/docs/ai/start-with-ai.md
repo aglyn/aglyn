@@ -57,6 +57,8 @@ card under the field: **Local service business**, **Restaurant or cafe**, **Prof
 practice**, **Trades business**, **Shop**, **Nonprofit**, **Personal portfolio** or
 **Event**. A card fills in the field for you. Keep it under 120 characters.
 
+![The Your site step of Start your site: the progress bar on Your site, the question What kind of site are you creating? answered with a neighborhood dog groomer, and eight cards to pick the closest kind instead, with Back and Next at the bottom](/img/ai/start-with-ai-kind.png)
+
 What you write here picks the site's [style](./site-looks.md#choose-a-style), unless you
 choose one yourself, and decides which pages it usually has and what each page says.
 
@@ -80,6 +82,8 @@ a restaurant, a blog and so on. Each site gets its own variation, so two sites w
 same style still look different, and yours will not match the picture exactly. See
 [Looks and themes for AI sites](./site-looks.md).
 
+![The Style step: Pick for me chosen, naming the style the answer suggests, beside cards for Business & services, Home services & trades and more, each with a picture of the starter home page drawn in that style and a line about the look](/img/ai/start-with-ai-style.png)
+
 ### Details {#details}
 
 - **Where do form submissions go?** decides where messages from the site's contact form
@@ -101,6 +105,8 @@ same style still look different, and yours will not match the picture exactly. S
 The last step lists every answer: the kind of site, who it is for, the style, where form
 submissions go, the pages and, on a paid plan, the welcome email. **Edit** beside an answer
 opens its step, and **Back to review** returns here. **Plan my site** starts the site.
+
+![The Review step: each answer with Edit beside it, and at the bottom the estimate, the model switch, Back and Plan my site](/img/ai/start-with-ai-review.png)
 
 On a paid plan a **Model** switch sits beside **Plan my site**. Leave it on **Auto**
 unless you have a reason to choose; see

@@ -102,6 +102,32 @@ const pickTeamDataset = [
   { click: 'role=option[name="Team"]', waitFor: 'Avery Quinn', settleMs: 800 },
 ]
 
+/**
+ * Sites → Create site → Start with AI, then Next to `step` (AGL-3898), with a
+ * site name and a kind of site typed in. Plan my site is never pressed.
+ */
+function guidedStartTo(step) {
+  const next = (heading) => ({ click: 'role=button[name="Next"]', waitFor: heading, settleMs: 600 })
+  const actions = [
+    { click: 'role=button[name=/Create site/] >> nth=0', waitFor: 'How do you want to start?', settleMs: 1500 },
+    { fill: ['role=textbox[name=/Site name/]', 'Hillside Dog Grooming'], settleMs: 600 },
+    { click: 'role=button[name="Start with AI"]', waitFor: 'What are you building?', settleMs: 600 },
+    {
+      fill: ['role=textbox[name=/What kind of site are you creating/]', 'a neighborhood dog groomer that takes bookings'],
+      settleMs: 400,
+    },
+  ]
+  if (step === 'kind') return actions
+  actions.push(next('Who is it for?'))
+  actions.push({ fill: ['role=textbox[name=/Who is it for/]', 'local dog owners who want a regular groom booked online'], settleMs: 400 })
+  actions.push(next('Choose a style'))
+  if (step === 'style') return [...actions, { settleMs: 2500 }]
+  actions.push({ click: 'role=radio[name=/^Photography:/]', settleMs: 400 })
+  actions.push(next('A few details'))
+  actions.push(next('Review your site'))
+  return [...actions, { settleMs: 1500 }]
+}
+
 const shots = [
   {
     out: 'getting-started/console-dashboard.png',
@@ -430,6 +456,31 @@ const shots = [
     waitFor: 'Basic details',
     settleMs: 2500,
     actions: [{ scroll: 'text=Languages', settleMs: 1000 }],
+  },
+  // The guided start's steps (AGL-3898): Sites → Create site → Start with AI,
+// walked with Next to the style step and to the review. It stops there:
+// nothing presses Plan my site, and the emulated console holds no AI key.
+// The jobs route admits the seeded org only with the AI release flag on.
+  {
+    out: 'ai/start-with-ai-kind.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_ai_generative: true },
+    actions: guidedStartTo('kind'),
+  },
+  {
+    out: 'ai/start-with-ai-style.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_ai_generative: true },
+    actions: guidedStartTo('style'),
+  },
+  {
+    out: 'ai/start-with-ai-review.png',
+    path: `/${ORG_SLUG}/hosts`,
+    waitFor: 'Demo Bakery',
+    orgReleaseFlags: { release_ai_generative: true },
+    actions: guidedStartTo('review'),
   },
   {
     out: 'ai/business-profile.png',
