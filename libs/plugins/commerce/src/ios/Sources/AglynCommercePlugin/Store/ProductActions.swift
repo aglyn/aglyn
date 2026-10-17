@@ -71,10 +71,13 @@ final class ProductQuotaModel {
     guard let hostID = context.hostID, key != hostID else { return }
     key = hostID
     ready = false
-    // The same count the create door counts: every product document of the site.
-    used = (try? await context.firestore.count(FirestoreQuery(productsPath(hostID)))) ?? used
+    // The same count the create door counts (every product document of the site), asked beside the plan, not
+    // before it.
+    async let counted = try? await context.firestore.count(FirestoreQuery(productsPath(hostID)))
+    async let plan = context.api.request("/api/orgs/entitlements", query: [("hostId", hostID)])
+    used = (await counted ?? nil) ?? used
     do {
-      let answer = try await context.api.request("/api/orgs/entitlements", query: [("hostId", hostID)])
+      let answer = try await plan
       if case .object(let quotas)? = answer?["quotas"] {
         switch quotas["productsPerHost"] {
         case .number(let cap)?: limit = cap

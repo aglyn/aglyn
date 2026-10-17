@@ -312,6 +312,7 @@ async function createSite(request: Request, ctx: ApiV1Context): Promise<Response
       subdomain,
       orgSlug: (ctx.org.slug as string | undefined) ?? null,
       createdBy: ctx.keyName ? `API key ${ctx.keyName}` : 'An API key',
+      start: 'api',
     })
     return apiJson(view, { status: 201, headers: ctx.headers })
   } catch (error) {

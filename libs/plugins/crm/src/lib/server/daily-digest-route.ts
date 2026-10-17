@@ -34,7 +34,9 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   buildMemberDigests,
+  composeCrmDigestEmailParts,
   composeCrmDigestEmailText,
+  crmDigestMergeValues,
   composeCrmDigestSubject,
   composeCrmDigestSummary,
   CRM_DIGEST_LEAD_AGE_MS,
@@ -513,6 +515,7 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
               ...brand.merge,
               'digest.subject': subject,
               'digest.body': composeCrmDigestEmailText({ ...digestInput, omitClosing: true }),
+              ...crmDigestMergeValues(composeCrmDigestEmailParts(digestInput)),
               settingsUrl,
             },
             brand.options,

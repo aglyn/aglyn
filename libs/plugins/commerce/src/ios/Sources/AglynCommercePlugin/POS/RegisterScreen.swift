@@ -4,6 +4,7 @@
 import AglynContracts
 import AglynHardware
 import AglynPluginHost
+import AglynSite
 import AglynUI
 import SwiftUI
 
@@ -16,6 +17,7 @@ struct RegisterScreen: View {
   @State private var showDiscount = false
   @State private var scanCode = ""
   @State private var showOps = false
+  @State private var showPrinters = false
   @State private var showOfflineCash = false
   let context: NativePluginContext
 
@@ -70,6 +72,7 @@ struct RegisterScreen: View {
     .onChange(of: query) { _, text in if text.isEmpty { model.search("") } }
     .sheet(item: $model.sheet) { _ in ItemSheetView(model: model) }
     .sheet(isPresented: $showOps) { RegisterOpsSheet(model: model) }
+    .sheet(isPresented: $showPrinters) { RegisterPrintersSheet(model: model) }
     .sheet(isPresented: $showOfflineCash) { OfflineCashSheet(model: model) }
     .overlay { if model.cashier.locked { LockedRegister(model: model) } }
     // Any touch is the register in use: it keeps the idle lock away.
@@ -122,6 +125,9 @@ struct RegisterScreen: View {
         Button("Cashier and shift", systemImage: "person.badge.clock") { showOps = true }
           .accessibilityIdentifier("pos-ops-open")
         Button("Card readers", systemImage: "creditcard") { context.navigate(commerceCardReadersScreen) }
+        Button("Receipt printers", systemImage: "printer") { showPrinters = true }
+          .disabled(model.register == nil)
+          .accessibilityIdentifier("pos-printers-open")
         Button("Clear basket", systemImage: "xmark.bin", role: .destructive) { model.clearCart() }
           .disabled(model.cart.isEmpty)
       } label: {
@@ -193,7 +199,10 @@ struct RegisterScreen: View {
       ForEach(Array(items.enumerated()), id: \.offset) { _, item in
         if let item {
           AglynItemTile(
-            item.name, subtitle: priceLine(item), imageURL: item.imageURL.flatMap(URL.init(string:)),
+            item.name, subtitle: priceLine(item),
+            // A product's picture is stored as a media reference (or, from the kiosk, a CDN path on the console):
+            // served from the console's media CDN for this site, never read as an address.
+            imageURL: item.imageURL.flatMap { mediaPreviewURL($0, origin: context.api.origin, hostID: context.hostID) },
             badge: item.variants.allSatisfy(\.soldOut) ? ("Sold out", .warning) : nil
           ) { model.tap(item) }
           .accessibilityIdentifier("tile-\(item.id)")
@@ -263,6 +272,9 @@ struct BasketPanel: View {
           AglynAmountRow(
             model.cart.discountPct > 0 ? "Discount (\(model.cart.discountPct)%)" : "Add a discount",
             amount: model.cart.discountPct > 0 ? "−\(model.money(model.cart.discountCents))" : "")
+            // The whole row is the button, not only its words.
+            .frame(maxWidth: .infinity, minHeight: 32)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(AglynColor.tint)

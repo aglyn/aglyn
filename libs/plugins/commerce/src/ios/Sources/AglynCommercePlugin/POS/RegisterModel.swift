@@ -112,6 +112,8 @@ final class RegisterModel {
   @ObservationIgnored let customers: PosCustomerModel
   /// The last sale this register finished, and its receipt.
   @ObservationIgnored let lastReceipt: PosLastReceiptModel
+  /// This register's receipt printers (AGL-3909).
+  @ObservationIgnored let printers: PosPrintersModel
   @ObservationIgnored private var tillOffline: PosOfflineModel!
   @ObservationIgnored private var tillReturns: PosReturnModel!
   @ObservationIgnored private var tillDisplay: PosDisplayControl!
@@ -151,6 +153,7 @@ final class RegisterModel {
     store = RegisterStore(defaults: defaults, hostID: hostID)
     customers = PosCustomerModel(api: customersAPI ?? ConsolePosCustomersAPI(api: api, hostID: hostID))
     lastReceipt = PosLastReceiptModel(reader: reader, api: sale, store: store, hostID: hostID)
+    printers = PosPrintersModel(reader: reader, api: api, hostID: hostID)
     let ops = self.opsAPI
     let cashier = PosCashier(api: ops, registerID: { [weak self] in self?.register?.id }, autoLockMinutes: { [weak self] in self?.context?.ops.autoLockMinutes ?? 0 })
     cashier.assertionSink = { sale.cashier.assertion = $0 }
@@ -206,7 +209,10 @@ final class RegisterModel {
       self?.stays = docs.map(posStay).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
     loadGrid()
-    if let register { lastReceipt.watch(registerID: register.id) }
+    if let register {
+      lastReceipt.watch(registerID: register.id)
+      printers.watch(registerID: register.id)
+    }
     Task { await loadContext() }
     reconnecting?.cancel()
     reconnecting = Task { [weak self] in await self?.reconnectWhileOffline() }
@@ -216,6 +222,7 @@ final class RegisterModel {
 
   func stop() {
     lastReceipt.stop()
+    printers.stop()
     listeners.values.forEach { $0.remove() }
     listeners = [:]
     reconnecting?.cancel()
@@ -273,6 +280,7 @@ final class RegisterModel {
     store.registerID = next.id
     cart = store.cart(next.id)
     lastReceipt.watch(registerID: next.id)
+    printers.watch(registerID: next.id)
     display.reset()
     displayShowsBasket = false
     displayShowsProcessing = false

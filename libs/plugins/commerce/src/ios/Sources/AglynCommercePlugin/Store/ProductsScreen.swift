@@ -234,6 +234,7 @@ struct ProductDetailView: View {
   @State private var deleting = false
   @State private var working = false
   @State private var notice: (text: String, tone: AglynTone)?
+  @Environment(\.dismiss) private var dismiss
 
   var body: some View {
     Group {
@@ -248,6 +249,10 @@ struct ProductDetailView: View {
       }
     }
     .navigationTitle(titled ? (model.row?.name ?? "Product") : "Products")
+    #if os(iOS)
+      // The header below already shows the name large.
+      .navigationBarTitleDisplayMode(.inline)
+    #endif
     .toolbar {
       if let doc = model.doc, let row = model.row {
         // HIG toolbars: the two actions used most stay visible, every other one is in one labeled More menu.
@@ -426,7 +431,9 @@ extension ProductDetailView {
     defer { working = false }
     do {
       try await deleteProduct(api: context.api, hostID: hostID, productID: productID)
-      notice = ("Product deleted", .success)
+      // Pushed on a phone, the product is gone, so its screen goes too and the list (which drops the row) is back;
+      // beside the list, the list picks the next product.
+      if titled { dismiss() } else { notice = ("Product deleted", .success) }
     } catch {
       notice = (productWriteProblem(error).errorDescription ?? "Could not delete product", .error)
     }

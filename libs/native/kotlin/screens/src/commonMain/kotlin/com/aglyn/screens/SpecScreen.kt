@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -169,7 +170,9 @@ fun SpecScreen(
   var selection by remember(key) { mutableStateOf<Selection?>(null) }
   val split = !embedded && spec.blocks.any { it.type == "list" && it.flag("split") && it["open"] != null }
   val wide = currentWidthClass() != WidthClass.COMPACT
-  if (split && wide) {
+  // A screen the plan does not include is one offer across the window, not a list beside an empty detail.
+  val refused = (model.phase as? ScreenModel.Phase.Failed)?.upsell == true
+  if (split && wide && !refused) {
     Row(Modifier.fillMaxSize()) {
       Box(Modifier.weight(0.42f).fillMaxHeight()) {
         SpecBody(model, plugin, selection, onSelect = { selection = it }, splitting = true)
@@ -376,7 +379,14 @@ private fun SpecBodyContent(
         icon = AglynIcons.named("workspace_premium"),
         tone = EmptyTone.UPSELL,
         action = {
-          FilledTonalButton(onClick = { plugin.navigate(BILLING_ADDONS_SCREEN, emptyMap()) }, Modifier.testTag("upsell-addons")) { Text("See add-ons") }
+          FilledTonalButton(
+            onClick = { plugin.navigate(BILLING_ADDONS_SCREEN, emptyMap()) },
+            modifier = Modifier.testTag("upsell-addons"),
+            colors = ButtonDefaults.filledTonalButtonColors(
+              containerColor = MaterialTheme.colorScheme.primaryContainer,
+              contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ),
+          ) { Text("See add-ons") }
         },
         modifier = Modifier.testTag("spec-upsell"),
       )

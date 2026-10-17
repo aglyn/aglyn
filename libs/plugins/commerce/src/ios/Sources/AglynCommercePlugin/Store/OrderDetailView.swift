@@ -60,18 +60,12 @@ struct OrderDetailView: View {
     let order = row.order
     return Form {
       Section {
-        HStack(alignment: .firstTextBaseline) {
-          VStack(alignment: .leading, spacing: 4) {
-            Text(row.number).font(AglynFont.title2)
-            Text(
-              [orderChannelLabel(order.channel?.rawValue), row.createdAt.map { $0.formatted(date: .abbreviated, time: .shortened) }]
-                .compactMap { $0 }.joined(separator: " · ")
-            )
-            .font(AglynFont.subheadline).foregroundStyle(.secondary)
-          }
-          Spacer()
-          StatusChip(row.statusLabel, tone: orderStatusTone(row.status).tone)
-        }
+        // The kit's detail head (spec 7): the order number, its channel and time, its status.
+        AglynDetailHeader(
+          row.number,
+          subtitle: [orderChannelLabel(order.channel?.rawValue), row.createdAt.map { $0.formatted(date: .abbreviated, time: .shortened) }]
+            .compactMap { $0 }.joined(separator: " · "),
+          systemImage: "bag", status: (row.statusLabel, orderStatusTone(row.status).tone))
         if let dispute = describeOrderDispute(order) {
           AglynNotice("\(dispute.label). \(dispute.detail)", tone: dispute.tone == "open" || dispute.tone == "lost" ? .error : .info)
             .accessibilityIdentifier("order-dispute")

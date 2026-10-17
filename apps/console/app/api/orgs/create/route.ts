@@ -258,6 +258,7 @@ async function handler(request: Request): Promise<Response> {
         displayName: resolveIdpDisplayName(decoded) || null,
       },
       origin: headers.origin ?? `https://${headers.host}`,
+      via: 'workspace-page',
     })
 
     return Response.json({ orgId, slug }, { status: 200 })

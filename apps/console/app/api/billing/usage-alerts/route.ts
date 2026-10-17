@@ -1582,6 +1582,8 @@ async function handler(request: Request): Promise<Response> {
               const staffEmail = await emailStaffAlert({
                 subject: title,
                 text: `${body}\n\nOrg: ${consoleOrigin()}${link}`,
+                url: `${consoleOrigin()}${link}`,
+                urlLabel: 'Open in the staff console',
                 context: emailContext,
               })
               undelivered.delete(quota)
