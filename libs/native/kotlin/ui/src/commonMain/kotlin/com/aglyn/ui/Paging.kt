@@ -61,11 +61,11 @@ fun ListPager(
       Modifier.padding(horizontal = space(1f)),
       style = MaterialTheme.typography.bodySmall,
     )
-    IconButton(onClick = { onPage(page - 1) }, enabled = page > 0, modifier = Modifier.testTag("page-previous")) {
+    WithTooltip("Previous page") { IconButton(onClick = { onPage(page - 1) }, enabled = page > 0, modifier = Modifier.testTag("page-previous")) {
       Icon(AglynIcons.named("chevron_left"), contentDescription = "Previous page")
-    }
-    IconButton(onClick = { onPage(page + 1) }, enabled = next, modifier = Modifier.testTag("page-next")) {
+    } }
+    WithTooltip("Next page") { IconButton(onClick = { onPage(page + 1) }, enabled = next, modifier = Modifier.testTag("page-next")) {
       Icon(AglynIcons.named("chevron_right"), contentDescription = "Next page")
-    }
+    } }
   }
 }

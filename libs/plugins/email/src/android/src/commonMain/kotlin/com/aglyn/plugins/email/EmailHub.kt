@@ -53,6 +53,7 @@ import com.aglyn.ui.Busy
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.FieldEditor
 import com.aglyn.ui.FieldKind
 import com.aglyn.ui.FieldSpec
@@ -65,6 +66,7 @@ import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.PropertyRow
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
@@ -417,7 +419,7 @@ fun AudiencesSection(context: NativePluginContext, actions: EmailActions, initia
       }
     },
     detail = { selected ->
-      if (selected == null) EmptyState("Pick a list to see who is on it", icon = AglynIcons.named("groups")) else ListDetail(context, actions, selected)
+      if (selected == null) SelectionPlaceholder("Pick a list to see who is on it", icon = AglynIcons.named("groups")) else ListDetail(context, actions, selected)
     },
   )
   if (creating) NameSheet("New list", "", "Create", { creating = false }) { actions.createList(it) }
@@ -564,7 +566,7 @@ fun TopicsSection(context: NativePluginContext, actions: EmailActions) {
     val rows = (list.rows as? Live.Ready)?.value.orEmpty().sortedWith(compareBy({ it.archived }, { it.name.lowercase() }))
     when (list.rows) {
       Live.Loading -> SkeletonList(rows = 4)
-      is Live.Failed -> EmptyState("Could not load topics", icon = AglynIcons.named("error"))
+      is Live.Failed -> EmptyState("Could not load topics", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
       is Live.Ready -> if (rows.isEmpty()) {
         EmptyState("No topics yet", body = "Like a newsletter or product news.", icon = AglynIcons.named("tag"))
       } else {
@@ -698,7 +700,7 @@ fun SendingSection(actions: EmailActions) {
     notice?.let { NoticeBanner(it.first, it.second) }
     val current = view
     when {
-      current == null && loadError != null -> EmptyState("Could not load sending", body = loadError, icon = AglynIcons.named("error"), action = { OutlinedButton(onClick = { reload++ }) { Text("Try again") } })
+      current == null && loadError != null -> EmptyState("Could not load sending", body = loadError, icon = AglynIcons.named("error"), tone = EmptyTone.ERROR, action = { OutlinedButton(onClick = { reload++ }) { Text("Try again") } })
       current == null -> SkeletonList(rows = 5)
       else -> {
         SectionCard("Sending as") {

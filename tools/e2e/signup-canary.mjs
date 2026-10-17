@@ -92,6 +92,7 @@
 
 import { createRequire } from 'node:module'
 import { randomBytes } from 'node:crypto'
+import { chromeExecutable } from './lib/chrome-executable.mjs'
 
 const require = createRequire(import.meta.url)
 // The repo's own reader, not a second copy: it owns the variable names and
@@ -994,10 +995,8 @@ async function main() {
   let failedStep = null
   let debugToken = ''
   const browser = await chromium.launch({
-    executablePath:
-      process.env['CHROME_PATH'] ||
-      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
     headless: true,
+    ...chromeExecutable({ explicit: process.env['CHROME_PATH'] }),
   })
 
   try {

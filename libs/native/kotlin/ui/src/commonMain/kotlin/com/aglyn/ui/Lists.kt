@@ -91,8 +91,10 @@ fun OverflowMenu(actions: List<MenuAction>, modifier: Modifier = Modifier, conte
   if (actions.isEmpty()) return
   var open by remember { mutableStateOf(false) }
   Box(modifier) {
-    IconButton(onClick = { open = true }, Modifier.testTag("overflow-menu")) {
-      Icon(AglynIcons.named("more_vert"), contentDescription = contentDescription)
+    WithTooltip(contentDescription) {
+      IconButton(onClick = { open = true }, Modifier.testTag("overflow-menu")) {
+        Icon(AglynIcons.named("more_vert"), contentDescription = contentDescription)
+      }
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
       for (action in actions) {
@@ -164,7 +166,7 @@ fun <T> LoadContent(
       is Load.Failed -> EmptyState(
         failedTitle,
         body = load.message,
-        icon = AglynIcons.named("error"),
+        icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
         action = { androidx.compose.material3.OutlinedButton(onClick = onRetry) { Text("Try again") } },
       )
       is Load.Ready -> content(load.value)

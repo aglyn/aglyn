@@ -49,6 +49,7 @@ import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.DashboardGrid
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.FieldEditor
 import com.aglyn.ui.FieldKind
 import com.aglyn.ui.FieldOption
@@ -64,6 +65,7 @@ import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.PropertyRow
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
@@ -220,7 +222,7 @@ fun CampaignsSection(context: NativePluginContext, actions: MarketingActions, ac
       }
     },
     detail = { selected ->
-      if (selected == null) EmptyState("Pick a campaign to see its emails", icon = AglynIcons.named("campaign")) else CampaignDetail(context, actions, access, selected, listNames)
+      if (selected == null) SelectionPlaceholder("Pick a campaign to see its emails", icon = AglynIcons.named("campaign")) else CampaignDetail(context, actions, access, selected, listNames)
     },
   )
   if (creating) CampaignSheet(context, actions, null, listNames, { creating = false }) { name, start, end, picked, topic, _ ->
@@ -407,7 +409,7 @@ fun OverlaysSection(context: NativePluginContext, actions: MarketingActions, acc
     error?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.padding(space(2f))) }
     when (val state = list.rows) {
       Live.Loading -> com.aglyn.ui.SkeletonList(rows = 4)
-      is Live.Failed -> EmptyState("Could not load overlays", body = state.error.message, icon = AglynIcons.named("error"), action = { OutlinedButton(onClick = list::retry) { Text("Try again") } })
+      is Live.Failed -> EmptyState("Could not load overlays", body = state.error.message, icon = AglynIcons.named("error"), tone = EmptyTone.ERROR, action = { OutlinedButton(onClick = list::retry) { Text("Try again") } })
       is Live.Ready -> if (rows.isEmpty()) EmptyState("No overlays yet", body = "An announcement bar across the top, or a popup, shown on the pages you pick.", icon = AglynIcons.named("web_asset"))
     }
     if (rows.isNotEmpty()) {
@@ -601,7 +603,7 @@ fun ExperimentsSection(context: NativePluginContext, actions: MarketingActions, 
       }
     },
     detail = { selected ->
-      if (selected == null) EmptyState("Pick an experiment to see how its versions do", icon = AglynIcons.named("science")) else ExperimentDetail(context, actions, access, selected)
+      if (selected == null) SelectionPlaceholder("Pick an experiment to see how its versions do", icon = AglynIcons.named("science")) else ExperimentDetail(context, actions, access, selected)
     },
   )
   if (creating) ExperimentSheet(context, actions) { creating = false }

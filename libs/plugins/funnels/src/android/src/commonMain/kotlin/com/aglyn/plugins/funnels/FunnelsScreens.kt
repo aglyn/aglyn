@@ -62,14 +62,17 @@ import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatTile
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 
 private fun planGranting(feature: String): String? =
@@ -134,7 +137,7 @@ fun FunnelsScreen(context: NativePluginContext) {
         }
         when (live) {
           Live.Loading -> SkeletonList(rows = 4)
-          is Live.Failed -> EmptyState("Could not load this site's funnels", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+          is Live.Failed -> EmptyState("Could not load this site's funnels", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
           is Live.Ready -> LazyColumn(Modifier.fillMaxSize().testTag("funnels-list")) {
             if (live.value.isEmpty()) {
               item {
@@ -166,7 +169,7 @@ fun FunnelsScreen(context: NativePluginContext) {
       // A deleted funnel leaves the list, and its detail closes with it.
       CloseWhenGone((live as? Live.Ready)?.let { row != null })
       if (row == null) {
-        EmptyState("Pick a funnel to see its results", icon = AglynIcons.named("filter_alt"))
+        SelectionPlaceholder("Pick a funnel to see its results", icon = AglynIcons.named("filter_alt"))
       } else {
         FunnelDetail(row, api, editor, access)
       }
@@ -184,7 +187,7 @@ private fun FunnelDetail(row: FunnelRow, api: FunnelsApi, editor: FunnelsEditor,
         Text(row.name, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
         if (row.draft) StatusChip("Draft", StatusTone.INFO)
         if (!row.draft) {
-          IconButton(onClick = editor::refresh, Modifier.testTag("refresh-funnel")) { Icon(AglynIcons.named("refresh"), contentDescription = "Refresh") }
+          WithTooltip("Refresh") { IconButton(onClick = editor::refresh, Modifier.testTag("refresh-funnel")) { Icon(AglynIcons.named("refresh"), contentDescription = "Refresh") } }
         }
       }
       if (!row.draft) {
@@ -450,13 +453,13 @@ private fun FunnelEditorForm(draft: FunnelDraft, inventory: FunnelInventory?, on
       SectionCard(null, Modifier.fillMaxWidth().testTag("step-$index")) {
         Row(verticalAlignment = Alignment.CenterVertically) {
           Text("Step ${index + 1}", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-          IconButton(onClick = { move(index, -1) }, enabled = index > 0) { Icon(AglynIcons.named("expand_less"), contentDescription = "Move step ${index + 1} up") }
-          IconButton(onClick = { move(index, 1) }, enabled = index < draft.steps.size - 1) { Icon(AglynIcons.named("expand_more"), contentDescription = "Move step ${index + 1} down") }
-          IconButton(
+          WithTooltip("Move step ${index + 1} up") { IconButton(onClick = { move(index, -1) }, enabled = index > 0) { Icon(AglynIcons.named("expand_less"), contentDescription = "Move step ${index + 1} up") } }
+          WithTooltip("Move step ${index + 1} down") { IconButton(onClick = { move(index, 1) }, enabled = index < draft.steps.size - 1) { Icon(AglynIcons.named("expand_more"), contentDescription = "Move step ${index + 1} down") } }
+          WithTooltip("Remove step ${index + 1}") { IconButton(
             onClick = { onChange(draft.copy(steps = draft.steps.filterIndexed { at, _ -> at != index })) },
             enabled = draft.steps.size > Contracts.funnelMinSteps,
             modifier = Modifier.testTag("remove-step-$index"),
-          ) { Icon(AglynIcons.named("delete"), contentDescription = "Remove step ${index + 1}") }
+          ) { Icon(AglynIcons.named("delete"), contentDescription = "Remove step ${index + 1}") } }
         }
         SelectField(
           label = "Step",

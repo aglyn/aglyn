@@ -88,9 +88,9 @@ fun WeeklyHoursPicker(
                   allowEmpty = false,
                 )
               }
-              IconButton(onClick = { setDay(index, intervals.filterIndexed { i, _ -> i != position }) }, enabled = enabled) {
+              WithTooltip("Remove $name $intervalNoun${if (intervals.size > 1) " ${position + 1}" else ""}") { IconButton(onClick = { setDay(index, intervals.filterIndexed { i, _ -> i != position }) }, enabled = enabled) {
                 Icon(AglynIcons.named("close"), contentDescription = "Remove $name $intervalNoun${if (intervals.size > 1) " ${position + 1}" else ""}")
-              }
+              } }
             }
           }
           TextButton(

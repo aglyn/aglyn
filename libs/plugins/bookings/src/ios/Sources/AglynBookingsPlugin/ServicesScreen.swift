@@ -94,10 +94,11 @@ struct BookingServicesScreen: View {
         } else if rows.isEmpty {
           AglynEmptyState("No services yet", systemImage: "list.bullet.rectangle", message: "Add a service visitors can book, with the hours it is open.")
         } else if selectable {
-          List(rows, selection: $selection) { service in
-            ServiceListRow(service: service).tag(service.id)
+          List(rows) { service in
+            ServiceListRow(service: service).aglynSelectableRow(service.id, selection: $selection)
           }
-          .aglynListBackground()
+          .aglynSelectableListStyle()
+          .aglynSelectionKeys(rows.map(\.id), selection: $selection)
           .accessibilityIdentifier("services-list")
         } else {
           List(rows) { service in
@@ -124,7 +125,7 @@ struct BookingServicesScreen: View {
     } else if let service = services.rows?.first(where: { $0.id == id }) {
       editor(for: service).id(service.id)
     } else {
-      AglynEmptyState("Pick a service to see it here", systemImage: "list.bullet.rectangle")
+      AglynSelectionPlaceholder("No service selected", systemImage: "list.bullet.rectangle")
     }
   }
 

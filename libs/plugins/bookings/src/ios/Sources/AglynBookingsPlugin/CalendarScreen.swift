@@ -95,7 +95,7 @@ struct BookingsCalendarScreen: View {
                 self.selection = nil
               }
             } else {
-              AglynEmptyState("Pick a booking to see it here", systemImage: "calendar")
+              AglynSelectionPlaceholder("No booking selected", systemImage: "calendar")
             }
           }
           .frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
@@ -306,7 +306,8 @@ struct BookingListRow: View {
       }
     }
     .padding(.vertical, 2)
-    .background(selected ? AglynColor.tint.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+    .padding(.horizontal, selected ? AglynSpace.half : 0)
+    .background(AglynRowHighlight(selected: selected))
   }
 }
 

@@ -65,6 +65,7 @@ import com.aglyn.site.media.MediaImageField
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.OpeningHoursPicker
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
@@ -82,10 +83,12 @@ import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
 
@@ -135,11 +138,11 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
     },
     detail = { selected ->
       if (selected == null) {
-        EmptyState("Pick a section to set it up", icon = AglynIcons.named("settings"))
+        SelectionPlaceholder("Pick a section to set it up", icon = AglynIcons.named("settings"))
       } else {
         when (val live = host) {
           Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
-          is Live.Failed -> EmptyState("Could not load this site's setup", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+          is Live.Failed -> EmptyState("Could not load this site's setup", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
           is Live.Ready -> {
             val doc = live.value ?: return@AglynListDetail EmptyState("This site is gone", icon = AglynIcons.named("public"))
             val canEdit = context.siteRole in SETTINGS_ROLES
@@ -274,7 +277,7 @@ private fun BusinessDetailsCard(host: Map<String, Any?>, api: HostSettingsApi, c
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
         OutlinedTextField(link.label, { links[index] = link.copy(label = it) }, label = { Text("Label") }, singleLine = true, enabled = canEdit, modifier = Modifier.weight(0.4f))
         OutlinedTextField(link.url, { links[index] = link.copy(url = it) }, label = { Text("URL") }, singleLine = true, enabled = canEdit, modifier = Modifier.weight(0.6f))
-        IconButton(onClick = { links.removeAt(index) }, enabled = canEdit) { Icon(AglynIcons.named("delete"), contentDescription = "Remove ${link.label.ifBlank { "this link" }}") }
+        WithTooltip("Remove ${link.label.ifBlank { "this link" }}") { IconButton(onClick = { links.removeAt(index) }, enabled = canEdit) { Icon(AglynIcons.named("delete"), contentDescription = "Remove ${link.label.ifBlank { "this link" }}") } }
       }
     }
     TextButton(onClick = { links.add(SocialLink("", "")) }, enabled = canEdit && links.size < SOCIAL_LINKS_MAX, modifier = Modifier.testTag("add-social-link")) {

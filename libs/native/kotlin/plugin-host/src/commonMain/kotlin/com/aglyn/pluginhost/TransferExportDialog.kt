@@ -49,6 +49,7 @@ import com.aglyn.ui.LocalFileExporter
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 
 /** `n thing` or `n things`, as the console's `countOf`. */
@@ -215,16 +216,16 @@ fun TransferExportDialog(
         val name = built.field(id)?.label ?: id
         Row(verticalAlignment = Alignment.CenterVertically) {
           Text("${index + 1}. $name", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-          IconButton(
+          WithTooltip("Move $name up") { IconButton(
             { choice = current.pick(moveTransferField(current.fieldIds, index, index - 1)) },
             Modifier.semantics { contentDescription = "Move $name up" }.testTag("export-up-$id"),
             enabled = index > 0,
-          ) { Icon(AglynIcons.named("arrow_upward"), contentDescription = null) }
-          IconButton(
+          ) { Icon(AglynIcons.named("arrow_upward"), contentDescription = null) } }
+          WithTooltip("Move $name down") { IconButton(
             { choice = current.pick(moveTransferField(current.fieldIds, index, index + 1)) },
             Modifier.semantics { contentDescription = "Move $name down" }.testTag("export-down-$id"),
             enabled = index < current.fieldIds.size - 1,
-          ) { Icon(AglynIcons.named("arrow_downward"), contentDescription = null) }
+          ) { Icon(AglynIcons.named("arrow_downward"), contentDescription = null) } }
         }
       }
       // Which records.

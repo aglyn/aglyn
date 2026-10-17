@@ -36,17 +36,14 @@ struct SitesScreen: View {
       if let orgID = context.orgID {
         WideLayoutReader { wide in
           if wide {
-            HStack(spacing: 0) {
-              list(selectable: true).frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
-              Divider()
-              Group {
-                if let selection {
-                  SiteOverview(context: context, hostID: selection).id(selection)
-                } else {
-                  AglynEmptyState("Pick a site to see it here", systemImage: SiteSymbols.site)
-                }
+            AglynListDetailColumns {
+              list(selectable: true)
+            } detail: {
+              if let selection {
+                SiteOverview(context: context, hostID: selection).id(selection)
+              } else {
+                AglynSelectionPlaceholder("No site selected", systemImage: SiteSymbols.site)
               }
-              .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
           } else {
             list(selectable: false)
@@ -109,10 +106,9 @@ struct SitesScreen: View {
       }
     case .ready(let rows):
       if selectable {
-        List(selection: $selection) {
+        List {
           ForEach(rows) { row in
-            SiteListRow(context: context, row: row).tag(row.id)
-              .aglynListRow()
+            SiteListRow(context: context, row: row).aglynSelectableRow(row.id, selection: $selection)
               .accessibilityIdentifier("site-\(row.id)")
           }
           if model.hasMore { AglynLoadMoreRow("Show more sites") { model.loadMore() } }
@@ -125,7 +121,8 @@ struct SitesScreen: View {
         }
         .sensoryFeedback(.selection, trigger: selection)
         .refreshable { model.refresh() }
-        .aglynListBackground()
+        .aglynSelectableListStyle()
+        .aglynSelectionKeys(rows.map(\.id), selection: $selection)
         .accessibilityIdentifier("sites-list")
       } else {
         List {

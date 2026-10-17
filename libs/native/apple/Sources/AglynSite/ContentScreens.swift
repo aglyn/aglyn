@@ -160,17 +160,14 @@ private struct CollectionEntries: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
-          Divider()
-          Group {
-            if let selection {
-              EntryEditor(env: env, collection: collection, entryID: selection, model: model).id(selection)
-            } else {
-              AglynEmptyState("Pick an entry to edit it here", systemImage: "doc.richtext")
-            }
+        AglynListDetailColumns(listWidth: 380) {
+          list(selectable: true)
+        } detail: {
+          if let selection {
+            EntryEditor(env: env, collection: collection, entryID: selection, model: model).id(selection)
+          } else {
+            AglynSelectionPlaceholder("No entry selected", systemImage: "doc.richtext")
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       } else {
         list(selectable: false)
@@ -248,15 +245,16 @@ private struct CollectionEntries: View {
         message: filtered ? "Try another search." : "Write the first \(collection.name.lowercased()) entry.")
     case .ready(let rows):
       if selectable {
-        List(selection: $selection) {
+        List {
           ForEach(rows) { entry in
-            entryRow(entry).tag(entry.id).aglynListRow().accessibilityIdentifier("entry-\(entry.id)")
+            entryRow(entry).aglynSelectableRow(entry.id, selection: $selection).accessibilityIdentifier("entry-\(entry.id)")
           }
           if model.hasMore { AglynLoadMoreRow("Show more entries") { model.loadMore() } }
         }
         .sensoryFeedback(.selection, trigger: selection)
         .refreshable { model.refresh() }
-        .aglynListBackground()
+        .aglynSelectableListStyle()
+        .aglynSelectionKeys(rows.map(\.id), selection: $selection)
         .accessibilityIdentifier("entries-list")
       } else {
         List {

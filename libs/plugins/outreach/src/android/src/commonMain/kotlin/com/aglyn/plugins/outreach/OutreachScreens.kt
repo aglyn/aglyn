@@ -57,6 +57,7 @@ import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.PropertyRow
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -156,7 +157,7 @@ fun SequencesSection(context: NativePluginContext, api: OutreachApi, initial: St
       }
     },
     detail = { selected ->
-      if (selected == null) EmptyState("Pick a sequence", icon = AglynIcons.named("timeline")) else SequenceDetail(context, api, selected, mailboxes)
+      if (selected == null) SelectionPlaceholder("Pick a sequence", icon = AglynIcons.named("timeline")) else SequenceDetail(context, api, selected, mailboxes)
     },
   )
   if (creating) SequenceEditor(context, api, null, mailboxes) { creating = false }
