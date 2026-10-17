@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import com.aglyn.ui.WithTooltip
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -68,6 +69,8 @@ fun AglynShell(
       com.aglyn.ui.LocalImageTransformer provides (com.aglyn.ui.LocalImageTransformer.current ?: platformImageTransformer()),
       com.aglyn.ui.LocalVideoProbe provides (com.aglyn.ui.LocalVideoProbe.current ?: platformVideoProbe()),
     ) {
+    // A site's live address, a preview or a help page opens in the app's web sheet; a provider's sign-in keeps the secure tab.
+    com.aglyn.webview.ProvideInAppBrowser(secureTab = services.openHostedPage) {
     val auth by services.auth.state.collectAsState()
     val impersonation by services.auth.impersonation.collectAsState()
     // A sign-up, sign-in, reset or verification link opens its own screen; any other link waits for the signed-in shell.
@@ -87,6 +90,7 @@ fun AglynShell(
       // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
       is AuthState.SignedIn if !state.user.emailVerified && impersonation == null -> VerifyEmailScreen(services, state.user.email)
       is AuthState.SignedIn -> SignedInShell(services, navigator, state.user.uid, pendingLink, onLinkOpened)
+    }
     }
     }
   }
@@ -118,7 +122,9 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
   val workspace by services.workspace.state.collectAsState()
   val version by services.registry.version.collectAsState()
   val widthClass = currentWidthClass()
-  val wide = widthClass != WidthClass.COMPACT
+  // Every plugin place gets its own row only in the permanent drawer (840 dp and up); a rail holds a handful of
+  // destinations (Material: 3 to 7), so a medium window keeps the phone's Home, Apps, Notifications and Settings.
+  val wide = widthClass == WidthClass.EXPANDED || widthClass == WidthClass.LARGE
 
   // The plugins' places (their tabs, then the quick actions that open a screen) become top-level destinations on wide windows.
   val topLevel = remember(version) {
@@ -229,7 +235,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     destinations, navigator.top, onSelect = navigator::select,
     drawerHeader = {
       AglynLogo(
-        Modifier.padding(horizontal = 24.dp, vertical = 16.dp).height(28.dp).semantics { heading() },
+        Modifier.padding(start = 26.dp, end = 24.dp, top = 24.dp, bottom = 12.dp).height(28.dp).semantics { heading() },
         contentDescription = services.config.brandName,
       )
     },
@@ -259,9 +265,9 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
           },
           navigationIcon = {
             if (route != null) {
-              IconButton(onClick = { navigator.back() }) {
+              WithTooltip("Back") { IconButton(onClick = { navigator.back() }) {
                 Icon(AglynIcons.named("arrow_back"), contentDescription = "Back")
-              }
+              } }
             }
           },
           actions = {

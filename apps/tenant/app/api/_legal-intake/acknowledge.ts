@@ -129,12 +129,39 @@ async function sendReceipt(options: {
   to: string
   subject: string
   text: string
+  /**
+   * The same receipt in the parts the designed email draws: what it is, the
+   * reference and the reported address as a details panel, and what happens
+   * next. The plain text above stays the whole receipt.
+   */
+  parts: {
+    kind: string
+    reference: string
+    reportedUrl: string
+    next: string
+    signOff: string
+  }
   replyTo?: string
   context: string
 }): Promise<SendEmailResult> {
+  const { parts } = options
+  const received = new Date().toISOString().slice(0, 16).replace('T', ' ')
   const content = await renderSystemEmailContent(
     'legal-intake-receipt',
-    { 'receipt.subject': options.subject, 'receipt.body': options.text.trim() },
+    {
+      'receipt.subject': options.subject,
+      'receipt.body': options.text.trim(),
+      'receipt.eyebrow': `Receipt · ${parts.reference}`,
+      'receipt.heading': `We received your ${parts.kind}`,
+      'receipt.intro': `We have received your ${parts.kind} about ${parts.reportedUrl}.`,
+      'receipt.details': [
+        `Reference: ${parts.reference}`,
+        `About: ${parts.reportedUrl}`,
+        `Received: ${received} UTC`,
+      ].join('\n'),
+      'receipt.next': parts.next,
+      'receipt.keep': `${KEEP_THIS}${parts.signOff}`.trim(),
+    },
     systemEmailBrand(null),
     { subject: options.subject, text: options.text },
   )
@@ -259,23 +286,26 @@ export async function acknowledgeCounterNotice(options: {
   reportedUrl: string
 }): Promise<AcknowledgeResult> {
   const { to, reference, reportedUrl } = options
+  const next =
+    `What happens now. We send a copy of your counter-notice, including ` +
+    `the contact details you gave, to the person who sent the original ` +
+    `complaint. Unless they tell us they have filed a court action to stop ` +
+    `you using the material, we restore access ` +
+    `${Aglyn.COUNTER_NOTICE_MIN_BUSINESS_DAYS}–${Aglyn.COUNTER_NOTICE_MAX_BUSINESS_DAYS} ` +
+    `business days after we received this counter-notice.\n\n` +
+    `That clock started when you submitted the form, not when we get to ` +
+    `it, so any time we take to process it comes out of the wait rather ` +
+    `than out of yours.`
   const result = await sendReceipt({
     to,
+    parts: { kind: 'counter-notice', reference, reportedUrl, next, signOff: signOff('legal') },
     subject: `Counter-notice received — ${reference}`,
     replyTo: contactText('legal') ?? undefined,
     context: 'dmca-counter-notice-receipt',
     text:
       `We have received your counter-notice about ${reportedUrl}.\n\n` +
       `Your reference is ${reference}.\n\n` +
-      `What happens now. We send a copy of your counter-notice, including ` +
-      `the contact details you gave, to the person who sent the original ` +
-      `complaint. Unless they tell us they have filed a court action to stop ` +
-      `you using the material, we restore access ` +
-      `${Aglyn.COUNTER_NOTICE_MIN_BUSINESS_DAYS}–${Aglyn.COUNTER_NOTICE_MAX_BUSINESS_DAYS} ` +
-      `business days after we received this counter-notice.\n\n` +
-      `That clock started when you submitted the form, not when we get to ` +
-      `it, so any time we take to process it comes out of the wait rather ` +
-      `than out of yours.\n\n` +
+      `${next}\n\n` +
       `${KEEP_THIS}${signOff('legal')}\n`,
   })
   // Platform scope, not host (AGL-1438). These are Aglyn's own legal
@@ -317,6 +347,13 @@ export async function acknowledgeAbuseReport(options: {
       `it.`
   const result = await sendReceipt({
     to,
+    parts: {
+      kind: what,
+      reference,
+      reportedUrl,
+      next: nextStep,
+      signOff: signOff(isCopyright ? 'legal' : 'support'),
+    },
     subject: `${isCopyright ? 'Copyright notice' : 'Report'} received — ${reference}`,
     replyTo: contactText(isCopyright ? 'legal' : 'support') ?? undefined,
     context: 'abuse-report-receipt',

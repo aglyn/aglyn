@@ -24,6 +24,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -37,6 +39,7 @@ import com.aglyn.ui.InputChoice
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 
 /*
@@ -94,9 +97,9 @@ internal fun StructuredValueEditor(shape: StructuredShape, value: String, onChan
           } else {
             Text("${index + 1}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.widthIn(min = 20.dp))
           }
-          IconButton(onClick = { commit(rows.filterIndexed { at, _ -> at != index }) }) {
+          WithTooltip("Remove $noun ${index + 1}") { IconButton(onClick = { commit(rows.filterIndexed { at, _ -> at != index }) }) {
             Icon(AglynIcons.named("close"), contentDescription = "Remove $noun ${index + 1}")
-          }
+          } }
         }
         if (row.kind == StructuredKind.KEPT) {
           Text("A nested list or set of entries — kept as it is", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -154,8 +157,10 @@ private fun FormulaOperand.source(): String = when (this) {
 @Composable
 internal fun FormulaBuilderButton(current: String, names: List<FormulaName>, onUse: (String) -> Unit, modifier: Modifier = Modifier, onOpen: () -> Unit = {}) {
   var open by remember { mutableStateOf(false) }
-  IconButton(onClick = { onOpen(); open = true }, modifier = modifier.testTag("formula-open")) {
-    Text("ƒx", fontStyle = FontStyle.Italic, fontWeight = FontWeight.SemiBold)
+  WithTooltip("Build formula", modifier) {
+    IconButton(onClick = { onOpen(); open = true }, modifier = Modifier.semantics { contentDescription = "Build formula" }.testTag("formula-open")) {
+      Text("ƒx", fontStyle = FontStyle.Italic, fontWeight = FontWeight.SemiBold)
+    }
   }
   if (open) FormulaBuilderDialog(current, names, onUse = { onUse(it); open = false }, onClose = { open = false })
 }
@@ -210,9 +215,9 @@ private fun FormulaBuilderDialog(current: String, names: List<FormulaName>, onUs
               allowEmpty = false,
             )
             if (operation.variadic && index >= operation.minOperands) {
-              IconButton(onClick = { draft = draft.copy(operands = draft.operands.filterIndexed { at, _ -> at != index }) }) {
+              WithTooltip("Remove ${formulaOperandLabel(operation, index)}") { IconButton(onClick = { draft = draft.copy(operands = draft.operands.filterIndexed { at, _ -> at != index }) }) {
                 Icon(AglynIcons.named("close"), contentDescription = "Remove ${formulaOperandLabel(operation, index)}")
-              }
+              } }
             }
           }
           when (operand) {
@@ -301,9 +306,9 @@ internal fun ParameterChoicesEditor(parameterName: String, type: FunctionValueTy
           singleLine = true,
           modifier = Modifier.weight(2f),
         )
-        IconButton(onClick = { commit(rows.filterIndexed { at, _ -> at != index }) }) {
+        WithTooltip("Remove choice ${index + 1} of ${parameterName.ifEmpty { "parameter" }}") { IconButton(onClick = { commit(rows.filterIndexed { at, _ -> at != index }) }) {
           Icon(AglynIcons.named("close"), contentDescription = "Remove choice ${index + 1} of ${parameterName.ifEmpty { "parameter" }}")
-        }
+        } }
       }
     }
     Row(verticalAlignment = Alignment.CenterVertically) {

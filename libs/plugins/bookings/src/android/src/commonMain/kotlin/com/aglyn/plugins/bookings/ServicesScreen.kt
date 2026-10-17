@@ -61,9 +61,11 @@ import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.HoursWindow
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -140,7 +142,7 @@ fun BookingServicesScreen(context: NativePluginContext) {
         }
         when (live) {
           Live.Loading -> SkeletonList(rows = 3)
-          is Live.Failed -> EmptyState("Could not load this site's services", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+          is Live.Failed -> EmptyState("Could not load this site's services", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
           is Live.Ready -> LazyColumn(Modifier.fillMaxSize().testTag("services-list")) {
             if (live.value.isEmpty()) {
               item { EmptyState("No services yet", body = "Add a service visitors can book, with the hours it is open.", icon = AglynIcons.named("design_services")) }
@@ -165,7 +167,7 @@ fun BookingServicesScreen(context: NativePluginContext) {
       // A deleted service leaves the list, and its detail closes with it.
       CloseWhenGone(if (selected == NEW) null else (live as? Live.Ready)?.let { services.any { it.id == selected } })
       when {
-        selected == null -> EmptyState("Pick a service to see it here", icon = AglynIcons.named("design_services"))
+        selected == null -> SelectionPlaceholder("Pick a service to see it here", icon = AglynIcons.named("design_services"))
         selected == NEW -> ServiceEditor(
           initial = remember { newBookingServiceDraft(deviceTimeZone()) },
           isNew = true,

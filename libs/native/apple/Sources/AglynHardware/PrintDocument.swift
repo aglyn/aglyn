@@ -121,6 +121,33 @@ public func drawerKickDocument(columns: Int = PaperColumns.mm80) -> PrintDocumen
   PrintDocument(columns: columns, ops: [.drawer])
 }
 
+/// One line of a receipt preview: its text padded to the width it prints at, and whether it prints double size
+/// (half as many characters, each twice as wide) or bold.
+public struct PrintPreviewLine: Equatable, Sendable {
+  public let text: String
+  public let double: Bool
+  public let bold: Bool
+}
+
+/// A document as the register's preview draws it: `renderText`'s lines, with a double-size line laid out over half
+/// the columns, so drawn at twice the size it spans the paper (TOTAL right-aligned, as printed).
+public func renderPreviewLines(_ document: PrintDocument) -> [PrintPreviewLine] {
+  var out: [PrintPreviewLine] = []
+  for op in document.ops {
+    if case .text(let value, let align, let bold, let size) = op {
+      let double = size >= 2
+      let columns = double ? max(1, document.columns / 2) : document.columns
+      let line = renderText(PrintDocument(columns: columns, ops: [.text(value, align: align, bold: bold, size: 1)]))
+      out.append(PrintPreviewLine(text: String(line.dropLast()), double: double, bold: bold))
+    } else {
+      for line in renderText(PrintDocument(columns: document.columns, ops: [op])).dropLast().split(separator: "\n", omittingEmptySubsequences: false) {
+        out.append(PrintPreviewLine(text: String(line), double: false, bold: false))
+      }
+    }
+  }
+  return out
+}
+
 /// A document as plain text: what the register shows as the receipt preview and what a spec reads a layout by. Size
 /// and emphasis do not exist in plain text; alignment is padding; a barcode prints its data between brackets; a drawer
 /// kick and a cut print nothing.

@@ -401,9 +401,7 @@ struct CheckoutView: View {
       }
       if let data = model.receipt {
         ScrollView(.horizontal, showsIndicators: false) {
-          Text(renderText(layoutReceipt(data, ReceiptLayoutOptions(columns: PaperColumns.mm58 + 8))).trimmingCharacters(in: .newlines))
-            .font(AglynFont.caption.monospaced())
-            .fixedSize(horizontal: true, vertical: false)
+          ReceiptPreviewText(document: layoutReceipt(data, ReceiptLayoutOptions(columns: PaperColumns.mm58 + 8)))
             .padding(AglynSpace.one)
         }
         .aglynCardSurface()
@@ -469,5 +467,27 @@ struct CheckoutView: View {
         .accessibilityIdentifier("receipt-gift")
       }
     }
+  }
+}
+
+/// The receipt as the paper prints it: a monospaced line each, a double-size line (TOTAL) at twice the size so it
+/// spans the paper with its amount right-aligned.
+struct ReceiptPreviewText: View {
+  let document: PrintDocument
+
+  var body: some View {
+    let base = AglynFont.size(AglynTokens.Typography.caption)
+    let lines = renderPreviewLines(document)
+    let first = lines.firstIndex { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty } ?? 0
+    let last = lines.lastIndex { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty } ?? (lines.count - 1)
+    VStack(alignment: .leading, spacing: 0) {
+      ForEach(Array(lines.enumerated()).filter { $0.offset >= first && $0.offset <= last }, id: \.offset) { _, line in
+        Text(line.text.isEmpty ? " " : line.text)
+          .font(.system(size: line.double ? base * 2 : base, weight: line.bold ? .bold : .regular, design: .monospaced))
+          .lineLimit(1)
+      }
+    }
+    .fixedSize(horizontal: true, vertical: false)
+    .accessibilityElement(children: .combine)
   }
 }

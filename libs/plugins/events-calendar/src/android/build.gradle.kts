@@ -21,6 +21,8 @@ kotlin {
     commonMain.dependencies {
       implementation(project(":native-plugin-host"))
       implementation(project(":native-ui"))
+      // The media chooser, for an event's cover picture.
+      implementation(project(":native-site"))
       implementation(project(":native-contracts"))
     }
     commonTest.dependencies {

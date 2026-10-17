@@ -16,6 +16,7 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
@@ -231,8 +232,8 @@ async function handler(request: Request): Promise<Response> {
       const orgsList = due
         .map(
           (entry) =>
-            `- ${entry.name ?? entry.orgId} (${entry.orgId}), ` +
-            `requested ${entry.requestedAt?.toISOString() ?? '?'}`,
+            `${entry.name ?? entry.orgId} (${entry.orgId}) — requested ` +
+            `${entry.requestedAt?.toISOString().slice(0, 10) ?? '?'}`,
         )
         .join('\n')
       // What happens next, so the reminder asks for nothing (AGL-3432):
@@ -254,6 +255,7 @@ async function handler(request: Request): Promise<Response> {
       const designed = await renderSystemEmail('erasure-hold-alert', {
         count: String(due.length),
         'orgs.list': orgsList,
+        healthUrl: `${platformConsoleOrigin()}/admin/health`,
       })
       for (const to of staffEmails) {
         await sendEmail({

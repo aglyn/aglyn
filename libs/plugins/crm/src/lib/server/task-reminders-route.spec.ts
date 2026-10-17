@@ -477,12 +477,16 @@ describe('POST /api/crm/task-reminders (AGL-2659)', () => {
       priority: 'bulk',
       fromName: 'Aglyn',
     })
-    expect(annMail.text).toMatch(/^A reminder from Aglyn about 2 of your tasks in Acme:\n/)
+    // The designed email (AGL-3897): the workspace, the tasks as a details
+    // panel soonest first, the first task's button and each task's link.
+    expect(annMail.text).toMatch(/^Acme\n\nReminder: 2 tasks\n\nA reminder about 2 of your tasks/)
     expect(annMail.text).toContain(
-      '- Call Jane · due Sat, Sep 5, 7:55 AM CDT\n' +
-        '  https://app.aglyn.com/acme/hosts/main/crm/contacts/c-1\n' +
-        '- Renew the insurance · due Sun, Sep 6, 8:00 AM CDT\n' +
-        '  https://app.aglyn.com/acme/crm/tasks',
+      'Call Jane — due Sat, Sep 5, 7:55 AM CDT\n' +
+        'Renew the insurance — due Sun, Sep 6, 8:00 AM CDT',
+    )
+    expect(annMail.text).toContain(
+      'Call Jane — https://app.aglyn.com/acme/hosts/main/crm/contacts/c-1\n' +
+        'Renew the insurance — https://app.aglyn.com/acme/crm/tasks',
     )
     expect(annMail.text).toContain('https://app.aglyn.com/manage/notifications')
     expect(bobMail).toMatchObject({ to: ['bob@acme.com'], subject: 'Reminder: Send the deck' })

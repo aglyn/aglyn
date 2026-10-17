@@ -61,6 +61,7 @@ import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.ListHeader
 import com.aglyn.ui.Load
 import com.aglyn.ui.LoadContent
@@ -73,6 +74,7 @@ import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -186,7 +188,7 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
     },
     detail = { selected ->
       if (selected == null) {
-        EmptyState("Pick a ${kind.singular} to see it here", icon = AglynIcons.named(kind.icon))
+        SelectionPlaceholder("Pick a ${kind.singular} to see it here", icon = AglynIcons.named(kind.icon))
       } else {
         ArtifactDetail(context, hostId, kind, selected, api, runner, canEdit) { dialog = it }
       }
@@ -279,7 +281,7 @@ private fun ArtifactDetail(
   CloseWhenGone((live as? Live.Ready)?.let { ready -> ready.value?.let(ArtifactRow::from) != null })
   when (val doc = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this ${kind.singular}", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this ${kind.singular}", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val row = doc.value?.let(ArtifactRow::from) ?: return EmptyState("This ${kind.singular} is gone", icon = AglynIcons.named(kind.icon))
       val versions = if (kind.versionKind != null) artifactVersions(context, hostId, kind, id) else Live.Ready(emptyList())

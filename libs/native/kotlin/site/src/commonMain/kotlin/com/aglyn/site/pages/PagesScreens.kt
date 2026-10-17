@@ -1,6 +1,7 @@
 package com.aglyn.site.pages
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -8,14 +9,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -23,6 +27,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +36,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
@@ -60,15 +66,21 @@ import com.aglyn.pluginhost.RunnerBanners
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.ListHeader
+import com.aglyn.ui.LoadMoreEffect
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OverflowMenu
+import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
+import kotlinx.coroutines.launch
 
 const val SITE_PAGES_SCREEN = "site.pages"
 
@@ -76,24 +88,22 @@ const val SITE_PAGES_SCREEN = "site.pages"
 private val CONTENT_ROLES = setOf("admin", "editor", "author")
 private val PUBLISH_ROLES = setOf("admin", "editor")
 
-/** The site's pages, live: the screens window and the host's routing map. */
-class PagesLive(val rows: Live<List<PageTreeRow>>, val pages: List<PageNode>, val routing: SiteRouting, val truncated: Boolean)
+/** The site's pages as far as the list has read them ([PagesTreeLoader]), the tree they make, and the host's routing map. */
+class PagesLive(val rows: Live<List<PageTreeRow>>, val pages: List<PageNode>, val routing: SiteRouting, val loader: PagesTreeLoader)
 
 @Composable
 fun sitePages(context: NativePluginContext, hostId: String): PagesLive {
   val host by remember(hostId, context.firestore) { context.firestore.observeDoc("hosts/$hostId") }.collectAsState(Live.Loading)
-  val window by remember(hostId, context.firestore) {
-    context.firestore.observe(FirestoreQuery("hosts/$hostId/screens", orderBy = listOf(FirestoreOrder("__name__")), limit = PAGES_WINDOW + 1))
-  }.collectAsState(Live.Loading)
+  val loader = remember(hostId, context.firestore) { PagesTreeLoader(context.firestore, hostId) }
+  LaunchedEffect(loader) { loader.loadMore() }
   val routing = SiteRouting.from((host as? Live.Ready)?.value)
-  return when (val live = window) {
-    Live.Loading -> PagesLive(Live.Loading, emptyList(), routing, false)
-    is Live.Failed -> PagesLive(live, emptyList(), routing, false)
-    is Live.Ready -> {
-      val pages = live.value.take(PAGES_WINDOW).mapNotNull(PageNode::from)
-      PagesLive(Live.Ready(pageTree(pages, routing)), pages, routing, live.value.size > PAGES_WINDOW)
-    }
+  val pages = loader.drawable()
+  val rows = when {
+    !loader.started -> Live.Loading
+    loader.error != null && loader.pages.isEmpty() -> Live.Failed(IllegalStateException(loader.error))
+    else -> Live.Ready(pageTree(pages, routing))
   }
+  return PagesLive(rows, pages, routing, loader)
 }
 
 /** What a page dialog is asking for. */
@@ -147,10 +157,30 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
         if (dialog == null) {
           Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) { RunnerBanners(runner) }
         }
+        // Collapsed like the console's hub; what is open is kept per site for as long as the app runs.
+        var expanded by remember(hostId) { mutableStateOf(PagesTreeMemory.expanded(hostId)) }
+        var query by remember(hostId) { mutableStateOf("") }
+        fun setExpanded(ids: Set<String>) {
+          expanded = ids
+          PagesTreeMemory.remember(hostId, ids)
+        }
+        // A link or a new page lands on its row: its parents open (reading its chain if it is not in hand yet).
+        LaunchedEffect(initialPageId) {
+          val id = initialPageId ?: return@LaunchedEffect
+          live.loader.reveal(id)
+        }
+        val tree = (live.rows as? Live.Ready)?.value
+        LaunchedEffect(initialPageId, tree?.any { it.page.id == initialPageId }) {
+          val id = initialPageId ?: return@LaunchedEffect
+          if (tree != null) pageAncestors(tree, id).takeIf { it.isNotEmpty() && !expanded.containsAll(it) }?.let { setExpanded(expanded + it) }
+        }
+        // A search finds any page, so it reads the windows the list has not reached yet.
+        LaunchedEffect(query.isNotBlank()) { if (query.isNotBlank()) live.loader.loadAll() }
+        SearchField(query, { query = it }, placeholder = "Search pages", modifier = Modifier.padding(horizontal = space(2f), vertical = space(1f)))
         when (val rows = live.rows) {
           Live.Loading -> SkeletonList(rows = 6)
-          is Live.Failed -> EmptyState("Could not load this site's pages", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
-          is Live.Ready -> if (rows.value.isEmpty()) {
+          is Live.Failed -> EmptyState("Could not load this site's pages", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
+          is Live.Ready -> if (rows.value.isEmpty() && live.loader.ended) {
             EmptyState(
               "No pages yet",
               body = "Add a page, then design it in the Besigner.",
@@ -162,13 +192,30 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
               },
             )
           } else {
-            LazyColumn(Modifier.fillMaxSize().testTag("pages-list")) {
-              if (live.truncated) {
-                item { NoticeBanner("This site has more than $PAGES_WINDOW pages; the first $PAGES_WINDOW are listed.", StatusTone.WARNING, Modifier.padding(horizontal = space(2f)).testTag("pages-truncated")) }
+            val visible = visiblePageRows(rows.value, expanded, Int.MAX_VALUE, query)
+            val listState = rememberLazyListState()
+            LoadMoreEffect(listState, hasMore = query.isBlank() && !live.loader.ended && !live.loader.loading) { scope.launch { live.loader.loadMore() } }
+            LazyColumn(Modifier.fillMaxSize().testTag("pages-list"), state = listState) {
+              if (query.isNotBlank() && visible.rows.isEmpty() && live.loader.ended) {
+                item { EmptyState("No page matches “${query.trim()}”", icon = AglynIcons.named("search")) }
               }
-              items(rows.value, key = { it.page.id }) { row ->
-                PageRowItem(row, selected = row.page.id == selected) { onSelect(row.page.id) }
+              items(visible.rows, key = { it.page.id }) { row ->
+                val open = row.page.id in expanded
+                PageRowItem(
+                  row,
+                  selected = row.page.id == selected,
+                  expanded = if (query.isBlank() && row.childCount > 0) open else null,
+                  onToggle = {
+                    if (open) {
+                      setExpanded(expanded - row.page.id)
+                    } else {
+                      setExpanded(expanded + row.page.id)
+                      scope.launch { live.loader.expand(row.page.id) }
+                    }
+                  },
+                ) { onSelect(row.page.id) }
               }
+              if (live.loader.loading && live.loader.started) item { SkeletonList(rows = 2) }
             }
           }
         }
@@ -180,9 +227,9 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
       // A deleted page leaves the list, and its detail closes with it.
       CloseWhenGone(rows?.let { row != null })
       if (row == null) {
-        EmptyState("Pick a page to see it here", icon = AglynIcons.named("description"))
+        SelectionPlaceholder("Pick a page to see it here", icon = AglynIcons.named("description"))
       } else {
-        PageDetail(context, hostId, row, live.routing, api, runner, canEdit, canPublish) { dialog = it }
+        PageDetail(context, hostId, row, live.routing, api, runner, canEdit, canPublish, live.loader) { dialog = it }
       }
     },
   )
@@ -191,16 +238,32 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
 }
 
 @Composable
-private fun PageRowItem(row: PageTreeRow, selected: Boolean, onClick: () -> Unit) {
+private fun PageRowItem(row: PageTreeRow, selected: Boolean, expanded: Boolean?, onToggle: () -> Unit, onClick: () -> Unit) {
   val status = pageStatus(row)
-  Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-    Spacer(Modifier.width((row.depth * 20).dp))
+  val count = if (row.childCount == 1) "1 page" else "${row.childCount} pages"
+  Row(Modifier.fillMaxWidth().padding(start = (row.depth * 24).dp), verticalAlignment = Alignment.CenterVertically) {
+    // The chevron opens the row's children in place; a row with none keeps the same indent.
+    Box(Modifier.padding(start = space(1f)).size(40.dp), contentAlignment = Alignment.Center) {
+      if (expanded != null) {
+        val label = if (expanded) "Collapse ${row.page.name}" else "Expand ${row.page.name}"
+        WithTooltip(label) {
+          IconButton(onClick = onToggle, modifier = Modifier.testTag("page-toggle-${row.page.id}")) {
+            Icon(
+              AglynIcons.named("chevron_right"),
+              contentDescription = label,
+              modifier = Modifier.rotate(if (expanded) 90f else 0f),
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+        }
+      }
+    }
     AglynListItem(
       title = row.page.name,
       supporting = when {
-        row.page.isGroup -> if (row.childCount == 1) "1 page" else "${row.childCount} pages"
-        row.livePath != null -> row.livePath
-        else -> row.page.slug?.let { "/$it · not published" } ?: "No address yet"
+        row.page.isGroup -> count
+        row.livePath != null -> if (row.childCount > 0) "${row.livePath} · $count" else row.livePath
+        else -> (row.page.slug?.let { "/$it · not published" } ?: "No address yet") + if (row.childCount > 0) " · $count" else ""
       },
       icon = AglynIcons.named(if (row.page.isGroup) "folder" else if (row.home) "home" else "description"),
       selected = selected,
@@ -226,6 +289,7 @@ private fun PageDetail(
   runner: ActionRunner,
   canEdit: Boolean,
   canPublish: Boolean,
+  loader: PagesTreeLoader,
   open: (PageDialog) -> Unit,
 ) {
   val page = row.page
@@ -286,15 +350,14 @@ private fun PageDetail(
         DetailRow("Address", row.livePath ?: page.slug?.let { "/$it (not published)" }, placeholder = "No address yet")
         DetailRow("Published", page.publishedAt?.let { relativeTime(it.epochMillis, now) }, placeholder = "Not published")
         DetailRow("Updated", page.updatedAt?.let { relativeTime(it.epochMillis, now) })
-        DetailRow("Page id", page.id)
       }
-      PageVersions(context, hostId, page, api, runner, canPublish)
+      PageVersions(context, hostId, page, api, runner, canPublish, loader)
     }
   }
 }
 
 @Composable
-private fun PageVersions(context: NativePluginContext, hostId: String, page: PageNode, api: PagesApi, runner: ActionRunner, canPublish: Boolean) {
+private fun PageVersions(context: NativePluginContext, hostId: String, page: PageNode, api: PagesApi, runner: ActionRunner, canPublish: Boolean, loader: PagesTreeLoader) {
   val versions by remember(hostId, page.id, context.firestore) {
     context.firestore.observe(FirestoreQuery("hosts/$hostId/screens/${page.id}/versions", orderBy = listOf(FirestoreOrder("createdAt", descending = true)), limit = 20))
   }.collectAsState(Live.Loading)
@@ -320,7 +383,10 @@ private fun PageVersions(context: NativePluginContext, hostId: String, page: Pag
                 Row {
                   TextButton(onClick = { context.openBesigner(BesignerPaths.screen(page.id, version.id), ConsoleScope.SITE) }) { Text("Open") }
                   TextButton(
-                    onClick = { runner.run("This version is now the page's working version.") { api.makeVersionLive(page.id, version.id) } },
+                    onClick = { runner.run("This version is now the page's working version.") {
+                      api.makeVersionLive(page.id, version.id)
+                      loader.patch(page.id)
+                    } },
                     enabled = canPublish && !runner.busy,
                   ) { Text("Use") }
                 }
@@ -365,7 +431,7 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
         busy = runner.busy,
         error = runner.error,
         onDismiss = close,
-        onConfirm = { runner.run("${name.trim()} was added as a draft.", onDone = done) { api.createPage(name, description) } },
+        onConfirm = { runner.run("${name.trim()} was added as a draft.", onDone = done) { live.loader.patch(api.createPage(name, description).first) } },
       ) {
         OutlinedTextField(name, { name = it.take(PAGE_NAME_MAX) }, label = { Text("Name") }, singleLine = true, supportingText = { Text("${name.length}/$PAGE_NAME_MAX") }, modifier = Modifier.fillMaxWidth().testTag("page-name"))
         OutlinedTextField(description, { description = it.take(PAGE_DESCRIPTION_MAX) }, label = { Text("Description (optional)") }, supportingText = { Text("${description.length}/$PAGE_DESCRIPTION_MAX") }, modifier = Modifier.fillMaxWidth())
@@ -384,7 +450,7 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
         onDismiss = close,
         onConfirm = {
           val top = live.pages.filter { it.parentId == null }.mapNotNull { it.order }.minOrNull() ?: 0.0
-          runner.run("Group ${name.trim()} added.", onDone = done) { api.createGroup(name, top) }
+          runner.run("Group ${name.trim()} added.", onDone = done) { live.loader.patch(api.createGroup(name, top)) }
         },
       ) {
         OutlinedTextField(name, { name = it.take(PAGE_NAME_MAX) }, label = { Text("Group name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("group-name"))
@@ -401,7 +467,10 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
         busy = runner.busy,
         error = runner.error,
         onDismiss = close,
-        onConfirm = { runner.run("Saved.", onDone = done) { api.rename(dialog.page.id, name, if (dialog.page.isGroup) null else description) } },
+        onConfirm = { runner.run("Saved.", onDone = done) {
+          api.rename(dialog.page.id, name, if (dialog.page.isGroup) null else description)
+          live.loader.patch(dialog.page.id)
+        } },
       ) {
         OutlinedTextField(name, { name = it.take(PAGE_NAME_MAX) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("rename-name"))
         if (!dialog.page.isGroup) {
@@ -423,6 +492,7 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
         onConfirm = {
           runner.run(onDone = done) {
             val path = api.publish(dialog.page.id, slug)
+            live.loader.patch(dialog.page.id)
             runner.notice = "Published at ${path ?: "/" + slug.trim('/')}"
           }
         },
@@ -439,7 +509,10 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
       busy = runner.busy,
       error = runner.error,
       onDismiss = close,
-      onConfirm = { runner.run("Page unpublished.", onDone = done) { api.unpublish(dialog.page.id) } },
+      onConfirm = { runner.run("Page unpublished.", onDone = done) {
+        api.unpublish(dialog.page.id)
+        live.loader.patch(dialog.page.id)
+      } },
     )
     is PageDialog.Duplicate -> {
       var name by remember(dialog) { mutableStateOf("${dialog.page.name} copy".take(PAGE_NAME_MAX)) }
@@ -453,13 +526,15 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
         error = runner.error,
         onDismiss = close,
         onConfirm = {
-          runner.run("Copy added as a draft.", onDone = done) { api.duplicate(dialog.page.id, name)?.let(onSelectNew) }
+          runner.run("Copy added as a draft.", onDone = done) { api.duplicate(dialog.page.id, name)?.let { id -> live.loader.patch(id); onSelectNew(id) } }
         },
       ) {
         OutlinedTextField(name, { name = it.take(PAGE_NAME_MAX) }, label = { Text("Name of the copy") }, singleLine = true, modifier = Modifier.fillMaxWidth())
       }
     }
     is PageDialog.Move -> {
+      // Every group and page can be the new parent, so the whole site is read first.
+      LaunchedEffect(dialog) { live.loader.loadAll() }
       val choices = remember(dialog, live.pages) { movableParents(live.pages, dialog.page.id) }
       var parent by remember(dialog) { mutableStateOf(dialog.page.parentId) }
       ActionDialog(
@@ -473,7 +548,10 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
         onDismiss = close,
         onConfirm = {
           val siblings = live.pages.count { it.parentId == parent && it.id != dialog.page.id }
-          runner.run("Moved.", onDone = done) { api.move(dialog.page.id, parent, siblings) }
+          runner.run("Moved.", onDone = done) {
+            api.move(dialog.page.id, parent, siblings)
+            live.loader.patch(dialog.page.id)
+          }
         },
       ) {
         LazyColumn(Modifier.fillMaxWidth().padding(top = space(0.5f)).testTag("move-choices")) {
@@ -500,6 +578,7 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
       onConfirm = {
         runner.run(if (dialog.page.isGroup) "Group deleted." else "Page deleted.", onDone = done) {
           if (dialog.page.isGroup) api.deleteGroup(dialog.page.id) else api.delete(dialog.page.id)
+          live.loader.patch(dialog.page.id)
         }
       },
     )

@@ -47,7 +47,17 @@ export interface OrgMemberNoticeInput {
   /** Also the organization's owners and admins. */
   includeAdmins?: boolean
   subject: string
+  /** The whole notice as plain text, link included. */
   text: string
+  /** The designed email's body; {@link text} when absent. */
+  lead?: string | null
+  /** "Label: value" lines for the designed email's details panel. */
+  details?: string | null
+  /** Where the reader acts on it, and the button's words for it. */
+  url?: string | null
+  urlLabel?: string | null
+  /** Why this reader is getting it. */
+  reason?: string | null
   /** Resend tag / log label. */
   context: string
 }
@@ -105,6 +115,13 @@ export async function sendOrgMemberNotice(input: OrgMemberNoticeInput): Promise<
       {
         'notice.subject': input.subject,
         'notice.body': input.text,
+        'notice.lead': String(input.lead ?? '').trim() || input.text,
+        'notice.details': String(input.details ?? '').trim(),
+        'notice.url': String(input.url ?? '').trim(),
+        'notice.action': String(input.urlLabel ?? '').trim() || 'Open the workspace',
+        'notice.reason':
+          String(input.reason ?? '').trim() ||
+          `You are getting this because you are a member of ${brand.orgName || 'this workspace'}.`,
         'org.name': brand.orgName ?? '',
       },
       brand,

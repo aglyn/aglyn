@@ -255,3 +255,61 @@ export function composeCrmTaskReminderEmailText(input: CrmTaskReminderEmailInput
   )
   return lines.join('\n') + (input.supportLine ?? '')
 }
+
+/** A reminder in the parts the designed `crm-task-reminder` email lays out. */
+export interface CrmTaskReminderEmailParts {
+  /** The workspace the tasks are in, or empty. */
+  eyebrow: string
+  /** "A reminder about your task." */
+  intro: string
+  /** One "Title — due …" detail row per task. */
+  details: string
+  /** The task, or the first task's Tasks page when there are several. */
+  url: string
+  urlLabel: string
+  /** For several tasks, each one's own link as "Title — URL". */
+  links: string
+}
+
+/**
+ * The same reminder as {@link composeCrmTaskReminderEmailText}, cut into the
+ * parts the system email draws: the tasks as a details panel, a button to
+ * the task, and each task's own link when there are several.
+ */
+export function composeCrmTaskReminderEmailParts(
+  input: CrmTaskReminderEmailInput,
+): CrmTaskReminderEmailParts {
+  const ordered = [...input.tasks].sort(
+    (a, b) => (a.dueAtMs ?? a.remindAtMs) - (b.dueAtMs ?? b.remindAtMs),
+  )
+  const due = (task: CrmReminderTask) =>
+    typeof task.dueAtMs === 'number'
+      ? `due ${crmTaskReminderWhen(task.dueAtMs, input.timeZone)}`
+      : 'no due date'
+  const several = ordered.length > 1
+  const first = ordered[0]
+  return {
+    eyebrow: input.workspaceName?.trim() ?? '',
+    intro: several
+      ? `A reminder about ${ordered.length} of your tasks, in the order they are due.`
+      : 'A reminder about your task. Open it to see the contact or deal it is for.',
+    details: ordered.map((task) => `${task.title} — ${due(task)}`).join('\n'),
+    url: first ? input.taskUrl(first) : '',
+    urlLabel: several ? 'Open the first task' : 'Open the task',
+    links: several ? ordered.map((task) => `${task.title} — ${input.taskUrl(task)}`).join('\n') : '',
+  }
+}
+
+/** {@link CrmTaskReminderEmailParts} as the `crm-task-reminder` email's merge tokens. */
+export function crmTaskReminderMergeValues(
+  parts: CrmTaskReminderEmailParts,
+): Record<string, string> {
+  return {
+    'reminder.eyebrow': parts.eyebrow,
+    'reminder.intro': parts.intro,
+    'reminder.details': parts.details,
+    'reminder.url': parts.url,
+    'reminder.action': parts.urlLabel,
+    'reminder.links': parts.links,
+  }
+}

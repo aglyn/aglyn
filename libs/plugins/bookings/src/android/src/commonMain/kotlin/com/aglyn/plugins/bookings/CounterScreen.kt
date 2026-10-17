@@ -42,6 +42,7 @@ import com.aglyn.hardware.CardCollectorState
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
@@ -124,7 +125,7 @@ fun CounterBookingsScreen(context: NativePluginContext) {
         is Loaded.Failed -> EmptyState(
           "Bookings did not load",
           body = value.message,
-          icon = AglynIcons.named("error"),
+          icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
           action = { OutlinedButton(onClick = { refresh++ }) { Text("Try again") } },
         )
         is Loaded.Ready -> if (value.bookings.isEmpty()) {

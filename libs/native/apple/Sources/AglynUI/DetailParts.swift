@@ -169,3 +169,44 @@ extension View {
     frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
   }
 }
+
+/// The kit's text field look (sign-in, sign-up, first run): 44 points tall on
+/// iPhone and iPad, 32 on the Mac, rounded 10, on the paper fill with a
+/// hairline in the divider color.
+public struct AglynFieldStyle: TextFieldStyle {
+  public init() {}
+
+  /// A field's height on this platform.
+  public static var height: CGFloat {
+    #if os(macOS)
+      32
+    #else
+      44
+    #endif
+  }
+
+  public func _body(configuration: TextField<Self._Label>) -> some View {
+    configuration
+      .textFieldStyle(.plain)
+      .padding(.horizontal, AglynSpace.oneAndHalf)
+      .frame(minHeight: Self.height)
+      .background(AglynColor.paper, in: RoundedRectangle(cornerRadius: AglynRadius.tile, style: .continuous))
+      .overlay(RoundedRectangle(cornerRadius: AglynRadius.tile, style: .continuous).strokeBorder(AglynColor.divider))
+  }
+}
+
+extension TextFieldStyle where Self == AglynFieldStyle {
+  /// The kit's field look: see `AglynFieldStyle`.
+  public static var aglyn: AglynFieldStyle { AglynFieldStyle() }
+}
+
+/// A primary action's height on this platform: 50 points on iPhone and iPad, 36 on the Mac.
+public enum AglynPrimaryButtonMetrics {
+  public static var height: CGFloat {
+    #if os(macOS)
+      36
+    #else
+      50
+    #endif
+  }
+}

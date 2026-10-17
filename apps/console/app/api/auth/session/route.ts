@@ -34,7 +34,6 @@ import {
   getLockdownVerdict,
   isImpersonationSession,
   lockdownJsonResponse,
-  notifyStaff,
   resolveConsoleDomain,
   seedUserProfile,
   syncAuthIdentityFromIdp,
@@ -73,6 +72,7 @@ import {
 } from '../../_lib/device-revocation'
 import { enforceSanctionsGeo } from '../../../../constants/sanctions-geo'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { announceNewAccount } from '../../_lib/growth-announcements'
 
 export const dynamic = 'force-dynamic'
 
@@ -564,7 +564,7 @@ async function handler(request: Request): Promise<Response> {
            * all write that document before this mint can, so its absence
            * announced only the sign-ups that happened to win the race.
            *
-           * `notifyStaff` never throws and already respects each staff
+           * `announceNewAccount` never throws, and `notifyStaff` under it respects each staff
            * member's own preferences, so a claim holder who does not want to
            * hear about sign-ups switches the category off and nothing here
            * has to know.
@@ -588,11 +588,13 @@ async function handler(request: Request): Promise<Response> {
                 accountCreatedAtMs: Number.isFinite(createdAtMs) ? createdAtMs : null,
               }))
             ) {
-              await notifyStaff({
-                type: 'staff.userSignedUp',
-                title: 'New account',
-                body: `${decoded.email ?? uid} signed up.`,
-                link: buildRoute(Route.ADMIN_USER_DETAIL, { uid }),
+              // Who it is and how they found us, in detail (AGL-3897).
+              await announceNewAccount({
+                uid,
+                email: decoded.email ? String(decoded.email) : null,
+                displayName: seed.displayName ?? null,
+                provider: String(decoded.firebase?.sign_in_provider ?? '') || null,
+                emailVerified: decoded.email_verified === true,
               })
             }
           } catch (error) {

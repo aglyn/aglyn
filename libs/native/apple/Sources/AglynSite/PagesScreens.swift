@@ -10,38 +10,70 @@ import SwiftUI
 let pageContentRoles: Set<String> = ["admin", "editor", "author"]
 let pagePublishRoles: Set<String> = ["admin", "editor"]
 
-/// The site's pages, live: the screens window and the host's routing map.
+/// The site's pages: the host's routing map, live, and the pages tree, read a level at a time (AGL-3896).
 @MainActor
 @Observable
 final class SitePagesModel {
   let host = LiveDocument()
-  let window = LiveQuery()
+  private(set) var tree: PagesTree?
+  private var reader: FirestoreReader?
+  /// The search the list is filtered by; while there is one, every window is read so it finds any page.
+  var search = ""
 
   var routing: SiteRouting { SiteRouting(host: host.state.value ?? nil) }
 
-  var pages: [PageNode] { (window.state.value ?? []).prefix(pagesWindow).compactMap(PageNode.init) }
+  /// Every page read so far.
+  var pages: [PageNode] { tree.map { Array($0.nodes.values) } ?? [] }
+
+  var hasMore: Bool { tree.map { !$0.exhausted } ?? false }
 
   var rows: LiveValue<[PageTreeRow]> {
-    switch window.state {
-    case .loading: .loading
-    case .failed(let message): .failed(message)
-    case .ready: .ready(pageTree(pages, routing: routing))
-    }
+    guard let tree, tree.started, !(tree.loading && tree.nodes.isEmpty) else { return .loading }
+    if let failure = tree.failure, tree.nodes.isEmpty { return .failed(failure) }
+    let text = search.trimmingCharacters(in: .whitespacesAndNewlines)
+    return .ready(text.isEmpty ? tree.rows(routing: routing) : tree.matches(text, routing: routing))
   }
 
-  var truncated: Bool { (window.state.value?.count ?? 0) > pagesWindow }
-
   func row(_ id: String?) -> PageTreeRow? {
-    guard let id, case .ready(let rows) = rows else { return nil }
-    return rows.first { $0.page.id == id }
+    guard let id, let tree, let node = tree.nodes[id] else { return nil }
+    let live = routing.routes[id]
+    return PageTreeRow(page: node, depth: 0, livePath: live.map(routeURL), home: live == "/", childCount: tree.childCount(id))
   }
 
   func bind(_ reader: FirestoreReader, hostID: String) async {
-    let (host, window) = (self.host, self.window)
+    self.reader = reader
+    let tree = PagesTree(hostID: hostID) { [reader] query in try await reader.readOnce(query) }
+    self.tree = tree
     async let hostDoc: Void = host.bind(reader, ["hosts", hostID])
-    async let screens: Void = window.bind(
-      reader, FirestoreQuery(["hosts", hostID, "screens"], order: [.init("__name__")], limit: pagesWindow + 1))
-    _ = await (hostDoc, screens)
+    await tree.start()
+    _ = await hostDoc
+  }
+
+  func loadMore() async { await tree?.loadMore() }
+
+  func toggle(_ id: String) async { await tree?.toggle(id) }
+
+  /// A search, or a choice over every page (Move), reads the windows still unread.
+  func loadAll() async { await tree?.loadAll() }
+
+  /// After a change: the pages it touched read again and placed where they now belong.
+  func reread(_ ids: [String?]) async {
+    guard let tree, let reader else { return }
+    await tree.reread(ids.compactMap { $0 }) { path in try await reader.readOnce(path) }
+  }
+
+  /// A page a link names: read if it is not yet, and its parents opened so its row is on screen.
+  func reveal(_ id: String) async {
+    guard let tree else { return }
+    if tree.nodes[id] == nil { await reread([id]) }
+    var parent = tree.nodes[id]?.parentID
+    var guardSteps = 0
+    while let next = parent, guardSteps < 16 {
+      guardSteps += 1
+      if tree.nodes[next] == nil { await reread([next]) }
+      await tree.expand(next)
+      parent = tree.nodes[next]?.parentID
+    }
   }
 }
 
@@ -128,7 +160,17 @@ struct PagesScreen: View {
             self.sheet = nil
           }
         }
-        .task(id: hostID) { await model.bind(context.firestore, hostID: hostID) }
+        .task(id: hostID) {
+          await model.bind(context.firestore, hostID: hostID)
+          if let initialPageID { await model.reveal(initialPageID) }
+        }
+        .searchable(text: $model.search, prompt: "Search pages")
+        .task(id: model.search) {
+          // A search finds any page: the windows still unread are read, only while searching.
+          guard !model.search.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+          try? await Task.sleep(nanoseconds: 300_000_000)
+          if !Task.isCancelled { await model.loadAll() }
+        }
       } else {
         AglynEmptyState("Pick a site first", systemImage: SiteSymbols.site)
       }
@@ -193,6 +235,12 @@ struct PagesScreen: View {
       AglynEmptyState(
         "Could not load this site's pages", systemImage: SiteSymbols.error,
         message: "Check the connection and try again.")
+    case .ready(let rows) where rows.isEmpty && searching:
+      if model.tree?.loading == true || model.hasMore {
+        List { SkeletonRows(count: 4) }.aglynListBackground()
+      } else {
+        AglynEmptyState("No pages match", systemImage: "magnifyingglass", message: "Try another name or address.")
+      }
     case .ready(let rows) where rows.isEmpty:
       AglynEmptyState(
         "No pages yet", systemImage: SiteSymbols.page, message: "Add a page, then design it in the Besigner."
@@ -204,11 +252,14 @@ struct PagesScreen: View {
       Group {
         if selectable {
           List {
-            truncatedNotice
             ForEach(rows) { row in
-              PageListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
-                .accessibilityIdentifier("page-\(row.id)")
+              PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
+                Task { await model.toggle(row.id) }
+              })
+              .aglynSelectableRow(row.id, selection: $selection)
+              .accessibilityIdentifier("page-\(row.id)")
             }
+            moreRow
           }
           .aglynSelectableListStyle()
           .aglynSelectionKeys(rows.map(\.id), selection: $selection)
@@ -225,7 +276,6 @@ struct PagesScreen: View {
           .sensoryFeedback(.selection, trigger: selection)
         } else {
           List {
-            truncatedNotice
             ForEach(rows) { row in
               NavigationLink {
                 PageDetail(
@@ -234,11 +284,14 @@ struct PagesScreen: View {
                 )
                 .navigationTitle(row.page.name)
               } label: {
-                PageListRow(row: row)
+                PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
+                  Task { await model.toggle(row.id) }
+                })
               }
               .aglynListRow()
               .accessibilityIdentifier("page-\(row.id)")
             }
+            moreRow
           }
           // A link to one page (a notification, a job's draft) opens it, as the wide layout selects it.
           .navigationDestination(item: $linkedPage) { id in
@@ -262,25 +315,54 @@ struct PagesScreen: View {
     }
   }
 
+  private var searching: Bool { !model.search.trimmingCharacters(in: .whitespaces).isEmpty }
+
+  /// The next 25 top-level pages as the list scrolls to its end.
   @ViewBuilder
-  private var truncatedNotice: some View {
-    if model.truncated {
-      AglynNotice("This site has more than \(pagesWindow) pages; the first \(pagesWindow) are listed.", tone: .warning)
-        .accessibilityIdentifier("pages-truncated")
+  private var moreRow: some View {
+    if model.hasMore && model.search.trimmingCharacters(in: .whitespaces).isEmpty {
+      AglynLoadMoreRow("Show more pages") { Task { await model.loadMore() } }
+        .accessibilityIdentifier("pages-more")
     }
   }
 }
 
 struct PageListRow: View {
   let row: PageTreeRow
+  var expanded = false
+  var onToggle: (() -> Void)?
 
   var body: some View {
     let status = pageStatus(row)
     let subtitle: String =
-      if row.page.isGroup { row.childCount == 1 ? "1 page" : "\(row.childCount) pages" }
+      if row.page.isGroup || row.childCount > 0 {
+        [row.page.isGroup ? nil : row.livePath, row.childCount == 1 ? "1 page inside" : "\(row.childCount) pages inside"]
+          .compactMap { $0 }.joined(separator: " · ")
+      }
       else if let live = row.livePath { live }
       else { row.page.slug.map { "/\($0) · not published" } ?? "No address yet" }
     AglynTreeIndent(depth: row.depth) {
+      // A chevron on a row with children opens it in place; the list starts collapsed, like the console's.
+      Group {
+        if row.childCount > 0, let onToggle {
+          Button(action: onToggle) {
+            Image(systemName: "chevron.right")
+              .font(.caption.weight(.semibold))
+              .rotationEffect(.degrees(expanded ? 90 : 0))
+              .animation(.snappy(duration: 0.15), value: expanded)
+              .frame(width: 20, height: 28)
+              .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .foregroundStyle(.secondary)
+          .help(expanded ? "Hide the pages inside" : "Show the pages inside")
+          .accessibilityLabel(expanded ? "Collapse \(row.page.name)" : "Expand \(row.page.name)")
+          .accessibilityValue("\(row.childCount) inside")
+          .accessibilityIdentifier("page-toggle-\(row.page.id)")
+        } else {
+          Color.clear.frame(width: 20, height: 1).accessibilityHidden(true)
+        }
+      }
       AglynRow(
         row.page.name, subtitle: subtitle,
         systemImage: row.page.isGroup ? SiteSymbols.group : row.home ? SiteSymbols.home : SiteSymbols.page
@@ -323,12 +405,18 @@ struct PageDetail: View {
           switch pending {
           case .unpublish(let page):
             Button("Unpublish", role: .destructive) {
-              runner.run("Page unpublished.") { try await api.unpublish(page.id) }
+              runner.run("Page unpublished.") {
+                try await api.unpublish(page.id)
+                await model.reread([page.id])
+              }
             }
           case .delete(let page, _):
             Button("Delete", role: .destructive) {
               runner.run(page.isGroup ? "Group deleted." : "Page deleted.") {
+                let inside = model.tree?.children[page.id] ?? []
                 if page.isGroup { try await api.deleteGroup(page.id) } else { try await api.delete(page.id) }
+                // The page leaves the cache; a deleted group's pages move up a level.
+                await model.reread([page.id] + inside)
               }
             }
           }
@@ -349,11 +437,15 @@ struct PageDetail: View {
   }
 
   private func confirmMessage(_ pending: PageConfirm) -> String {
+    // The pages inside are spoken of only when there are some.
+    let inside = (model.row(pending.page.id)?.childCount ?? 0) > 0 ? "Pages inside it keep their addresses." : nil
     switch pending {
-    case .unpublish: return "Visitors can no longer reach it. Pages inside it keep their addresses."
+    case .unpublish: return ["Visitors can no longer reach it.", inside].compactMap { $0 }.joined(separator: " ")
     case .delete(let page, let livePath):
-      if page.isGroup { return "Its pages move up a level and keep their addresses." }
-      return [livePath.map { "It is live at \($0) and stops answering there." }, "Pages inside it keep their addresses."]
+      if page.isGroup {
+        return inside == nil ? "The group is removed. It has no address of its own." : "Its pages move up a level and keep their addresses."
+      }
+      return [livePath.map { "It is live at \($0) and stops answering there." } ?? "It is not live.", inside]
         .compactMap { $0 }.joined(separator: " ")
     }
   }
@@ -463,7 +555,7 @@ struct PageDetail: View {
           AglynDetailRow("Page id", value: page.id)
         }
         PageVersionsSection(
-          context: context, hostID: hostID, page: page, api: api, runner: runner, canPublish: canPublish)
+          context: context, hostID: hostID, page: page, model: model, api: api, runner: runner, canPublish: canPublish)
       }
     }
     .formStyle(.grouped)
@@ -477,6 +569,7 @@ struct PageVersionsSection: View {
   let context: NativePluginContext
   let hostID: String
   let page: PageNode
+  let model: SitePagesModel
   let api: PagesAPI
   let runner: ActionRunner
   let canPublish: Bool
@@ -508,6 +601,7 @@ struct PageVersionsSection: View {
                 Button("Use") {
                   runner.run("This version is now the page's working version.") {
                     try await api.makeVersionLive(page.id, versionID: version.id)
+                    await model.reread([page.id])
                   }
                 }
                 .disabled(!canPublish || runner.busy)
@@ -590,7 +684,10 @@ struct PageSheetView: View {
           text = page.description ?? ""
         case .publish(_, let slug): text = slug
         case .duplicate(let page): name = "\(page.name) copy".capped(pageNameMax)
-        case .move(let page): parent = page.parentID
+        case .move(let page):
+          parent = page.parentID
+          // The choice is over every page, so the windows still unread are read first.
+          Task { await model.loadAll() }
         case .newPage, .newGroup, .fromTemplate, .useTemplate, .saveTemplate: break
         }
       }
@@ -616,7 +713,8 @@ struct PageSheetView: View {
       ) {
         let (name, description) = (name, text)
         runner.run("\(name.trimmed) was added as a draft.", onDone: close) {
-          try await api.createPage(name: name, description: description)
+          let made = try await api.createPage(name: name, description: description)
+          await model.reread([made.id])
         }
       } fields: {
         nameField
@@ -632,7 +730,10 @@ struct PageSheetView: View {
       ) {
         let top = model.pages.filter { $0.parentID == nil }.compactMap(\.order).min() ?? 0
         let name = name
-        runner.run("Group \(name.trimmed) added.", onDone: close) { try await api.createGroup(name: name, topOrder: top) }
+        runner.run("Group \(name.trimmed) added.", onDone: close) {
+          let id = try await api.createGroup(name: name, topOrder: top)
+          await model.reread([id])
+        }
       } fields: {
         nameField
       }
@@ -644,6 +745,7 @@ struct PageSheetView: View {
         let (name, description) = (name, text)
         runner.run("Saved.", onDone: close) {
           try await api.rename(page.id, name: name, description: page.isGroup ? nil : description)
+          await model.reread([page.id])
         }
       } fields: {
         nameField
@@ -661,6 +763,7 @@ struct PageSheetView: View {
         let slug = text
         runner.run(onDone: close) {
           let path = try await api.publish(page.id, slug: slug)
+          await model.reread([page.id])
           runner.notice = "Published at \(path ?? "/" + slug.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
         }
       } fields: {
@@ -683,7 +786,10 @@ struct PageSheetView: View {
       ) {
         let name = name
         runner.run("Copy added as a draft.", onDone: close) {
-          if let id = try await api.duplicate(sourceID: page.id, name: name) { onSelectNew(id) }
+          if let id = try await api.duplicate(sourceID: page.id, name: name) {
+            await model.reread([id])
+            onSelectNew(id)
+          }
         }
       } fields: {
         TextField("Name of the copy", text: Binding(get: { name }, set: { name = $0.capped(pageNameMax) }))
@@ -697,7 +803,11 @@ struct PageSheetView: View {
       ) {
         let target = parent
         let siblings = model.pages.filter { $0.parentID == target && $0.id != page.id }.count
-        runner.run("Moved.", onDone: close) { try await api.move(page.id, parentID: target, index: siblings) }
+        runner.run("Moved.", onDone: close) {
+          try await api.move(page.id, parentID: target, index: siblings)
+          await model.reread([page.id])
+          if let target { await model.tree?.expand(target) }
+        }
       } fields: {
         moveChoice("Top level", systemImage: SiteSymbols.home, id: nil)
         ForEach(movableParents(model.pages, pageID: page.id)) { choice in

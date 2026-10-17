@@ -46,6 +46,7 @@ import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
@@ -219,7 +220,7 @@ fun WorkflowEditor(context: NativePluginContext, hostId: String, id: String?, on
   val pickers = rememberSitePickers(context, hostId)
 
   if (id != null && stored is Live.Loading) return SkeletonList(rows = 4)
-  if (id != null && stored is Live.Failed) return EmptyState("Could not load this workflow", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+  if (id != null && stored is Live.Failed) return EmptyState("Could not load this workflow", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
   val seed = (stored as? Live.Ready)?.value
   if (id != null && seed == null) return EmptyState("This workflow is gone", icon = AglynIcons.named("account_tree"))
 

@@ -65,6 +65,7 @@ import com.aglyn.ui.CountedTextField
 import com.aglyn.ui.DateTimeField
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.FormCard
 import com.aglyn.ui.ListHeader
 import com.aglyn.ui.LoadContent
@@ -77,10 +78,12 @@ import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.formatDateTime
 import com.aglyn.ui.space
 
@@ -125,7 +128,7 @@ fun ContentScreen(context: NativePluginContext, initialCollection: String? = nul
 
   when (val live = collectionsLive) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this site's content", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this site's content", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val collections = sortedCollections(live.value)
       val collection = collections.firstOrNull { it.id == picked || it.slug == picked } ?: collections.firstOrNull()
@@ -240,7 +243,7 @@ private fun CollectionEntries(
     },
     detail = { selected ->
       if (selected == null) {
-        EmptyState("Pick an entry to edit it here", icon = AglynIcons.named("article"))
+        SelectionPlaceholder("Pick an entry to edit it here", icon = AglynIcons.named("article"))
       } else {
         EntryEditor(context, hostId, collection, selected, api, runner, canWrite, canPublish, routing, model, open)
       }
@@ -278,7 +281,7 @@ private fun EntryEditor(
   CloseWhenGone((live as? Live.Ready)?.let { ready -> ready.value?.let(ContentEntry::from) != null })
   when (val doc = live) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this entry", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this entry", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val entry = doc.value?.let(ContentEntry::from) ?: return EmptyState("This entry is gone", icon = AglynIcons.named("article"))
       val stored = remember(entry) { EntryDraft.of(entry) }
@@ -525,18 +528,18 @@ private fun ContentDialogs(
           categories.forEachIndexed { index, category ->
             Row(verticalAlignment = Alignment.CenterVertically) {
               OutlinedTextField(category.name, { categories[index] = category.copy(name = it) }, label = { Text(category.id) }, singleLine = true, modifier = Modifier.weight(1f))
-              IconButton(onClick = { categories.removeAt(index) }) { Icon(AglynIcons.named("delete"), contentDescription = "Remove ${category.name}") }
+              WithTooltip("Remove ${category.name}") { IconButton(onClick = { categories.removeAt(index) }) { Icon(AglynIcons.named("delete"), contentDescription = "Remove ${category.name}") } }
             }
           }
           Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(newName, { newName = it }, label = { Text("New category") }, singleLine = true, modifier = Modifier.weight(1f).testTag("new-category"))
-            IconButton(
+            WithTooltip("Add category") { IconButton(
               onClick = {
                 categories.add(ContentCategory(newCategoryId(newName, categories), newName.trim()))
                 newName = ""
               },
               enabled = newName.isNotBlank() && categories.size < COLLECTION_CATEGORIES_MAX,
-            ) { Icon(AglynIcons.named("add"), contentDescription = "Add category") }
+            ) { Icon(AglynIcons.named("add"), contentDescription = "Add category") } }
           }
         }
       }
