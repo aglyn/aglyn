@@ -38,6 +38,11 @@ import {
   type NotificationChannel,
   type NotificationSettings,
 } from '@aglyn/aglyn'
+import {
+  DEFAULT_NOTIFICATION_SOUND,
+  NOTIFICATION_SOUNDS,
+  notificationSound,
+} from '@aglyn/aglyn/app-utils/notification-sounds'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -50,6 +55,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -58,6 +64,7 @@ import NotificationCategoryTable from '../../../../../../components/notification
 import NotificationScopeTable from '../../../../../../components/notification-scope-table.component'
 import useIsStaff from '../../../../../../hooks/use-is-staff'
 import useNotificationAlertPrefs from '../../../../../../hooks/use-notification-prefs'
+import useNotificationSound from '../../../../../../hooks/use-notification-sound'
 import useOrgHosts from '../../../../../../hooks/use-org-hosts'
 import { useOrgScope } from '../../../../../../hooks/use-org-scope'
 import {
@@ -119,6 +126,7 @@ const ManageNotificationSettings: NextPageWithLayout<
   // granted per origin per device, and whether you want sound on your work
   // laptop says nothing about your phone.
   const [alertPrefs, setAlertPrefs] = useNotificationAlertPrefs()
+  const [sound, pickSound] = useNotificationSound()
   const [permission, setPermission] = useState<
     NotificationPermission | 'unsupported'
   >('default')
@@ -406,7 +414,7 @@ const ManageNotificationSettings: NextPageWithLayout<
    * exact case where you want to hear it before switching it on.
    */
   const handleTestAlerts = useCallback(async () => {
-    playNotificationChime()
+    playNotificationChime(sound)
     let current = desktopNotificationPermission()
     if (current === 'default') current = await requestDesktopNotifications()
     setPermission(current)
@@ -431,7 +439,7 @@ const ManageNotificationSettings: NextPageWithLayout<
             : 'Chime played. Desktop notifications were not granted.',
       { variant: current === 'granted' ? 'success' : 'info', persist: false },
     )
-  }, [setAlertPrefs, enqueueSnackbar])
+  }, [setAlertPrefs, enqueueSnackbar, sound])
 
   const handleDesktopToggle = useCallback(async () => {
     if (alertPrefs.desktop) {
@@ -661,6 +669,58 @@ const ManageNotificationSettings: NextPageWithLayout<
       </CardDisplay>
 
       <CardDisplay
+        header={'Notification sound'}
+        help={docsHelp('consoleTour', {
+          anchor: '#notification-sound',
+          excerpt:
+            'The sound your notifications make, here and in the apps.',
+        })}
+        contentGutterX
+        contentGutterY
+        contentBordered="all"
+      >
+        <Stack
+          useFlexGap
+          direction="row"
+          spacing={1}
+          sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
+        >
+          <TextField
+            select
+            size="small"
+            label="Sound"
+            value={sound.id}
+            onChange={(event) => {
+              pickSound(event.target.value)
+              // Picking is hearing: the new sound plays as it is chosen.
+              playNotificationChime(notificationSound(event.target.value))
+            }}
+            sx={{ minWidth: 220 }}
+          >
+            {NOTIFICATION_SOUNDS.map((option) => (
+              <MenuItem key={option.id} value={option.id}>
+                {option.id === DEFAULT_NOTIFICATION_SOUND
+                  ? `${option.label} (default)`
+                  : option.label}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<PlayArrowRoundedIcon />}
+            onClick={() => playNotificationChime(sound)}
+          >
+            {'Play'}
+          </Button>
+          <Typography variant="caption" color="text.secondary">
+            {`Your notifications make this sound here and in the ${PLATFORM_BRAND_NAME} ` +
+              'apps on your phone, tablet and computer.'}
+          </Typography>
+        </Stack>
+      </CardDisplay>
+
+      <CardDisplay
         header={'Alerts on this device'}
         help={docsHelp('consoleTour', {
           anchor: '#alerts-on-this-device',
@@ -699,7 +759,7 @@ const ManageNotificationSettings: NextPageWithLayout<
                 onChange={() => setAlertPrefs({ sound: !alertPrefs.sound })}
               />
             }
-            label="Sound"
+            label="Play sound"
             slotProps={{ typography: { variant: 'caption' } }}
           />
           <FormControlLabel
