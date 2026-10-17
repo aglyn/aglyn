@@ -51,8 +51,10 @@ import {
 import {
   AI_LAYOUT_FEATURED_RECORDS,
   AI_LAYOUT_LISTING_ELEMENTS,
+  aiLayoutIsRecordImageAlt,
   aiLayoutListingAt,
   aiLayoutRecordHref,
+  aiLayoutRecordImageAltField,
   type AiLayoutListing,
   type AiLayoutListingRole,
 } from './ai-layout-listings'
@@ -260,6 +262,11 @@ const componentOf = (targets: AiLayoutTargets, id: string | undefined) =>
  * The section of this page that places a form: one whose plan places one, or
  * whose design places one by its id.
  */
+/** Whether the site's form lives on another page of the site than this one. */
+function formLivesElsewhere(targets: AiLayoutTargets): boolean {
+  return !!targets.formPageId && targets.formPageId !== targets.pageId
+}
+
 function formSectionOf(
   sections: readonly AiLayoutSection[],
   plan: AiLayoutPagePlan,
@@ -270,6 +277,8 @@ function formSectionOf(
     section.uses.some((ref) => forms.has(ref)),
   )
   if (planned !== -1) return planned
+  // A form drawn on a page it does not live on becomes a button to its page (AGL-3899).
+  if (formLivesElsewhere(targets)) return null
   const designed = sections.findIndex((section) =>
     section.blocks.some(
       (block) => block.kind === 'form' && (!block.to || forms.has(block.to)),
@@ -674,6 +683,27 @@ function placePlanned(
   }))
   const lastCol =
     raw.cols && raw.cols.length >= 2 ? raw.cols.length - 1 : undefined
+  // A form the design drew where the plan places none, on a page the form
+  // does not live on, is that page's way to it (AGL-3899): a button to the
+  // page that holds the form, never a second copy of the form.
+  if (!plannedForms.length && formLivesElsewhere(page.targets)) {
+    const at0 = blocks.findIndex((block) => block.kind === 'form')
+    if (at0 !== -1) {
+      const asks = blocks.some((block) => block.kind === 'button' && (block.to === 'form' || block.to === `page:${page.targets.formPageId}`))
+      const col = blocks[at0].col
+      const kept = blocks.filter((block) => block.kind !== 'form')
+      if (!asks) {
+        kept.splice(at0, 0, {
+          kind: 'button',
+          text: aiLayoutLabel('getInTouch', page.options.language),
+          to: 'form',
+          ...(col !== undefined ? { col } : {}),
+        })
+      }
+      blocks.splice(0, blocks.length, ...kept)
+      page.settled.push({ at, what: 'a form on a page it does not live on; a button to its page instead' })
+    }
+  }
   for (const block of blocks) {
     if (block.kind === 'form' && !(block.to && forms.has(block.to))) {
       const only =
@@ -1468,7 +1498,10 @@ function group(
     // columns (AGL-3676): the beta.237 Willow Wick home, on a paid plan, drew
     // every other group compact — four bands of a title and a sentence.
     const variant = design && block.kind === 'cards' && block.style !== 'quiet' ? aiLayoutGroupVariant(design.input, design.choices, scope.words ?? '') : null
-    if (variant === 'icons') return iconColumns(scope, items, room)
+    // Icon columns side by side, where rule 1 knows them by their cells; any
+    // site's groups may take them (AGL-3899), and one to a row outside a
+    // store they are drawn compact.
+    if (variant === 'icons' && (retail || perRow > 1)) return iconColumns(scope, items, room)
     const pictured = (variant === 'pictures' || variant === 'articles') && room === 'full' && picturesLeft(scope.page) >= items.length
     return (pictured && designedGroup(scope, variant, items, room)) || compactGroup(scope, block, items, perRow)
   }
@@ -2940,7 +2973,7 @@ const RECORD_PEOPLE = /\b(team|staff|people|crew|instructors?|teachers?|stylists
 export function aiLayoutRecordCardFields(
   fields: readonly { id: string; name: string; type: string }[],
 ): { title: string | null; kicker: string | null; body: string | null } {
-  const texts = fields.filter((field) => field.type === 'text' || field.type === 'sorted')
+  const texts = fields.filter((field) => (field.type === 'text' || field.type === 'sorted') && !aiLayoutIsRecordImageAlt(field.name))
   const title = texts.find((field) => field.type === 'text')?.id ?? null
   const rest = texts.filter((field) => field.id !== title)
   const body = rest.find((field) => field.type === 'text' && RECORD_BODY.test(field.name))?.id ?? null
@@ -2985,6 +3018,7 @@ function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: nu
     ? tree.add('muiTypography', { children: `{{item.${fields.body}}}`, variant: 'body2', ...textAlign }, muted(scope), null, 'recordBody')
     : null
   const photoField = !questions && listing.imageField ? listing.imageField : null
+  const altField = photoField ? aiLayoutRecordImageAltField(listing.fields ?? []) : null
   const opens = Boolean(photoField) && aiOpensGalleriesInLightbox(page)
   // Each card opens its record's own page where the dataset has one (AGL-3727):
   // `/{base}/{{item.<address>}}`, filled per record as the card repeats.
@@ -2995,7 +3029,12 @@ function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: nu
         'image',
         {
           src: `{{item.${photoField}}}`,
-          alt: fields.title ? `{{item.${fields.title}}}` : aiLayoutFitText(listing.name, 'alt', scope.page.options.language) || 'A photo',
+          // What the photo shows, where the dataset keeps it; a record's name is what it is called (AGL-3856).
+          alt: altField
+            ? `{{item.${altField}}}`
+            : fields.title
+              ? `{{item.${fields.title}}}`
+              : aiLayoutFitText(listing.name, 'alt', scope.page.options.language) || 'A photo',
           objectFit: 'cover',
           width: '100%',
           loading: 'lazy',
