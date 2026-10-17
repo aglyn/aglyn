@@ -60,6 +60,7 @@ import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SectionCard
@@ -361,7 +362,7 @@ fun OrgAutomationEditor(context: NativePluginContext, orgId: String, id: String?
   val sites = rememberOrgSites(context, orgId)
 
   if (id != null && stored is Live.Loading) return SkeletonList(rows = 4)
-  if (id != null && stored is Live.Failed) return EmptyState("Could not load this org automation", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+  if (id != null && stored is Live.Failed) return EmptyState("Could not load this org automation", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
   val seed = (stored as? Live.Ready)?.value
   if (id != null && (seed == null || seed.data["deletedAt"] != null)) return EmptyState("This org automation is gone", icon = AglynIcons.named("workspaces"))
 

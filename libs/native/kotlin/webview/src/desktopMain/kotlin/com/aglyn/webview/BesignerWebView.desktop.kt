@@ -168,7 +168,9 @@ private fun WebView2Besigner(
           override fun addNotify() {
             super.addNotify()
             val hwnd = Native.getComponentPointer(this)
-            val made = WebView2View(hwnd, listener, bridgeScript)
+            val made = WebView2View(hwnd, listener, bridgeScript) { base ->
+              BesignerEntry.userAgent(base, System.getProperty("jpackage.app-version"), "windows")
+            }
             view = made
             val scale = graphicsConfiguration?.defaultTransform?.scaleX ?: 1.0
             made.resize((width * scale).toInt(), (height * scale).toInt())

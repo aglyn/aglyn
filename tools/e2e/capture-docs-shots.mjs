@@ -46,7 +46,7 @@
 // shot failed, captured files are still kept).
 
 import { scryptSync, randomBytes } from 'node:crypto'
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
@@ -61,6 +61,7 @@ import { orderListFieldsOf } from '../scripts/backfill-orders-list-fields.mjs'
 import { listingQueryFieldsPatch } from '../scripts/lib/listing-query-fields.mjs'
 import { datasetFilterFields } from '../scripts/lib/record-filter-keys.mjs'
 import { nameSearchKey, nameSearchTokens } from '../scripts/lib/name-search-tokens.mjs'
+import { chromeExecutable } from './lib/chrome-executable.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img/guides')
@@ -1088,28 +1089,6 @@ if (!skipSeed) await seedGuideFixtures()
 }
 
 // ── 2. Browser setup (same conventions as capture-docs-screenshots.mjs) ────
-
-function chromeExecutable() {
-  if (process.env.E2E_CHROME_PATH) {
-    return { executablePath: process.env.E2E_CHROME_PATH }
-  }
-  if (process.platform === 'darwin') {
-    const candidates = [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ]
-    for (const executablePath of candidates) {
-      try {
-        readFileSync(executablePath)
-        return { executablePath }
-      } catch {
-        // Not installed — try the next flavor.
-      }
-    }
-  }
-  return { channel: 'chrome' }
-}
 
 const browser = await chromium.launch({ headless: true, ...chromeExecutable() })
 const context = await browser.newContext({

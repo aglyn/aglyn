@@ -38,8 +38,8 @@
 //
 //   node tools/e2e/global-search.e2e.mjs
 
-import { readFileSync } from 'node:fs'
 import { chromium } from 'playwright-core'
+import { chromeExecutable } from './lib/chrome-executable.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4200'
 const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
@@ -71,27 +71,6 @@ const fail = (name, detail) => {
 const skip = (name, why) => {
   inconclusive += 1
   console.warn(`INCONCLUSIVE  ${name} — ${why}`)
-}
-
-function chromeExecutable() {
-  if (process.env.E2E_CHROME_PATH) {
-    return { executablePath: process.env.E2E_CHROME_PATH }
-  }
-  if (process.platform === 'darwin') {
-    for (const executablePath of [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ]) {
-      try {
-        readFileSync(executablePath)
-        return { executablePath }
-      } catch {
-        // Not installed — try the next flavor.
-      }
-    }
-  }
-  return { channel: 'chrome' }
 }
 
 const browser = await chromium.launch({ headless: true, ...chromeExecutable() })

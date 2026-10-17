@@ -16,13 +16,14 @@
  */
 'use client'
 
+import { useIsNativeAppWebView } from '@aglyn/aglyn/app-utils/native-app-web-view'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 // Subpath, not the library index — see the note there.
 import { prefersDarkInk } from '@aglyn/shared-util-tools/contrast'
 import { darken, lighten } from '@mui/material/styles'
 import { useEffect } from 'react'
 import useBranding from '../hooks/use-branding'
-import { renameTitleSubject } from '../app/entity-page-title'
+import { dropTitleBrand, renameTitleSubject } from '../app/entity-page-title'
 import { stripUnreadBadge } from '../utils/notification-alerts'
 import { useDocumentSubject } from './document-subject'
 
@@ -51,6 +52,9 @@ export function ConsoleBrandingEffects(): null {
   const subject = useDocumentSubject()
   const subjectId = subject?.id ?? null
   const subjectName = subject?.name ?? null
+  // The Besigner inside the native apps (AGL-3894): its title is what the
+  // app has to name the page, so it carries no trailing brand.
+  const inNativeApp = useIsNativeAppWebView()
 
   // Primary color: the console theme is a static CSS-var theme, so a per-org
   // color is applied by overriding the MUI primary custom properties inline on
@@ -167,7 +171,7 @@ export function ConsoleBrandingEffects(): null {
     // would make every replacement a fixed point we cannot tell from a loop.
     const rebranding = !!productName && productName !== PLATFORM_BRAND_NAME
     const naming = !!subjectId && !!subjectName
-    if (!rebranding && !naming) return
+    if (!rebranding && !naming && !inNativeApp) return
     /** Both rewrites, composed. Idempotent — see the note on termination. */
     const transform = (title: string) => {
       // The unread badge is stripped off the FRONT before the subject is
@@ -184,9 +188,15 @@ export function ConsoleBrandingEffects(): null {
       // leaking silently.
       const base = naming ? stripUnreadBadge(title) : title
       const badge = naming ? title.slice(0, title.length - base.length) : ''
-      const named = naming
+      const renamed = naming
         ? badge + renameTitleSubject(base, subjectId, subjectName)
         : title
+      // Inside the apps the trailing brand goes rather than being renamed:
+      // the third transform, on the same end the rebrand acts on, so it runs
+      // first and leaves the rebrand nothing to do there.
+      const named = inNativeApp
+        ? dropTitleBrand(renamed, PLATFORM_BRAND_NAME)
+        : renamed
       return rebranding && named.includes(PLATFORM_BRAND_NAME)
         ? named.split(PLATFORM_BRAND_NAME).join(productName)
         : named
@@ -221,7 +231,7 @@ export function ConsoleBrandingEffects(): null {
         document.title = original
       }
     }
-  }, [productName, subjectId, subjectName])
+  }, [productName, subjectId, subjectName, inNativeApp])
 
   return null
 }

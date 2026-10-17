@@ -68,6 +68,7 @@ import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SkeletonList
@@ -126,7 +127,7 @@ internal fun NotificationSettingsScreen(
     is Live.Failed -> EmptyState(
       "Could not load your notification settings",
       body = "Check the connection and try again.",
-      icon = AglynIcons.named("error"),
+      icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
       modifier = Modifier.testTag("notification-settings-error"),
     )
     is Live.Ready -> {

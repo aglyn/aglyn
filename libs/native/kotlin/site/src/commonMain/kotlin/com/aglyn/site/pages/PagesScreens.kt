@@ -60,11 +60,13 @@ import com.aglyn.pluginhost.RunnerBanners
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.ListHeader
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -149,7 +151,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
         }
         when (val rows = live.rows) {
           Live.Loading -> SkeletonList(rows = 6)
-          is Live.Failed -> EmptyState("Could not load this site's pages", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+          is Live.Failed -> EmptyState("Could not load this site's pages", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
           is Live.Ready -> if (rows.value.isEmpty()) {
             EmptyState(
               "No pages yet",
@@ -180,7 +182,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
       // A deleted page leaves the list, and its detail closes with it.
       CloseWhenGone(rows?.let { row != null })
       if (row == null) {
-        EmptyState("Pick a page to see it here", icon = AglynIcons.named("description"))
+        SelectionPlaceholder("Pick a page to see it here", icon = AglynIcons.named("description"))
       } else {
         PageDetail(context, hostId, row, live.routing, api, runner, canEdit, canPublish) { dialog = it }
       }

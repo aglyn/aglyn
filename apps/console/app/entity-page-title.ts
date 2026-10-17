@@ -132,3 +132,25 @@ export function renameTitleSubject(
   if (!current.startsWith(prefix)) return current
   return `${name}${current.slice(id.length)}`
 }
+
+/**
+ * The title without its trailing brand: `Home · Page besigner · shop.aglyn.app`
+ * from `Home · Page besigner · shop.aglyn.app · Aglyn` (AGL-3894).
+ *
+ * For the Besigner inside the native apps. The web view's title is what the
+ * app has to show for the page, and inside an app that already wears the
+ * brand a trailing ` · Aglyn` only repeats it. Anchored at the END and only
+ * after the separator, so a bare `Aglyn` (the title before a route has its
+ * own) and a subject that merely contains the brand are left alone.
+ *
+ * Idempotent: the result no longer ends with the brand, so a second pass
+ * under the title observer returns it unchanged.
+ */
+export function dropTitleBrand(title: string, brand: string): string {
+  const current = clean(title)
+  const name = clean(brand)
+  if (!current || !name) return current
+  const suffix = `${TITLE_SEPARATOR}${name}`
+  if (!current.endsWith(suffix) || current === suffix.trim()) return current
+  return current.slice(0, current.length - suffix.length)
+}

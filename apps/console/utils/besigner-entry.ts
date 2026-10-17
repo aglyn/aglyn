@@ -63,31 +63,12 @@ export function besignerEntryNeedsSignIn(
   return uid !== user.uid || pool !== (user.tenantId ?? null)
 }
 
-/** Set by the entry page for the life of the web view's tab. */
-const NATIVE_APP_WEB_VIEW_KEY = 'aglyn:native-app-web-view'
-
-/**
- * Remember, for this tab, that it is the native apps' web view. Session
- * storage lives exactly as long as the web view does and never reaches a
- * browser tab, which is what keeps the mark from leaking.
+/*
+ * Whether this tab is the native apps' web view: the shared answer the
+ * Besigner reads too (the user-agent marker or the entry page's mark,
+ * AGL-3894), re-exported for the console's imports.
  */
-export function markNativeAppWebView(): void {
-  try {
-    window.sessionStorage.setItem(NATIVE_APP_WEB_VIEW_KEY, '1')
-  } catch {
-    // Storage refused: the page still works, it only offers web-only extras.
-  }
-}
-
-/**
- * Whether this tab is the Besigner inside the native apps. The app owns
- * notifications there (its own push), so web-only offers stay out of it.
- */
-export function isNativeAppWebView(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    return window.sessionStorage.getItem(NATIVE_APP_WEB_VIEW_KEY) === '1'
-  } catch {
-    return false
-  }
-}
+export {
+  isNativeAppWebView,
+  markNativeAppWebView,
+} from '@aglyn/aglyn/app-utils/native-app-web-view'
