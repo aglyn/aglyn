@@ -18,7 +18,7 @@ On **Marketing → Email**, click **New email template**. That creates an
 email document and opens it in the besigner with the email blocks:
 
 - **Email section** — the 600px container with background and padding.
-- **Email text** — heading/subheading/body/caption styles; supports
+- **Email text** — heading, subheading, body and caption styles, plus **Eyebrow** (a small label above a heading) and **Details**, which draws each "Label: value" line as a row of a panel, with a "Total" row in bold; supports
   merge tokens.
 - **Email rich text** — formatted HTML (sanitized like the custom HTML
   block).

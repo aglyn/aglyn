@@ -467,3 +467,64 @@ export function describeAccountAcquisition(
   parts.push(doorPhrase(record))
   return parts.join(' → ')
 }
+
+/** A UTC instant as a staff reader writes it: "Oct 16, 2026, 14:03 UTC". */
+function acquisitionTime(ms: number | null): string | null {
+  if (!ms || !Number.isFinite(ms)) return null
+  return `${new Date(ms).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'UTC',
+  })} UTC`
+}
+
+/**
+ * The record as rows a staff email or card lays out label beside value
+ * (AGL-3897): how the person found the platform, where they landed, what
+ * the visit carried, how and where they signed up. A row the record has no
+ * value for is left out, so an account with nothing captured reads as one
+ * honest row rather than a column of blanks.
+ */
+export function accountAcquisitionDetails(
+  record: AccountAcquisition | null | undefined,
+  options: { primaryHost?: string | null } = {},
+): Array<{ label: string; value: string }> {
+  if (!record) return [{ label: 'How they found us', value: 'No acquisition record' }]
+  const rows: Array<{ label: string; value: string | null }> = [
+    { label: 'How they found us', value: channelPhrase(record) },
+    {
+      label: 'Landing page',
+      value: record.landing
+        ? options.primaryHost && displayHost(record.landing.host) === displayHost(options.primaryHost)
+          ? record.landing.path
+          : `${displayHost(record.landing.host)}${record.landing.path}`
+        : null,
+    },
+    { label: 'Referrer', value: record.referrerHost ? displayHost(record.referrerHost) : null },
+    {
+      label: 'Source / medium',
+      value: record.source && record.source !== 'unknown' ? [record.source, record.medium].filter(Boolean).join(' / ') : null,
+    },
+    { label: 'Campaign', value: record.campaign },
+    { label: 'Google Ads campaign', value: record.adCampaignId },
+    {
+      label: 'Ad click',
+      value: record.clickIds.length ? record.clickIds.join(', ') : null,
+    },
+    {
+      label: 'UTM content / term',
+      value: [record.utm?.content, record.utm?.term].filter(Boolean).join(' / ') || null,
+    },
+    { label: 'First visit', value: acquisitionTime(record.capturedAt) },
+    { label: 'Signed up', value: doorPhrase(record).replace(/^\w/, (first) => first.toUpperCase()) },
+    {
+      label: 'From',
+      value: record.geo ? [record.geo.city, record.geo.region, record.geo.country].filter(Boolean).join(', ') || null : null,
+    },
+  ]
+  return rows.filter((row): row is { label: string; value: string } => Boolean(row.value))
+}

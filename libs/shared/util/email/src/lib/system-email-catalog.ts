@@ -131,7 +131,11 @@ export type SystemEmailDefaultBlock =
   | {
       block: 'text'
       text: string
-      variant?: 'heading' | 'subheading' | 'body' | 'caption'
+      /**
+       * `eyebrow` is a small muted line above a heading; `details` draws each
+       * "Label: value" line as a row of a panel (AGL-3897).
+       */
+      variant?: 'heading' | 'subheading' | 'body' | 'caption' | 'eyebrow' | 'details'
     }
   | { block: 'button'; label: string; href: string }
 
@@ -256,6 +260,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       // Mirrors the fallbackText in invites/route.ts.
       defaultBody: [
+        { block: 'text', text: 'Join {{org.name}}', variant: 'heading' },
         {
           block: 'text',
           text: "You've been invited to join {{org.name}} as {{invite.role}}.",
@@ -423,7 +428,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           text: 'Here is how {{org.name}} used {{brand.productName}} in {{month.label}}.',
           variant: 'body',
         },
-        { block: 'text', text: '{{usage.summary}}', variant: 'body' },
+        { block: 'text', text: '{{usage.summary}}', variant: 'details' },
       ],
       footerReason:
         'You’re receiving this monthly summary because you manage ' +
@@ -550,6 +555,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       // Mirrors the fallbackText in orgs/members/route.ts.
       defaultBody: [
+        { block: 'text', text: 'You’re in {{org.name}}', variant: 'heading' },
         {
           block: 'text',
           text: 'You were added to {{org.name}} as {{member.role}}.',
@@ -788,10 +794,13 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
             'not used before.',
           variant: 'body',
         },
-        { block: 'text', text: 'Device: {{device.name}}', variant: 'body' },
-        { block: 'text', text: 'Location: {{device.location}}', variant: 'body' },
-        { block: 'text', text: 'IP address: {{device.ip}}', variant: 'body' },
-        { block: 'text', text: 'When: {{device.time}}', variant: 'body' },
+        {
+          block: 'text',
+          text:
+            'Device: {{device.name}}\nLocation: {{device.location}}\n' +
+            'IP address: {{device.ip}}\nWhen: {{device.time}}',
+          variant: 'details',
+        },
         {
           // AGL-1959. The button used to say "Review account security" and
           // land on the account page's DEFAULT tab, which offered a password
@@ -854,7 +863,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
             'account. It can be used to sign in without your password.',
           variant: 'body',
         },
-        { block: 'text', text: 'When: {{device.time}}', variant: 'body' },
+        { block: 'text', text: 'Passkey: {{passkey.label}}\nWhen: {{device.time}}', variant: 'details' },
         {
           block: 'button',
           label: 'Review account security',
@@ -1093,6 +1102,11 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: 'Name: Jane Doe\nEmail: jane@example.com\nMessage: Do you deliver on Saturdays?',
         },
         {
+          name: 'notification.context',
+          description: 'The site and workspace it is about, when it is about one',
+          sample: 'Copper Kettle Catering · Test Org',
+        },
+        {
           name: 'notification.url',
           description: 'Where the notification opens in the console',
           sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/notifications`,
@@ -1104,9 +1118,10 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
       ],
       defaultBody: [
+        { block: 'text', text: '{{notification.context}}', variant: 'eyebrow' },
         { block: 'text', text: '{{notification.title}}', variant: 'heading' },
         { block: 'text', text: '{{notification.body}}', variant: 'body' },
-        { block: 'text', text: '{{notification.details}}', variant: 'body' },
+        { block: 'text', text: '{{notification.details}}', variant: 'details' },
         { block: 'button', label: 'Open in {{brand.productName}}', href: '{{notification.url}}' },
         {
           block: 'text',

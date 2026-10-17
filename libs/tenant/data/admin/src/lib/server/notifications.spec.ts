@@ -543,8 +543,11 @@ describe('the notification email is a system email (AGL-3367)', () => {
     )
     expect(sends).toHaveLength(1)
     const html = String(sends[0]['html'])
-    // Escaped, line by line, and a blank answer is left out.
-    expect(html).toContain('Name: Jane &lt;Doe&gt;<br />Message: Two lines<br />of question')
+    // Escaped, a row each in the details panel (AGL-3897), an answer that ran
+    // over two lines kept in its own row, and a blank answer left out.
+    expect(html).toMatch(/>Name<\/td><td [^>]*>Jane &lt;Doe&gt;<\/td>/)
+    expect(html).toMatch(/>Message<\/td><td [^>]*>Two lines<br \/>of question<\/td>/)
+    expect(html).not.toContain('>Phone<')
     expect(html).not.toContain('Phone')
     expect(sends[0]['text']).toContain('Name: Jane <Doe>\nMessage: Two lines\nof question')
     // The feed entry keeps to the notification itself.

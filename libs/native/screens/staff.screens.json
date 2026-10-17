@@ -9251,6 +9251,11 @@
               "sample": "Name: Jane Doe\nEmail: jane@example.com\nMessage: Do you deliver on Saturdays?"
             },
             {
+              "name": "notification.context",
+              "description": "The site and workspace it is about, when it is about one",
+              "sample": "Copper Kettle Catering · Test Org"
+            },
+            {
               "name": "notification.url",
               "description": "Where the notification opens in the console",
               "sample": "https://app.aglyn.com/manage/notifications"

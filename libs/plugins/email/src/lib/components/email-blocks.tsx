@@ -32,6 +32,7 @@ import {
 import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
 import { EMAIL_BLOCK_STARTER_TREES } from '@aglyn/aglyn/app-utils/email-block-starters'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
+import { splitEmailDetailLine } from '@aglyn/shared-util-email'
 import Box from '@mui/material/Box'
 import type { SxProps, Theme } from '@mui/material/styles'
 import Typography from '@mui/material/Typography'
@@ -144,7 +145,7 @@ export const TEXT_ID: Aglyn.ComponentId = 'emailText'
 
 export interface EmailTextProps extends EmailBlockStyleProps {
   children?: string
-  variant?: 'heading' | 'subheading' | 'body' | 'caption'
+  variant?: 'heading' | 'subheading' | 'body' | 'caption' | 'eyebrow' | 'details'
   color?: string
   align?: 'left' | 'center' | 'right'
 }
@@ -156,13 +157,79 @@ const TEXT_PRESETS: Record<
   heading: { fontSize: 28, fontWeight: 700, lineHeight: 1.25 },
   subheading: { fontSize: 20, fontWeight: 600, lineHeight: 1.3 },
   body: { fontSize: 15, fontWeight: 400, lineHeight: 1.55 },
-  caption: { fontSize: 12, fontWeight: 400, lineHeight: 1.4 },
+  caption: { fontSize: 12, fontWeight: 400, lineHeight: 1.5 },
+  eyebrow: { fontSize: 12, fontWeight: 700, lineHeight: 1.4 },
+  details: { fontSize: 14, fontWeight: 400, lineHeight: 1.45 },
+}
+
+/** The styles drawn in the theme's muted text color unless a color is set, as the sent email draws them. */
+const MUTED_VARIANTS: ReadonlySet<string> = new Set(['caption', 'eyebrow'])
+
+/**
+ * A details panel as the sent email draws it (`detailsHtml` in the email
+ * renderer): each line a row, label muted left and value right, a "Total"
+ * row bold with a rule over it.
+ */
+function EmailDetailsPreview({ text, color }: { text: string; color?: string }) {
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+  return (
+    <Box
+      sx={{
+        bgcolor: 'tint.primary',
+        borderRadius: 2,
+        px: 2,
+        py: 0.5,
+        fontFamily: 'Helvetica, Arial, sans-serif',
+        fontSize: 14,
+        lineHeight: 1.45,
+      }}
+    >
+      {lines.map((line, index) => {
+        const split = splitEmailDetailLine(line)
+        const total = Boolean(split && /^total\b/i.test(split.label))
+        return (
+          <Box
+            key={index}
+            sx={{
+              display: 'flex',
+              gap: 2,
+              justifyContent: 'space-between',
+              py: 1.125,
+              borderTop: index > 0 ? 1 : 0,
+              borderColor: 'divider',
+              color: color || 'text.primary',
+            }}
+          >
+            {split ? (
+              <>
+                <Box component="span" sx={{ color: total ? undefined : 'text.secondary', fontWeight: total ? 700 : 400 }}>
+                  {split.label}
+                </Box>
+                <Box component="span" sx={{ fontWeight: total ? 700 : 600, textAlign: 'right', wordBreak: 'break-word' }}>
+                  {split.value}
+                </Box>
+              </>
+            ) : (
+              <Box component="span">{line}</Box>
+            )}
+          </Box>
+        )
+      })}
+    </Box>
+  )
 }
 
 export const EmailText = forwardRef<HTMLDivElement, EmailTextProps>(
   (props, ref) => {
     const { children, variant, color, align, sx, ...rest } = props
-    const preset = TEXT_PRESETS[variant ?? 'body']
+    const preset = TEXT_PRESETS[variant ?? 'body'] ?? TEXT_PRESETS.body
+    if (variant === 'details') {
+      return (
+        <Box ref={ref} {...rest} sx={mergeSxProps({ mb: 1 }, sx)}>
+          <EmailDetailsPreview text={children ?? 'Label: value'} {...(color ? { color } : {})} />
+        </Box>
+      )
+    }
     return (
       <Typography
         ref={ref}
@@ -173,7 +240,8 @@ export const EmailText = forwardRef<HTMLDivElement, EmailTextProps>(
             fontSize: preset.fontSize,
             fontWeight: preset.fontWeight,
             lineHeight: preset.lineHeight,
-            color: color || '#1a1a1a',
+            color: color || (MUTED_VARIANTS.has(variant ?? '') ? 'text.secondary' : '#1a1a1a'),
+            ...(variant === 'eyebrow' ? { letterSpacing: '0.06em', textTransform: 'uppercase' } : {}),
             textAlign: align ?? 'left',
             fontFamily: 'Helvetica, Arial, sans-serif',
             mb: 1,
@@ -210,13 +278,17 @@ export const emailTextSchema: Aglyn.ComponentSchema<EmailTextProps> = {
       label: 'Style',
       description:
         'Size and weight of this text — Heading and Subheading also give it ' +
-        'the spacing above and below that a heading needs.',
+        'the spacing above and below that a heading needs. Eyebrow is a ' +
+        'small label above a heading. Details draws each "Label: value" line ' +
+        'as a row of a panel, a "Total" row in bold.',
       component: Aglyn.FieldComponentType.SELECT,
       options: [
         { value: 'heading', label: 'Heading' },
         { value: 'subheading', label: 'Subheading' },
         { value: 'body', label: 'Body' },
         { value: 'caption', label: 'Caption' },
+        { value: 'eyebrow', label: 'Eyebrow' },
+        { value: 'details', label: 'Details' },
       ],
     },
     {

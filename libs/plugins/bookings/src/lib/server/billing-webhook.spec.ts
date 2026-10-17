@@ -455,11 +455,8 @@ describe('the paid confirmation tells the time in the booking’s zone (AGL-3432
   it('a booking that predates the stored zone reads in its service’s zone, named', async () => {
     await deliver(BOOKING_SESSION)
     const text = String(sentEmails[0].text)
-    expect(text).toContain(
-      'Hi Rhea Salt, your booking with Harbor Spa is confirmed: ' +
-        '"Deep tissue massage" on Thursday, April 23, 2026 at 10:06 PM ' +
-        '(America/Chicago).',
-    )
+    expect(text).toContain('Hi Rhea Salt, your booking with Harbor Spa is confirmed.')
+    expect(text).toContain('Service: Deep tissue massage\nWhen: Thursday, April 23, 2026 at 10:06 PM (America/Chicago)')
     expect(text).toContain('You paid $95.00.')
     expect(text).not.toContain('()')
   })
@@ -471,7 +468,7 @@ describe('the paid confirmation tells the time in the booking’s zone (AGL-3432
     })
     await deliver(BOOKING_SESSION)
     expect(String(sentEmails[0].text)).toContain(
-      'on Friday, April 24, 2026 at 5:06 AM (Europe/Berlin).',
+      'When: Friday, April 24, 2026 at 5:06 AM (Europe/Berlin)',
     )
   })
 
@@ -483,7 +480,7 @@ describe('the paid confirmation tells the time in the booking’s zone (AGL-3432
     })
     await deliver(BOOKING_SESSION)
     expect(String(sentEmails[0].text)).toContain(
-      'on Thursday, April 23, 2026 at 11:06 PM (America/New_York).',
+      'When: Thursday, April 23, 2026 at 11:06 PM (America/New_York)',
     )
   })
 
@@ -491,7 +488,7 @@ describe('the paid confirmation tells the time in the booking’s zone (AGL-3432
     docs.set('hosts/host-1/services/service-1', { ...SERVICE, timezone: '' })
     await deliver(BOOKING_SESSION)
     const text = String(sentEmails[0].text)
-    expect(text).toContain('on Friday, April 24, 2026 at 3:06 AM (UTC).')
+    expect(text).toContain('When: Friday, April 24, 2026 at 3:06 AM (UTC)')
     expect(text).not.toContain('()')
   })
 })

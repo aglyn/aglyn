@@ -71,13 +71,16 @@ export function bookingsTenantEmails(): readonly TenantEmailEntry[] {
         { block: 'text', text: 'Booking confirmed', variant: 'heading' },
         {
           block: 'text',
-          text:
-            'Hi {{name}}, your booking with {{host.businessName}} is ' +
-            'confirmed: "{{service.name}}" on {{when}} ({{timezone}}).',
+          text: 'Hi {{name}}, your booking with {{host.businessName}} is confirmed.',
           variant: 'body',
         },
+        // What, when and the reference as a details panel (AGL-3897).
+        {
+          block: 'text',
+          text: 'Service: {{service.name}}\nWhen: {{when}} ({{timezone}})\nReference: {{booking.ref}}',
+          variant: 'details',
+        },
         { block: 'text', text: '{{booking.payment}}', variant: 'body' },
-        { block: 'text', text: 'Reference: {{booking.ref}}', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you booked with {{host.businessName}}.',
@@ -109,13 +112,16 @@ export function bookingsTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
+        { block: 'text', text: 'Your booking is coming up', variant: 'heading' },
         {
           block: 'text',
-          text:
-            'Hi {{name}}, this is a reminder of your booking with ' +
-            '{{host.businessName}}: "{{service.name}}" on {{when}} ' +
-            '({{timezone}}).',
+          text: 'Hi {{name}}, this is a reminder of your booking with {{host.businessName}}.',
           variant: 'body',
+        },
+        {
+          block: 'text',
+          text: 'Service: {{service.name}}\nWhen: {{when}} ({{timezone}})',
+          variant: 'details',
         },
       ],
       footerReason:
@@ -161,13 +167,16 @@ export function bookingsTenantEmails(): readonly TenantEmailEntry[] {
         { block: 'text', text: 'Your booking has a new time', variant: 'heading' },
         {
           block: 'text',
-          text:
-            'Hi {{name}}, your booking with {{host.businessName}} for ' +
-            '"{{service.name}}" is now on {{when}} ({{timezone}}). It was ' +
-            'on {{previousWhen}}.',
+          text: 'Hi {{name}}, your booking with {{host.businessName}} has a new time.',
           variant: 'body',
         },
-        { block: 'text', text: 'Reference: {{booking.ref}}', variant: 'caption' },
+        {
+          block: 'text',
+          text:
+            'Service: {{service.name}}\nNew time: {{when}} ({{timezone}})\n' +
+            'Was: {{previousWhen}}\nReference: {{booking.ref}}',
+          variant: 'details',
+        },
       ],
       footerReason:
         'You’re receiving this because you have a booking with {{host.businessName}}.',

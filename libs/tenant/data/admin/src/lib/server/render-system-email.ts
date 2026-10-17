@@ -307,6 +307,8 @@ function systemEmailTheme(options: SystemEmailBrandOptions): EmailTheme {
       ? buildEmailPalette({ base: 'platform', primaryColor })
       : PLATFORM_EMAIL_PALETTE,
     buttonRadius: 4,
+    // The console's buttons: MUI's button type, which its theme keeps.
+    buttonText: { transform: 'uppercase', weight: 500, letterSpacing: '0.02857em' },
   }
 }
 

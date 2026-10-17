@@ -216,6 +216,7 @@ async function emailNotification(
             'notification.body': payload.body ?? '',
             'notification.details': details,
             'notification.url': url,
+            'notification.context': context.line ?? '',
             settingsUrl,
           },
           context.brand.options,
@@ -248,6 +249,13 @@ interface NotificationEmailContext {
   brand: SystemEmailBrand
   orgSlug?: string
   hostSubdomain?: string
+  /**
+   * What the notification is about, for the line above its heading
+   * (AGL-3897): the site and the workspace, "Copper Kettle Catering · Acme",
+   * or the workspace alone. A person in several workspaces otherwise gets
+   * "New order" with nothing to say whose.
+   */
+  line?: string
 }
 
 /**
@@ -275,8 +283,13 @@ async function notificationEmailContext(
     ])
     const slug = org.get('slug')
     const subdomain = host?.get('subdomain')
+    const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+    const orgName = text(org.get('name'))
+    const siteName = text(host?.get('displayName')) || text(host?.get('name')) || text(subdomain)
+    const line = [siteName, orgName && orgName !== siteName ? orgName : ''].filter(Boolean).join(' · ')
     return {
       brand: systemEmailBrand(org.exists ? (org.data() ?? null) : null),
+      ...(line ? { line } : {}),
       ...(typeof slug === 'string' && slug ? { orgSlug: slug } : {}),
       ...(typeof subdomain === 'string' && subdomain
         ? { hostSubdomain: subdomain }
@@ -460,7 +473,10 @@ async function listStaffUids(): Promise<string[]> {
  * instead: the same console notification, plus staff's switches, the
  * operator email or digest, and the webhook. See `raiseOperatorAlert`.
  */
-async function notifyStaffNow(payload: NotificationPayload): Promise<void> {
+async function notifyStaffNow(
+  payload: NotificationPayload,
+  options: Pick<NotifyUsersOptions, 'emailDetails'> = {},
+): Promise<void> {
   try {
     const alert = operatorAlertForNotificationType(payload.type)
     if (alert) {
@@ -475,7 +491,7 @@ async function notifyStaffNow(payload: NotificationPayload): Promise<void> {
       })
       return
     }
-    await notifyStaffConsole(payload)
+    await notifyStaffConsole(payload, options)
   } catch (error) {
     console.error('staff notification failed', error)
   }
@@ -488,12 +504,15 @@ async function notifyStaffNow(payload: NotificationPayload): Promise<void> {
  */
 async function notifyStaffConsoleNow(
   payload: NotificationPayload,
-  options: { skipEmail?: boolean } = {},
+  options: Pick<NotifyUsersOptions, 'skipEmail' | 'emailDetails'> = {},
 ): Promise<void> {
   try {
     await notifyUsers(await listStaffUids(), payload, {
       audience: 'staff',
       ...(options.skipEmail ? { skipEmail: true } : {}),
+      // What the email alone carries — a new account's acquisition, a new
+      // site's workspace (AGL-3897) — beside the bell's one line.
+      ...(options.emailDetails?.length ? { emailDetails: options.emailDetails } : {}),
     })
   } catch (error) {
     console.error('staff notification failed', error)

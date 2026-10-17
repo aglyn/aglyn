@@ -103,8 +103,8 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
           text: 'Here is the receipt for your order from {{host.businessName}}.',
           variant: 'body',
         },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
-        { block: 'text', text: 'Total charged: {{order.total}}', variant: 'body' },
+        // Each line an item and its price, the total under them (AGL-3897).
+        { block: 'text', text: '{{order.summary}}\nTotal charged: {{order.total}}', variant: 'details' },
         { block: 'text', text: '{{store.receiptFooter}}', variant: 'body' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
         {
@@ -167,7 +167,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
           text: '{{host.businessName}} shipped items from order {{order.number}}.',
           variant: 'body',
         },
-        { block: 'text', text: '{{shipment.summary}}', variant: 'body' },
+        { block: 'text', text: '{{shipment.summary}}', variant: 'details' },
         { block: 'text', text: '{{shipment.tracking}}', variant: 'body' },
         { block: 'text', text: '{{shipment.remaining}}', variant: 'body' },
         { block: 'button', label: 'Track your order', href: '{{order.statusUrl}}' },
@@ -199,7 +199,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
             '{{host.businessName}} marked order {{order.number}} as delivered.',
           variant: 'body',
         },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
+        { block: 'text', text: '{{order.summary}}', variant: 'details' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
         {
           block: 'text',
@@ -252,7 +252,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
             '{{order.number}}.',
           variant: 'body',
         },
-        { block: 'text', text: '{{refund.summary}}', variant: 'body' },
+        { block: 'text', text: '{{refund.summary}}', variant: 'details' },
         { block: 'text', text: '{{refund.note}}', variant: 'body' },
         {
           block: 'text',
@@ -298,7 +298,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
           text: '{{host.businessName}} canceled order {{order.number}}.',
           variant: 'body',
         },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
+        { block: 'text', text: '{{order.summary}}', variant: 'details' },
         { block: 'text', text: '{{cancel.note}}', variant: 'body' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
       ],
@@ -342,7 +342,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
           text: 'Order {{order.number}} is ready at {{pickup.location}}.',
           variant: 'body',
         },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
+        { block: 'text', text: '{{order.summary}}', variant: 'details' },
         { block: 'text', text: '{{pickup.hours}}', variant: 'body' },
         { block: 'text', text: '{{pickup.instructions}}', variant: 'body' },
         {
@@ -379,7 +379,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
           text: 'Order {{order.number}} was picked up from {{pickup.location}}.',
           variant: 'body',
         },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
+        { block: 'text', text: '{{order.summary}}', variant: 'details' },
         {
           block: 'text',
           text:
@@ -423,7 +423,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
             'Your window: {{delivery.window}}.',
           variant: 'body',
         },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
+        { block: 'text', text: '{{order.summary}}', variant: 'details' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
       ],
       footerReason: ORDER_FOOTER_REASON,
@@ -466,8 +466,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
           text: 'A new order came in on {{site.name}}.',
           variant: 'body',
         },
-        { block: 'text', text: '{{order.summary}}', variant: 'body' },
-        { block: 'text', text: 'Total: {{order.total}}', variant: 'body' },
+        { block: 'text', text: '{{order.summary}}\nTotal: {{order.total}}', variant: 'details' },
         {
           block: 'text',
           text: 'Buyer: {{buyer.email}} · Order {{order.ref}}',
@@ -526,14 +525,10 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
         {
           block: 'text',
-          text: 'Check-in: {{reservation.checkIn}}',
-          variant: 'body',
-        },
-        { block: 'text', text: 'Nights: {{reservation.nights}}', variant: 'body' },
-        {
-          block: 'text',
-          text: 'Paid today: {{reservation.paid}}',
-          variant: 'body',
+          text:
+            'Check-in: {{reservation.checkIn}}\nNights: {{reservation.nights}}\n' +
+            'Paid today: {{reservation.paid}}',
+          variant: 'details',
         },
         { block: 'text', text: '{{reservation.balance}}', variant: 'body' },
         {
@@ -582,8 +577,8 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         { block: 'text', text: '{{giftcard.note}}', variant: 'body' },
         {
           block: 'text',
-          text: 'Gift card code: {{giftcard.code}}',
-          variant: 'body',
+          text: 'Value: {{giftcard.value}}\nGift card code: {{giftcard.code}}',
+          variant: 'details',
         },
         {
           block: 'text',
@@ -628,6 +623,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
+        { block: 'text', text: 'Back in stock', variant: 'heading' },
         {
           block: 'text',
           text: '{{product.name}} is back in stock at {{host.businessName}}.',
@@ -657,6 +653,7 @@ export function commerceTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
+        { block: 'text', text: 'You left something behind', variant: 'heading' },
         {
           block: 'text',
           text:
@@ -930,7 +927,7 @@ function returnTenantEmails(): readonly TenantEmailEntry[] {
           text: '{{buyer.email}} wants to return items from order {{order.number}}.',
           variant: 'body',
         },
-        { block: 'text', text: '{{return.items}}', variant: 'body' },
+        { block: 'text', text: '{{return.items}}', variant: 'details' },
         { block: 'text', text: '{{return.customerNote}}', variant: 'body' },
         {
           block: 'text',
@@ -970,7 +967,7 @@ function returnTenantEmails(): readonly TenantEmailEntry[] {
           text: '{{host.businessName}} approved the return of:',
           variant: 'body',
         },
-        { block: 'text', text: '{{return.items}}', variant: 'body' },
+        { block: 'text', text: '{{return.items}}', variant: 'details' },
         { block: 'text', text: '{{return.note}}', variant: 'body' },
         { block: 'text', text: '{{return.label}}', variant: 'body' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
@@ -993,7 +990,7 @@ function returnTenantEmails(): readonly TenantEmailEntry[] {
           text: '{{host.businessName}} declined the return of:',
           variant: 'body',
         },
-        { block: 'text', text: '{{return.items}}', variant: 'body' },
+        { block: 'text', text: '{{return.items}}', variant: 'details' },
         { block: 'text', text: '{{return.note}}', variant: 'body' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
       ],
@@ -1026,7 +1023,7 @@ function returnTenantEmails(): readonly TenantEmailEntry[] {
             '{{return.refundTotal}} to your original payment method.',
           variant: 'body',
         },
-        { block: 'text', text: '{{return.items}}', variant: 'body' },
+        { block: 'text', text: '{{return.items}}', variant: 'details' },
         { block: 'button', label: 'View your order', href: '{{order.statusUrl}}' },
       ],
       footerReason: ORDER_FOOTER_REASON,

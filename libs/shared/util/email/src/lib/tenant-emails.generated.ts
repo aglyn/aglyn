@@ -59,18 +59,18 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "Hi {{name}}, your booking with {{host.businessName}} is confirmed: \"{{service.name}}\" on {{when}} ({{timezone}}).",
+        "text": "Hi {{name}}, your booking with {{host.businessName}} is confirmed.",
         "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Service: {{service.name}}\nWhen: {{when}} ({{timezone}})\nReference: {{booking.ref}}",
+        "variant": "details"
       },
       {
         "block": "text",
         "text": "{{booking.payment}}",
         "variant": "body"
-      },
-      {
-        "block": "text",
-        "text": "Reference: {{booking.ref}}",
-        "variant": "caption"
       }
     ],
     "footerReason": "You’re receiving this because you booked with {{host.businessName}}."
@@ -108,8 +108,18 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
     "defaultBody": [
       {
         "block": "text",
-        "text": "Hi {{name}}, this is a reminder of your booking with {{host.businessName}}: \"{{service.name}}\" on {{when}} ({{timezone}}).",
+        "text": "Your booking is coming up",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
+        "text": "Hi {{name}}, this is a reminder of your booking with {{host.businessName}}.",
         "variant": "body"
+      },
+      {
+        "block": "text",
+        "text": "Service: {{service.name}}\nWhen: {{when}} ({{timezone}})",
+        "variant": "details"
       }
     ],
     "footerReason": "You’re receiving this because you have a booking with {{host.businessName}}."
@@ -162,13 +172,13 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "Hi {{name}}, your booking with {{host.businessName}} for \"{{service.name}}\" is now on {{when}} ({{timezone}}). It was on {{previousWhen}}.",
+        "text": "Hi {{name}}, your booking with {{host.businessName}} has a new time.",
         "variant": "body"
       },
       {
         "block": "text",
-        "text": "Reference: {{booking.ref}}",
-        "variant": "caption"
+        "text": "Service: {{service.name}}\nNew time: {{when}} ({{timezone}})\nWas: {{previousWhen}}\nReference: {{booking.ref}}",
+        "variant": "details"
       }
     ],
     "footerReason": "You’re receiving this because you have a booking with {{host.businessName}}."
@@ -226,13 +236,8 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "{{order.summary}}",
-        "variant": "body"
-      },
-      {
-        "block": "text",
-        "text": "Total charged: {{order.total}}",
-        "variant": "body"
+        "text": "{{order.summary}}\nTotal charged: {{order.total}}",
+        "variant": "details"
       },
       {
         "block": "text",
@@ -311,7 +316,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "block": "text",
         "text": "{{shipment.summary}}",
-        "variant": "body"
+        "variant": "details"
       },
       {
         "block": "text",
@@ -370,7 +375,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "block": "text",
         "text": "{{order.summary}}",
-        "variant": "body"
+        "variant": "details"
       },
       {
         "block": "button",
@@ -434,7 +439,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "block": "text",
         "text": "{{refund.summary}}",
-        "variant": "body"
+        "variant": "details"
       },
       {
         "block": "text",
@@ -498,7 +503,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "block": "text",
         "text": "{{order.summary}}",
-        "variant": "body"
+        "variant": "details"
       },
       {
         "block": "text",
@@ -567,7 +572,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "block": "text",
         "text": "{{order.summary}}",
-        "variant": "body"
+        "variant": "details"
       },
       {
         "block": "text",
@@ -636,7 +641,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "block": "text",
         "text": "{{order.summary}}",
-        "variant": "body"
+        "variant": "details"
       },
       {
         "block": "text",
@@ -690,7 +695,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "block": "text",
         "text": "{{order.summary}}",
-        "variant": "body"
+        "variant": "details"
       },
       {
         "block": "button",
@@ -748,13 +753,8 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "{{order.summary}}",
-        "variant": "body"
-      },
-      {
-        "block": "text",
-        "text": "Total: {{order.total}}",
-        "variant": "body"
+        "text": "{{order.summary}}\nTotal: {{order.total}}",
+        "variant": "details"
       },
       {
         "block": "text",
@@ -812,18 +812,8 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "Check-in: {{reservation.checkIn}}",
-        "variant": "body"
-      },
-      {
-        "block": "text",
-        "text": "Nights: {{reservation.nights}}",
-        "variant": "body"
-      },
-      {
-        "block": "text",
-        "text": "Paid today: {{reservation.paid}}",
-        "variant": "body"
+        "text": "Check-in: {{reservation.checkIn}}\nNights: {{reservation.nights}}\nPaid today: {{reservation.paid}}",
+        "variant": "details"
       },
       {
         "block": "text",
@@ -881,8 +871,8 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "Gift card code: {{giftcard.code}}",
-        "variant": "body"
+        "text": "Value: {{giftcard.value}}\nGift card code: {{giftcard.code}}",
+        "variant": "details"
       },
       {
         "block": "text",
@@ -928,6 +918,11 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
     "defaultBody": [
       {
         "block": "text",
+        "text": "Back in stock",
+        "variant": "heading"
+      },
+      {
+        "block": "text",
         "text": "{{product.name}} is back in stock at {{host.businessName}}.",
         "variant": "body"
       },
@@ -956,6 +951,11 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       }
     ],
     "defaultBody": [
+      {
+        "block": "text",
+        "text": "You left something behind",
+        "variant": "heading"
+      },
       {
         "block": "text",
         "text": "You left items in your cart at {{host.businessName}}. Pick up where you left off.",
@@ -1254,7 +1254,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "block": "text",
         "text": "{{return.items}}",
-        "variant": "body"
+        "variant": "details"
       },
       {
         "block": "text",
@@ -1318,7 +1318,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "block": "text",
         "text": "{{return.items}}",
-        "variant": "body"
+        "variant": "details"
       },
       {
         "block": "text",
@@ -1382,7 +1382,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "block": "text",
         "text": "{{return.items}}",
-        "variant": "body"
+        "variant": "details"
       },
       {
         "block": "text",
@@ -1441,7 +1441,7 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       {
         "block": "text",
         "text": "{{return.items}}",
-        "variant": "body"
+        "variant": "details"
       },
       {
         "block": "button",
@@ -1529,12 +1529,12 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "You have {{loyalty.balance}} points (worth {{loyalty.value}}) and {{loyalty.credit}} in store credit.",
-        "variant": "body"
+        "text": "Points: {{loyalty.balance}} (worth {{loyalty.value}})\nStore credit: {{loyalty.credit}}\nRewards code: {{loyalty.code}}",
+        "variant": "details"
       },
       {
         "block": "text",
-        "text": "Your rewards code is {{loyalty.code}}. Enter it at checkout on {{host.url}}, or give it at the register, to spend your balance.",
+        "text": "Enter your rewards code at checkout on {{host.url}}, or give it at the register, to spend your balance.",
         "variant": "body"
       },
       {
@@ -1613,12 +1613,12 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "You have {{loyalty.balance}} points (worth {{loyalty.value}}) and {{loyalty.credit}} in store credit.",
-        "variant": "body"
+        "text": "Points: {{loyalty.balance}} (worth {{loyalty.value}})\nStore credit: {{loyalty.credit}}\nRewards code: {{loyalty.code}}",
+        "variant": "details"
       },
       {
         "block": "text",
-        "text": "Your rewards code is {{loyalty.code}}. Enter it at checkout on {{host.url}}, or give it at the register, to spend your balance.",
+        "text": "Enter your rewards code at checkout on {{host.url}}, or give it at the register, to spend your balance.",
         "variant": "body"
       },
       {
@@ -1687,12 +1687,12 @@ export const PLUGIN_TENANT_EMAILS: readonly TenantEmailEntry[] = [
       },
       {
         "block": "text",
-        "text": "You have {{loyalty.balance}} points (worth {{loyalty.value}}) and {{loyalty.credit}} in store credit.",
-        "variant": "body"
+        "text": "Points: {{loyalty.balance}} (worth {{loyalty.value}})\nStore credit: {{loyalty.credit}}\nRewards code: {{loyalty.code}}",
+        "variant": "details"
       },
       {
         "block": "text",
-        "text": "Your rewards code is {{loyalty.code}}. Enter it at checkout on {{host.url}}, or give it at the register, to spend your balance.",
+        "text": "Enter your rewards code at checkout on {{host.url}}, or give it at the register, to spend your balance.",
         "variant": "body"
       },
       {

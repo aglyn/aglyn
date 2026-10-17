@@ -187,6 +187,7 @@ async function handler(request: Request): Promise<Response> {
           subdomain,
           orgSlug: (resumedOrg?.['slug'] as string | undefined) ?? null,
           createdBy: decoded.email ? String(decoded.email) : null,
+          start: 'resumed',
         })
         return Response.json(
           {
@@ -362,6 +363,7 @@ async function handler(request: Request): Promise<Response> {
           displayName: resolveIdpDisplayName(decoded) || null,
         },
         origin: headers.origin ?? `https://${headers.host}`,
+        via: 'first-site',
       })
     }
     await announceNewSite({
@@ -370,6 +372,7 @@ async function handler(request: Request): Promise<Response> {
       subdomain,
       orgSlug,
       createdBy: actorEmail,
+      start: guidedStart ? 'guided-ai' : 'starter',
     })
     // No starter seeding here (AGL-687). Starters render from the code
     // definitions and are copied in only when a user uses or edits one, so a

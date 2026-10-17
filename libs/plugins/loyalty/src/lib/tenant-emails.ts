@@ -41,14 +41,17 @@ const BALANCE_TOKENS = [
 
 const SPEND_LINE = {
   block: 'text',
-  text: 'Your rewards code is {{loyalty.code}}. Enter it at checkout on {{host.url}}, or give it at the register, to spend your balance.',
+  text: 'Enter your rewards code at checkout on {{host.url}}, or give it at the register, to spend your balance.',
   variant: 'body',
 } as const
 
+/** The balance and the code as a details panel (AGL-3897). */
 const BALANCE_LINE = {
   block: 'text',
-  text: 'You have {{loyalty.balance}} points (worth {{loyalty.value}}) and {{loyalty.credit}} in store credit.',
-  variant: 'body',
+  text:
+    'Points: {{loyalty.balance}} (worth {{loyalty.value}})\nStore credit: {{loyalty.credit}}\n' +
+    'Rewards code: {{loyalty.code}}',
+  variant: 'details',
 } as const
 
 export function loyaltyTenantEmails(): readonly TenantEmailEntry[] {

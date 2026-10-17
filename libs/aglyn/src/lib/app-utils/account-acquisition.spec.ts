@@ -17,6 +17,7 @@
 
 import {
   buildAccountAcquisition,
+  accountAcquisitionDetails,
   describeAccountAcquisition,
   organizationAcquisition,
   providerLabel,
@@ -244,5 +245,43 @@ describe('the plain-language line', () => {
     expect(providerLabel('google.com')).toBe('Google')
     expect(providerLabel('oidc.okta')).toBe('single sign-on')
     expect(providerLabel(null)).toBeNull()
+  })
+})
+
+describe('the record as rows for a staff email (AGL-3897)', () => {
+  it('lays out how they found us, where they landed, and how and where they signed up', () => {
+    const record = buildAccountAcquisition({
+      touch: reviewSignup,
+      door: 'signup-password',
+      provider: 'password',
+      geo: { country: 'au', region: 'NSW', city: 'Sydney' },
+      accountCreatedAtMs: NOW - 5_000,
+      recordedBy: 'signup',
+      nowMs: NOW,
+    })
+    expect(accountAcquisitionDetails(record, { primaryHost: 'www.example.com' })).toEqual([
+      { label: 'How they found us', value: 'Referral from g2.com' },
+      { label: 'Landing page', value: '/pricing' },
+      { label: 'Referrer', value: 'g2.com' },
+      { label: 'Source / medium', value: 'g2.com / referral' },
+      { label: 'First visit', value: 'Sep 23, 2026, 19:57 UTC' },
+      { label: 'Signed up', value: 'Signed up with password' },
+      { label: 'From', value: 'Sydney, NSW, AU' },
+    ])
+  })
+
+  it('leaves out what was never captured, and says so when there is no record at all', () => {
+    const record = buildAccountAcquisition({
+      touch: null,
+      door: 'signup-google',
+      provider: 'google.com',
+      recordedBy: 'signup',
+      nowMs: NOW,
+    })
+    expect(accountAcquisitionDetails(record)).toEqual([
+      { label: 'How they found us', value: 'Source unknown — nothing was captured' },
+      { label: 'Signed up', value: 'Signed up with Google' },
+    ])
+    expect(accountAcquisitionDetails(null)).toEqual([{ label: 'How they found us', value: 'No acquisition record' }])
   })
 })
