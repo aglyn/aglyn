@@ -30,6 +30,7 @@ let package = Package(
         .product(name: "AglynCore", package: "apple"),
         .product(name: "AglynUI", package: "apple"),
         .product(name: "AglynPluginHost", package: "apple"),
+        .product(name: "AglynSite", package: "apple"),
       ]
     ),
     .testTarget(name: "AglynEventsCalendarPluginTests", dependencies: ["AglynEventsCalendarPlugin"]),
