@@ -213,6 +213,14 @@ built-in reports and funnel explorations work. `Custom` = no GA4 equivalent.
 | `host_created`                 | Custom          | Console                                                                   | —                                                                                         | Activation                                                                                             |
 | **`site_published`**           | Custom          | Console + **Server** (tenant)                                             | `first_publish?`                                                                          | **Activation — "% who publish a site"**                                                                |
 | `site_start_choice`            | Custom          | Console                                                                   | `choice` (`starter` \| `ai`)                                                             | Activation — how a new site starts (AGL-3594)                                                          |
+| `site_start_step_viewed`       | Custom          | Console (AGL-3898)                                                        | `step`, `step_index`, `step_count`                                                        | Activation — the guided start as a funnel: how many reach each step                                    |
+| `site_start_step_completed`    | Custom          | Console (AGL-3898)                                                        | `step`, `step_index`, `duration_ms`                                                       | ...how many leave each step forward, and how long it took                                              |
+| `site_start_step_back`         | Custom          | Console (AGL-3898)                                                        | `step`, `step_index`, `duration_ms`                                                       | ...where people go back to change an answer                                                            |
+| `site_start_abandoned`         | Custom          | Console (AGL-3898)                                                        | `step`, `step_index`, `reason`, `duration_ms`, `total_ms`                                 | ...the step the start was left on, and how (`skip`, `close`, `unload`, `route`)                        |
+| `site_start_field_error`       | Custom          | Console (AGL-3898)                                                        | `step`, `field`, `error`                                                                  | ...which answer a step refused, and why (closed codes)                                                 |
+| `site_start_struggle`          | Custom          | Console (AGL-3898)                                                        | `step`, `signal`, `field?`, `count?`, `duration_ms?`                                      | ...an answer changed 3+ times (`edits`) or a step idle 30 s (`idle`)                                   |
+| `site_start_rage_click`        | Custom          | Console (AGL-3898)                                                        | `step`, `area`, `clicks`                                                                  | ...3+ clicks within 700 ms and 30 px                                                                   |
+| `site_start_dead_click`        | Custom          | Console (AGL-3898)                                                        | `step`, `area`                                                                            | ...clicks on parts of the form that do nothing (at most 3 a step visit)                                |
 | `stripe_connected`             | Custom          | Console                                                                   | —                                                                                         | **Activation — "% who connect Stripe"**                                                                |
 | `begin_checkout`               | Reserved        | Console + Tenant (cart, buy-now, Starter product, reservations, bookings) | `currency`, `value`, `items`, `billing_interval?`                                         | Revenue — checkout funnel                                                                              |
 | `purchase`                     | Reserved        | **Server** (ours) + Tenant storefront **and bookings** (the merchant's)   | `transaction_id`, `currency`, `value`, `items`, `billing_interval?`, `shipping?`          | Revenue — paid conversions, ARPA, annual mix; and the merchant's own ecommerce **and service** revenue |
@@ -301,6 +309,7 @@ a tenant site pointed at our own property.
 | `host_created`     | `apps/console/components/create-host-dialog.component.tsx`, when `POST /api/hosts/create` answers with the site — the starter chosen, Skip, Plan my site, or the plain dialog's Create site; never when Create site merely opens (AGL-3761)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `site_published`   | `apps/console/constants/screen-publishing.ts` (`publishScreenRoute` — the routing-map primitive every publish surface passes through) and the besigner's two publish handlers; **server-side** from `libs/tenant/runtime/…/apply-publish-schedule.ts` when a due schedule registers a NEW routing entry (AGL-1589); and when the guided start's starter is written to a site born without it (`requestStarterSite` in `apps/console/utils/host-first-run.ts`, `requestAiStarterSite` in the AI plugin), with `first_publish: true` (AGL-3594) |
 | `site_start_choice` | `libs/plugins/ai/src/lib/components/ai-site-start-card.component.tsx`, when a person picks the starter site or AI on the guided start's first step (AGL-3594) |
+| `site_start_*` (AGL-3898) | `libs/plugins/ai/src/lib/components/ai-site-start-tracking.ts` (`createAiSiteStartTracker`), bound to the guided start by `useAiSiteStartTracking` in `ai-site-start-card.component.tsx`: a step drawn or left with Next, Back or an Edit on the review; Skip and the close control (`site_start_abandoned`), `pagehide` (`unload`) and an unmount before a site was started (`route`); a refused Next (`site_start_field_error`, one per field); and the dialog's own click, key and input listeners for struggle, rage and dead clicks |
 | `stripe_connected` | `libs/plugins/commerce/.../payments-settings-card.component.tsx`; `apps/console/components/org-seller-panel.component.tsx`; **server-side** from `libs/tenant/data/admin/…/payment-provider-stripe-connect-status.ts` when `account.updated` is what first flips `stripeChargesEnabled` on (AGL-1580). Both browser emitters gate on the profile still reading "not connected" at click time, and the AGL-1997 webhook lands while the merchant is still on Stripe's hosted onboarding — so on a deployment that HAS a Connect webhook destination the browser guard is already shut by the time they return, and this was the reason the event had never been seen. The two guards read the same stored flag from opposite sides, so exactly one of them can be open per account |
 | `begin_checkout`   | `apps/console/app/(app)/[orgSlug]/billing/page.tsx` (plan checkout); `libs/plugins/commerce/src/lib/components/cart.tsx` (storefront cart checkout, both the redirect and the in-page-payment branch — AGL-1591); `product-detail.tsx` (buy-now, both branches); `libs/plugins/mui/src/lib/components/product.tsx` (the Commerce Starter block, when its displayed price parses to a positive number); `libs/plugins/commerce/src/lib/components/reservation-widget.tsx` (the DEPOSIT being charged, not the value of the stay); `libs/plugins/bookings/src/lib/components/booking.tsx` (a paid service). Every one fires only after the server returned a session, never on the click                                                                            |
 | `view_item`        | `libs/plugins/commerce/src/lib/components/product-detail.tsx`, when the product payload resolves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -2016,6 +2025,50 @@ sign-in into the conversion column and into any Ads import that follows it.
 `org_created` is a candidate once it is trusted — it had never arrived when
 this was written, and marking an event as a key event is **not retroactive**,
 so there is nothing to gain by starring it before it is known to fire.
+
+## The guided start funnel (AGL-3898)
+
+The AI guided start (**Create site** → **Start with AI**) asks one decision a
+step: `choose` (starter or AI), `kind`, `audience`, `style`, `details` and
+`review`, `step_index` 0 to 5. The eight `site_start_*` events above make it a
+funnel, sent from the console through `trackEvent`, so they are dropped for a
+visitor who has not granted analytics exactly as every other console event is,
+and sanitized the same way. Their params are step ids, field ids
+(`siteType`, `audience`, `kind`, `pages`, `submissions`, `welcomeEmail`), closed
+codes (`error`: `required` \| `too_long` \| `out_of_range` \| `invalid`;
+`signal`: `edits` \| `idle`; `reason`: `skip` \| `close` \| `unload` \|
+`route`), closed area ids (`area`: `header`, `progress`, `heading`, `notice`,
+`choose-cards`, `kind-cards`, `style-cards`, `field-<field>`, `review`,
+`footer`, else `form`), counts and durations. Nothing a person typed or picked
+is ever sent: `ai-site-start-card.spec.tsx` types an answer with a name and an
+email address in it and asserts neither reaches a tracked call.
+
+**Reading it.** There is no staff analytics page in the console, so read it in
+GA4 (property `302497406`, Explore):
+
+1. **Funnel exploration** — steps are `site_start_step_viewed` with
+   `step` = `kind`, `audience`, `style`, `details`, `review`, then
+   `site_start_step_completed` with `step` = `review` (the site was started).
+   Breakdown by `step` on `site_start_abandoned` says where people left and
+   how (`reason`); the median `duration_ms` of `site_start_step_completed` by
+   `step` is the time each step takes.
+2. **Where they struggle** — a free-form exploration of
+   `site_start_field_error` by `step` × `field` × `error`,
+   `site_start_struggle` by `step` × `signal` × `field`, and
+   `site_start_rage_click` / `site_start_dead_click` by `step` × `area`.
+3. **Going back** — `site_start_step_back` by `step`: a step people return to
+   after the review is one whose answer they did not expect to matter.
+
+⚠️ Each of `step`, `step_index`, `field`, `error`, `reason`, `signal`, `area`,
+`clicks`, `count`, `duration_ms` and `total_ms` must be registered as an
+event-scoped custom dimension (or metric, for the numbers) in GA4 Admin before
+it can be used as a breakdown. Until then the events count, but their params
+are collected and not reportable (see "GA UI configuration" below). Registration
+is not done by this change.
+
+The internal-traffic filter applies here as everywhere: our own sessions are
+excluded, so at beta scale the counts are small. Read a drought against that
+before reading it as a broken event.
 
 ## Reading the property from a script
 
