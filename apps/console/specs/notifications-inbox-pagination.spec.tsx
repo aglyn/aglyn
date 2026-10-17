@@ -93,6 +93,11 @@ jest.mock('firebase/firestore', () => ({
     return mockRun(q)
   },
   onSnapshot: (q: FakeQuery, next: (snapshot: unknown) => void) => {
+    // A document ref (the user doc's picked sound) has no query to run.
+    if (!q.wheres) {
+      next({ get: () => undefined })
+      return () => undefined
+    }
     const listener = () => next(mockRun(q))
     mockListeners.add(listener)
     listener()
