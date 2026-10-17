@@ -410,6 +410,18 @@ It is a rule about a **domain**, not about staff. It never requires staff to use
 staff can be granted to any account, on any domain, in any pool. The only sign-in it
 refuses is an address on a domain you listed that arrives with no SSO tenant at all.
 
+An account outside your company that has to sign in with an address on that domain,
+such as the demo login you give an app store reviewer, can be named exactly:
+
+```bash
+AGLYN_SSO_EXEMPT_EMAILS="reviewer@example.com"
+```
+
+Set the same three values in `cloud/functions/.env` and deploy the functions. The
+console refuses the session, and the account-creation blocking function refuses to
+create the account at all, so a "Continue with Google" on your domain never leaves a
+second account behind under the same address.
+
 **Keep a way back in.** Before switching enforcement on, make sure at least one
 account that the rule *cannot* refuse still has staff — the simplest being an admin on
 a domain you did not list. Otherwise a misconfigured tenant id locks you out of the

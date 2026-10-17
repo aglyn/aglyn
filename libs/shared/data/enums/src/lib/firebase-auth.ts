@@ -97,6 +97,11 @@ export const AuthAppErrorCodes = {
   PASSKEY_NOT_COMPLETED: 'auth/passkey-not-completed',
   /** The ceremony ran but the server refused the assertion. */
   PASSKEY_SIGNIN_FAILED: 'auth/passkey-signin-failed',
+  /**
+   * The address is on a domain that must sign in through its SSO tenant, and
+   * the account-creation blocking function refused it (AGL-1993).
+   */
+  SSO_DOMAIN_REQUIRED: 'auth/sso-domain-required',
 } as const
 
 export type AuthAppCode =
@@ -123,6 +128,7 @@ export const AuthErrorNotice = {
   [AuthAppErrorCodes.SSO_INPUT_REQUIRED]: true,
   [AuthAppErrorCodes.SSO_INCOMPLETE]: true,
   [AuthAppErrorCodes.PASSKEY_NOT_COMPLETED]: true,
+  [AuthAppErrorCodes.SSO_DOMAIN_REQUIRED]: true,
 }
 
 export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
@@ -266,6 +272,39 @@ export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
   [AuthAppErrorCodes.PASSKEY_SIGNIN_FAILED]:
     'Your other sign-in methods still work — password, Google, or single ' +
     'sign-on.',
+  [AuthAppErrorCodes.SSO_DOMAIN_REQUIRED]:
+    'No account was created. Choose Single sign-on (SSO) on the sign-in ' +
+    'page and enter this address.',
+}
+
+/**
+ * The text `cloud/functions` puts in its SSO-domain refusal (AGL-1993).
+ * Identity Platform reports every blocking-function error as
+ * `auth/internal-error`, so this marker is the only way to tell that refusal
+ * from a real outage.
+ */
+export const SSO_DOMAIN_REQUIRED_MARKER = 'sso-domain-required'
+
+/**
+ * The error as a person should see it. A blocking-function refusal arrives as
+ * `auth/internal-error` with Identity Platform's raw JSON for a message;
+ * the SSO-domain one is given its own code and sentence, and every other
+ * error is returned unchanged.
+ */
+export function normalizeAuthError<T extends AuthResultError | null | undefined>(
+  error: T,
+): T {
+  if (
+    error?.code === AuthErrorCodes.INTERNAL_ERROR &&
+    String(error.message ?? '').includes(SSO_DOMAIN_REQUIRED_MARKER)
+  ) {
+    return {
+      ...error,
+      code: AuthAppErrorCodes.SSO_DOMAIN_REQUIRED,
+      message: 'This address signs in with single sign-on.',
+    } as T
+  }
+  return error
 }
 
 export const COOKIE_KEY_USER_TOKEN = 'aglyn-user-token'

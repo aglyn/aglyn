@@ -124,7 +124,18 @@ export function aiJobNoticeLink(job: AiJobNoticeSource, to: AiJobNoticeTransitio
  * person who created it. Customer-safe throughout: a stopped job's sentence is
  * the job's own `error`, which the machine writes as a fixed sentence.
  */
-export function aiJobNotice(job: AiJobNoticeSource, to: AiJobNoticeTransition): AiJobNotice {
+/** The site a job worked on, as its notice names it: its name, and where it is live. */
+export interface AiJobNoticeSite {
+  name: string
+  /** The site's live address, absolute; `null` when it has none yet. */
+  url: string | null
+}
+
+export function aiJobNotice(
+  job: AiJobNoticeSource,
+  to: AiJobNoticeTransition,
+  site: AiJobNoticeSite | null = null,
+): AiJobNotice {
   const noun = aiJobKindNoun(job.kind)
   const scope = { orgId: job.orgId, ...(job.hostId ? { hostId: job.hostId } : {}) }
   const link = aiJobNoticeLink(job, to)
@@ -183,19 +194,26 @@ export function aiJobNotice(job: AiJobNoticeSource, to: AiJobNoticeTransition): 
     // A guided site start publishes its pages when it finishes (AGL-3596):
     // with one live, the site is, and the build page lists any that stayed
     // drafts with the reason for each.
-    const live = job.kind === 'site' ? (job.sitePublish?.published.length ?? 0) : 0
-    if (live > 0) {
+    const published = job.kind === 'site' ? (job.sitePublish?.published.length ?? 0) : 0
+    if (published > 0) {
       const drafts = job.sitePublish?.drafts.length ?? 0
       const stayed = drafts === 1 ? 'one that stayed a draft' : `${drafts} that stayed drafts`
+      // Named, with its address (AGL-3889): someone with several sites, or
+      // reading the email days later, cannot tell which site went live from
+      // "Your site is live", nor where to see it.
+      const live = site ? `${site.name} is live` : 'Your site is live'
+      const at = site?.url ? ` at ${site.url}` : ''
       return {
         type: 'content.aiJobDone',
         level,
-        title: partial ? 'Your site is live, but part of it wasn’t built' : 'Your site is live',
+        title: partial ? `${live}, but part of it wasn’t built` : live,
         body: partial
-          ? `${partial} ${drafts > 0 ? `What was built is published, except ${stayed}.` : 'What was built is published.'}`
+          ? `${partial} ${drafts > 0 ? `What was built is published${at}, except ${stayed}.` : `What was built is published${at}.`}`
           : drafts > 0
-            ? `Your pages are published, except ${stayed}. Open it to see why.`
-            : 'Your pages are published. Open it to view your site or edit your pages.',
+            ? `Your pages are published${at}, except ${stayed}. Open the build page to see why.`
+            : at
+              ? `Your pages are published${at}. Visit your site there, or open it in the console to edit your pages.`
+              : 'Your pages are published. Open it to view your site or edit your pages.',
         link,
         ...scope,
       }

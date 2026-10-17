@@ -4561,7 +4561,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               'but its payment link was still live and has been paid. The ' +
               'money is in Stripe and no sale was recorded — refund it in ' +
               'Stripe or reconcile it by hand.',
-            link: `/${hostId}/orders`,
+            link: `/${hostId}/products/orders`,
           })
         }
         if (flipped) {
@@ -5619,7 +5619,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 'is taken back from your balance.'
               : `The chargeback on order ${disputedOrderLabel} on {site} ` +
                 'closed in your favor. Nothing is taken back from you for it.',
-            link: `/${hostId}/orders`,
+            link: `/${hostId}/products/orders`,
           })
           // The customer's side of the ledger (AGL-1754), through the same
           // seam a refund uses and with the reason set so the person's
@@ -5699,7 +5699,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 'transferred to you for that sale has been taken back. If ' +
                 'your balance does not cover it, Stripe recovers the rest ' +
                 'from your future payouts.',
-              link: `/${hostId}/orders`,
+              link: `/${hostId}/products/orders`,
             })
           }
         }

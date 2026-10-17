@@ -74,4 +74,22 @@ final class DeepLinkTests: XCTestCase {
       XCTAssertFalse(DeepLinks.isBesignerPath(path), path)
     }
   }
+
+  /// The console's `normalizeNotificationLink` cases: host notifications are stored as `/{hostDocId}/…`.
+  func testANotificationLinkOpensWhereTheConsoleOpensIt() {
+    let follow = { (link: String?) in
+      DeepLinks.notificationLink(link, orgSlug: "acme", hostID: "h1", hostSubdomain: "shop")
+    }
+    XCTAssertEqual(follow("/h1/products/orders?order=o1"), "/acme/hosts/shop/products/orders?order=o1")
+    XCTAssertEqual(follow("/h1/bookings"), "/acme/hosts/shop/bookings")
+    XCTAssertEqual(follow("/h1?tab=2"), "/acme/hosts/shop?tab=2")
+    XCTAssertEqual(follow("/h1"), "/acme/hosts/shop")
+    XCTAssertEqual(follow("/h10/bookings"), "/h10/bookings")
+    XCTAssertEqual(follow("/org/billing"), "/acme/billing")
+    XCTAssertEqual(follow("/hosts"), "/acme/hosts")
+    XCTAssertEqual(follow("/acme/crm/leads"), "/acme/crm/leads")
+    XCTAssertEqual(follow("https://example.com/x"), "https://example.com/x")
+    XCTAssertNil(follow(nil))
+    XCTAssertEqual(DeepLinks.notificationLink("/h1/bookings", orgSlug: "acme", hostID: "h1", hostSubdomain: nil), "/h1/bookings")
+  }
 }

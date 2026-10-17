@@ -238,13 +238,17 @@ final class AppModel {
     case .besigner(let path)?: navigation.push(.besigner(path))
     case .unavailable(let path)?:
       // The app's own screens answer the console's own pages.
+      let scope = DeepLinks.splitConsoleScope(path)
       if path.hasPrefix("/manage/notifications/settings") {
         navigation.select(.notifications)
         navigation.push(.notificationSettings)
       } else if path.hasPrefix("/manage/notifications") {
         navigation.select(.notifications)
-      } else if DeepLinks.splitConsoleScope(path).rest.hasPrefix("/analytics") {
+      } else if scope.rest.hasPrefix("/analytics") {
         navigation.push(.analytics)
+      } else if scope.hostSlug != nil, scope.rest == "/" {
+        // A site's own dashboard (a "you have access to this site" notice) is Home.
+        navigation.select(.home)
       } else {
         navigation.push(.unavailable(path))
       }
