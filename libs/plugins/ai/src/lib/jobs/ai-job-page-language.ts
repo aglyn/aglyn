@@ -38,6 +38,7 @@ import type {
   AiLayoutTargets,
 } from '../layout-language/ai-layout-links'
 import { aiLayoutCopyCheck, aiLayoutWithoutSections } from '../layout-language/ai-layout-gaps'
+import { aiLayoutPromisedCopyViolations, aiLayoutPromisedSections } from '../layout-language/ai-layout-promised-copy'
 import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { AI_STEP_TIERS } from '../providers/catalog'
@@ -492,6 +493,8 @@ export interface AiLayoutPageCheckInput {
   language?: string
   /** The site the page's entrance motion is drawn for (`aiLayoutMotionSiteOf`); absent, its design. */
   motion?: { kind?: string; seed: number }
+  /** Whether copy may promise what is coming (a coming-soon site, AGL-3887); absent, it may not. */
+  promisesAllowed?: boolean
 }
 
 /**
@@ -730,6 +733,24 @@ export function aiLayoutPageCheck(
       nodes = without.nodes as typeof nodes
       dropped.push(...without.dropped)
     }
+    // A section that promises its content later — "We are building this
+    // space" — is asked for again, and the last answer's is taken out, the
+    // page's first section aside (AGL-3887). A coming-soon site's is its point.
+    const promised = input.promisesAllowed ? [] : aiLayoutPromisedSections(nodes, input.sectionIds)
+    const promisedOut = last ? promised.filter(({ index }) => index > 0) : []
+    if (promisedOut.length) {
+      const without = aiLayoutWithoutSections(
+        nodes,
+        CANVAS_ROOT_ELEMENT_ID,
+        promisedOut.map(({ index }) => ({
+          id: input.sectionIds[index],
+          name: input.screen.sections[index].name,
+          why: 'which promised content that is not there',
+        })),
+      )
+      nodes = without.nodes as typeof nodes
+      dropped.push(...without.dropped)
+    }
     const report = validateAiDoctrineTree(
       { rootId: CANVAS_ROOT_ELEMENT_ID, nodes },
       'page',
@@ -747,6 +768,7 @@ export function aiLayoutPageCheck(
       ...report.violations,
       ...copy.violations,
       ...aiLayoutEmptyItemSections(input.screen, items, compiled.quotesOnly, emptied),
+      ...(last ? [] : aiLayoutPromisedCopyViolations(input.screen, promised)),
       ...aiLayoutInventedContactViolations(
         { rootId: CANVAS_ROOT_ELEMENT_ID, nodes: nodes as unknown as Record<string, AiDoctrineNode> },
         input.targets.facts,
@@ -846,6 +868,7 @@ export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiVa
           motion: aiLayoutMotionSiteOf(input.job, input.screen.slug),
           ...(only ? { only } : {}),
           ...(input.plan.language ? { language: input.plan.language } : {}),
+          promisesAllowed: aiSiteKindOfInputs(input.job.inputs)?.id === 'coming-soon',
         }),
       ),
       ...(input.signal ? { signal: input.signal } : {}),

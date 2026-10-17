@@ -329,3 +329,81 @@ describe('a call to action on another page goes to the form Home places (AGL-372
     expect(buttons(result.value?.nodes)).toEqual([])
   })
 })
+
+/*
+ * The live Whitmore Lane Family Law home (beta.262, 2026-10-16, AGL-3887):
+ * its "Client feedback" section read "We are building this space for the
+ * words of families we have worked with." A section that promises its
+ * content later is asked for again, and the last answer's is taken out. An
+ * event that is genuinely coming soon, on a dated list, is no such promise.
+ */
+describe('a section that promises its content later (AGL-3887)', () => {
+  const screen = {
+    title: 'Home',
+    slug: '/',
+    template: null,
+    sections: [
+      { name: 'Hero', uses: [], items: 0 },
+      { name: 'Client feedback', uses: [], items: 0 },
+    ],
+  }
+  const sectionIds = ['sec-0', 'sec-1']
+  const run = (options: { promisesAllowed?: boolean } = {}) =>
+    aiLayoutPageCheck({
+      screen: screen as never,
+      sectionIds,
+      targets: { pageId: 'p0', pages: [], homeIds: [], forms: [], formPageId: null, components: [], facts: 'A family law firm in Columbus.' } as never,
+      context: { screenIds: [], formIds: [], componentIds: [], codeBuilt: true, scrollTargetIds: sectionIds, reusableComponents: false },
+      reusableComponents: false,
+      ...options,
+    })
+  const page = (blocks: unknown[]) => ({
+    sections: [
+      { band: 'plain', align: 'start', cols: [], blocks: [block('heading', 'Family law, handled with care'), block('lede', 'Divorce and custody in Columbus.')] },
+      { band: 'soft', align: 'start', cols: [], blocks },
+    ],
+  })
+  const WHITMORE = page([
+    block('heading', 'Client feedback'),
+    block('text', 'We are building this space for the words of families we have worked with. To learn more about the attorneys, visit About Our Attorneys.'),
+  ])
+
+  it('asks again about "We are building this space…", naming the section and the line', () => {
+    const result = run()(WHITMORE)
+    expect(result.value).toBeNull()
+    expect(result.violations.map((violation) => violation.code)).toEqual(['layout-promised-copy'])
+    expect(result.violations[0].message).toContain('Section 2 ("Client feedback") promises content that is not there')
+    expect(result.violations[0].message).toContain('We are building this space')
+  })
+
+  it('takes the section out of the last answer rather than publishing it', () => {
+    const check = run()
+    check(WHITMORE)
+    const last = check(WHITMORE)
+    expect(last.violations).toEqual([])
+    expect(last.value?.dropped).toEqual(['the section "Client feedback", which promised content that is not there'])
+    const nodes = last.value?.nodes as unknown as Record<string, unknown>
+    expect(nodes['sec-1']).toBeUndefined()
+    expect(JSON.stringify(nodes)).not.toContain('building this space')
+    expect(JSON.stringify(nodes)).toContain('Family law, handled with care')
+  })
+
+  it('admits an event that is genuinely coming soon on a dated list', () => {
+    const events = {
+      ...block('list', ''),
+      items: [
+        { title: 'Co-parenting workshop, Nov 12', text: 'A free evening session at our office.', to: '', icon: '' },
+        { title: 'Spring legal clinic', text: 'Coming soon: dates to be announced.', to: '', icon: '' },
+      ],
+    }
+    const result = run()(page([block('heading', 'Upcoming events'), events]))
+    expect(result.violations.map((violation) => violation.code)).not.toContain('layout-promised-copy')
+    expect(JSON.stringify(result.value?.nodes ?? {})).toContain('Coming soon: dates to be announced.')
+  })
+
+  it('admits a coming-soon site saying what is coming', () => {
+    const soon = page([block('heading', 'Our new office'), block('text', 'This page is under construction. Stay tuned for this space.')])
+    expect(run()(soon).violations.map((violation) => violation.code)).toContain('layout-promised-copy')
+    expect(run({ promisesAllowed: true })(soon).violations.map((violation) => violation.code)).not.toContain('layout-promised-copy')
+  })
+})
