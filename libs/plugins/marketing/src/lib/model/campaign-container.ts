@@ -451,7 +451,8 @@ export interface CampaignResume {
  *   come. The state this function exists for.
  * - `sent` — finished, whether in one batch or six.
  * - `stopped` — finished with people it never addressed: canceled mid-flight,
- *   failed mid-flight, or stopped by the batch guard. The count is what makes
+ *   failed mid-flight, or stopped by the batch guard; or canceled or failed
+ *   before it sent anything at all. The count is what makes
  *   this legible rather than alarming — an email that reached 2,400 of 3,000
  *   and stopped is a different conversation from one that reached nobody.
  */
@@ -533,6 +534,26 @@ export function campaignSendProgress(
       batch,
       nextAtMs: 0,
       label: status === 'sending' ? 'Sending' : 'Scheduled',
+    }
+  }
+  // Canceled, or failed, before a single message went out, with nobody left
+  // waiting: it never sent. "Sent to 0" would describe a send that happened.
+  if (
+    (status === 'canceled' || status === 'failed') &&
+    reached === 0 &&
+    remaining === 0
+  ) {
+    return {
+      state: 'stopped',
+      reached: 0,
+      audience,
+      remaining: 0,
+      batch,
+      nextAtMs: 0,
+      label:
+        status === 'canceled'
+          ? 'Canceled before it was sent'
+          : 'Failed before it was sent',
     }
   }
   if (remaining > 0) {

@@ -101,4 +101,22 @@ final class EmailTests: XCTestCase {
   func testAddressesSplitOnEverySeparator() {
     XCTAssertEqual(addressesIn("a@x.test, b@x.test;c@x.test\n d@x.test"), ["a@x.test", "b@x.test", "c@x.test", "d@x.test"])
   }
+
+  func testACanceledEmailThatNeverWentOutSaysSoAndNamesWhatAnAbsentSenderMeans() {
+    let canceled: [String: Any] = ["status": "canceled"]
+    XCTAssertEqual(campaignSendDisplay(canceled).label, "Canceled before it was sent")
+    XCTAssertEqual(sentAsMissing(canceled), "Not sent")
+    XCTAssertEqual(deliveryPlaceholder(canceled), "This email was not sent to anybody, so there is nothing to report.")
+    XCTAssertNil(emailSentAs(canceled))
+    XCTAssertEqual(sentAsMissing(["status": "scheduled"]), "Not sent yet")
+    let old: [String: Any] = ["status": "sent", "stats": ["sent": 12]]
+    XCTAssertEqual(sentAsMissing(old), "Not recorded")
+    XCTAssertNil(deliveryPlaceholder(old))
+    var stamped = old
+    stamped["sentAs"] = ["from": " news@bakery.test ", "fromName": ""]
+    XCTAssertEqual(emailSentAs(stamped), SentAs(from: "news@bakery.test", fromName: nil, replyTo: nil))
+    let partly: [String: Any] = ["status": "canceled", "stats": ["sent": 10], "resume": ["remaining": 30]]
+    XCTAssertEqual(campaignSendDisplay(partly).label, "Reached 10 — canceled with 30 not addressed")
+    XCTAssertNil(deliveryPlaceholder(partly))
+  }
 }

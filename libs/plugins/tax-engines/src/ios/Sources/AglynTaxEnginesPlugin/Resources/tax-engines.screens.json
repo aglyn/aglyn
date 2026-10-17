@@ -12,6 +12,7 @@
       "zones": [
         "commerceSettings"
       ],
+      "showWhen": "data.conn.available",
       "load": {
         "conn": "/api/tax-engines/connection?hostId={site.id}",
         "exemptions": {

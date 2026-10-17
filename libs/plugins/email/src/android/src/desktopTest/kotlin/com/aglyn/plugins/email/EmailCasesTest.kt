@@ -104,4 +104,24 @@ class EmailCasesTest {
     assertEquals("list:L", AudiencePick.stored(mapOf("audience" to "list", "listId" to "L"))?.raw)
     assertEquals(listOf("a@x.test", "b@x.test", "c@x.test"), addressesIn("a@x.test, b@x.test;\nc@x.test"))
   }
+
+  @Test
+  fun aCanceledEmailThatNeverWentOutSaysSoAndNamesWhatAnAbsentSenderMeans() {
+    val canceled = mapOf<String, Any?>("status" to "canceled")
+    assertEquals("Canceled before it was sent", campaignSendDisplay(canceled).label)
+    assertEquals("Not sent", sentAsMissing(canceled))
+    assertEquals("This email was not sent to anybody, so there is nothing to report.", deliveryPlaceholder(canceled))
+    assertNull(emailSentAs(canceled))
+    assertEquals("Not sent yet", sentAsMissing(mapOf("status" to "scheduled")))
+    // Sent before sends recorded their sender.
+    val old = mapOf<String, Any?>("status" to "sent", "stats" to mapOf("sent" to 12))
+    assertEquals("Not recorded", sentAsMissing(old))
+    assertNull(deliveryPlaceholder(old))
+    // A recorded sender with no display name or reply address: the address alone, replies to it.
+    assertEquals(SentAs("news@bakery.test", null, null), emailSentAs(old + ("sentAs" to mapOf("from" to " news@bakery.test ", "fromName" to "", "replyTo" to null))))
+    // A canceled send that reached some is a report, not a never-sent email.
+    val partly = mapOf<String, Any?>("status" to "canceled", "stats" to mapOf("sent" to 10), "resume" to mapOf("remaining" to 30))
+    assertEquals("Reached 10 — canceled with 30 not addressed", campaignSendDisplay(partly).label)
+    assertNull(deliveryPlaceholder(partly))
+  }
 }

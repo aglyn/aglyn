@@ -284,7 +284,7 @@ struct EventListRow: View {
       row.title, subtitle: row.start.formatted(date: .abbreviated, time: .shortened) + (row.location.isEmpty ? "" : " · \(row.location)"),
       systemImage: "calendar"
     ) {
-      StatusChip(row.status, tone: row.status == "published" ? .success : .neutral)
+      StatusChip(row.status == "published" ? "Published" : "Draft", tone: row.status == "published" ? .success : .neutral)
     }
   }
 }

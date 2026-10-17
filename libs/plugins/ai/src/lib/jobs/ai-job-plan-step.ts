@@ -67,6 +67,11 @@ import {
   AI_SITE_GALLERY_MIN_ITEMS,
 } from '../model/ai-site-job'
 import { aiSiteContentPart } from './ai-job-site-content'
+import {
+  aiPlanHasCustomerWords,
+  aiSettlePlanPlaceholderNames,
+  aiSettlePlanSaidSections,
+} from '../model/ai-plan-said-sections'
 import { aiLayoutIsShopPage, aiLayoutShopGridSection } from '../layout-language/ai-layout-listings'
 import { aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
 import { aiStorefrontPlanScreens } from '../layout-language/ai-layout-storefront'
@@ -264,7 +269,7 @@ export function aiPlanTodaySentence(now: Date): string {
  * job's turn, whose length the Free page's wall is proven at.
  */
 export function aiPlanSiteLines(
-  job: Pick<AiJob, 'kind'> & Partial<Pick<AiJob, 'inputs'>>,
+  job: Pick<AiJob, 'kind'> & Partial<Pick<AiJob, 'inputs' | 'brief'>>,
   inventory: AiSiteInventory | null,
   capabilities: AiPlanCapabilities | null,
 ): string[] {
@@ -323,6 +328,11 @@ export function aiPlanSiteLines(
   // A section that shows the work counts its pieces (AGL-3660): a planned
   // gallery of no items let a page about the work show none.
   lines.push(AI_SITE_GALLERY_SENTENCE)
+  // No section of customer words the site has none of (AGL-3887); the plan
+  // is settled to this in code as well (`aiSettlePlanSaidSections`).
+  if (!aiPlanHasCustomerWords({ brief: job.brief, inventory, siteKind: aiSiteKindOfInputs(job.inputs)?.id })) {
+    lines.push(AI_SITE_NO_CUSTOMER_WORDS_SENTENCE)
+  }
   // A section that asks for something places the form (AGL-3660): a live
   // portfolio start planned a commissions inquiry beside the form it made
   // for its Contact page, without placing it.
@@ -342,6 +352,34 @@ export function aiPlanSiteLines(
   )
   return lines
 }
+
+/**
+ * The settling every plan is given before the doctrine reads it (AGL-3887):
+ * no section named a placeholder, and on a site start, where the site and
+ * the brief have no customer words, no section of them
+ * (`aiSettlePlanSaidSections`). Only a site start's sections are recast: a
+ * page or a build may plan a page the owner's own quotes are already on.
+ */
+export function aiPlanSaidSettle(
+  job: Pick<AiJob, 'kind' | 'brief' | 'inputs'>,
+  inventory: AiSiteInventory | null,
+  homeMin: number,
+): (plan: AiBuildPlan) => AiBuildPlan {
+  if (job.kind !== 'site') return aiSettlePlanPlaceholderNames
+  const hasCustomerWords = aiPlanHasCustomerWords({
+    brief: job.brief,
+    inventory,
+    siteKind: aiSiteKindOfInputs(job.inputs)?.id,
+  })
+  return (plan) => aiSettlePlanSaidSections(aiSettlePlanPlaceholderNames(plan), { hasCustomerWords, homeMin })
+}
+
+/**
+ * What a site plan is told where the site has no customer words (AGL-3887):
+ * no section of them, and the band to plan in its place.
+ */
+export const AI_SITE_NO_CUSTOMER_WORDS_SENTENCE =
+  'This site has no reviews or testimonials yet, and the build never writes them: plan no testimonials, reviews or client feedback section, and plan what working together is like instead. Never name a section a placeholder.'
 
 /**
  * The sentence a site plan's turn states about a section that collects
@@ -1149,17 +1187,19 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
       capabilities,
       // A build's events are listed on a page (AGL-3755): on the one it makes
       // about them, else on an Events page of its own where there is room.
-      ...(ops
-        ? {
-            settle: (answered: AiBuildPlan) =>
-              aiSettleBuildEventPage(answered, {
+      // No section is named a placeholder, and a site start plans no section
+      // of customer words it has none of (AGL-3887).
+      settle: (answered: AiBuildPlan) =>
+        aiPlanSaidSettle(job, inventory, site ? aiSitePlanHomeRule(inventory, capabilities).min : 0)(
+          ops
+            ? aiSettleBuildEventPage(answered, {
                 ops,
                 siteSlugs: (inventory?.screens ?? []).map((screen) => screen.slug),
                 pageLimit: aiBuildPageLimit(freeTaste),
                 siteLayout: aiSiteLayoutOf(inventory),
-              }),
-          }
-        : {}),
+              })
+            : answered,
+        ),
       extend: aiSiteWithEventItemsCheck(
         planViolations(
           scope,

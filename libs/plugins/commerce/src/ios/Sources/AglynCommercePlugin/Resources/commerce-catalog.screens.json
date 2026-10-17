@@ -95,6 +95,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit category",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "prompt": [
                 {
@@ -892,6 +894,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit rule",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "url": "/api/hosts/collections",
               "prompt": [

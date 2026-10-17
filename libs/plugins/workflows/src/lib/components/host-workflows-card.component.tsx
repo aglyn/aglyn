@@ -707,15 +707,21 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
                   {workflow.name}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" noWrap>
-                  {`${(workflow.steps ?? []).length} step${
-                    (workflow.steps ?? []).length === 1 ? '' : 's'
-                  }${
+                  {[
+                    `${(workflow.steps ?? []).length} step${
+                      (workflow.steps ?? []).length === 1 ? '' : 's'
+                    }`,
                     workflow.trigger?.event
-                      ? ` · on ${hostEventLabel(workflow.trigger.event)}`
-                      : ''
-                  } · ${(workflow.steps ?? [])
-                    .map((step: any) => step.functionName)
-                    .join(' → ')}`}
+                      ? `on ${hostEventLabel(workflow.trigger.event)}`
+                      : '',
+                    // An Actions step calls no function, so it names none.
+                    (workflow.steps ?? [])
+                      .map((step: any) => step.functionName)
+                      .filter(Boolean)
+                      .join(' → '),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </Typography>
               </Stack>
               <Button

@@ -3650,6 +3650,50 @@
         {
           "args": [
             {
+              "status": "canceled"
+            }
+          ],
+          "result": {
+            "label": "Canceled before it was sent",
+            "progress": {
+              "audience": null,
+              "batch": 0,
+              "label": "Canceled before it was sent",
+              "nextAtMs": 0,
+              "reached": 0,
+              "remaining": 0,
+              "state": "stopped"
+            },
+            "state": "stopped"
+          }
+        },
+        {
+          "args": [
+            {
+              "status": "failed",
+              "stats": {
+                "sent": 0,
+                "audienceSize": 25
+              }
+            }
+          ],
+          "result": {
+            "label": "Failed before it was sent",
+            "progress": {
+              "audience": 25,
+              "batch": 0,
+              "label": "Failed before it was sent",
+              "nextAtMs": 0,
+              "reached": 0,
+              "remaining": 0,
+              "state": "stopped"
+            },
+            "state": "stopped"
+          }
+        },
+        {
+          "args": [
+            {
               "status": "sent",
               "stats": {
                 "sent": 2400,

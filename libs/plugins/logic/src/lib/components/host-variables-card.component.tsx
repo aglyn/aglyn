@@ -572,9 +572,9 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
       <Stack spacing={1}>
         {variables.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            {'Define typed values once and bind them anywhere with ' +
-              '{{name}} — change the variable, every page updates on the ' +
-              'next publish.'}
+            {'Define typed values once and put them into any text with ' +
+              'Insert data in the Besigner — change the variable, every ' +
+              'page updates on the next publish.'}
           </Typography>
         ) : (
           visibleVariables.map((variable: any) => (
@@ -586,7 +586,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
             >
               <Stack sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="body2" noWrap>
-                  {`{{${variable.name}}}`}
+                  {variable.name}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" noWrap>
                   {`${HOST_VARIABLE_TYPE_LABELS[variable.type as HostVariableType] ?? variable.type} · ${

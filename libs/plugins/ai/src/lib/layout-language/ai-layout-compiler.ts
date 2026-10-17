@@ -951,6 +951,15 @@ function muted(scope: SectionScope): Record<string, unknown> | null {
   return scope.band === 'brand' || scope.overPhoto ? null : { color: 'text.secondary' }
 }
 
+/**
+ * A List Item Text's secondary words: MUI draws them in the muted text color
+ * whatever they sit on, so on a brand band, or over a photo, they take the
+ * band's own color as the primary words do (AGL-3886).
+ */
+function mutedSecondary(scope: SectionScope): Record<string, unknown> {
+  return scope.band === 'brand' || scope.overPhoto ? { secondaryColor: 'inherit' } : {}
+}
+
 /** An accent's color: the brand's, or the band's own on a brand band. */
 function accent(scope: SectionScope): Record<string, unknown> | null {
   return scope.band === 'brand' || scope.overPhoto ? null : { color: 'primary.main' }
@@ -1560,7 +1569,7 @@ function compactGroup(
           )
     return tree.add(
       'muiListItemText',
-      { primary: title, ...(text ? { secondary: text } : {}) },
+      { primary: title, ...(text ? { secondary: text, ...mutedSecondary(scope) } : {}) },
       null,
       null,
       'pair',
@@ -1578,12 +1587,14 @@ function card(
   const tree = scope.page.tree
   const facts = scope.page.targets.facts
   const icon = aiIconOfWord(item.icon) ?? aiIconOfWord(block.icon)
+  // A quiet card draws no surface of its own, so it is colored as the band it sits on.
+  const quiet = block.style === 'quiet'
   const children = [
     icon
       ? tree.add(
           AI_ICON_COMPONENT_ID,
           { iconId: icon.id, size: '32' },
-          { color: 'primary.main' },
+          quiet ? accent(scope) : { color: 'primary.main' },
           null,
           'icon',
         )
@@ -1608,7 +1619,7 @@ function card(
             children: aiLayoutWords(item.text, 'itemText', facts, scope.page.options.language),
             variant: 'body1',
           },
-          { color: 'text.secondary' },
+          quiet ? muted(scope) : { color: 'text.secondary' },
           null,
           'text',
         )
@@ -1621,7 +1632,7 @@ function card(
     children,
     'cardStack',
   )
-  if (block.style === 'quiet') return stack
+  if (quiet) return stack
   const content = tree.add(
     'muiCardContent',
     null,
@@ -1888,7 +1899,10 @@ function faq(scope: SectionScope, block: AiLayoutBlock): string | null {
             {
               primary: aiLayoutWords(item.title, 'question', facts, scope.page.options.language),
               ...(item.text.trim()
-                ? { secondary: aiLayoutWords(item.text, 'answer', facts, scope.page.options.language) }
+                ? {
+                    secondary: aiLayoutWords(item.text, 'answer', facts, scope.page.options.language),
+                    ...mutedSecondary(scope),
+                  }
                 : {}),
             },
             null,
