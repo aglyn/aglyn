@@ -31,6 +31,7 @@
 import {
   domainOf,
   evaluateSsoDomainPolicy,
+  isSsoExemptEmail,
   parseSsoExemptEmails,
   parseSsoRequiredDomains,
   ssoDomainCreationRefused,
@@ -444,5 +445,44 @@ describe('account creation agrees with the session mint', () => {
   it('refuses the duplicate a Google sign-in would create, ON', () => {
     expect(ssoDomainCreationRefused({ email: 'staff@aglyn.com', tenantId: null }, AGLYN_ON)).toBe(true)
     expect(ssoDomainCreationRefused({ email: 'staff@aglyn.com', tenantId: null }, AGLYN_OFF)).toBe(false)
+  })
+})
+
+describe('plus-tag exemptions', () => {
+  const exempt = parseSsoExemptEmails('ops+signup-canary*@aglyn.com')
+
+  it('admits the tag and every stamped extension of it, on that domain only', () => {
+    expect(isSsoExemptEmail('ops+signup-canary@aglyn.com', exempt)).toBe(true)
+    expect(isSsoExemptEmail('OPS+signup-canary-1729123456@aglyn.com', exempt)).toBe(true)
+    expect(isSsoExemptEmail('ops+signup-canary-1@notaglyn.com', exempt)).toBe(false)
+    expect(isSsoExemptEmail('ops+signup-canary-1@sub.aglyn.com', exempt)).toBe(false)
+  })
+
+  it('does not reach the mailbox itself or another tag', () => {
+    expect(isSsoExemptEmail('ops@aglyn.com', exempt)).toBe(false)
+    expect(isSsoExemptEmail('ops+other@aglyn.com', exempt)).toBe(false)
+    expect(isSsoExemptEmail('other+signup-canary@aglyn.com', exempt)).toBe(false)
+  })
+
+  it('drops any entry that could cover a whole mailbox or domain', () => {
+    for (const entry of [
+      '*@aglyn.com',
+      'ops*@aglyn.com',
+      'ops+*@aglyn.com',
+      '+tag*@aglyn.com',
+      'ops+t*g@aglyn.com',
+      'ops+tag@*.com',
+      'ops+tag*@',
+    ]) {
+      expect([...parseSsoExemptEmails(entry)]).toEqual([])
+    }
+  })
+
+  it('reaches both the mint and creation from configuration', () => {
+    const env = { ...AGLYN_ON, [SSO_EXEMPT_EMAILS_ENV]: 'reviewer@aglyn.com, ops+signup-canary*@aglyn.com' }
+    const canary = { email: 'ops+signup-canary-1729123456@aglyn.com', tenantId: null }
+    expect(ssoDomainRefusal(canary, env)).toBeNull()
+    expect(ssoDomainCreationRefused(canary, env)).toBe(false)
+    expect(ssoDomainCreationRefused({ email: 'ops@aglyn.com', tenantId: null }, env)).toBe(true)
   })
 })
