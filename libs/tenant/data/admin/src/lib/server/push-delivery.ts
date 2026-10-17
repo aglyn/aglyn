@@ -43,6 +43,7 @@ import {
   type MobilePushData,
   type MobilePushTransport,
 } from '@aglyn/aglyn/app-utils/notification-push'
+import { notificationSound, type NotificationSound } from '@aglyn/aglyn/app-utils/notification-sounds'
 import { normalizeNotificationLink } from '@aglyn/aglyn/server'
 import type { DocumentReference, Firestore } from 'firebase-admin/firestore'
 import type { MobilePushPayload, MobilePushSender } from './mobile-push-switch'
@@ -57,6 +58,8 @@ export interface PushTarget {
   /** APNs: the app's bundle id, which is the push topic. */
   topic: string
   apnsEnvironment?: ApnsEnvironment
+  /** The sound its person picked; each transport names that platform's file. */
+  sound: NotificationSound
 }
 
 /** What every device of one notification is sent. */
@@ -80,6 +83,8 @@ export interface PushDeliveryDeps {
   /** Each transport, or null when the deployment has none configured. Resolved only when a device needs it. */
   transport: (kind: MobilePushTransport) => Promise<PushTransport | null>
   now?: () => number
+  /** Each recipient's picked sound id; anyone missing hears the default. */
+  sounds?: Readonly<Record<string, string>>
 }
 
 export interface PushDeliveryResult {
@@ -195,6 +200,7 @@ export async function deliverNativePush(
           token,
           app,
           topic: MOBILE_APP_BUNDLES[app],
+          sound: notificationSound(deps.sounds?.[uid]),
           ...(transport === 'apns' && (environment === 'sandbox' || environment === 'production')
             ? { apnsEnvironment: environment }
             : {}),
@@ -248,6 +254,6 @@ async function deploymentTransport(kind: MobilePushTransport): Promise<PushTrans
 }
 
 /** The sender `registerNativePushSenders` hands the fan-out. */
-export const nativePushSender: MobilePushSender = async (uids, payload, { db }) => {
-  await deliverNativePush(uids, payload, { db, transport: deploymentTransport })
+export const nativePushSender: MobilePushSender = async (uids, payload, { db, sounds }) => {
+  await deliverNativePush(uids, payload, { db, transport: deploymentTransport, ...(sounds ? { sounds } : {}) })
 }

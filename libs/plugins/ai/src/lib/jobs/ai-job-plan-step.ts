@@ -16,6 +16,8 @@
  */
 
 import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
+import { aiSiteHomeArc, aiSiteHomeArcSentence, type AiSiteHomeArc } from '../model/ai-site-home-arcs'
+import { aiSiteSeed } from '../model/ai-site-look'
 import { createHash } from 'node:crypto'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import {
@@ -89,6 +91,7 @@ import {
   AI_FREE_PAGE_WORST_CASE_CREDITS,
   aiPlanEmbedBriefViolations,
   aiSettlePlanDatasets,
+  aiSettlePlanHomeForms,
   type AiDoctrineViolation,
 } from '../runtime/ai-doctrine-validators'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
@@ -125,7 +128,7 @@ import {
 } from './ai-job-text-step'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiDoctrineReview, aiUnspentOutcome } from './ai-job-generation'
-import { aiPlanWithDraftIds } from './ai-job-draft-ids'
+import { aiOriginJobId, aiPlanWithDraftIds } from './ai-job-draft-ids'
 import { AI_JOBS_COLLECTION, registerAiJobPlanStep } from './ai-jobs'
 
 /**
@@ -208,7 +211,7 @@ export const AI_JOB_PLAN_REVIEW_COPY =
  * never in a system block the platform's cache entry is keyed on.
  */
 export function aiJobPlanPrompt(
-  job: Pick<AiJob, 'kind' | 'brief' | 'inputs'>,
+  job: Pick<AiJob, 'kind' | 'brief' | 'inputs'> & Partial<Pick<AiJob, '$id'>>,
   capabilities: AiPlanCapabilities | null = null,
   inventory: AiSiteInventory | null = null,
   ops: AiBuildOps | null = null,
@@ -275,7 +278,7 @@ export function aiPlanTodaySentence(now: Date): string {
  * job's turn, whose length the Free page's wall is proven at.
  */
 export function aiPlanSiteLines(
-  job: Pick<AiJob, 'kind'> & Partial<Pick<AiJob, 'inputs' | 'brief'>>,
+  job: Pick<AiJob, 'kind'> & Partial<Pick<AiJob, 'inputs' | 'brief' | '$id'>>,
   inventory: AiSiteInventory | null,
   capabilities: AiPlanCapabilities | null,
 ): string[] {
@@ -302,18 +305,26 @@ export function aiPlanSiteLines(
   }
   const cap = capabilities?.freeSitePages
   const home = aiSitePlanHomeRule(inventory, capabilities)
+  // The form lives on the page a visitor opens to get in touch (AGL-3899),
+  // and the home's call to action links it; a one-page site keeps it home.
+  const formOnHome = aiSiteFormStaysHome(job, cap)
   if (cap !== undefined) {
+    const where = formOnHome ? ' Put the contact form on the home page.' : ' Put the contact form on the page that is not the home page.'
     lines.push(
-      `This is a Free workspace: plan at most ${cap} ${cap === 1 ? 'page' : 'pages'} — the home page at / and the one page the brief most needs, such as services, booking or contact — and ${home.across} sections across them.${aiPlanCanPlaceForm(inventory, capabilities) ? ' Put the contact form on one of them.' : ''}`,
+      `This is a Free workspace: plan at most ${cap} ${cap === 1 ? 'page' : 'pages'} — the home page at / and the one page the brief most needs, such as services, booking or contact — and ${home.across} sections across them.${aiPlanCanPlaceForm(inventory, capabilities) ? where : ''}`,
     )
   }
   // A new site is a full website (AGL-3660): its home is planned as one, not
   // left to a ceiling the outline is free to stay far under.
   const plansHome = !pages.some((page) => !page.replaceable && aiSitePlanIsHome(page))
   if (home.min > 0 && plansHome) {
-    // A store's home is a storefront (AGL-3676): its own parts, in its own order.
+    // A store's home is a storefront (AGL-3676): its own parts.
     const bands = aiSiteKindOfInputs(job.inputs)?.id === 'store' ? AI_SITE_STORE_HOME_BANDS : AI_SITE_HOME_BANDS
     lines.push(`The home page at / reads as a full website: at least ${home.min} sections — ${bands}.`)
+    // And its own arc, chosen by the job's seed (AGL-3899): two identical
+    // briefs are two different homes.
+    const arc = aiSitePlanHomeArc(job)
+    if (arc) lines.push(aiSiteHomeArcSentence(arc))
   }
   // The sections are a budget to use (AGL-3660): a prod start of 2026-10-08
   // read "at most 8" as leave to plan a home of two.
@@ -342,7 +353,10 @@ export function aiPlanSiteLines(
   // A section that asks for something places the form (AGL-3660): a live
   // portfolio start planned a commissions inquiry beside the form it made
   // for its Contact page, without placing it.
-  if (aiPlanCanPlaceForm(inventory, capabilities)) lines.push(AI_SITE_FORM_SENTENCE)
+  if (aiPlanCanPlaceForm(inventory, capabilities)) lines.push(aiSiteFormSentence(formOnHome))
+  // As many items as the content has (AGL-3899): 47 of 55 groups in the
+  // newest production homes showed exactly three.
+  lines.push(AI_SITE_ITEMS_SENTENCE)
   // Structured content is kept as a dataset where one may be made (AGL-3616).
   if (capabilities?.create.dataset.allowed) {
     lines.push(aiSiteDatasetSentence(Math.min(capabilities.datasetsMax ?? AI_SITE_DATASETS_MAX, capabilities.create.dataset.left ?? AI_SITE_DATASETS_MAX)))
@@ -389,11 +403,67 @@ export const AI_SITE_NO_CUSTOMER_WORDS_SENTENCE =
 
 /**
  * The sentence a site plan's turn states about a section that collects
- * answers (AGL-3660): it places the saved form by reference, and one form
- * may be placed on more than one page.
+ * answers (AGL-3660): it places the saved form by reference — on the page a
+ * visitor opens to get in touch, never on the home page as well (AGL-3899).
+ * Told "one form may be placed on several pages", 17 of the 22 newest
+ * production homes carried the contact form, 16 of them in their last band,
+ * so every site ended the same way.
  */
 export const AI_SITE_FORM_SENTENCE =
-  "A section that asks visitors for something (contact, inquiry, commissions, booking, sign-up) places the form: put new:<the form's name> or the site's form id in its uses. One form may be placed on several pages."
+  "A section that asks visitors for something (contact, inquiry, commissions, booking, sign-up) places the form: put new:<the form's name> or the site's form id in its uses."
+
+/** Where the form goes, said after {@link AI_SITE_FORM_SENTENCE} on a site whose home does not keep it. */
+export const AI_SITE_FORM_PAGE_SENTENCE =
+  "Place it on the page a visitor opens to get in touch (such as Contact, Book, Visit or Enroll), and nowhere on the home page: the home's call to action is a button to that page."
+
+/** What a site plan is told about its form: where it goes, as {@link aiSiteFormStaysHome} decides. */
+export function aiSiteFormSentence(onHome: boolean): string {
+  return onHome ? AI_SITE_FORM_SENTENCE : `${AI_SITE_FORM_SENTENCE} ${AI_SITE_FORM_PAGE_SENTENCE}`
+}
+
+/**
+ * What a site plan is told about repeated items (AGL-3899): as many as the
+ * content has. Told nothing, the newest production plans gave 45 of 62 home
+ * groups three items, and the pages drew 47 of 55 groups with three.
+ */
+export const AI_SITE_ITEMS_SENTENCE =
+  'Give each section that repeats items as many as its content has, from 2 to 6 (two offers, four steps, five questions, six pieces of work): vary the counts from section to section, never 3 everywhere.'
+
+/** The kinds whose one action is the form on the home page: a landing page and a coming-soon page. */
+const AI_SITE_FORM_HOME_KINDS: ReadonlySet<string> = new Set(['landing', 'coming-soon'])
+
+/**
+ * A brief that asks for the form on the home page itself, in one sentence:
+ * "a sign-up form on the home page", "the homepage should have a contact form".
+ */
+const HOME_FORM_ASKED =
+  /\b(?:home ?page|front page|main page)\b[^.!?\n]{0,60}\bform\b|\bform\b[^.!?\n]{0,60}\b(?:home ?page|front page|main page)\b/i
+
+/**
+ * Whether a site start's home keeps its form (AGL-3899): a one-page site, a
+ * kind whose one action is that form (a landing or coming-soon page), or a
+ * brief that asks for it there. Every other start places the form on the
+ * page a visitor opens to get in touch, and its home closes with a call to
+ * action that links it (`aiSettlePlanHomeForms`).
+ */
+export function aiSiteFormStaysHome(job: Partial<Pick<AiJob, 'inputs' | 'brief'>>, freePages?: number): boolean {
+  const asked = Number(job.inputs?.['pages'])
+  // A Free start's pages are its capped band (`freeSitePages`), else the pages asked for.
+  const pages = freePages ?? (Number.isInteger(asked) && asked > 0 ? asked : null)
+  if (pages === 1) return true
+  const kind = aiSiteKindOfInputs(job.inputs)?.id
+  if (kind && AI_SITE_FORM_HOME_KINDS.has(kind)) return true
+  return HOME_FORM_ASKED.test(job.brief ?? '')
+}
+
+/** The home arc a site start's plan is told (AGL-3899), by its job's seed; `null` for a job with no id. */
+export function aiSitePlanHomeArc(job: Partial<Pick<AiJob, '$id' | 'inputs'>>): AiSiteHomeArc | null {
+  if (!job.$id) return null
+  return aiSiteHomeArc({
+    kind: aiSiteKindOfInputs(job.inputs)?.id ?? null,
+    seed: aiSiteSeed(aiOriginJobId({ $id: job.$id, inputs: job.inputs ?? {} })),
+  })
+}
 
 /**
  * The sentence a site plan's turn states where it may create datasets, with
@@ -464,9 +534,13 @@ export const AI_SITE_STORE_SHOP_SENTENCE =
 export const AI_SITE_STORE_PAGES_SENTENCE =
   "The platform adds this store's account page (sign in, orders, saved items), its cart page, and its Shipping & returns, Privacy policy and Terms of sale pages, and links them in the header and footer; they do not count toward this plan's pages. Plan none of them: spend every page on what the brief is about."
 
-/** What a store's home is composed of (AGL-3676): a storefront's parts, in a storefront's order. */
+/**
+ * What a store's home is composed of (AGL-3676): a storefront's parts, the
+ * hero first and the sign-up last, between them in the order its arc gives
+ * (AGL-3899).
+ */
 export const AI_SITE_STORE_HOME_BANDS =
-  'a hero that sells first, then "Bestsellers" (the platform lists the real products), "Shop by collection" with 3 or 4 items, the brand story, why buy here with 3 or 4 items, "Customer reviews" (the platform shows the store\'s real ones) and a "Newsletter sign-up" band last'
+  'a hero that sells first and a "Newsletter sign-up" band last, and between them "Bestsellers" (the platform lists the real products), "Shop by collection" with 3 or 4 items, the brand story, why buy here with 3 or 4 items and "Customer reviews" (the platform shows the store\'s real ones)'
 
 /**
  * A store plan held to a storefront (AGL-3676, `ai-layout-storefront.ts`):
@@ -1224,6 +1298,14 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
               ? aiSettleSiteForeignDatasets(answered, inventory, capabilities)
               : answered,
         ),
+      // A site start's home places no form another page holds (AGL-3899):
+      // its call to action links that page instead.
+      ...(site
+        ? {
+            settleForms: (placed: AiBuildPlan) =>
+              aiSettlePlanHomeForms(placed, inventory, { keep: aiSiteFormStaysHome(job, capabilities?.freeSitePages) }),
+          }
+        : {}),
       extend: aiSiteWithEventItemsCheck(
         planViolations(
           scope,
