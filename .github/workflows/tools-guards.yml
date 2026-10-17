@@ -516,6 +516,14 @@ jobs:
       # itself needs a live model and never runs in CI. Pure node.
       - run: npm run test:ai-guided-start-local
 
+      # test:chrome-executable  The one Chrome picker every headless script
+      # spreads into chromium.launch. On macOS it switches off Chrome's
+      # MacAppCodeSignClone (a ~1.4 GB app copy left in $TMPDIR by any run
+      # that exits without closing) inside one --disable-features that also
+      # carries Playwright's list, read from the installed playwright-core.
+      # A Playwright upgrade that moves that list fails here. Pure node.
+      - run: npm run test:chrome-executable
+
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs

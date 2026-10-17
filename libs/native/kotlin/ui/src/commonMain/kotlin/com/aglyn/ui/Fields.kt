@@ -200,8 +200,8 @@ fun DateTimeField(
     singleLine = true,
     trailingIcon = {
       androidx.compose.foundation.layout.Row {
-        if (value != null && enabled) IconButton(onClick = { onValue(null) }) { Icon(AglynIcons.named("close"), contentDescription = "Clear $label") }
-        IconButton(onClick = { picking = true }, enabled = enabled, modifier = Modifier.testTag("date-pick")) { Icon(AglynIcons.named("event"), contentDescription = "Pick $label") }
+        if (value != null && enabled) WithTooltip("Clear $label") { IconButton(onClick = { onValue(null) }) { Icon(AglynIcons.named("close"), contentDescription = "Clear $label") } }
+        WithTooltip("Pick $label") { IconButton(onClick = { picking = true }, enabled = enabled, modifier = Modifier.testTag("date-pick")) { Icon(AglynIcons.named("event"), contentDescription = "Pick $label") } }
       }
     },
     modifier = modifier.fillMaxWidth(),
@@ -271,7 +271,7 @@ fun ChipsField(
       keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
       keyboardActions = KeyboardActions(onDone = { commit() }),
       trailingIcon = {
-        if (draft.isNotBlank()) IconButton(onClick = { commit() }) { Icon(AglynIcons.named("add"), contentDescription = "Add $draft") }
+        if (draft.isNotBlank()) WithTooltip("Add $draft") { IconButton(onClick = { commit() }) { Icon(AglynIcons.named("add"), contentDescription = "Add $draft") } }
       },
       modifier = Modifier.fillMaxWidth().testTag("chips-input"),
     )
@@ -284,9 +284,9 @@ fun ChipsField(
             enabled = enabled,
             label = { Text(word) },
             trailingIcon = {
-              IconButton(onClick = { onValues(values - word) }, enabled = enabled, modifier = Modifier.size(InputChipDefaults.IconSize + 8.dp)) {
+              WithTooltip("Remove $word") { IconButton(onClick = { onValues(values - word) }, enabled = enabled, modifier = Modifier.size(InputChipDefaults.IconSize + 8.dp)) {
                 Icon(AglynIcons.named("close"), contentDescription = "Remove $word", Modifier.size(InputChipDefaults.IconSize))
-              }
+              } }
             },
           )
         }

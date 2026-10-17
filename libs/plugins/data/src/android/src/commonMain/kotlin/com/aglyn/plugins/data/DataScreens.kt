@@ -55,12 +55,14 @@ import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChoiceField
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.InputChoice
 import com.aglyn.ui.ListHeader
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatTile
 import com.aglyn.ui.StatusChip
@@ -151,7 +153,7 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
         }
         when (val live = datasets) {
           Live.Loading -> SkeletonList(rows = 5, modifier = Modifier.padding(space(2f)))
-          is Live.Failed -> EmptyState("Could not load datasets", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+          is Live.Failed -> EmptyState("Could not load datasets", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
           is Live.Ready -> if (live.value.isEmpty()) {
             val scoped = (access as? Live.Ready)?.value?.let { !it.orgWide && it.tokens.isEmpty() } == true
             EmptyState(
@@ -192,7 +194,7 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
       // A deleted dataset leaves the list, and its detail closes with it.
       CloseWhenGone(rows?.let { dataset != null })
       when {
-        selected == null -> EmptyState("Pick a dataset to see it here", icon = AglynIcons.named("dataset"))
+        selected == null -> SelectionPlaceholder("Pick a dataset to see it here", icon = AglynIcons.named("dataset"))
         rows == null -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
         dataset == null -> EmptyState("This dataset is gone", body = "It was deleted, or it is no longer shared with you.", icon = AglynIcons.named("dataset"))
         else -> DatasetDetail(context, orgId, dataset, rows, canWrite) { dialog = it }

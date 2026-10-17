@@ -54,6 +54,7 @@ import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.FieldEditor
 import com.aglyn.ui.FieldKind
 import com.aglyn.ui.FieldOption
@@ -66,6 +67,7 @@ import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.PropertyRow
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -160,7 +162,7 @@ fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? =
     },
     detail = { selected ->
       if (selected == null) {
-        EmptyState("Pick a message to read it here", icon = AglynIcons.named("inbox"))
+        SelectionPlaceholder("Pick a message to read it here", icon = AglynIcons.named("inbox"))
       } else {
         SubmissionDetail(context, hostId, selected, (site as? Live.Ready)?.value, permissions)
       }
@@ -246,7 +248,7 @@ fun SubmissionDetail(context: NativePluginContext, hostId: String, submissionId:
 
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this message", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this message", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val doc = value.value
       if (doc == null) {

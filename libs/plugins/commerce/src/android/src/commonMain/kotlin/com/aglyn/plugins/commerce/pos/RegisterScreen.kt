@@ -2,6 +2,7 @@ package com.aglyn.plugins.commerce.pos
 
 import com.aglyn.hardware.CameraScanFilter
 import com.aglyn.ui.BarcodeScanSheet
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.LocalCameraScanner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -101,6 +102,7 @@ import com.aglyn.ui.QuantityStepper
 import com.aglyn.ui.SkeletonGrid
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.WidthClass
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.currentWidthClass
 import com.aglyn.ui.space
 import kotlinx.coroutines.delay
@@ -362,7 +364,7 @@ private fun CatalogPane(
         leadingIcon = { Icon(AglynIcons.named("search"), contentDescription = null) },
         trailingIcon = {
           if (query.isNotEmpty()) {
-            IconButton(onClick = { onQuery("") }) { Icon(AglynIcons.named("close"), contentDescription = "Clear search") }
+            WithTooltip("Clear search") { IconButton(onClick = { onQuery("") }) { Icon(AglynIcons.named("close"), contentDescription = "Clear search") } }
           }
         },
         singleLine = true,
@@ -370,16 +372,16 @@ private fun CatalogPane(
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
       )
       if (onCamera != null) {
-        IconButton(onClick = onCamera, modifier = Modifier.testTag("pos-scan-camera")) {
+        WithTooltip("Scan barcodes with the camera") { IconButton(onClick = onCamera, modifier = Modifier.testTag("pos-scan-camera")) {
           Icon(AglynIcons.named("photo_camera"), contentDescription = "Scan barcodes with the camera")
-        }
+        } }
       }
-      IconButton(onClick = onEnterCode, modifier = Modifier.testTag("pos-enter-code")) {
+      WithTooltip("Enter a barcode or SKU") { IconButton(onClick = onEnterCode, modifier = Modifier.testTag("pos-enter-code")) {
         Icon(AglynIcons.named("barcode"), contentDescription = "Enter a barcode or SKU")
-      }
-      IconButton(onClick = onOps, modifier = Modifier.testTag("pos-ops-open")) {
+      } }
+      WithTooltip("Cashier and shift") { IconButton(onClick = onOps, modifier = Modifier.testTag("pos-ops-open")) {
         Icon(AglynIcons.named("person_check"), contentDescription = "Cashier and shift")
-      }
+      } }
       RegisterPicker(model)
     }
     RegisterOfflineBanner(model)
@@ -420,7 +422,7 @@ private fun CatalogPane(
       is Load.Failed -> EmptyState(
         "Products did not load",
         body = grid.message,
-        icon = AglynIcons.named("error"),
+        icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
         action = { OutlinedButton(onClick = { model.loadGrid() }) { Text("Try again") } },
       )
       is Load.Ready -> if (grid.value.isEmpty()) {
@@ -725,7 +727,7 @@ private fun BasketPane(model: RegisterModel, onHolds: () -> Unit, inSheet: Boole
         Spacer(Modifier.width(space(0.5f)))
         Text("Held (${model.holds.size})")
       }
-      IconButton(onClick = { model.clearCart() }, enabled = !cart.isEmpty) { Icon(AglynIcons.named("clear_all"), contentDescription = "Clear the basket") }
+      WithTooltip("Clear the basket") { IconButton(onClick = { model.clearCart() }, enabled = !cart.isEmpty) { Icon(AglynIcons.named("clear_all"), contentDescription = "Clear the basket") } }
     }
     if (model.registers is Load.Ready && model.register == null) {
       NoticeBanner("This store has no register yet. Add one in the console's register settings.", StatusTone.WARNING, Modifier.padding(space(2f)))
@@ -799,7 +801,7 @@ private fun HoldsDialog(model: RegisterModel, onDismiss: () -> Unit) {
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
               }
-              IconButton(onClick = { model.discardHold(held.id) }) { Icon(AglynIcons.named("delete"), contentDescription = "Discard ${held.label}") }
+              WithTooltip("Discard ${held.label}") { IconButton(onClick = { model.discardHold(held.id) }) { Icon(AglynIcons.named("delete"), contentDescription = "Discard ${held.label}") } }
               TextButton(onClick = { model.resume(held.id); onDismiss() }) { Text("Resume") }
             }
           }

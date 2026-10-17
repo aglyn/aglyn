@@ -52,6 +52,7 @@ import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.ListHeader
 import com.aglyn.ui.LoadContent
 import com.aglyn.ui.LoadMoreEffect
@@ -64,6 +65,7 @@ import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectOption
 import com.aglyn.ui.SelectField
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatTile
 import com.aglyn.ui.StatusChip
@@ -165,7 +167,7 @@ fun BrowseScreen(context: NativePluginContext, initialListingId: String? = null)
     },
     detail = { selected ->
       if (selected == null) {
-        EmptyState("Pick a listing to see it here", icon = AglynIcons.named("storefront"))
+        SelectionPlaceholder("Pick a listing to see it here", icon = AglynIcons.named("storefront"))
       } else {
         ListingDetail(context, selected)
       }
@@ -186,7 +188,7 @@ private fun ListingDetail(context: NativePluginContext, listingId: String) {
   val live by remember(listingId, context.firestore) { context.firestore.observeDoc("$LISTINGS/$listingId") }.collectAsState(Live.Loading)
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this listing", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this listing", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val listing = value.value?.let(ListingRow::from)
       if (listing == null || listing.deleted || listing.workspaceLocked) {
@@ -553,7 +555,7 @@ fun LicencesScreen(context: NativePluginContext) {
         StatusTone.INFO,
       )
       when {
-        heldLive is Live.Failed -> EmptyState("Could not load licenses", body = "This workspace’s licenses could not be loaded. Check the connection and try again.", icon = AglynIcons.named("error"))
+        heldLive is Live.Failed -> EmptyState("Could not load licenses", body = "This workspace’s licenses could not be loaded. Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
         held == null -> SkeletonList(rows = 3)
         held.isEmpty() -> EmptyState("This workspace holds no licenses", body = "Anything bought for this workspace shows up here, whoever on the team paid for it.", icon = AglynIcons.named("receipt"))
         else -> SectionCard("This workspace", modifier = Modifier.testTag("licences-held")) {
@@ -562,7 +564,7 @@ fun LicencesScreen(context: NativePluginContext) {
         }
       }
       when {
-        mineLive is Live.Failed -> EmptyState("Could not load your purchases", body = "Your purchases could not be loaded. Check the connection and try again.", icon = AglynIcons.named("error"))
+        mineLive is Live.Failed -> EmptyState("Could not load your purchases", body = "Your purchases could not be loaded. Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
         mine == null -> SkeletonList(rows = 3)
         mine.isEmpty() && licensedTo == null -> EmptyState("You have not bought anything yet", body = "Your own marketplace receipts appear here, across every workspace you belong to.", icon = AglynIcons.named("receipt"))
         else -> SectionCard("Bought by you", modifier = Modifier.testTag("licences-mine")) {

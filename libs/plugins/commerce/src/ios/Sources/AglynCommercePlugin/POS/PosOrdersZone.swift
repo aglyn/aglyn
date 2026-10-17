@@ -16,12 +16,14 @@ struct PosOrdersZone: View {
   var body: some View {
     let widgets = context.slotWidgets(commercePosOrdersSlot)
     if !widgets.isEmpty {
-      // A long queue scrolls in its own band instead of pushing the product grid off the screen.
-      ViewThatFits(in: .vertical) {
-        zone(widgets)
-        ScrollView { zone(widgets) }
+      // A long queue scrolls in its own band instead of pushing the product grid off the screen. The band is as tall
+      // as what the widgets draw, so a widget that draws nothing (no delivery service connected) leaves no gap.
+      HeightCap(320) {
+        ViewThatFits(in: .vertical) {
+          zone(widgets)
+          ScrollView { zone(widgets) }
+        }
       }
-      .frame(maxHeight: 320)
       .accessibilityIdentifier("pos-orders-zone")
     }
   }
@@ -30,5 +32,22 @@ struct PosOrdersZone: View {
     VStack(spacing: 0) {
       ForEach(widgets) { $0.make(context) }
     }
+  }
+}
+
+/// Proposes at most `limit` points of height and takes the height its content chooses. `.frame(maxHeight:)` would
+/// instead grow to the limit whenever the parent offers more, even around content that draws nothing.
+private struct HeightCap: Layout {
+  let limit: CGFloat
+
+  init(_ limit: CGFloat) { self.limit = limit }
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    guard let content = subviews.first else { return .zero }
+    return content.sizeThatFits(ProposedViewSize(width: proposal.width, height: min(proposal.height ?? limit, limit)))
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
   }
 }

@@ -60,18 +60,24 @@ struct BrowseScreen: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          shelf(selectable: true).frame(minWidth: 320, idealWidth: 400, maxWidth: 460)
+        // The sections span the window over both columns, so the browse list keeps its column to itself.
+        VStack(spacing: 0) {
+          SectionTabs(context: context, current: marketplaceBrowseScreen)
+            .frame(maxWidth: 640)
+            .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
+            .frame(maxWidth: .infinity)
           Divider()
-          Group {
+          AglynListDetailColumns(listWidth: 400, showsDetail: !(list.ready && list.rows.isEmpty)) {
+            shelf(selectable: true)
+          } detail: {
             if let selection {
               ListingDetail(context: context, listingID: selection).id(selection)
             } else {
-              AglynEmptyState("Pick a listing to see it here", systemImage: "storefront")
+              AglynSelectionPlaceholder("No listing selected", systemImage: "storefront")
             }
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .aglynListColumn()
       } else {
         shelf(selectable: false)
       }
@@ -99,36 +105,34 @@ struct BrowseScreen: View {
   @ViewBuilder
   private func shelf(selectable: Bool) -> some View {
     VStack(spacing: 0) {
-      SectionTabs(context: context, current: marketplaceBrowseScreen)
-        .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
+      if !selectable {
+        SectionTabs(context: context, current: marketplaceBrowseScreen)
+          .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
+      }
       ScrollView(.horizontal, showsIndicators: false) {
-        HStack {
-          chip("All", on: category == nil) { category = nil }
+        HStack(spacing: AglynSpace.one) {
+          AglynChoiceChip("All", selected: category == nil) { category = nil }
           ForEach(ContractValues.shared.listingCategories, id: \.self) { name in
-            chip(name.prefix(1).uppercased() + name.dropFirst(), on: category == name) { category = name }
+            AglynChoiceChip(name.prefix(1).uppercased() + name.dropFirst(), selected: category == name) { category = name }
           }
+          Menu {
+            Picker("Order", selection: $sort) {
+              ForEach(BrowseSort.allCases) { Text($0.label).tag($0) }
+            }
+          } label: {
+            Label(sort.label, systemImage: "arrow.up.arrow.down")
+          }
+          .fixedSize()
+          .help("Order the listings")
+          .accessibilityIdentifier("marketplace-sort")
         }
         .padding(.horizontal, AglynSpace.two)
+        .padding(.vertical, AglynSpace.one)
       }
-      Picker("Order", selection: $sort) {
-        ForEach(BrowseSort.allCases) { Text($0.label).tag($0) }
-      }
-      .pickerStyle(.segmented)
-      .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
       content(selectable: selectable)
     }
+    .aglynListColumn()
     .background(AglynColor.page)
-  }
-
-  private func chip(_ title: String, on: Bool, _ action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-      Text(title).font(AglynFont.subheadline)
-        .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
-        .background(on ? AglynColor.primary.opacity(0.16) : AglynColor.paper, in: Capsule())
-        .overlay(Capsule().strokeBorder(on ? AglynColor.primary : AglynColor.divider))
-    }
-    .buttonStyle(.plain)
-    .accessibilityAddTraits(on ? .isSelected : [])
   }
 
   @ViewBuilder
@@ -140,9 +144,9 @@ struct BrowseScreen: View {
     } else if list.rows.isEmpty {
       AglynEmptyState("Nothing matches", systemImage: "storefront", message: "Try another search or category.")
     } else if selectable {
-      List(selection: $selection) { rows(selectable: true) }
+      List { rows(selectable: true) }
         .sensoryFeedback(.selection, trigger: selection)
-        .aglynListBackground()
+        .aglynSelectableListStyle().aglynSelectionKeys(list.rows.map(\.id), selection: $selection)
         .accessibilityIdentifier("listings")
     } else {
       List { rows(selectable: false) }
@@ -156,7 +160,7 @@ struct BrowseScreen: View {
     ForEach(list.rows) { row in
       Group {
         if selectable {
-          ListingListRow(row: row).tag(row.id)
+          ListingListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
         } else {
           Button { pushed = row.id } label: {
             HStack {
