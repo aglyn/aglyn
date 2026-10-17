@@ -19,6 +19,7 @@ import { createHash, createHmac } from 'node:crypto'
 import {
   effectiveOperatorAlertSetting,
   OPERATOR_ALERT_DEFAULT_NOTIFICATION_TYPE,
+  OPERATOR_ALERT_CATEGORY_LABELS,
   OPERATOR_ALERT_TIER_LABELS,
   operatorAlertLevel,
   renderOperatorAlertTemplate,
@@ -398,6 +399,30 @@ export function operatorAlertAbsoluteLink(link: string | undefined | null): stri
 }
 
 /**
+ * What the `operator-alert` email shows around an alert's own words: its
+ * level and area above the title, and which alert, workspace and site it is
+ * as a details panel, so the reader knows how much it matters before
+ * reading it.
+ */
+export function operatorAlertEmailFrame(
+  alert: Pick<RenderedOperatorAlert, 'label' | 'tier' | 'category' | 'orgId' | 'hostId'>,
+  now: Date = new Date(),
+): { eyebrow: string; details: string; settingsUrl: string } {
+  const details = [
+    `Alert: ${alert.label}`,
+    `Level: ${OPERATOR_ALERT_TIER_LABELS[alert.tier]}`,
+    alert.orgId ? `Workspace id: ${alert.orgId}` : '',
+    alert.hostId ? `Site id: ${alert.hostId}` : '',
+    `Raised: ${now.toISOString().slice(0, 16).replace('T', ' ')} UTC`,
+  ]
+  return {
+    eyebrow: `${OPERATOR_ALERT_TIER_LABELS[alert.tier]} · ${OPERATOR_ALERT_CATEGORY_LABELS[alert.category] ?? alert.category}`,
+    details: details.filter(Boolean).join('\n'),
+    settingsUrl: operatorAlertAbsoluteLink('/admin/operator-alerts'),
+  }
+}
+
+/**
  * The definition's link with its tokens filled, or `''` when a token it
  * needs is missing — `/admin/orgs/` would open the wrong page.
  */
@@ -555,6 +580,7 @@ async function deliverOperatorAlert(
           title: alert.title,
           body: alert.body,
           url: operatorAlertAbsoluteLink(alert.link),
+          ...operatorAlertEmailFrame(alert),
           context: `operator-alert ${alert.type}`,
         })
       : Promise.resolve<SendEmailResult>({ sent: false, reason: 'unconfigured' }),
@@ -742,6 +768,7 @@ export async function sendOperatorAlertTest(
           title: alert.title,
           body: alert.body,
           url: operatorAlertAbsoluteLink(alert.link) || operatorAlertAbsoluteLink('/admin/operator-alerts'),
+          ...operatorAlertEmailFrame(alert),
           context: `operator-alert-test ${definition.type}`,
         })
       : Promise.resolve<SendEmailResult>({ sent: false, reason: 'unconfigured' }),

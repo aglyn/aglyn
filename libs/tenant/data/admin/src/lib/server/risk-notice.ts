@@ -952,6 +952,12 @@ function isAlreadyExists(error: unknown): boolean {
   return code === 6 || code === 'already-exists' || code === 'ALREADY_EXISTS'
 }
 
+/** What a notice email shows above its title: whose it is, under the safety team's name. */
+function riskNoticeEyebrow(workspaceName: string | null | undefined): string {
+  const name = String(workspaceName ?? '').trim()
+  return name ? `${name} · Account safety` : 'Account safety'
+}
+
 /** The flat merge map a notice email renders with. */
 function emailMerge(input: {
   title: string
@@ -980,6 +986,19 @@ function emailMerge(input: {
     'notice.actions': links.map((link) => `${link.label}: ${link.url}`).join('\n'),
     'notice.primaryActionLabel': primary?.label ?? '',
     'notice.primaryActionUrl': primary?.url ?? '',
+    // The rest of the actions, as links under the button.
+    'notice.otherActions': links
+      .filter((link) => link !== primary)
+      .map((link) => `${link.label}: ${link.url}`)
+      .join('\n'),
+    'notice.eyebrow': riskNoticeEyebrow(input.workspaceName),
+    'notice.details': [
+      input.workspaceName ? `Workspace: ${input.workspaceName}` : '',
+      input.reference ? `Reference: ${input.reference}` : '',
+      input.lockMessage ? `Message from our team: ${input.lockMessage}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
     'workspace.name': input.workspaceName ?? '',
     'lock.message': input.lockMessage ?? '',
     reference: input.reference ?? '',
@@ -1151,6 +1170,9 @@ async function flushLedger(deps: RiskNoticeDeps, ledgerId: string): Promise<bool
         'help.url': riskNoticeHelpUrl(),
         reference: '',
         'workspace.name': context.orgName ?? '',
+        'notice.eyebrow': riskNoticeEyebrow(context.orgName),
+        'notice.otherActions': '',
+        'notice.details': context.orgName ? `Workspace: ${context.orgName}` : '',
       })
       await emailPeople(deps, recipients, rendered, abuseReportContactEmail('support') ?? '')
     }
@@ -1374,6 +1396,15 @@ export async function requestRiskReview(
       'notice.primaryActionUrl': holdsUrl,
       'holds.url': holdsUrl,
       'workspace.name': orgName ?? '',
+      'notice.eyebrow': riskNoticeEyebrow(orgName),
+      'notice.details': [
+        orgName ? `Workspace: ${orgName}` : '',
+        `Item: ${itemLabel ?? 'The held or flagged item'}`,
+        outcome.reference ? `Reference: ${outcome.reference}` : '',
+        'Status: Waiting for review',
+      ]
+        .filter(Boolean)
+        .join('\n'),
       reference: outcome.reference ?? '',
       'help.url': riskNoticeHelpUrl('requesting-a-review'),
     })

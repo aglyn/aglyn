@@ -36,6 +36,7 @@ import {
   renderHostEmail,
   renderLoadedHostEmail,
   type EmailChrome,
+  type EmailButtonText,
   type EmailTheme,
   type LoadedHostEmail,
   type RenderedHostEmail,
@@ -145,6 +146,31 @@ type SiteEmailHost = HostTokenSource & {
  * corner radius for buttons. A site with no theme of its own resolves the
  * same base the site itself does.
  */
+/**
+ * How the site's buttons set their label (AGL-3897): the theme's button type
+ * (`typography.variants.button`, the variant the site's buttons are set in),
+ * a `MuiButton` root override's case over it, and MUI's own button type —
+ * uppercase, 500 — under both, which is what the site's buttons draw when
+ * its theme says nothing.
+ */
+function siteButtonText(theme: ReturnType<typeof resolveSiteTheme> | null | undefined): EmailButtonText {
+  type ButtonType = { textTransform?: unknown; fontWeight?: unknown; letterSpacing?: unknown }
+  const read = theme as {
+    typography?: { button?: ButtonType; variants?: { button?: ButtonType } }
+    components?: { MuiButton?: { styleOverrides?: { root?: unknown } } }
+  } | null
+  const type = read?.typography?.variants?.button ?? read?.typography?.button ?? {}
+  const root = read?.components?.MuiButton?.styleOverrides?.root
+  const override = root && typeof root === 'object' ? (root as { textTransform?: unknown }).textTransform : undefined
+  const transform = typeof override === 'string' ? override : typeof type.textTransform === 'string' ? type.textTransform : 'uppercase'
+  const weight = Number(type.fontWeight)
+  return {
+    transform: transform as EmailButtonText['transform'],
+    weight: Number.isFinite(weight) && weight >= 100 ? weight : 500,
+    letterSpacing: typeof type.letterSpacing === 'string' ? type.letterSpacing : '0.02857em',
+  }
+}
+
 function siteThemeFor(host: SiteEmailHost | null): EmailTheme {
   // Resolved, not read off `theme`: a site's edits are an override on the
   // theme it picked (AGL-3404), so the stored theme alone is the design
@@ -157,6 +183,7 @@ function siteThemeFor(host: SiteEmailHost | null): EmailTheme {
       colors: (theme?.colorSchemes?.light ?? null) as Record<string, unknown> | null,
     }),
     ...(typeof radius === 'number' ? { buttonRadius: radius } : {}),
+    buttonText: siteButtonText(theme),
   }
 }
 

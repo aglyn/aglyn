@@ -141,6 +141,11 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
         includeAdmins: true,
         subject: email.subject,
         text: email.text,
+        lead: email.lead,
+        details: email.details,
+        url: email.url,
+        urlLabel: email.urlLabel,
+        reason: email.reason,
         context: 'outreach-mailbox-notice',
       })
       if (!result.sent) console.warn(`[outreach] the mailbox owner was not emailed: ${result.reason}`)

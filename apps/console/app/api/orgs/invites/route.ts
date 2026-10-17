@@ -494,7 +494,7 @@ async function handler(request: Request): Promise<Response> {
           // the moment white-label used to invert.
           ...brandMergeTokens(branding),
           'org.name': String(orgName),
-          'invite.role': role,
+          'invite.role': role.charAt(0).toUpperCase() + role.slice(1),
           'handoff.previousOwner': previousOwnerLine,
           signInUrl: origin,
         },

@@ -62,7 +62,9 @@ import { platformConsoleOrigin as consoleOrigin } from '@aglyn/aglyn/app-utils/p
 import { digestTimeZone } from './daily-digest-route'
 import {
   composeCrmTaskReminderBody,
+  composeCrmTaskReminderEmailParts,
   composeCrmTaskReminderEmailText,
+  crmTaskReminderMergeValues,
   composeCrmTaskReminderSubject,
   CRM_TASK_REMINDER_CEILING,
   type CrmReminderTask,
@@ -407,6 +409,7 @@ async function remindOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
               ...brand.merge,
               'reminder.subject': subject,
               'reminder.body': composeCrmTaskReminderEmailText({ ...reminderInput, omitClosing: true }),
+              ...crmTaskReminderMergeValues(composeCrmTaskReminderEmailParts(reminderInput)),
               settingsUrl,
             },
             brand.options,

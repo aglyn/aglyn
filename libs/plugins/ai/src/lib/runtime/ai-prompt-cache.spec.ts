@@ -883,7 +883,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // 2,901 before AGL-3287 gave the email palette its Header and Footer,
       // which the catalog names as blocks to imitate. Up 74 at AGL-3676, which
       // says plainly that a subject line and a preheader carry no merge token.
-      email: { prefixTokens: 2_970, minimum: 512, caches: true, toolsStable: true },
+      // Up 5 at AGL-3897, whose email text offers the Eyebrow, Details and
+      // Links styles.
+      email: { prefixTokens: 2_975, minimum: 512, caches: true, toolsStable: true },
       // 2,728 while a form was the Form and its all-in-one Form Fields. Up 594
       // when the form job moved to MUI's separate form elements: the form
       // catalog lists each piece of a field, and the instructions say how a
