@@ -12,7 +12,8 @@ import UserNotifications
   import AppKit
 #endif
 
-/// Push straight from APNs: asks once after sign-in, registers with APNs,
+/// Push straight from APNs, for an app the server pushes (`AglynAppID.receivesPushes`;
+/// Aglyn POS is pushed nothing, so it never asks): asks once after sign-in, registers with APNs,
 /// keeps this install's row in `users/{uid}/devices` current, drops it on
 /// sign-out, and turns a tapped push into a link the shell opens.
 ///
@@ -31,9 +32,11 @@ final class PushCenter: NSObject {
   @ObservationIgnored private var uid: String?
   @ObservationIgnored private var reader: FirestoreReader?
   @ObservationIgnored private var token: Data?
+  @ObservationIgnored private let receivesPushes: Bool
 
   init(app: AglynAppID) {
     registration = PushDeviceRegistration(app: app)
+    receivesPushes = app.receivesPushes
     super.init()
     UNUserNotificationCenter.current().delegate = self
   }
@@ -44,7 +47,7 @@ final class PushCenter: NSObject {
   func signedIn(uid: String?, reader: FirestoreReader?) {
     self.uid = uid
     self.reader = reader
-    guard uid != nil else { return }
+    guard uid != nil, receivesPushes else { return }
     #if DEBUG
       // Screenshot and UI-test runs keep the system's permission sheet away.
       if UserDefaults.standard.bool(forKey: "AglynNoPushPrompt") { return }
@@ -70,6 +73,7 @@ final class PushCenter: NSObject {
   }
 
   func didRegister(token: Data) {
+    guard receivesPushes else { return }
     self.token = token
     Task { await write(token) }
   }

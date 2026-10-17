@@ -22,6 +22,14 @@ data class FirebaseOptionsConfig(
 enum class AglynAppId(val wire: String) {
   AGLYN("aglyn"),
   POS("aglyn-pos"),
+  ;
+
+  /**
+   * Whether the server sends this app any push. Aglyn carries every workspace notification; the register is pushed
+   * only the types in the server's `POS_PUSH_TYPES` (`push-delivery.ts`), which lists none, so Aglyn POS neither asks
+   * for notification permission nor registers a device.
+   */
+  val receivesPushes: Boolean get() = this == AGLYN
 }
 
 /** The raw build values, by the same names on every platform. */
