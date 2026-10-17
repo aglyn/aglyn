@@ -28,6 +28,7 @@ import {
 import { operatorAlertForNotificationType } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { notificationPushEnabled } from '@aglyn/aglyn/app-utils/notification-push'
+import { NOTIFICATION_SOUND_FIELD, notificationSound } from '@aglyn/aglyn/app-utils/notification-sounds'
 import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { FieldValue } from 'firebase-admin/firestore'
 import { withoutMailWithheldAccounts } from './account-mail'
@@ -333,6 +334,7 @@ export async function notifyUsers(
     let count = 0
     const mailTo: string[] = []
     const pushTo: string[] = []
+    const sounds: Record<string, string> = {}
     for (const userDoc of userDocs) {
       const settings = userDoc.get(NOTIFICATION_SETTINGS_FIELD) as
         | NotificationSettings
@@ -364,6 +366,7 @@ export async function notifyUsers(
       // The mobile push channel (AGL-3620); unanswered, it follows the feed.
       if (notificationPushEnabled(settings, payload.type, scope, legacy)) {
         pushTo.push(userDoc.id)
+        sounds[userDoc.id] = notificationSound(userDoc.get(NOTIFICATION_SOUND_FIELD)).id
       }
       if (
         notificationChannelEnabled(settings, 'email', payload.type, scope, legacy) &&
@@ -382,7 +385,7 @@ export async function notifyUsers(
     if (pushTo.length && mobilePushEnabled()) {
       for (const send of mobilePushSenders()) {
         try {
-          await send(pushTo, payload, { db })
+          await send(pushTo, payload, { db, sounds })
         } catch (error) {
           console.error('push delivery failed', error)
         }

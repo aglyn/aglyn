@@ -150,6 +150,10 @@
       "why": "Name-search token normalizers, so an app list search matches the console's search index (AGL-3621)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/notification-sounds.ts",
+      "why": "The notification sounds a person picks from, with each platform's file name, so the apps' pickers and the push payload name the console's sounds; no imports at all."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/organizations.ts",
       "why": "Whether a member reaches the whole workspace and the scope tokens their reads are admitted by, read by the app's org access (AGL-3622)."
     },

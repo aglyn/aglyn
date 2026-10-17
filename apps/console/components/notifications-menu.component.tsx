@@ -57,6 +57,7 @@ import {
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useHostIndexEntries from '../hooks/use-host-index-entries'
 import useNotificationAlertPrefs from '../hooks/use-notification-prefs'
+import useNotificationSound from '../hooks/use-notification-sound'
 import {
   markAllNotificationsReadFor,
   markNotificationRead,
@@ -191,6 +192,7 @@ export function NotificationsMenu() {
 
   // ---- Alerts (AGL-650): sound, desktop notification, tab badge ----------
   const [alertPrefs] = useNotificationAlertPrefs()
+  const [sound] = useNotificationSound()
 
   // `useOrgHosts` above only covers the org currently open, so a notification
   // from any other org had no subdomain and fell through to its stored
@@ -268,7 +270,7 @@ export function NotificationsMenu() {
     // A new invitation belongs in the banner now, not on the next reload.
     if (arrived.some((item) => item.inviteId)) void refreshInvites()
 
-    if (alertPrefs.sound) playNotificationChime()
+    if (alertPrefs.sound) playNotificationChime(sound)
     if (alertPrefs.desktop) {
       // One notification for a burst — a batch write (an org-wide broadcast,
       // say) should not stack N toasts.
@@ -287,6 +289,7 @@ export function NotificationsMenu() {
   }, [
     recent,
     alertPrefs.sound,
+    sound,
     alertPrefs.desktop,
     followNotification,
     refreshInvites,

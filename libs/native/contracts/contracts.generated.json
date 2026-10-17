@@ -1770,6 +1770,7 @@
       "probability": 0
     }
   ],
+  "DEFAULT_NOTIFICATION_SOUND": "xylophone",
   "DEFAULT_TITLE_PATTERN": "{{page.name}} {{site.separator}} {{site.name}}",
   "DROP_OFF_MAX_HOURS": 720,
   "DROP_OFF_WAIT_HOURS": [
@@ -4392,6 +4393,72 @@
     ]
   },
   "NOTHING_MOVED": "Aglyn has not refunded or canceled anything.",
+  "NOTIFICATION_SOUND_FIELD": "notificationSound",
+  "NOTIFICATION_SOUNDS": [
+    {
+      "android": "aglyn_sound_xylophone",
+      "apple": "aglyn-xylophone.caf",
+      "id": "xylophone",
+      "label": "Xylophone",
+      "web": "/sounds/notifications/xylophone.wav"
+    },
+    {
+      "android": "aglyn_sound_aglyn",
+      "apple": "aglyn-aglyn.caf",
+      "id": "aglyn",
+      "label": "Aglyn",
+      "web": "/sounds/notifications/aglyn.wav"
+    },
+    {
+      "android": "aglyn_sound_tada",
+      "apple": "aglyn-tada.caf",
+      "id": "tada",
+      "label": "Ta-da",
+      "web": "/sounds/notifications/tada.wav"
+    },
+    {
+      "android": "aglyn_sound_plink",
+      "apple": "aglyn-plink.caf",
+      "id": "plink",
+      "label": "Plink",
+      "web": "/sounds/notifications/plink.wav"
+    },
+    {
+      "android": "aglyn_sound_arcade",
+      "apple": "aglyn-arcade.caf",
+      "id": "arcade",
+      "label": "Arcade",
+      "web": "/sounds/notifications/arcade.wav"
+    },
+    {
+      "android": "aglyn_sound_cowbell",
+      "apple": "aglyn-cowbell.caf",
+      "id": "cowbell",
+      "label": "Cowbell",
+      "web": "/sounds/notifications/cowbell.wav"
+    },
+    {
+      "android": "aglyn_sound_bubbles",
+      "apple": "aglyn-bubbles.caf",
+      "id": "bubbles",
+      "label": "Bubbles",
+      "web": "/sounds/notifications/bubbles.wav"
+    },
+    {
+      "android": "aglyn_sound_steel_pan",
+      "apple": "aglyn-steel_pan.caf",
+      "id": "steel_pan",
+      "label": "Steel pan",
+      "web": "/sounds/notifications/steel_pan.wav"
+    },
+    {
+      "android": "aglyn_sound_cash_register",
+      "apple": "aglyn-cash_register.caf",
+      "id": "cash_register",
+      "label": "Cash register",
+      "web": "/sounds/notifications/cash_register.wav"
+    }
+  ],
   "OPEN_DISPUTE_CLAUSE": {
     "field": "disputeKey",
     "op": "equals",

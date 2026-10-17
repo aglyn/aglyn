@@ -1205,6 +1205,15 @@ data class NativeCrmPicklist(
 )
 
 @Serializable
+data class NotificationSound(
+    val android: String,
+    val apple: String,
+    val id: String,
+    val label: String,
+    val web: String,
+)
+
+@Serializable
 data class OrderAddress(
     val city: String? = null,
     val country: String? = null,
@@ -2603,6 +2612,7 @@ internal data class ContractValuesPart2(
     @SerialName("DATASET_FILTER_PREFIX_MAX") val datasetFilterPrefixMax: Long,
     @SerialName("DEAL_LIST_DECLARATION") val dealListDeclaration: ListQueryDeclaration,
     @SerialName("DEFAULT_DEAL_STAGES") val defaultDealStages: List<CrmDealStage>,
+    @SerialName("DEFAULT_NOTIFICATION_SOUND") val defaultNotificationSound: String,
     @SerialName("DEFAULT_TITLE_PATTERN") val defaultTitlePattern: String,
     @SerialName("DROP_OFF_MAX_HOURS") val dropOffMaxHours: Double,
     @SerialName("DROP_OFF_WAIT_HOURS") val dropOffWaitHours: List<Double>,
@@ -2647,11 +2657,11 @@ internal data class ContractValuesPart2(
     @SerialName("IMAGE_EDIT_JPEG_QUALITY") val imageEditJpegQuality: Double,
     @SerialName("IMAGE_EDIT_PREVIEW_MAX") val imageEditPreviewMax: Long,
     @SerialName("INSTALL_TARGETS") val installTargets: Map<String, List<InstallTarget>>,
-    @SerialName("LABEL_CODE_MAX_LENGTH") val labelCodeMaxLength: Long,
 )
 
 @Serializable
 internal data class ContractValuesPart3(
+    @SerialName("LABEL_CODE_MAX_LENGTH") val labelCodeMaxLength: Long,
     @SerialName("LABEL_SIZES") val labelSizes: List<LabelSize>,
     @SerialName("LAYOUT_LIST_QUERY") val layoutListQuery: ListQueryDeclaration,
     @SerialName("LEAD_LIST_DECLARATION") val leadListDeclaration: ListQueryDeclaration,
@@ -2699,11 +2709,13 @@ internal data class ContractValuesPart3(
     @SerialName("NATIVE_CRM_TASK_KINDS") val nativeCrmTaskKinds: List<String>,
     @SerialName("NATIVE_SITE_CAMPAIGNS_QUERY") val nativeSiteCampaignsQuery: ListQueryDeclaration,
     @SerialName("NATIVE_SITE_EMAILS_QUERY") val nativeSiteEmailsQuery: ListQueryDeclaration,
-    @SerialName("NOTHING_MOVED") val nothingMoved: String,
 )
 
 @Serializable
 internal data class ContractValuesPart4(
+    @SerialName("NOTHING_MOVED") val nothingMoved: String,
+    @SerialName("NOTIFICATION_SOUND_FIELD") val notificationSoundField: String,
+    @SerialName("NOTIFICATION_SOUNDS") val notificationSounds: List<NotificationSound>,
     @SerialName("OPEN_DISPUTE_CLAUSE") val openDisputeClause: ListFilterClause,
     @SerialName("ORDER_CHANNEL_LABELS") val orderChannelLabels: Map<String, String>,
     @SerialName("ORDER_CHANNEL_OPTIONS") val orderChannelOptions: List<ListFilterOption>,
@@ -2749,13 +2761,13 @@ internal data class ContractValuesPart4(
     @SerialName("POS_KIOSK_UNLOCK_MAX_ATTEMPTS") val posKioskUnlockMaxAttempts: Long,
     @SerialName("POS_KIOSK_UNLOCK_TTL_MS") val posKioskUnlockTtlMs: Double,
     @SerialName("POS_OFFLINE_CLOCK_SKEW_MS") val posOfflineClockSkewMs: Double,
-    @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
-    @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
-    @SerialName("POS_OFFLINE_LATE_SYNC_MS") val posOfflineLateSyncMs: Double,
 )
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
+    @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
+    @SerialName("POS_OFFLINE_LATE_SYNC_MS") val posOfflineLateSyncMs: Double,
     @SerialName("POS_OFFLINE_MAX_AGE_MS") val posOfflineMaxAgeMs: Double,
     @SerialName("POS_OFFLINE_SALE_MAX_LINES") val posOfflineSaleMaxLines: Long,
     @SerialName("POS_OFFLINE_SYNC_BATCH_MAX") val posOfflineSyncBatchMax: Long,
@@ -2801,6 +2813,10 @@ internal data class ContractValuesPart5(
     @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
     @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
     @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
+)
+
+@Serializable
+internal data class ContractValuesPart6(
     @SerialName("TIME_ZONE_DEFAULT_LABEL") val timeZoneDefaultLabel: String,
     @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
 )
@@ -2816,6 +2832,7 @@ class ContractValues internal constructor(
     private val part3: ContractValuesPart3,
     private val part4: ContractValuesPart4,
     private val part5: ContractValuesPart5,
+    private val part6: ContractValuesPart6,
 ) {
     val areaServedMax: Long get() = part1.areaServedMax
     val areaServedNameMaxLength: Long get() = part1.areaServedNameMaxLength
@@ -2868,6 +2885,7 @@ class ContractValues internal constructor(
     val datasetFilterPrefixMax: Long get() = part2.datasetFilterPrefixMax
     val dealListDeclaration: ListQueryDeclaration get() = part2.dealListDeclaration
     val defaultDealStages: List<CrmDealStage> get() = part2.defaultDealStages
+    val defaultNotificationSound: String get() = part2.defaultNotificationSound
     val defaultTitlePattern: String get() = part2.defaultTitlePattern
     val dropOffMaxHours: Double get() = part2.dropOffMaxHours
     val dropOffWaitHours: List<Double> get() = part2.dropOffWaitHours
@@ -2912,7 +2930,7 @@ class ContractValues internal constructor(
     val imageEditJpegQuality: Double get() = part2.imageEditJpegQuality
     val imageEditPreviewMax: Long get() = part2.imageEditPreviewMax
     val installTargets: Map<String, List<InstallTarget>> get() = part2.installTargets
-    val labelCodeMaxLength: Long get() = part2.labelCodeMaxLength
+    val labelCodeMaxLength: Long get() = part3.labelCodeMaxLength
     val labelSizes: List<LabelSize> get() = part3.labelSizes
     val layoutListQuery: ListQueryDeclaration get() = part3.layoutListQuery
     val leadListDeclaration: ListQueryDeclaration get() = part3.leadListDeclaration
@@ -2960,7 +2978,9 @@ class ContractValues internal constructor(
     val nativeCrmTaskKinds: List<String> get() = part3.nativeCrmTaskKinds
     val nativeSiteCampaignsQuery: ListQueryDeclaration get() = part3.nativeSiteCampaignsQuery
     val nativeSiteEmailsQuery: ListQueryDeclaration get() = part3.nativeSiteEmailsQuery
-    val nothingMoved: String get() = part3.nothingMoved
+    val nothingMoved: String get() = part4.nothingMoved
+    val notificationSoundField: String get() = part4.notificationSoundField
+    val notificationSounds: List<NotificationSound> get() = part4.notificationSounds
     val openDisputeClause: ListFilterClause get() = part4.openDisputeClause
     val orderChannelLabels: Map<String, String> get() = part4.orderChannelLabels
     val orderChannelOptions: List<ListFilterOption> get() = part4.orderChannelOptions
@@ -3006,9 +3026,9 @@ class ContractValues internal constructor(
     val posKioskUnlockMaxAttempts: Long get() = part4.posKioskUnlockMaxAttempts
     val posKioskUnlockTtlMs: Double get() = part4.posKioskUnlockTtlMs
     val posOfflineClockSkewMs: Double get() = part4.posOfflineClockSkewMs
-    val posOfflineDisabledTenders: Map<String, String> get() = part4.posOfflineDisabledTenders
-    val posOfflineFlagLabels: Map<String, String> get() = part4.posOfflineFlagLabels
-    val posOfflineLateSyncMs: Double get() = part4.posOfflineLateSyncMs
+    val posOfflineDisabledTenders: Map<String, String> get() = part5.posOfflineDisabledTenders
+    val posOfflineFlagLabels: Map<String, String> get() = part5.posOfflineFlagLabels
+    val posOfflineLateSyncMs: Double get() = part5.posOfflineLateSyncMs
     val posOfflineMaxAgeMs: Double get() = part5.posOfflineMaxAgeMs
     val posOfflineSaleMaxLines: Long get() = part5.posOfflineSaleMaxLines
     val posOfflineSyncBatchMax: Long get() = part5.posOfflineSyncBatchMax
@@ -3054,12 +3074,12 @@ class ContractValues internal constructor(
     val tenantEmailCollection: String get() = part5.tenantEmailCollection
     val tenantEmails: List<TenantEmailEntry> get() = part5.tenantEmails
     val timeZoneChoices: List<String> get() = part5.timeZoneChoices
-    val timeZoneDefaultLabel: String get() = part5.timeZoneDefaultLabel
-    val workflowMaxSteps: Long get() = part5.workflowMaxSteps
+    val timeZoneDefaultLabel: String get() = part6.timeZoneDefaultLabel
+    val workflowMaxSteps: Long get() = part6.workflowMaxSteps
 
-    override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4 && part5 == other.part5)
+    override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4 && part5 == other.part5 && part6 == other.part6)
 
-    override fun hashCode(): Int = listOf<Any>(part1, part2, part3, part4, part5).hashCode()
+    override fun hashCode(): Int = listOf<Any>(part1, part2, part3, part4, part5, part6).hashCode()
 
     companion object {
         /** Decodes every part from one JSON text; the format must ignore unknown keys. */
@@ -3071,6 +3091,7 @@ class ContractValues internal constructor(
                 json.decodeFromJsonElement(ContractValuesPart3.serializer(), tree),
                 json.decodeFromJsonElement(ContractValuesPart4.serializer(), tree),
                 json.decodeFromJsonElement(ContractValuesPart5.serializer(), tree),
+                json.decodeFromJsonElement(ContractValuesPart6.serializer(), tree),
             )
         }
     }

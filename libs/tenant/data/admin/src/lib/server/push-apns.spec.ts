@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { notificationSound } from '@aglyn/aglyn/app-utils/notification-sounds'
 import { generateKeyPairSync, verify } from 'node:crypto'
 import {
   APNS_HOSTS,
@@ -40,8 +41,20 @@ const MESSAGE: PushMessage = {
   data: { type: 'content.order', link: '/acme/orders/o1', orgId: 'org-1' },
   urgent: false,
 }
-const PHONE: PushTarget = { token: 'a'.repeat(64), app: 'aglyn', topic: 'com.aglyn.app', apnsEnvironment: 'production' }
-const MAC: PushTarget = { token: 'b'.repeat(64), app: 'aglyn-pos', topic: 'com.aglyn.pos', apnsEnvironment: 'sandbox' }
+const PHONE: PushTarget = {
+  token: 'a'.repeat(64),
+  app: 'aglyn',
+  topic: 'com.aglyn.app',
+  apnsEnvironment: 'production',
+  sound: notificationSound('cowbell'),
+}
+const MAC: PushTarget = {
+  token: 'b'.repeat(64),
+  app: 'aglyn-pos',
+  topic: 'com.aglyn.pos',
+  apnsEnvironment: 'sandbox',
+  sound: notificationSound(undefined),
+}
 
 function fakeRequest(answer: (path: string) => { status: number; body?: string }) {
   const calls: Array<{ origin: string; headers: Record<string, string>; body: string }> = []
@@ -79,6 +92,15 @@ describe('APNs transport (AGL-3651)', () => {
     ).toBe(true)
   })
 
+  it('plays each device’s own picked sound, and the system sound when none is named', async () => {
+    const { calls, request } = fakeRequest(() => ({ status: 200 }))
+    const transport = createApnsTransport({ credentials: apnsCredentials(ENV)!, request, now: () => 0 })
+    await transport.send([PHONE, MAC], MESSAGE)
+    expect(JSON.parse(calls[0].body).aps.sound).toBe('aglyn-cowbell.caf')
+    expect(JSON.parse(calls[1].body).aps.sound).toBe('aglyn-xylophone.caf')
+    expect(JSON.parse(apnsPayload(MESSAGE)).aps.sound).toBe('default')
+  })
+
   it('sends the alert with the tap data beside aps, to each device’s own gateway and topic', async () => {
     const { calls, request } = fakeRequest(() => ({ status: 200 }))
     const transport = createApnsTransport({ credentials: apnsCredentials(ENV)!, request, now: () => 0 })
@@ -93,7 +115,7 @@ describe('APNs transport (AGL-3651)', () => {
     expect(calls[1].headers['apns-topic']).toBe('com.aglyn.pos')
     expect(calls[0].headers['authorization']).toMatch(/^bearer [\w-]+\.[\w-]+\.[\w-]+$/)
     expect(JSON.parse(calls[0].body)).toEqual({
-      aps: { alert: { title: 'New order #1042', body: '$12.50 from Acme' }, sound: 'default' },
+      aps: { alert: { title: 'New order #1042', body: '$12.50 from Acme' }, sound: 'aglyn-cowbell.caf' },
       type: 'content.order',
       link: '/acme/orders/o1',
       orgId: 'org-1',

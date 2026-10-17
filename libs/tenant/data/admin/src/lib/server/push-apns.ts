@@ -36,6 +36,7 @@
 
 import { createPrivateKey, sign, type KeyObject } from 'node:crypto'
 import { connect, type ClientHttp2Session } from 'node:http2'
+import type { NotificationSound } from '@aglyn/aglyn/app-utils/notification-sounds'
 import type { PushMessage, PushOutcome, PushTarget, PushTransport } from './push-delivery'
 
 export const APNS_HOSTS = {
@@ -94,12 +95,16 @@ export function apnsProviderToken(credentials: ApnsCredentials, nowMs: number): 
   return `${header}.${claims}.${base64url(signature)}`
 }
 
-/** The APNs payload: the alert, the default sound, and the tap data beside `aps`. */
-export function apnsPayload(message: PushMessage): string {
+/**
+ * The APNs payload: the alert, the person's picked sound and the tap data
+ * beside `aps`. The sound names a file in the app's bundle; a build that
+ * does not ship it yet plays the system sound instead.
+ */
+export function apnsPayload(message: PushMessage, sound?: NotificationSound): string {
   return JSON.stringify({
     aps: {
       alert: { title: message.title, ...(message.body ? { body: message.body } : {}) },
-      sound: 'default',
+      sound: sound?.apple ?? 'default',
     },
     ...message.data,
   })
@@ -177,7 +182,6 @@ export function createApnsTransport(options: ApnsTransportOptions): PushTranspor
       const { request, close } = options.request
         ? { request: options.request, close: () => undefined }
         : http2Requester()
-      const body = apnsPayload(message)
       const outcomes: PushOutcome[] = new Array(targets.length).fill('failed')
       try {
         for (let start = 0; start < targets.length; start += CONCURRENCY) {
@@ -195,7 +199,7 @@ export function createApnsTransport(options: ApnsTransportOptions): PushTranspor
                     'apns-priority': message.urgent ? '10' : '5',
                     'content-type': 'application/json',
                   },
-                  body,
+                  apnsPayload(message, target.sound),
                 )
                 // An expired or refused provider token is ours to mint again, not the device's fault.
                 if (response.status === 403) cached = null

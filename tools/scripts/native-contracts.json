@@ -790,6 +790,16 @@
         "FULFILLMENT_OTHER_CARRIER",
         "REFUND_BLOCKED_BY_DISPUTE"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/notification-sounds.ts": {
+      "types": [
+        "NotificationSound"
+      ],
+      "values": [
+        "NOTIFICATION_SOUND_FIELD",
+        "NOTIFICATION_SOUNDS",
+        "DEFAULT_NOTIFICATION_SOUND"
+      ]
     }
   },
   "ints": [
