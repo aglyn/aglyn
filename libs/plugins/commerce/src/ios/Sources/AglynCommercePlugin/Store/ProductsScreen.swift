@@ -248,6 +248,10 @@ struct ProductDetailView: View {
       }
     }
     .navigationTitle(titled ? (model.row?.name ?? "Product") : "Products")
+    #if os(iOS)
+      // The header below already shows the name large.
+      .navigationBarTitleDisplayMode(.inline)
+    #endif
     .toolbar {
       if let doc = model.doc, let row = model.row {
         // HIG toolbars: the two actions used most stay visible, every other one is in one labeled More menu.
