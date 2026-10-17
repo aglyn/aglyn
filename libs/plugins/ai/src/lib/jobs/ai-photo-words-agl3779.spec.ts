@@ -306,7 +306,8 @@ describe('a business type in another language, in English (AGL-3779)', () => {
 
   it('searches a Spanish bakery with no photo words by "bakery", never "restaurant cafe"', () => {
     const words = aiStockPhotoWordsOf({ plan: { language: 'es' }, inputs: bakeryJob().inputs })
-    expect(words).toEqual({ language: 'es', kindWords: 'restaurant cafe' })
+    expect(words).toMatchObject({ language: 'es', kindWords: 'restaurant cafe', name: 'Panaderia La Molienda' })
+    expect(words).not.toHaveProperty('photoWords')
     const terms = aiStockSourceTerms({ business: BUSINESS_TYPE, ...words })
     expect(terms).toEqual(aiStockSiteTerms('bakery'))
     expect(JSON.stringify(terms)).not.toMatch(/restaurant|coffee|dulce/)

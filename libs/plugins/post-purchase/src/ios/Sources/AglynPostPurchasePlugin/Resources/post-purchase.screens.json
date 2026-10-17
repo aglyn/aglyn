@@ -12,6 +12,7 @@
       "zones": [
         "commerceSettings"
       ],
+      "showWhen": "data.settings.vendors",
       "load": {
         "settings": "/api/post-purchase/settings?hostId={site.id}"
       },

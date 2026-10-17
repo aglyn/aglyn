@@ -23,17 +23,14 @@ struct ProductsScreen: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
-          Divider()
-          Group {
-            if let selection {
-              ProductDetailView(context: context, productID: selection, titled: false).id(selection)
-            } else {
-              AglynEmptyState("Pick a product", systemImage: "shippingbox")
-            }
+        AglynListDetailColumns(listWidth: 380) {
+          list(selectable: true)
+        } detail: {
+          if let selection {
+            ProductDetailView(context: context, productID: selection, titled: false).id(selection)
+          } else {
+            AglynSelectionPlaceholder("No product selected", systemImage: "shippingbox")
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       } else {
         list(selectable: false)
@@ -50,6 +47,7 @@ struct ProductsScreen: View {
         } label: {
           Label("New product", systemImage: "plus")
         }
+        .buttonStyle(.borderedProminent)
         .disabled(!quota.hasRoom)
         .accessibilityIdentifier("new-product")
         .help(quota.hasRoom ? "Add a product to this site" : "Your plan includes \(Int(quota.limit ?? 0)) products — upgrade for more")
@@ -152,13 +150,20 @@ struct ProductsScreen: View {
         message: model.status == nil && model.search.isEmpty
           ? "Products you sell on this site show up here." : "Try another status or search.")
     } else if selectable {
-      List(selection: $selection) { rows(selectable: true) }
-        .onChange(of: model.rows, initial: true) { _, rows in
-          if selection == nil || !rows.contains(where: { $0.id == selection }) { selection = rows.first?.id }
-        }
-        .sensoryFeedback(.selection, trigger: selection)
-        .aglynListBackground()
-        .accessibilityIdentifier("products-list")
+      ScrollViewReader { proxy in
+        List { rows(selectable: true) }
+          .onChange(of: model.rows, initial: true) { _, rows in
+            // A product just added keeps the pick while its row is on its way from the listener.
+            if let created, selection == created {
+              if rows.contains(where: { $0.id == created }) { withAnimation { proxy.scrollTo(created, anchor: .center) } }
+              return
+            }
+            if selection == nil || !rows.contains(where: { $0.id == selection }) { selection = rows.first?.id }
+          }
+          .sensoryFeedback(.selection, trigger: selection)
+          .aglynSelectableListStyle().aglynSelectionKeys(model.rows.map(\.id), selection: $selection)
+          .accessibilityIdentifier("products-list")
+      }
     } else {
       List { rows(selectable: false) }
         .aglynListBackground()
@@ -171,7 +176,7 @@ struct ProductsScreen: View {
     ForEach(model.rows) { row in
       Group {
         if selectable {
-          ProductListRow(row: row).tag(row.id)
+          ProductListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
         } else {
           NavigationLink {
             ProductDetailView(context: context, productID: row.id, titled: true)
@@ -245,87 +250,80 @@ struct ProductDetailView: View {
     .navigationTitle(titled ? (model.row?.name ?? "Product") : "Products")
     .toolbar {
       if let doc = model.doc, let row = model.row {
-        ToolbarItem(placement: .secondaryAction) {
+        // HIG toolbars: the two actions used most stay visible, every other one is in one labeled More menu.
+        ToolbarItemGroup(placement: .secondaryAction) {
           Button {
             editing = .editing(doc)
           } label: {
             Label("Edit", systemImage: "pencil")
           }
+          .help("Edit this product's name, price and stock")
           .accessibilityIdentifier("edit-product")
-        }
-        ToolbarItem(placement: .secondaryAction) {
-          // The address, supplier, tags, categories, tax, billing and search listing: a spec screen on the shared renderer.
           Button {
-            context.navigate("commerce.productDetails", ["productId": productID])
-          } label: {
-            Label("Details", systemImage: "slider.horizontal.3")
-          }
-          .accessibilityIdentifier("product-details")
-        }
-        ToolbarItem(placement: .secondaryAction) {
-          // The pictures, and a digital product's downloads and members videos.
-          Button {
+            // The pictures, and a digital product's downloads and members videos.
             context.navigate(commerceProductMediaScreen, ["productId": productID])
           } label: {
             Label("Images and files", systemImage: "photo.on.rectangle")
           }
+          .help("This product's pictures and files")
           .accessibilityIdentifier("product-media")
         }
         ToolbarItem(placement: .secondaryAction) {
-          Button {
-            adjusting = true
-          } label: {
-            Label("Adjust stock", systemImage: "plusminus")
-          }
-          .disabled(row.item.variants.isEmpty)
-          .accessibilityIdentifier("adjust-stock")
-        }
-        ToolbarItem(placement: .secondaryAction) {
-          Button {
-            Task { await duplicate() }
-          } label: {
-            Label("Duplicate", systemImage: "plus.square.on.square")
-          }
-          .disabled(working)
-          .accessibilityIdentifier("product-duplicate")
-        }
-        ToolbarItem(placement: .secondaryAction) {
-          Button {
-            Task { await setStatus(doc, row, row.status == "archived" ? "active" : "archived") }
-          } label: {
-            Label(row.status == "archived" ? "Activate" : "Archive", systemImage: row.status == "archived" ? "tray.and.arrow.up" : "archivebox")
-          }
-          .disabled(working)
-          .accessibilityIdentifier("product-archive")
-        }
-        if row.type == "digital" {
-          ToolbarItem(placement: .secondaryAction) {
+          AglynMoreMenu {
+            // The address, supplier, tags, categories, tax, billing and search listing: a spec screen on the shared renderer.
             Button {
-              keys = true
+              context.navigate("commerce.productDetails", ["productId": productID])
             } label: {
-              Label("Keys", systemImage: "key")
+              Label("Details", systemImage: "slider.horizontal.3")
             }
-            .accessibilityIdentifier("product-keys")
-          }
-        }
-        ToolbarItem(placement: .secondaryAction) {
-          Button(role: .destructive) {
-            deleting = true
-          } label: {
-            Label("Delete", systemImage: "trash")
-          }
-          .disabled(working)
-          .accessibilityIdentifier("product-delete")
-        }
-        if row.type == "physical" {
-          ToolbarItem(placement: .secondaryAction) {
-            // Shelf labels with a barcode the register scans back (the console's Labels).
+            .accessibilityIdentifier("product-details")
             Button {
-              labels = productLabelRows(JSONValue.from(doc.data))
+              adjusting = true
             } label: {
-              Label("Labels", systemImage: "barcode")
+              Label("Adjust stock", systemImage: "plusminus")
             }
-            .accessibilityIdentifier("product-labels")
+            .disabled(row.item.variants.isEmpty)
+            .accessibilityIdentifier("adjust-stock")
+            if row.type == "physical" {
+              // Shelf labels with a barcode the register scans back (the console's Labels).
+              Button {
+                labels = productLabelRows(JSONValue.from(doc.data))
+              } label: {
+                Label("Labels", systemImage: "barcode")
+              }
+              .accessibilityIdentifier("product-labels")
+            }
+            if row.type == "digital" {
+              Button {
+                keys = true
+              } label: {
+                Label("Keys", systemImage: "key")
+              }
+              .accessibilityIdentifier("product-keys")
+            }
+            Divider()
+            Button {
+              Task { await duplicate() }
+            } label: {
+              Label("Duplicate", systemImage: "plus.square.on.square")
+            }
+            .disabled(working)
+            .accessibilityIdentifier("product-duplicate")
+            Button {
+              Task { await setStatus(doc, row, row.status == "archived" ? "active" : "archived") }
+            } label: {
+              Label(row.status == "archived" ? "Activate" : "Archive", systemImage: row.status == "archived" ? "tray.and.arrow.up" : "archivebox")
+            }
+            .disabled(working)
+            .accessibilityIdentifier("product-archive")
+            Divider()
+            Button(role: .destructive) {
+              deleting = true
+            } label: {
+              Label("Delete", systemImage: "trash")
+            }
+            .disabled(working)
+            .accessibilityIdentifier("product-delete")
           }
         }
       }
@@ -355,21 +353,12 @@ struct ProductDetailView: View {
     Form {
       if let notice { AglynNotice(notice.text, tone: notice.tone) { self.notice = nil } }
       Section {
-        if let image = row.item.imageURL.flatMap(URL.init(string:)) {
-          AsyncImage(url: image) { phase in
-            if let picture = phase.image {
-              picture.resizable().scaledToFill()
-            } else {
-              AglynColor.paper
-            }
-          }
-          .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
-          .clipShape(RoundedRectangle(cornerRadius: CGFloat(AglynTokens.radius), style: .continuous))
-          .listRowInsets(EdgeInsets())
-          .accessibilityHidden(true)
-        }
+        AglynDetailHeader(
+          row.name, subtitle: row.price, imageURL: row.item.imageURL.flatMap(URL.init(string:)), systemImage: "shippingbox",
+          status: (row.statusLabel, row.status == "active" ? .success : .neutral))
+      }
+      Section("Pricing and stock") {
         LabeledContent("Price", value: row.price)
-        LabeledContent("Status") { StatusChip(row.statusLabel, tone: row.status == "active" ? .success : .neutral) }
         if let type = row.typeLabel { LabeledContent("Type", value: type) }
         if let stock = productStockText(row.stock) { LabeledContent("Stock", value: stock) }
       }

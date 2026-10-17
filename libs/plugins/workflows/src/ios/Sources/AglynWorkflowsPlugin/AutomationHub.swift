@@ -132,20 +132,31 @@ struct AutomationHubScreen: View {
     .onDisappear { orgSites.stop() }
   }
 
+  private func hubRow(_ section: HubSection, _ picked: Binding<HubSection?>) -> some View {
+    Label {
+      Text(section.title)
+    } icon: {
+      Image(systemName: section.icon).foregroundStyle(AglynColor.tint)
+    }
+    .aglynSelectableRow(section, selection: picked, density: .sidebar)
+  }
+
   private var sidebar: some View {
-    List(selection: Binding(get: { current }, set: { selection = $0 })) {
+    let picked = Binding<HubSection?>(get: { current }, set: { if let next = $0 { selection = next } })
+    return List {
       if hostID != nil {
         Section(siteTitle) {
-          ForEach(HubSection.site) { Label($0.title, systemImage: $0.icon).tag($0) }
+          ForEach(HubSection.site) { hubRow($0, picked) }
         }
       }
       if context.orgID != nil {
         Section("Organization") {
-          ForEach(HubSection.org) { Label($0.title, systemImage: $0.icon).tag($0) }
+          ForEach(HubSection.org) { hubRow($0, picked) }
         }
       }
     }
-    .aglynListBackground()
+    .aglynSelectableListStyle()
+    .aglynSelectionKeys((hostID != nil ? HubSection.site : []) + (context.orgID != nil ? HubSection.org : []), selection: picked)
     .accessibilityIdentifier("automation-sidebar")
   }
 

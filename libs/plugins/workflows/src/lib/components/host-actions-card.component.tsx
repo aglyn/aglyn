@@ -787,15 +787,20 @@ export function HostActionsCard(props: {
                 {action.name}
               </Typography>
               <Typography variant="caption" color="text.secondary" noWrap>
-                {`on ${hostEventLabel(action.trigger?.event)}` +
-                  ` · ${(action.steps ?? [])
+                {[
+                  `on ${hostEventLabel(action.trigger?.event)}`,
+                  (action.steps ?? [])
                     .map(
                       (step: any) =>
                         HOST_ACTION_STEP_LABELS[
                           step.type as HostActionStepType
                         ] ?? step.type,
                     )
-                    .join(' → ')}`}
+                    .filter(Boolean)
+                    .join(' → '),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </Typography>
               {missing ? (
                 <Typography variant="caption" color="warning.main" noWrap>

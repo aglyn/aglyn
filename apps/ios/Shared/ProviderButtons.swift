@@ -44,10 +44,10 @@ struct ProviderSignInButtons: View {
         }
         if googleOffered {
           Button(action: google) {
-            Label("Google", systemImage: "g.circle").frame(maxWidth: .infinity)
+            Label("Google", systemImage: "g.circle").frame(maxWidth: .infinity, minHeight: AglynFieldStyle.height)
           }
           .buttonStyle(.bordered)
-          .controlSize(.large)
+          .buttonBorderShape(.roundedRectangle(radius: AglynRadius.tile))
           .disabled(busy || !enabled)
           .accessibilityIdentifier("sign-in-google")
         }
@@ -61,7 +61,8 @@ struct ProviderSignInButtons: View {
             apple(result)
           }
           .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-          .frame(height: 44)
+          .frame(height: AglynFieldStyle.height)
+          .clipShape(RoundedRectangle(cornerRadius: AglynRadius.tile, style: .continuous))
           .disabled(busy || !enabled)
           // The agreement is checked before Apple's sheet opens: without it, a tap shows the reminder instead.
           .overlay {
@@ -73,19 +74,19 @@ struct ProviderSignInButtons: View {
         }
         if mode == .signIn {
           Button(action: singleSignOn) {
-            Label("Single sign-on (SSO)", systemImage: "key.viewfinder").frame(maxWidth: .infinity)
+            Label("Single sign-on (SSO)", systemImage: "key.viewfinder").frame(maxWidth: .infinity, minHeight: AglynFieldStyle.height)
           }
           .buttonStyle(.bordered)
-          .controlSize(.large)
+          .buttonBorderShape(.roundedRectangle(radius: AglynRadius.tile))
           .disabled(busy || !enabled)
           .accessibilityIdentifier("sign-in-sso")
         }
         if passkeyOffered {
           Button(action: passkey) {
-            Label("Passkey", systemImage: "person.badge.key").frame(maxWidth: .infinity)
+            Label("Passkey", systemImage: "person.badge.key").frame(maxWidth: .infinity, minHeight: AglynFieldStyle.height)
           }
           .buttonStyle(.bordered)
-          .controlSize(.large)
+          .buttonBorderShape(.roundedRectangle(radius: AglynRadius.tile))
           .disabled(busy || !enabled)
           .accessibilityIdentifier("sign-in-passkey")
         }

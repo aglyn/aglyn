@@ -533,9 +533,15 @@ export function aiSiteEmptyGalleryViolations(
 /** The violation a site plan whose home page is under its fewest sections is re-asked under. */
 export const AI_SITE_THIN_HOME_CODE = 'plan-thin-home'
 
-/** What a site plan's home is composed of, in the words the plan's turn and its re-ask both use. */
+/**
+ * What a site plan's home is composed of, in the words the plan's turn and its
+ * re-ask both use. Its trust band is what working together is like, never
+ * testimonials (AGL-3887): a new site has no customer words to show, and a
+ * home asked for them planned a "Client feedback placeholder" the build could
+ * fill only with a promise of words to come.
+ */
 export const AI_SITE_HOME_BANDS =
-  'a hero first, then bands such as services or the offer, about or why us, and testimonials or other social proof, and a closing call to action or contact band last'
+  'a hero first, then bands such as services or the offer, about or why us, and what working together is like, and a closing call to action or contact band last'
 
 /**
  * The fewest sections this site start's home is held to (AGL-3660): five, or

@@ -139,11 +139,13 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#generate-for-several-sites-at-once': 'On the Sites page of your organization, Generate for several sites runs one brief across many of your sites, changing the business name, the city and the brand for each.',
   },
   aiSiteLooks: {
-    '#choose-a-style': 'The Style step of Start your site offers these styles. One is picked for you from what you said the site is; choose another to change it.',
+    '#choose-a-style': 'The Style step of Start your site offers these styles, each as a card with a picture of the starter home page drawn in it.',
   },
   aiStart: {
+    '#audience': 'Who is it for? is optional. It is who every page and every search listing is written for, and it decides which questions the contact form asks.',
     '#details': 'Where do form submissions go? decides where messages from the site\'s contact form land: You can change this on the form itself afterwards.',
     '#how-do-you-want-to-start': 'The first step asks for the site\'s Site name and Subdomain, its free address on Aglyn.',
+    '#review': 'The last step lists every answer: the kind of site, who it is for, the style, where form submissions go, the pages and, on a paid plan, the welcome email.',
     '#the-sites-search-listing': 'The site\'s own search title and description, the fallback for every page without its own, are not saved for you.',
     '#your-business': 'What kind of site are you creating? is the one required answer.',
   },

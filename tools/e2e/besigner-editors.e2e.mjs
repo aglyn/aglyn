@@ -26,11 +26,11 @@
 //
 // Then:  npm run e2e:besigner
 
-import { readFileSync } from 'node:fs'
 import { chromium } from 'playwright-core'
 import { initializeApp, getApps } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { displayNameSearchFields } from '../scripts/lib/name-search-tokens.mjs'
+import { chromeExecutable } from './lib/chrome-executable.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4200'
 const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
@@ -41,27 +41,6 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
 
 process.env.FIRESTORE_EMULATOR_HOST ??= 'localhost:8082'
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= 'localhost:9099'
-
-function chromeExecutable() {
-  if (process.env.E2E_CHROME_PATH) {
-    return { executablePath: process.env.E2E_CHROME_PATH }
-  }
-  if (process.platform === 'darwin') {
-    for (const executablePath of [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ]) {
-      try {
-        readFileSync(executablePath)
-        return { executablePath }
-      } catch {
-        // Not installed — try the next flavor.
-      }
-    }
-  }
-  return { channel: 'chrome' }
-}
 
 if (!getApps().length) initializeApp({ projectId: 'aglyn-main' })
 const db = getFirestore(process.env.FIRESTORE_DATABASE_ID)

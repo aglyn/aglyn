@@ -285,19 +285,35 @@ export function maintenanceScreen(jobs, reasonMin) {
     const check = `data.crons.checks.${job.id}`
     blocks.push(
       { type: 'notice', tone: 'warning', title: job.label, text: 'No schedule reading for this job. The crons probe did not report it.', when: `!${check}` },
+      // The last report is a number of minutes only when the job has reported; one that never has says so in words, as
+      // the console's health facts do. `!= ''` holds for any reading, 0 minutes included; `== ''` only where there is none.
       {
         type: 'notice',
         tone: 'success',
         title: job.label,
-        text: `Scheduled \u00b7 {${check}.schedule} \u00b7 last report {${check}.lastBeatAgeMinutes|'never'} min ago`,
-        when: `${check}.ok`,
+        text: `Scheduled \u00b7 {${check}.schedule} \u00b7 last ran {${check}.lastBeatAgeMinutes} min ago`,
+        when: `${check}.ok && ${check}.lastBeatAgeMinutes != ''`,
+      },
+      {
+        type: 'notice',
+        tone: 'success',
+        title: job.label,
+        text: `Scheduled \u00b7 {${check}.schedule} \u00b7 it has never reported a run`,
+        when: `${check}.ok && ${check}.lastBeatAgeMinutes == ''`,
       },
       {
         type: 'notice',
         tone: 'error',
         title: job.label,
-        text: `NOT RUNNING {${check}.code|'no reading'} \u00b7 {${check}.schedule} \u00b7 last report {${check}.lastBeatAgeMinutes|'never'} min ago`,
-        when: `${check} && !${check}.ok`,
+        text: `NOT RUNNING {${check}.code|'no reading'} \u00b7 {${check}.schedule} \u00b7 last ran {${check}.lastBeatAgeMinutes} min ago`,
+        when: `${check} && !${check}.ok && ${check}.lastBeatAgeMinutes != ''`,
+      },
+      {
+        type: 'notice',
+        tone: 'error',
+        title: job.label,
+        text: `NOT RUNNING {${check}.code|'no reading'} \u00b7 {${check}.schedule} \u00b7 it has never reported a run`,
+        when: `${check} && !${check}.ok && ${check}.lastBeatAgeMinutes == ''`,
       },
       { type: 'notice', tone: job.destructive ? 'error' : 'warning', text: `${job.what}\n\n${job.consequence}` },
       // The console's card keeps the real run locked until a preview has been read in this session (AGL-1949):

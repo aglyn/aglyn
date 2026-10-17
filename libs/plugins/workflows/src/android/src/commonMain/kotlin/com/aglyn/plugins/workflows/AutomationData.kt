@@ -156,16 +156,22 @@ data class WorkflowRow(
   val trigger: Doc?,
   val raw: Doc,
 ) {
-  /** `3 steps · on New lead · double → quote`, as the console's row reads. */
+  /** `3 steps · on New lead · double → quote`, as the console's row reads; a part with nothing to say is left out. */
   val caption: String
     get() {
       val count = "${steps.size} step${if (steps.size == 1) "" else "s"}"
-      val event = trigger.str("event")?.takeIf { it.isNotEmpty() }?.let { " · on ${hostEventLabel(it)}" } ?: ""
-      // `step.functionName` joined: an Actions step has none, and JavaScript joins it as nothing.
-      val calls = steps.joinToString(" → ") { it["functionName"]?.let(::jsString) ?: "" }
-      return "$count$event · $calls"
+      val event = trigger.str("event")?.takeIf { it.isNotEmpty() }?.let { "on ${hostEventLabel(it)}" }
+      // An Actions step calls no function, so it names none.
+      val calls = steps.mapNotNull { step -> step["functionName"]?.let(::jsString)?.takeIf { it.isNotEmpty() } }.joinToString(" → ")
+      return captionOf(count, event, calls)
     }
 }
+
+/** A row's caption parts joined with ` · `, an empty one left out rather than leaving a dangling separator. */
+internal fun captionOf(vararg parts: String?): String = parts.filterNot { it.isNullOrEmpty() }.joinToString(" · ")
+
+/** Steps by their labels, `Send an email → Wait`; a step with no label is left out. */
+internal fun stepsCaption(steps: List<Doc>): String = steps.map { stepLabel(it.str("type")) }.filter { it.isNotEmpty() }.joinToString(" → ")
 
 fun workflowRowOf(doc: FirestoreDoc): WorkflowRow = WorkflowRow(
   id = doc.id,
@@ -197,7 +203,7 @@ data class ActionRow(
   val event: String get() = trigger.str("event") ?: ""
 
   /** `on Form submitted · Send an email → Wait`. */
-  val caption: String get() = "on ${hostEventLabel(event)} · ${steps.joinToString(" → ") { stepLabel(it.str("type")) }}"
+  val caption: String get() = captionOf("on ${hostEventLabel(event)}", stepsCaption(steps))
 
   val placeholders: Int get() = interactionPlaceholders(raw).size
 
@@ -290,7 +296,7 @@ data class OrgAutomationRow(
   val pausedHostIds: List<String>,
   val raw: Doc,
 ) {
-  val caption: String get() = "on ${hostEventLabel(trigger.str("event"))} · ${steps.joinToString(" → ") { stepLabel(it.str("type")) }}"
+  val caption: String get() = captionOf("on ${hostEventLabel(trigger.str("event"))}", stepsCaption(steps))
   val everySite: Boolean get() = ORG_SCOPE_TOKEN in visibleTo
 }
 

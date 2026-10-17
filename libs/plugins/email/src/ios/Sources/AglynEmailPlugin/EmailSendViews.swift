@@ -54,17 +54,14 @@ struct EmailsScreen: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          listPane(selectable: true).frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
-          Divider()
-          Group {
-            if let selection, let orgID = context.orgID, let hostID = context.hostID {
-              EmailDetail(context: context, orgID: orgID, hostID: hostID, sendID: selection, canSend: role.canSend).id(selection)
-            } else {
-              AglynEmptyState("Pick an email to see how it did", systemImage: "envelope")
-            }
+        AglynListDetailColumns(listWidth: 380) {
+          listPane(selectable: true)
+        } detail: {
+          if let selection, let orgID = context.orgID, let hostID = context.hostID {
+            EmailDetail(context: context, orgID: orgID, hostID: hostID, sendID: selection, canSend: role.canSend).id(selection)
+          } else {
+            AglynSelectionPlaceholder("No email selected", systemImage: "envelope")
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       } else {
         listPane(selectable: false)
@@ -120,7 +117,7 @@ struct EmailsScreen: View {
           status == "all" && search.isEmpty ? "No emails yet" : "No emails match", systemImage: "envelope",
           message: "Emails you write to your audiences show up here, with how each one did.")
       } else if selectable {
-        List(selection: $selection) { rows(selectable: true) }.aglynListBackground()
+        List { rows(selectable: true) }.aglynSelectableListStyle().aglynSelectionKeys(list.rows.map(\.id), selection: $selection)
       } else {
         List { rows(selectable: false) }.refreshable { list.retry() }.aglynListBackground()
       }
@@ -133,7 +130,7 @@ struct EmailsScreen: View {
     ForEach(list.rows) { send in
       Group {
         if selectable {
-          EmailRow(send: send).tag(send.id)
+          EmailRow(send: send).aglynSelectableRow(send.id, selection: $selection)
         } else if let orgID = context.orgID, let hostID = context.hostID {
           NavigationLink {
             EmailDetail(context: context, orgID: orgID, hostID: hostID, sendID: send.id, canSend: role.canSend)
@@ -206,7 +203,7 @@ struct EmailDetail: View {
   private func content(_ send: EmailSend, _ document: FirestoreDocument) -> some View {
     let report = campaignReport(document.data["stats"] as? [String: Any])
     let linkReport = sendLinkReport(links.document?.data)
-    let sentAs = document.data["sentAs"] as? [String: Any]
+    let sentAs = emailSentAs(document.data)
     Form {
       if let notice { AglynNotice(notice, tone: .success) { self.notice = nil } }
       if send.held {
@@ -240,12 +237,21 @@ struct EmailDetail: View {
         }
       }
       Section("Sent as") {
-        PropertyRow("From", [sentAs?["fromName"] as? String ?? document.string("fromName"), sentAs?["from"] as? String].compactMap { $0 }.joined(separator: " · "))
-        PropertyRow("Reply to", sentAs?["replyTo"] as? String ?? document.string("replyTo"))
+        // What the send recorded, never today's identity; where it recorded none, why. A recorded sender names what an
+        // absent display name or reply address meant, as the console does.
+        PropertyRow("Sent as", sentAs?.from ?? sentAsMissing(document.data)).accessibilityIdentifier("email-sent-as")
+        if let sentAs {
+          PropertyRow("From name", sentAs.fromName ?? "The address on its own")
+          PropertyRow("Reply-to", sentAs.replyTo ?? "The sending address")
+        }
         PropertyRow("Preview text", document.string("preheader"))
         PropertyRow("Design", document.string("templateScreenId") != nil ? "Designed email" : "Plain message")
       }
-      if send.status != "draft" {
+      if let placeholder = deliveryPlaceholder(document.data) {
+        Section("Delivery") {
+          Text(placeholder).foregroundStyle(.secondary).accessibilityIdentifier("email-delivery-placeholder")
+        }
+      } else {
         Section("Delivery") {
           LabeledContent("Sent", value: grouped(report.sent))
           LabeledContent("Addressed", value: grouped(report.recipients))

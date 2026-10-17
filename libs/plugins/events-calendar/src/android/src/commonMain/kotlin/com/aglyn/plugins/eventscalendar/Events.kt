@@ -178,12 +178,10 @@ suspend fun saveEvent(writer: FirestoreWriter, hostId: String, draft: EventDraft
   return id
 }
 
-/** An event's status as the console names it: "Draft", "Published"; never the stored word. */
-internal fun eventStatusLabel(status: String): String = when (status) {
-  "published" -> "Published"
-  "draft" -> "Draft"
-  "deleted" -> "Deleted"
-  else -> status.replaceFirstChar { it.uppercase() }
+/** An event's status as the editor's chips name it: Draft or Published. */
+fun eventStatusLabel(status: String): String = when (status) {
+  EventStatus.PUBLISHED.raw -> "Published"
+  else -> "Draft"
 }
 
 /** The page's delete: `deletedAt`, and `status: deleted`, which the public listing's query reads. */

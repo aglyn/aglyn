@@ -312,6 +312,13 @@ export const AI_SITE_DATASET_PHOTOS_BUDGET_MS = 20_000
 /** The field a pictured dataset's photo is kept in, where the plan gave it none. */
 export const AI_SITE_DATASET_IMAGE_FIELD = 'Image'
 
+/**
+ * The field a pictured dataset keeps what each record's photo shows in
+ * (AGL-3856), which its card's and its page's Image take as their alt text:
+ * a record's title is what it is called, never what its photo shows.
+ */
+export const AI_SITE_DATASET_IMAGE_ALT_FIELD = 'Image description'
+
 /** A planned field that already names a record's photo. */
 const IMAGE_FIELD_NAME =
   /^(?:main |cover |hero |featured? )?(?:image|photo|picture|photograph|thumbnail|headshot|portrait|cover)s?$/i
@@ -322,6 +329,8 @@ export interface AiSiteDatasetRecordPhoto {
   src: string | null
   /** The `media:` reference of the stock photo placed, or `null` for a starter. */
   placed: string | null
+  /** What the photo shows, in its own words (AGL-3856); `null` for none. */
+  alt?: string | null
 }
 
 /**
@@ -357,6 +366,8 @@ export async function aiSiteDatasetRecordPhotos(input: {
     aspect: people ? 4 / 5 : 4 / 3,
     sectionIndex: 0,
     role: people ? ('about' as const) : ('gallery' as const),
+    // A record's name is a search's words, never what its photo shows (AGL-3856).
+    standIn: true,
   }))
   const seed = `${job.$id}:records`
   let found: ReadonlyArray<AiLayoutPicturePhoto | null> = []
@@ -384,8 +395,8 @@ export async function aiSiteDatasetRecordPhotos(input: {
   const hostId = job.hostId
   return slots.map((_slot, index) => {
     const stock = aiSiteProductPhotoSrc(found[index]?.src, hostId)
-    if (stock) return { src: stock, placed: found[index]?.src ?? null }
-    return { src: aiSiteProductPhotoSrc(starters[index]?.src, hostId), placed: null }
+    if (stock) return { src: stock, placed: found[index]?.src ?? null, alt: found[index]?.alt?.trim() || null }
+    return { src: aiSiteProductPhotoSrc(starters[index]?.src, hostId), placed: null, alt: starters[index]?.alt?.trim() || null }
   })
 }
 
@@ -399,13 +410,21 @@ export async function aiSiteDatasetRecordPhotos(input: {
 export function aiSiteDatasetContentWithPhotos(
   content: Record<string, unknown>,
   photos: ReadonlyArray<string | null>,
+  /** What each record's photo shows (AGL-3856), kept in {@link AI_SITE_DATASET_IMAGE_ALT_FIELD}; none adds no field. */
+  alts: ReadonlyArray<string | null> = [],
 ): Record<string, unknown> {
   const fields = (Array.isArray(content['fields']) ? content['fields'] : []) as Array<{ name: string; type?: string }>
   const named = fields.find((field) => IMAGE_FIELD_NAME.test(str(field.name)))
   const fieldName = named ? named.name : AI_SITE_DATASET_IMAGE_FIELD
-  const nextFields = named
+  const withImage = named
     ? fields.map((field) => (field === named ? { ...field, type: 'image' } : field))
     : [...fields, { name: AI_SITE_DATASET_IMAGE_FIELD, type: 'image' }]
+  const described = alts.some((alt, index) => Boolean(alt && photos[index]))
+  const altName = AI_SITE_DATASET_IMAGE_ALT_FIELD
+  const nextFields =
+    described && !withImage.some((field) => str(field.name).toLowerCase() === altName.toLowerCase())
+      ? [...withImage, { name: altName, type: 'text' }]
+      : withImage
   const records = (Array.isArray(content['records']) ? content['records'] : []) as Array<Record<string, unknown>>
   return {
     ...content,
@@ -414,7 +433,8 @@ export function aiSiteDatasetContentWithPhotos(
       const next = { ...record }
       delete next[fieldName]
       const photo = photos[index]
-      return photo ? { ...next, [fieldName]: photo } : next
+      const alt = photo && described ? alts[index] : null
+      return photo ? { ...next, [fieldName]: photo, ...(alt ? { [altName]: alt } : {}) } : next
     }),
   }
 }
@@ -585,7 +605,11 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
         }).catch(() => [] as AiSiteDatasetRecordPhoto[])
       : []
     const content = input.pictures
-      ? aiSiteDatasetContentWithPhotos(designed, generation.value.records.map((_values, index) => photos[index]?.src ?? null))
+      ? aiSiteDatasetContentWithPhotos(
+          designed,
+          generation.value.records.map((_values, index) => photos[index]?.src ?? null),
+          generation.value.records.map((_values, index) => photos[index]?.alt ?? null),
+        )
       : designed
     // The data plugin's own rules, before anything is written: content we
     // made that its model refuses is our failure, refunded.

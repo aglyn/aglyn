@@ -24,6 +24,7 @@ import {
   type AiBuildPlanScreen,
   type AiBuildPlanSection,
 } from '../model/ai-build-plan'
+import { aiLayoutRecordImageAltField } from '../layout-language/ai-layout-listings'
 import { aiPageTypeDefinition, parseAiPageJobInputs } from '../model/ai-page-job'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { aiHomeScreenIds, aiHomeScreenNames, type AiSiteInventory } from '../model/ai-site-inventory'
@@ -193,7 +194,10 @@ export function aiPageRecordLine(template: AiPageRecordTemplate): string {
         .join(', ')}.`
     : ''
   // A record's photo is a picture's address, never its words (AGL-3616).
-  const photo = template.imageField ? ` Each record's photo is {{item.${template.imageField}}}: the src of the page's main Image.` : ''
+  const altField = aiLayoutRecordImageAltField(template.fields)
+  const photo = template.imageField
+    ? ` Each record's photo is {{item.${template.imageField}}}: the src of the page's main Image${altField ? `, and {{item.${altField}}} its alt` : ''}.`
+    : ''
   return `This page is the record template of the dataset "${template.name}": it is served once per record, at /${template.base}/<record address>. Write what differs from one record to the next as {{item.<field>}}, never one record's copy, and write out what every record page shares.${fields}${photo}`
 }
 
@@ -224,9 +228,14 @@ export function aiPageSectionWithRecordImage(
   if (!first) return section
   const node = (section.nodes as unknown as Record<string, Record<string, unknown>>)[first.id]
   const props = isRecord(node['props']) ? node['props'] : {}
+  // What the photo shows is its alt, where the dataset keeps it (AGL-3856).
+  const altField = aiLayoutRecordImageAltField(template.fields)
   return {
     ...section,
-    nodes: { ...section.nodes, [first.id]: { ...node, props: { ...props, src: token } } } as unknown as NodesMap,
+    nodes: {
+      ...section.nodes,
+      [first.id]: { ...node, props: { ...props, src: token, ...(altField ? { alt: `{{item.${altField}}}` } : {}) } },
+    } as unknown as NodesMap,
   }
 }
 

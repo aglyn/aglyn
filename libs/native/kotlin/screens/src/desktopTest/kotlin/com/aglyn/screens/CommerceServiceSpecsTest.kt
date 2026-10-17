@@ -1157,4 +1157,34 @@ class CommerceServiceSpecsTest {
     assertEquals("3 labels · $10.00 from Stripe balance · $5.00 on invoice", ScreenValues.render(spend.blocks.first { it.id == "months" }.string("secondary")!!, row))
     assertEquals("/api/shipping/spend?orgId=o1", ScreenValues.renderUrl(spend.loads.first().url, model.context))
   }
+
+  // ---- Commerce settings' zone -------------------------------------------------------------------------------------
+
+  /**
+   * Each service's row in Commerce settings is listed only where its console card draws: a deployment that offers none
+   * (or a plugin that is off, whose routes answer 404 and leave the screen unloaded) lists no row to open onto an error.
+   */
+  @Test
+  fun aZoneRowIsListedOnlyWhereTheConsoleCardDraws() {
+    val cases = listOf(
+      Triple("marketplaces", "marketplaces.service", """{"conn":{"offered":[{"id":"etsy"}],"connections":[]}}""") to """{"conn":{"offered":[],"connections":[]}}""",
+      Triple("delivery-apps", "delivery-apps.service", """{"stores":{"offered":[{"id":"doordash"}],"stores":[]}}""") to """{"stores":{"offered":[],"stores":[]}}""",
+      Triple("inventory-sync", "inventory-sync.service", """{"conn":{"offered":[],"connection":{"provider":"cin7"}}}""") to """{"conn":{"offered":[],"connection":null}}""",
+      Triple("print-on-demand", "print-on-demand.service", """{"conn":{"available":true,"connections":[]}}""") to """{"conn":{"available":false,"connections":[]}}""",
+      Triple("fulfillment-networks", "fulfillment-networks.service", """{"nets":{"offered":[{"id":"shipbob"}],"connections":[]}}""") to """{"nets":{"offered":[],"connections":[]}}""",
+      Triple("couriers", "couriers.service", """{"conn":{"available":true,"connection":null}}""") to """{"conn":{"available":false,"connection":null}}""",
+      Triple("post-purchase", "post-purchase.service", """{"settings":{"vendors":["aftership"],"settings":{}}}""") to """{"settings":{"vendors":[],"settings":{}}}""",
+      Triple("shipping", "shipping.service", """{"s":{},"avail":{"available":true}}""") to """{"s":{},"avail":{"available":false}}""",
+      Triple("tax-engines", "tax-engines.service", """{"conn":{"available":true,"connection":null}}""") to """{"conn":{"available":false,"connection":null}}""",
+      Triple("review-platforms", "review-platforms.service", """{"settings":{"platforms":[]}}""") to """{}""",
+      Triple("sales-channels", "sales-channels.service", """{"state":{"sells":true}}""") to """{}""",
+    )
+    for ((listed, hidden) in cases) {
+      val (dir, id, data) = listed
+      val spec = spec(dir, id)
+      assertTrue("commerceSettings" in spec.zones, id)
+      assertTrue(ScreenValues.condition(spec.showWhen!!, screen(spec, emptyMap(), data).context), "$id is listed for $data")
+      assertFalse(ScreenValues.condition(spec.showWhen!!, screen(spec, emptyMap(), hidden).context), "$id is not listed for $hidden")
+    }
+  }
 }
