@@ -42,18 +42,17 @@ import { aiLayoutLabel, aiLayoutSpeaksOtherThanEnglish } from './ai-layout-label
  *    starter reads better than no picture when there is no library.
  *
  * Where the library answered and nothing in it fits a slot
- * ({@link AI_LAYOUT_NO_PHOTO}), the slot keeps the compiler's no-photo
- * treatment — its frame with its icon — and never a starter: the beta.257
+ * ({@link AI_LAYOUT_NO_PHOTO}), the slot never takes a starter: the beta.257
  * Copper Kettle Catering start (2026-10-15) opened a barbecue caterer's home
- * page on the starters' pottery workbench (AGL-3831). An empty picture draws
- * nothing on the published page, and the Besigner shows the owner where to
- * choose one. A COVER left without a photo is taken out, frame and all
- * ({@link aiLayoutDropEmptyCovers}): its frame is a black scrim laid over the
- * whole section for a dimmed photo, and with nothing in it the section read
- * as a solid black block (the beta.261 Synchronicity Gym hero, AGL-3856).
- * Without it the section shows its own band: a cover's section is pinned to
- * the site's dark scheme, which paints that scheme's background and text
- * colors, so the words written for a dark photo stay readable.
+ * page on the starters' pottery workbench (AGL-3831). Nor does it ship empty
+ * (AGL-3856): its picture is taken out, frame and all
+ * ({@link aiLayoutDropEmptyPictures}). A cover's frame is a black scrim laid
+ * over the whole section, and with nothing in it the beta.261 Synchronicity
+ * Gym hero read as a solid black block; a split's picture card is a rounded
+ * gray box, and the beta.262 Adult Hybrid Learning Center hero read as
+ * broken. Without them the section shows its own band, a cover's section
+ * still pinned to the site's dark scheme so the words written for a dark
+ * photo stay readable, and a split's words take the row's width.
  *
  * A slot keeps the alt text the model wrote only when it describes the photo
  * placed: a stock photo that is not what it says is described by what it is
@@ -360,43 +359,77 @@ export function aiLayoutPlacePictures(
   return next as unknown as NodesMap
 }
 
-/**
- * Whether a frame is a cover's (AGL-3856): laid absolutely over its whole
- * section, the photo dimmed over it, as the compiler draws words over a
- * photo.
- */
-function isCoverFrame(frame: Record<string, unknown> | undefined): boolean {
-  const sx = frame?.['sx'] as Record<string, unknown> | undefined
-  return sx?.['position'] === 'absolute' && sx['width'] === '100%' && sx['height'] === '100%'
-}
+/** Whether a node is a grid row: a `muiGrid` container. */
+const isGridRow = (node: Record<string, unknown> | undefined) =>
+  node?.['componentId'] === 'muiGrid' && (node['props'] as Record<string, unknown> | undefined)?.['container'] === true
+
+/** Whether a node is a column of a grid row: a sized `muiGrid` item. */
+const isGridColumn = (node: Record<string, unknown> | undefined) =>
+  node?.['componentId'] === 'muiGrid' && !isGridRow(node)
 
 /**
- * The page without the covers left with no photo (AGL-3856): each slot whose
- * photo is missing and whose frame is a cover loses its frame, its image and
- * its icon, so its section shows its own band instead of a black scrim over
- * nothing. Every other empty slot keeps its frame for the owner to fill.
+ * The page without the pictures left with no photo (AGL-3856). A slot whose
+ * photo is missing loses its image, its icon and its frame where the frame
+ * holds nothing else, and so does every wrapper that holds nothing once it
+ * is gone, up to its section. A cover's black scrim over nothing read as a
+ * solid black block (the beta.261 Synchronicity Gym hero), and an empty
+ * rounded gray card as a broken picture (the beta.262 Adult Hybrid Learning
+ * Center hero). A column of a split row taken out leaves the words' column
+ * the row's full width. A cover's section stays pinned to the site's dark
+ * scheme, which paints that scheme's background and text colors, so the
+ * words written for a dark photo stay readable. A slot a photo fills, a
+ * starter's included, is kept.
  */
-export function aiLayoutDropEmptyCovers(
+export function aiLayoutDropEmptyPictures(
   nodes: NodesMap,
   slots: readonly AiLayoutPictureSlot[],
   photos: ReadonlyArray<AiLayoutPicturePhoto | null>,
+  sectionIds: readonly string[] = [],
 ): NodesMap {
   const map = nodes as unknown as Record<string, Record<string, unknown>>
-  const covers = slots.filter((slot, index) => {
-    if (photos[index]?.src || !slot.frameId) return false
-    const image = map[slot.imageId]
-    const src = (image?.['props'] as Record<string, unknown> | undefined)?.['src']
-    return !(typeof src === 'string' && src.trim()) && isCoverFrame(map[slot.frameId])
+  const empty = slots.filter((slot, index) => {
+    if (photos[index]?.src) return false
+    const src = (map[slot.imageId]?.['props'] as Record<string, unknown> | undefined)?.['src']
+    return Boolean(map[slot.imageId]) && !(typeof src === 'string' && src.trim())
   })
-  if (!covers.length) return nodes
+  if (!empty.length) return nodes
   const next = { ...map }
-  for (const slot of covers) {
-    const frameId = slot.frameId as string
-    for (const [id, node] of Object.entries(next)) {
-      const children = node['nodes'] as string[] | undefined
-      if (children?.includes(frameId)) next[id] = { ...node, nodes: children.filter((child) => child !== frameId) }
+  const children = (id: string) => (next[id]?.['nodes'] as string[] | undefined) ?? []
+  const parentOf = (id: string) => Object.keys(next).find((key) => children(key).includes(id)) ?? null
+  const remove = (id: string) => {
+    const parent = parentOf(id)
+    if (parent) next[parent] = { ...next[parent], nodes: children(parent).filter((child) => child !== id) }
+    delete next[id]
+    return parent
+  }
+  const sections = new Set(sectionIds)
+  for (const slot of empty) {
+    const own = new Set([slot.imageId, slot.iconId].filter(Boolean) as string[])
+    const frameHoldsOnly = Boolean(slot.frameId && next[slot.frameId] && children(slot.frameId).every((child) => own.has(child)))
+    let parent = remove(slot.imageId)
+    if (slot.iconId && next[slot.iconId]) remove(slot.iconId)
+    if (!frameHoldsOnly) continue
+    // The frame, then each wrapper it leaves empty: never a section, nor the page's root.
+    let at: string | null = slot.frameId
+    while (at && next[at] && !children(at).length && !sections.has(at) && parentOf(at) !== null) {
+      const column = isGridColumn(next[at])
+      parent = remove(at)
+      at = column ? null : parent
     }
-    for (const id of [frameId, slot.imageId, slot.iconId]) if (id) delete next[id]
+    // A split row left with one column gives its words the row's width.
+    if (parent && isGridRow(next[parent])) {
+      const [only, ...rest] = children(parent)
+      if (only && !rest.length && isGridColumn(next[only])) {
+        const column = next[only] as Record<string, unknown>
+        const sx = { ...((column['sx'] as Record<string, unknown> | undefined) ?? {}) }
+        delete sx['order']
+        next[only] = {
+          ...column,
+          props: { ...((column['props'] as Record<string, unknown> | undefined) ?? {}), size: 'xs:12' },
+          sx: Object.keys(sx).length ? sx : null,
+        }
+      }
+    }
   }
   return next as unknown as NodesMap
 }
@@ -416,7 +449,7 @@ export type AiLayoutPictureSource = (
 /**
  * Fills a stored page's empty picture slots (AGL-3660): from `source` where
  * one is given and it answers; a slot it answers with nothing fitting stays
- * without a photo, a cover taken out ({@link aiLayoutDropEmptyCovers}); every
+ * without a photo and is taken out ({@link aiLayoutDropEmptyPictures}); every
  * other slot takes a starter photo, described by its own words (AGL-3831). Never throws, and never leaves a page worse than it
  * came: a picture is decoration, and a job never fails over one.
  */
@@ -459,7 +492,7 @@ export async function aiResolveLayoutPictures(
       if (answer) return answer.src ? answer : null
       return starters[index] ?? null
     })
-    return aiLayoutDropEmptyCovers(aiLayoutPlacePictures(nodes, slots, photos), slots, photos)
+    return aiLayoutDropEmptyPictures(aiLayoutPlacePictures(nodes, slots, photos), slots, photos, input.sectionIds)
   } catch (error) {
     console.error('ai layout pictures: the page keeps its empty picture slots', { error })
     return nodes

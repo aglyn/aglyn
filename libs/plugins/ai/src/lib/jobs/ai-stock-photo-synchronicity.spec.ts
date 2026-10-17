@@ -20,7 +20,7 @@ import type { StockPhoto, StockPhotoProvider } from '@aglyn/aglyn/plugin-manager
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import {
   AI_LAYOUT_NO_PHOTO,
-  aiLayoutDropEmptyCovers,
+  aiLayoutDropEmptyPictures,
   aiLayoutPictureSlots,
   aiResolveLayoutPictures,
   type AiLayoutPicturePhoto,
@@ -189,7 +189,7 @@ describe('why the Synchronicity Gym hero was black (AGL-3856, beta.261)', () => 
 
 describe('the Synchronicity Gym read by its name (AGL-3856)', () => {
   it('passes the name and the audience on from the job', () => {
-    expect(aiStockPhotoWordsOf(JOB)).toEqual({ language: 'en', kindWords: expect.any(String), name: NAME, audience: AUDIENCE })
+    expect(aiStockPhotoWordsOf(JOB)).toEqual({ language: 'en', kindWords: expect.any(String), kind: 'business', name: NAME, audience: AUDIENCE })
   })
 
   it('takes a listed craft from a name, else an audience, and never a name that names none', () => {
@@ -293,14 +293,16 @@ describe('a cover left without a photo (AGL-3856, beta.261)', () => {
     expect(map(nodes)['sec-0']?.nodes).toEqual(['frame-0', 'container-0'])
   })
 
-  it('keeps an empty picture card, which is no scrim, for the owner to fill', () => {
+  it('takes out an empty picture card too, and keeps one a starter fills', async () => {
     const card = {
       ...map(page()),
       'frame-4': { componentId: 'muiBox', sx: { position: 'relative', aspectRatio: '4 / 3', bgcolor: 'action.hover' }, nodes: ['img-4'] },
     } as unknown as NodesMap
     const slots = aiLayoutPictureSlots(card, 'root', { ids: input.sectionIds, names: SECTIONS })
-    const kept = aiLayoutDropEmptyCovers(card, slots, [null, null])
-    expect(map(kept)['frame-4']?.nodes).toEqual(['img-4'])
-    expect(map(kept)['frame-0']).toBeUndefined()
+    const dropped = aiLayoutDropEmptyPictures(card, slots, [null, null], input.sectionIds)
+    expect(map(dropped)['frame-4']).toBeUndefined()
+    expect(map(dropped)['sec-4']?.nodes).toEqual(['container-4'])
+    const started = await aiResolveLayoutPictures(card, { ...input, source: async () => [null, null] })
+    expect(map(started)['frame-4']?.nodes).toEqual(['img-4'])
   })
 })

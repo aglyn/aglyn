@@ -2521,6 +2521,11 @@ export interface AiLayoutStockPhotoSourceInput {
   name?: string
   /** Who the site is for, as the person typed it: searched as the name is, after it (AGL-3856). */
   audience?: string
+  /**
+   * The id of the kind of site the person picked ("education"): what a site
+   * is searched by when nothing else names its world (AGL-3856).
+   */
+  kind?: string
   /** The page's section names, by plan index. */
   sectionNames: readonly string[]
   /**
@@ -2557,7 +2562,7 @@ interface AiStockChoice {
 export function aiStockPhotoWordsOf(job: {
   plan?: Pick<AiBuildPlan, 'language' | 'photoWords'> | null
   inputs?: Readonly<Record<string, unknown>> | null
-}): Pick<AiLayoutStockPhotoSourceInput, 'language' | 'photoWords' | 'kindWords' | 'name' | 'audience'> {
+}): Pick<AiLayoutStockPhotoSourceInput, 'language' | 'photoWords' | 'kindWords' | 'name' | 'audience' | 'kind'> {
   const plan = job.plan
   const kind = job.inputs ? aiSiteKindOfInputs(job.inputs) : null
   // "Restaurant & café" searches as "restaurant cafe".
@@ -2572,6 +2577,7 @@ export function aiStockPhotoWordsOf(job: {
     ...(plan?.language ? { language: plan.language } : {}),
     ...(plan?.photoWords ? { photoWords: plan.photoWords } : {}),
     ...(kindWords ? { kindWords } : {}),
+    ...(kind ? { kind: kind.id } : {}),
     ...(name ? { name } : {}),
     ...(audience ? { audience } : {}),
   }
@@ -2606,19 +2612,177 @@ export function aiStockPhotoWordsSubject(photoWords: string): string {
  * post — so no slot searches by words another slot is held against.
  */
 export function aiStockSourceTerms(
-  input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords' | 'kindWords' | 'name' | 'audience'>,
+  input: Pick<AiLayoutStockPhotoSourceInput, 'business' | 'language' | 'photoWords' | 'kindWords' | 'name' | 'audience' | 'kind'>,
 ): AiStockSiteTerms {
-  const terms = aiStockSiteTerms(aiStockSourceSubject(input) || input.business)
-  if (terms.domain.length) return terms
-  // A business type that names no world ("a local service business") is
-  // searched by the craft its name, else its audience, names (AGL-3856): the
-  // beta.261 Synchronicity Gym hero searched nothing at all and was left a
-  // black scrim, and its closing band, held to no world, took a subway train
-  // for "Ready to train".
+  const english = aiStockSourceSubject(input)
+  const terms = aiStockSiteTerms(english || input.business)
+  if (english || (terms.domain.length && !aiStockIsAbbreviation(input.business))) return terms
+  // A business type that names no world ("a local service business"), or
+  // one the libraries do not know ("LMS"), is searched by the craft its
+  // name, else its audience, names (AGL-3856): the beta.261 Synchronicity Gym
+  // hero searched nothing at all and was left a black scrim, and its closing
+  // band, held to no world, took a subway train for "Ready to train". Then by
+  // the kind of site its name says ("Adult Hybrid Learning Center"), and
+  // last by the kind of site the person picked: the beta.262 Adult Hybrid
+  // Learning Center searched "lms" and shipped no photo at all.
   const craft = aiStockListedCraft(input.name ?? '') || aiStockListedCraft(input.audience ?? '')
-  if (!craft) return terms
-  const named = aiStockSiteTerms(craft)
-  return { ...named, named: [...new Set([...terms.named, ...named.named])] }
+  const kind = craft ? '' : aiStockNamedKind(input.name ?? '') || aiStockNamedKind(input.audience ?? '') || (input.kind ?? '')
+  const found = craft ? aiStockSiteTerms(craft) : aiStockKindTerms(kind)
+  if (!found) return terms
+  return { ...found, named: [...new Set([...terms.named, ...found.named])] }
+}
+
+/**
+ * Whether a business type is only an abbreviation the libraries do not know
+ * (AGL-3856): "LMS", "CRM", "B2B". Its letters are no world to search.
+ */
+export function aiStockIsAbbreviation(businessType: string): boolean {
+  const list = businessType.trim().split(/\s+/).filter(Boolean)
+  return list.length > 0 && list.length <= 2 && list.every((word) => /^[A-Z0-9&/.-]{2,6}s?$/.test(word) && /[A-Z]/.test(word))
+}
+
+/**
+ * What a picture of each kind of site the guided start offers shows, where
+ * nothing else says (AGL-3856): the words it is searched by, the words a
+ * photo of it is tagged with, and its broad searches. A kind whose subject
+ * is a craft {@link CRAFT_KIN} lists takes that craft's own.
+ */
+const KIND_SUBJECTS: Readonly<Record<string, { subject: string; kin?: readonly string[]; broad?: readonly string[] }>> = {
+  business: {
+    subject: 'small business',
+    kin: ['business', 'office', 'team', 'meeting', 'workplace', 'coworkers', 'entrepreneur', 'shop', 'service', 'customer'],
+    broad: ['small business owner', 'team meeting office'],
+  },
+  trades: {
+    subject: 'contractor',
+    kin: ['contractor', 'construction', 'repair', 'renovation', 'tools', 'worker', 'handyman', 'plumber', 'electrician', 'house', 'roof'],
+    broad: ['home repair contractor', 'construction worker tools'],
+  },
+  professional: {
+    subject: 'consultant',
+    kin: ['consultant', 'consulting', 'office', 'meeting', 'client', 'advisor', 'finance', 'accountant', 'lawyer', 'desk', 'business'],
+    broad: ['consultant client meeting', 'professional office'],
+  },
+  wellness: {
+    subject: 'wellness',
+    kin: ['wellness', 'health', 'therapy', 'therapist', 'massage', 'spa', 'relaxation', 'clinic', 'healthcare'],
+    broad: ['wellness therapy', 'massage therapy'],
+  },
+  restaurant: {
+    subject: 'restaurant',
+    kin: ['restaurant', 'dining', 'food', 'dish', 'chef', 'meal', 'cafe', 'cuisine', 'dinner', 'lunch'],
+    broad: ['restaurant dining', 'restaurant food'],
+  },
+  store: {
+    subject: 'boutique',
+    kin: ['boutique', 'shop', 'store', 'shopping', 'retail', 'products', 'display', 'shelf'],
+    broad: ['boutique shop', 'retail store display'],
+  },
+  portfolio: {
+    subject: 'artist',
+    kin: ['art', 'artist', 'design', 'creative', 'studio', 'workspace', 'painting', 'drawing'],
+    broad: ['artist studio', 'creative workspace'],
+  },
+  studio: {
+    subject: 'design studio',
+    kin: ['design', 'designer', 'studio', 'creative', 'agency', 'team', 'workspace', 'office'],
+    broad: ['design studio team', 'creative agency office'],
+  },
+  photography: { subject: 'photographer' },
+  blog: {
+    subject: 'writer',
+    kin: ['writer', 'writing', 'notebook', 'laptop', 'desk', 'journal', 'reading', 'book'],
+    broad: ['writer desk laptop', 'writing notebook'],
+  },
+  events: {
+    subject: 'event',
+    kin: ['event', 'celebration', 'party', 'wedding', 'venue', 'reception', 'gathering', 'decoration', 'banquet'],
+    broad: ['event celebration', 'event venue decoration'],
+  },
+  fitness: { subject: 'gym' },
+  yoga: {
+    subject: 'yoga',
+    kin: ['yoga', 'meditation', 'mindfulness', 'pose', 'mat', 'relaxation', 'stretching'],
+    broad: ['yoga class', 'meditation'],
+  },
+  beauty: {
+    subject: 'salon',
+    kin: ['salon', 'beauty', 'hair', 'hairdresser', 'makeup', 'nails', 'manicure', 'stylist', 'spa', 'cosmetics'],
+    broad: ['beauty salon', 'hair salon'],
+  },
+  realestate: {
+    subject: 'real estate',
+    kin: ['house', 'home', 'estate', 'property', 'interior', 'apartment', 'realtor', 'architecture', 'living'],
+    broad: ['house exterior', 'home interior'],
+  },
+  education: {
+    subject: 'classroom',
+    kin: ['classroom', 'student', 'students', 'education', 'learning', 'e-learning', 'teacher', 'teaching', 'class', 'lecture', 'study', 'studying', 'course', 'school', 'seminar', 'training', 'book', 'books', 'laptop'],
+    broad: ['adult students classroom', 'online learning', 'adult education'],
+  },
+  nonprofit: {
+    subject: 'volunteers',
+    kin: ['volunteer', 'volunteers', 'community', 'charity', 'helping', 'donation', 'nonprofit', 'team', 'people'],
+    broad: ['community volunteers', 'volunteers helping'],
+  },
+  music: {
+    subject: 'musician',
+    kin: ['music', 'musician', 'band', 'concert', 'guitar', 'stage', 'singer', 'instrument', 'piano', 'drums'],
+    broad: ['live music band', 'musician guitar'],
+  },
+  personal: {
+    subject: 'workspace',
+    kin: ['workspace', 'desk', 'laptop', 'office', 'professional', 'notebook', 'coffee'],
+    broad: ['workspace desk laptop', 'professional workspace'],
+  },
+  landing: {
+    subject: 'startup team',
+    kin: ['startup', 'team', 'technology', 'laptop', 'office', 'workspace', 'business', 'meeting'],
+    broad: ['startup team office', 'modern workspace'],
+  },
+  'coming-soon': {
+    subject: 'workspace',
+    kin: ['workspace', 'desk', 'laptop', 'office', 'notebook', 'coffee'],
+    broad: ['modern workspace', 'workspace desk laptop'],
+  },
+}
+
+/** Words a business's name or audience uses for a kind of site (AGL-3856): "Learning Center" is a school's. */
+const NAMED_KINDS: ReadonlyArray<{ words: readonly string[]; kind: string }> = [
+  {
+    kind: 'education',
+    words: ['learning', 'academy', 'school', 'tutoring', 'tutor', 'tutors', 'college', 'institute', 'university', 'courses', 'classes', 'lessons', 'education', 'students', 'learners'],
+  },
+  { kind: 'beauty', words: ['salon', 'barber', 'barbershop', 'nails', 'spa', 'lashes', 'brows'] },
+  { kind: 'realestate', words: ['realty', 'realtor', 'realtors', 'properties', 'homes', 'estate'] },
+  { kind: 'restaurant', words: ['restaurant', 'bistro', 'kitchen', 'grill', 'diner', 'eatery', 'cafe', 'café', 'tavern', 'pizzeria'] },
+  { kind: 'trades', words: ['plumbing', 'roofing', 'hvac', 'electric', 'electrical', 'landscaping', 'construction', 'contracting', 'remodeling', 'painting', 'handyman'] },
+  { kind: 'nonprofit', words: ['foundation', 'charity', 'church', 'ministry', 'nonprofit', 'volunteers'] },
+  { kind: 'yoga', words: ['yoga', 'meditation', 'mindfulness'] },
+  { kind: 'music', words: ['band', 'music', 'orchestra', 'choir', 'records'] },
+  { kind: 'wellness', words: ['wellness', 'therapy', 'massage', 'clinic', 'chiropractic', 'counseling'] },
+]
+
+/** The kind of site a business's name or audience names ({@link NAMED_KINDS}), or empty. */
+export function aiStockNamedKind(text: string): string {
+  const named = new Set(text.toLowerCase().split(/[^a-zÀ-ɏ]+/).filter(Boolean))
+  return NAMED_KINDS.find((entry) => entry.words.some((word) => named.has(word)))?.kind ?? ''
+}
+
+/** What a kind of site's pictures are searched and judged by ({@link KIND_SUBJECTS}); `null` for a kind not listed. */
+export function aiStockKindTerms(kind: string): AiStockSiteTerms | null {
+  const entry = KIND_SUBJECTS[kind]
+  if (!entry) return null
+  const base = aiStockSiteTerms(entry.subject)
+  if (!entry.kin?.length) return base
+  const kin = entry.kin.map(aiStockStem)
+  return {
+    ...base,
+    domain: [...new Set([...base.domain, ...kin])],
+    broad: [...(entry.broad ?? base.broad)],
+    // A hero names one of the kind's own words, never only the subject's.
+    core: [...new Set([...base.core, ...kin])],
+  }
 }
 
 /**
