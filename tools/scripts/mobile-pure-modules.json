@@ -62,6 +62,10 @@
       "why": "The {{name}} placeholders a saved template asks for when it is used; the native Save as template declares the same (AGL-3668)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/duplicate-resource.ts",
+      "why": "The activity code a copy writes and the words a reader sees for it (DUPLICATE_ACTIVITY_ACTION_LABELS): the Activity lists name a duplicate in words; no imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/element-animation.ts",
       "why": "Reached by reusable-component-keys: animation prop names."
     },

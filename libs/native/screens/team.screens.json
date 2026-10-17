@@ -516,7 +516,7 @@
           "when": "org.manager",
           "load": "activity",
           "items": "data.activity.entries",
-          "primary": "{item.actionLabel|item.action:title}",
+          "primary": "{item.actionLabel|item.action:activity}",
           "secondary": "{item.targetLabel|item.target.name|item.target.label|item.target.title|item.target.type:title}",
           "tertiary": "{item.createdAt:datetime}",
           "empty": "Nothing yet."
@@ -803,7 +803,7 @@
           "load": "activity",
           "search": true,
           "items": "data.activity.entries",
-          "primary": "{item.actionLabel|item.action:title}",
+          "primary": "{item.actionLabel|item.action:activity}",
           "secondary": "{item.targetLabel|item.target.name|item.target.label|item.target.title|item.target.type:title}",
           "tertiary": "{item.actorEmail|item.actorEmailNow|item.apiKeyName|'System'} · {item.createdAt:datetime}",
           "icon": "clock|schedule",

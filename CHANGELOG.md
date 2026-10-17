@@ -9,12 +9,57 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.264 — 2026-10-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.263...v1.0.0-beta.264)
+
+### Added
+
+- **apple:** product header + grouped toolbar, upsells, alerts, one Save, polished sign-in ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **native:** mark the apps' web views and name the Besigner natively ([AGL-3894](https://linear.app/aglyn/issue/AGL-3894))
+- **native-android:** material 3 list rows, quiet placeholders, tooltips, dialogs ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **apple:** one soft selection on every list; quiet pick placeholders ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **apple:** shared selection style, sidebar lockup + switcher footer ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+
+### Fixed
+
+- **e2e:** stop headless Chrome leaving 1.4 GB code_sign_clone copies ([AGL-3904](https://linear.app/aglyn/issue/AGL-3904))
+- **console:** /auth/native reads its query when used, not at render ([AGL-3902](https://linear.app/aglyn/issue/AGL-3902))
+- **ai:** a nonprofit's photo words say charity, never community ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856), [AGL-975](https://linear.app/aglyn/issue/AGL-975))
+- **native:** the register never asks for notifications it is never sent ([AGL-3901](https://linear.app/aglyn/issue/AGL-3901))
+- **auth:** let the sign-up canary pass the SSO domain rule by plus tag ([AGL-3877](https://linear.app/aglyn/issue/AGL-3877))
+- **pos:** the register's orders zone takes no room when it draws nothing ([AGL-3900](https://linear.app/aglyn/issue/AGL-3900))
+- **console:** keep the Besigner's browser chrome out of the apps ([AGL-3894](https://linear.app/aglyn/issue/AGL-3894))
+- **e2e:** the guided-start run loads again; products start at the default price ([AGL-3676](https://linear.app/aglyn/issue/AGL-3676))
+- **ai:** no empty picture card ships; an unknown business is searched by its kind ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+- **ai:** a record's cover alt says what its photo shows, never its title ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+- **ai:** stock photos read a gym by its name, never a railway; alts are phrases ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+- **ai:** take a photo cover with no photo out, so its section shows its band ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+
 ## v1.0.0-beta.263 — 2026-10-17
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.262...v1.0.0-beta.263)
 
+### Added
+
+- **mui:** a secondary text color setting for List Item Text ([AGL-3886](https://linear.app/aglyn/issue/AGL-3886))
+- **notifications:** one weekly summary per site plus a workspace overview ([AGL-3867](https://linear.app/aglyn/issue/AGL-3867))
+- **ai:** weekly insights cover last Monday to Sunday, like the free summary ([AGL-3867](https://linear.app/aglyn/issue/AGL-3867))
+
 ### Fixed
 
+- **ai:** list text on a colored band reads in the band's own color ([AGL-3886](https://linear.app/aglyn/issue/AGL-3886))
+- **ai:** a site start plans no customer-words section it cannot fill ([AGL-3887](https://linear.app/aglyn/issue/AGL-3887))
+- **ai:** a built section that promises its content later is settled ([AGL-3887](https://linear.app/aglyn/issue/AGL-3887))
+- **notifications:** weekly summary colors come only from the email palette ([AGL-3867](https://linear.app/aglyn/issue/AGL-3867))
+- **native:** pin the POS change due; an owner never reads as a raw uid ([AGL-3895](https://linear.app/aglyn/issue/AGL-3895))
+- **console,native:** smoke-walk copy that read as code or dangled ([AGL-3884](https://linear.app/aglyn/issue/AGL-3884))
+- **android:** the share sheet can read an exported file ([AGL-3883](https://linear.app/aglyn/issue/AGL-3883))
+- **android:** read the Analytics traffic days by id ascending ([AGL-3882](https://linear.app/aglyn/issue/AGL-3882))
+- **console,native:** an email canceled before it went out says so, not Sent to 0 ([AGL-3881](https://linear.app/aglyn/issue/AGL-3881))
+- **native:** a deal row names its stage, never the stage id ([AGL-3880](https://linear.app/aglyn/issue/AGL-3880))
+- **native:** the theme library lists own and marketplace themes by kind ([AGL-3879](https://linear.app/aglyn/issue/AGL-3879))
+- **native:** list a Commerce settings service only where its console card draws ([AGL-3878](https://linear.app/aglyn/issue/AGL-3878))
 - **ai:** "your site is live" names the site and gives its address ([AGL-3889](https://linear.app/aglyn/issue/AGL-3889))
 - **notifications:** native push is immediate, never cut off, and sent once ([AGL-3888](https://linear.app/aglyn/issue/AGL-3888))
 - **native-apple:** the launch restore never refreshes behind a fresh sign-in ([AGL-3885](https://linear.app/aglyn/issue/AGL-3885))

@@ -41,18 +41,15 @@ struct OrdersScreen: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
-          Divider()
-          Group {
-            if let selection {
-              OrderDetailView(context: context, orderID: selection, titled: false)
-                .id(selection)
-            } else {
-              AglynEmptyState("Pick an order", systemImage: "bag")
-            }
+        AglynListDetailColumns(listWidth: 380) {
+          list(selectable: true)
+        } detail: {
+          if let selection {
+            OrderDetailView(context: context, orderID: selection, titled: false)
+              .id(selection)
+          } else {
+            AglynSelectionPlaceholder("No order selected", systemImage: "bag")
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       } else {
         list(selectable: false)
@@ -268,14 +265,14 @@ struct OrdersScreen: View {
       .aglynListBackground()
       .accessibilityIdentifier("orders-list")
     } else if selectable {
-      List(selection: $selection) {
+      List {
         rows(selectable: true)
       }
       .onChange(of: model.rows, initial: true) { _, rows in
         if selection == nil || !rows.contains(where: { $0.id == selection }) { selection = rows.first?.id }
       }
       .sensoryFeedback(.selection, trigger: selection)
-      .aglynListBackground()
+      .aglynSelectableListStyle().aglynSelectionKeys(model.rows.map(\.id), selection: $selection)
       .accessibilityIdentifier("orders-list")
     } else {
       List { rows(selectable: false) }
@@ -289,7 +286,7 @@ struct OrdersScreen: View {
     ForEach(model.rows) { row in
       Group {
         if selectable {
-          OrderListRow(row: row).tag(row.id)
+          OrderListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
         } else {
           NavigationLink {
             OrderDetailView(context: context, orderID: row.id, titled: true)

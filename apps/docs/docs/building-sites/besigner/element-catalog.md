@@ -369,7 +369,7 @@ itself change what the rest of the page shows — wire an
 | --- | --- |
 | **List** | A vertical list. Optional sticky **Heading**, plus **Dense** and **Disable padding**. |
 | **List Item** | One row, with **Divider**, **Align items**, **Dense**, **Disable gutters** and **Disable padding**. |
-| **List Item Text** | Primary and secondary text, plus **Inset** to line the text up with rows that have an icon or avatar. |
+| **List Item Text** | Primary and secondary text, plus **Inset** to line the text up with rows that have an icon or avatar, and **Secondary text color**: **Muted** for the page background, or **Same as the primary text** on a band painted in a brand color. |
 | **Collection entries** and friends | Content collections — entry lists, bodies, related posts, share bars. |
 | **Custom HTML** | Sanitized markup you supply. |
 

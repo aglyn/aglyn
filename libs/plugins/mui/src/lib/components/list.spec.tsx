@@ -180,6 +180,38 @@ describe('List Item Text', () => {
     expect(screen.queryByTestId('dropped')).toBeNull()
     expect(screen.getByText('One')).toBeTruthy()
   })
+
+  /*
+   * AGL-3886: MUI draws the secondary words in the theme's text.secondary,
+   * made for the page background, so on a band in a brand color they nearly
+   * vanished. `secondaryColor: inherit` draws them in the row's own color.
+   */
+  it('draws the secondary words in the row’s own color when told to, and muted otherwise', () => {
+    expect(names(listItemTextSchema)).toContain('secondaryColor')
+    const secondaryOf = (ui: React.ReactElement): HTMLElement => {
+      const { container } = render(<div style={{ color: 'rgb(255, 255, 255)' }}>{ui}</div>)
+      return container.querySelector('.MuiListItemText-secondary') as HTMLElement
+    }
+    const inherited = secondaryOf(
+      <ListItemText primary="1. Tell us about you" secondary="Share your goals." secondaryColor="inherit" />,
+    )
+    expect(getComputedStyle(inherited).color).toBe('rgb(255, 255, 255)')
+    expect(inherited.className).toMatch(/MuiTypography-body2/)
+    const muted = secondaryOf(<ListItemText primary="One" secondary="Two" />)
+    expect(getComputedStyle(muted).color).not.toBe('rgb(255, 255, 255)')
+    // The authored prop is the wrapper's: it never reaches the DOM.
+    expect(inherited.closest('[secondarycolor]')).toBeNull()
+  })
+
+  it('never offers a secondary color the attributes form cannot persist', () => {
+    const attribute = (listItemTextSchema.attributes ?? []).find(
+      (entry: any) => entry.name === 'secondaryColor',
+    ) as any
+    expect(attribute.options.map((option: any) => option.value)).toEqual([
+      'textSecondary',
+      'inherit',
+    ])
+  })
 })
 
 /** AGL-1451 — cleared values must reach MUI as absences, not as `''`. */

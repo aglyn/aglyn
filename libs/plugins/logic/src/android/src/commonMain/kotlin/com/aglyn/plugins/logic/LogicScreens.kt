@@ -47,6 +47,7 @@ import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.ChoiceField
 import com.aglyn.ui.DateField
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.InputChoice
 import com.aglyn.ui.ListHeader
 import com.aglyn.ui.MenuAction
@@ -130,7 +131,7 @@ fun LogicScreen(context: NativePluginContext, initialTab: String? = null) {
     val failed = when (tab) { LogicTab.VARIABLES -> variablesLive; LogicTab.FUNCTIONS -> functionsLive; LogicTab.HEALTH -> null } is Live.Failed
     when {
       tab == LogicTab.HEALTH -> ReferenceHealth(context)
-      failed -> EmptyState("Could not load this list", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+      failed -> EmptyState("Could not load this list", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
       tab == LogicTab.VARIABLES && variables == null -> SkeletonList(rows = 5, modifier = Modifier.padding(space(2f)))
       tab == LogicTab.FUNCTIONS && functions == null -> SkeletonList(rows = 5, modifier = Modifier.padding(space(2f)))
       tab == LogicTab.VARIABLES -> VariableList(variables!!.first, canEdit, onEdit = { row ->
@@ -154,7 +155,7 @@ fun LogicScreen(context: NativePluginContext, initialTab: String? = null) {
         title = if (open.kind == "variable") "Delete this variable?" else "Delete this function?",
         body = if (used > 0) {
           "\"${open.name}\" is used in ${summarizeDependents(open.scan!!)}" +
-            if (open.kind == "variable") ". Those bindings will render as empty or literal tokens after the next publish." else " — those references will stop resolving after the next publish."
+            if (open.kind == "variable") ". Those places show nothing in its place after the next publish." else ". Those places stop working after the next publish."
         } else {
           "\"${open.name}\" is not referenced by any published page, layout, or workflow."
         },
@@ -178,7 +179,7 @@ private fun VariableList(rows: List<VariableRow>, canEdit: Boolean, onEdit: (Var
   if (rows.isEmpty()) {
     return EmptyState(
       "No variables yet",
-      body = "A variable is a value you bind into any text with {{name}}: a phone number, a price, an opening date. Change it once and every page follows.",
+      body = "A variable is a value you put into any text with Insert data in the Besigner: a phone number, a price, an opening date. Change it once and every page follows.",
       icon = AglynIcons.named("data_object"),
     )
   }
@@ -294,7 +295,7 @@ private fun VariableEditor(
     error = runner.error,
     onDismiss = { runner.error = null; close() },
     onConfirm = {
-      runner.run("Saved — use {{${draft.name}}} in any text to bind it", onDone = close) {
+      runner.run("Saved. Put it into any text with Insert data in the Besigner.", onDone = close) {
         api.saveVariable(draft.id, draft.name, draft.type, draft.value, draft.workflowId, draft.workflowName)
       }
     },
@@ -311,7 +312,7 @@ private fun VariableEditor(
             when {
               nameTaken -> "A variable with this name already exists"
               draft.name.isNotEmpty() && !validName -> "Start with a letter or _; letters, numbers and _ only, up to 40"
-              else -> "Bind it with {{${draft.name.ifEmpty { "name" }}}}"
+              else -> "Pick it by this name from Insert data in the Besigner"
             },
           )
         },

@@ -51,6 +51,7 @@ import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -303,9 +304,9 @@ private fun SmartReadersSection(
           trailing = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
               StatusChip(if (reader.online) "Online" else "Offline", if (reader.online) StatusTone.SUCCESS else StatusTone.NEUTRAL)
-              IconButton(onClick = { error = null; removing = reader }, Modifier.testTag("remove-reader-${reader.id}")) {
+              WithTooltip("Remove ${reader.label}") { IconButton(onClick = { error = null; removing = reader }, Modifier.testTag("remove-reader-${reader.id}")) {
                 Icon(AglynIcons.named("delete"), contentDescription = "Remove ${reader.label}")
-              }
+              } }
             }
           },
           modifier = Modifier.testTag("reader-${reader.id}"),

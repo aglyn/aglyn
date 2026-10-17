@@ -85,6 +85,12 @@ func campaignSendProgress(_ send: [String: Any]?) -> SendProgress {
       state: "pending", reached: 0, audience: audience, remaining: remaining, batch: batch, nextAtMs: 0,
       label: status == "sending" ? "Sending" : "Scheduled")
   }
+  // Canceled, or failed, before a single message went out, with nobody left waiting: it never sent.
+  if (status == "canceled" || status == "failed") && reached == 0 && remaining == 0 {
+    return SendProgress(
+      state: "stopped", reached: 0, audience: audience, remaining: 0, batch: batch, nextAtMs: 0,
+      label: status == "canceled" ? "Canceled before it was sent" : "Failed before it was sent")
+  }
   if remaining > 0 {
     let why = status == "canceled" ? "canceled" : status == "failed" ? "stopped by an error" : "stopped"
     return SendProgress(
@@ -94,6 +100,45 @@ func campaignSendProgress(_ send: [String: Any]?) -> SendProgress {
   return SendProgress(
     state: "sent", reached: reached, audience: audience, remaining: 0, batch: batch, nextAtMs: 0,
     label: batch > 1 ? "Sent to \(grouped(reached))\(of) over \(batch) runs" : "Sent to \(grouped(reached))\(of)")
+}
+
+/// The sender a message actually left with, as the send recorded it (`emailSentAs`): the address is what makes it a record.
+struct SentAs: Equatable {
+  let from: String
+  let fromName: String?
+  let replyTo: String?
+}
+
+func emailSentAs(_ data: [String: Any]) -> SentAs? {
+  guard let stamp = data["sentAs"] as? [String: Any] else { return nil }
+  func text(_ key: String) -> String? {
+    (stamp[key] as? String).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
+  }
+  guard let from = text("from") else { return nil }
+  return SentAs(from: from, fromName: text("fromName"), replyTo: text("replyTo"))
+}
+
+/// Not yet mailed to anybody (`emailIsUnsent`): a draft, or a send waiting for its time or under way.
+func emailIsUnsent(_ data: [String: Any]) -> Bool { ["draft", "scheduled", "sending"].contains(data["status"] as? String ?? "") }
+
+/// Canceled or failed before it went to anybody (`emailNeverSent`): it never will be, and has no report.
+func emailNeverSent(_ data: [String: Any]) -> Bool {
+  ["canceled", "failed"].contains(data["status"] as? String ?? "") && count((data["stats"] as? [String: Any])?["sent"]) == 0
+}
+
+/// What "Sent as" says where the send recorded no sender: not sent yet, never sent, or sent before senders were recorded.
+func sentAsMissing(_ data: [String: Any]) -> String {
+  emailIsUnsent(data) ? "Not sent yet" : emailNeverSent(data) ? "Not sent" : "Not recorded"
+}
+
+/// The Delivery report's stand-in for an email with nothing to report, as the console words it; nil when there is a report.
+func deliveryPlaceholder(_ data: [String: Any]) -> String? {
+  let status = data["status"] as? String
+  if emailNeverSent(data) { return "This email was not sent to anybody, so there is nothing to report." }
+  if status == "sending" { return "This email is being sent right now. Its figures appear here once the send finishes." }
+  if status == "draft" { return "This email has not been sent, so there is nothing to report yet." }
+  if emailIsUnsent(data) { return "This email has not been sent yet. Its figures appear here once it goes out." }
+  return nil
 }
 
 func campaignSendHeld(_ send: [String: Any]?) -> Bool {

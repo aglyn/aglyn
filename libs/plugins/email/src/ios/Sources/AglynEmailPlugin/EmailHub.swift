@@ -423,7 +423,7 @@ struct AudiencesSection: View {
           if let selection {
             ListDetail(context: context, actions: actions, listID: selection).id(selection)
           } else {
-            AglynEmptyState("Pick a list to see who is on it", systemImage: "person.3").frame(maxWidth: .infinity, maxHeight: .infinity)
+            AglynSelectionPlaceholder("No list selected", systemImage: "person.3").frame(maxWidth: .infinity, maxHeight: .infinity)
           }
         }
       } else {
@@ -462,11 +462,11 @@ struct AudiencesSection: View {
       .padding(.vertical, AglynSpace.one)
       if selectable {
         if list.ready && list.failure == nil && !list.rows.isEmpty {
-          List(selection: $selection) {
-            ForEach(list.rows) { row in ListRowView(row: row).tag(row.id).aglynListRow() }
+          List {
+            ForEach(list.rows) { row in ListRowView(row: row).aglynSelectableRow(row.id, selection: $selection) }
             if list.hasMore { Button("Show more") { list.loadMore() }.frame(maxWidth: .infinity) }
           }
-          .aglynListBackground()
+          .aglynSelectableListStyle().aglynSelectionKeys(list.rows.map(\.id), selection: $selection)
         } else {
           states
         }

@@ -66,16 +66,19 @@ import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OpeningHoursPicker
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
 import com.aglyn.ui.WidthClass
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.currentWidthClass
 import com.aglyn.ui.space
 import kotlinx.coroutines.delay
@@ -99,6 +102,23 @@ internal fun toneFor(spec: JsonElement, value: String, context: JsonElement): St
   if (map != null) return tone((map[value] as? JsonPrimitive)?.content ?: (map["*"] as? JsonPrimitive)?.content)
   return tone(spec.str("tone")?.let { ScreenValues.render(it, context) })
 }
+
+/**
+ * A list row's line: a template, or a list of parts (a template, or `{ text, when }` shown while its condition holds) joined
+ * with ` · `, a part that holds nothing left out, so a row never ends on a dangling `set by `.
+ */
+internal fun rowLine(spec: JsonElement?, scope: JsonElement): String? = when (spec) {
+  is JsonArray -> spec.mapNotNull { part ->
+    val template = when {
+      part is JsonPrimitive && part.isString -> part.content
+      ScreenValues.condition(part.str("when"), scope) -> part.str("text")
+      else -> null
+    }
+    template?.let { ScreenValues.render(it, scope).trim() }?.takeIf { it.isNotEmpty() }
+  }.joinToString(" \u00b7 ")
+  is JsonPrimitive -> if (spec.isString) ScreenValues.render(spec.content, scope) else null
+  else -> null
+}?.takeIf { it.isNotEmpty() }
 
 internal fun renderParams(params: JsonElement?, context: JsonElement): NativeParams =
   ((params as? JsonObject) ?: JsonObject(emptyMap())).mapValues { (_, value) ->
@@ -161,7 +181,7 @@ fun SpecScreen(
         if (picked != null && detail != null) {
           SpecScreen(detail, plugin, picked.params, embedded = true)
         } else {
-          EmptyState("Nothing selected", body = "Pick a row to see it here.", icon = AglynIcons.named("chevron_right"))
+          SelectionPlaceholder("Pick a row to see it here", icon = AglynIcons.named("list"))
         }
       }
     }
@@ -349,12 +369,26 @@ private fun SpecBodyContent(
 
   when (val phase = model.phase) {
     ScreenModel.Phase.Loading -> SkeletonList(rows = 6)
-    is ScreenModel.Phase.Failed -> EmptyState(
-      "This did not load",
-      body = phase.message,
-      icon = AglynIcons.named("error"),
-      action = { OutlinedButton(onClick = { scope.launch { model.load() } }) { Text("Try again") } },
-    )
+    is ScreenModel.Phase.Failed -> if (phase.upsell) {
+      EmptyState(
+        "Add this to your plan",
+        body = "${model.spec.title.takeIf { '{' !in it } ?: "This"} is not part of this workspace's plan yet. Add it to start using it.",
+        icon = AglynIcons.named("workspace_premium"),
+        tone = EmptyTone.UPSELL,
+        action = {
+          FilledTonalButton(onClick = { plugin.navigate(BILLING_ADDONS_SCREEN, emptyMap()) }, Modifier.testTag("upsell-addons")) { Text("See add-ons") }
+        },
+        modifier = Modifier.testTag("spec-upsell"),
+      )
+    } else {
+      EmptyState(
+        "This did not load",
+        body = phase.message,
+        icon = AglynIcons.named("error"),
+        tone = EmptyTone.ERROR,
+        action = { OutlinedButton(onClick = { scope.launch { model.load() } }) { Text("Try again") } },
+      )
+    }
     ScreenModel.Phase.Ready -> {
       val blocks = model.spec.blocks.filter { ScreenValues.condition(it.whenCondition, context) }
       val actions = model.spec.actions.filter { ScreenValues.condition(it.whenCondition, context) }
@@ -538,9 +572,9 @@ private fun PromptDialog(pending: Pending, search: suspend (LookupGroup, String)
   val visible = filled()
   val missing = inputs.any { ScreenValues.condition(it.whenCondition, visible) && it.unmet(fieldJson(it, values[it.key] ?: initialValue(it, pending.scope)), pending.scope) }
   ActionDialog(
-    title = ScreenValues.render(pending.action.label, pending.scope),
+    title = ScreenValues.render(pending.action.promptTitle ?: pending.action.label, pending.scope),
     body = pending.action.confirmText(pending.scope),
-    confirmLabel = ScreenValues.render(pending.action.label, pending.scope),
+    confirmLabel = ScreenValues.render(pending.action.submitLabel ?: pending.action.label, pending.scope),
     destructive = pending.action.destructive,
     confirmEnabled = !missing,
     dismissLabel = "Cancel",
@@ -873,13 +907,13 @@ private fun listScopes(block: BlockSpec, context: JsonElement, chipField: String
 private fun SortMenu(key: String, columns: List<ListColumn>, asked: ListOrder?, chosen: ListColumn?, ask: (ListOrder?, Boolean) -> Unit) {
   var open by remember { mutableStateOf(false) }
   Box {
-    IconButton(onClick = { open = true }, modifier = Modifier.testTag("sort-$key")) {
+    WithTooltip("Sort") { IconButton(onClick = { open = true }, modifier = Modifier.testTag("sort-$key")) {
       Icon(
         AglynIcons.named("filter_list"),
         contentDescription = "Sort",
         tint = if (asked == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
       )
-    }
+    } }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
       DropdownMenuItem(
         text = { Text(if (asked == null) "\u2713 Default order" else "Default order") },
@@ -903,9 +937,9 @@ private fun SortMenu(key: String, columns: List<ListColumn>, asked: ListOrder?, 
 private fun ColumnsMenu(key: String, columns: List<ListColumn>, shown: Set<String>, pick: (Set<String>) -> Unit) {
   var open by remember { mutableStateOf(false) }
   Box {
-    IconButton(onClick = { open = true }, modifier = Modifier.testTag("columns-$key")) {
+    WithTooltip("Columns") { IconButton(onClick = { open = true }, modifier = Modifier.testTag("columns-$key")) {
       Icon(AglynIcons.named("tune"), contentDescription = "Columns", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+    } }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
       for (column in columns) {
         val on = column.id in shown
@@ -935,8 +969,8 @@ private fun ListRow(
     openSpec.str("screen")?.let { Selection(it, renderParams(openSpec.obj("params"), scope)) }
   }
   val primary = ScreenValues.render(block.string("primary") ?: "{item.name|item.\$id}", scope).ifEmpty { "—" }
-  val secondary = block.string("secondary")?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() }
-  val tertiary = block.string("tertiary")?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() }
+  val secondary = rowLine(block["secondary"], scope)
+  val tertiary = rowLine(block["tertiary"], scope)
   val trailingText = block.string("trailing")?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() }
   val badges = block.raw.arr("badges").mapNotNull { badge ->
     if (!ScreenValues.condition(badge.str("when"), scope)) return@mapNotNull null
@@ -975,9 +1009,9 @@ private fun ListRow(
           }
           if (actions.isNotEmpty()) {
             Box {
-              IconButton(onClick = { menu = true }, modifier = Modifier.testTag("row-menu")) {
+              WithTooltip("Actions for $primary") { IconButton(onClick = { menu = true }, modifier = Modifier.testTag("row-menu")) {
                 Icon(AglynIcons.named("more_vert"), contentDescription = "Actions for $primary")
-              }
+              } }
               DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 for (action in actions) {
                   DropdownMenuItem(
@@ -1249,3 +1283,6 @@ private fun ZoneRow(spec: ScreenSpec, plugin: NativePluginContext, params: Nativ
     modifier = Modifier.testTag("zone-${spec.id}"),
   )
 }
+
+/** Where a plan refusal sends a person to add what the screen needs. */
+internal const val BILLING_ADDONS_SCREEN = "core.billing.addons"

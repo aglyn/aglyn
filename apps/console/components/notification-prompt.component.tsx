@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { isNativeAppWebView } from '@aglyn/aglyn/app-utils/native-app-web-view'
 import { mdiBellOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -30,7 +31,6 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import useNotificationAlertPrefs from '../hooks/use-notification-prefs'
-import { isNativeAppWebView } from '../utils/besigner-entry'
 import {
   desktopNotificationPermission,
   requestDesktopNotifications,
@@ -86,7 +86,8 @@ function readDismissed(): 'never' | 'snoozed' | null {
  * - notifications are unsupported,
  * - nobody is signed in,
  * - the page is the Besigner inside the native apps, which send their own
- *   push notifications (AGL-3850).
+ *   push notifications (AGL-3850): the apps' user-agent marker or the
+ *   entry page's mark, so a direct open is covered too (AGL-3894).
  */
 export function NotificationPrompt() {
   const { data: user } = useUser()

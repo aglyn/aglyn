@@ -23,6 +23,7 @@ import {
   detectDocumentStructure,
   detectHeavyDocument,
   detectInvisibleLinks,
+  detectPageTextOnBands,
   detectUnresponsiveGrids,
   validateAiDoctrineTree,
   type AiDoctrineTree,
@@ -249,6 +250,75 @@ describe('rule 5 link-color-on-band: a link’s words in its band’s contrast t
     // A contained button draws its own fill, and is left as written.
     expect(settled.nodes['n5']).toBe(input.nodes['n5'])
     expect(detectInvisibleLinks(settled, 'page')).toEqual([])
+  })
+})
+
+describe('rule 5 page-text-on-band: words on a colored band in the band’s own colors (AGL-3886)', () => {
+  const pair = (primary: string, secondary: string, props: Record<string, unknown> = {}): Nested => ({
+    componentId: 'muiListItemText',
+    props: { primary, secondary, ...props },
+  })
+  const muted = (copy: string): Nested => ({ ...text('body1', copy), sx: { color: 'text.secondary' } })
+  /** A band painted in `bgcolor`, holding a Grid of one step and a line of muted words. */
+  const band = (bgcolor: string, ...children: Nested[]): Nested => ({
+    componentId: 'section',
+    props: { element: 'section' },
+    sx: { bgcolor, color: 'primary.contrastText' },
+    children: [
+      {
+        componentId: 'muiGrid',
+        props: { container: true, spacing: '3' },
+        children: [{ componentId: 'muiGrid', props: { size: 'xs:12 md:4' }, children }],
+      },
+    ],
+  })
+
+  /*
+   * The live forge-line-strength-club.aglyn.app band (beta.261): an olive
+   * `primary.main` band whose steps' secondary words MUI drew in the theme's
+   * text.secondary, about 1.6:1 on the band.
+   */
+  it('draws a List Item Text’s secondary words and muted words on a brand band in the band’s own color', () => {
+    const input = tree(page(band('primary.main', pair('1. Tell us about you', 'Share your goals.'), muted('Classes run daily.'))))
+    expect(detectPageTextOnBands(input, 'page')).toEqual([
+      expect.objectContaining({ rule: 5, code: 'page-text-on-band', nodeIds: ['n4', 'n5'] }),
+    ])
+    const settled = settle(input)
+    expect(settled.nodes['n4'].props).toEqual({
+      primary: '1. Tell us about you',
+      secondary: 'Share your goals.',
+      secondaryColor: 'inherit',
+    })
+    expect(settled.nodes['n5'].sx).toEqual({ color: 'primary.contrastText' })
+    expect(detectPageTextOnBands(settled, 'page')).toEqual([])
+  })
+
+  it('gives words on a band of another family, or its dark shade, that family’s contrast text', () => {
+    const settled = settle(tree(page(band('secondary.dark', muted('Open every day.')))))
+    expect(settled.nodes['n4'].sx).toEqual({ color: 'secondary.contrastText' })
+  })
+
+  it('leaves the same words alone on the page, a paper band, a light band, a card and a pair already in the row’s color', () => {
+    const cardOnBand: Nested = {
+      componentId: 'muiCard',
+      children: [{ componentId: 'muiCardContent', children: [muted('Inside a card.'), pair('Title', 'Words')] }],
+    }
+    const clean = tree(
+      page(
+        section(pair('On the page', 'Muted words'), muted('Muted words')),
+        band('background.paper', pair('On paper', 'Muted words'), muted('Muted words')),
+        band('primary.light', pair('On a light band', 'Muted words'), muted('Muted words')),
+        band('primary.main', cardOnBand, pair('Settled', 'Already inherits', { secondaryColor: 'inherit' }), pair('No secondary', '')),
+      ),
+    )
+    expect(detectPageTextOnBands(clean, 'page')).toEqual([])
+    expect(aiSettleMechanicalRules(clean, 'page')).toBe(clean)
+  })
+
+  it('reads no band in an email or a form', () => {
+    const input = tree(page(band('primary.main', pair('Title', 'Words'))))
+    expect(detectPageTextOnBands(input, 'email')).toEqual([])
+    expect(detectPageTextOnBands(input, 'form')).toEqual([])
   })
 })
 

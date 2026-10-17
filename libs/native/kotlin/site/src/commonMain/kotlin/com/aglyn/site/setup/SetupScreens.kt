@@ -65,6 +65,7 @@ import com.aglyn.site.media.MediaImageField
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.OpeningHoursPicker
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
@@ -82,10 +83,12 @@ import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
 
@@ -135,11 +138,11 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
     },
     detail = { selected ->
       if (selected == null) {
-        EmptyState("Pick a section to set it up", icon = AglynIcons.named("settings"))
+        SelectionPlaceholder("Pick a section to set it up", icon = AglynIcons.named("settings"))
       } else {
         when (val live = host) {
           Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
-          is Live.Failed -> EmptyState("Could not load this site's setup", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+          is Live.Failed -> EmptyState("Could not load this site's setup", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
           is Live.Ready -> {
             val doc = live.value ?: return@AglynListDetail EmptyState("This site is gone", icon = AglynIcons.named("public"))
             val canEdit = context.siteRole in SETTINGS_ROLES
@@ -274,7 +277,7 @@ private fun BusinessDetailsCard(host: Map<String, Any?>, api: HostSettingsApi, c
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
         OutlinedTextField(link.label, { links[index] = link.copy(label = it) }, label = { Text("Label") }, singleLine = true, enabled = canEdit, modifier = Modifier.weight(0.4f))
         OutlinedTextField(link.url, { links[index] = link.copy(url = it) }, label = { Text("URL") }, singleLine = true, enabled = canEdit, modifier = Modifier.weight(0.6f))
-        IconButton(onClick = { links.removeAt(index) }, enabled = canEdit) { Icon(AglynIcons.named("delete"), contentDescription = "Remove ${link.label.ifBlank { "this link" }}") }
+        WithTooltip("Remove ${link.label.ifBlank { "this link" }}") { IconButton(onClick = { links.removeAt(index) }, enabled = canEdit) { Icon(AglynIcons.named("delete"), contentDescription = "Remove ${link.label.ifBlank { "this link" }}") } }
       }
     }
     TextButton(onClick = { links.add(SocialLink("", "")) }, enabled = canEdit && links.size < SOCIAL_LINKS_MAX, modifier = Modifier.testTag("add-social-link")) {
@@ -644,7 +647,7 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
   val selection = themeSelectionOf(host)
   val edited = hasThemeEdits(host)
   val saved by remember(hostId, context.firestore) {
-    context.firestore.observe(FirestoreQuery("hosts/$hostId/themes", orderBy = listOf(FirestoreOrder("__name__")), limit = THEME_LIBRARY_MAX_CUSTOM + 1))
+    context.firestore.observe(FirestoreQuery("hosts/$hostId/themes", orderBy = listOf(FirestoreOrder("__name__")), limit = THEME_LIBRARY_READ_LIMIT))
   }.collectAsState(Live.Loading)
   val runner = rememberRunner()
   var naming by remember { mutableStateOf<Pair<String?, String>?>(null) }
@@ -694,33 +697,31 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
         )
       }
     }
-    Text("Saved themes", style = MaterialTheme.typography.labelLarge)
     when (val live = saved) {
-      Live.Loading -> SkeletonList(rows = 2)
-      is Live.Failed -> Text("Saved themes could not be loaded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Live.Loading -> {
+        Text("Your themes", style = MaterialTheme.typography.labelLarge)
+        SkeletonList(rows = 2)
+      }
+      is Live.Failed -> {
+        Text("Your themes", style = MaterialTheme.typography.labelLarge)
+        Text("Your themes could not be loaded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
       is Live.Ready -> {
-        val themes = live.value.map(::savedThemeOf)
-        if (themes.isEmpty()) Text("None yet. Save your theme to switch back to it later.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        themes.forEachIndexed { index, theme ->
+        val themes = libraryThemes(live.value)
+        val own = themes.filter { it.kind == "custom" }
+        val installed = themes.filter { it.kind == "installed" }
+        Text("Your themes", style = MaterialTheme.typography.labelLarge)
+        if (own.isEmpty()) Text("None yet. Save your theme to switch back to it later.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        own.forEachIndexed { index, theme ->
           if (index > 0) HorizontalDivider()
-          val current = selection.kind == "custom" && selection.id == theme.id
-          AglynListItem(
-            title = theme.name,
-            icon = AglynIcons.named("palette"),
-            trailing = {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                if (current) StatusChip("In use", StatusTone.SUCCESS)
-                else TextButton(onClick = { runner.run("Switched to ${theme.name}.") { api.selectTheme("custom", theme.id) } }, enabled = canManage && !runner.busy) { Text("Use") }
-                OverflowMenu(
-                  listOf(
-                    MenuAction("rename", "Rename", "edit", enabled = canManage) { naming = theme.id to theme.name },
-                    MenuAction("delete", "Delete", "delete", destructive = true, enabled = canManage && !current) { deleting = theme },
-                  ),
-                )
-              }
-            },
-            modifier = Modifier.testTag("saved-theme-${theme.id}"),
-          )
+          LibraryThemeRow(theme, selection, canManage, runner, api, onRename = { naming = theme.id to theme.name }, onDelete = { deleting = theme })
+        }
+        if (installed.isNotEmpty()) {
+          Text("From the marketplace", style = MaterialTheme.typography.labelLarge)
+          installed.forEachIndexed { index, theme ->
+            if (index > 0) HorizontalDivider()
+            LibraryThemeRow(theme, selection, canManage, runner, api, onRename = null, onDelete = { deleting = theme })
+          }
         }
       }
     }
@@ -753,6 +754,40 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
       onConfirm = { runner.run("Deleted.", onDone = { deleting = null }) { api.deleteTheme(theme.id) } },
     )
   }
+}
+
+/**
+ * One theme of the library: Use switches to it by its own kind (a marketplace theme is `installed`, never `custom`), and only
+ * the site's own themes can be renamed ([onRename] is null for the rest), as the theme route allows.
+ */
+@Composable
+private fun LibraryThemeRow(
+  theme: SavedTheme,
+  selection: ThemeSelection,
+  canManage: Boolean,
+  runner: ActionRunner,
+  api: HostSettingsApi,
+  onRename: (() -> Unit)?,
+  onDelete: () -> Unit,
+) {
+  val current = selection.kind == theme.kind && selection.id == theme.id
+  AglynListItem(
+    title = theme.name,
+    icon = AglynIcons.named(if (theme.kind == "installed") "storefront" else "palette"),
+    trailing = {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        if (current) StatusChip("In use", StatusTone.SUCCESS)
+        else TextButton(onClick = { runner.run("Switched to ${theme.name}.") { api.selectTheme(theme.kind, theme.id) } }, enabled = canManage && !runner.busy) { Text("Use") }
+        OverflowMenu(
+          listOfNotNull(
+            onRename?.let { MenuAction("rename", "Rename", "edit", enabled = canManage) { it() } },
+            MenuAction("delete", "Delete", "delete", destructive = true, enabled = canManage && !current) { onDelete() },
+          ),
+        )
+      }
+    },
+    modifier = Modifier.testTag("saved-theme-${theme.id}"),
+  )
 }
 
 /** A preset's colors as small overlapping dots. */

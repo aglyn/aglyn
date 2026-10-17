@@ -31,8 +31,11 @@ class AutomationDataTest {
     val rows = visibleWorkflows(docs)
     assertEquals(listOf("Alpha", "beta"), rows.map { it.name })
     assertEquals("1 step · quote", rows[0].caption)
-    // An Actions step has no function name, and JavaScript joins it as nothing.
-    assertEquals("2 steps · on New lead · double → ", rows[1].caption)
+    // An Actions step has no function name, so it is left out rather than leaving a dangling arrow.
+    assertEquals("2 steps · on New lead · double", rows[1].caption)
+    // Nothing to call and no trigger: the count alone, no trailing separator.
+    assertEquals("1 step", workflowRowOf(doc("w4", mapOf("name" to "Bare", "steps" to listOf(mapOf("type" to "notifyAdmins"))))).caption)
+    assertEquals("on New lead", actionRowOf(doc("a9", mapOf("name" to "Empty", "trigger" to mapOf("event" to "lead"), "steps" to emptyList<Any>()))).caption)
     assertTrue(workflowNameTaken(rows, " alpha ", null))
     assertFalse(workflowNameTaken(rows, "Alpha", "w1"))
   }

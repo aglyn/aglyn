@@ -65,13 +65,16 @@ import com.aglyn.ui.BarcodeScanSheet
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.LocalCameraScanner
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -116,7 +119,7 @@ fun ProductsScreen(context: NativePluginContext, initialProductId: String? = nul
     onItemRemoved = { model.reload() },
     list = { selected, onSelect -> ProductsList(context, model, editor, selected, onSelect) },
     detail = { selected ->
-      if (selected == null) EmptyState("Pick a product to see it here", icon = AglynIcons.named("inventory"))
+      if (selected == null) SelectionPlaceholder("Pick a product to see it here", icon = AglynIcons.named("inventory"))
       else ProductDetailPane(context, selected, editor)
     },
   )
@@ -156,8 +159,10 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
     Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
         SearchField(model.search, model::type, placeholder = "Search products", modifier = Modifier.weight(1f))
-        OutlinedButton(onClick = { context.navigate(COMMERCE_SCAN_SCREEN) }, Modifier.testTag("products-scan")) {
-          Icon(AglynIcons.named("qr_code_scanner"), contentDescription = "Scan a barcode")
+        WithTooltip("Scan a barcode") {
+          OutlinedButton(onClick = { context.navigate(COMMERCE_SCAN_SCREEN) }, Modifier.testTag("products-scan")) {
+            Icon(AglynIcons.named("qr_code_scanner"), contentDescription = "Scan a barcode")
+          }
         }
       }
       Row(verticalAlignment = Alignment.CenterVertically) {
@@ -207,7 +212,7 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
     }
     when (val rows = model.rows) {
       Load.Loading -> SkeletonList(rows = 6)
-      is Load.Failed -> EmptyState("Could not load products", body = rows.message, icon = AglynIcons.named("error"), action = { OutlinedButton(onClick = { model.reload() }) { Text("Try again") } })
+      is Load.Failed -> EmptyState("Could not load products", body = rows.message, icon = AglynIcons.named("error"), tone = EmptyTone.ERROR, action = { OutlinedButton(onClick = { model.reload() }) { Text("Try again") } })
       is Load.Ready -> if (rows.value.isEmpty()) {
         EmptyState(
           if (model.search.isBlank() && model.filter == ProductFilter.ALL) "No products yet" else "No products match",
@@ -259,7 +264,7 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
   CloseWhenGone((live as? Live.Ready)?.let { ready -> ready.value != null && ready.value?.data?.get("deletedAt") == null })
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this product", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this product", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val doc = value.value
       if (doc == null || doc.data["deletedAt"] != null) {
@@ -526,9 +531,9 @@ private fun ProductDialogs(editor: ProductEditorModel) {
           Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(option.name, { editor.change(draft.withOptionName(index, it)) }, label = { Text("Option name") }, placeholder = { Text("Size") }, singleLine = true,
               modifier = Modifier.weight(1f).testTag("option-name-$index"))
-            IconButton(onClick = { editor.change(draft.withOptionRemoved(index)) }, modifier = Modifier.testTag("option-remove-$index")) {
+            WithTooltip("Remove option ${option.name.ifBlank { index + 1 }}") { IconButton(onClick = { editor.change(draft.withOptionRemoved(index)) }, modifier = Modifier.testTag("option-remove-$index")) {
               Icon(AglynIcons.named("close"), contentDescription = "Remove option ${option.name.ifBlank { index + 1 }}")
-            }
+            } }
           }
           OutlinedTextField(option.valuesText, { editor.change(draft.withOptionValues(index, it)) }, label = { Text("Values") }, placeholder = { Text("Small, Medium, Large") },
             supportingText = { Text("Separate values with commas.") }, modifier = Modifier.fillMaxWidth().testTag("option-values-$index"))

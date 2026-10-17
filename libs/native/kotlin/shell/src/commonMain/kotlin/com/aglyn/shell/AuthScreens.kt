@@ -57,6 +57,8 @@ import com.aglyn.pluginhost.NativeApp
 import com.aglyn.ui.AglynLogo
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.WidthClass
+import com.aglyn.ui.currentWidthClass
 import com.aglyn.ui.space
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -89,25 +91,36 @@ internal fun AuthCard(
 ) {
   val brand = services.config.brandName
   val appName = if (services.app == NativeApp.POS) "$brand POS" else brand
+  // One centered column, 400 dp at most: flat on a phone, on a card where the window leaves room around it.
+  val compact = currentWidthClass() == WidthClass.COMPACT
+  val body: @Composable () -> Unit = {
+    Column(
+      Modifier.padding(horizontal = space(if (compact) 3f else 4f), vertical = space(4f)),
+      verticalArrangement = Arrangement.spacedBy(space(2f)),
+    ) {
+      // The colored lockup (white wordmark on dark ground), with the mark's height clear below it.
+      AglynLogo(Modifier.padding(bottom = space(1f)).height(36.dp), contentDescription = appName)
+      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+        if (subtitle != null) {
+          Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      }
+      content()
+      footer()
+    }
+  }
   Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
     Box(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
-      Surface(
-        Modifier.padding(space(2f)).widthIn(max = 440.dp).fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        shadowElevation = 2.dp,
-      ) {
-        Column(Modifier.padding(space(3f)), verticalArrangement = Arrangement.spacedBy(space(2f))) {
-          AglynLogo(Modifier.height(36.dp), contentDescription = appName)
-          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
-            if (subtitle != null) {
-              Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-          }
-          content()
-          footer()
-        }
+      if (compact) {
+        Box(Modifier.widthIn(max = 400.dp).fillMaxWidth()) { body() }
+      } else {
+        Surface(
+          Modifier.padding(space(3f)).widthIn(max = 448.dp).fillMaxWidth(),
+          shape = MaterialTheme.shapes.extraLarge,
+          color = MaterialTheme.colorScheme.surfaceContainerLowest,
+          shadowElevation = 2.dp,
+        ) { body() }
       }
     }
   }

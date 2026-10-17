@@ -19,16 +19,64 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   mdiFormatListChecks,
 } from '@aglyn/shared-data-mdi'
-import ListItemText, {
+import MuiListItemText, {
   type ListItemTextProps,
 } from '@mui/material/ListItemText'
+import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; keep the legacy ids.
 export const ID: Aglyn.ComponentId = 'muiListItemText'
 
-export const schema: Aglyn.ComponentSchema<ListItemTextProps> = {
+/**
+ * The colors the secondary words can take: the theme's muted text color
+ * (MUI's own default), or the color of the row around them.
+ */
+export const LIST_ITEM_TEXT_SECONDARY_COLORS = ['textSecondary', 'inherit'] as const
+export type ListItemTextSecondaryColor =
+  (typeof LIST_ITEM_TEXT_SECONDARY_COLORS)[number]
+
+export interface ListItemTextElementProps extends ListItemTextProps {
+  /**
+   * The secondary words' color. MUI draws them in the theme's
+   * `text.secondary`, which is chosen for the page's own background, so on
+   * a band painted in a brand color they nearly vanish. `inherit` draws them
+   * in the color the row inherits, as the primary words already are.
+   */
+  secondaryColor?: ListItemTextSecondaryColor
+}
+
+/**
+ * List Item Text (https://mui.com/material-ui/api/list-item-text/).
+ *
+ * Wraps MUI's ListItemText only to turn the authored `secondaryColor` into
+ * the secondary slot's Typography `color`, which MUI otherwise fixes at
+ * `textSecondary`.
+ */
+const ListItemText = forwardRef<HTMLDivElement, ListItemTextElementProps>(
+  (props, ref) => {
+    const { secondaryColor, slotProps, ...rest } = props
+    const own = slotProps?.secondary
+    return createElement(MuiListItemText, {
+      ref,
+      ...rest,
+      slotProps:
+        secondaryColor === 'inherit'
+          ? {
+              ...slotProps,
+              secondary: {
+                ...(typeof own === 'object' ? own : {}),
+                color: 'inherit',
+              },
+            }
+          : slotProps,
+    })
+  },
+)
+ListItemText.displayName = 'AglynListItemText'
+
+export const schema: Aglyn.ComponentSchema<ListItemTextElementProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'List Item Text',
@@ -60,6 +108,20 @@ export const schema: Aglyn.ComponentSchema<ListItemTextProps> = {
       description: 'The secondary content text.',
       component: Aglyn.FieldComponentType.TEXTAREA,
       label: 'Secondary text',
+    },
+    {
+      name: 'secondaryColor',
+      description:
+        'Muted draws the secondary text in the theme’s quieter text color, ' +
+        'made for the page background. On a band painted in a brand color, ' +
+        'pick Same as the primary text so it reads in the band’s own text ' +
+        'color.',
+      component: Aglyn.FieldComponentType.SELECT,
+      label: 'Secondary text color',
+      options: [
+        { value: 'textSecondary', label: 'Muted (default)' },
+        { value: 'inherit', label: 'Same as the primary text' },
+      ],
     },
     {
       name: 'inset',

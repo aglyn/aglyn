@@ -36,6 +36,7 @@ import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import { chromium } from 'playwright-core'
 import sharp from 'sharp'
+import { chromeExecutable } from '../e2e/lib/chrome-executable.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -244,29 +245,6 @@ function coverHtml(post) {
   </div>
 </body>
 </html>`
-}
-
-// Chrome-flavor fallback, mirroring tools/e2e/capture-docs-screenshots.mjs.
-function chromeExecutable() {
-  if (process.env.E2E_CHROME_PATH) {
-    return { executablePath: process.env.E2E_CHROME_PATH }
-  }
-  if (process.platform === 'darwin') {
-    const candidates = [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ]
-    for (const executablePath of candidates) {
-      try {
-        readFileSync(executablePath)
-        return { executablePath }
-      } catch {
-        // Not installed — try the next flavor.
-      }
-    }
-  }
-  return { channel: 'chrome' }
 }
 
 const outDir =

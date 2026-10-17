@@ -117,7 +117,7 @@ struct SequencesSection: View {
           if let selection {
             SequenceDetail(context: context, api: api, orgID: orgID, sequenceID: selection, mailboxes: mailboxes.rows).id(selection)
           } else {
-            AglynEmptyState("Pick a sequence", systemImage: "arrow.triangle.branch").frame(maxWidth: .infinity, maxHeight: .infinity)
+            AglynSelectionPlaceholder("No sequence selected", systemImage: "arrow.triangle.branch").frame(maxWidth: .infinity, maxHeight: .infinity)
           }
         }
       } else {
@@ -159,11 +159,11 @@ struct SequencesSection: View {
         .padding(.vertical, AglynSpace.one)
       }
       if selectable && list.ready && list.failure == nil && !list.rows.isEmpty {
-        List(selection: $selection) {
-          ForEach(list.rows) { row in SequenceRowView(row: row, mailboxes: mailboxes.rows).tag(row.id).aglynListRow() }
+        List {
+          ForEach(list.rows) { row in SequenceRowView(row: row, mailboxes: mailboxes.rows).aglynSelectableRow(row.id, selection: $selection) }
           if list.hasMore { Button("Show more") { list.loadMore() }.frame(maxWidth: .infinity) }
         }
-        .aglynListBackground()
+        .aglynSelectableListStyle().aglynSelectionKeys(list.rows.map(\.id), selection: $selection)
       } else {
         AglynLiveList(
           rows: list.rows, ready: list.ready, failure: list.failure, hasMore: list.hasMore, failedTitle: "Could not load sequences",

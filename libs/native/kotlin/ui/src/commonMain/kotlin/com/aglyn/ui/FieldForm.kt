@@ -247,9 +247,9 @@ private fun DateField(
       trailingIcon = {
         Row {
           if (value.isNotEmpty() && !spec.required) {
-            IconButton(onClick = { onChange("") }, enabled = enabled) { Icon(AglynIcons.named("close"), contentDescription = "Clear ${spec.label}") }
+            WithTooltip("Clear ${spec.label}") { IconButton(onClick = { onChange("") }, enabled = enabled) { Icon(AglynIcons.named("close"), contentDescription = "Clear ${spec.label}") } }
           }
-          IconButton(onClick = { open = true }, enabled = enabled) { Icon(AglynIcons.named("event"), contentDescription = "Pick ${spec.label}") }
+          WithTooltip("Pick ${spec.label}") { IconButton(onClick = { open = true }, enabled = enabled) { Icon(AglynIcons.named("event"), contentDescription = "Pick ${spec.label}") } }
         }
       },
       modifier = Modifier.weight(1f),
@@ -292,7 +292,7 @@ private fun TimeField(
     supportingText = (error ?: spec.help)?.let { { Text(it) } },
     singleLine = true,
     trailingIcon = {
-      IconButton(onClick = { open = true }, enabled = enabled) { Icon(AglynIcons.named("schedule"), contentDescription = "Pick ${spec.label}") }
+      WithTooltip("Pick ${spec.label}") { IconButton(onClick = { open = true }, enabled = enabled) { Icon(AglynIcons.named("schedule"), contentDescription = "Pick ${spec.label}") } }
     },
     modifier = modifier.fillMaxWidth(),
   )

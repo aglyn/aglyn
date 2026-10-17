@@ -39,26 +39,22 @@ struct SetupScreen: View {
       if context.hostID == nil {
         AglynEmptyState("Pick a site first", systemImage: SiteSymbols.site)
       } else if wide {
-        HStack(spacing: 0) {
-          List(selection: $selection) {
+        AglynListDetailColumns(listWidth: 320) {
+          List {
             ForEach(sections) { section in
               AglynRow(section.title, subtitle: section.supporting, systemImage: section.systemImage)
-                .tag(section)
-                .aglynListRow()
+                .aglynSelectableRow(section, selection: $selection)
                 .accessibilityIdentifier("setup-\(section.id)")
             }
           }
-          .aglynListBackground()
-          .frame(minWidth: 280, idealWidth: 320, maxWidth: 380)
-          Divider()
-          Group {
-            if let selection {
-              SetupDetail(context: context, section: selection, integrations: integrations).id(selection)
-            } else {
-              AglynEmptyState("Pick a section to set it up", systemImage: "gearshape")
-            }
+          .aglynSelectableListStyle()
+          .aglynSelectionKeys(sections, selection: $selection)
+        } detail: {
+          if let selection {
+            SetupDetail(context: context, section: selection, integrations: integrations).id(selection)
+          } else {
+            AglynSelectionPlaceholder("No section selected", systemImage: "gearshape")
           }
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear { if selection == nil { selection = SetupSection.of(initialSection ?? "details") } }
       } else {
@@ -831,45 +827,20 @@ private struct ThemeLibraryCard: View {
         }
       }
     }
-    Section("Saved themes") {
+    Section("Your themes") {
       switch saved.state {
       case .loading: SkeletonRows(count: 2)
-      case .failed: Text("Saved themes could not be loaded.").foregroundStyle(.secondary)
+      case .failed: Text("Your themes could not be loaded.").foregroundStyle(.secondary)
       case .ready(let docs):
-        let themes = docs.map(SavedTheme.init)
-        if themes.isEmpty { Text("None yet. Save your theme to switch back to it later.").foregroundStyle(.secondary) }
-        ForEach(themes) { theme in
-          let current = selection.kind == "custom" && selection.id == theme.id
-          AglynRow(theme.name, systemImage: "paintpalette") {
-            HStack(spacing: AglynSpace.one) {
-              if current {
-                StatusChip("In use", tone: .success)
-              } else {
-                Button("Use") { runner.run("Switched to \(theme.name).") { try await api.selectTheme(kind: "custom", id: theme.id) } }
-                  .buttonStyle(.borderless)
-                  .disabled(!canManage || runner.busy)
-              }
-              Menu {
-                Button("Rename", systemImage: "pencil") { naming = NamingTarget(themeID: theme.id, name: theme.name) }
-                  .disabled(!canManage)
-                Button("Delete", systemImage: "trash", role: .destructive) { deleting = theme }
-                  .disabled(!canManage || current)
-              } label: {
-                Image(systemName: "ellipsis.circle")
-              }
-              .accessibilityLabel("Actions for \(theme.name)")
-              .menuStyle(.borderlessButton)
-              .fixedSize()
-            }
-          }
-          .accessibilityIdentifier("saved-theme-\(theme.id)")
-        }
+        let own = libraryThemes(docs).filter { $0.kind == "custom" }
+        if own.isEmpty { Text("None yet. Save your theme to switch back to it later.").foregroundStyle(.secondary) }
+        ForEach(own) { theme in libraryRow(theme, selection: selection) }
       }
     }
     .task(id: hostID) {
       await saved.bind(
         context.firestore,
-        FirestoreQuery(["hosts", hostID, "themes"], order: [.init("__name__")], limit: themeLibraryMaxCustom + 1))
+        FirestoreQuery(["hosts", hostID, "themes"], order: [.init("__name__")], limit: themeLibraryReadLimit))
     }
     .sheet(item: $naming) { target in
       NameThemeSheet(target: target, runner: runner, api: api) { naming = nil }
@@ -881,6 +852,45 @@ private struct ThemeLibraryCard: View {
         onConfirm: { runner.run("Deleted.", onDone: { deleting = nil }) { try await api.deleteTheme(theme.id) } }
       ) { EmptyView() }
     }
+    if case .ready(let docs) = saved.state {
+      let installed = libraryThemes(docs).filter { $0.kind == "installed" }
+      if !installed.isEmpty {
+        Section("From the marketplace") {
+          ForEach(installed) { theme in libraryRow(theme, selection: selection) }
+        }
+      }
+    }
+  }
+
+  /// One theme of the library: Use switches to it by its own kind (a marketplace theme is `installed`, never `custom`), and
+  /// only the site's own themes can be renamed, as the theme route allows.
+  private func libraryRow(_ theme: SavedTheme, selection: ThemeSelection) -> some View {
+    let current = selection.kind == theme.kind && selection.id == theme.id
+    return AglynRow(theme.name, systemImage: theme.kind == "installed" ? "storefront" : "paintpalette") {
+      HStack(spacing: AglynSpace.one) {
+        if current {
+          StatusChip("In use", tone: .success)
+        } else {
+          Button("Use") { runner.run("Switched to \(theme.name).") { try await api.selectTheme(kind: theme.kind, id: theme.id) } }
+            .buttonStyle(.borderless)
+            .disabled(!canManage || runner.busy)
+        }
+        Menu {
+          if theme.kind == "custom" {
+            Button("Rename", systemImage: "pencil") { naming = NamingTarget(themeID: theme.id, name: theme.name) }
+              .disabled(!canManage)
+          }
+          Button("Delete", systemImage: "trash", role: .destructive) { deleting = theme }
+            .disabled(!canManage || current)
+        } label: {
+          Image(systemName: "ellipsis.circle")
+        }
+        .accessibilityLabel("Actions for \(theme.name)")
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+      }
+    }
+    .accessibilityIdentifier("saved-theme-\(theme.id)")
   }
 
   private func selectionDetail(_ selection: ThemeSelection) -> String {

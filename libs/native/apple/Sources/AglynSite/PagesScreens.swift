@@ -108,19 +108,16 @@ struct PagesScreen: View {
         let api = PagesAPI(api: context.api, writer: context.writer, hostID: hostID)
         WideLayoutReader { wide in
           if wide {
-            HStack(spacing: 0) {
-              list(hostID: hostID, api: api, selectable: true).frame(minWidth: 300, idealWidth: 360, maxWidth: 440)
-              Divider()
-              Group {
-                if let row = model.row(selection) {
-                  PageDetail(
-                    context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner,
-                    canEdit: canEdit, canPublish: canPublish)
-                } else {
-                  AglynEmptyState("Pick a page to see it here", systemImage: SiteSymbols.page)
-                }
+            AglynListDetailColumns {
+              list(hostID: hostID, api: api, selectable: true)
+            } detail: {
+              if let row = model.row(selection) {
+                PageDetail(
+                  context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner,
+                  canEdit: canEdit, canPublish: canPublish)
+              } else {
+                AglynSelectionPlaceholder("No page selected", systemImage: SiteSymbols.page)
               }
-              .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
           } else {
             list(hostID: hostID, api: api, selectable: false)
@@ -206,13 +203,15 @@ struct PagesScreen: View {
     case .ready(let rows):
       Group {
         if selectable {
-          List(selection: $selection) {
+          List {
             truncatedNotice
             ForEach(rows) { row in
-              PageListRow(row: row).tag(row.id).aglynListRow()
+              PageListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
                 .accessibilityIdentifier("page-\(row.id)")
             }
           }
+          .aglynSelectableListStyle()
+          .aglynSelectionKeys(rows.map(\.id), selection: $selection)
           .onChange(of: rows, initial: true) { _, rows in
             // The page a link named wins once it is listed, even when the first rows (from the cache) came without
             // it, as a page a job has just drafted can.

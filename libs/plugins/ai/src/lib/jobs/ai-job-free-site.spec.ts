@@ -82,6 +82,7 @@ import { AI_BUILD_PLAN_TOOL, type AiBuildPlan } from '../model/ai-build-plan'
 import { aiPlanFailureCopy, aiPlanRetryRefusal } from '../model/ai-job-failure-copy'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import type { AiPlanCapabilities } from '../model/ai-plan-capabilities'
+import { AI_PLAN_SAID_SECTION_NAME } from '../model/ai-plan-said-sections'
 import {
   aiHomeScreenIds,
   emptyAiSiteInventory,
@@ -123,6 +124,7 @@ import { assistCreditsFromUsd } from '../usage/assist-credits'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
 import {
   AI_PAID_SITE_PLAN_EFFORT,
+  AI_SITE_NO_CUSTOMER_WORDS_SENTENCE,
   AI_SITE_STORE_PAGES_SENTENCE,
   aiPlanSiteLines,
   aiSitePlanCapabilities,
@@ -736,8 +738,53 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     expect([first.maxTokens, second.maxTokens]).toEqual([AI_SITE_PLAN_MAX_TOKENS.free, AI_SITE_PLAN_MAX_TOKENS.free])
     expect(String(second.messages.at(-1)?.content)).toContain('The home page has 2 sections')
     const plan = outcome.plan as AiJobPlan
-    expect(plan.screens[0].sections.map((section) => section.name)).toEqual(YOGA_FULL_HOME.sections.map((section) => section.name))
+    // A studio with no students' words plans what practicing there is like instead (AGL-3887).
+    expect(plan.screens[0].sections.map((section) => section.name)).toEqual([
+      'hero',
+      'classes we teach',
+      'why practice with us',
+      AI_PLAN_SAID_SECTION_NAME,
+      'book your first class',
+    ])
     expect(outcome.uncredited).toBeUndefined()
+  })
+
+  /*
+   * The live Whitmore Lane Family Law start (beta.262, 2026-10-16, AGL-3887)
+   * planned "Client feedback placeholder" on its home, and its build wrote
+   * "We are building this space…". Settled in code with no re-ask, which
+   * would cost the person credits for a plan with one answer.
+   */
+  it('plans no customer words a new site has none of, with no re-ask, and keeps the ones its brief gives', async () => {
+    mockRunAiRequest.mockReset()
+    const sections = YOGA_FULL_HOME.sections.map((section, index) =>
+      index === 3 ? { ...section, name: 'Student feedback placeholder' } : section,
+    )
+    mockRunAiRequest.mockResolvedValueOnce(toolAnswer({ ...YOGA_FULL, screens: [{ ...YOGA_FULL_HOME, sections }, YOGA_CLASSES] }))
+    const outcome = await planStepFor(FREE_ORG, FREE, yogaJob())
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    const [request] = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
+    expect(String(request.messages[0].content)).toContain(AI_SITE_NO_CUSTOMER_WORDS_SENTENCE)
+    expect(String(request.messages[0].content)).toContain('what working together is like')
+    expect(String(request.messages[0].content)).not.toContain('testimonials or other social proof')
+    const home = (outcome.plan as AiJobPlan).screens[0].sections
+    expect(home.map((section) => section.name)).toEqual([
+      'hero',
+      'classes we teach',
+      'why practice with us',
+      AI_PLAN_SAID_SECTION_NAME,
+      'book your first class',
+    ])
+    expect(home.every((section) => !/placeholder/i.test(section.name))).toBe(true)
+
+    // A brief that quotes a student, with her name, has real words to show.
+    mockRunAiRequest.mockReset()
+    mockRunAiRequest.mockResolvedValueOnce(toolAnswer(YOGA_FULL))
+    const quoted = { ...yogaJob(), brief: 'A yoga studio. “The calmest hour of my week, every week.” — Priya S.' } as AiJob
+    const kept = await planStepFor(FREE_ORG, FREE, quoted)
+    const [asked] = mockRunAiRequest.mock.calls.map((call) => call[0] as SentRequest)
+    expect(String(asked.messages[0].content)).not.toContain(AI_SITE_NO_CUSTOMER_WORDS_SENTENCE)
+    expect((kept.plan as AiJobPlan).screens[0].sections[3].name).toBe('what students say')
   })
 
   it('keeps a second answer whose home is still thin rather than stopping the start', async () => {

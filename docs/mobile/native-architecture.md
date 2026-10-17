@@ -294,6 +294,17 @@ A screen gets a `NativePluginContext`, the twin of `MobilePluginContext`:
   accepts third-party cookies for the canvas and the auth frames, and only a
   main-frame navigation is ever routed out of the view.
 
+  Every web view also appends `AglynApp/<version> (<platform>)` to its user
+  agent (AGL-3894): WKWebView's `applicationNameForUserAgent` after WebKit's
+  own `Mobile/…`, Android's `userAgentString`, and WebView2's
+  `ICoreWebView2Settings2.UserAgent`. `BesignerEntry.userAgent…` builds it on
+  both platforms. The console reads it, or the entry page's session mark,
+  through `@aglyn/aglyn/app-utils/native-app-web-view` and leaves out what an
+  app screen does not need: the web notification prompt, the editor's back
+  arrow, and the unread count and trailing brand in the page title. The
+  marker decides presentation only, never auth. The app names the screen
+  itself ("Besigner"), so the Mac window title never comes from the page.
+
 ### Generated native manifest
 
 A plugin's `mobile` block in `plugins.config.json` names its native
@@ -1072,8 +1083,10 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `constants` | fixed rows, read as `const` |
 
 An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, destructive, prompt,
-reason, success, instead, check, open, navigate, back, reload, when, link, copy, export,
-overlay, reveal, else, then, write, route }`: `prompt` asks for inputs first (`form.*`); `reason: true`
+promptTitle, submitLabel, reason, success, instead, check, open, navigate, back, reload, when, link, copy, export,
+overlay, reveal, else, then, write, route }`: `prompt` asks for inputs first (`form.*`), in a dialog titled
+`promptTitle` with a `submitLabel` button where the label alone would say neither (a row's `Edit` opens
+"Edit category" with Save, as the console's dialog does); `reason: true`
 adds the required reason the staff routes record; `open` names the response
 field holding a URL that opens in the platform's secure browser sheet
 (Stripe Checkout and the Customer Portal, `ASWebAuthenticationSession` and
@@ -1169,7 +1182,7 @@ system email test's "Populate from" uses it; its fills are generated from the co
 Templates are `{path|fallback|'literal':format}` over the context `org`,
 `site`, `user`, `staff`, `params`, `data`, `item`, `parent`, `form`,
 `response` and `const`. A path takes `rows[field=other.path]` (the first row
-whose field matches) and `map[key.with.dots]`. `now` has `year`, `month`, `prevMonth`, `day`, `quarter`, `ms` and `months` (the last twelve, newest first). A list block's `flatten: "a.b"` walks down into the lists inside its rows (each row found carries `$parent`, the row it came out of). A prompt field with `each: "<list path>"` is one field for every row of that list (key, label, help and initial are templates over `item`, so an email's test asks for each variable it takes, and `{"$collect": {"prefix": "token."}}` gathers what was typed). A prompt field with `generate: { length, alphabet }` offers a Generate button that fills it from the
+whose field matches) and `map[key.with.dots]`. `now` has `year`, `month`, `prevMonth`, `day`, `quarter`, `ms` and `months` (the last twelve, newest first). A list row's `secondary` or `tertiary` may be a list of parts instead of one template (each a template, or `{ text, when }` shown while its condition holds), joined with ` · ` and an empty part left out, so a row never ends on a dangling `set by `. A list block's `flatten: "a.b"` walks down into the lists inside its rows (each row found carries `$parent`, the row it came out of). A prompt field with `each: "<list path>"` is one field for every row of that list (key, label, help and initial are templates over `item`, so an email's test asks for each variable it takes, and `{"$collect": {"prefix": "token."}}` gathers what was typed). A prompt field with `generate: { length, alphabet }` offers a Generate button that fills it from the
 platform's secure generator (the console's password generator). Formats: `pairs` (a map's entries as
 `key: value`, the keys untouched, where `facts` splits them into words), `labeled/<path>` (each id through the map at
 `<path>`), `before/-` and `after/-` (either side of the first separator), `date`, `datetime`,

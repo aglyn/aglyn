@@ -12,6 +12,7 @@
       "zones": [
         "commerceSettings"
       ],
+      "showWhen": "data.avail.available",
       "load": {
         "s": "/api/shipping/settings?hostId={site.id}",
         "avail": "/api/shipping/availability?hostId={site.id}"
@@ -264,6 +265,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit box",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "url": "/api/shipping/settings",
               "prompt": [
