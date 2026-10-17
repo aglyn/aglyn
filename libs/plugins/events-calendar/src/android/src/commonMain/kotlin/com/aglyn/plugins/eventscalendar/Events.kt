@@ -48,6 +48,7 @@ import com.aglyn.core.Live
 import com.aglyn.core.firestoreNow
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.pluginhost.NativePluginRegistrar
+import com.aglyn.site.media.MediaPickField
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -57,8 +58,10 @@ import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.DateTimeField
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -175,6 +178,14 @@ suspend fun saveEvent(writer: FirestoreWriter, hostId: String, draft: EventDraft
   return id
 }
 
+/** An event's status as the console names it: "Draft", "Published"; never the stored word. */
+internal fun eventStatusLabel(status: String): String = when (status) {
+  "published" -> "Published"
+  "draft" -> "Draft"
+  "deleted" -> "Deleted"
+  else -> status.replaceFirstChar { it.uppercase() }
+}
+
 /** The page's delete: `deletedAt`, and `status: deleted`, which the public listing's query reads. */
 suspend fun deleteEvent(writer: FirestoreWriter, hostId: String, id: String) =
   writer.merge("${eventsPath(hostId)}/$id", mapOf("deletedAt" to firestoreNow(), "status" to "deleted"))
@@ -227,7 +238,7 @@ fun EventsScreen(context: NativePluginContext) {
           NoticeBanner("Showing the newest $EVENT_CEILING events.", StatusTone.INFO, Modifier.padding(horizontal = space(2f)))
         }
         when {
-          live is Live.Failed -> EmptyState("Could not load this site's events", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+          live is Live.Failed -> EmptyState("Could not load this site's events", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
           ready == null -> SkeletonList(rows = 4)
           ready.first.isEmpty() -> EmptyState(
             "No events yet",
@@ -241,7 +252,7 @@ fun EventsScreen(context: NativePluginContext) {
                 supporting = formatLocalDay(row.startsAtMs, "EEE, MMM d, yyyy") + " · " + formatClock(row.startsAtMs) + (if (row.location.isNotEmpty()) " · ${row.location}" else ""),
                 icon = AglynIcons.named("event"),
                 selected = row.id == selected,
-                trailing = { StatusChip(row.status, if (row.status == "published") StatusTone.SUCCESS else StatusTone.NEUTRAL) },
+                trailing = { StatusChip(eventStatusLabel(row.status), if (row.status == "published") StatusTone.SUCCESS else StatusTone.NEUTRAL) },
                 onClick = { onSelect(row.id) },
                 modifier = Modifier.testTag("event-${row.id}"),
               )
@@ -255,10 +266,10 @@ fun EventsScreen(context: NativePluginContext) {
       // A deleted event leaves the list, and its detail closes with it.
       CloseWhenGone(if (selected == NEW) null else ready?.let { row != null })
       when {
-        selected == null -> EmptyState("Pick an event to see it here", icon = AglynIcons.named("event"))
-        selected == NEW -> EventEditor(EventDraft(null), busy) { draft -> run("Event saved.") { saveEvent(context.writer, hostId, draft) } }
+        selected == null -> SelectionPlaceholder("Pick an event to see it here", icon = AglynIcons.named("event"))
+        selected == NEW -> EventEditor(context, EventDraft(null), busy) { draft -> run("Event saved.") { saveEvent(context.writer, hostId, draft) } }
         row == null -> EmptyState("This event is gone", icon = AglynIcons.named("event_busy"))
-        else -> EventEditor(remember(row) { draftOf(row) }, busy, onDelete = { deleting = row }) { draft ->
+        else -> EventEditor(context, remember(row) { draftOf(row) }, busy, onDelete = { deleting = row }) { draft ->
           run("Event saved.") { saveEvent(context.writer, hostId, draft) }
         }
       }
@@ -283,7 +294,7 @@ fun EventsScreen(context: NativePluginContext) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun EventEditor(initial: EventDraft, busy: Boolean, onDelete: (() -> Unit)? = null, onSave: (EventDraft) -> Unit) {
+private fun EventEditor(context: NativePluginContext, initial: EventDraft, busy: Boolean, onDelete: (() -> Unit)? = null, onSave: (EventDraft) -> Unit) {
   var draft by remember(initial) { mutableStateOf(initial) }
   val problem = eventWriteProblem(draft.title, draft.startsAtMs ?: 0)
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -314,7 +325,16 @@ private fun EventEditor(initial: EventDraft, busy: Boolean, onDelete: (() -> Uni
         OutlinedTextField(draft.description, { draft = draft.copy(description = it.take(Contracts.eventDescriptionMaxLength.toInt())) }, label = { Text("Description") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("event-description"))
       }
       SectionCard("Cover", Modifier.fillMaxWidth()) {
-        OutlinedTextField(draft.coverImage, { draft = draft.copy(coverImage = it) }, label = { Text("Cover image URL") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("event-cover"))
+        // Picked from the media library, never typed; the event keeps the file's public address, as a typed link would be.
+        MediaPickField(
+          context,
+          "Cover image",
+          draft.coverImage,
+          onPick = { chosen -> chosen.item.url?.let { url -> draft = draft.copy(coverImage = url, coverImageAlt = draft.coverImageAlt.ifBlank { chosen.item.alt }) } },
+          onClear = { draft = draft.copy(coverImage = "", coverImageAlt = "") },
+          onLink = { draft = draft.copy(coverImage = it) },
+          modifier = Modifier.testTag("event-cover"),
+        )
         if (draft.coverImage.isNotBlank()) {
           OutlinedTextField(
             draft.coverImageAlt,

@@ -48,6 +48,7 @@ import com.aglyn.ui.AmountRow
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.FieldEditor
 import com.aglyn.ui.FieldKind
 import com.aglyn.ui.FieldOption
@@ -58,6 +59,7 @@ import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.PropertyRow
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -137,7 +139,7 @@ fun EmailsScreen(context: NativePluginContext, initial: String? = null, composeC
       }
     },
     detail = { selected ->
-      if (selected == null) EmptyState("Pick an email to see how it did", icon = AglynIcons.named("mail"))
+      if (selected == null) SelectionPlaceholder("Pick an email to see how it did", icon = AglynIcons.named("mail"))
       else EmailDetail(context, orgId, hostId, selected, canSend)
     },
   )
@@ -160,7 +162,7 @@ fun EmailDetail(context: NativePluginContext, orgId: String, hostId: String, sen
   CloseWhenGone((live as? Live.Ready)?.let { it.value != null })
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this email", body = value.error.message, icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this email", body = value.error.message, icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val doc = value.value ?: run {
         EmptyState("This email is gone", body = "A draft that was discarded leaves no trace.", icon = AglynIcons.named("mail"))

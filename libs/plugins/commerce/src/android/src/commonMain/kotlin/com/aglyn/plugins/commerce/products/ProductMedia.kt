@@ -49,6 +49,7 @@ import com.aglyn.site.media.mediaPreviewUrl
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.LocalMediaPicker
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.PickSource
@@ -58,6 +59,7 @@ import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.pickSourceLabel
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
@@ -281,7 +283,7 @@ fun ProductMediaScreen(context: NativePluginContext, productId: String) {
   val live by flow.collectAsState(Live.Loading)
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this product", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this product", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val doc = value.value
       if (doc == null || doc.data["deletedAt"] != null) {
@@ -386,11 +388,11 @@ private fun ProductMediaContent(context: NativePluginContext, hostId: String, pr
         Row(Modifier.fillMaxWidth().testTag("product-image-$index"), horizontalArrangement = Arrangement.spacedBy(space(2f)), verticalAlignment = Alignment.CenterVertically) {
           RemoteImage(mediaPreviewUrl(reference, context.api.origin, context.hostId, 160), null, Modifier.size(56.dp).clip(MaterialTheme.shapes.small), icon = "image")
           Text(if (index == 0) "Main image" else "Image ${index + 1}", Modifier.weight(1f))
-          IconButton(
+          WithTooltip("Remove image ${index + 1}") { IconButton(
             onClick = { apply(ProductMediaEdit.RemoveImage(index)) },
             enabled = !busy,
             modifier = Modifier.semantics { contentDescription = "Remove image ${index + 1}" }.testTag("remove-image-$index"),
-          ) { Icon(AglynIcons.named("close"), contentDescription = null) }
+          ) { Icon(AglynIcons.named("close"), contentDescription = null) } }
         }
       }
       var menu by remember { mutableStateOf(false) }
@@ -465,11 +467,11 @@ private fun ProductMediaContent(context: NativePluginContext, hostId: String, pr
             PaidMediaChip(context, video.url) { asset ->
               coroutines.launch { protector.protect(asset.scope, asset.mediaId, PaidMediaKind.VIDEO, false, hostId, productId, context.api) }
             }
-            IconButton(
+            WithTooltip("Remove video") { IconButton(
               onClick = { apply(ProductMediaEdit.RemoveVideo(video.index)) },
               enabled = !busy,
               modifier = Modifier.semantics { contentDescription = "Remove video" },
-            ) { Icon(AglynIcons.named("close"), contentDescription = null) }
+            ) { Icon(AglynIcons.named("close"), contentDescription = null) } }
           }
         }
         OutlinedButton(onClick = { choice = Choice.VIDEO }, enabled = !busy, modifier = Modifier.testTag("product-add-video")) { Text("Add members video") }

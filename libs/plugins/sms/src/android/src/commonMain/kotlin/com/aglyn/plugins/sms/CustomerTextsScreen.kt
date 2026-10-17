@@ -22,6 +22,7 @@ import com.aglyn.core.Live
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SkeletonList
@@ -61,7 +62,7 @@ fun CustomerTextsScreen(context: NativePluginContext) {
     TextChannel.Failed -> EmptyState(
       "Could not check texts",
       body = "Check the connection and try again.",
-      icon = AglynIcons.named("error"),
+      icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
       action = { Button(onClick = texts::check) { Text("Try again") } },
     )
     TextChannel.Available -> Column(

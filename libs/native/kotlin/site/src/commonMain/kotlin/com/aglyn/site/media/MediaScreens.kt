@@ -82,6 +82,7 @@ import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.CountedTextField
 import com.aglyn.ui.DetailRow
 import com.aglyn.ui.EmptyState
+import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.FieldEditor
 import com.aglyn.ui.FieldKind
 import com.aglyn.ui.FieldSpec
@@ -101,6 +102,7 @@ import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
+import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonGrid
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
@@ -132,7 +134,7 @@ internal fun MediaScopeGate(context: NativePluginContext, scope: MediaScope, con
   val tokens = if (scope is MediaScope.Org) orgScopeTokens(context, scope) else Live.Ready(null)
   when (tokens) {
     Live.Loading -> SkeletonGrid(tiles = 9)
-    is Live.Failed -> EmptyState("Could not load this library", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this library", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> content(tokens.value)
   }
 }
@@ -305,7 +307,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
     },
     detail = { selected ->
       if (selected == null) {
-        EmptyState("Pick a file to see its details", icon = AglynIcons.named("photo_library"))
+        SelectionPlaceholder("Pick a file to see its details", icon = AglynIcons.named("photo_library"))
       } else {
         MediaDetail(context, scope, selected, api, runner, folderList, foldersById, canEdit, onDeleted = { id, name, restorable -> model.drop(id); undo = if (restorable) id to name else null; if (!restorable) runner.notice = "$name deleted." }, onChanged = { model.refresh() })
       }
@@ -587,7 +589,7 @@ private fun MediaDetail(
   CloseWhenGone((live as? Live.Ready)?.let { ready -> ready.value?.let(MediaItem::from) != null })
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
-    is Live.Failed -> EmptyState("Could not load this file", body = "Check the connection and try again.", icon = AglynIcons.named("error"))
+    is Live.Failed -> EmptyState("Could not load this file", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
     is Live.Ready -> {
       val item = value.value?.let(MediaItem::from)
       if (item == null) {

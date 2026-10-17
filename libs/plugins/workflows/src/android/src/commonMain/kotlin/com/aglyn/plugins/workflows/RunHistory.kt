@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import com.aglyn.ui.EmptyTone
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -99,7 +100,7 @@ fun RunHistory(context: NativePluginContext, hostId: String, targetId: String, n
     HorizontalDivider()
     when (live) {
       Live.Loading -> SkeletonList(rows = 4)
-      is Live.Failed -> EmptyState("Could not load the runs", body = failureMessage(live.error), icon = AglynIcons.named("error"))
+      is Live.Failed -> EmptyState("Could not load the runs", body = failureMessage(live.error), icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
       is Live.Ready -> {
         val (rows, more) = pageOf(live.value.map(::runRowOf), pageSize, page)
         if (rows.isEmpty() && page == 0) {

@@ -377,9 +377,9 @@ fun WeeklyHoursEditor(
             )
           }
         }
-        IconButton(onClick = { editing = index to null }, modifier = Modifier.testTag("hours-add-$index")) {
+        WithTooltip("Add hours on $label") { IconButton(onClick = { editing = index to null }, modifier = Modifier.testTag("hours-add-$index")) {
           Icon(AglynIcons.named("add"), contentDescription = "Add hours on $label")
-        }
+        } }
       }
     }
   }
@@ -438,8 +438,8 @@ fun CalendarHeader(
   trailing: (@Composable () -> Unit)? = null,
 ) {
   Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-    IconButton(onClick = onPrevious, modifier = Modifier.testTag("calendar-previous")) { Icon(AglynIcons.named("chevron_left"), contentDescription = "Previous") }
-    IconButton(onClick = onNext, modifier = Modifier.testTag("calendar-next")) { Icon(AglynIcons.named("chevron_right"), contentDescription = "Next") }
+    WithTooltip("Previous") { IconButton(onClick = onPrevious, modifier = Modifier.testTag("calendar-previous")) { Icon(AglynIcons.named("chevron_left"), contentDescription = "Previous") } }
+    WithTooltip("Next") { IconButton(onClick = onNext, modifier = Modifier.testTag("calendar-next")) { Icon(AglynIcons.named("chevron_right"), contentDescription = "Next") } }
     Text(title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     TextButton(onClick = onToday, modifier = Modifier.testTag("calendar-today")) { Text("Today") }
     trailing?.invoke()
@@ -472,12 +472,12 @@ fun DateTimeField(
       label = { Text(label) },
       placeholder = { Text("Pick a date") },
       trailingIcon = {
-        IconButton(onClick = { step = 1 }) { Icon(AglynIcons.named("calendar_month"), contentDescription = "Pick $label") }
+        WithTooltip("Pick $label") { IconButton(onClick = { step = 1 }) { Icon(AglynIcons.named("calendar_month"), contentDescription = "Pick $label") } }
       },
       modifier = Modifier.weight(1f).clickable { step = 1 },
     )
     if (clearable && valueMs != null) {
-      IconButton(onClick = { onChange(null) }) { Icon(AglynIcons.named("close"), contentDescription = "Clear $label") }
+      WithTooltip("Clear $label") { IconButton(onClick = { onChange(null) }) { Icon(AglynIcons.named("close"), contentDescription = "Clear $label") } }
     }
   }
   if (step == 1) {
