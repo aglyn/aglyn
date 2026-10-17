@@ -644,7 +644,7 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
   val selection = themeSelectionOf(host)
   val edited = hasThemeEdits(host)
   val saved by remember(hostId, context.firestore) {
-    context.firestore.observe(FirestoreQuery("hosts/$hostId/themes", orderBy = listOf(FirestoreOrder("__name__")), limit = THEME_LIBRARY_MAX_CUSTOM + 1))
+    context.firestore.observe(FirestoreQuery("hosts/$hostId/themes", orderBy = listOf(FirestoreOrder("__name__")), limit = THEME_LIBRARY_READ_LIMIT))
   }.collectAsState(Live.Loading)
   val runner = rememberRunner()
   var naming by remember { mutableStateOf<Pair<String?, String>?>(null) }
@@ -694,33 +694,31 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
         )
       }
     }
-    Text("Saved themes", style = MaterialTheme.typography.labelLarge)
     when (val live = saved) {
-      Live.Loading -> SkeletonList(rows = 2)
-      is Live.Failed -> Text("Saved themes could not be loaded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Live.Loading -> {
+        Text("Your themes", style = MaterialTheme.typography.labelLarge)
+        SkeletonList(rows = 2)
+      }
+      is Live.Failed -> {
+        Text("Your themes", style = MaterialTheme.typography.labelLarge)
+        Text("Your themes could not be loaded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
       is Live.Ready -> {
-        val themes = live.value.map(::savedThemeOf)
-        if (themes.isEmpty()) Text("None yet. Save your theme to switch back to it later.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        themes.forEachIndexed { index, theme ->
+        val themes = libraryThemes(live.value)
+        val own = themes.filter { it.kind == "custom" }
+        val installed = themes.filter { it.kind == "installed" }
+        Text("Your themes", style = MaterialTheme.typography.labelLarge)
+        if (own.isEmpty()) Text("None yet. Save your theme to switch back to it later.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        own.forEachIndexed { index, theme ->
           if (index > 0) HorizontalDivider()
-          val current = selection.kind == "custom" && selection.id == theme.id
-          AglynListItem(
-            title = theme.name,
-            icon = AglynIcons.named("palette"),
-            trailing = {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                if (current) StatusChip("In use", StatusTone.SUCCESS)
-                else TextButton(onClick = { runner.run("Switched to ${theme.name}.") { api.selectTheme("custom", theme.id) } }, enabled = canManage && !runner.busy) { Text("Use") }
-                OverflowMenu(
-                  listOf(
-                    MenuAction("rename", "Rename", "edit", enabled = canManage) { naming = theme.id to theme.name },
-                    MenuAction("delete", "Delete", "delete", destructive = true, enabled = canManage && !current) { deleting = theme },
-                  ),
-                )
-              }
-            },
-            modifier = Modifier.testTag("saved-theme-${theme.id}"),
-          )
+          LibraryThemeRow(theme, selection, canManage, runner, api, onRename = { naming = theme.id to theme.name }, onDelete = { deleting = theme })
+        }
+        if (installed.isNotEmpty()) {
+          Text("From the marketplace", style = MaterialTheme.typography.labelLarge)
+          installed.forEachIndexed { index, theme ->
+            if (index > 0) HorizontalDivider()
+            LibraryThemeRow(theme, selection, canManage, runner, api, onRename = null, onDelete = { deleting = theme })
+          }
         }
       }
     }
@@ -753,6 +751,40 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
       onConfirm = { runner.run("Deleted.", onDone = { deleting = null }) { api.deleteTheme(theme.id) } },
     )
   }
+}
+
+/**
+ * One theme of the library: Use switches to it by its own kind (a marketplace theme is `installed`, never `custom`), and only
+ * the site's own themes can be renamed ([onRename] is null for the rest), as the theme route allows.
+ */
+@Composable
+private fun LibraryThemeRow(
+  theme: SavedTheme,
+  selection: ThemeSelection,
+  canManage: Boolean,
+  runner: ActionRunner,
+  api: HostSettingsApi,
+  onRename: (() -> Unit)?,
+  onDelete: () -> Unit,
+) {
+  val current = selection.kind == theme.kind && selection.id == theme.id
+  AglynListItem(
+    title = theme.name,
+    icon = AglynIcons.named(if (theme.kind == "installed") "storefront" else "palette"),
+    trailing = {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        if (current) StatusChip("In use", StatusTone.SUCCESS)
+        else TextButton(onClick = { runner.run("Switched to ${theme.name}.") { api.selectTheme(theme.kind, theme.id) } }, enabled = canManage && !runner.busy) { Text("Use") }
+        OverflowMenu(
+          listOfNotNull(
+            onRename?.let { MenuAction("rename", "Rename", "edit", enabled = canManage) { it() } },
+            MenuAction("delete", "Delete", "delete", destructive = true, enabled = canManage && !current) { onDelete() },
+          ),
+        )
+      }
+    },
+    modifier = Modifier.testTag("saved-theme-${theme.id}"),
+  )
 }
 
 /** A preset's colors as small overlapping dots. */

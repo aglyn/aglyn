@@ -48,6 +48,9 @@ describe('funnels in the weekly summary (AGL-3867)', () => {
         { funnel: 'Unused', entered: 0, completed: 0 },
       ],
     )
-    expect(overview.weeklySummary?.lines(funnels)).toEqual(['Funnels: Checkout 120 started, 30 finished'])
+    expect(overview.weeklySummary?.summarize(funnels)).toEqual({
+      title: 'Funnels',
+      rows: [{ label: 'Checkout', value: '120 started · 30 finished' }],
+    })
   })
 })

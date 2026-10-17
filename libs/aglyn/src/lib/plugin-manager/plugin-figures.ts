@@ -203,30 +203,46 @@ export interface PluginFigureReader {
   weeklySummary?: PluginFigureWeeklySummary
 }
 
-/** A count a weekly summary's subject line may lead with, and how it is named. */
-export interface PluginFigureHeadline {
-  count: number
-  /** The noun for one, which also keys the sum across sites: "visitor". */
-  one: string
-  /** The noun for any other count: "visitors". */
-  many: string
+/** A headline figure, drawn as a tile: "577 Visitors ▼ 27.9%". */
+export interface PluginFigureSummaryStat {
+  /** What it counts, as a tile names it: "Visitors". */
+  label: string
+  /** The figure as a person reads it: "577", "$1,240.00". */
+  value: string
+  /** The percent change on the week before; `null` or absent when there is nothing to compare with. */
+  change?: number | null
+  /**
+   * A count the workspace overview adds up across sites and the subject line
+   * may lead with, and its noun: `{ count: 577, one: 'visitor', many:
+   * 'visitors' }`. Stats with the same `one` are summed.
+   */
+  total?: { count: number; one: string; many: string }
+}
+
+/** One reader's part of a weekly summary: a titled block of tiles, ranked rows, or both. */
+export interface PluginFigureSummaryPart {
+  /** The block's heading: "Traffic", "Top pages". */
+  title: string
+  stats?: readonly PluginFigureSummaryStat[]
+  /** A ranked list, most first: a page and its views, a form and its submissions. */
+  rows?: ReadonlyArray<{ label: string; value: string }>
+  /** One plain sentence the figures need. */
+  note?: string
 }
 
 /** A reader's part in the weekly summary. */
 export interface PluginFigureWeeklySummary {
   /**
-   * Which section lists it: `site`, under each site; `workspace`, once for the
-   * whole workspace. A workspace reader may say `site` to be read narrowed to
-   * each site. Absent, a site reader is `site` and a workspace reader is
-   * `workspace`.
+   * Which email lists it: `site`, each site's own; `workspace`, the
+   * workspace overview. A workspace reader may say `site` to be read
+   * narrowed to each site. Absent, a site reader is `site` and a workspace
+   * reader is `workspace`.
    */
   per?: 'site' | 'workspace'
-  /** Where its lines sit in a section: lower first. */
+  /** Where its block sits: lower first. */
   order: number
-  /** What the table says, one line each; `[]` when it has nothing to report this week. */
-  lines(table: PluginFigureTable): string[]
-  /** The count it adds to the subject line, or `null` for none this week. */
-  headline?(table: PluginFigureTable): PluginFigureHeadline | null
+  /** What the table says this week, or `null` when it has nothing to report. */
+  summarize(table: PluginFigureTable): PluginFigureSummaryPart | null
 }
 
 export const PLUGIN_FIGURES = definePluginServiceContract<PluginFigureReader>('core.figures', {

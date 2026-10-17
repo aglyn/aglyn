@@ -203,7 +203,7 @@ struct EmailDetail: View {
   private func content(_ send: EmailSend, _ document: FirestoreDocument) -> some View {
     let report = campaignReport(document.data["stats"] as? [String: Any])
     let linkReport = sendLinkReport(links.document?.data)
-    let sentAs = document.data["sentAs"] as? [String: Any]
+    let sentAs = emailSentAs(document.data)
     Form {
       if let notice { AglynNotice(notice, tone: .success) { self.notice = nil } }
       if send.held {
@@ -237,12 +237,21 @@ struct EmailDetail: View {
         }
       }
       Section("Sent as") {
-        PropertyRow("From", [sentAs?["fromName"] as? String ?? document.string("fromName"), sentAs?["from"] as? String].compactMap { $0 }.joined(separator: " · "))
-        PropertyRow("Reply to", sentAs?["replyTo"] as? String ?? document.string("replyTo"))
+        // What the send recorded, never today's identity; where it recorded none, why. A recorded sender names what an
+        // absent display name or reply address meant, as the console does.
+        PropertyRow("Sent as", sentAs?.from ?? sentAsMissing(document.data)).accessibilityIdentifier("email-sent-as")
+        if let sentAs {
+          PropertyRow("From name", sentAs.fromName ?? "The address on its own")
+          PropertyRow("Reply-to", sentAs.replyTo ?? "The sending address")
+        }
         PropertyRow("Preview text", document.string("preheader"))
         PropertyRow("Design", document.string("templateScreenId") != nil ? "Designed email" : "Plain message")
       }
-      if send.status != "draft" {
+      if let placeholder = deliveryPlaceholder(document.data) {
+        Section("Delivery") {
+          Text(placeholder).foregroundStyle(.secondary).accessibilityIdentifier("email-delivery-placeholder")
+        }
+      } else {
         Section("Delivery") {
           LabeledContent("Sent", value: grouped(report.sent))
           LabeledContent("Addressed", value: grouped(report.recipients))

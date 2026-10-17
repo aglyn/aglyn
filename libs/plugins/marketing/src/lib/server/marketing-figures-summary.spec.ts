@@ -49,6 +49,14 @@ describe('campaigns in the weekly summary (AGL-3867)', () => {
         { campaign: 'Spring sale', delivered: 1_200, openRate: 40, clickRate: 5 },
       ],
     )
-    expect(campaigns?.weeklySummary?.lines(sent)).toEqual(['Campaigns: 1 email sent, reaching 1,200, 40% opened, 5% clicked'])
+    expect(campaigns?.weeklySummary?.summarize(sent)).toEqual({
+      title: 'Campaigns',
+      stats: [
+        { label: 'Email sent', value: '1' },
+        { label: 'Delivered', value: '1,200' },
+        { label: 'Opened', value: '40%' },
+        { label: 'Clicked', value: '5%' },
+      ],
+    })
   })
 })

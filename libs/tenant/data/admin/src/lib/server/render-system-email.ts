@@ -300,7 +300,7 @@ export async function loadSystemEmail(
  * or, for a white-label org that set a brand color, the same palette with
  * that color as its primary. Buttons use the console's corner radius.
  */
-function systemEmailTheme(options: SystemEmailBrandOptions): EmailTheme {
+export function systemEmailTheme(options: SystemEmailBrandOptions): EmailTheme {
   const primaryColor = String(options.brandPrimaryColor ?? '').trim()
   return {
     palette: primaryColor

@@ -204,7 +204,7 @@ describe('the System emails entries', () => {
         entry.defaultSubject,
         entry.footerReason ?? '',
         ...(entry.defaultBody ?? []).flatMap((block) =>
-          block.block === 'button' ? [block.label, block.href] : [block.text],
+          block.block === 'button' ? [block.label, block.href] : block.block === 'html' ? [block.html] : [block.text],
         ),
       ]
       for (const text of texts) {

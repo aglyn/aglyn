@@ -143,12 +143,12 @@ struct RecordsSection: View {
     ForEach(list.rows) { row in
       Group {
         if selectable {
-          CrmRowView(row: row).aglynSelectableRow(row.id, selection: $selection)
+          CrmRowView(row: row, reference: reference).aglynSelectableRow(row.id, selection: $selection)
         } else {
           NavigationLink {
             RecordDetail(context: context, kind: kind, id: row.id, scope: scope, api: api, reference: reference)
           } label: {
-            CrmRowView(row: row)
+            CrmRowView(row: row, reference: reference)
           }
         }
       }
@@ -163,9 +163,17 @@ struct RecordsSection: View {
 
 struct CrmRowView: View {
   let row: CrmRow
+  /// The workspace's pipelines, which load beside the list: a deal's row names its stage from them.
+  var reference: CrmReference? = nil
+
+  private var subtitle: String {
+    guard row.kind == .deal, let reference, let stageID = row.data["stageId"] as? String else { return row.subtitle }
+    let name = reference.stageName(row.data["pipelineId"] as? String, stageID)
+    return dealSubtitle(row.data) { _, _ in name }
+  }
 
   var body: some View {
-    AglynRow(row.title, subtitle: row.subtitle.isEmpty ? nil : row.subtitle, systemImage: row.kind.symbol) {
+    AglynRow(row.title, subtitle: subtitle.isEmpty ? nil : subtitle, systemImage: row.kind.symbol) {
       if let chip = row.chip { StatusChip(chip, tone: row.tone) }
     }
   }
@@ -380,7 +388,7 @@ struct RecordDetail: View {
             Button {
               context.navigate(relatedKind.detailScreen, [relatedKind.param: item.id])
             } label: {
-              CrmRowView(row: item)
+              CrmRowView(row: item, reference: reference)
             }
             .buttonStyle(.plain)
           }

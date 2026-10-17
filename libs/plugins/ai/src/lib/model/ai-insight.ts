@@ -20,6 +20,7 @@ import {
   pluginFigureIsoWeek,
   type PluginFigureTable,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
+import { weeklySummaryPeriod } from '@aglyn/aglyn/app-utils/weekly-summary'
 import type { AiJob, AiJobOutput } from './ai-jobs.types'
 
 /**
@@ -148,6 +149,22 @@ export const AI_INSIGHT_DEFAULT_DAYS = 14
 
 /** The window a weekly digest reads. */
 export const AI_INSIGHT_DIGEST_DAYS = 7
+
+/**
+ * The week a digest reads (AGL-3867): Monday to Sunday before the Monday it
+ * was made, the same week the free Weekly summary reports, so the two emails
+ * a person gets that morning quote the same figures. The sweep stamps the
+ * week's last day as `through`; a job made before it did reads the week
+ * before `now`.
+ */
+export function aiInsightDigestPeriod(
+  inputs: Record<string, unknown> | null | undefined,
+  now: Date,
+): ReturnType<typeof weeklySummaryPeriod> {
+  const through = typeof inputs?.['through'] === 'string' ? inputs['through'] : ''
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(through) ? Date.parse(`${through}T00:00:00Z`) : Number.NaN
+  return weeklySummaryPeriod(Number.isFinite(day) ? new Date(day + 86_400_000) : now)
+}
 
 /** A window an insight's inputs or a read names, held to the readers' own ranges. */
 export function aiInsightDays(value: unknown): number {

@@ -60,6 +60,7 @@ import {
 import {
   emailAudienceLabel,
   emailIsUnsent,
+  emailNeverSent,
   emailSendTimeMs,
   emailSentAs,
 } from '../model/email-record'
@@ -267,6 +268,8 @@ export function EmailDetail(props: EmailDetailProps) {
    * different facts about an email.
    */
   const unsent = emailIsUnsent(email)
+  /** Canceled or failed before it went to anybody: it never will, and has no report either. */
+  const neverSent = emailNeverSent(email)
   /** The merchant's own name for this email, where one was given. */
   const displayName = String(email?.displayName ?? '')
   /**
@@ -997,7 +1000,11 @@ export function EmailDetail(props: EmailDetailProps) {
                       </Typography>
                     ) : (
                       <Typography variant="body2" color="text.secondary">
-                        {unsent ? 'not sent yet' : 'not recorded'}
+                        {unsent
+                          ? 'not sent yet'
+                          : neverSent
+                            ? 'not sent'
+                            : 'not recorded'}
                       </Typography>
                     )}
                   </TableCell>
@@ -1110,10 +1117,13 @@ export function EmailDetail(props: EmailDetailProps) {
             * as 0%, and a report whose whole subject is unrecorded renders
             * absent rather than as zeros.
             *=========================================*/}
-          {unsent ? (
+          {unsent || neverSent ? (
             <Section title="Delivery">
               <Typography variant="body2" color="text.secondary">
-                {sending
+                {neverSent
+                  ? 'This email was not sent to anybody, so there is ' +
+                    'nothing to report.'
+                  : sending
                   ? 'This email is being sent right now. Its figures appear ' +
                     'here once the send finishes.'
                   : draft
