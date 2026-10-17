@@ -64,7 +64,7 @@ struct FirstRunView: View {
             .accessibilityIdentifier("first-run-accept-\(invite.id)")
         }
         .padding(AglynSpace.one)
-        .background(AglynColor.paper, in: RoundedRectangle(cornerRadius: 12))
+        .background(AglynColor.paper, in: RoundedRectangle(cornerRadius: AglynRadius.card, style: .continuous))
       }
       if let inviteError { AuthMessage(text: inviteError) }
     }
