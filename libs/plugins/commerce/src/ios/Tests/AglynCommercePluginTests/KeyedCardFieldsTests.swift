@@ -55,6 +55,39 @@ final class KeyedCardFieldsTests: XCTestCase {
     XCTAssertTrue(form.isComplete(.expiry))
   }
 
+  func testTheCursorMovesOnAsEachFieldIsComplete() {
+    let (form, _, _) = session(FakeStripe(), verdicts: [])
+    XCTAssertEqual(form.type(.number, "4242 4242 4242 424", cursor: .number), .number)
+    XCTAssertEqual(form.type(.number, "4242 4242 4242 4242", cursor: .number), .expiry)
+    XCTAssertEqual(form.type(.expiry, "12 / 34", cursor: .expiry), .cvc)
+    XCTAssertEqual(form.type(.cvc, "123", cursor: .cvc), .postalCode)
+    XCTAssertEqual(form.type(.postalCode, "78701", cursor: .postalCode), .postalCode)
+  }
+
+  /// A fast typist's keys keep landing in the number after the cursor has moved
+  /// on: they go to the expiry and the security code, never onto the number.
+  func testKeysTypedAheadOfTheCursorGoToTheFieldItMovedTo() {
+    let (form, _, _) = session(FakeStripe(), verdicts: [])
+    var cursor = form.type(.number, "4000 0000 0000 0002", cursor: .number)
+    XCTAssertEqual(cursor, .expiry)
+    for key in ["1", "2", "3", "4"] { cursor = form.type(.number, form.fields.number + key, cursor: cursor) }
+    XCTAssertEqual(form.fields.number, "4000 0000 0000 0002")
+    XCTAssertEqual(form.fields.expiry, "12 / 34")
+    XCTAssertEqual(cursor, .cvc)
+    cursor = form.type(.number, form.fields.number + "123", cursor: cursor)
+    XCTAssertEqual(form.fields.cvc, "123")
+    XCTAssertEqual(cursor, .postalCode)
+  }
+
+  /// Back in a finished number on purpose, the cashier edits the number itself.
+  func testEditingAFinishedFieldTheCursorIsInStaysInIt() {
+    let (form, _, _) = session(FakeStripe(), verdicts: [])
+    _ = form.type(.number, "4242 4242 4242 4242", cursor: .number)
+    XCTAssertEqual(form.type(.number, "4242 4242 4242 424", cursor: .number), .number)
+    XCTAssertEqual(form.fields.number, "4242 4242 4242 424")
+    XCTAssertEqual(form.fields.expiry, "")
+  }
+
   func testPayWithAnUnfinishedCardShowsEachErrorAndNeverCallsStripe() async {
     let stripe = FakeStripe()
     let (form, sent, _) = session(stripe, verdicts: [])

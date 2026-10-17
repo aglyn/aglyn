@@ -103,6 +103,31 @@ final class CardFormSession: Identifiable {
 
   func leave(_ field: CardFields.Field) { left.insert(field) }
 
+  /// What `field` holds now, as shown.
+  func value(_ field: CardFields.Field) -> String {
+    switch field {
+    case .number: fields.number
+    case .expiry: fields.expiry
+    case .cvc: fields.cvc
+    case .postalCode: fields.postalCode
+    }
+  }
+
+  /// The cashier typed into `field`, whose text is now `text`, while the cursor
+  /// is meant to be in `cursor`. Keys typed faster than the cursor moves (a
+  /// hardware keyboard, a paste) still reach a field it already left: they
+  /// belong to the field it moved to. Answers where the cursor goes next.
+  func type(_ field: CardFields.Field, _ text: String, cursor: CardFields.Field?) -> CardFields.Field? {
+    var target = field
+    var typed = text
+    if let cursor, cursor != field, isComplete(field), text.hasPrefix(value(field)) {
+      target = cursor
+      typed = value(cursor) + text.dropFirst(value(field).count)
+    }
+    edit(target, typed)
+    return isComplete(target) ? target.next : target
+  }
+
   /// The field complete enough to move on from, so the cursor can go to the next one.
   func isComplete(_ field: CardFields.Field) -> Bool {
     switch field {
@@ -249,11 +274,8 @@ struct CardFieldsSheet: View {
       HStack {
         CardTextField(
           kind: which, placeholder: prompt, accessibilityLabel: title, identifier: identifier(which),
-          text: { text(which) },
-          edit: { next in
-            session.edit(which, next)
-            if session.isComplete(which) { focus = following(which) }
-          },
+          text: { session.value(which) },
+          edit: { next in focus = session.type(which, next, cursor: focus) },
           focused: Binding(
             get: { focus == which },
             set: { now in
@@ -264,7 +286,7 @@ struct CardFieldsSheet: View {
               }
             }),
           onSubmit: {
-            if which == .postalCode { Task { await session.pay() } } else { focus = following(which) }
+            if which == .postalCode { Task { await session.pay() } } else { focus = which.next }
           }
         )
         .frame(minHeight: 30)
@@ -275,24 +297,8 @@ struct CardFieldsSheet: View {
           .accessibilityIdentifier("\(identifier(which))-error")
       }
     }
-  }
-
-  private func text(_ which: CardFields.Field) -> String {
-    switch which {
-    case .number: session.fields.number
-    case .expiry: session.fields.expiry
-    case .cvc: session.fields.cvc
-    case .postalCode: session.fields.postalCode
-    }
-  }
-
-  private func following(_ which: CardFields.Field) -> CardFields.Field? {
-    switch which {
-    case .number: .expiry
-    case .expiry: .cvc
-    case .cvc: .postalCode
-    case .postalCode: nil
-    }
+    // The row's line starts under the field, not under the brand name beside it.
+    .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
   }
 
   private func identifier(_ which: CardFields.Field) -> String {
@@ -489,3 +495,15 @@ struct CardFieldsSheet: View {
     }
   }
 #endif
+
+extension CardFields.Field {
+  /// The field the cursor moves on to, in the order a card is read out.
+  var next: CardFields.Field? {
+    switch self {
+    case .number: .expiry
+    case .expiry: .cvc
+    case .cvc: .postalCode
+    case .postalCode: nil
+    }
+  }
+}
