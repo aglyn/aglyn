@@ -349,11 +349,15 @@ struct PageDetail: View {
   }
 
   private func confirmMessage(_ pending: PageConfirm) -> String {
+    // The pages inside are spoken of only when there are some.
+    let inside = (model.row(pending.page.id)?.childCount ?? 0) > 0 ? "Pages inside it keep their addresses." : nil
     switch pending {
-    case .unpublish: return "Visitors can no longer reach it. Pages inside it keep their addresses."
+    case .unpublish: return ["Visitors can no longer reach it.", inside].compactMap { $0 }.joined(separator: " ")
     case .delete(let page, let livePath):
-      if page.isGroup { return "Its pages move up a level and keep their addresses." }
-      return [livePath.map { "It is live at \($0) and stops answering there." }, "Pages inside it keep their addresses."]
+      if page.isGroup {
+        return inside == nil ? "The group is removed. It has no address of its own." : "Its pages move up a level and keep their addresses."
+      }
+      return [livePath.map { "It is live at \($0) and stops answering there." } ?? "It is not live.", inside]
         .compactMap { $0 }.joined(separator: " ")
     }
   }
