@@ -122,7 +122,9 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
   val workspace by services.workspace.state.collectAsState()
   val version by services.registry.version.collectAsState()
   val widthClass = currentWidthClass()
-  val wide = widthClass != WidthClass.COMPACT
+  // Every plugin place gets its own row only in the permanent drawer (840 dp and up); a rail holds a handful of
+  // destinations (Material: 3 to 7), so a medium window keeps the phone's Home, Apps, Notifications and Settings.
+  val wide = widthClass == WidthClass.EXPANDED || widthClass == WidthClass.LARGE
 
   // The plugins' places (their tabs, then the quick actions that open a screen) become top-level destinations on wide windows.
   val topLevel = remember(version) {

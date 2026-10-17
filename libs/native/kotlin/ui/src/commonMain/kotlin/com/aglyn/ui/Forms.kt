@@ -87,7 +87,8 @@ fun ActionDialog(
   AlertDialog(
     onDismissRequest = { if (!busy) onDismiss() },
     modifier = modifier.testTag("action-dialog"),
-    icon = icon?.let { name -> { Icon(AglynIcons.named(name), contentDescription = null) } },
+    // The glyph says what kind of act it is: the error color for a destructive one, else the brand primary.
+    icon = icon?.let { name -> { Icon(AglynIcons.named(name), contentDescription = null, tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) } },
     title = { Text(title) },
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(space(1.5f))) {

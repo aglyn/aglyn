@@ -55,6 +55,7 @@ import com.aglyn.contracts.productPriceRange
 import com.aglyn.core.Live
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.plugins.commerce.pos.Load
+import com.aglyn.site.media.mediaPreviewUrl
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -64,10 +65,14 @@ import com.aglyn.ui.AmountRow
 import com.aglyn.ui.BarcodeScanSheet
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
+import com.aglyn.ui.DetailHeader
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.LocalCameraScanner
+import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OverflowMenu
+import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectionPlaceholder
@@ -165,25 +170,26 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
           }
         }
       }
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        ChoiceChipRow(
-          options = ProductFilter.entries.map { ChipOption(it.name, it.label) },
-          selected = model.filter.name,
-          onSelect = { model.pick(ProductFilter.valueOf(it)) },
-          modifier = Modifier.weight(1f),
-        )
-        Button(onClick = editor::create, Modifier.padding(start = space(1f)).testTag("new-product"), enabled = hasRoom) {
-          Icon(AglynIcons.named("add"), contentDescription = null)
-          Text("New product", Modifier.padding(start = space(1f)))
-        }
+      // The list's own actions, end-aligned, then its filter chips on a row of their own (never squeezed by a button).
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space(1f), Alignment.End), verticalAlignment = Alignment.CenterVertically) {
         if (canImportProducts(context)) {
           // The console's Import beside Add product: the data transfer hub's import, for this site's products.
           OutlinedButton(
             onClick = { context.navigate(CORE_DATA_IMPORT_SCREEN, productsImportParams(context.hostId)) },
-            modifier = Modifier.padding(start = space(1f)).testTag("import-products"),
+            modifier = Modifier.testTag("import-products"),
           ) { Text("Import") }
         }
+        Button(onClick = editor::create, Modifier.testTag("new-product"), enabled = hasRoom) {
+          Icon(AglynIcons.named("add"), contentDescription = null)
+          Text("New product", Modifier.padding(start = space(1f)))
+        }
       }
+      ChoiceChipRow(
+        options = ProductFilter.entries.map { ChipOption(it.name, it.label) },
+        selected = model.filter.name,
+        onSelect = { model.pick(ProductFilter.valueOf(it)) },
+        modifier = Modifier.fillMaxWidth(),
+      )
       // Any filter the console's grid takes (name, status, type, slug, SKU, barcode) and its header sorts.
       Row(verticalAlignment = Alignment.Top) {
         ClauseFilterBar(
@@ -315,80 +321,85 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
         verticalArrangement = Arrangement.spacedBy(space(2f)),
       ) {
         notice?.let { (text, tone) -> NoticeBanner(text, tone, action = { androidx.compose.material3.TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }
+        val archived = status == ProductStatus.ARCHIVED
+        fun duplicate() {
+          working = true
+          scope.launch {
+            notice = try {
+              val id = duplicateProduct(context.api, hostId, productId, com.aglyn.core.createResourceUid(20))
+              context.navigate(COMMERCE_PRODUCT_SCREEN, mapOf("product" to id))
+              "Product duplicated as draft" to StatusTone.SUCCESS
+            } catch (error: Throwable) {
+              if (error is CancellationException) throw error
+              productWriteMessage(error, "Could not duplicate product") to StatusTone.WARNING
+            } finally {
+              working = false
+            }
+          }
+                }
+        fun toggleArchive() {
+          working = true
+          val next = if (archived) "active" else "archived"
+          scope.launch {
+            notice = try {
+              ConsoleProductWriteApi(context.api, hostId).save(productId, false, productStatusSaveJson(doc.data, next), com.aglyn.plugins.commerce.pos.newAttemptKey("status"))
+              // A product with a variant nobody has priced may go live (AGL-3676): the owner is told, not stopped.
+              if (next == "active" && productPriceMissing(doc.data)) activatingUnpricedNotice(product.name ?: "This product") to StatusTone.INFO else null
+            } catch (error: Throwable) {
+              if (error is CancellationException) throw error
+              productWriteMessage(error, "The product could not be saved") to StatusTone.ERROR
+            } finally {
+              working = false
+            }
+          }
+                }
+        val picture = product.mediaUrls.orEmpty().firstOrNull()?.let { mediaPreviewUrl(it, context.api.origin, hostId, 160) }
         SectionCard(null) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(product.name ?: "Product", Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
-            StatusChip(statusLabel(status), statusTone(status))
-          }
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-            StatusChip(typeLabel(product.type ?: ProductType.PHYSICAL))
-            if (isLowStock(product)) StatusChip("Low stock", StatusTone.WARNING)
-            if (product.taxExempt == true) StatusChip("Tax exempt")
-          }
+          // The product's picture, name and state at the top; the less common actions in the ⋮ menu beside them.
+          DetailHeader(
+            product.name ?: "Product",
+            icon = AglynIcons.named("inventory"),
+            image = picture?.let { url -> { RemoteImage(url, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop) } },
+            status = {
+              FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+                StatusChip(statusLabel(status), statusTone(status))
+                StatusChip(typeLabel(product.type ?: ProductType.PHYSICAL))
+                if (isLowStock(product)) StatusChip("Low stock", StatusTone.WARNING)
+                if (product.taxExempt == true) StatusChip("Tax exempt")
+              }
+            },
+            actions = if (editor == null) null else {
+              {
+                OverflowMenu(
+                  buildList {
+                    add(MenuAction("product-duplicate", "Duplicate", "content_copy", enabled = !working) { duplicate() })
+                    add(MenuAction("product-archive", if (archived) "Activate" else "Archive", if (archived) "unarchive" else "archive", enabled = !working) { toggleArchive() })
+                    if (product.type == ProductType.DIGITAL) add(MenuAction("product-keys", "Keys", "key") { keys = true })
+                    // Shelf labels with a barcode the register scans back (the console's Labels).
+                    if (product.type == ProductType.PHYSICAL) add(MenuAction("product-labels", "Labels", "label") { labels = productLabelRows(doc.data) })
+                    add(MenuAction("product-delete", "Delete", "delete", destructive = true, enabled = !working) { deleting = true })
+                  },
+                  contentDescription = "More product actions",
+                )
+              }
+            },
+          )
           Text(priceLabel(productPriceRange(product)), style = MaterialTheme.typography.titleLarge)
           Text(stockLabel(productInventory(product)), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
           product.description?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
           if (editor != null) {
-            Button(onClick = { editor.edit(productId, doc.data) }, Modifier.testTag("edit-product")) {
-              Icon(AglynIcons.named("tune"), contentDescription = null)
-              Text("Edit product", Modifier.padding(start = space(1f)))
-            }
-            // The address, supplier, tags, categories, tax, billing and search listing: a spec screen on the shared renderer.
-            OutlinedButton(onClick = { context.navigate("commerce.productDetails", mapOf("productId" to productId)) }, Modifier.testTag("product-details")) {
-              Text("Details")
-            }
-            // The pictures, and a digital product's downloads and members videos.
-            OutlinedButton(onClick = { context.navigate(COMMERCE_PRODUCT_MEDIA_SCREEN, mapOf("productId" to productId)) }, Modifier.testTag("product-media-link")) {
-              Text("Images and files")
-            }
-            OutlinedButton(
-              onClick = {
-                working = true
-                scope.launch {
-                  notice = try {
-                    val id = duplicateProduct(context.api, hostId, productId, com.aglyn.core.createResourceUid(20))
-                    context.navigate(COMMERCE_PRODUCT_SCREEN, mapOf("product" to id))
-                    "Product duplicated as draft" to StatusTone.SUCCESS
-                  } catch (error: Throwable) {
-                    if (error is CancellationException) throw error
-                    productWriteMessage(error, "Could not duplicate product") to StatusTone.WARNING
-                  } finally {
-                    working = false
-                  }
-                }
-              },
-              enabled = !working,
-              modifier = Modifier.testTag("product-duplicate"),
-            ) { Text("Duplicate") }
-            val archived = status == ProductStatus.ARCHIVED
-            OutlinedButton(
-              onClick = {
-                working = true
-                val next = if (archived) "active" else "archived"
-                scope.launch {
-                  notice = try {
-                    ConsoleProductWriteApi(context.api, hostId).save(productId, false, productStatusSaveJson(doc.data, next), com.aglyn.plugins.commerce.pos.newAttemptKey("status"))
-                    // A product with a variant nobody has priced may go live (AGL-3676): the owner is told, not stopped.
-                    if (next == "active" && productPriceMissing(doc.data)) activatingUnpricedNotice(product.name ?: "This product") to StatusTone.INFO else null
-                  } catch (error: Throwable) {
-                    if (error is CancellationException) throw error
-                    productWriteMessage(error, "The product could not be saved") to StatusTone.ERROR
-                  } finally {
-                    working = false
-                  }
-                }
-              },
-              enabled = !working,
-              modifier = Modifier.testTag("product-archive"),
-            ) { Text(if (archived) "Activate" else "Archive") }
-            if (product.type == ProductType.DIGITAL) {
-              OutlinedButton(onClick = { keys = true }, Modifier.testTag("product-keys")) { Text("Keys") }
-            }
-            OutlinedButton(onClick = { deleting = true }, enabled = !working, modifier = Modifier.testTag("product-delete")) { Text("Delete") }
-            // Shelf labels with a barcode the register scans back (the console's Labels).
-            if (product.type == ProductType.PHYSICAL) {
-              OutlinedButton(onClick = { labels = productLabelRows(doc.data) }, Modifier.testTag("product-labels")) {
-                Text("Labels")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+              Button(onClick = { editor.edit(productId, doc.data) }, Modifier.testTag("edit-product")) {
+                Icon(AglynIcons.named("tune"), contentDescription = null)
+                Text("Edit product", Modifier.padding(start = space(1f)))
+              }
+              // The address, supplier, tags, categories, tax, billing and search listing: a spec screen on the shared renderer.
+              OutlinedButton(onClick = { context.navigate("commerce.productDetails", mapOf("productId" to productId)) }, Modifier.testTag("product-details")) {
+                Text("Details")
+              }
+              // The pictures, and a digital product's downloads and members videos.
+              OutlinedButton(onClick = { context.navigate(COMMERCE_PRODUCT_MEDIA_SCREEN, mapOf("productId" to productId)) }, Modifier.testTag("product-media-link")) {
+                Text("Images and files")
               }
             }
           }
