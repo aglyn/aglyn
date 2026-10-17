@@ -288,7 +288,6 @@ private fun PageDetail(
         DetailRow("Address", row.livePath ?: page.slug?.let { "/$it (not published)" }, placeholder = "No address yet")
         DetailRow("Published", page.publishedAt?.let { relativeTime(it.epochMillis, now) }, placeholder = "Not published")
         DetailRow("Updated", page.updatedAt?.let { relativeTime(it.epochMillis, now) })
-        DetailRow("Page id", page.id)
       }
       PageVersions(context, hostId, page, api, runner, canPublish)
     }
