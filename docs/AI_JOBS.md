@@ -1842,12 +1842,18 @@ Every scaffold opens with a look unit, its own row on the build page
 site's own theme from their first draft. It never builds a theme change through
 the `theme` kind's proposal, and no site plan may propose one.
 
-- **The kind.** The guided start asks for the style of site in a grid of 21
-  kinds (`model/ai-site-kinds.ts`: business, trades, law and finance, health and
-  wellness, restaurant, store, portfolio, studio, photography, blog, events,
-  fitness, yoga, beauty, real estate, education, nonprofit, music, personal,
-  landing page, coming soon), the one its first answer suggests selected until
-  the person picks another; the job carries it as `inputs.siteKind`. A kind is
+- **The kind.** The guided start asks for the style of site on its own step,
+  in a grid of 21 kinds (`model/ai-site-kinds.ts`: business, trades, law and
+  finance, health and wellness, restaurant, store, portfolio, studio,
+  photography, blog, events, fitness, yoga, beauty, real estate, education,
+  nonprofit, music, personal, landing page, coming soon), each card a picture
+  of the starter home page in that kind's look (AGL-3898,
+  `scripts/render-site-style-previews.mts`, no model call), after "Pick for
+  me", which leaves the kind unset so the one the first answer suggests is
+  used; the job carries it as `inputs.siteKind`. The steps (kind of site,
+  audience, style, details, review) hold the same answers object the single
+  form did, so the brief and inputs a job is created with are unchanged
+  (`ai-site-start-card.spec.tsx` pins them). A kind is
   not a template: it is a LOOK FAMILY the code bounds the theme to (base themes,
   hue ranges, palette strength, grounds, font pairings, corners, button style,
   heading scale, density) and two lines the model reads — how its pages are

@@ -75,6 +75,14 @@ export const START_STEP_HELP = {
     excerpt:
       'What kind of site it is picks its style and pages; who it is for is who every page and the contact form are written for.',
   }),
+  audience: pluginDocsHelp('aiStart', {
+    anchor: '#audience',
+    excerpt: 'Who the site is for is who every page, every search listing and the contact form are written for. Optional.',
+  }),
+  review: pluginDocsHelp('aiStart', {
+    anchor: '#review',
+    excerpt: 'Every answer, each with Edit to change it. Plan my site creates the site, plans it, writes the pages and publishes it.',
+  }),
   style: pluginDocsHelp('aiSiteLooks', {
     anchor: '#choose-a-style',
     excerpt:
@@ -390,6 +398,6 @@ export function ReviewStep({
 
 /** A step's help beside its heading. */
 export function StepHelp({ step }: { step: AiSiteStartStep }) {
-  const help = step === 'kind' || step === 'audience' ? START_STEP_HELP.kind : step === 'style' ? START_STEP_HELP.style : step === 'details' ? START_STEP_HELP.details : null
+  const help = step === 'choose' ? null : START_STEP_HELP[step]
   return help ? <HelpTip sx={{ float: 'right' }} {...help} /> : null
 }
