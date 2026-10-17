@@ -518,11 +518,9 @@ struct SpecScreenBody: View {
     if let link = action.link {
       let rendered = ScreenValues.render(link, in: scope)
       guard let url = URL(string: rendered.hasPrefix("/") ? session.origin + rendered : rendered) else { return }
-      if url.scheme == "https" || url.scheme == "http" {
-        await webAuthentication.openHostedPage(url)
-      } else {
-        openURL(url)
-      }
+      // A plain page (the live site, a preview, a docs link) shows in the in-app web sheet the app's root installs;
+      // the sign-in session is for OAuth and hosted payment steps only.
+      openURL(url)
       return
     }
     // A route is asked first what the action would do; its answer is `preview` in the confirmation.
