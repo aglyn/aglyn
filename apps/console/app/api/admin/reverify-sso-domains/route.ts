@@ -310,6 +310,8 @@ async function handler(request: Request): Promise<Response> {
       const staffMail = await emailStaffAlert({
         subject: staffTitle,
         text: driftStaffAlertText(summary, origin, orgNames),
+        url: `${origin}/admin/orgs`,
+        urlLabel: 'Open Staff → Workspaces',
         context: 'sso-domain-drift',
       })
 

@@ -297,6 +297,8 @@ const TEXT_STYLES: Record<string, string> = {
   eyebrow: `font-size:12px;font-weight:700;line-height:1.4;letter-spacing:0.06em;text-transform:uppercase`,
   // The rows of a details panel; see `detailsHtml`.
   details: `font-size:14px;font-weight:400;line-height:1.45`,
+  // A list of next steps or help, each a link; see `linksHtml`.
+  links: `font-size:15px;font-weight:600;line-height:1.4`,
 }
 
 /** The space around each text style's row: a heading needs room below it, an eyebrow sits tight above one. */
@@ -307,6 +309,7 @@ const TEXT_PADDING: Record<string, string> = {
   caption: 'padding:5px 0;',
   eyebrow: 'padding:0 0 2px;',
   details: 'padding:10px 0;',
+  links: 'padding:8px 0;',
 }
 
 /** A details value longer than this reads as a paragraph under its label rather than beside it. */
@@ -385,6 +388,29 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
   /** A theme token's color, from the email's palette, else the platform's, which resolves every one. */
   const themeColor = (token: string): string =>
     resolveEmailColor(token, palette) ?? resolveEmailColor(token, PLATFORM_EMAIL_PALETTE) ?? 'inherit'
+
+  /**
+   * A list of links (AGL-3897): each "Label — https://…" line a row whose
+   * label is the link, in the theme's link color, with an arrow after it and
+   * a hairline between rows — next steps, help pages. A line with no address
+   * is drawn as plain text; an address the link check refuses drops the link
+   * and keeps the words.
+   */
+  const linksHtml = (text: string, style: string): string => {
+    const rule = themeColor('divider')
+    const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+    const rows = lines.map((line, index) => {
+      const split = splitEmailDetailLine(line)
+      const href = split ? linkHref(split.value) : undefined
+      const label = escapeEmailHtml(split ? split.label : line)
+      const border = index > 0 ? `border-top:1px solid ${rule};` : ''
+      const inner = href
+        ? `<a href="${escapeEmailHtml(href)}" target="_blank" style="color:${accent.link};text-decoration:none;">${label}&nbsp;&rarr;</a>`
+        : `<span style="color:${themeColor('text.primary')};">${label}</span>`
+      return `<tr><td style="font-family:${FONT};${style};padding:10px 0;${border}">${inner}</td></tr>`
+    })
+    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows.join('')}</table>`
+  }
 
   /**
    * A details panel (AGL-3897): each line a row, its label muted on the left
@@ -591,7 +617,14 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
         )
       }
       case 'emailText': {
-        const text = sub(props.children)
+        const merged = sub(props.children)
+        // An eyebrow is a few parts joined by " · "; one a token left empty
+        // ("{{host.businessName}} · Order #1042" on a site with no name) loses
+        // its separator rather than starting with one.
+        const text =
+          props.variant === 'eyebrow'
+            ? merged.replace(/^(\s*·\s*)+|(\s*·\s*)+$/g, '').replace(/(\s*·\s*){2,}/g, ' · ')
+            : merged
         // A block whose copy is only a token the send left empty (a
         // notification with no detail line, AGL-3367) draws nothing, rather
         // than an empty row and a blank paragraph in the text part.
@@ -609,6 +642,9 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
               ? themeColor('text.secondary')
               : '#1a1a1a'
         const align = props.align || 'left'
+        if (variant === 'links') {
+          return row(linksHtml(text, style), TEXT_PADDING['links'])
+        }
         if (variant === 'details') {
           return row(detailsHtml(text, style, props.color ? color : themeColor('text.primary')), TEXT_PADDING['details'])
         }
@@ -649,6 +685,12 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
         )
       }
       case 'emailButton': {
+        // A button written as merge tokens that the send left empty is one
+        // this email has nothing to point at (an alert about no one item),
+        // so it is left out rather than drawn going nowhere.
+        const tokenOnly = (value: unknown): boolean =>
+          /\{\{[^}]+\}\}/.test(String(value ?? '')) && !sub(value).trim()
+        if (tokenOnly(props.href) || tokenOnly(props.children)) return ''
         const label = sub(props.children ?? 'Call to action')
         // A refused href falls back to the placeholder the empty case already
         // uses, so the button keeps its place in the layout and goes nowhere.

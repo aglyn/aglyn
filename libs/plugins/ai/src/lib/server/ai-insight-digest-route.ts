@@ -109,7 +109,7 @@ export async function POST(request: Request): Promise<Response> {
         // The `ai-insights-digest` system email (AGL-3367), in the org's brand.
         const content = await renderSystemEmailContent(
           'ai-insights-digest',
-          { 'site.name': email.siteName, 'digest.body': email.text },
+          { 'site.name': email.siteName, 'digest.body': email.text, ...email.merge },
           systemEmailBrand(email.org),
           { subject: email.subject, text: email.text },
         )

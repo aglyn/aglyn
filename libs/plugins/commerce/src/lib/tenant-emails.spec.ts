@@ -49,9 +49,9 @@ describe('commerce site emails name the store and say only what is true (AGL-343
       'product.name': 'House Blend',
       'product.url': 'https://northwind.example/products/house-blend',
     })
-    expect(text).toContain('House Blend is back in stock at Northwind Coffee.')
+    expect(text).toContain('You asked to hear when House Blend was back at Northwind Coffee.')
     expect(text).toContain(
-      'View product: https://northwind.example/products/house-blend',
+      'Shop House Blend: https://northwind.example/products/house-blend',
     )
     expect(text).not.toMatch(/sells? out/)
   })
@@ -60,7 +60,7 @@ describe('commerce site emails name the store and say only what is true (AGL-343
     const text = render('abandoned-cart', {
       'cart.url': 'https://northwind.example/cart',
     })
-    expect(text).toContain('You left items in your cart at Northwind Coffee.')
+    expect(text).toContain('Your cart at Northwind Coffee still has your items in it.')
     expect(text).toContain('Nothing in your cart is held for you.')
     expect(text).not.toMatch(/\bheld but\b|\breserved\b/)
   })
@@ -77,7 +77,7 @@ describe('commerce site emails name the store and say only what is true (AGL-343
       'reservation.balance':
         'Still to pay: $240.00, at the property. It has not been charged.',
     })
-    expect(owing).toContain('Your stay at Northwind Coffee is confirmed.')
+    expect(owing).toContain('Your reservation at Northwind Coffee is booked.')
     expect(owing).toContain('Still to pay: $240.00')
 
     const paidInFull = render('reservation-confirmed', {
@@ -99,7 +99,7 @@ describe('commerce site emails name the store and say only what is true (AGL-343
       'store.receiptFooter': 'Returns are accepted within 30 days.',
     })
     expect(withFooter).toContain(
-      'Here is the receipt for your order from Northwind Coffee.',
+      'Here is your receipt from Northwind Coffee.',
     )
     expect(withFooter).toContain('Returns are accepted within 30 days.')
     expect(render('order-receipt', { ...merge, 'store.receiptFooter': '' })).not.toContain(
@@ -113,12 +113,13 @@ describe('commerce site emails name the store and say only what is true (AGL-343
       'giftcard.value': '$25.00',
       'giftcard.note': '',
     })
-    expect(text).toContain('You have a $25.00 gift card for Northwind Coffee.')
+    expect(text).toContain('Northwind Coffee · Gift card')
+    expect(text).toContain('You have a $25.00 gift card')
     expect(text).toContain('Gift card code: GC-ABC123DEF456')
     expect(text).toContain(
       'Enter the code at checkout on https://northwind.example to use its balance.',
     )
-    expect(text).toContain('Visit Northwind Coffee: https://northwind.example')
+    expect(text).toContain('Shop Northwind Coffee: https://northwind.example')
     expect(text).not.toMatch(/\n\s*\n\s*\n/)
   })
 
@@ -138,7 +139,7 @@ describe('commerce site emails name the store and say only what is true (AGL-343
       confirmUrl: 'https://northwind.example/subscribe/confirm?token=t',
     })
     expect(text).toContain(
-      'Please confirm that you want to get Newsletter emails from Northwind ' +
+      'Please confirm that you want Newsletter emails from Northwind ' +
         'Coffee at this address.',
     )
   })
@@ -156,7 +157,7 @@ describe('commerce site emails name the store and say only what is true (AGL-343
       ...merge,
       'shipment.tracking': 'Tracking: UPS 1Z1 — https://www.ups.com/track?tracknum=1Z1',
     })
-    expect(tracked).toContain('Northwind Coffee shipped items from order #1042.')
+    expect(tracked).toContain('Northwind Coffee shipped these items from order #1042.')
     expect(tracked).toContain('Tracking: UPS 1Z1')
     expect(tracked).toContain(
       'Track your order: https://northwind.example/order-status?o=o&t=t',

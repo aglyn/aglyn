@@ -8746,7 +8746,7 @@
             {
               "name": "invite.role",
               "description": "Role the person is invited as",
-              "sample": "editor"
+              "sample": "Editor"
             },
             {
               "name": "signInUrl",
@@ -8860,6 +8860,11 @@
               "sample": "Plan: Starter\nPage views: 12,400\nMetered usage beyond your plan: none, so nothing extra is billed for it."
             },
             {
+              "name": "billingUrl",
+              "description": "The workspace Billing page",
+              "sample": "https://app.aglyn.com/test-org/billing"
+            },
+            {
               "name": "brand.productName",
               "description": "The sender's product name — the org's own on white-label",
               "sample": "Aglyn"
@@ -8884,7 +8889,12 @@
             {
               "name": "orgs.list",
               "description": "The organizations, one per line",
-              "sample": "- Test Org (org_123), requested 2026-07-01"
+              "sample": "Test Org (org_123) — requested 2026-07-01\nNorth Bakery (org_456) — requested 2026-07-02"
+            },
+            {
+              "name": "healthUrl",
+              "description": "Staff → Health, where pending erasures can be run",
+              "sample": "https://app.aglyn.com/admin/health"
             },
             {
               "name": "brand.productName",
@@ -8919,6 +8929,16 @@
               "sample": "https://app.aglyn.com"
             },
             {
+              "name": "welcome.intro",
+              "description": "What is ready, and what to do first, for how the workspace started",
+              "sample": "Test Org is ready. Here is how most people get their first site live."
+            },
+            {
+              "name": "welcome.steps",
+              "description": "The next steps, one per line, each \"Step — link\"",
+              "sample": "Build your first site — https://app.aglyn.com/test-org/hosts\nLet AI draft it for you — https://docs.aglyn.com/ai/generate-a-site\nInvite your team — https://app.aglyn.com/test-org/team\nConnect your own domain — https://docs.aglyn.com/building-sites/custom-domains/connect-a-domain"
+            },
+            {
               "name": "brand.productName",
               "description": "The sender's product name — the org's own on white-label",
               "sample": "Aglyn"
@@ -8943,7 +8963,7 @@
             {
               "name": "member.role",
               "description": "Role they were given",
-              "sample": "editor"
+              "sample": "Editor"
             },
             {
               "name": "signInUrl",
@@ -8993,6 +9013,11 @@
               "name": "org.name",
               "description": "The organization to be erased",
               "sample": "Test Org"
+            },
+            {
+              "name": "erasure.date",
+              "description": "The day the 7-day hold ends and erasure runs",
+              "sample": "July 8, 2026"
             },
             {
               "name": "brand.productName",
@@ -9310,6 +9335,16 @@
               "sample": "Free-tier AI spend for 2026-09-28 (UTC) is at $40.00 of the $50.00 ceiling."
             },
             {
+              "name": "alert.url",
+              "description": "Where the alert is handled; the staff console when the sender names nowhere",
+              "sample": "https://app.aglyn.com/admin/lockdown"
+            },
+            {
+              "name": "alert.urlLabel",
+              "description": "The button’s words for that page",
+              "sample": "Open Staff → Lockdown"
+            },
+            {
               "name": "brand.productName",
               "description": "The sender's product name — the org's own on white-label",
               "sample": "Aglyn"
@@ -9340,6 +9375,21 @@
               "name": "alert.url",
               "description": "The item in the staff console",
               "sample": "https://app.aglyn.com/admin/abuse-reports"
+            },
+            {
+              "name": "alert.eyebrow",
+              "description": "The alert’s level and area",
+              "sample": "Must know · Payments & payouts"
+            },
+            {
+              "name": "alert.details",
+              "description": "Which alert, which workspace or site, and when, as \"Label: value\" lines",
+              "sample": "Alert: Card testing\nLevel: Must know\nSite id: host_123\nRaised: 2026-09-28 14:03 UTC"
+            },
+            {
+              "name": "settingsUrl",
+              "description": "Staff → Operator alerts",
+              "sample": "https://app.aglyn.com/admin/operator-alerts"
             },
             {
               "name": "brand.productName",
@@ -9431,6 +9481,21 @@
               "sample": "Test Org"
             },
             {
+              "name": "ticket.opening",
+              "description": "Who opened or replied, as one sentence",
+              "sample": "Test Org opened a support ticket."
+            },
+            {
+              "name": "ticket.message",
+              "description": "What the customer wrote",
+              "sample": "We added the TXT record yesterday and the domain still says pending."
+            },
+            {
+              "name": "ticket.details",
+              "description": "The workspace, sender, subject and ticket id as \"Label: value\" lines",
+              "sample": "Workspace: Test Org\nFrom: owner@example.com\nSubject: Domain will not verify\nTicket id: tkt_123"
+            },
+            {
               "name": "brand.productName",
               "description": "The sender's product name — the org's own on white-label",
               "sample": "Aglyn"
@@ -9450,17 +9515,42 @@
             {
               "name": "notice.subject",
               "description": "The notice, in one line",
-              "sample": "Test Org has used 80% of this month’s emails"
+              "sample": "Sequences paused your mailbox avery@example.com"
             },
             {
               "name": "notice.body",
               "description": "The notice as its sender wrote it",
-              "sample": "Test Org has sent 8,000 of its 10,000 emails this month."
+              "sample": "Sequences paused the mailbox Avery Quinn <avery@example.com>.\n\nSequences paused it after 3 bounces in a row."
             },
             {
               "name": "org.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
+            },
+            {
+              "name": "notice.lead",
+              "description": "What happened and what to do, without the link",
+              "sample": "Sequences paused avery@example.com after 3 bounces in a row. 4 enrollments are active on it and waiting. Re-check the addresses, then open Mailboxes and select Resume."
+            },
+            {
+              "name": "notice.details",
+              "description": "The facts, as \"Label: value\" lines",
+              "sample": "Mailbox: avery@example.com\nStatus: Paused by Sequences\nEnrollments waiting: 4"
+            },
+            {
+              "name": "notice.url",
+              "description": "Where the reader acts on it",
+              "sample": "https://app.aglyn.com/test-org/outreach/mailboxes"
+            },
+            {
+              "name": "notice.action",
+              "description": "The button’s words",
+              "sample": "Open Mailboxes to resume"
+            },
+            {
+              "name": "notice.reason",
+              "description": "Why this reader is getting it",
+              "sample": "You are getting this because the mailbox is yours, or you manage the organization it belongs to."
             },
             {
               "name": "brand.productName",
@@ -9532,6 +9622,66 @@
               "sample": "https://app.aglyn.com/manage/notifications/settings"
             },
             {
+              "name": "digest.eyebrow",
+              "description": "The workspace and the day",
+              "sample": "Test Org · Friday, September 28"
+            },
+            {
+              "name": "digest.summary",
+              "description": "What is owed today, in one line",
+              "sample": "1 task due today, 2 overdue, 3 unworked leads."
+            },
+            {
+              "name": "digest.overdueHeading",
+              "description": "The overdue list’s heading, empty when there is none",
+              "sample": "Overdue (2)"
+            },
+            {
+              "name": "digest.overdue",
+              "description": "Overdue tasks, one \"Title — when\" per line",
+              "sample": "Call back Jordan — Main site · Thu, Sep 27, 9:00 AM CDT\nSend the proposal — Fri, Sep 28, 8:00 AM CDT"
+            },
+            {
+              "name": "digest.todayHeading",
+              "description": "The due-today list’s heading",
+              "sample": "Due today (1)"
+            },
+            {
+              "name": "digest.today",
+              "description": "Tasks due today, one per line",
+              "sample": "Follow up with Priya — Main site · Fri, Sep 28, 3:00 PM CDT"
+            },
+            {
+              "name": "digest.leadsHeading",
+              "description": "The unworked leads list’s heading",
+              "sample": "Unworked leads (3)"
+            },
+            {
+              "name": "digest.leads",
+              "description": "Unworked leads, one \"Name — site · first seen\" per line",
+              "sample": "Jane Doe — Main site · first seen Sep 26\nsam@example.com — Main site · first seen Sep 27"
+            },
+            {
+              "name": "digest.nurturing",
+              "description": "The leads in sequences or campaigns, or empty",
+              "sample": "2 leads are in sequences or campaigns."
+            },
+            {
+              "name": "digest.url",
+              "description": "Where the reader starts: the Tasks section, else the leads",
+              "sample": "https://app.aglyn.com/test-org/crm/tasks"
+            },
+            {
+              "name": "digest.action",
+              "description": "The button’s words",
+              "sample": "Open your tasks"
+            },
+            {
+              "name": "digest.links",
+              "description": "Each site’s leads, one \"Leads on Site — URL\" per line",
+              "sample": "Leads on Main site — https://app.aglyn.com/test-org/crm/leads"
+            },
+            {
               "name": "brand.productName",
               "description": "The sender's product name — the org's own on white-label",
               "sample": "Aglyn"
@@ -9564,6 +9714,36 @@
               "sample": "https://app.aglyn.com/manage/notifications/settings"
             },
             {
+              "name": "reminder.eyebrow",
+              "description": "The workspace the task is in",
+              "sample": "Test Org"
+            },
+            {
+              "name": "reminder.intro",
+              "description": "What this is, in one sentence",
+              "sample": "A reminder about your task. Open it to see the contact or deal it is for."
+            },
+            {
+              "name": "reminder.details",
+              "description": "Each task as \"Title — due …\"",
+              "sample": "Call back Jordan — due today at 9:00 AM CDT"
+            },
+            {
+              "name": "reminder.url",
+              "description": "The task, or the first one when there are several",
+              "sample": "https://app.aglyn.com/test-org/crm/tasks#t-1"
+            },
+            {
+              "name": "reminder.action",
+              "description": "The button’s words",
+              "sample": "Open the task"
+            },
+            {
+              "name": "reminder.links",
+              "description": "For several tasks, each one’s link as \"Title — URL\"; empty for one",
+              "sample": "Call back Jordan — https://app.aglyn.com/test-org/crm/tasks#t-1\nSend the proposal — https://app.aglyn.com/test-org/crm/tasks#t-2"
+            },
+            {
               "name": "brand.productName",
               "description": "The sender's product name — the org's own on white-label",
               "sample": "Aglyn"
@@ -9589,6 +9769,31 @@
               "name": "digest.body",
               "description": "The insights, numbered, with their links",
               "sample": "1. Visits from search rose 18% on last week."
+            },
+            {
+              "name": "digest.eyebrow",
+              "description": "The workspace and the week",
+              "sample": "Test Org · Oct 5 – Oct 11"
+            },
+            {
+              "name": "digest.intro",
+              "description": "What the insights are, in one sentence",
+              "sample": "What Test Site's figures showed last week. Each one is traced to the figures it cites, so you can check it on the Analytics page."
+            },
+            {
+              "name": "digest.insights",
+              "description": "The insights, numbered",
+              "sample": "1. Visits from search rose 18% on last week.\n\n2. The pricing page was the most viewed page, with 312 views."
+            },
+            {
+              "name": "digest.analyticsUrl",
+              "description": "The site’s Analytics page",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-site/analytics"
+            },
+            {
+              "name": "digest.why",
+              "description": "Why it came, what it cost and how to turn it off",
+              "sample": "You asked for weekly insights for Test Org. Writing these used 21 of Test Org’s AI credits. Turn them off in Notifications: https://app.aglyn.com/manage/notifications"
             },
             {
               "name": "brand.productName",
@@ -9732,6 +9937,36 @@
               "sample": "We have received your report about https://example.com.\n\nYour reference is AR-3F9K2."
             },
             {
+              "name": "receipt.eyebrow",
+              "description": "The reference",
+              "sample": "Receipt · AR-3F9K2"
+            },
+            {
+              "name": "receipt.heading",
+              "description": "What was received",
+              "sample": "We received your report"
+            },
+            {
+              "name": "receipt.intro",
+              "description": "What it was about",
+              "sample": "We have received your report about https://example.com."
+            },
+            {
+              "name": "receipt.details",
+              "description": "Reference, address and time, as \"Label: value\" lines",
+              "sample": "Reference: AR-3F9K2\nAbout: https://example.com\nReceived: 2026-09-28 14:03 UTC"
+            },
+            {
+              "name": "receipt.next",
+              "description": "What happens next",
+              "sample": "We do not publish what we decide about individual sites, and we will not share your details with the site's owner unless the law requires it."
+            },
+            {
+              "name": "receipt.keep",
+              "description": "Keep this email, and the sign-off",
+              "sample": "Keep this email. It is your record that we received the message above, and the reference is how we will find it if you write to us about it."
+            },
+            {
               "name": "brand.productName",
               "description": "The sender's product name — the org's own on white-label",
               "sample": "Aglyn"
@@ -9757,6 +9992,16 @@
               "name": "review.body",
               "description": "The decision as review wrote it",
               "sample": "Test Plugin 1.2.0 passed review and is live in the marketplace."
+            },
+            {
+              "name": "review.details",
+              "description": "Plugin, version and outcome as \"Label: value\" lines",
+              "sample": "Plugin: Test Plugin\nVersion: 1.2.0\nOutcome: Approved"
+            },
+            {
+              "name": "review.url",
+              "description": "The publisher’s Marketplace page",
+              "sample": "https://app.aglyn.com/test-org/marketplace"
             },
             {
               "name": "brand.productName",
@@ -9809,6 +10054,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -9888,6 +10148,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -9963,6 +10238,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -10042,6 +10332,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -10117,6 +10422,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -10196,6 +10516,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -10271,6 +10606,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -10350,6 +10700,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -10425,6 +10790,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -10504,6 +10884,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -10579,6 +10974,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -10658,6 +11068,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -10733,6 +11158,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -10812,6 +11252,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -10887,6 +11342,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -10966,6 +11436,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -11041,6 +11526,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -11120,6 +11620,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -11195,6 +11710,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -11274,6 +11804,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -11349,6 +11894,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -11428,6 +11988,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -11503,6 +12078,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -11582,6 +12172,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -11657,6 +12262,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -11736,6 +12356,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -11811,6 +12446,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -11890,6 +12540,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -11965,6 +12630,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -12044,6 +12724,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -12119,6 +12814,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -12198,6 +12908,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -12273,6 +12998,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -12352,6 +13092,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -12427,6 +13182,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -12506,6 +13276,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -12581,6 +13366,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",
@@ -12660,6 +13460,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -12737,6 +13552,21 @@
               "sample": "https://app.example.com/test-org/settings/holds"
             },
             {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
+            },
+            {
               "name": "workspace.name",
               "description": "The workspace the notice is about",
               "sample": "Test Org"
@@ -12812,6 +13642,21 @@
               "name": "notice.primaryActionUrl",
               "description": "The main action’s link",
               "sample": "https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.otherActions",
+              "description": "The actions besides the main one, one per line, as label and link",
+              "sample": "View holds and reviews: https://app.example.com/test-org/settings/holds"
+            },
+            {
+              "name": "notice.eyebrow",
+              "description": "Whose notice it is, above the title",
+              "sample": "Test Org · Account safety"
+            },
+            {
+              "name": "notice.details",
+              "description": "The workspace, the case reference and any message from our team",
+              "sample": "Workspace: Test Org\nReference: HS-0A1B2C3D4E"
             },
             {
               "name": "workspace.name",

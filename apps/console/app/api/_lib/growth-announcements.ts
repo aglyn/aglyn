@@ -29,13 +29,18 @@ import {
   isSignupCanaryOrgSlug,
   PLATFORM_BRANDING_PROFILE,
 } from '@aglyn/aglyn/server'
-import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import {
+  isEmailConfigured,
+  sendEmail,
+  welcomeEmailMergeValues,
+} from '@aglyn/shared-util-email'
 import {
   firebaseAdmin,
   meterOrgEmail,
   notifyStaff,
   type NotificationEmailDetail,
 } from '@aglyn/tenant-data-admin'
+import { DOCS_BASE_URL } from '../../../constants/docs-links'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { renderSystemEmail } from './render-system-email'
 
@@ -187,7 +192,7 @@ export async function announceNewWorkspace(
         const ownerName = owner.displayName || 'there'
         const fallbackText =
           `Hi ${ownerName}, thanks for creating ${name}. Your workspace ` +
-          `is ready.\n\nOpen your dashboard at ${origin}.`
+          `is ready.\n\nOpen it at ${origin}/${slug}.`
         // No brand argument: `renderSystemEmail` already merges
         // `DEFAULT_BRAND_TOKENS` — the platform profile — under whatever the
         // caller supplies (AGL-2139). That is the right answer here anyway,
@@ -196,7 +201,14 @@ export async function announceNewWorkspace(
         const designed = await renderSystemEmail('welcome', {
           name: ownerName,
           'org.name': name,
-          consoleUrl: origin,
+          consoleUrl: `${origin}/${slug}`,
+          ...welcomeEmailMergeValues({
+            orgName: name,
+            slug,
+            consoleOrigin: origin,
+            docsOrigin: DOCS_BASE_URL,
+            start: via,
+          }),
         })
         await sendEmail({
           to: owner.email,

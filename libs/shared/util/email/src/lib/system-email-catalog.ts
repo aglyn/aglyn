@@ -78,6 +78,15 @@ import { BRAND } from '@aglyn/shared-data-enums/aglyn'
 import { EMAIL_NODE_ROOT_ID } from './email-render'
 import { RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES } from './risk-notice-emails'
 import { retentionSystemEmailTemplates } from './retention-emails'
+import { welcomeEmailMergeValues } from './welcome-email'
+
+/** The welcome email's next steps, as a new workspace's owner gets them. */
+const WELCOME_SAMPLES = welcomeEmailMergeValues({
+  orgName: 'Test Org',
+  slug: 'test-org',
+  consoleOrigin: SAMPLE_CONSOLE_ORIGIN,
+  docsOrigin: SAMPLE_DOCS_ORIGIN,
+})
 
 /**
  * Who actually puts the message on the wire.
@@ -135,7 +144,7 @@ export type SystemEmailDefaultBlock =
        * `eyebrow` is a small muted line above a heading; `details` draws each
        * "Label: value" line as a row of a panel (AGL-3897).
        */
-      variant?: 'heading' | 'subheading' | 'body' | 'caption' | 'eyebrow' | 'details'
+      variant?: 'heading' | 'subheading' | 'body' | 'caption' | 'eyebrow' | 'details' | 'links'
     }
   | { block: 'button'; label: string; href: string }
   /**
@@ -258,7 +267,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'invite.role',
           description: 'Role the person is invited as',
-          sample: 'editor',
+          sample: 'Editor',
         },
         {
           name: 'signInUrl',
@@ -268,20 +277,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       // Mirrors the fallbackText in invites/route.ts.
       defaultBody: [
-        { block: 'text', text: 'Join {{org.name}}', variant: 'heading' },
-        {
-          block: 'text',
-          text: "You've been invited to join {{org.name}} as {{invite.role}}.",
-          variant: 'body',
-        },
-        {
-          block: 'text',
-          text:
-            'Sign in with this email address and accept the invite from ' +
-            'your dashboard.',
-          variant: 'body',
-        },
-        { block: 'button', label: 'Sign in', href: '{{signInUrl}}' },
+        { block: 'text', text: 'Invitation · {{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Join {{org.name}} on {{brand.productName}}', variant: 'heading' },
+        { block: 'text', text: 'You\'ve been invited to join {{org.name}} as {{invite.role}}. Sign in with this email address and the invitation is waiting on your dashboard.', variant: 'body' },
+        { block: 'text', text: 'Workspace: {{org.name}}\nYour role: {{invite.role}}', variant: 'details' },
+        { block: 'button', label: 'Accept the invitation', href: '{{signInUrl}}' },
+        { block: 'text', text: 'Not expecting this? You can ignore it. Nothing happens unless you accept.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because someone invited you to join ' +
@@ -316,27 +317,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       // Mirrors the fallback text in invites/route.ts.
       defaultBody: [
-        {
-          block: 'text',
-          text: '{{org.name}} is being handed to you',
-          variant: 'heading',
-        },
-        {
-          block: 'text',
-          text:
-            "You've been invited to take over {{org.name}} as its owner. " +
-            'Accepting makes you the owner of the workspace and every site ' +
-            'in it. {{handoff.previousOwner}}',
-          variant: 'body',
-        },
-        {
-          block: 'text',
-          text:
-            'Sign in with this email address and accept the invitation ' +
-            'from your dashboard. Nothing changes until you accept.',
-          variant: 'body',
-        },
-        { block: 'button', label: 'Sign in', href: '{{signInUrl}}' },
+        { block: 'text', text: 'Ownership transfer · {{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{org.name}} is being handed to you', variant: 'heading' },
+        { block: 'text', text: 'You\'ve been invited to take over {{org.name}} as its owner. The owner holds the workspace, every site in it, and its billing. {{handoff.previousOwner}}', variant: 'body' },
+        { block: 'text', text: 'Workspace: {{org.name}}\nYour role: Owner', variant: 'details' },
+        { block: 'button', label: 'Review and accept', href: '{{signInUrl}}' },
+        { block: 'text', text: 'Nothing changes until you accept. Sign in with this email address to see the invitation.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because someone invited you to take over ' +
@@ -375,21 +361,13 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       // Mirrors the fallback text in /api/admin/org-upgrade-proposal.
       defaultBody: [
-        {
-          block: 'text',
-          text: 'The {{plan.name}} plan, proposed for {{org.name}}',
-          variant: 'heading',
-        },
-        {
-          block: 'text',
-          text:
-            'Your {{brand.productName}} team proposed moving {{org.name}} to ' +
-            'the {{plan.name}} plan. When you are ready, start the ' +
-            'subscription from Billing, where the plan is already selected.',
-          variant: 'body',
-        },
+        { block: 'text', text: '{{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: 'The {{plan.name}} plan, proposed for {{org.name}}', variant: 'heading' },
+        { block: 'text', text: 'Your {{brand.productName}} team proposed moving {{org.name}} to the {{plan.name}} plan.', variant: 'body' },
         { block: 'text', text: '{{proposal.note}}', variant: 'body' },
-        { block: 'button', label: 'Review the plan', href: '{{billingUrl}}' },
+        { block: 'text', text: 'When you are ready, start the subscription from Billing. The plan is already selected there, beside the others so you can compare them first.', variant: 'body' },
+        { block: 'button', label: 'Review the {{plan.name}} plan', href: '{{billingUrl}}' },
+        { block: 'text', text: 'Nothing changes until you start the subscription.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you own {{org.name}} on ' +
@@ -427,16 +405,17 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
             'Plan: Starter\nPage views: 12,400\n' +
             'Metered usage beyond your plan: none, so nothing extra is billed for it.',
         },
+        { name: 'billingUrl', description: 'The workspace Billing page', sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/billing` },
       ],
       // Mirrors the summary lines assembled in usage-email/route.ts.
       defaultBody: [
-        { block: 'text', text: 'Usage summary for {{org.name}}', variant: 'heading' },
-        {
-          block: 'text',
-          text: 'Here is how {{org.name}} used {{brand.productName}} in {{month.label}}.',
-          variant: 'body',
-        },
+        { block: 'text', text: '{{month.label}} · {{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Your usage for {{month.label}}', variant: 'heading' },
+        { block: 'text', text: 'Here is how {{org.name}} used {{brand.productName}} in {{month.label}}: your plan, storage, page views and anything metered beyond the plan.', variant: 'body' },
         { block: 'text', text: '{{usage.summary}}', variant: 'details' },
+        { block: 'text', text: 'Billing shows the full meters beside each plan limit, and the invoices for every month.', variant: 'body' },
+        { block: 'button', label: 'Open billing', href: '{{billingUrl}}' },
+        { block: 'text', text: 'Usage that goes over your plan is billed with the next invoice. A larger plan includes more, and you can compare them from Billing.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this monthly summary because you manage ' +
@@ -460,26 +439,20 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'orgs.list',
           description: 'The organizations, one per line',
-          sample: '- Test Org (org_123), requested 2026-07-01',
+          sample: 'Test Org (org_123) — requested 2026-07-01\nNorth Bakery (org_456) — requested 2026-07-02',
         },
+        { name: 'healthUrl', description: 'Staff → Health, where pending erasures can be run', sample: `${SAMPLE_CONSOLE_ORIGIN}/admin/health` },
       ],
       // Mirrors the staff-alert text in audit-archive/route.ts. It reports
       // and asks for nothing: `run-erasures` erases these orgs at 04:00 UTC,
       // an hour after this sends, and a failure raises its own alert.
       defaultBody: [
-        {
-          block: 'text',
-          text:
-            'These workspaces are past their 7-day erasure hold. The nightly ' +
-            'erasure job erases them at 04:00 UTC, five a run and oldest ' +
-            'first, and keeps no copy, so nothing is needed from you. A ' +
-            'workspace still listed here tomorrow either failed to erase, ' +
-            'which raises its own "could not be erased" alert, or is waiting ' +
-            'behind a longer queue. Pending erasures on Staff → Health can ' +
-            'run the due ones sooner.',
-          variant: 'body',
-        },
-        { block: 'text', text: '{{orgs.list}}', variant: 'body' },
+        { block: 'text', text: 'Staff · data erasure', variant: 'eyebrow' },
+        { block: 'text', text: '{{count}} erasure request(s) past the hold', variant: 'heading' },
+        { block: 'text', text: 'These workspaces are past their 7-day erasure hold. The nightly erasure job erases them at 04:00 UTC, five a run and oldest first, and keeps no copy, so nothing is needed from you.', variant: 'body' },
+        { block: 'text', text: '{{orgs.list}}', variant: 'details' },
+        { block: 'text', text: 'A workspace still listed tomorrow either failed to erase, which raises its own "could not be erased" alert, or is waiting behind a longer queue. Pending erasures on Staff → Health can run the due ones sooner.', variant: 'body' },
+        { block: 'button', label: 'Open Staff → Health', href: '{{healthUrl}}' },
       ],
       footerReason:
         'You’re receiving this because this address gets ' +
@@ -510,25 +483,17 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           description: 'Console dashboard URL',
           sample: SAMPLE_CONSOLE_ORIGIN,
         },
+        { name: 'welcome.intro', description: 'What is ready, and what to do first, for how the workspace started', sample: WELCOME_SAMPLES['welcome.intro'] },
+        { name: 'welcome.steps', description: 'The next steps, one per line, each "Step — link"', sample: WELCOME_SAMPLES['welcome.steps'] },
       ],
       // Mirrors the fallbackText in orgs/create/route.ts.
       defaultBody: [
-        { block: 'text', text: 'Welcome to {{brand.productName}}', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            'Hi {{name}}, thanks for creating {{org.name}}. Your workspace ' +
-            'is ready.',
-          variant: 'body',
-        },
-        {
-          block: 'text',
-          text:
-            'From your dashboard you can add a site, invite your team, and ' +
-            'start building.',
-          variant: 'body',
-        },
-        { block: 'button', label: 'Open your dashboard', href: '{{consoleUrl}}' },
+        { block: 'text', text: '{{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Welcome to {{brand.productName}}, {{name}}', variant: 'heading' },
+        { block: 'text', text: '{{welcome.intro}}', variant: 'body' },
+        { block: 'text', text: '{{welcome.steps}}', variant: 'links' },
+        { block: 'button', label: 'Open {{org.name}}', href: '{{consoleUrl}}' },
+        { block: 'text', text: 'Questions as you build? The guides answer most of them, and support is a click away: {{brand.supportUrl}}', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you created an organization on ' +
@@ -553,7 +518,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'member.role',
           description: 'Role they were given',
-          sample: 'editor',
+          sample: 'Editor',
         },
         {
           name: 'signInUrl',
@@ -563,18 +528,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       // Mirrors the fallbackText in orgs/members/route.ts.
       defaultBody: [
+        { block: 'text', text: '{{org.name}}', variant: 'eyebrow' },
         { block: 'text', text: 'You’re in {{org.name}}', variant: 'heading' },
-        {
-          block: 'text',
-          text: 'You were added to {{org.name}} as {{member.role}}.',
-          variant: 'body',
-        },
-        {
-          block: 'text',
-          text: 'Sign in to switch to it from your dashboard.',
-          variant: 'body',
-        },
-        { block: 'button', label: 'Open {{brand.productName}}', href: '{{signInUrl}}' },
+        { block: 'text', text: 'You were added to {{org.name}} as {{member.role}}. Sign in and pick it from the workspace menu to see its sites.', variant: 'body' },
+        { block: 'text', text: 'Workspace: {{org.name}}\nYour role: {{member.role}}', variant: 'details' },
+        { block: 'button', label: 'Open {{org.name}}', href: '{{signInUrl}}' },
+        { block: 'text', text: 'Not expecting this? Ask whoever runs {{org.name}}, or contact support: {{brand.supportUrl}}', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you were added to {{org.name}} ' +
@@ -598,19 +557,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       // Mirrors the fallbackText in admin/run-erasures/route.ts.
       defaultBody: [
+        { block: 'text', text: 'Data erasure · {{org.name}}', variant: 'eyebrow' },
         { block: 'text', text: 'Your data has been erased', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            '{{org.name}} and all of its data have been permanently erased ' +
-            'from {{brand.productName}}, as requested.',
-          variant: 'body',
-        },
-        {
-          block: 'text',
-          text: 'This is complete and cannot be undone.',
-          variant: 'body',
-        },
+        { block: 'text', text: '{{org.name}} and all of its data have been permanently erased from {{brand.productName}}, as you asked. This is complete and cannot be undone.', variant: 'body' },
+        { block: 'text', text: 'Workspace: {{org.name}}\nStatus: Erased', variant: 'details' },
+        { block: 'text', text: 'Nothing more is needed from you. Your sign-in stays, so you can start a new workspace any time.', variant: 'body' },
+        { block: 'text', text: 'Questions about the erasure? Contact support: {{brand.supportUrl}}', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you asked {{brand.productName}} ' +
@@ -631,24 +583,17 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           description: 'The organization to be erased',
           sample: 'Test Org',
         },
+        { name: 'erasure.date', description: 'The day the 7-day hold ends and erasure runs', sample: 'July 8, 2026' },
       ],
       // Mirrors the fallbackText in admin/erasure-request/route.ts.
       defaultBody: [
-        { block: 'text', text: 'Erasure request received', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            'We have recorded a request to erase {{org.name}} and all of ' +
-            'its data from {{brand.productName}}.',
-          variant: 'body',
-        },
-        {
-          block: 'text',
-          text:
-            'Deletion is permanent and happens after a 7-day hold. If this ' +
-            'was not intended, contact support before then to cancel.',
-          variant: 'body',
-        },
+        { block: 'text', text: 'Data erasure · {{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Your erasure request is recorded', variant: 'heading' },
+        { block: 'text', text: 'We have recorded a request to erase {{org.name}} and all of its data from {{brand.productName}}: every site, form submission, order, file and member.', variant: 'body' },
+        { block: 'text', text: 'Workspace: {{org.name}}\nErased on: {{erasure.date}}', variant: 'details' },
+        { block: 'text', text: 'Erasure is permanent. It waits out a 7-day hold first, so if this was not intended, contact support before {{erasure.date}} and we will cancel it.', variant: 'body' },
+        { block: 'button', label: 'Contact support', href: '{{brand.supportUrl}}' },
+        { block: 'text', text: 'Want a copy of anything first? Export it from the workspace before the hold ends.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you own {{org.name}} on ' +
@@ -682,22 +627,11 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       // Mirrors the fallbackText in _lib/password-admin.ts.
       defaultBody: [
+        { block: 'text', text: 'Account security', variant: 'eyebrow' },
         { block: 'text', text: 'Reset your password', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            '{{actor.name}} started a password reset for your {{brand.productName}} ' +
-            'account. Choose a new password here:',
-          variant: 'body',
-        },
+        { block: 'text', text: '{{actor.name}} started a password reset for your {{brand.productName}} account. Choose a new password with the button below.', variant: 'body' },
         { block: 'button', label: 'Set a new password', href: '{{resetUrl}}' },
-        {
-          block: 'text',
-          text:
-            'The link expires shortly. If you were not expecting this, you ' +
-            'can ignore this email — your password stays as it is.',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'The link works once and expires shortly. If you were not expecting this, ignore this email and your password stays as it is.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because an administrator started a ' +
@@ -727,24 +661,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       // Mirrors the fallbackText in _lib/password-admin.ts.
       defaultBody: [
+        { block: 'text', text: 'Account security', variant: 'eyebrow' },
         { block: 'text', text: 'Your password was changed', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            '{{actor.name}} set a new password on your {{brand.productName}} ' +
-            'account. You have ' +
-            'been signed out everywhere and will need the new password to ' +
-            'sign back in.',
-          variant: 'body',
-        },
+        { block: 'text', text: '{{actor.name}} set a new password on your {{brand.productName}} account and signed you out everywhere. Sign back in with the new password.', variant: 'body' },
+        { block: 'text', text: 'Changed by: {{actor.name}}', variant: 'details' },
         { block: 'button', label: 'Sign in', href: '{{signInUrl}}' },
-        {
-          block: 'text',
-          text:
-            'If you did not expect this, contact whoever administers your ' +
-            'account straight away.',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'If you did not expect this, contact whoever administers your account straight away, or support: {{brand.supportUrl}}', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because an administrator changed the ' +
@@ -794,41 +716,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       // Mirrors the fallbackText in _lib/security-alerts.ts.
       defaultBody: [
+        { block: 'text', text: 'Security alert', variant: 'eyebrow' },
         { block: 'text', text: 'New device sign-in', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            'Your {{brand.productName}} account was just signed in to from a device it has ' +
-            'not used before.',
-          variant: 'body',
-        },
-        {
-          block: 'text',
-          text:
-            'Device: {{device.name}}\nLocation: {{device.location}}\n' +
-            'IP address: {{device.ip}}\nWhen: {{device.time}}',
-          variant: 'details',
-        },
-        {
-          // AGL-1959. The button used to say "Review account security" and
-          // land on the account page's DEFAULT tab, which offered a password
-          // change and nothing about the device the mail is about. AGL-665
-          // asked for this: "'Manage your devices' has to land somewhere that
-          // can list and revoke sessions, or the alert tells you something is
-          // wrong and offers no way to act on it — which is worse than sending
-          // nothing."
-          block: 'button',
-          label: 'Manage your devices',
-          href: '{{accountSecurityUrl}}',
-        },
-        {
-          block: 'text',
-          text:
-            'If this was you, no action is needed. If it was not, sign this ' +
-            'device out from Recent sign-ins and change your password right ' +
-            'away.',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'Your {{brand.productName}} account was just signed in to from a device it has not used before.', variant: 'body' },
+        { block: 'text', text: 'Device: {{device.name}}\nLocation: {{device.location}}\nIP address: {{device.ip}}\nWhen: {{device.time}}', variant: 'details' },
+        { block: 'text', text: 'If this was you, there is nothing to do. If it was not, sign this device out from Recent sign-ins and change your password right away.', variant: 'body' },
+        { block: 'button', label: 'Review your devices', href: '{{accountSecurityUrl}}' },
       ],
       footerReason:
         'You’re receiving this because your {{brand.productName}} ' +
@@ -863,27 +756,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       // Mirrors the fallbackText in _lib/security-alerts.ts.
       defaultBody: [
+        { block: 'text', text: 'Security alert', variant: 'eyebrow' },
         { block: 'text', text: 'New passkey added', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            'A passkey ("{{passkey.label}}") was just added to your {{brand.productName}} ' +
-            'account. It can be used to sign in without your password.',
-          variant: 'body',
-        },
+        { block: 'text', text: 'A passkey was just added to your {{brand.productName}} account. It can sign you in without your password.', variant: 'body' },
         { block: 'text', text: 'Passkey: {{passkey.label}}\nWhen: {{device.time}}', variant: 'details' },
-        {
-          block: 'button',
-          label: 'Review account security',
-          href: '{{accountSecurityUrl}}',
-        },
-        {
-          block: 'text',
-          text:
-            'If you did not add this passkey, change your password from ' +
-            'Manage account right away.',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'If you added it, there is nothing to do. If you did not, remove it and change your password right away.', variant: 'body' },
+        { block: 'button', label: 'Review account security', href: '{{accountSecurityUrl}}' },
       ],
       footerReason:
         'You’re receiving this because a passkey was added to your ' +
@@ -918,22 +796,11 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       // Mirrors the fallbackText in the route, so the designed and undesigned
       // versions say the same thing.
       defaultBody: [
+        { block: 'text', text: 'Account security', variant: 'eyebrow' },
         { block: 'text', text: 'Reset your password', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            'Someone asked to reset the password for your {{brand.productName}} account. ' +
-            'Choose a new one here:',
-          variant: 'body',
-        },
+        { block: 'text', text: 'Someone asked to reset the password for your {{brand.productName}} account. If it was you, choose a new one with the button below.', variant: 'body' },
         { block: 'button', label: 'Choose a new password', href: '{{resetUrl}}' },
-        {
-          block: 'text',
-          text:
-            'The link expires shortly. If this was not you, you can ignore ' +
-            'this email — your password stays as it is.',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'The link works once and expires shortly. If this was not you, ignore this email and your password stays as it is.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because someone asked to reset the ' +
@@ -956,21 +823,11 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
       ],
       defaultBody: [
+        { block: 'text', text: 'One last step', variant: 'eyebrow' },
         { block: 'text', text: 'Confirm your email', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            'Confirm this address to finish setting up your {{brand.productName}} account:',
-          variant: 'body',
-        },
+        { block: 'text', text: 'Confirm this address to finish setting up your {{brand.productName}} account. It keeps your account secure, and it is where we tell you about your sites: new form submissions, orders and bookings.', variant: 'body' },
         { block: 'button', label: 'Confirm my email', href: '{{verifyUrl}}' },
-        {
-          block: 'text',
-          text:
-            'If you did not create an {{brand.productName}} account, you can ignore this ' +
-            'email.',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'If you did not sign up for {{brand.productName}}, you can ignore this email.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because this address was used to sign ' +
@@ -1000,23 +857,11 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       ],
       // Mirrors the fallbackText in the route.
       defaultBody: [
+        { block: 'text', text: 'Account security', variant: 'eyebrow' },
         { block: 'text', text: 'Confirm this email address', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            'Confirm this address so you can use it with your ' +
-            '{{brand.productName}} account:',
-          variant: 'body',
-        },
+        { block: 'text', text: 'Confirm this address to add it to your {{brand.productName}} account. Once it is confirmed you can sign in with it and choose it for your email.', variant: 'body' },
         { block: 'button', label: 'Confirm email address', href: '{{confirmUrl}}' },
-        {
-          block: 'text',
-          text:
-            'If you did not ask to add this address, you can ignore this ' +
-            'email — nothing has changed and the address has not been added ' +
-            'to any account.',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'If you did not ask to add this address, ignore this email. Nothing has changed, and the address has not been added to any account.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because someone asked to add this address ' +
@@ -1065,12 +910,8 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: '{{message.subject}}', variant: 'heading' },
         { block: 'text', text: 'Hi {{name}},', variant: 'body' },
         { block: 'text', text: '{{message.body}}', variant: 'body' },
-        { block: 'text', text: '{{sender.name}}', variant: 'body' },
-        {
-          block: 'text',
-          text: 'Reply to this email to reach {{sender.name}} directly.',
-          variant: 'caption',
-        },
+        { block: 'text', text: '{{sender.name}}\n{{brand.productName}}', variant: 'body' },
+        { block: 'text', text: 'Reply to this email to reach {{sender.name}} directly.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you have a {{brand.productName}} ' +
@@ -1172,12 +1013,17 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           description: 'The alert as its sender wrote it',
           sample: 'Free-tier AI spend for 2026-09-28 (UTC) is at $40.00 of the $50.00 ceiling.',
         },
+        { name: 'alert.url', description: 'Where the alert is handled; the staff console when the sender names nowhere', sample: 'https://app.aglyn.com/admin/lockdown' },
+        { name: 'alert.urlLabel', description: 'The button’s words for that page', sample: 'Open Staff → Lockdown' },
       ],
       // The subject heads the body (AGL-3432): a reader who skips the
       // subject line still sees what the alert is about.
       defaultBody: [
+        { block: 'text', text: 'Staff alert', variant: 'eyebrow' },
         { block: 'text', text: '{{alert.subject}}', variant: 'heading' },
         { block: 'text', text: '{{alert.body}}', variant: 'body' },
+        { block: 'button', label: '{{alert.urlLabel}}', href: '{{alert.url}}' },
+        { block: 'text', text: 'Sent to the staff alert inbox. Every alert is also on Staff → Overview.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because this address gets ' +
@@ -1213,11 +1059,17 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           description: 'The item in the staff console',
           sample: `${SAMPLE_CONSOLE_ORIGIN}/admin/abuse-reports`,
         },
+        { name: 'alert.eyebrow', description: 'The alert’s level and area', sample: 'Must know · Payments & payouts' },
+        { name: 'alert.details', description: 'Which alert, which workspace or site, and when, as "Label: value" lines', sample: 'Alert: Card testing\nLevel: Must know\nSite id: host_123\nRaised: 2026-09-28 14:03 UTC' },
+        { name: 'settingsUrl', description: 'Staff → Operator alerts', sample: 'https://app.aglyn.com/admin/operator-alerts' },
       ],
       defaultBody: [
+        { block: 'text', text: '{{alert.eyebrow}}', variant: 'eyebrow' },
         { block: 'text', text: '{{alert.title}}', variant: 'heading' },
         { block: 'text', text: '{{alert.body}}', variant: 'body' },
+        { block: 'text', text: '{{alert.details}}', variant: 'details' },
         { block: 'button', label: 'Review it', href: '{{alert.url}}' },
+        { block: 'text', text: 'Choose which alerts email you, and which wait for the daily digest, on Staff → Operator alerts: {{settingsUrl}}', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because this address gets ' +
@@ -1266,9 +1118,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
       ],
       defaultBody: [
+        { block: 'text', text: 'Daily digest · {{digest.date}}', variant: 'eyebrow' },
         { block: 'text', text: '{{digest.title}}', variant: 'heading' },
+        { block: 'text', text: 'The routine alerts from the last day, batched so they arrive together. None of them needed you right away.', variant: 'body' },
         { block: 'text', text: '{{digest.body}}', variant: 'body' },
-        { block: 'button', label: 'Open the staff console', href: '{{digest.url}}' },
+        { block: 'button', label: 'Open operator alerts', href: '{{digest.url}}' },
+        { block: 'text', text: 'Choose which alerts wait for this digest on Staff → Operator alerts.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because this address gets ' +
@@ -1314,11 +1169,18 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           description: 'The organization the ticket is from',
           sample: 'Test Org',
         },
+        { name: 'ticket.opening', description: 'Who opened or replied, as one sentence', sample: 'Test Org opened a support ticket.' },
+        { name: 'ticket.message', description: 'What the customer wrote', sample: 'We added the TXT record yesterday and the domain still says pending.' },
+        { name: 'ticket.details', description: 'The workspace, sender, subject and ticket id as "Label: value" lines', sample: 'Workspace: Test Org\nFrom: owner@example.com\nSubject: Domain will not verify\nTicket id: tkt_123' },
       ],
       defaultBody: [
-        { block: 'text', text: '{{manager.name}},', variant: 'body' },
-        { block: 'text', text: '{{ticket.body}}', variant: 'body' },
+        { block: 'text', text: '{{ticket.heading}} · {{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{ticket.subject}}', variant: 'heading' },
+        { block: 'text', text: '{{manager.name}}, {{ticket.opening}} You are its success manager, so it is copied to you.', variant: 'body' },
+        { block: 'text', text: '{{ticket.details}}', variant: 'details' },
+        { block: 'text', text: '{{ticket.message}}', variant: 'body' },
         { block: 'button', label: 'Open the ticket', href: '{{ticket.url}}' },
+        { block: 'text', text: 'Answer from Staff → Support so the reply is threaded on the ticket and the customer sees it in their console.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you are the success manager for ' +
@@ -1338,24 +1200,33 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         {
           name: 'notice.subject',
           description: 'The notice, in one line',
-          sample: 'Test Org has used 80% of this month’s emails',
+          sample: 'Sequences paused your mailbox avery@example.com',
         },
         {
           name: 'notice.body',
           description: 'The notice as its sender wrote it',
-          sample: 'Test Org has sent 8,000 of its 10,000 emails this month.',
+          sample: 'Sequences paused the mailbox Avery Quinn <avery@example.com>.\n\nSequences paused it after 3 bounces in a row.',
         },
         {
           name: 'org.name',
           description: 'The workspace the notice is about',
           sample: 'Test Org',
         },
+        { name: 'notice.lead', description: 'What happened and what to do, without the link', sample: 'Sequences paused avery@example.com after 3 bounces in a row. 4 enrollments are active on it and waiting. Re-check the addresses, then open Mailboxes and select Resume.' },
+        { name: 'notice.details', description: 'The facts, as "Label: value" lines', sample: 'Mailbox: avery@example.com\nStatus: Paused by Sequences\nEnrollments waiting: 4' },
+        { name: 'notice.url', description: 'Where the reader acts on it', sample: 'https://app.aglyn.com/test-org/outreach/mailboxes' },
+        { name: 'notice.action', description: 'The button’s words', sample: 'Open Mailboxes to resume' },
+        { name: 'notice.reason', description: 'Why this reader is getting it', sample: 'You are getting this because the mailbox is yours, or you manage the organization it belongs to.' },
       ],
       // The subject heads the body (AGL-3432): a reader who skips the
       // subject line still sees what the notice is about.
       defaultBody: [
+        { block: 'text', text: '{{org.name}}', variant: 'eyebrow' },
         { block: 'text', text: '{{notice.subject}}', variant: 'heading' },
-        { block: 'text', text: '{{notice.body}}', variant: 'body' },
+        { block: 'text', text: '{{notice.lead}}', variant: 'body' },
+        { block: 'text', text: '{{notice.details}}', variant: 'details' },
+        { block: 'button', label: '{{notice.action}}', href: '{{notice.url}}' },
+        { block: 'text', text: '{{notice.reason}}', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you’re a member of {{org.name}} on ' +
@@ -1393,32 +1264,12 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
       ],
       defaultBody: [
+        { block: 'text', text: '{{org.name}}', variant: 'eyebrow' },
         { block: 'text', text: 'Confirm this address', variant: 'heading' },
-        {
-          block: 'text',
-          text:
-            '{{member.name}} asked to add {{address}} as one of their own ' +
-            'email addresses in the {{org.name}} workspace on ' +
-            '{{brand.productName}}. To confirm it, open the link while ' +
-            'signed in as that member.',
-          variant: 'body',
-        },
+        { block: 'text', text: '{{member.name}} asked to add {{address}} as one of their own email addresses in {{org.name}}. Open the link while signed in as that member to confirm it.', variant: 'body' },
+        { block: 'text', text: 'Address: {{address}}\nWorkspace: {{org.name}}\nFor: {{member.name}}', variant: 'details' },
         { block: 'button', label: 'Confirm the address', href: '{{confirmUrl}}' },
-        {
-          block: 'text',
-          text:
-            'Once it is confirmed, email sent from {{address}} with the ' +
-            'workspace’s capture address in BCC is filed under the person it ' +
-            'was written to. The link works for 24 hours.',
-          variant: 'body',
-        },
-        {
-          block: 'text',
-          text:
-            'If you did not expect this email, ignore it. Nothing changes ' +
-            'unless the member who asked opens the link.',
-          variant: 'caption',
-        },
+        { block: 'text', text: 'Once confirmed, email sent from {{address}} with the workspace’s capture address in BCC is filed under the person it was written to. The link works for 24 hours. If you did not expect this, ignore it.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because a member of {{org.name}} on ' +
@@ -1449,14 +1300,33 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           description: 'Notification settings, where the digest is turned off',
           sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/notifications/settings`,
         },
+        { name: 'digest.eyebrow', description: 'The workspace and the day', sample: 'Test Org · Friday, September 28' },
+        { name: 'digest.summary', description: 'What is owed today, in one line', sample: '1 task due today, 2 overdue, 3 unworked leads.' },
+        { name: 'digest.overdueHeading', description: 'The overdue list’s heading, empty when there is none', sample: 'Overdue (2)' },
+        { name: 'digest.overdue', description: 'Overdue tasks, one "Title — when" per line', sample: 'Call back Jordan — Main site · Thu, Sep 27, 9:00 AM CDT\nSend the proposal — Fri, Sep 28, 8:00 AM CDT' },
+        { name: 'digest.todayHeading', description: 'The due-today list’s heading', sample: 'Due today (1)' },
+        { name: 'digest.today', description: 'Tasks due today, one per line', sample: 'Follow up with Priya — Main site · Fri, Sep 28, 3:00 PM CDT' },
+        { name: 'digest.leadsHeading', description: 'The unworked leads list’s heading', sample: 'Unworked leads (3)' },
+        { name: 'digest.leads', description: 'Unworked leads, one "Name — site · first seen" per line', sample: 'Jane Doe — Main site · first seen Sep 26\nsam@example.com — Main site · first seen Sep 27' },
+        { name: 'digest.nurturing', description: 'The leads in sequences or campaigns, or empty', sample: '2 leads are in sequences or campaigns.' },
+        { name: 'digest.url', description: 'Where the reader starts: the Tasks section, else the leads', sample: 'https://app.aglyn.com/test-org/crm/tasks' },
+        { name: 'digest.action', description: 'The button’s words', sample: 'Open your tasks' },
+        { name: 'digest.links', description: 'Each site’s leads, one "Leads on Site — URL" per line', sample: 'Leads on Main site — https://app.aglyn.com/test-org/crm/leads' },
       ],
       defaultBody: [
-        { block: 'text', text: '{{digest.body}}', variant: 'body' },
-        {
-          block: 'text',
-          text: 'Change what you are emailed about: {{settingsUrl}}',
-          variant: 'caption',
-        },
+        { block: 'text', text: '{{digest.eyebrow}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Your day in the CRM', variant: 'heading' },
+        { block: 'text', text: '{{digest.summary}}', variant: 'body' },
+        { block: 'text', text: '{{digest.overdueHeading}}', variant: 'subheading' },
+        { block: 'text', text: '{{digest.overdue}}', variant: 'details' },
+        { block: 'text', text: '{{digest.todayHeading}}', variant: 'subheading' },
+        { block: 'text', text: '{{digest.today}}', variant: 'details' },
+        { block: 'text', text: '{{digest.leadsHeading}}', variant: 'subheading' },
+        { block: 'text', text: '{{digest.leads}}', variant: 'details' },
+        { block: 'text', text: '{{digest.nurturing}}', variant: 'caption' },
+        { block: 'button', label: '{{digest.action}}', href: '{{digest.url}}' },
+        { block: 'text', text: '{{digest.links}}', variant: 'links' },
+        { block: 'text', text: 'Turn the digest off, or change what you are emailed about: {{settingsUrl}}', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this each morning because the Daily CRM digest is ' +
@@ -1485,14 +1355,21 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           description: 'Notification settings, where reminders are turned off',
           sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/notifications/settings`,
         },
+        { name: 'reminder.eyebrow', description: 'The workspace the task is in', sample: 'Test Org' },
+        { name: 'reminder.intro', description: 'What this is, in one sentence', sample: 'A reminder about your task. Open it to see the contact or deal it is for.' },
+        { name: 'reminder.details', description: 'Each task as "Title — due …"', sample: 'Call back Jordan — due today at 9:00 AM CDT' },
+        { name: 'reminder.url', description: 'The task, or the first one when there are several', sample: 'https://app.aglyn.com/test-org/crm/tasks#t-1' },
+        { name: 'reminder.action', description: 'The button’s words', sample: 'Open the task' },
+        { name: 'reminder.links', description: 'For several tasks, each one’s link as "Title — URL"; empty for one', sample: 'Call back Jordan — https://app.aglyn.com/test-org/crm/tasks#t-1\nSend the proposal — https://app.aglyn.com/test-org/crm/tasks#t-2' },
       ],
       defaultBody: [
-        { block: 'text', text: '{{reminder.body}}', variant: 'body' },
-        {
-          block: 'text',
-          text: 'Change what you are emailed about: {{settingsUrl}}',
-          variant: 'caption',
-        },
+        { block: 'text', text: '{{reminder.eyebrow}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{reminder.subject}}', variant: 'heading' },
+        { block: 'text', text: '{{reminder.intro}}', variant: 'body' },
+        { block: 'text', text: '{{reminder.details}}', variant: 'details' },
+        { block: 'button', label: '{{reminder.action}}', href: '{{reminder.url}}' },
+        { block: 'text', text: '{{reminder.links}}', variant: 'links' },
+        { block: 'text', text: 'Change what you are emailed about: {{settingsUrl}}', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because task reminders are on in your ' +
@@ -1518,10 +1395,19 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           description: 'The insights, numbered, with their links',
           sample: '1. Visits from search rose 18% on last week.',
         },
+        { name: 'digest.eyebrow', description: 'The workspace and the week', sample: 'Test Org · Oct 5 – Oct 11' },
+        { name: 'digest.intro', description: 'What the insights are, in one sentence', sample: 'What Test Site\'s figures showed last week. Each one is traced to the figures it cites, so you can check it on the Analytics page.' },
+        { name: 'digest.insights', description: 'The insights, numbered', sample: '1. Visits from search rose 18% on last week.\n\n2. The pricing page was the most viewed page, with 312 views.' },
+        { name: 'digest.analyticsUrl', description: 'The site’s Analytics page', sample: 'https://app.aglyn.com/test-org/hosts/test-site/analytics' },
+        { name: 'digest.why', description: 'Why it came, what it cost and how to turn it off', sample: 'You asked for weekly insights for Test Org. Writing these used 21 of Test Org’s AI credits. Turn them off in Notifications: https://app.aglyn.com/manage/notifications' },
       ],
       defaultBody: [
+        { block: 'text', text: '{{digest.eyebrow}}', variant: 'eyebrow' },
         { block: 'text', text: 'Weekly insights for {{site.name}}', variant: 'heading' },
-        { block: 'text', text: '{{digest.body}}', variant: 'body' },
+        { block: 'text', text: '{{digest.intro}}', variant: 'body' },
+        { block: 'text', text: '{{digest.insights}}', variant: 'body' },
+        { block: 'button', label: 'Open {{site.name}} analytics', href: '{{digest.analyticsUrl}}' },
+        { block: 'text', text: '{{digest.why}}', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you turned on weekly insights in ' +
@@ -1682,8 +1568,22 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           description: 'The receipt as the intake wrote it',
           sample: 'We have received your report about https://example.com.\n\nYour reference is AR-3F9K2.',
         },
+        { name: 'receipt.eyebrow', description: 'The reference', sample: 'Receipt · AR-3F9K2' },
+        { name: 'receipt.heading', description: 'What was received', sample: 'We received your report' },
+        { name: 'receipt.intro', description: 'What it was about', sample: 'We have received your report about https://example.com.' },
+        { name: 'receipt.details', description: 'Reference, address and time, as "Label: value" lines', sample: 'Reference: AR-3F9K2\nAbout: https://example.com\nReceived: 2026-09-28 14:03 UTC' },
+        { name: 'receipt.next', description: 'What happens next', sample: 'We do not publish what we decide about individual sites, and we will not share your details with the site\'s owner unless the law requires it.' },
+        { name: 'receipt.keep', description: 'Keep this email, and the sign-off', sample: 'Keep this email. It is your record that we received the message above, and the reference is how we will find it if you write to us about it.' },
       ],
-      defaultBody: [{ block: 'text', text: '{{receipt.body}}', variant: 'body' }],
+      defaultBody: [
+        { block: 'text', text: '{{receipt.eyebrow}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{receipt.heading}}', variant: 'heading' },
+        { block: 'text', text: '{{receipt.intro}}', variant: 'body' },
+        { block: 'text', text: '{{receipt.details}}', variant: 'details' },
+        { block: 'text', text: 'What happens next', variant: 'subheading' },
+        { block: 'text', text: '{{receipt.next}}', variant: 'body' },
+        { block: 'text', text: '{{receipt.keep}}', variant: 'caption' },
+      ],
       footerReason:
         'You’re receiving this because this address was given on a report ' +
         'or notice sent to {{brand.productName}}.',
@@ -1708,8 +1608,17 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           description: 'The decision as review wrote it',
           sample: 'Test Plugin 1.2.0 passed review and is live in the marketplace.',
         },
+        { name: 'review.details', description: 'Plugin, version and outcome as "Label: value" lines', sample: 'Plugin: Test Plugin\nVersion: 1.2.0\nOutcome: Approved' },
+        { name: 'review.url', description: 'The publisher’s Marketplace page', sample: 'https://app.aglyn.com/test-org/marketplace' },
       ],
-      defaultBody: [{ block: 'text', text: '{{review.body}}', variant: 'body' }],
+      defaultBody: [
+        { block: 'text', text: 'Marketplace review', variant: 'eyebrow' },
+        { block: 'text', text: '{{review.subject}}', variant: 'heading' },
+        { block: 'text', text: '{{review.body}}', variant: 'body' },
+        { block: 'text', text: '{{review.details}}', variant: 'details' },
+        { block: 'button', label: 'Open your marketplace listings', href: '{{review.url}}' },
+        { block: 'text', text: 'Questions about a review? Contact support: {{brand.supportUrl}}', variant: 'caption' },
+      ],
       footerReason:
         'You’re receiving this because you manage a plugin published on ' +
         '{{brand.productName}}.',

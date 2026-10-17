@@ -145,7 +145,7 @@ export const TEXT_ID: Aglyn.ComponentId = 'emailText'
 
 export interface EmailTextProps extends EmailBlockStyleProps {
   children?: string
-  variant?: 'heading' | 'subheading' | 'body' | 'caption' | 'eyebrow' | 'details'
+  variant?: 'heading' | 'subheading' | 'body' | 'caption' | 'eyebrow' | 'details' | 'links'
   color?: string
   align?: 'left' | 'center' | 'right'
 }
@@ -160,6 +160,27 @@ const TEXT_PRESETS: Record<
   caption: { fontSize: 12, fontWeight: 400, lineHeight: 1.5 },
   eyebrow: { fontSize: 12, fontWeight: 700, lineHeight: 1.4 },
   details: { fontSize: 14, fontWeight: 400, lineHeight: 1.45 },
+  links: { fontSize: 15, fontWeight: 600, lineHeight: 1.4 },
+}
+
+/** A list of links as the sent email draws it: each "Label — address" line its label, linked, with an arrow. */
+function EmailLinksPreview({ text }: { text: string }) {
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+  return (
+    <Box sx={{ fontFamily: 'Helvetica, Arial, sans-serif', fontSize: 15, fontWeight: 600, lineHeight: 1.4 }}>
+      {lines.map((line, index) => {
+        const split = splitEmailDetailLine(line)
+        return (
+          <Box
+            key={index}
+            sx={{ py: 1.25, borderTop: index > 0 ? 1 : 0, borderColor: 'divider', color: split ? 'primary.dark' : 'text.primary' }}
+          >
+            {split ? `${split.label} →` : line}
+          </Box>
+        )
+      })}
+    </Box>
+  )
 }
 
 /** The styles drawn in the theme's muted text color unless a color is set, as the sent email draws them. */
@@ -223,6 +244,13 @@ export const EmailText = forwardRef<HTMLDivElement, EmailTextProps>(
   (props, ref) => {
     const { children, variant, color, align, sx, ...rest } = props
     const preset = TEXT_PRESETS[variant ?? 'body'] ?? TEXT_PRESETS.body
+    if (variant === 'links') {
+      return (
+        <Box ref={ref} {...rest} sx={mergeSxProps({ mb: 1 }, sx)}>
+          <EmailLinksPreview text={children ?? 'Read the guide — https://example.com'} />
+        </Box>
+      )
+    }
     if (variant === 'details') {
       return (
         <Box ref={ref} {...rest} sx={mergeSxProps({ mb: 1 }, sx)}>
@@ -280,7 +308,8 @@ export const emailTextSchema: Aglyn.ComponentSchema<EmailTextProps> = {
         'Size and weight of this text — Heading and Subheading also give it ' +
         'the spacing above and below that a heading needs. Eyebrow is a ' +
         'small label above a heading. Details draws each "Label: value" line ' +
-        'as a row of a panel, a "Total" row in bold.',
+        'as a row of a panel, a "Total" row in bold. Links draws each ' +
+        '"Label — web address" line as that label, linked.',
       component: Aglyn.FieldComponentType.SELECT,
       options: [
         { value: 'heading', label: 'Heading' },
@@ -289,6 +318,7 @@ export const emailTextSchema: Aglyn.ComponentSchema<EmailTextProps> = {
         { value: 'caption', label: 'Caption' },
         { value: 'eyebrow', label: 'Eyebrow' },
         { value: 'details', label: 'Details' },
+        { value: 'links', label: 'Links' },
       ],
     },
     {

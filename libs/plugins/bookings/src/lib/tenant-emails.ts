@@ -68,19 +68,12 @@ export function bookingsTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
-        { block: 'text', text: 'Booking confirmed', variant: 'heading' },
-        {
-          block: 'text',
-          text: 'Hi {{name}}, your booking with {{host.businessName}} is confirmed.',
-          variant: 'body',
-        },
-        // What, when and the reference as a details panel (AGL-3897).
-        {
-          block: 'text',
-          text: 'Service: {{service.name}}\nWhen: {{when}} ({{timezone}})\nReference: {{booking.ref}}',
-          variant: 'details',
-        },
+        { block: 'text', text: '{{host.businessName}} · Booking', variant: 'eyebrow' },
+        { block: 'text', text: 'You’re booked: {{service.name}}', variant: 'heading' },
+        { block: 'text', text: 'Hi {{name}}, your booking with {{host.businessName}} is confirmed. Here are the details to keep.', variant: 'body' },
+        { block: 'text', text: 'Service: {{service.name}}\nWhen: {{when}} ({{timezone}})\nReference: {{booking.ref}}', variant: 'details' },
         { block: 'text', text: '{{booking.payment}}', variant: 'body' },
+        { block: 'text', text: 'Need to change it? Reply to this email and {{host.businessName}} will help.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you booked with {{host.businessName}}.',
@@ -112,17 +105,11 @@ export function bookingsTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Booking', variant: 'eyebrow' },
         { block: 'text', text: 'Your booking is coming up', variant: 'heading' },
-        {
-          block: 'text',
-          text: 'Hi {{name}}, this is a reminder of your booking with {{host.businessName}}.',
-          variant: 'body',
-        },
-        {
-          block: 'text',
-          text: 'Service: {{service.name}}\nWhen: {{when}} ({{timezone}})',
-          variant: 'details',
-        },
+        { block: 'text', text: 'Hi {{name}}, this is a reminder of your booking with {{host.businessName}}.', variant: 'body' },
+        { block: 'text', text: 'Service: {{service.name}}\nWhen: {{when}} ({{timezone}})', variant: 'details' },
+        { block: 'text', text: 'Can no longer make it? Reply to this email so {{host.businessName}} can offer the time to someone else.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you have a booking with {{host.businessName}}.',
@@ -164,19 +151,11 @@ export function bookingsTenantEmails(): readonly TenantEmailEntry[] {
         },
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Booking', variant: 'eyebrow' },
         { block: 'text', text: 'Your booking has a new time', variant: 'heading' },
-        {
-          block: 'text',
-          text: 'Hi {{name}}, your booking with {{host.businessName}} has a new time.',
-          variant: 'body',
-        },
-        {
-          block: 'text',
-          text:
-            'Service: {{service.name}}\nNew time: {{when}} ({{timezone}})\n' +
-            'Was: {{previousWhen}}\nReference: {{booking.ref}}',
-          variant: 'details',
-        },
+        { block: 'text', text: 'Hi {{name}}, your booking with {{host.businessName}} moved. The new time is below; the old one no longer applies.', variant: 'body' },
+        { block: 'text', text: 'Service: {{service.name}}\nNew time: {{when}} ({{timezone}})\nWas: {{previousWhen}}\nReference: {{booking.ref}}', variant: 'details' },
+        { block: 'text', text: 'Does the new time not work? Reply to this email and {{host.businessName}} will help.', variant: 'caption' },
       ],
       footerReason:
         'You’re receiving this because you have a booking with {{host.businessName}}.',

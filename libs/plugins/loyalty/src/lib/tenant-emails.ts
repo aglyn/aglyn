@@ -69,8 +69,9 @@ export function loyaltyTenantEmails(): readonly TenantEmailEntry[] {
         { name: 'loyalty.points', description: 'Points this order earned', sample: '45' },
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Rewards', variant: 'eyebrow' },
         { block: 'text', text: 'You earned {{loyalty.points}} points', variant: 'heading' },
-        { block: 'text', text: 'Thanks for your order with {{host.businessName}}.', variant: 'body' },
+        { block: 'text', text: 'Thanks for your order with {{host.businessName}}, {{name}}. Here is where your rewards stand.', variant: 'body' },
         BALANCE_LINE,
         SPEND_LINE,
         { block: 'text', text: '{{loyalty.referral}}', variant: 'body' },
@@ -92,7 +93,9 @@ export function loyaltyTenantEmails(): readonly TenantEmailEntry[] {
         { name: 'loyalty.note', description: 'The note the store wrote; empty when none', sample: 'Sorry about the delay!' },
       ],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Rewards', variant: 'eyebrow' },
         { block: 'text', text: 'You have {{loyalty.amount}} in store credit', variant: 'heading' },
+        { block: 'text', text: '{{host.businessName}} added {{loyalty.amount}} of store credit to your rewards.', variant: 'body' },
         { block: 'text', text: '{{loyalty.note}}', variant: 'body' },
         BALANCE_LINE,
         SPEND_LINE,
@@ -110,12 +113,9 @@ export function loyaltyTenantEmails(): readonly TenantEmailEntry[] {
       defaultSubject: 'A friend’s first order earned you {{loyalty.amount}}',
       mergeTokens: [...BALANCE_TOKENS, { name: 'loyalty.amount', description: 'The reward', sample: '$10.00' }],
       defaultBody: [
+        { block: 'text', text: '{{host.businessName}} · Rewards', variant: 'eyebrow' },
         { block: 'text', text: 'Your referral paid off', variant: 'heading' },
-        {
-          block: 'text',
-          text: 'A friend used your referral code at {{host.businessName}}, so you have {{loyalty.amount}} more in store credit.',
-          variant: 'body',
-        },
+        { block: 'text', text: 'A friend used your referral code at {{host.businessName}}, so you have {{loyalty.amount}} more in store credit. Thanks for spreading the word.', variant: 'body' },
         BALANCE_LINE,
         SPEND_LINE,
         { block: 'button', label: 'Shop {{host.businessName}}', href: '{{host.url}}' },

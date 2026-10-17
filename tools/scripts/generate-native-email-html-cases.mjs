@@ -167,6 +167,14 @@ export async function emailHtmlCases() {
       if (block.block === 'button') return [merged(block.label)]
       if (block.block === 'html') return []
       const text = merged(block.text)
+      // A links list draws each "Label — address" line as its label, linked.
+      if (block.variant === 'links') {
+        return text
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => render.splitEmailDetailLine(line)?.label ?? line)
+      }
       if (block.variant !== 'details') return [text]
       return text
         .split('\n')

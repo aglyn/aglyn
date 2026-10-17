@@ -21,6 +21,7 @@ import {
   type AssistRefusedBy,
 } from './assist-credits'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
   ASSIST_RETURNED_USD_FIELD,
@@ -392,6 +393,8 @@ export async function announcePlatformFreeSpend(
         'workspace is refused AI generation until the day rolls. The ' +
         'assist signals page shows the day so far; the `ai-generate` ' +
         'feature lock on Staff → Lockdown is the manual stop.',
+    url: `${platformConsoleOrigin()}/admin/lockdown`,
+    urlLabel: 'Open Staff → Lockdown',
     context: 'ai-free-spend',
   })
   return crossed

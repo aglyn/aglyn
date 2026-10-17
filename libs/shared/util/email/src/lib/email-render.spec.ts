@@ -1032,6 +1032,44 @@ describe('the polished blocks (AGL-3897)', () => {
     expect(html).toContain(`color:${resolveEmailColor('primary.dark', PLATFORM_EMAIL_PALETTE)};`)
   })
 
+  it('drops an eyebrow’s separator when a token beside it is empty', () => {
+    const text = (children: string, merge: Record<string, string>) =>
+      one({ variant: 'eyebrow', children }, { merge }).text
+    expect(text('{{site}} · Order {{n}}', { site: '', n: '#7' })).toBe('Order #7')
+    expect(text('{{a}} · {{b}} · {{c}}', { a: 'Acme', b: '', c: 'Rewards' })).toBe('Acme · Rewards')
+  })
+
+  it('draws a links list, each "Label — address" line a link', () => {
+    const { html } = one({
+      variant: 'links',
+      children: 'Invite your team — https://x.test/team\nRead the guide',
+    })
+    expect(html).toContain('href="https://x.test/team"')
+    expect(html).toContain('Invite your team&nbsp;&rarr;')
+    // A line with no address stays words.
+    expect(html).toContain('>Read the guide</span>')
+  })
+
+  it('leaves out a button whose link a token left empty, and keeps one with a written link', () => {
+    const button = (props: Record<string, unknown>, merge: Record<string, string>) =>
+      renderEmailHtml({
+        nodes: {
+          root: { componentId: 'div', nodes: ['section'] },
+          section: { componentId: 'emailSection', nodes: ['button'] },
+          button: { componentId: 'emailButton', props },
+        } as never,
+        merge,
+        sanitize: SANITIZE,
+      })
+    expect(button({ children: 'Review it', href: '{{alert.url}}' }, { 'alert.url': '' }).html).not.toContain(
+      'Review it',
+    )
+    expect(button({ children: '{{label}}', href: 'https://x.test' }, { label: '' }).html).not.toContain('href=')
+    expect(button({ children: 'Review it', href: '{{alert.url}}' }, { 'alert.url': 'https://x.test/a' }).html).toContain(
+      'href="https://x.test/a"',
+    )
+  })
+
   it('draws a caption in the theme’s muted text', () => {
     const { html } = one({ variant: 'caption', children: 'Order reference: 123' })
     expect(html).toContain(`color:${resolveEmailColor('text.secondary', PLATFORM_EMAIL_PALETTE)};`)
