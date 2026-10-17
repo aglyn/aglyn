@@ -138,7 +138,7 @@ if (modulesLink?.isSymbolicLink()) {
 if (liveAi && !process.env.FIRESTORE_EMULATOR_HOST) {
   fail('--live-ai needs FIRESTORE_EMULATOR_HOST: a live model is passed through only to a server on the emulators.')
 }
-const { env, blanked, passedThrough } = emulatedServeEnvironment(
+const { env, blanked, passedThrough, identityFilled, adminSdkMissing } = emulatedServeEnvironment(
   process.env,
   readEnvFiles(serveEnvFiles(repoRoot, app)),
   { liveAi },
@@ -160,6 +160,20 @@ console.log(
     (blanked.length > 0 ? `: ${blanked.join(', ')}` : '') +
     (liveAi ? `; LIVE AI: ${passedThrough.join(', ')} passed through, the beat answers CRON_SECRET` : ''),
 )
+// What no env file gave this checkout (AGL-3910), said before the first
+// request rather than as a 500 or a browser-console error after it.
+if (identityFilled.length > 0) {
+  console.log(
+    `serve-emulated: no env file set ${identityFilled.join(', ')}; using the emulator project ` +
+      `${env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}'s values (lib/emulated-env.mjs)`,
+  )
+}
+if (adminSdkMissing.length > 0) {
+  console.warn(
+    `serve-emulated: ${adminSdkMissing.join(' and ')} not set, so the Admin SDK will not start and ` +
+      "every server route that uses it answers 500 (app/no-app). Put the service account in the repo's .env.",
+  )
+}
 
 const nextBin = createRequire(join(repoRoot, 'package.json')).resolve('next/dist/bin/next')
 const server = fork(nextBin, ['dev', '--port', String(port)], {
