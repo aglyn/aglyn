@@ -2379,6 +2379,22 @@ beside them.
 after the live plan eval. A run costs a few hundred credits, well under a
 dollar of model time.
 
+**Without a live model:** `--stub-model` (AGL-3910) serves the console with one
+provider, a loopback OpenAI-compatible stub that answers every call with a 503.
+The Anthropic key is held empty, and the preflight allows the stub's key alone.
+The run walks the start through workspace creation, sign-in, Create site, the
+answers and Plan my site. It ends on the "Building your site" page without
+starting the beat, which makes it the check for the harness itself and for
+everything before the model's first word.
+
+A checkout without the gitignored app env files still serves. Beside an
+emulator, `serve-emulated.mjs` fills the Firebase web config that no file set
+(the project id, from `FIREBASE_PROJECT_ID` or else `aglyn-main`, then the
+auth domain, bucket, database URL and a placeholder web API key) and says
+which values it filled. Without that config, the Admin SDK never started and
+`/api/orgs/create` answered 500 with `app/no-app`. It still needs the service
+account from the repo `.env`, and it warns at startup when that is missing.
+
 ## The `seo` kind
 
 SEO by AI (AGL-2910): `src/lib/jobs/ai-job-seo-step.ts`, its generation call in
