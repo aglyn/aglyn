@@ -98,7 +98,13 @@ public struct SpecScreenView: View {
   /// Whether the split list has a row to pick: an empty list folds the detail column away (spec 4), so a short Team or
   /// Roles list never sits beside half a window of "Nothing selected".
   private func splitListHasRows(_ model: ScreenModel) -> Bool {
-    guard model.phase == .ready, let block = splitBlock else { return true }
+    guard let block = splitBlock else { return true }
+    switch model.phase {
+    case .loading: return true
+    // A failure or an upsell is the whole screen's answer: nothing to pick beside it.
+    case .failed, .planRefused: return false
+    case .ready: break
+    }
     let items = block["items"]?.stringValue ?? ""
     if let through = block["flatten"]?.stringValue {
       return !ScreenValues.flatten(ScreenValues.rows(ScreenValues.lookup(items, in: model.context)), through: through).isEmpty

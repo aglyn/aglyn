@@ -272,6 +272,9 @@ struct BasketPanel: View {
           AglynAmountRow(
             model.cart.discountPct > 0 ? "Discount (\(model.cart.discountPct)%)" : "Add a discount",
             amount: model.cart.discountPct > 0 ? "−\(model.money(model.cart.discountCents))" : "")
+            // The whole row is the button, not only its words.
+            .frame(maxWidth: .infinity, minHeight: 32)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(AglynColor.tint)
