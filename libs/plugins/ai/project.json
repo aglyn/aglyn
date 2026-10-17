@@ -19,7 +19,12 @@
         "main": "libs/plugins/ai/src/index.ts",
         "tsConfig": "libs/plugins/ai/tsconfig.lib.json",
         "assets": [
-          "libs/plugins/ai/*.md"
+          "libs/plugins/ai/*.md",
+          {
+            "input": "libs/plugins/ai/src/lib/assets",
+            "glob": "**/*.webp",
+            "output": "src/lib/assets"
+          }
         ]
       }
     },

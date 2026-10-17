@@ -6,7 +6,11 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,13 +24,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.ripple
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -34,13 +41,27 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** A list row: leading icon, title, optional supporting line and trailing slot. */
+/** How far a list row's rounded container sits in from the list's edges, so its content stays on the 16 dp line. */
+internal val ListRowInset = 8.dp
+
+/**
+ * A list row on the Material 3 list tokens: a 40 dp leading circle, a BodyLarge title (two lines at most), a BodyMedium
+ * supporting line and a trailing slot, at least 56 dp tall (72 with a supporting line).
+ *
+ * Every row sits in a rounded container inset from the list's edges, so a selected row reads as one shape: the container
+ * fills with primaryContainer, the title turns semibold and the leading circle inverts, which keeps selection from
+ * relying on color alone. Pressed and hovered states are clipped to the same shape, and keyboard focus draws a 2 dp
+ * primary outline around it. The same shape marks the selected destination in the navigation drawer.
+ */
 @Composable
 fun AglynListItem(
   title: String,
@@ -53,56 +74,112 @@ fun AglynListItem(
   trailing: (@Composable () -> Unit)? = null,
   onClick: (() -> Unit)? = null,
 ) {
-  ListItem(
-    modifier = modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-    headlineContent = {
+  val colors = MaterialTheme.colorScheme
+  val shape = MaterialTheme.shapes.large
+  val interaction = remember { MutableInteractionSource() }
+  val focused by interaction.collectIsFocusedAsState()
+  val content = if (selected) colors.onPrimaryContainer else colors.onSurface
+  Row(
+    modifier
+      .fillMaxWidth()
+      .padding(horizontal = ListRowInset, vertical = 1.dp)
+      .clip(shape)
+      .background(if (selected) colors.primaryContainer else Color.Transparent)
+      .then(if (focused) Modifier.border(2.dp, colors.primary, shape) else Modifier)
+      .then(
+        if (onClick != null) {
+          Modifier.clickable(interactionSource = interaction, indication = ripple(), onClick = onClick)
+        } else {
+          Modifier
+        },
+      )
+      .semantics(mergeDescendants = onClick != null) { if (selected) this.selected = true }
+      .heightIn(min = if (supporting != null) 72.dp else 56.dp)
+      .padding(horizontal = ListRowInset, vertical = 10.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
+    if (icon != null) {
+      Box(
+        Modifier.size(40.dp).clip(CircleShape).background(if (selected) colors.primary else colors.primaryContainer),
+        contentAlignment = Alignment.Center,
+      ) { Icon(icon, contentDescription = null, tint = if (selected) colors.onPrimary else colors.onPrimaryContainer) }
+    }
+    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
       Text(
         title,
+        style = MaterialTheme.typography.bodyLarge,
+        color = content,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
-        fontWeight = if (emphasized) FontWeight.SemiBold else null,
+        fontWeight = if (emphasized || selected) FontWeight.SemiBold else null,
       )
-    },
-    supportingContent = supporting?.let { { Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
-    leadingContent = icon?.let {
-      {
-        Box(
-          Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
-          contentAlignment = Alignment.Center,
-        ) { Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+      if (supporting != null) {
+        Text(
+          supporting,
+          style = MaterialTheme.typography.bodyMedium,
+          color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
+          maxLines = 2,
+          overflow = TextOverflow.Ellipsis,
+        )
       }
-    },
-    trailingContent = trailing,
-    colors = ListItemDefaults.colors(
-      containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-    ),
-  )
+    }
+    if (trailing != null) {
+      CompositionLocalProvider(
+        LocalContentColor provides if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
+        LocalTextStyle provides MaterialTheme.typography.labelMedium,
+      ) { trailing() }
+    }
+  }
 }
 
-/** A centered message for an empty list or an unpicked detail pane. */
+/** What an [EmptyState] stands for: nothing yet, a feature the plan does not include, or a real failure. */
+enum class EmptyTone { NEUTRAL, UPSELL, ERROR }
+
+/**
+ * A centered message for an empty list, a missing feature or a failure: a 48 dp icon in a 72 dp tonal circle, a
+ * TitleMedium title, a BodyMedium body (360 dp wide at most) and at most one action. A plan or add-on the workspace does
+ * not have yet is an [EmptyTone.UPSELL] (brand tone, never an error glyph); [EmptyTone.ERROR] is for real failures only.
+ */
 @Composable
 fun EmptyState(
   title: String,
   modifier: Modifier = Modifier,
   body: String? = null,
   icon: ImageVector? = null,
+  tone: EmptyTone = EmptyTone.NEUTRAL,
   action: (@Composable () -> Unit)? = null,
 ) {
+  val colors = MaterialTheme.colorScheme
+  val (circle, glyph) = when (tone) {
+    EmptyTone.NEUTRAL -> colors.surfaceContainerHigh to colors.onSurfaceVariant
+    EmptyTone.UPSELL -> colors.primaryContainer to colors.onPrimaryContainer
+    EmptyTone.ERROR -> colors.errorContainer to colors.onErrorContainer
+  }
   Box(modifier.fillMaxSize().padding(space(3f)), contentAlignment = Alignment.Center) {
     Column(
-      Modifier.widthIn(max = 420.dp),
+      Modifier.widthIn(max = 360.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
       if (icon != null) {
-        Icon(icon, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Box(Modifier.size(72.dp).clip(CircleShape).background(circle), contentAlignment = Alignment.Center) {
+          Icon(icon, null, Modifier.size(40.dp), tint = glyph)
+        }
+        Spacer(Modifier.height(space(0.5f)))
       }
-      Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+      Text(
+        title,
+        Modifier.semantics { heading() },
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Medium,
+        textAlign = TextAlign.Center,
+      )
       if (body != null) {
         Text(
           body,
           style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          color = colors.onSurfaceVariant,
           textAlign = TextAlign.Center,
         )
       }
@@ -111,6 +188,62 @@ fun EmptyState(
         action()
       }
     }
+  }
+}
+
+/**
+ * The detail pane of a list-detail before anything is picked: a quiet 32 dp icon over one TitleMedium line in
+ * onSurfaceVariant, centered, with no card and no button ("Pick a product to see it here"), as Mail and Gmail leave it.
+ */
+@Composable
+fun SelectionPlaceholder(title: String, icon: ImageVector? = null, modifier: Modifier = Modifier) {
+  Box(modifier.fillMaxSize().padding(space(3f)).testTag("selection-placeholder"), contentAlignment = Alignment.Center) {
+    Column(
+      Modifier.widthIn(max = 360.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.spacedBy(space(1f)),
+    ) {
+      if (icon != null) Icon(icon, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+      Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+    }
+  }
+}
+
+/**
+ * The top of a detail pane: a 56 dp tile (the item's picture, else its icon on a tonal ground), its name in TitleLarge,
+ * an optional line under it, a status chip and the pane's own actions at the end.
+ */
+@Composable
+fun DetailHeader(
+  title: String,
+  modifier: Modifier = Modifier,
+  icon: ImageVector? = null,
+  image: (@Composable () -> Unit)? = null,
+  subtitle: String? = null,
+  status: (@Composable () -> Unit)? = null,
+  actions: (@Composable () -> Unit)? = null,
+) {
+  Row(
+    modifier.fillMaxWidth().testTag("detail-header"),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(space(2f)),
+  ) {
+    if (image != null || icon != null) {
+      Box(
+        Modifier.size(56.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+      ) {
+        if (image != null) image() else Icon(icon!!, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+      }
+    }
+    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+      Text(title, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+      if (subtitle != null) {
+        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+      }
+      status?.invoke()
+    }
+    actions?.invoke()
   }
 }
 

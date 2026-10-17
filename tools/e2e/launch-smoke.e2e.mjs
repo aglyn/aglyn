@@ -68,6 +68,7 @@ import {
   setDoc,
 } from 'firebase/firestore'
 import { chromium } from 'playwright-core'
+import { chromeExecutable } from './lib/chrome-executable.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -809,23 +810,4 @@ async function publishRootThroughConsole(pageHandle, viewUrl) {
   } catch (error) {
     return { ok: false, detail: `UI publish failed: ${String(error).slice(0, 200)}` }
   }
-}
-
-function chromeExecutable() {
-  if (process.env.E2E_CHROME_PATH) return { executablePath: process.env.E2E_CHROME_PATH }
-  if (process.platform === 'darwin') {
-    for (const executablePath of [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    ]) {
-      try {
-        readFileSync(executablePath)
-        return { executablePath }
-      } catch {
-        // Next flavor.
-      }
-    }
-  }
-  return { channel: 'chrome' }
 }

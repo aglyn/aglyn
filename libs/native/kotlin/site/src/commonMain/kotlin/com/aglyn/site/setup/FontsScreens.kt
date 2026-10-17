@@ -39,6 +39,7 @@ import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -234,9 +235,9 @@ private fun InstalledFontRow(
       Row(Modifier.fillMaxWidth().padding(start = space(2f)), verticalAlignment = Alignment.CenterVertically) {
         Text(face.label, Modifier.padding(end = space(1f)), style = MaterialTheme.typography.bodyMedium)
         Text(face.style, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        IconButton(onClick = { change("Removed that file.") { it.remove(face, font.family) } }, enabled = canEdit) {
+        WithTooltip("Remove ${face.label} of ${font.family}") { IconButton(onClick = { change("Removed that file.") { it.remove(face, font.family) } }, enabled = canEdit) {
           Icon(AglynIcons.named("delete"), contentDescription = "Remove ${face.label} of ${font.family}")
-        }
+        } }
       }
     }
   }
@@ -254,7 +255,7 @@ private fun FontJobRow(job: FontJob, onDismiss: () -> Unit) {
         FontJobStep.QUEUED -> StatusChip("Waiting")
       }
       if (job.step == FontJobStep.INSTALLED || job.step == FontJobStep.FAILED) {
-        IconButton(onClick = onDismiss) { Icon(AglynIcons.named("close"), contentDescription = "Dismiss") }
+        WithTooltip("Dismiss") { IconButton(onClick = onDismiss) { Icon(AglynIcons.named("close"), contentDescription = "Dismiss") } }
       }
     }
     Text(
