@@ -26,6 +26,7 @@ import {
   emailCreatedAtMs,
   emailIsUnsent,
   emailListTimeMs,
+  emailNeverSent,
   emailSendTimeMs,
   emailSentAs,
   emailStateLabel,
@@ -172,6 +173,19 @@ describe('whether a message has gone to anybody', () => {
      * of a send that did happen, so it keeps its report.
      */
     expect(emailIsUnsent({ status: 'canceled' })).toBe(false)
+  })
+})
+
+describe('an email withdrawn before it went to anybody', () => {
+  it('is never sent when canceled or failed with nothing delivered', () => {
+    expect(emailNeverSent({ status: 'canceled' })).toBe(true)
+    expect(emailNeverSent({ status: 'failed', stats: { sent: 0 } })).toBe(true)
+  })
+
+  it('keeps its report once anything was delivered, and never covers an unsent one', () => {
+    expect(emailNeverSent({ status: 'canceled', stats: { sent: 10 } })).toBe(false)
+    expect(emailNeverSent({ status: 'scheduled' })).toBe(false)
+    expect(emailNeverSent({ status: 'sent', stats: { sent: 0 } })).toBe(false)
   })
 })
 

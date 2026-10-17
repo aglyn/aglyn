@@ -44,22 +44,26 @@ const SUMMARY: PluginFigureColumn[] = [
 ]
 
 describe('traffic and forms in the weekly summary (AGL-3867)', () => {
-  it('says visitors and page views with their change, and leads the subject with visitors', () => {
+  it('tiles visitors and page views with their change, and offers visitors to the totals', () => {
     const traffic = table(SUMMARY, [
       { figure: 'Page views', current: 3_410, previous: 3_150, change: 8.3 },
       { figure: 'Visitors', current: 1_204, previous: 1_000, change: 20.4 },
     ])
-    expect(TRAFFIC_WEEKLY_SUMMARY.lines(traffic)).toEqual(['Visitors: 1,204 (+20.4%) · Page views: 3,410 (+8.3%)'])
-    expect(TRAFFIC_WEEKLY_SUMMARY.headline?.(traffic)).toEqual({ count: 1_204, one: 'visitor', many: 'visitors' })
+    expect(TRAFFIC_WEEKLY_SUMMARY.summarize(traffic)).toEqual({
+      title: 'Traffic',
+      stats: [
+        { label: 'Visitors', value: '1,204', change: 20.4, total: { count: 1_204, one: 'visitor', many: 'visitors' } },
+        { label: 'Page views', value: '3,410', change: 8.3 },
+      ],
+    })
     const quiet = table(SUMMARY, [
       { figure: 'Page views', current: 0, previous: 10, change: -100 },
       { figure: 'Visitors', current: 0, previous: 4, change: -100 },
     ])
-    expect(TRAFFIC_WEEKLY_SUMMARY.lines(quiet)).toEqual([])
-    expect(TRAFFIC_WEEKLY_SUMMARY.headline?.(quiet)).toBeNull()
+    expect(TRAFFIC_WEEKLY_SUMMARY.summarize(quiet)).toBeNull()
   })
 
-  it('names the top pages and sources', () => {
+  it('ranks the top pages and sources', () => {
     const pages = table(
       [
         { key: 'page', label: 'Page', kind: 'text' },
@@ -72,7 +76,15 @@ describe('traffic and forms in the weekly summary (AGL-3867)', () => {
         { page: '/about', views: 60 },
       ],
     )
-    expect(TOP_PAGES_WEEKLY_SUMMARY.lines(pages)).toEqual(['Top pages: / 1,020 views, /pricing 340, /contact 120'])
+    expect(TOP_PAGES_WEEKLY_SUMMARY.summarize(pages)).toEqual({
+      title: 'Top pages',
+      rows: [
+        { label: '/', value: '1,020 views' },
+        { label: '/pricing', value: '340 views' },
+        { label: '/contact', value: '120 views' },
+        { label: '/about', value: '60 views' },
+      ],
+    })
     const sources = table(
       [
         { key: 'source', label: 'Source', kind: 'text' },
@@ -80,8 +92,12 @@ describe('traffic and forms in the weekly summary (AGL-3867)', () => {
       ],
       [{ source: 'google.com', views: 610 }],
     )
-    expect(SOURCES_WEEKLY_SUMMARY.lines(sources)).toEqual(['Top sources: google.com 610 views'])
-    expect(TOP_PAGES_WEEKLY_SUMMARY.lines(table([{ key: 'page', label: 'Page', kind: 'text' }], [{ page: '/' }]))).toEqual([])
+    expect(SOURCES_WEEKLY_SUMMARY.summarize(sources)).toEqual({
+      title: 'Where visits came from',
+      rows: [{ label: 'google.com', value: '610 views' }],
+    })
+    // A table without the column it reads drops out rather than misreporting.
+    expect(TOP_PAGES_WEEKLY_SUMMARY.summarize(table([{ key: 'page', label: 'Page', kind: 'text' }], [{ page: '/' }]))).toBeNull()
   })
 
   it('says form submissions since the month began, because forms are counted by month', () => {
@@ -97,6 +113,13 @@ describe('traffic and forms in the weekly summary (AGL-3867)', () => {
       ],
       { period: { from: '2026-10-01', to: '2026-10-11', days: 11 } },
     )
-    expect(FORMS_WEEKLY_SUMMARY.lines(forms)).toEqual(['Form submissions since Oct 1: 14 (Contact us 10, Quote 4)'])
+    expect(FORMS_WEEKLY_SUMMARY.summarize(forms)).toEqual({
+      title: 'Forms',
+      stats: [{ label: 'Submissions since Oct 1', value: '14' }],
+      rows: [
+        { label: 'Contact us', value: '10' },
+        { label: 'Quote', value: '4' },
+      ],
+    })
   })
 })

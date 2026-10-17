@@ -174,6 +174,20 @@ export function emailIsUnsent(
 }
 
 /**
+ * Whether an email was withdrawn before it was mailed to anybody: canceled, or
+ * failed, with nothing delivered. Unlike {@link emailIsUnsent} it never will
+ * be, so a surface says it was not sent rather than "not sent yet", and has
+ * no report to draw for it.
+ */
+export function emailNeverSent(
+  record: Record<string, any> | null | undefined,
+): boolean {
+  const value = String(record?.['status'] ?? '')
+  const sent = Math.floor(Number(record?.['stats']?.['sent'] ?? 0))
+  return (value === 'canceled' || value === 'failed') && !(sent > 0)
+}
+
+/**
  * Reader-facing names for the built-in audience kinds.
  *
  * The KEYS are the persisted `audience` values written on every message since

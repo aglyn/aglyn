@@ -385,10 +385,10 @@ struct DatasetsScreen: View {
       }
     case .delete(let dataset, let records):
       AglynActionSheet(
-        "Delete this collection?",
+        "Delete this dataset?",
         message: "\"\(dataset.name)\""
-          + ((records ?? 0) > 0 ? " and its \(records ?? 0) document\(records == 1 ? "" : "s")" : "")
-          + " stop resolving in repeatable components and bindings that reference it.",
+          + ((records ?? 0) > 0 ? " and its \((records ?? 0).formatted()) record\(records == 1 ? "" : "s")" : "")
+          + " will be deleted. Repeatable components and bindings that use it stop showing its data.",
         confirmLabel: "Delete", destructive: true, busy: runner.busy, error: runner.error,
         onCancel: { self.sheet = nil },
         onConfirm: {

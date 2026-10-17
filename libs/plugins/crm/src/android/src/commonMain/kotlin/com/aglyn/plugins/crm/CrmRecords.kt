@@ -403,11 +403,24 @@ fun crmRow(kind: CrmKind, doc: FirestoreDoc, scope: CrmScope, stages: Map<String
     CrmKind.COMPANY -> CrmRow(doc.id, kind, s("name") ?: "Company", listOfNotNull(s("domain"), s("industry"), (data["contactsCount"] as? Number)?.toLong()?.takeIf { it > 0 }?.let { if (it == 1L) "1 contact" else "$it contacts" }).joinToString(" · "), s("type"), data)
     CrmKind.DEAL -> CrmRow(
       doc.id, kind, s("title") ?: "Deal",
-      listOfNotNull((data["amountCents"] as? Number)?.let { formatCents(it.toLong(), s("currency")) }, s("stageId")?.let { stages[it] ?: it }).joinToString(" · "),
+      dealSubtitle(data) { _, stageId -> stageId?.let { stages[it] ?: it } },
       when (s("status")) { "won" -> "Won"; "lost" -> "Lost"; else -> null }, data,
     )
   }
 }
+
+/** A deal's line under its title: the amount, then its stage's name ([stageName] of its pipeline and stage ids). */
+fun dealSubtitle(data: Map<String, Any?>, stageName: (pipelineId: String?, stageId: String?) -> String?): String {
+  fun s(key: String) = (data[key] as? String)?.takeIf { it.isNotBlank() }
+  return listOfNotNull((data["amountCents"] as? Number)?.let { formatCents(it.toLong(), s("currency")) }, s("stageId")?.let { stageName(s("pipelineId"), it) }).joinToString(" · ")
+}
+
+/**
+ * The row's line under its title as a list shows it: a deal names its stage from the workspace's pipelines, which load
+ * beside the list (a row is built before they arrive, so it holds only the stage id).
+ */
+fun CrmRow.listSubtitle(reference: CrmReference): String =
+  if (kind == CrmKind.DEAL) dealSubtitle(data, reference::stageName) else subtitle
 
 /** Whole-dollar amounts read as the console's deal cards read them. */
 fun formatCents(cents: Long, currency: String? = "usd"): String {

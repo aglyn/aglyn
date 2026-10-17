@@ -48,6 +48,7 @@ import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.ActionRunner
+import com.aglyn.pluginhost.RunnerBanners
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.site.media.MediaPickField
 import com.aglyn.site.pages.livePageUrl
@@ -55,6 +56,7 @@ import com.aglyn.site.pages.SiteRouting
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChipsField
@@ -167,6 +169,9 @@ private fun CollectionEntries(
   val isAdmin = context.siteRole == "admin"
   AglynListDetail(
     initialSelected = initialEntry,
+    onItemRemoved = { model.reload(keep = true) },
+    // A phone shows the editor without the list, so the editor carries the list's banners (a Publish refused for its byline).
+    detailBanner = { RunnerBanners(runner) },
     list = { selected, onSelect ->
       val listState = rememberLazyListState()
       LoadMoreEffect(listState, model.hasMore, onLoadMore = model::loadMore)
@@ -199,8 +204,7 @@ private fun CollectionEntries(
             model.status ?: "all",
             { model.pick(it.takeIf { key -> key != "all" }) },
           )
-          runner.error?.let { NoticeBanner(it, StatusTone.ERROR) }
-          runner.notice?.let { message -> NoticeBanner(message, StatusTone.SUCCESS, action = { TextButton(onClick = runner::clear) { Text("Dismiss") } }) }
+          RunnerBanners(runner)
         }
         RefreshableBox(model.refreshing, model::refresh) {
           LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load entries") { rows ->
@@ -270,6 +274,8 @@ private fun EntryEditor(
   val authorsLive by remember(hostId, context.firestore) { context.firestore.observe(FirestoreQuery("hosts/$hostId/authors", limit = 100)) }.collectAsState(Live.Loading)
   val authors = (authorsLive as? Live.Ready)?.value.orEmpty().map(::contentAuthorOf).sortedBy { it.name.lowercase() }
   val uri = LocalUriHandler.current
+  // A deleted entry closes its editor and drops out of the list.
+  CloseWhenGone((live as? Live.Ready)?.let { ready -> ready.value?.let(ContentEntry::from) != null })
   when (val doc = live) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this entry", body = "Check the connection and try again.", icon = AglynIcons.named("error"))

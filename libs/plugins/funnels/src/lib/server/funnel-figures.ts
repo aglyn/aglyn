@@ -86,22 +86,19 @@ export function funnelFigureReaders(firestore: () => any): PluginFigureReader[] 
       feature: FUNNEL_FEATURE,
       weeklySummary: {
         order: 100,
-        lines: (table) => {
-          if (!figureHasColumn(table, 'entered')) return []
-          const busy = table.rows
-            .filter((row) => figureCount(row['entered']) > 0)
-            .slice(0, WEEKLY_SUMMARY_TOP_ROWS)
-          if (!busy.length) return []
-          return [
-            'Funnels: ' +
-              busy
-                .map(
-                  (row) =>
-                    `${row['funnel']} ${pluginFigureCellText(table, 'entered', row['entered'] ?? 0)} started, ` +
-                    `${pluginFigureCellText(table, 'completed', row['completed'] ?? 0)} finished`,
-                )
-                .join('; '),
-          ]
+        summarize: (table) => {
+          if (!figureHasColumn(table, 'entered')) return null
+          const busy = table.rows.filter((row) => figureCount(row['entered']) > 0).slice(0, WEEKLY_SUMMARY_TOP_ROWS)
+          if (!busy.length) return null
+          return {
+            title: 'Funnels',
+            rows: busy.map((row) => ({
+              label: String(row['funnel']),
+              value:
+                `${pluginFigureCellText(table, 'entered', row['entered'] ?? 0)} started · ` +
+                `${pluginFigureCellText(table, 'completed', row['completed'] ?? 0)} finished`,
+            })),
+          }
         },
       },
       read: async (request) => {

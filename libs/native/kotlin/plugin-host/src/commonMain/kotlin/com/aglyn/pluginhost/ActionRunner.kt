@@ -7,6 +7,7 @@ import com.aglyn.core.ConsoleApiError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.testTag
 
 /**
  * One screen's writes, one at a time: whether one is running, why the last
@@ -54,5 +55,19 @@ class ActionRunner(private val scope: CoroutineScope, private val roleHint: Stri
     failure.message.orEmpty().contains("permission", ignoreCase = true) ->
       "That change needs a different role — ask $roleHint"
     else -> "That did not go through. Check the connection and try again."
+  }
+}
+
+/** The runner's error and its last notice as a screen's banners, the notice dismissible. */
+@androidx.compose.runtime.Composable
+fun RunnerBanners(runner: ActionRunner) {
+  runner.error?.let { com.aglyn.ui.NoticeBanner(it, com.aglyn.ui.StatusTone.ERROR, androidx.compose.ui.Modifier.testTag("runner-error")) }
+  runner.notice?.let { message ->
+    com.aglyn.ui.NoticeBanner(
+      message,
+      com.aglyn.ui.StatusTone.SUCCESS,
+      androidx.compose.ui.Modifier.testTag("runner-notice"),
+      action = { androidx.compose.material3.TextButton(onClick = runner::clear) { androidx.compose.material3.Text("Dismiss") } },
+    )
   }
 }

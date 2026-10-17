@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
@@ -28,9 +29,13 @@ private class AndroidFileExporter(private val context: Context) : FileExporter {
     val send = Intent(Intent.ACTION_SEND).apply {
       type = mimeType
       putExtra(Intent.EXTRA_STREAM, uri)
+      // The file also rides as the intent's ClipData: the read grant covers a ClipData URI, and the chooser reads the file
+      // for its preview (an EXTRA_STREAM alone is not granted to it, a SecurityException in the share sheet).
+      clipData = ClipData.newUri(context.contentResolver, name, uri)
       addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    context.startActivity(Intent.createChooser(send, name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    val chooser = Intent.createChooser(send, name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    context.startActivity(chooser)
     return true
   }
 }

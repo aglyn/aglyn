@@ -669,16 +669,16 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const handleDeleteDataset = useCallback(async () => {
     if (!selected) return
     const confirmed = await confirm({
-      title: 'Delete this collection?',
+      title: 'Delete this dataset?',
       description:
         `"${datasetDisplayName(selected)}"` +
         // What is actually being destroyed, not what is loaded (AGL-1716):
         // a 40,000-row dataset used to warn about "its 500 documents".
         (recordCount
-          ? ` and its ${recordCount} document${recordCount === 1 ? '' : 's'}`
+          ? ` and its ${recordCount.toLocaleString()} record${recordCount === 1 ? '' : 's'}`
           : '') +
-        ' stop resolving in repeatable components and bindings that ' +
-        'reference it.',
+        ' will be deleted. Repeatable components and bindings that use it ' +
+        'stop showing its data.',
       confirmationText: 'Delete',
       confirmationButtonProps: { color: 'error' },
     })

@@ -40,6 +40,8 @@ import type { AiJob } from '../model/ai-jobs.types'
 import { AI_BUILD_PARTLY_FAILED } from '../operator-alerts'
 import { aiJobFailureAlerter, aiJobTransitionNotifier } from './ai-jobs-notify'
 
+const noSite = async () => null
+
 const job = (patch: Partial<AiJob> = {}) =>
   ({
     $id: 'job-1',
@@ -61,23 +63,51 @@ const job = (patch: Partial<AiJob> = {}) =>
 describe('a guided site start (AGL-3594)', () => {
   it('is not asked to confirm a plan that is confirmed for it', async () => {
     const notify = jest.fn().mockResolvedValue(undefined)
-    await aiJobTransitionNotifier(notify)({ job: job({ inputs: { autoConfirm: true } }), to: 'needs-review' })
+    await aiJobTransitionNotifier(notify, noSite)({ job: job({ inputs: { autoConfirm: true } }), to: 'needs-review' })
     expect(notify).not.toHaveBeenCalled()
   })
 
   it('opens the build page from a site job’s notice, and a page job still opens AI jobs', async () => {
     const notify = jest.fn().mockResolvedValue(undefined)
-    await aiJobTransitionNotifier(notify)({ job: job({ status: 'done', review: null }), to: 'done' })
+    await aiJobTransitionNotifier(notify, noSite)({ job: job({ status: 'done', review: null }), to: 'done' })
     expect(notify.mock.calls[0][1]).toMatchObject({ link: '/host-1/ai-jobs/job-1' })
-    await aiJobTransitionNotifier(notify)({ job: job({ kind: 'page' }), to: 'needs-review' })
+    await aiJobTransitionNotifier(notify, noSite)({ job: job({ kind: 'page' }), to: 'needs-review' })
     expect(notify.mock.calls[1][1]).toMatchObject({ link: '/host-1?aiJob=job-1' })
+  })
+})
+
+describe('the site a job worked on (AGL-3889)', () => {
+  it('names it and gives its address in the email’s details', async () => {
+    const notify = jest.fn().mockResolvedValue(undefined)
+    const readSite = jest.fn().mockResolvedValue({ name: 'Acme Roofing', url: 'https://acme.aglyn.app' })
+    await aiJobTransitionNotifier(notify, readSite)({
+      job: job({ status: 'done', review: null, sitePublish: { published: ['home'], drafts: [] } } as never),
+      to: 'done',
+    })
+    expect(readSite).toHaveBeenCalledWith('host-1')
+    expect(notify).toHaveBeenCalledWith(
+      ['uid-creator'],
+      expect.objectContaining({ title: 'Acme Roofing is live' }),
+      {
+        emailDetails: [
+          { label: 'Site', value: 'Acme Roofing' },
+          { label: 'Address', value: 'https://acme.aglyn.app' },
+        ],
+      },
+    )
+  })
+
+  it('still tells them when the site cannot be read', async () => {
+    const notify = jest.fn().mockResolvedValue(undefined)
+    await aiJobTransitionNotifier(notify, jest.fn().mockRejectedValue(new Error('down')))({ job: job(), to: 'needs-review' })
+    expect(notify).toHaveBeenCalledWith(['uid-creator'], expect.objectContaining({ type: 'content.aiJobNeedsYou' }))
   })
 })
 
 describe('aiJobTransitionNotifier', () => {
   it('tells the job’s creator, once, that the plan waits for them', async () => {
     const notify = jest.fn().mockResolvedValue(undefined)
-    await aiJobTransitionNotifier(notify)({ job: job(), to: 'needs-review' })
+    await aiJobTransitionNotifier(notify, noSite)({ job: job(), to: 'needs-review' })
     expect(notify).toHaveBeenCalledTimes(1)
     expect(notify).toHaveBeenCalledWith(
       ['uid-creator'],
@@ -94,7 +124,7 @@ describe('aiJobTransitionNotifier', () => {
 
   it('tells them when it finishes and when it stops', async () => {
     const notify = jest.fn().mockResolvedValue(undefined)
-    const notifier = aiJobTransitionNotifier(notify)
+    const notifier = aiJobTransitionNotifier(notify, noSite)
     await notifier({ job: job({ status: 'done', review: null }), to: 'done' })
     await notifier({ job: job({ status: 'failed', review: null, error: 'It stopped.' }), to: 'failed' })
     expect(notify.mock.calls.map(([, payload]) => payload.type)).toEqual([
@@ -105,7 +135,7 @@ describe('aiJobTransitionNotifier', () => {
 
   it('tells nobody about a job with no creator', async () => {
     const notify = jest.fn()
-    await aiJobTransitionNotifier(notify)({ job: job({ createdBy: '' }), to: 'done' })
+    await aiJobTransitionNotifier(notify, noSite)({ job: job({ createdBy: '' }), to: 'done' })
     expect(notify).not.toHaveBeenCalled()
   })
 })

@@ -22,7 +22,7 @@ import {
   registerPluginFigureReader,
   type PluginFigureReader,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
-import { figureCount, figureRanked, figureRow, figureWithChange } from '@aglyn/aglyn/app-utils/weekly-summary'
+import { figureCount, figureRanked, figureRow, figureStat } from '@aglyn/aglyn/app-utils/weekly-summary'
 import { BUNDLE_ID } from '../constants/bundle-common'
 
 /**
@@ -89,20 +89,17 @@ export function bookingFigureReader(firestore: () => Firestore): PluginFigureRea
     feature: 'bookings',
     weeklySummary: {
       order: 60,
-      lines: (table) => {
+      summarize: (table) => {
         const all = figureRow(table, 'service', 'All services')
-        if (!all || (!figureCount(all['booked']) && !figureCount(all['canceled']))) return []
-        const canceled = figureCount(all['canceled'])
-        const services = figureRanked(table, 'service', 'booked', '', table.rows.filter((row) => row !== all))
-        return [
-          `Bookings: ${figureWithChange(table, all, 'booked', 'change')}` +
-            (canceled ? `, ${canceled.toLocaleString('en-US')} canceled` : '') +
-            (services ? ` (${services})` : ''),
-        ]
-      },
-      headline: (table) => {
-        const count = figureCount(figureRow(table, 'service', 'All services')?.['booked'])
-        return count ? { count, one: 'booking', many: 'bookings' } : null
+        if (!all || (!figureCount(all['booked']) && !figureCount(all['canceled']))) return null
+        return {
+          title: 'Bookings',
+          stats: [
+            figureStat(table, all, 'booked', 'Booked', { change: 'change', total: { one: 'booking', many: 'bookings' } }),
+            ...(figureCount(all['canceled']) ? [figureStat(table, all, 'canceled', 'Canceled')] : []),
+          ],
+          rows: figureRanked(table, 'service', 'booked', table.rows.filter((row) => row !== all)),
+        }
       },
     },
     read: async (request) => {

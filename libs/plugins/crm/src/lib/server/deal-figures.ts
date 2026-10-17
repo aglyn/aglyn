@@ -18,14 +18,13 @@
 import { isPipelineArchived, type CrmDeal, type CrmPipeline } from '@aglyn/aglyn/app-utils/crm'
 import {
   PLUGIN_FIGURE_MAX_ROWS,
-  pluginFigureCellText,
   pluginFigureChange,
   pluginFigureWindows,
   registerPluginFigureReader,
   type PluginFigureReader,
   type PluginFigureRow,
 } from '@aglyn/aglyn/plugin-manager/plugin-figures'
-import { figureCount, figureHasColumn, figurePlural, figureRow } from '@aglyn/aglyn/app-utils/weekly-summary'
+import { figureCount, figureHasColumn, figureRow, figureStat } from '@aglyn/aglyn/app-utils/weekly-summary'
 import { scopedToHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { currencyOfDeals, pipelineTotals } from '../model/crm-reports'
@@ -113,11 +112,13 @@ export function crmPipelineFigureReader(firestore: () => Firestore): PluginFigur
     feature: 'crm',
     weeklySummary: {
       order: 20,
-      lines: (table) => {
+      summarize: (table) => {
         const all = figureRow(table, 'pipeline', 'All pipelines')
-        const deals = figureCount(all?.['deals'])
-        if (!all || !deals) return []
-        return [`Open pipeline: ${figurePlural(deals, 'deal', 'deals')} worth ${pluginFigureCellText(table, 'value', all['value'] ?? 0)}`]
+        if (!all || !figureCount(all['deals'])) return null
+        return {
+          title: 'Open pipeline',
+          stats: [figureStat(table, all, 'deals', 'Open deals'), figureStat(table, all, 'value', 'Value'), figureStat(table, all, 'weighted', 'Weighted value')],
+        }
       },
     },
     read: async (request) => {
@@ -227,17 +228,18 @@ export function crmClosedDealsFigureReader(firestore: () => Firestore): PluginFi
     feature: 'crm',
     weeklySummary: {
       order: 10,
-      lines: (table) => {
+      summarize: (table) => {
         const row = table.rows[0]
-        if (!row || !figureHasColumn(table, 'won')) return []
-        const won = figureCount(row['won'])
-        const lost = figureCount(row['lost'])
-        if (!won && !lost) return []
-        return [
-          `Deals: ${won.toLocaleString('en-US')} won` +
-            (won ? ` (${pluginFigureCellText(table, 'wonValue', row['wonValue'] ?? 0)})` : '') +
-            `, ${lost.toLocaleString('en-US')} lost`,
-        ]
+        if (!row || !figureHasColumn(table, 'won')) return null
+        if (!figureCount(row['won']) && !figureCount(row['lost'])) return null
+        return {
+          title: 'Deals closed',
+          stats: [
+            figureStat(table, row, 'won', 'Won', { change: 'change', total: { one: 'deal won', many: 'deals won' } }),
+            figureStat(table, row, 'wonValue', 'Value won'),
+            ...(figureCount(row['lost']) ? [figureStat(table, row, 'lost', 'Lost')] : []),
+          ],
+        }
       },
     },
     read: async (request) => {

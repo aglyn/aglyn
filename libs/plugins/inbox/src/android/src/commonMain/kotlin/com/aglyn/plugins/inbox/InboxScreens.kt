@@ -49,6 +49,7 @@ import com.aglyn.pluginhost.TransferExportDialog
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
@@ -240,6 +241,8 @@ fun SubmissionDetail(context: NativePluginContext, hostId: String, submissionId:
   var deleting by remember(submissionId) { mutableStateOf(false) }
   var deleteError by remember(submissionId) { mutableStateOf<String?>(null) }
   var markedOnOpen by remember(submissionId) { mutableStateOf(false) }
+  // A deleted message closes its detail; the Inbox's live list has already dropped it.
+  CloseWhenGone((live as? Live.Ready)?.let { it.value != null })
 
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))

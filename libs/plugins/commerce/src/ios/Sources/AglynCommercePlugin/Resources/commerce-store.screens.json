@@ -716,6 +716,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit supplier",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "prompt": [
                 {
@@ -1243,6 +1245,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit tax rate",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "prompt": [
                 {
@@ -2340,6 +2344,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit endpoint",
+              "submitLabel": "Save",
               "url": "/api/commerce/order-webhooks",
               "body": {
                 "hostId": "{site.id}",

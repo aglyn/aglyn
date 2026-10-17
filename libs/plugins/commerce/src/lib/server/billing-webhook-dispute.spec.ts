@@ -1653,7 +1653,7 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
     expect(payout[0].body).toContain('order #RDER-1 on {site}')
     // The negative-balance consequence, in the merchant's own words.
     expect(payout[0].body).toContain('future payouts')
-    expect(payout[0].link).toBe('/host-1/orders')
+    expect(payout[0].link).toBe('/host-1/products/orders')
   })
 
   /** Both notices, distinct: the outcome AND the payout, never conflated. */

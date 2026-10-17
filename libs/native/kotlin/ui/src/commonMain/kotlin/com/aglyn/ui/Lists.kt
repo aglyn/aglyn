@@ -1,5 +1,8 @@
 package com.aglyn.ui
 
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -121,10 +124,15 @@ fun ListHeader(title: String, modifier: Modifier = Modifier, actions: @Composabl
     horizontalArrangement = Arrangement.spacedBy(space(1f), Alignment.End),
     verticalArrangement = Arrangement.spacedBy(space(1f)),
   ) {
+    // The title keeps its whole width: actions that do not fit beside it wrap to the next line rather than squeezing it to "…".
+    val style = MaterialTheme.typography.titleSmall
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val titleWidth = remember(title, style, density) { with(density) { measurer.measure(title, style, maxLines = 1).size.width.toDp() } }
     Text(
       title,
-      Modifier.weight(1f).align(Alignment.CenterVertically).semantics { heading() },
-      style = MaterialTheme.typography.titleSmall,
+      Modifier.widthIn(min = titleWidth).weight(1f).align(Alignment.CenterVertically).semantics { heading() },
+      style = style,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,

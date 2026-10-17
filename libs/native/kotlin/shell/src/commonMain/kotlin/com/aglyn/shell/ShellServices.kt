@@ -114,6 +114,15 @@ class ShellNavigator(initialTop: String = HOME) {
 
   val current: Route? get() = stack.lastOrNull()
 
+  /**
+   * The saved-state key of every place on the way to [current]: the destination, then each pushed screen by its depth and
+   * route, so the same screen pushed twice holds two states and a popped one leaves its key behind.
+   */
+  val keys: List<String> get() = listOf(baseKey(top)) + stack.mapIndexed { depth, route -> "${baseKey(top)}/$depth:$route" }
+
+  /** The saved-state key of what is showing. */
+  val currentKey: String get() = keys.last()
+
   fun select(key: String) {
     top = key
     stack.clear()
@@ -132,6 +141,9 @@ class ShellNavigator(initialTop: String = HOME) {
     const val NOTIFICATIONS = "notifications"
     const val SETTINGS = "settings"
     fun screenKey(screenId: String) = "screen:$screenId"
+    private fun baseKey(top: String) = "top:$top"
+    /** A pushed screen's key, which is dropped when the screen is popped (a destination's is kept). */
+    fun isPushedKey(key: String) = key.contains('/')
   }
 }
 

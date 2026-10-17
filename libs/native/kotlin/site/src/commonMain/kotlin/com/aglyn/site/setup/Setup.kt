@@ -210,10 +210,23 @@ object SeoLimits {
 /** The business entity's kinds (`HostEntityType`, stored as the enum's number in text). */
 val ENTITY_TYPES = listOf("1" to "Organization", "2" to "Person")
 
-/** One of the site's saved themes (`hosts/{hostId}/themes`). */
-data class SavedTheme(val id: String, val name: String, val updatedAt: FirestoreTimestamp?)
+/**
+ * One entry of the site's theme library (`hosts/{hostId}/themes`): a theme of its own (`custom`), a marketplace theme it
+ * installed (`installed`), or the stash a built-in theme keeps while another is picked (`default`, `preset`).
+ */
+data class SavedTheme(val id: String, val name: String, val updatedAt: FirestoreTimestamp?, val kind: String = "custom")
 
-fun savedThemeOf(doc: FirestoreDoc) = SavedTheme(doc.id, doc.string("name")?.ifBlank { null } ?: "Untitled theme", doc.data["updatedAt"] as? FirestoreTimestamp)
+fun savedThemeOf(doc: FirestoreDoc) =
+  SavedTheme(doc.id, doc.string("name")?.ifBlank { null } ?: "Untitled theme", doc.data["updatedAt"] as? FirestoreTimestamp, doc.string("kind").orEmpty())
+
+/**
+ * The library's entries the picker lists as themes to switch to, as the console's picker does: the site's own themes, then
+ * the marketplace ones, each switched to by its own kind. A built-in theme's stash, or an entry with no known kind, is not one.
+ */
+fun libraryThemes(docs: List<FirestoreDoc>): List<SavedTheme> =
+  docs.map(::savedThemeOf).filter { it.kind in LISTED_THEME_KINDS }.sortedBy { LISTED_THEME_KINDS.indexOf(it.kind) }
+
+private val LISTED_THEME_KINDS = listOf("custom", "installed")
 
 /** Which theme the site picked (`themeSelection`): its kind (default, preset, custom, installed), id and name. */
 data class ThemeSelection(val kind: String, val id: String?, val name: String?)
@@ -234,6 +247,9 @@ fun hasThemeEdits(host: Map<String, Any?>?): Boolean = ((host?.get("themeOverrid
 
 /** The theme library's limits (`THEME_LIBRARY_MAX_CUSTOM`, `THEME_NAME_MAX`). */
 const val THEME_LIBRARY_MAX_CUSTOM = 25
+
+/** The most library entries read at once: the custom themes, a stash per built-in theme and the marketplace ones (`LIBRARY_READ_LIMIT`). */
+const val THEME_LIBRARY_READ_LIMIT = 100
 const val THEME_NAME_MAX = 60
 
 /** One theme color control. */

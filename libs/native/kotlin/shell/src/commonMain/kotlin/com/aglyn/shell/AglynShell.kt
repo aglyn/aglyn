@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -119,11 +120,9 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
   val widthClass = currentWidthClass()
   val wide = widthClass != WidthClass.COMPACT
 
-  // Plugin screens with a quick action become top-level destinations on wide windows.
-  val actions = remember(version) { services.registry.quickActions(NativeApp.AGLYN) }
+  // The plugins' places (their tabs, then the quick actions that open a screen) become top-level destinations on wide windows.
   val topLevel = remember(version) {
-    actions.mapNotNull { action -> action.screen?.let { services.registry.screen(it) }?.let { it to action.icon } }
-      .distinctBy { it.first.id }
+    shellPlaces(services.registry, NativeApp.AGLYN).mapNotNull { place -> services.registry.screen(place.screen)?.let { it to place.icon } }
   }
   val context = ShellPluginContext(uid, workspace, services, navigator, if (wide) topLevel.map { it.first.id }.toSet() else emptySet())
 
@@ -175,6 +174,15 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
   }
 
   BackHandler(enabled = navigator.stack.isNotEmpty()) { navigator.back() }
+  val entries = rememberSaveableStateHolder()
+  // A popped screen's saved state goes with it: opening it again starts it fresh.
+  val liveKeys = navigator.keys
+  val pushedKeys = remember { mutableSetOf<String>() }
+  LaunchedEffect(liveKeys) {
+    pushedKeys.filter { it !in liveKeys }.forEach(entries::removeState)
+    pushedKeys.retainAll(liveKeys.toSet())
+    pushedKeys += liveKeys.filter { ShellNavigator.isPushedKey(it) }
+  }
 
   // The token's claims gate the staff section; read from the token itself, as the console does.
   var claims by remember(uid) { mutableStateOf(com.aglyn.core.TokenClaims()) }
@@ -267,6 +275,9 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
       },
     ) { padding ->
       Box(Modifier.padding(padding).fillMaxSize()) {
+        // Each destination and each pushed screen keeps its own saved state (selection, scroll, filters), so Back returns to
+        // the screen below as it was left, and a destination never inherits the one before it.
+        entries.SaveableStateProvider(navigator.currentKey) {
         when (route) {
           is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null) { navigator.back() }
           is Route.Besigner -> services.besigner(route.path, { navigator.back() }) { link -> navigator.back(); context.openLink(link) }
@@ -275,7 +286,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
           Route.NotificationSettings -> NotificationSettingsScreen(services, uid)
           null -> when {
             navigator.top == ShellNavigator.HOME -> HomeScreen(services, context, workspace, widthClass, navigator)
-            navigator.top == ShellNavigator.MORE -> MoreScreen(services, context)
+            navigator.top == ShellNavigator.MORE -> MoreScreen(services, context, workspace.site?.name) { navigator.push(Route.Analytics) }
             navigator.top == ShellNavigator.NOTIFICATIONS -> NotificationsScreen(services, uid, context)
             navigator.top == ShellNavigator.SETTINGS -> SettingsScreen(services, context, screenSession.claims.isStaff) { navigator.push(Route.NotificationSettings) }
             navigator.top.startsWith("screen:") ->
@@ -284,6 +295,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
               }
             else -> HomeScreen(services, context, workspace, widthClass, navigator)
           }
+        }
         }
       }
     }

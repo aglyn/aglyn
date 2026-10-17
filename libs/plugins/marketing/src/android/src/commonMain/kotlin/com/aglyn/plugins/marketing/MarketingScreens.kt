@@ -42,6 +42,7 @@ import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.Busy
 import com.aglyn.ui.ChipOption
@@ -238,6 +239,8 @@ fun CampaignDetail(context: NativePluginContext, actions: MarketingActions, acce
   val busy = remember { Busy() }
   LaunchedEffect(emails) { emails.show { campaignEmailsQuery(actions.orgId, actions.hostId, campaignId, it) } }
   val value = doc
+  // A deleted one closes its detail.
+  CloseWhenGone(if (gone) false else (value as? Live.Ready)?.let { it.value != null })
   if (gone || (value is Live.Ready && value.value == null)) {
     EmptyState("This campaign is gone", icon = AglynIcons.named("campaign"))
     return
@@ -614,6 +617,8 @@ fun ExperimentDetail(context: NativePluginContext, actions: MarketingActions, ac
   var gone by remember(experimentId) { mutableStateOf(false) }
   val busy = remember { Busy() }
   val value = doc
+  // A deleted one closes its detail.
+  CloseWhenGone(if (gone) false else (value as? Live.Ready)?.let { it.value != null })
   if (gone || (value is Live.Ready && value.value == null)) {
     EmptyState("This experiment is gone", icon = AglynIcons.named("science"))
     return

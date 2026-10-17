@@ -57,6 +57,7 @@ import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
+import com.aglyn.ui.CloseWhenGone
 import com.aglyn.ui.AglynListItem
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
@@ -162,6 +163,8 @@ fun FunnelsScreen(context: NativePluginContext) {
     },
     detail = { selected ->
       val row = (live as? Live.Ready)?.value?.firstOrNull { it.id == selected }
+      // A deleted funnel leaves the list, and its detail closes with it.
+      CloseWhenGone((live as? Live.Ready)?.let { row != null })
       if (row == null) {
         EmptyState("Pick a funnel to see its results", icon = AglynIcons.named("filter_alt"))
       } else {

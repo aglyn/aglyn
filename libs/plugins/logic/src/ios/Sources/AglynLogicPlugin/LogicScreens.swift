@@ -194,7 +194,7 @@ struct LogicScreen: View {
         kind == "variable" ? "Delete this variable?" : "Delete this function?",
         message: used > 0
           ? "\"\(name)\" is used in \(summarizeDependents(scan))"
-            + (kind == "variable" ? ". Those bindings will render as empty or literal tokens after the next publish." : " — those references will stop resolving after the next publish.")
+            + (kind == "variable" ? ". Those places show nothing in its place after the next publish." : ". Those places stop working after the next publish.")
           : "\"\(name)\" is not referenced by any published page, layout, or workflow.",
         confirmLabel: "Delete", destructive: true, busy: runner.busy, error: runner.error,
         onCancel: { self.sheet = nil },
@@ -221,7 +221,7 @@ private struct VariableList: View {
     if rows.isEmpty {
       AglynEmptyState(
         "No variables yet", systemImage: "curlybraces",
-        message: "A variable is a value you bind into any text with {{name}}: a phone number, a price, an opening date. Change it once and every page follows.")
+        message: "A variable is a value you put into any text with Insert data in the Besigner: a phone number, a price, an opening date. Change it once and every page follows.")
     } else {
       List {
         ForEach(rows) { row in
@@ -368,7 +368,7 @@ private struct VariableEditorSheet: View {
           Text(
             nameTaken
               ? "A variable with this name already exists"
-              : (!draft.name.isEmpty && !validName ? "Start with a letter or _; letters, numbers and _ only, up to 40" : "Bind it with {{\(draft.name.isEmpty ? "name" : draft.name)}}"))
+              : (!draft.name.isEmpty && !validName ? "Start with a letter or _; letters, numbers and _ only, up to 40" : "Pick it by this name from Insert data in the Besigner"))
         }
         Section {
           Picker("Type", selection: Binding(get: { draft.type }, set: { type in
@@ -412,7 +412,7 @@ private struct VariableEditorSheet: View {
             guard let hostID = context.hostID else { return }
             let api = LogicAPI(api: context.api, writer: context.writer, reader: context.firestore, hostID: hostID)
             let current = draft
-            runner.run(success: "Saved — use {{\(current.name)}} in any text to bind it", onDone: onClose) {
+            runner.run(success: "Saved. Put it into any text with Insert data in the Besigner.", onDone: onClose) {
               try await api.saveVariable(id: current.id, name: current.name, type: current.type, value: current.value, workflowID: current.workflowID, workflowName: current.workflowName)
             }
           } label: {

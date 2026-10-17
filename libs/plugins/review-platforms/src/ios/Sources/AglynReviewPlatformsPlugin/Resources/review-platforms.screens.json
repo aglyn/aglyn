@@ -12,6 +12,7 @@
       "zones": [
         "commerceSettings"
       ],
+      "showWhen": "data.settings",
       "load": {
         "settings": "/api/review-platforms/settings?hostId={site.id}"
       },
