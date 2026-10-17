@@ -89,5 +89,12 @@ public struct AglynListDetailColumns<List: View, Detail: View>: View {
       }
     }
     .animation(.snappy(duration: 0.2), value: showsDetail)
+    #if os(iOS)
+      // Two scroll views side by side leave the bar no single one to collapse a large title into, so the title
+      // would sit over the rows as they scroll: a split screen's title is inline on a bar that keeps its background,
+      // as Mail's columns are.
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbarBackground(.visible, for: .navigationBar)
+    #endif
   }
 }

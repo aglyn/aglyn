@@ -71,8 +71,9 @@ public struct AglynLabeledField: View {
 }
 
 /// A plan quota as the console's readout states it: `3/25 workflows on your
-/// plan`, `∞` for an unlimited one, and `3 workflows · checking your plan…`
-/// until the plan is known.
+/// plan`, `∞` for an unlimited one, and just the count (`3 workflows`) until
+/// the plan is known, so a slow or failed plan read never leaves a "checking"
+/// line standing.
 public struct AglynQuotaReadout: View {
   let ready: Bool
   let used: Int
@@ -91,7 +92,7 @@ public struct AglynQuotaReadout: View {
 
   public static func text(ready: Bool, used: Int, limit: Double?, noun: String, plural: String? = nil) -> String {
     let plural = plural ?? "\(noun)s"
-    guard ready else { return "\(used) \(used == 1 ? noun : plural) · checking your plan…" }
+    guard ready else { return "\(used) \(used == 1 ? noun : plural)" }
     let cap = limit.flatMap { $0.isFinite ? String(Int($0)) : nil } ?? "∞"
     return "\(used)/\(cap) \(plural) on your plan"
   }

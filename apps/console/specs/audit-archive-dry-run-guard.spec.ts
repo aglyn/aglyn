@@ -268,7 +268,7 @@ describe('audit-archive: a GET reports, a POST archives (AGL-2084)', () => {
     expect(sent.text).toContain('The nightly erasure job erases them at 04:00 UTC')
     expect(sent.text).toContain('nothing is needed from you')
     expect(sent.text).not.toContain('erase-tenant.mjs')
-    expect(sent.text).toContain('- Overdue Ltd (org-due), requested')
+    expect(sent.text).toContain('Overdue Ltd (org-due) — requested')
   })
 
   it('an explicit flag beats the method in both directions', async () => {

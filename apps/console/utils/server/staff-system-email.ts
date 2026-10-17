@@ -18,6 +18,7 @@
 import {
   getSystemEmailTemplate,
   retentionDocsMergeValues,
+  welcomeEmailMergeValues,
   type SystemEmailTemplateDefinition,
 } from '@aglyn/shared-util-email'
 import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
@@ -151,6 +152,12 @@ export function autoMergeValues(
     preferencesUrl: `${origin}/manage/user/emails`,
     // The getting-started emails' docs links (AGL-3692), as the sweep fills them.
     ...retentionDocsMergeValues(DOCS_BASE_URL),
+    ...welcomeEmailMergeValues({
+      orgName,
+      slug,
+      consoleOrigin: origin,
+      docsOrigin: DOCS_BASE_URL,
+    }),
   }
   const action = ACTION_LINK_SYSTEM_EMAILS[definition.key]
   if (action) known[action.token] = ACTION_LINK_PREVIEW_PLACEHOLDER

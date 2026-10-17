@@ -29,13 +29,23 @@ public struct AglynFormSheet<Content: View>: View {
     self.content = content()
   }
 
+  private static var errorID: String { "form-sheet-error" }
+
   public var body: some View {
     NavigationStack {
-      Form {
-        if let error { AglynNotice(error, tone: .error) }
-        content
+      ScrollViewReader { proxy in
+        Form {
+          if let error { AglynNotice(error, tone: .error).id(Self.errorID) }
+          content
+        }
+        .formStyle(.grouped)
+        // Why it did not save is read where it is: the form scrolls to it, rather than the new banner pushing the
+        // field being typed in under the keyboard.
+        .onChange(of: error) { _, error in
+          guard error != nil else { return }
+          withAnimation { proxy.scrollTo(Self.errorID, anchor: .top) }
+        }
       }
-      .formStyle(.grouped)
       .navigationTitle(title)
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -61,6 +71,7 @@ public struct AglynFormSheet<Content: View>: View {
         }
       }
     }
+    .aglynWebSheetHost()
     .aglynSheetMinimumSize(width: 380, height: 420)
   }
 }

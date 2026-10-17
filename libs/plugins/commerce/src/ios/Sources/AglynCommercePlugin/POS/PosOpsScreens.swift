@@ -496,8 +496,12 @@ private struct LastReceiptSection: View {
             .disabled(last.busy)
             .accessibilityIdentifier("pos-last-receipt-print")
         } else {
-          Text("This register has no receipt printer. Add one in the console to print receipts here.")
-            .font(AglynFont.caption).foregroundStyle(.secondary)
+          NavigationLink {
+            RegisterPrintersView(model: model.printers)
+          } label: {
+            Label("Add a receipt printer", systemImage: "printer")
+          }
+          .accessibilityIdentifier("pos-last-receipt-add-printer")
         }
       } else {
         Text("The next sale you finish shows here.").font(AglynFont.caption).foregroundStyle(.secondary)

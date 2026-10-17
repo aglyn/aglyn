@@ -212,6 +212,9 @@ export async function emailStaffAlert(input: {
   subject: string
   text: string
   context: string
+  /** Where it is handled; the staff console when absent. */
+  url?: string
+  urlLabel?: string
 }): Promise<SendEmailResult> {
   // The library's sender, which is the same inbox, the same posture and the
   // same platform meter, and wears the `staff-alert` system email (AGL-3367).

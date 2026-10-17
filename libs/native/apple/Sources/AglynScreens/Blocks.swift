@@ -652,7 +652,6 @@ struct FormBlock: View {
           .disabled(busy || missing)
           .accessibilityIdentifier("submit-\(block.id)")
         }
-        .listRowBackground(Color.clear)
       }
     }
     .onAppear(perform: seed)

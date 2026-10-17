@@ -127,6 +127,12 @@ extension PushCenter: UNUserNotificationCenterDelegate {
   final class PushAppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static var push: PushCenter?
 
+    /// A second window is opened on purpose (File › New Window) and stands on its own: macOS never folds the app's
+    /// windows into a tab bar, so a restored or extra window never shows as a duplicate tab under the toolbar.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+      MainActor.assumeIsolated { NSWindow.allowsAutomaticWindowTabbing = false }
+    }
+
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
       MainActor.assumeIsolated { Self.push?.didRegister(token: deviceToken) }
     }

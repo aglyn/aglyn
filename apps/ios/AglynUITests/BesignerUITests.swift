@@ -27,15 +27,19 @@ final class BesignerUITests: XCTestCase {
   private func openBesigner(_ app: XCUIApplication) {
     app.launchArguments += ["-AglynAutoSignIn", "YES"]
     app.launch()
-    // The push permission prompt the first launch raises.
-    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-    let dontAllow = springboard.buttons["Don’t Allow"]
-    if dontAllow.waitForExistence(timeout: 20) { dontAllow.tap() }
+    #if os(iOS)
+      // The push permission prompt the first launch raises.
+      let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+      let dontAllow = springboard.buttons["Don’t Allow"]
+      if dontAllow.waitForExistence(timeout: 20) { dontAllow.tap() }
+    #endif
     XCTAssertTrue(app.buttons["quick-action-redirects.open"].waitForExistence(timeout: 60), "Home never appeared")
     shot("0-home")
     app.open(URL(string: page)!)
-    let open = springboard.buttons["Open"]
-    if open.waitForExistence(timeout: 5) { open.tap() }
+    #if os(iOS)
+      let open = springboard.buttons["Open"]
+      if open.waitForExistence(timeout: 5) { open.tap() }
+    #endif
     XCTAssertTrue(app.buttons["besigner-done"].waitForExistence(timeout: 30), "The Besigner screen never appeared")
     // The editor loads in the web view; its canvas is slow to query, so wait and look.
     sleep(90)
@@ -50,12 +54,25 @@ final class BesignerUITests: XCTestCase {
     shot("2-back-home")
   }
 
-  func testTheEditorsBackArrowReturnsToTheApp() throws {
+  /// Inside the app the Besigner leaves its browser-only chrome out (AGL-3894): no
+  /// back arrow of its own (Done is the way out), no web "Enable notifications"
+  /// prompt, and the screen names itself instead of wearing the page's title,
+  /// which carried an unread count and the brand into the Mac window title.
+  func testTheBesignerShowsNoBrowserChromeInTheApp() throws {
     let app = XCUIApplication()
     openBesigner(app)
-    // The Besigner's own back arrow, at the left of its toolbar.
-    tap(app, 13, 172)
-    XCTAssertTrue(app.buttons["quick-action-redirects.open"].waitForExistence(timeout: 30), "The back arrow did not return to Home")
-    shot("2-back-home")
+    let web = app.webViews.firstMatch
+    XCTAssertTrue(web.exists, "The Besigner web view is not there")
+    // The control that proves the editor itself loaded: its save button, under whichever state it is in.
+    let save = web.buttons.matching(NSPredicate(format: "label IN %@", ["Save draft", "Publish", "Up to date", "Save"]))
+    XCTAssertTrue(save.firstMatch.waitForExistence(timeout: 60), "The editor never loaded")
+    XCTAssertFalse(web.links["back"].exists || web.buttons["back"].exists, "The web back arrow is drawn in the app")
+    XCTAssertFalse(web.staticTexts["Enable notifications"].exists, "The web notifications prompt shows in the app")
+    #if os(macOS)
+      XCTAssertEqual(app.windows.firstMatch.title, "Besigner")
+    #else
+      XCTAssertTrue(app.navigationBars["Besigner"].exists, "The screen is not titled Besigner")
+    #endif
+    shot("2-no-browser-chrome")
   }
 }
