@@ -140,12 +140,19 @@ export function ssoRequiredDomains(
  *
  * For accounts that cannot use the IdP at all because someone outside the
  * company has to sign in with them: the demo login an app store reviewer is
- * given, for example. Exact addresses only, never a pattern, so every
- * exception is named and can be read back from configuration:
+ * given, for example, or an automated sign-up check that creates a new
+ * plus-addressed account on every run. Every exception is named and can be
+ * read back from configuration:
  *
  * ```
- * AGLYN_SSO_EXEMPT_EMAILS="reviewer@example.com"
+ * AGLYN_SSO_EXEMPT_EMAILS="reviewer@example.com ops+signup-canary*@example.com"
  * ```
+ *
+ * An entry is an exact address, or one mailbox's plus tag followed by `*`,
+ * which also admits every address that extends that tag on the same domain.
+ * The `*` is accepted only as the last character of the local part and only
+ * after a `+`, so no entry can exempt a whole mailbox or a whole domain; any
+ * other entry with a `*` is dropped.
  *
  * Comma or whitespace separated, compared lower-cased. Empty by default.
  */
@@ -157,9 +164,40 @@ export function parseSsoExemptEmails(
   const emails = new Set<string>()
   for (const entry of String(raw ?? '').split(/[,\s]+/)) {
     const email = entry.trim().toLowerCase()
-    if (email.includes('@')) emails.add(email)
+    const at = email.lastIndexOf('@')
+    if (at <= 0 || at === email.length - 1) continue
+    if (email.slice(at + 1).includes('*')) continue
+    const local = email.slice(0, at)
+    const star = local.indexOf('*')
+    if (star !== -1) {
+      const plus = local.indexOf('+')
+      // One trailing `*`, after a non-empty plus tag: `name+tag*`.
+      if (star !== local.length - 1 || plus <= 0 || plus >= star - 1) continue
+    }
+    emails.add(email)
   }
   return emails
+}
+
+/** Whether an address is named by one of the parsed exemption entries. */
+export function isSsoExemptEmail(
+  email: string | null | undefined,
+  exempt: ReadonlySet<string>,
+): boolean {
+  const address = String(email ?? '').trim().toLowerCase()
+  if (!address) return false
+  if (exempt.has(address)) return true
+  const at = address.lastIndexOf('@')
+  if (at <= 0) return false
+  const local = address.slice(0, at)
+  const domain = address.slice(at + 1)
+  for (const entry of exempt) {
+    if (!entry.endsWith(`*@${domain}`)) continue
+    if (local.startsWith(entry.slice(0, entry.length - domain.length - 2))) {
+      return true
+    }
+  }
+  return false
 }
 
 export function ssoExemptEmails(
@@ -290,7 +328,7 @@ export function evaluateSsoDomainPolicy(
     }
   }
 
-  if (exempt.has(String(identity.email ?? '').trim().toLowerCase())) {
+  if (isSsoExemptEmail(identity.email, exempt)) {
     return {
       verdict: 'allow-exempt',
       refused: false,

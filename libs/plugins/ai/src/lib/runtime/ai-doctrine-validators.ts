@@ -2048,6 +2048,73 @@ export function detectInvisibleLinks(tree: AiDoctrineTree, outputKind: AiOutputK
   ]
 }
 
+/** The text colors a theme makes for its page background, which a band in a brand color does not share. */
+const PAGE_TEXT_COLORS = new Set(['text.primary', 'text.secondary', 'text.disabled'])
+
+/** One element whose words a colored band hides, and what hides them. */
+interface AiPageTextOnBand {
+  id: string
+  family: string
+  token: string
+  /** `sx`: its own `sx` color is a page text color; `secondary`: a List Item Text's secondary words, which MUI draws muted. */
+  part: 'sx' | 'secondary'
+}
+
+/**
+ * The words on a colored band drawn in a color made for the page background:
+ * an element whose `sx` color is a `text.*` token, and a List Item Text's
+ * secondary words, which MUI draws in `text.secondary` unless the element's
+ * `secondaryColor` is `inherit`. A band is one `bandOf` names in a family's
+ * main or dark shade; its light shade sits close to the page, where the
+ * page's text colors still read.
+ */
+function pageTextOnBands(tree: AiDoctrineTree, outputKind: AiOutputKind): AiPageTextOnBand[] {
+  if (outputKind === 'email' || outputKind === 'form') return []
+  const found: AiPageTextOnBand[] = []
+  for (const visit of walkTree(tree)) {
+    const { node } = visit
+    const ownColor = node.sx?.['color']
+    const pageColored =
+      ownColor !== undefined &&
+      sxValues(ownColor).some((value) => typeof value === 'string' && PAGE_TEXT_COLORS.has(value.trim()))
+    const secondary = node.props?.['secondary']
+    const mutedSecondary =
+      node.componentId === 'muiListItemText' &&
+      typeof secondary === 'string' &&
+      secondary.trim() !== '' &&
+      node.props?.['secondaryColor'] !== 'inherit'
+    if (!pageColored && !mutedSecondary) continue
+    const band = bandOf(tree, visit)
+    if (!band || band.token.endsWith('.light')) continue
+    if (pageColored) found.push({ id: visit.id, ...band, part: 'sx' })
+    if (mutedSecondary) found.push({ id: visit.id, ...band, part: 'secondary' })
+  }
+  return found
+}
+
+/**
+ * Rule 5, for words on a colored band (AGL-3886). A theme's `text.*` colors
+ * are made for its page background: on a band in `primary.main` they are two
+ * valid tokens that cannot be read. A live gym site's "How your first week
+ * works" band, in an olive brand color, drew each step's words under its
+ * title in the muted text color, about 1.6:1. Words whose color is a page
+ * text color, and a List Item Text's secondary words left muted, on such a
+ * band are refused, with a re-ask for the band's contrast text.
+ */
+export function detectPageTextOnBands(tree: AiDoctrineTree, outputKind: AiOutputKind): AiDoctrineViolation[] {
+  const hidden = pageTextOnBands(tree, outputKind)
+  if (!hidden.length) return []
+  const [first] = hidden
+  return [
+    {
+      rule: 5,
+      code: 'page-text-on-band',
+      message: `Words on a ${first.token} band are drawn in a text color made for the page's background, so they cannot be read. Set their sx color to ${first.family}.contrastText, and give a List Item Text with secondary words on the band "secondaryColor": "inherit".`,
+      nodeIds: unique(hidden.map((entry) => entry.id)),
+    },
+  ]
+}
+
 /** A link's words that say it goes home. */
 const HOME_WORDS = /\bhome(?:\s?page)?\b/i
 
@@ -3672,7 +3739,11 @@ export function aiSettleCutHeadings(input: unknown): unknown {
  *   which is what the re-ask asks for;
  * - `link-color-on-band` (5): a link or a button whose words are drawn in its
  *   band's own family is given that family's contrast text as its `sx` color,
- *   which is what the re-ask asks for.
+ *   which is what the re-ask asks for;
+ * - `page-text-on-band` (5): words on a band in a family's main or dark shade
+ *   whose `sx` color is a page text color (`text.secondary`) are given the
+ *   family's contrast text, and a List Item Text's secondary words there take
+ *   the row's own color (`secondaryColor: inherit`).
  *
  * A tree with nothing to settle comes back as the same object, so settling is
  * idempotent; a node that is changed is copied, never edited in place.
@@ -3778,6 +3849,15 @@ export function aiSettleMechanicalRules<T extends AiDoctrineTree>(tree: T, outpu
       const node = edit(visit.id)
       node.sx = { ...(node.sx ?? {}), color: `${family}.contrastText` }
     }
+    // Rule 5: words on a band in the band's contrast text, and a list's secondary words in the row's own color.
+    for (const { id, family, part } of pageTextOnBands({ rootId: tree.rootId, nodes }, outputKind)) {
+      if (part === 'secondary') {
+        setProp(id, 'secondaryColor', 'inherit')
+        continue
+      }
+      const node = edit(id)
+      node.sx = { ...(node.sx ?? {}), color: `${family}.contrastText` }
+    }
   }
   return copied.size ? ({ ...tree, nodes } as T) : tree
 }
@@ -3878,6 +3958,7 @@ export function validateAiDoctrineTree(
     ...detectInlineForms(tree, outputKind),
     ...detectLiteralStyles(tree, outputKind),
     ...detectInvisibleLinks(tree, outputKind),
+    ...detectPageTextOnBands(tree, outputKind),
     ...detectOffBrandEmail(tree, outputKind, context.brand),
     ...detectTypedData(tree),
     ...detectUnfilledInstances(tree, context),

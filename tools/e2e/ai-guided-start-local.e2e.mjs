@@ -1246,13 +1246,13 @@ async function checkFirstContent({ context, run, runDir, check, browser, firesto
       const products = (await hostRef.collection('products').get()).docs.map((doc) => ({ id: doc.id, ...doc.data() }))
       record(run, { products: products.map((product) => ({ id: product.id, name: product.name, status: product.status, priceUsd: product.priceUsd ?? null, variants: (product.variants ?? []).map((variant) => variant.priceUsd ?? null) })) })
       const priced = products.filter((product) => product.priceUsd != null || (product.variants ?? []).some((variant) => variant.priceUsd != null))
-      // Listed before they have a price (AGL-3676): active, unpriced, each with a photo.
+      // Listed at the store's default price (AGL-3676): active, priced, each with a photo.
       check(
-        '3 to 6 products listed unpriced, each with a photo',
+        '3 to 6 products listed at the default price, each with a photo',
         products.length >= 3 &&
           products.length <= 6 &&
           products.every((product) => product.status === 'active' && (product.mediaUrls ?? []).length > 0) &&
-          priced.length === 0,
+          priced.length === products.length,
         `${products.length} products: ${products.map((product) => `${product.name} (${product.status}, ${(product.mediaUrls ?? []).length} photo)`).join(', ')}; priced ${priced.length}`,
       )
       check('products row says to set prices', /Set their prices/.test(productsRow.note ?? ''), rowText(productsRow))
@@ -1276,8 +1276,8 @@ async function checkFirstContent({ context, run, runDir, check, browser, firesto
       }
       check('the home and the shop list the products', gridOn.some((line) => line.startsWith('/ ')) && gridOn.length >= 2, gridOn.join('; ') || 'none')
       // A start's products carry the store's default price (AGL-3676), never "coming soon".
-      const priced = store.filter((one) => /\$\s?25(?:\.00)?\b/.test(one.visible)).map((one) => one.path)
-      check('cards show the starting price', priced.length > 0, priced.join(', ') || 'none')
+      const pricedPages = store.filter((one) => /\$\s?25(?:\.00)?\b/.test(one.visible)).map((one) => one.path)
+      check('cards show the starting price', pricedPages.length > 0, pricedPages.join(', ') || 'none')
       const pdps = []
       for (const [index, link] of [...productLinks].entries()) {
         const pdp = await visit(link, index === 0 ? '34-product-page' : null)

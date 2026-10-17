@@ -12,6 +12,7 @@
       "zones": [
         "commerceSettings"
       ],
+      "showWhen": "data.state",
       "load": {
         "state": "/api/sales-channels/state?hostId={site.id}"
       },

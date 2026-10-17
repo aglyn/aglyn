@@ -150,7 +150,7 @@ struct MediaLibrary: View {
               )
               .id(selection)
             } else {
-              AglynEmptyState("Pick a file to see its details", systemImage: SiteSymbols.media)
+              AglynSelectionPlaceholder("No file selected", systemImage: SiteSymbols.media)
             }
           }
           .frame(maxWidth: .infinity, maxHeight: .infinity)

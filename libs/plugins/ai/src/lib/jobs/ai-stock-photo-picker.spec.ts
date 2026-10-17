@@ -126,8 +126,8 @@ describe('the stock photo picker (AGL-3755)', () => {
     expect(searches).not.toContain('Autumn sourdough workshop')
     expect(stored).toHaveLength(1)
     // Described by what the photo shows, never the event's title (AGL-3856), and the pick says so too.
-    expect(stored[0]).toMatchObject({ hostId: 'host-1', uid: 'member-1', alt: 'Sourdough, bread and a loaf' })
-    expect(pick?.alt).toBe('Sourdough, bread and a loaf')
+    expect(stored[0]).toMatchObject({ hostId: 'host-1', uid: 'member-1', alt: 'Sourdough in a bakery' })
+    expect(pick?.alt).toBe('Sourdough in a bakery')
     expect(stored[0]?.stockPhoto?.key).toBe(`pixabay:${LOAF.id}`)
   })
 

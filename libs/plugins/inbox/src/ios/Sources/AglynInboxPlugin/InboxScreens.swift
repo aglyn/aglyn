@@ -99,10 +99,15 @@ struct PeopleScreen: View {
         Text("Leads").tag("leads")
       }
       .pickerStyle(.segmented)
+      .labelsHidden()
+      .frame(maxWidth: 420)
       .padding(AglynSpace.two)
       if let error { AglynNotice(error, tone: .error) { self.error = nil }.padding(.horizontal, AglynSpace.two) }
-      if tab == "members" { membersList } else { leadsList }
+      // The rows, or the empty state centered in all the room under the picker (never a box floating mid-window).
+      Group { if tab == "members" { membersList } else { leadsList } }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+    .aglynListColumn()
     .background(AglynColor.page)
     .navigationTitle("Members & leads")
     .onDisappear {

@@ -45,4 +45,26 @@ final class BesignerEntryTests: XCTestCase {
     XCTAssertEqual(BesignerEntry.exit(from: editor, to: "/verify-email"), .sessionEnded)
     XCTAssertEqual(BesignerEntry.exit(from: editor, to: "/signup-later"), .open("/signup-later"))
   }
+
+  // The console's apps/console and libs/aglyn `native-app-web-view` read exactly this shape (AGL-3894).
+  func testTheUserAgentMarkerNamesTheAppItsVersionAndPlatform() {
+    XCTAssertEqual(BesignerEntry.userAgentMarker(version: "1.4.0", platform: "ios"), "AglynApp/1.4.0 (ios)")
+    XCTAssertEqual(BesignerEntry.userAgentMarker(version: "", platform: "macos"), "AglynApp/0 (macos)")
+    XCTAssertEqual(BesignerEntry.userAgentMarker(version: "1.4 beta", platform: "ios"), "AglynApp/1.4beta (ios)")
+  }
+
+  func testTheMarkerFollowsWebKitsOwnApplicationName() {
+    // iOS: WebKit's `Mobile/<build>` stays, so pages still read the view as a phone.
+    XCTAssertEqual(
+      BesignerEntry.applicationNameForUserAgent(base: "Mobile/15E148", version: "1.4.0", platform: "ios"),
+      "Mobile/15E148 AglynApp/1.4.0 (ios)")
+    // macOS: WebKit has none.
+    XCTAssertEqual(
+      BesignerEntry.applicationNameForUserAgent(base: nil, version: "1.4.0", platform: "macos"),
+      "AglynApp/1.4.0 (macos)")
+    // A configuration that already carries it is not marked twice.
+    XCTAssertEqual(
+      BesignerEntry.applicationNameForUserAgent(base: "Mobile/15E148 AglynApp/1.4.0 (ios)", version: "1.5.0", platform: "ios"),
+      "Mobile/15E148 AglynApp/1.4.0 (ios)")
+  }
 }

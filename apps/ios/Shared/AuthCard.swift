@@ -24,26 +24,34 @@ struct AuthCard<Content: View, Footer: View>: View {
     self.footer = footer
   }
 
+  /// The lockup's height; it keeps that much clear space around it (the logo kit's rule).
+  private static var logoHeight: CGFloat { 32 }
+
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 24) {
-        VStack(alignment: .leading, spacing: 8) {
-          AglynArtwork.logo
-            .resizable()
-            .scaledToFit()
-            .frame(height: 44)
-            .accessibilityLabel(model.appName)
-          Text(title).font(AglynFont.title).accessibilityAddTraits(.isHeader)
-          if let subtitle { Text(subtitle).foregroundStyle(.secondary) }
+    GeometryReader { proxy in
+      ScrollView {
+        // One centered column, 400 points at most (spec 10), centered in the window while it fits.
+        VStack(alignment: .leading, spacing: AglynSpace.three) {
+          VStack(alignment: .leading, spacing: AglynSpace.one) {
+            AglynArtwork.logo
+              .resizable()
+              .scaledToFit()
+              .frame(height: Self.logoHeight)
+              .padding(.bottom, Self.logoHeight - AglynSpace.one)
+              .accessibilityLabel(model.appName)
+            Text(title).font(AglynFont.title).accessibilityAddTraits(.isHeader)
+            if let subtitle { Text(subtitle).font(AglynFont.body).foregroundStyle(.secondary) }
+          }
+          content()
+          footer()
         }
-        content()
-        footer()
+        .padding(Self.logoHeight)
+        .frame(maxWidth: 400 + Self.logoHeight * 2)
+        .frame(maxWidth: .infinity, minHeight: proxy.size.height)
       }
-      .padding(24)
-      .frame(maxWidth: 440)
-      .frame(maxWidth: .infinity)
+      .scrollBounceBehavior(.basedOnSize)
     }
-    .scrollBounceBehavior(.basedOnSize)
+    .background(AglynColor.page.ignoresSafeArea())
   }
 }
 
@@ -74,12 +82,13 @@ struct AuthPrimaryButton: View {
   var body: some View {
     Button(action: action) {
       Group {
-        if busy { ProgressView() } else { Text(title) }
+        if busy { ProgressView().controlSize(.small) } else { Text(title).fontWeight(.semibold) }
       }
-      .frame(maxWidth: .infinity)
+      .frame(maxWidth: .infinity, minHeight: AglynPrimaryButtonMetrics.height)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.borderedProminent)
-    .controlSize(.large)
+    .buttonBorderShape(.roundedRectangle(radius: AglynRadius.tile))
     .disabled(busy || !enabled)
     .keyboardShortcut(.defaultAction)
   }
@@ -104,8 +113,7 @@ struct AuthField: View {
           TextField(label, text: $text)
         }
       }
-      .textFieldStyle(.roundedBorder)
-      .controlSize(.large)
+      .textFieldStyle(.aglyn)
       .autocorrectionDisabled(content != .plain)
       #if os(iOS)
         .textInputAutocapitalization(content == .name || content == .organization ? .words : .never)

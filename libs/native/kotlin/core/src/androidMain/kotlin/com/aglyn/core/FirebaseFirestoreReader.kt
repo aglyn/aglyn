@@ -55,12 +55,20 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
     awaitClose { registration.remove() }
   }
 
+  private fun documentIds(value: Any?): Any? = when (value) {
+    is String -> value.substringAfterLast('/')
+    is List<*> -> value.map { (it as? String)?.substringAfterLast('/') ?: it }
+    else -> value
+  }
+
   private fun build(query: FirestoreQuery): Query {
     var q: Query = db.collection(query.collectionPath)
     for (filter in query.filters) {
       val field = if (filter.field == "__name__") FieldPath.documentId() else FieldPath.of(*filter.field.split('.').toTypedArray())
-      // A timestamp filter (a date range, the tombstones a quota count leaves out) is the SDK's Timestamp.
-      val value = toSdk(filter.value)
+      // A timestamp filter (a date range, the tombstones a quota count leaves out) is the SDK's Timestamp. An id filter names
+      // documents by path (`hosts/h/analytics/2026-10-01`, as the REST reader sends it), and the SDK takes a collection's
+      // document by its plain id.
+      val value = if (filter.field == "__name__") documentIds(filter.value) else toSdk(filter.value)
       q = when (filter.op) {
         FilterOp.EQ -> q.whereEqualTo(field, value)
         FilterOp.NE -> q.whereNotEqualTo(field, value)

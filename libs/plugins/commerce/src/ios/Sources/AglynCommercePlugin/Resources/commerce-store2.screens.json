@@ -408,6 +408,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit shipping zone",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "prompt": [
                 {
@@ -569,6 +571,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit shipping rate",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "when": "item.kind != carrier",
               "prompt": [
@@ -679,6 +683,8 @@
             {
               "id": "editCarrier",
               "label": "Edit",
+              "promptTitle": "Edit carrier rate",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "when": "item.kind == carrier",
               "prompt": [
@@ -1133,6 +1139,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit price tier",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "prompt": [
                 {
@@ -1300,6 +1308,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit weight tier",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "prompt": [
                 {
@@ -1677,6 +1687,8 @@
             {
               "id": "edit",
               "label": "Edit",
+              "promptTitle": "Edit delivery zone",
+              "submitLabel": "Save",
               "icon": "pencil|edit",
               "prompt": [
                 {

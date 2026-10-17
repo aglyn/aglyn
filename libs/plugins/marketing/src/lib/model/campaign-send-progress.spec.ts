@@ -137,6 +137,19 @@ describe('campaignSendProgress', () => {
     ).toBe('stopped')
   })
 
+  it('says a send canceled or failed before anything went out was never sent', () => {
+    expect(campaignSendProgress(send({ status: 'canceled' }))).toMatchObject({
+      state: 'stopped',
+      reached: 0,
+      label: 'Canceled before it was sent',
+    })
+    expect(
+      campaignSendProgress(
+        send({ status: 'failed', stats: { sent: 0, audienceSize: 25 } as never }),
+      ),
+    ).toMatchObject({ state: 'stopped', label: 'Failed before it was sent' })
+  })
+
   it('is total — a missing or corrupt record does not throw', () => {
     expect(() => campaignSendProgress(undefined)).not.toThrow()
     expect(campaignSendProgress(undefined).state).toBe('sent')

@@ -15,10 +15,24 @@
  * limitations under the License.
  */
 
+import { mdiCheckCircle } from '@aglyn/shared-data-mdi'
 import { Box, Card, CardActionArea, Stack, Typography } from '@mui/material'
 import { alpha, type Theme } from '@mui/material/styles'
 import { useRef, type KeyboardEvent } from 'react'
 import { MdiIcon } from './mdi-icon/mdi-icon'
+
+/**
+ * A picture across the top of an {@link OptionCard} (AGL-3898): a real
+ * example of the choice, at a fixed size so the grid does not shift while it
+ * loads, and loaded lazily, since a grid of them is mostly below the fold.
+ */
+export interface OptionCardImage {
+  src: string
+  /** What the picture shows, for a reader who cannot see it. */
+  alt: string
+  width: number
+  height: number
+}
 
 /** One choice in an {@link OptionCardGrid}. */
 export interface OptionCard<T extends string = string> {
@@ -27,6 +41,8 @@ export interface OptionCard<T extends string = string> {
   description?: string
   /** An SVG path, such as an MDI icon's. */
   icon?: string
+  /** A picture of the choice, drawn above its title. */
+  image?: OptionCardImage
 }
 
 export interface OptionCardGridProps<T extends string = string> {
@@ -38,13 +54,16 @@ export interface OptionCardGridProps<T extends string = string> {
   onChange: (value: T) => void
   /** Columns at each breakpoint. */
   columns?: { xs?: number; sm?: number; md?: number }
+  /** `data-*` attributes for the grid's root, such as a page's own marker for where clicks land. */
+  [data: `data-${string}`]: string | undefined
 }
 
 /**
  * A grid of cards to pick one from (AGL-3660): a radio group drawn as cards,
- * each with an icon, a title and a line under it. The selected card carries
- * the primary color and a check; the arrow keys move between cards and pick,
- * as a radio group's do, and only the picked card is in the tab order.
+ * each with an icon or a picture (AGL-3898), a title and a line under it. The
+ * selected card carries the primary color, and a picture card a check over
+ * its picture; the arrow keys move between cards and pick, as a radio group's
+ * do, and only the picked card is in the tab order.
  */
 export function OptionCardGrid<T extends string = string>({
   label,
@@ -52,6 +71,7 @@ export function OptionCardGrid<T extends string = string>({
   value,
   onChange,
   columns = { xs: 1, sm: 2, md: 3 },
+  ...rest
 }: OptionCardGridProps<T>) {
   const refs = useRef<Array<HTMLButtonElement | null>>([])
   const selectedIndex = options.findIndex((option) => option.id === value)
@@ -76,6 +96,7 @@ export function OptionCardGrid<T extends string = string>({
     <Box
       role="radiogroup"
       aria-label={label}
+      {...rest}
       sx={{
         display: 'grid',
         gap: 1.5,
@@ -108,9 +129,58 @@ export function OptionCardGrid<T extends string = string>({
               tabIndex={index === focusable ? 0 : -1}
               onClick={() => onChange(option.id)}
               onKeyDown={(event) => onKeyDown(event, index)}
-              sx={{ p: 2, height: '100%', minHeight: 44, display: 'flex', alignItems: 'flex-start' }}
+              sx={{
+                p: option.image ? 0 : 2,
+                height: '100%',
+                minHeight: 44,
+                display: 'flex',
+                flexDirection: option.image ? 'column' : 'row',
+                alignItems: option.image ? 'stretch' : 'flex-start',
+                justifyContent: 'flex-start',
+              }}
             >
-              <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start', width: '100%' }}>
+              {option.image && (
+                <Box sx={{ position: 'relative', width: '100%' }}>
+                  <Box
+                    component="img"
+                    src={option.image.src}
+                    alt={option.image.alt}
+                    width={option.image.width}
+                    height={option.image.height}
+                    loading="lazy"
+                    decoding="async"
+                    sx={{
+                      display: 'block',
+                      width: '100%',
+                      height: 'auto',
+                      aspectRatio: `${option.image.width} / ${option.image.height}`,
+                      objectFit: 'cover',
+                      objectPosition: 'top',
+                      borderBottom: 1,
+                      borderColor: 'divider',
+                      bgcolor: 'action.hover',
+                    }}
+                  />
+                  {selected && (
+                    <Box
+                      aria-hidden
+                      sx={{
+                        position: 'absolute',
+                        top: 8,
+                        right: 8,
+                        display: 'flex',
+                        borderRadius: '50%',
+                        bgcolor: 'background.paper',
+                        color: 'primary.main',
+                        boxShadow: 2,
+                      }}
+                    >
+                      <MdiIcon path={mdiCheckCircle.path} sx={{ fontSize: 24 }} />
+                    </Box>
+                  )}
+                </Box>
+              )}
+              <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start', width: '100%', p: option.image ? 1.5 : 0 }}>
                 {option.icon && (
                   <Box sx={{ color: selected ? 'primary.main' : 'text.secondary', display: 'flex', pt: 0.25 }} aria-hidden>
                     <MdiIcon path={option.icon} sx={{ fontSize: 22 }} />

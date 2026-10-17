@@ -181,6 +181,7 @@ describe('a site in another language with no photo words (AGL-3771)', () => {
     expect(aiStockPhotoWordsOf({ plan: { language: 'es' }, inputs: { siteKind: 'restaurant', businessType: BRIEF } })).toEqual({
       language: 'es',
       kindWords: 'restaurant cafe',
+      kind: 'restaurant',
     })
   })
 

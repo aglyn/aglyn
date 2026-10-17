@@ -22,7 +22,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx/components/loading-text.component'
 import { fbClientAppOptions, useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 import { Button, CircularProgress, Stack, Typography } from '@mui/material'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import AuthFormComponent from '../../../components/auth-form.component'
 import { endConsoleSession } from '../../../utils/end-console-session'
 import { nativeHandoffAuthOrigin } from '../../../utils/native-handoff-origin'
@@ -60,43 +60,38 @@ function NativeHandoff() {
   const [phase, setPhase] = useState<Phase>('checking')
   const [error, setError] = useState<string | null>(null)
 
-  const params = useMemo(
-    () => new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search),
-    [],
-  )
+  // The query is read when it is used, never frozen at the first render: arriving back from `/signin` or `/sso` is a
+  // client navigation, and Next renders this page BEFORE the address bar holds its URL, so a value taken during that
+  // render is the sign-in page's query (no challenge, return address or state) and every hand-off was refused as
+  // "not from the app" (AGL-3902).
+  const params = useCallback(() => new URLSearchParams(window.location.search), [])
   // The whole hand-off runs on the Firebase auth origin, or the sign-in sheet never sees an SSO result (AGL-3836).
-  const authOrigin = useMemo(
-    () => (typeof window === 'undefined' ? null : nativeHandoffAuthOrigin(window.location, fbClientAppOptions.authDomain)),
-    [],
-  )
-  const here = useMemo(() => {
-    if (typeof window === 'undefined') return '/auth/native'
-    const carried = new URLSearchParams(window.location.search)
-    // `start` is spent once the visitor has been sent to sign in.
-    carried.delete('start')
-    return `/auth/native?${carried.toString()}`
-  }, [])
-
+  const authOrigin = useCallback(() => nativeHandoffAuthOrigin(window.location, fbClientAppOptions.authDomain), [])
   const sendTo = useCallback(
     (page: string) => {
+      const carried = params()
       // The address the app already has (an SSO domain it looked up) rides to `/sso`, so it is not asked for twice.
-      const hint = page === '/sso' ? params.get('login_hint') : null
+      const hint = page === '/sso' ? carried.get('login_hint') : null
+      // `start` is spent once the visitor has been sent to sign in.
+      carried.delete('start')
+      const here = `/auth/native?${carried.toString()}`
       window.location.assign(
         `${page}?continue=${encodeURIComponent(here)}` +
           (hint ? `&email=${encodeURIComponent(hint)}` : ''),
       )
     },
-    [here, params],
+    [params],
   )
 
   useEffect(() => {
-    if (authOrigin) {
-      window.location.replace(authOrigin)
+    const origin = authOrigin()
+    if (origin) {
+      window.location.replace(origin)
       return
     }
     if (status === 'loading') return
     if (!signedIn) {
-      const start = START_PAGES[params.get('start') ?? '']
+      const start = START_PAGES[params().get('start') ?? '']
       if (start) {
         sendTo(start)
         return
@@ -112,14 +107,15 @@ function NativeHandoff() {
     if (!current) return
     setPhase('working')
     setError(null)
+    const query = params()
     try {
       const response = await authorizedFetch(current, '/api/auth/native-handoff/authorize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          challenge: params.get('challenge'),
-          redirectUri: params.get('redirect_uri'),
-          state: params.get('state'),
+          challenge: query.get('challenge'),
+          redirectUri: query.get('redirect_uri'),
+          state: query.get('state'),
         }),
       })
       const payload = (await response.json().catch(() => null)) as {

@@ -237,6 +237,41 @@ export interface AnalyticsEventParams {
    * site in the guided start: the ready-made starter, or AI.
    */
   site_start_choice: { choice: 'starter' | 'ai' }
+  /**
+   * Custom: no GA4 equivalent (AGL-3898). The guided start's steps, as a
+   * funnel: a step was drawn. `step` is the closed step id (`choose`,
+   * `kind`, `audience`, `style`, `details`, `review`), `step_index` its
+   * place from 0 and `step_count` how many there are. Never an answer: the
+   * guided start's params carry step and field ids, counts and durations.
+   */
+  site_start_step_viewed: { step: string; step_index: number; step_count: number }
+  /** Custom (AGL-3898). The person went forward from a step; `duration_ms` is the time spent on it. */
+  site_start_step_completed: { step: string; step_index: number; duration_ms: number }
+  /** Custom (AGL-3898). The person went back from a step, by Back or an Edit on the review. */
+  site_start_step_back: { step: string; step_index: number; duration_ms: number }
+  /**
+   * Custom (AGL-3898). The guided start was left without a site being started:
+   * `reason` is `skip`, `close` (the close control or Escape), `unload` (the
+   * tab closed or reloaded) or `route` (the page changed under it). `step` is
+   * the last one reached; `total_ms` the time since it opened.
+   */
+  site_start_abandoned: { step: string; step_index: number; reason: string; duration_ms: number; total_ms: number }
+  /**
+   * Custom (AGL-3898). A step refused to go forward on a field: `field` is
+   * the answer's id (`siteType`, `audience`, `pages`, `submissions`) and
+   * `error` a closed code (`required`, `too_long`, `out_of_range`, `invalid`).
+   */
+  site_start_field_error: { step: string; field: string; error: string }
+  /**
+   * Custom (AGL-3898). A sign the person is stuck: `signal` is `edits` (one
+   * field changed `count` times) or `idle` (no input on the step for
+   * `duration_ms`).
+   */
+  site_start_struggle: { step: string; signal: string; field?: string; count?: number; duration_ms?: number }
+  /** Custom (AGL-3898). Several fast clicks on one spot; `area` is the closed id of the part of the form clicked. */
+  site_start_rage_click: { step: string; area: string; clicks: number }
+  /** Custom (AGL-3898). A click on a part of the form that does nothing; `area` as above. */
+  site_start_dead_click: { step: string; area: string }
   /** Custom: no GA4 equivalent. Stripe Connect onboarding completed. */
   stripe_connected: Record<string, never>
 
@@ -990,6 +1025,14 @@ const TAXONOMY_EVENT_NAMES: Record<AnalyticsEventName, true> = {
   host_created: true,
   site_published: true,
   site_start_choice: true,
+  site_start_step_viewed: true,
+  site_start_step_completed: true,
+  site_start_step_back: true,
+  site_start_abandoned: true,
+  site_start_field_error: true,
+  site_start_struggle: true,
+  site_start_rage_click: true,
+  site_start_dead_click: true,
   stripe_connected: true,
   begin_checkout: true,
   purchase: true,

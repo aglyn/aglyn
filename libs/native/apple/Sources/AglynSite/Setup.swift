@@ -262,17 +262,28 @@ public enum SeoLimits {
 /// The business entity's kinds (`HostEntityType`, stored as the enum's number in text).
 public let entityTypes: [(value: String, label: String)] = [("1", "Organization"), ("2", "Person")]
 
-/// One of the site's saved themes (`hosts/{hostId}/themes`).
+/// One entry of the site's theme library (`hosts/{hostId}/themes`): a theme of its own (`custom`), a marketplace theme it
+/// installed (`installed`), or the stash a built-in theme keeps while another is picked (`default`, `preset`).
 public struct SavedTheme: Identifiable, Equatable, Sendable {
   public let id: String
   public let name: String
   public let updatedAt: Date?
+  public let kind: String
 
   public init(_ doc: FirestoreDocument) {
     id = doc.id
     name = doc.string("name").flatMap { $0.trimmed.isEmpty ? nil : $0 } ?? "Untitled theme"
     updatedAt = doc.date("updatedAt")
+    kind = doc.string("kind") ?? ""
   }
+}
+
+/// The library's entries the picker lists as themes to switch to, as the console's picker does: the site's own themes, then
+/// the marketplace ones, each switched to by its own kind. A built-in theme's stash, or an entry with no known kind, is not one.
+public func libraryThemes(_ docs: [FirestoreDocument]) -> [SavedTheme] {
+  let kinds = ["custom", "installed"]
+  let themes = docs.map(SavedTheme.init).filter { kinds.contains($0.kind) }
+  return kinds.flatMap { kind in themes.filter { $0.kind == kind } }
 }
 
 /// Which theme the site picked (`themeSelection`): its kind (default, preset, custom, installed), id and name.
@@ -348,6 +359,8 @@ public func hasThemeEdits(_ host: [String: Any]?) -> Bool {
 
 /// The theme library's limits (`THEME_LIBRARY_MAX_CUSTOM`, `THEME_NAME_MAX`).
 public let themeLibraryMaxCustom = 25
+/// The most library entries read at once: the custom themes, a stash per built-in theme and the marketplace ones (`LIBRARY_READ_LIMIT`).
+public let themeLibraryReadLimit = 100
 public let themeNameMax = 60
 
 public struct ThemeColorControl: Equatable, Sendable {

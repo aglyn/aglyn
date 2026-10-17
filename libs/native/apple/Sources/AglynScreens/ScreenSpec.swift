@@ -256,6 +256,9 @@ public struct ActionSpec: Sendable, Identifiable {
   public let prompt: [FieldSpec]
   let promptRaw: [JSONValue]
   public let success: String?
+  /// A prompt sheet's own title (`Edit category`) and its button (`Save`), where the action's label (`Edit`) would say neither.
+  public let promptTitle: String?
+  public let submitLabel: String?
   /// A response field holding a URL to open in the secure in-app browser (Stripe's pages).
   public let openURL: String?
   public let navigate: NavigateSpec?
@@ -385,6 +388,8 @@ public struct ActionSpec: Sendable, Identifiable {
     self.prompt = json["prompt"].array.compactMap(FieldSpec.init)
     self.promptRaw = json["prompt"].array
     self.success = json["success"]?.stringValue
+    self.promptTitle = json["promptTitle"]?.stringValue
+    self.submitLabel = json["submitLabel"]?.stringValue
     self.openURL = json["open"]?.stringValue
     self.navigate = json["navigate"].flatMap(NavigateSpec.init)
     self.back = json["back"] == .bool(true)

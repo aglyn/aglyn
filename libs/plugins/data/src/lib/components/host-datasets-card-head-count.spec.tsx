@@ -372,8 +372,8 @@ describe('the Data card head-counts are server aggregates (AGL-1716)', () => {
     const description = String(confirm.mock.calls[0][0].description)
     // Before the fix this read "and its 500 documents" for a collection of
     // 600,000 — a destructive prompt understating what it destroys.
-    expect(description).toContain('and its 600000 documents')
-    expect(description).not.toContain('its 500 documents')
+    expect(description).toContain('and its 600,000 records')
+    expect(description).not.toContain('its 500 records')
   })
 
   it('keeps both lists capped — the caps were never the defect', async () => {
@@ -432,7 +432,7 @@ describe('the Data card head-counts are server aggregates (AGL-1716)', () => {
     // document warning from a destructive prompt entirely, and would answer
     // `checkQuota` as "no usage" on a collection that is over its band.
     expect(String(confirm.mock.calls[0][0].description)).toContain(
-      `and its ${TABLE_PAGE_SIZE_DEFAULT} documents`,
+      `and its ${TABLE_PAGE_SIZE_DEFAULT} records`,
     )
     // The dataset aggregate answered, so its count is unaffected by the
     // record read failing — one denial does not poison the other.

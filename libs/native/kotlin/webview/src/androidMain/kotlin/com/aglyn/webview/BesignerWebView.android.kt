@@ -111,6 +111,9 @@ actual fun BesignerWebView(
         WebView(context).apply {
           settings.javaScriptEnabled = true
           settings.domStorageEnabled = true
+          // The console leaves its browser-only chrome out of the app (AGL-3894).
+          val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+          settings.userAgentString = BesignerEntry.userAgent(settings.userAgentString, version, "android")
           if (bridge != null) {
             addJavascriptInterface(
               object {
