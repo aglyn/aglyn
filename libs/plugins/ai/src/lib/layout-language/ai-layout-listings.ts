@@ -89,6 +89,20 @@ export interface AiLayoutListingPlacement {
   /** The section, by plan index. */
   section: number
   role: AiLayoutListingRole
+  /**
+   * The one group of a dataset's records the section lists (AGL-3921), where
+   * the page lists the dataset in several sections each named for one value
+   * of its category-like field: "Family portrait gallery" lists the records
+   * filed "Family portraits", drawn as the repeat's `repeatFilter`.
+   */
+  filter?: AiLayoutListingFilter
+}
+
+/** A records placement's group: the field, its value, and the records filed under it, by name. */
+export interface AiLayoutListingFilter {
+  field: string
+  value: string
+  records: string[]
 }
 
 /** One field of a dataset a `records` listing shows, as its card binds it. */
@@ -227,6 +241,17 @@ function listingFieldsOf(raw: unknown): AiLayoutListingField[] {
     .slice(0, 16)
 }
 
+/** A placement's group as its input carries it; one whose field or value does not read is none. */
+function listingFilterOf(raw: unknown): AiLayoutListingFilter | null {
+  const filter = (raw ?? {}) as Record<string, unknown>
+  const field = text(filter['field'])
+  // The repeat's filter is `field == value` on one line, at most 200 characters.
+  const value = text(filter['value']).replace(/\s+/g, ' ').slice(0, 120)
+  if (!FIELD_ID.test(field) || !value) return null
+  const records = (Array.isArray(filter['records']) ? filter['records'] : []).map(text).filter(Boolean).slice(0, 12)
+  return { field, value, records }
+}
+
 /** A site's listings as its unit inputs carry them; nothing that does not read is kept. */
 export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | null | undefined): AiLayoutListing[] {
   const raw = inputs?.[AI_LAYOUT_LISTINGS_INPUT]
@@ -262,8 +287,9 @@ export function aiLayoutListingsOf(inputs: Readonly<Record<string, unknown>> | n
       const screenId = text(placement['screenId'])
       const section = placement['section']
       const role = placement['role'] as AiLayoutListingRole
+      const filter = kind === 'records' ? listingFilterOf(placement['filter']) : null
       return screenId && typeof section === 'number' && Number.isInteger(section) && section >= 0 && PLACEMENT_ROLES.includes(role)
-        ? [{ screenId, section, role }]
+        ? [{ screenId, section, role, ...(filter ? { filter } : {}) }]
         : []
     })
     listings.push({
@@ -297,13 +323,18 @@ export function aiLayoutListingAt(
   listings: readonly AiLayoutListing[],
   screenId: string | null | undefined,
   section: number,
-): { listing: AiLayoutListing; role: AiLayoutListingRole } | null {
+): { listing: AiLayoutListing; role: AiLayoutListingRole; filter?: AiLayoutListingFilter } | null {
   if (!screenId) return null
   for (const listing of listings) {
     const placement = listing.placements.find((entry) => entry.screenId === screenId && entry.section === section)
-    if (placement) return { listing, role: placement.role }
+    if (placement) return { listing, role: placement.role, ...(placement.filter ? { filter: placement.filter } : {}) }
   }
   return null
+}
+
+/** The repeat filter a placement's group is drawn as: `category == Family portraits`. */
+export function aiLayoutRepeatFilterOf(filter: Pick<AiLayoutListingFilter, 'field' | 'value'>): string {
+  return `${filter.field} == ${filter.value}`
 }
 
 // ── Where a site's pages place them ────────────────────────────────────
@@ -504,19 +535,91 @@ export function aiLayoutRecordBaseOf(
  * other page lists them all. Chosen from the plan, never asked of the model.
  */
 export function aiLayoutRecordsPlacements(
-  dataset: { id: string; name: string },
+  dataset: {
+    id: string
+    name: string
+    /** Its records, by name, as {@link groups} files them. */
+    records?: readonly string[]
+    /** What its records are filed under: the field, by id, and each record's value, by position. */
+    groups?: { field: string; values: readonly string[] } | null
+  },
   screens: readonly AiLayoutListingScreen[],
 ): AiLayoutListingPlacement[] {
   const named = `new:${dataset.name}`.trim().toLowerCase()
   const placements: AiLayoutListingPlacement[] = []
   for (const screen of screens) {
     if (typeof screen.id !== 'string' || !screen.id) continue
+    const here: AiLayoutListingPlacement[] = []
     screen.sections.forEach((section, index) => {
       const lists = (section.uses ?? []).some((ref) => ref === dataset.id || ref.trim().toLowerCase() === named)
-      if (lists) placements.push({ screenId: screen.id as string, section: index, role: isHome(screen.slug) ? 'featured' : 'index' })
+      if (lists) here.push({ screenId: screen.id as string, section: index, role: isHome(screen.slug) ? 'featured' : 'index' })
     })
+    placements.push(...aiLayoutGroupedPlacements(here, screen, dataset))
   }
   return placements
+}
+
+/** Words a section's name adds to a group's without naming another: "Family portrait gallery" is "Family portraits". */
+const GROUP_FRAMING = new Set(
+  'a an and the of our my your for with in at to by from all more recent selected featured favorite gallery galleries portfolio collection collections work works photos photo photographs pictures images showcase grid list cards section'.split(' '),
+)
+
+/** A name's words as a group is matched by: lowercase, a plural's "-s" dropped, framing kept. */
+function groupWords(name: string): string[] {
+  return name
+    .toLowerCase()
+    .split(/[^a-z0-9À-ɏ]+/)
+    .filter(Boolean)
+    .map((word) => (word.length > 3 && word.endsWith('ies') ? `${word.slice(0, -3)}y` : word.length > 3 && /[^s]s$/.test(word) ? word.slice(0, -1) : word))
+}
+
+/**
+ * The value of a dataset's groups a section's name is named for (AGL-3921),
+ * or `null`: every word of the value is in the name ("Weddings and
+ * elopements gallery" is "Weddings and elopements"), else every word of the
+ * name past its framing is in the value ("Weddings" is "Weddings and
+ * elopements"), and no other value is named as well. Pure.
+ */
+export function aiLayoutSectionGroup(sectionName: string, values: readonly string[]): string | null {
+  const said = groupWords(sectionName)
+  const own = said.filter((word) => !GROUP_FRAMING.has(word))
+  const distinct = [...new Map(values.filter((value) => value.trim()).map((value) => [value.trim().toLowerCase(), value.trim()])).values()]
+  const wordsOf = (value: string) => groupWords(value).filter((word) => !GROUP_FRAMING.has(word))
+  const found = distinct.filter((value) => {
+    const words = wordsOf(value)
+    return (words.length > 0 && words.every((word) => said.includes(word))) || (own.length > 0 && own.every((word) => words.includes(word)))
+  })
+  if (found.length !== 1) return null
+  const value = found[0] as string
+  // "Weddings and family portraits" names a second group in part: it lists both.
+  const others = distinct.filter((other) => other !== value).flatMap(wordsOf)
+  const mine = wordsOf(value)
+  return own.some((word) => others.includes(word) && !mine.includes(word)) ? null : value
+}
+
+/**
+ * A page's placements of one dataset, each section named for one of its
+ * groups listing only that group's records (AGL-3921). The beta.265 Laurel
+ * Ridge "Galleries" page planned "Weddings and elopements gallery" and
+ * "Family portrait gallery" over one "Gallery collections" whose records were
+ * filed under those two categories, and both sections listed all ten: the
+ * plan names no filter, so the build reads it off the sections' names. Only
+ * where the page lists the dataset more than once; a section named for no
+ * one group lists them all. Pure.
+ */
+export function aiLayoutGroupedPlacements(
+  placements: readonly AiLayoutListingPlacement[],
+  screen: Pick<AiLayoutListingScreen, 'sections'>,
+  dataset: { records?: readonly string[]; groups?: { field: string; values: readonly string[] } | null },
+): AiLayoutListingPlacement[] {
+  const groups = dataset.groups
+  if (placements.length < 2 || !groups || !FIELD_ID.test(groups.field)) return [...placements]
+  return placements.map((placement) => {
+    const value = aiLayoutSectionGroup(screen.sections[placement.section]?.name ?? '', groups.values)
+    if (!value) return placement
+    const records = (dataset.records ?? []).filter((_name, index) => (groups.values[index] ?? '').trim().toLowerCase() === value.toLowerCase())
+    return { ...placement, filter: { field: groups.field, value, records } }
+  })
 }
 
 /**

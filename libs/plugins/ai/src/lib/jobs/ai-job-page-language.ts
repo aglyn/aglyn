@@ -416,7 +416,9 @@ export function aiLayoutPagePrompt(input: {
     }
     if (listed?.listing.kind === 'records') {
       // One of the site's datasets (AGL-3616), repeated by the platform over its records.
-      const names = listed.listing.records.length ? ` (${listed.listing.records.slice(0, 6).map((name) => `“${name}”`).join(', ')})` : ''
+      // A section named for one group lists that group's records alone (AGL-3921).
+      const shown = listed.filter?.records.length ? listed.filter.records : listed.listing.records
+      const names = shown.length ? ` (${shown.slice(0, 6).map((name) => `“${name}”`).join(', ')})` : ''
       return `${index + 1}. "${section.name}"${places}; the platform lists the records of the dataset “${listed.listing.name}”${names} here itself, one card each: write only its heading and a line about them, and no cards, list or images for them`
     }
     if (listed) {

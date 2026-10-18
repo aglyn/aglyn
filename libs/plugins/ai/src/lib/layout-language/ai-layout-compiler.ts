@@ -55,7 +55,9 @@ import {
   aiLayoutListingAt,
   aiLayoutRecordHref,
   aiLayoutRecordImageAltField,
+  aiLayoutRepeatFilterOf,
   type AiLayoutListing,
+  type AiLayoutListingFilter,
   type AiLayoutListingRole,
 } from './ai-layout-listings'
 import { aiStorefrontItemIcons } from './ai-layout-storefront'
@@ -2558,10 +2560,10 @@ function listingAllButton(page: PageScope, listing: AiLayoutListing): AiLayoutBl
 function listingSection(
   scope: SectionScope,
   blocks: readonly AiLayoutBlock[],
-  placed: { listing: AiLayoutListing; role: AiLayoutListingRole },
+  placed: { listing: AiLayoutListing; role: AiLayoutListingRole; filter?: AiLayoutListingFilter },
 ): string {
   const { page, index, at } = scope
-  const { listing, role } = placed
+  const { listing, role, filter } = placed
   if (listing.kind === 'reviews') return reviewsSection(scope, blocks)
   if (listing.kind === 'signup') return signupSection(scope, blocks)
   // The grid straight under a Shop page's title bar opens on the products:
@@ -2603,7 +2605,7 @@ function listingSection(
           'flex-end',
         )
       : head
-  const records = listingElement(scope, listing, role)
+  const records = listingElement(scope, listing, role, filter)
   const parts = [
     top ? (centered ? tree.add('muiContainer', { maxWidth: 'md', disableGutters: true }, null, [top], 'measure') : top) : null,
     records,
@@ -2822,7 +2824,12 @@ function iconColumns(scope: SectionScope, items: readonly AiLayoutItem[], room: 
  * the site's catalog, or Collection Entries over its blog with one post's
  * card as the template it repeats. Its records count as the section's items.
  */
-function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiLayoutListingRole): string {
+function listingElement(
+  scope: SectionScope,
+  listing: AiLayoutListing,
+  role: AiLayoutListingRole,
+  filter?: AiLayoutListingFilter,
+): string {
   const { page } = scope
   const tree = page.tree
   const featured = role === 'featured'
@@ -2880,13 +2887,15 @@ function listingElement(scope: SectionScope, listing: AiLayoutListing, role: AiL
       'products',
     )
   } else if (listing.kind === 'records') {
-    id = recordsElement(scope, listing, featured ? shown : null)
+    id = recordsElement(scope, listing, featured ? shown : null, filter)
   } else {
     id = postsElement(scope, listing, featured ? shown : COLLECTION_INDEX_POSTS)
   }
-  // What a visitor sees here is the site's records, however many it keeps:
-  // the section shows its planned items when it has any to show.
-  noted(scope, Array.from({ length: Math.max(2, Math.min(shown, listing.records.length)) }, () => id))
+  // What a visitor sees here is the site's records, however many it keeps —
+  // a section named for one group, that group's (AGL-3921): the section shows
+  // its planned items when it has any to show.
+  const listed = filter?.records.length ? filter.records.length : listing.records.length
+  noted(scope, Array.from({ length: Math.max(2, Math.min(shown, listed)) }, () => id))
   return id
 }
 
@@ -2996,7 +3005,7 @@ export function aiLayoutRecordCardFields(
  * of pieces stays the image-led gallery it was before it was a dataset.
  * A featured band shows the first few; a page of its own, every record.
  */
-function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: number | null): string {
+function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: number | null, filter?: AiLayoutListingFilter): string {
   const { page } = scope
   const tree = page.tree
   const fields = aiLayoutRecordCardFields(listing.fields ?? [])
@@ -3060,7 +3069,7 @@ function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: nu
     at: scope.at,
     what: `${listing.name} listed from its dataset${questions ? ' as a ruled list' : picture ? ' as picture cards' : ' as cards'}${
       recordHref ? `, each linking its page under /${listing.recordBase}` : ''
-    }`,
+    }${filter ? `, only those filed “${filter.value}”` : ''}`,
   })
   const card = questions
     ? tree.add('muiStack', { spacing: '1' }, { borderTop: 1, pt: 3 }, [title, body, more], 'record')
@@ -3073,7 +3082,12 @@ function recordsElement(scope: SectionScope, listing: AiLayoutListing, limit: nu
       )
   return tree.add(
     AI_LAYOUT_LISTING_ELEMENTS.records,
-    { repeatDataset: listing.datasetId, ...(limit ? { repeatLimit: String(limit) } : {}) },
+    {
+      repeatDataset: listing.datasetId,
+      ...(limit ? { repeatLimit: String(limit) } : {}),
+      // A section named for one group lists that group's records (AGL-3921).
+      ...(filter ? { repeatFilter: aiLayoutRepeatFilterOf(filter) } : {}),
+    },
     questions
       ? { display: 'grid', gap: 3 }
       : { display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 5 },

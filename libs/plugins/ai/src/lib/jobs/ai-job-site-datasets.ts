@@ -360,6 +360,8 @@ export async function aiSiteDatasetRecordPhotos(input: {
   name: string
   /** Each record's name, by position. */
   names: readonly string[]
+  /** What each record is filed under, by position ({@link aiSiteDatasetCategoryOf}, AGL-3856); absent for a list that files none. */
+  categories?: ReadonlyArray<string | null>
   pictures: AiSiteDatasetPictures
   signal?: AbortSignal
   stockPhotos?: typeof aiLayoutStockPhotoSource
@@ -380,6 +382,8 @@ export async function aiSiteDatasetRecordPhotos(input: {
     standIn: true,
     // A team's record shows an adult in their role, never a child (AGL-3856).
     ...(people ? { people: true } : {}),
+    // A piece's record is OF what it names and what it is filed under (AGL-3856).
+    ...(people ? {} : { record: input.categories?.[index]?.trim() ? { category: (input.categories[index] as string).trim() } : {} }),
   }))
   const seed = `${job.$id}:records`
   let found: ReadonlyArray<AiLayoutPicturePhoto | null> = []
@@ -474,6 +478,53 @@ interface AiSiteDatasetProposal {
    * nothing on most records — so its listing leaves them out.
    */
   sparseFields?: string[]
+  /**
+   * What its records are filed under (AGL-3921): the category-like field, by
+   * id, and each record's value of it, by position as {@link recordNames}.
+   * A section named for one value lists only its records.
+   */
+  groups?: { field: string; values: string[] }
+}
+
+/** A field whose name says it files its records: a category, a type, a kind. */
+const CATEGORY_FIELD = /^(?:(?:gallery|session|service|event|course|class|product|menu|work|project) )?(?:category|categories|type|kind|collection|genre|group|section|subject|occasion|series)$/i
+
+/**
+ * What a designed dataset's records are filed under (AGL-3921): its first
+ * field whose name says it files them ("Category", "Type", "Session type"),
+ * with each record's value, where they hold at least two different values
+ * and some record shares one — a list that files every record apart files
+ * none. `null` otherwise. Pure.
+ */
+export function aiSiteDatasetCategoryOf(dataset: {
+  fields: ReadonlyArray<{ name: string }>
+  records: ReadonlyArray<ReadonlyArray<string | undefined>>
+}): { column: number; name: string; values: Array<string | null> } | null {
+  for (const [column, field] of dataset.fields.entries()) {
+    if (column === 0 || !CATEGORY_FIELD.test(field.name.trim())) continue
+    const values = dataset.records.map((values) => (values[column] ?? '').replace(/\s+/g, ' ').trim() || null)
+    const distinct = new Set(values.filter((value): value is string => Boolean(value)).map((value) => value.toLowerCase()))
+    if (distinct.size >= 2 && distinct.size < values.filter(Boolean).length) return { column, name: field.name, values }
+  }
+  return null
+}
+
+/**
+ * A dataset's groups as its proposal keeps them: the written field's id, and
+ * the value of each record its {@link AiSiteDatasetProposal.recordNames} names.
+ */
+function aiSiteDatasetGroupsOf(
+  category: ReturnType<typeof aiSiteDatasetCategoryOf>,
+  written: readonly AiLayoutListingField[],
+  designed: { fields: ReadonlyArray<{ name: string }>; records: ReadonlyArray<ReadonlyArray<string | undefined>> },
+): Pick<AiSiteDatasetProposal, 'groups'> {
+  if (!category) return {}
+  const field =
+    written.find((entry) => entry.name.trim().toLowerCase() === category.name.trim().toLowerCase())?.id ??
+    (written.length === designed.fields.length ? written[category.column]?.id : undefined)
+  if (!field) return {}
+  const values = designed.records.flatMap((record, index) => record[0] ? [category.values[index] ?? ''] : []).slice(0, 12)
+  return { groups: { field, values } }
 }
 
 /**
@@ -509,6 +560,9 @@ function proposalOf(output: Pick<AiJobOutput, 'proposal'>): AiSiteDatasetProposa
     imageField: str(raw.imageField) || null,
     photos: Array.isArray(raw.photos) ? raw.photos.map(str).filter((src) => src.startsWith('media:')).slice(0, 24) : [],
     sparseFields: Array.isArray(raw.sparseFields) ? raw.sparseFields.map(str).filter(Boolean) : [],
+    ...(raw.groups && typeof raw.groups === 'object' && str(raw.groups.field) && Array.isArray(raw.groups.values)
+      ? { groups: { field: str(raw.groups.field), values: raw.groups.values.slice(0, 12).map(str) } }
+      : {}),
   }
 }
 
@@ -605,6 +659,8 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
     if (generation.status === 'refused') return { ...spent, refused: true }
     if (generation.status === 'needs_input') return { ...spent, failure: generation.message }
     const designed = aiDatasetDraftContent(creation.name, generation.value, { recordPages: input.recordPages })
+    // What each record is filed under, which its photo and the sections that list it by its value read (AGL-3856).
+    const category = aiSiteDatasetCategoryOf(generation.value)
     // A list a visitor looks at keeps its records' photos (AGL-3616): searched
     // in code, never asked of the model, so they cost no credits.
     const photos = input.pictures
@@ -612,6 +668,7 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
           job,
           name: creation.name,
           names: generation.value.records.map((values) => values[0] ?? ''),
+          ...(category ? { categories: category.values } : {}),
           pictures: input.pictures,
           ...(signal ? { signal } : {}),
         }).catch(() => [] as AiSiteDatasetRecordPhoto[])
@@ -659,6 +716,7 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
       ...(facts.imageField ? { imageField: facts.imageField } : {}),
       ...(placed.length ? { photos: placed } : {}),
       sparseFields: aiDatasetSparseFields(generation.value, facts.fields ?? []),
+      ...aiSiteDatasetGroupsOf(category, facts.fields ?? [], generation.value),
     }
     return { ...spent, outputs: [output(result.id, result.name, proposal, facts.records ?? generation.value.records.length)] }
   }
@@ -735,6 +793,8 @@ export function aiDatasetListingsOf(
     imageField?: string | null
     /** The record's page-address field, where the writer added one (AGL-3727). */
     addressField?: string | null
+    /** What its records are filed under, by position as `records` (AGL-3921): a section named for one value lists its records alone. */
+    groups?: { field: string; values: readonly string[] } | null
   }>,
   screens: readonly AiLayoutListingScreen[],
 ): AiLayoutListing[] {
@@ -1008,6 +1068,7 @@ export function aiSiteDatasetListings(input: {
         ),
         imageField: proposal.imageField ?? null,
         addressField: proposal.addressField,
+        groups: proposal.groups ?? null,
       },
     ]
   })
