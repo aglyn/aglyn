@@ -32,10 +32,9 @@
  * real and did. The card offered headroom that did not exist and then failed
  * the create — the AGL-1716 shape exactly.
  *
- * Both aggregates are UNFILTERED, matching the enforcing route's plain
- * `collection(…).count()`; its `softDeletes` branch governs only the flat
- * per-host webhook cap, so soft-deleted rows have always counted server-side
- * while these cards excluded them.
+ * Both counts are LIVE rows, as the enforcing route counts them (AGL-3918):
+ * every document less the tombstones (`deletedAt != null`), so a deleted
+ * variable or function frees its slot.
  *
  * Contracts, per card: the gate refuses over the band the window hid (red
  * before the fix), the list keeps its cap, the count is read once per mount
@@ -85,6 +84,11 @@ const aggregate: { variables: number | null; functions: number | null } = {
   variables: SERVER_VARIABLES,
   functions: SERVER_FUNCTIONS,
 }
+/** How many of each collection's documents are deleted (AGL-3918). */
+const tombstones: { variables: number; functions: number } = { variables: 0, functions: 0 }
+/** The suffix the mocked `query` gives the tombstone aggregate's target. */
+const TOMBSTONES = ':tombstones'
+type Counted = 'variables' | 'functions'
 
 /** Stable, like the real hook — `firestore` keys the head-count effect. */
 const FIRESTORE = {}
@@ -107,7 +111,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 
 const limitSpy = jest.fn((value: number) => value)
-const countSpy = jest.fn(async (name: 'variables' | 'functions') => {
+const countSpy = jest.fn(async (target: string) => {
+  const name = target.replace(TOMBSTONES, '') as Counted
   // A server aggregate is a NETWORK round-trip: its answer cannot land in
   // the same drain as the mount that asked for it. Resolving it there was
   // the fixture's own fiction, and it is what let a settle helper that
@@ -125,14 +130,21 @@ const countSpy = jest.fn(async (name: 'variables' | 'functions') => {
   if (aggregate[name] == null) {
     throw Object.assign(new Error('denied'), { code: 'permission-denied' })
   }
-  return { data: () => ({ count: aggregate[name] }) } as any
+  const count = target.endsWith(TOMBSTONES) ? tombstones[name] : aggregate[name]
+  return { data: () => ({ count }) } as any
 })
 
 jest.mock('firebase/firestore', () => ({
   ...jest.requireActual('firebase/firestore'),
   collection: (_db: unknown, ...segments: string[]) =>
     segments[segments.length - 1],
-  query: (name: string) => name,
+  // The tombstone aggregate (`deletedAt != null`) is told apart by its
+  // filter; every other query keeps the collection's name.
+  query: (name: string, ...constraints: Array<{ field?: string; op?: string }>) =>
+    constraints.some((constraint) => constraint?.field === 'deletedAt' && constraint.op === '!=')
+      ? `${name}${TOMBSTONES}`
+      : name,
+  where: (field: string, op: string) => ({ field, op }),
   limit: (value: number) => limitSpy(value),
   doc: () => ({}),
   getCountFromServer: (name: any) => countSpy(name),
@@ -159,6 +171,8 @@ beforeEach(() => {
   jest.clearAllMocks()
   aggregate.variables = SERVER_VARIABLES
   aggregate.functions = SERVER_FUNCTIONS
+  tombstones.variables = 0
+  tombstones.functions = 0
 })
 
 /**
@@ -198,11 +212,16 @@ beforeEach(() => {
  * the rows stood in" from "the read has not answered yet", since the
  * fallback is also the value the FIRST render used.
  */
-const countAnswered = async (name: 'variables' | 'functions') => {
-  await waitFor(() => expect(countSpy).toHaveBeenCalledWith(name))
+const countAnswered = async (name: Counted) => {
+  await waitFor(() => expect(countSpy).toHaveBeenCalledWith(`${name}${TOMBSTONES}`))
   await act(async () => {
-    const index = countSpy.mock.calls.findIndex(([called]) => called === name)
-    await countSpy.mock.results[index].value.catch(() => undefined)
+    await Promise.all(
+      countSpy.mock.calls.flatMap(([called], index) =>
+        called.replace(TOMBSTONES, '') === name
+          ? [countSpy.mock.results[index].value.catch(() => undefined)]
+          : [],
+      ),
+    )
   })
 }
 
@@ -251,8 +270,27 @@ describe('the variables cap is a server aggregate (AGL-1716)', () => {
     expect(
       [...new Set(limitSpy.mock.calls.map(([value]) => value))].sort(),
     ).toEqual([101])
-    expect(countSpy).toHaveBeenCalledTimes(1)
+    // Two aggregates, once: every variable, and the deleted ones (AGL-3918).
+    expect(countSpy).toHaveBeenCalledTimes(2)
     expect(countSpy).toHaveBeenCalledWith('variables')
+    expect(countSpy).toHaveBeenCalledWith(`variables${TOMBSTONES}`)
+  })
+
+  it('frees the slot a deleted variable held (AGL-3918)', async () => {
+    // 1,001 stored against Business's 1,000, two deleted: 999 live, so the
+    // draft opens. Before AGL-3918 both the card and the route counted 1,001.
+    aggregate.variables = 1_001
+    tombstones.variables = 2
+    render(<HostVariablesCard hostId="host-1" org={ORG} />)
+    await countAnswered('variables')
+
+    fireEvent.click(screen.getByText('Add variable'))
+    expect(screen.queryByText('Cancel')).not.toBeNull()
+    expect(
+      enqueueSnackbar.mock.calls.some((call) =>
+        String(call[0]).includes('Variable limit reached'),
+      ),
+    ).toBe(false)
   })
 
   it('falls back to the loaded rows, never to zero, when the read fails', async () => {
@@ -307,8 +345,34 @@ describe('the functions cap is a server aggregate (AGL-1716)', () => {
     // set asserting to stop a sibling read satisfying it.
     expect(limitSpy).toHaveBeenCalledWith(101)
     expect(limitSpy).not.toHaveBeenCalledWith(100)
-    expect(countSpy).toHaveBeenCalledTimes(1)
+    expect(countSpy).toHaveBeenCalledTimes(2)
     expect(countSpy).toHaveBeenCalledWith('functions')
+    expect(countSpy).toHaveBeenCalledWith(`functions${TOMBSTONES}`)
+  })
+
+  it('frees the slot a deleted function held, and still refuses one short (AGL-3918)', async () => {
+    aggregate.functions = 251
+    tombstones.functions = 1
+    render(<HostFunctionsCard hostId="host-1" org={ORG} />)
+    await countAnswered('functions')
+
+    // 250 live against Business's 250: still at the band.
+    fireEvent.click(screen.getByText('Add function'))
+    expect(
+      enqueueSnackbar.mock.calls.some((call) =>
+        String(call[0]).includes('Function limit reached (250)'),
+      ),
+    ).toBe(true)
+  })
+
+  it('opens the draft once a delete brings the live count under the band (AGL-3918)', async () => {
+    aggregate.functions = 251
+    tombstones.functions = 2
+    render(<HostFunctionsCard hostId="host-1" org={ORG} />)
+    await countAnswered('functions')
+
+    fireEvent.click(screen.getByText('Add function'))
+    expect(screen.queryByText('Cancel')).not.toBeNull()
   })
 
   it('falls back to the loaded rows, never to zero, when the read fails', async () => {

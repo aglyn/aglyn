@@ -17,6 +17,7 @@
 
 import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { countLiveDocuments, isLiveDocument } from '@aglyn/aglyn/app-utils/live-document-count'
 import type {
   PluginDraftCheck,
   PluginDraftContext,
@@ -131,7 +132,7 @@ function createLogicDraftWriter<T extends { name: string }>(
       if (!host.exists) return { status: 404, error: 'Unknown site' }
       const role = roleRefusal(host, context.uid)
       if (role) return role
-      const used = (await hostRef.collection(kind.collection).count().get()).data().count
+      const used = await countLiveDocuments(hostRef.collection(kind.collection))
       return roomRefusal(context.org, Number(used) || 0)
     },
 
@@ -161,10 +162,14 @@ function createLogicDraftWriter<T extends { name: string }>(
         if (existing.exists) return { ok: true, replayed: true, ...recordOf(existing) }
         const role = roleRefusal(host, request.uid)
         if (role) return { ok: false, ...role }
-        // One projected read answers both: the route counts every document
-        // for the allowance, and the cards compare names among the live ones.
+        // One projected read answers both: the allowance and the cards'
+        // name check each count the live ones, so a deleted record frees
+        // its slot and its name (AGL-3918).
         const rows = (await tx.get(records.select('name', 'deletedAt'))).docs
-        const room = roomRefusal(request.org, rows.length)
+        const room = roomRefusal(
+          request.org,
+          rows.filter((row) => isLiveDocument(row.get('deletedAt'))).length,
+        )
         if (room) return { ok: false, ...room }
         const key = logicNameKey(document.name)
         const taken = rows.some(
