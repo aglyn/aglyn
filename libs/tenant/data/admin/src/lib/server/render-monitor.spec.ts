@@ -30,6 +30,7 @@ import {
   pageProbeUrl,
   parseRenderMonitorPages,
   renderMonitorCheckId,
+  renderMonitorPageTurn,
   renderSpellingNumber,
   resolveRenderMonitorPages,
   resolveRenderMonitorTargets,
@@ -408,12 +409,22 @@ describe('real pages, rendered fresh (AGL-3571)', () => {
     ).toEqual(['https://demo.aglyn.app', 'https://ready-to-roll.aglyn.app', 'https://edr-construction.aglyn.app'])
   })
 
-  it("rotates through a site's pages, one per five-minute slot", () => {
-    const site = { origin: 'https://edr-construction.aglyn.app', host: 'edr-construction.aglyn.app', paths: ['/', '/services', '/contact'] }
-    const paths = [0, 1, 2, 3].map((slot) => new URL(pageProbeUrl(PLATFORM_RENDER_ORIGIN, site, slot, 7)).pathname)
-    expect(paths).toEqual(['/', '/services', '/contact', '/'])
-    const url = new URL(pageProbeUrl(PLATFORM_RENDER_ORIGIN, site, 1, 7))
+  it('renders one page per five-minute slot, in turn across every watched site (AGL-3928)', () => {
+    const shop = { origin: 'https://shop.aglyn.app', host: 'shop.aglyn.app', paths: ['/'] }
+    const edr = { origin: 'https://edr-construction.aglyn.app', host: 'edr-construction.aglyn.app', paths: ['/', '/services', '/contact'] }
+    const turns = [0, 1, 2, 3, 4, 5].map((slot) => renderMonitorPageTurn([shop, edr], slot))
+    expect(turns.map((turn) => `${turn?.site.host}${turn?.path}`)).toEqual([
+      'shop.aglyn.app/',
+      'edr-construction.aglyn.app/',
+      'edr-construction.aglyn.app/services',
+      'edr-construction.aglyn.app/contact',
+      'shop.aglyn.app/',
+      'edr-construction.aglyn.app/',
+    ])
+    expect(renderMonitorPageTurn([], 3)).toBeNull()
+    const url = new URL(pageProbeUrl(PLATFORM_RENDER_ORIGIN, { site: edr, path: '/services' }, 7))
     expect(url.origin).toBe(PLATFORM_RENDER_ORIGIN)
+    expect(url.pathname).toBe('/services')
     expect(url.searchParams.get('tenantHost')).toBe(freshHostSpelling('edr-construction.aglyn.app', 7))
   })
 
@@ -490,5 +501,17 @@ describe('renderMonitorProbesLayout', () => {
   it('draws every site when there are two or fewer', () => {
     expect(renderMonitorProbesLayout(1, 2, 7)).toBe(true)
     expect(renderMonitorProbesLayout(0, 1, 7)).toBe(true)
+  })
+
+  it('when a real page is drawn anyway, every site takes its turn, the first included (AGL-3928)', () => {
+    const drawn = (slot: number) =>
+      [0, 1, 2].filter((index) => renderMonitorProbesLayout(index, 3, slot, false))
+    expect(drawn(0)).toEqual([0])
+    expect(drawn(1)).toEqual([1])
+    expect(drawn(2)).toEqual([2])
+    expect(drawn(3)).toEqual([0])
+    // Two sites rotate too, where the every-run mode draws both.
+    expect([0, 1].filter((index) => renderMonitorProbesLayout(index, 2, 1, false))).toEqual([1])
+    expect(renderMonitorProbesLayout(0, 1, 7, false)).toBe(true)
   })
 })

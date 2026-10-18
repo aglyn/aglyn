@@ -95,11 +95,16 @@ import type { OperatorHealthStateDoc } from './operator-health'
  * A fresh layout reads the site's whole screen and collection lists, and a
  * large site makes that the most expensive request the platform serves: the
  * marketing site's 109 screens made this monitor a fifth of the project's
- * Firestore reads. The first target — the demonstration site — draws both
- * layout probes on every run, and a platform-wide render break fails it
- * first; every other site draws them on its turn, one site per run (see
- * {@link renderMonitorProbesLayout}). `page` probes still run on every run,
- * so the page-body break they exist for is seen as fast as before.
+ * Firestore reads. Every site draws them on its turn, one site per run (see
+ * {@link renderMonitorProbesLayout}), and the sites' pages take turns the
+ * same way, one page per run across every watched site (see
+ * {@link renderMonitorPageTurn}): three fresh renders a run. A platform-wide
+ * break fails whichever page and layout are drawn, so it is still seen on
+ * the run it happens and alerted on the next; a break on one page alone is
+ * seen on that page's turn. Without `page` probes (no render origin or no
+ * bypass) the first target — the demonstration site — draws its layout on
+ * every run instead, because nothing else would be looked at every run
+ * (AGL-3928).
  */
 
 /** The state documents' collection: the health checks' own. */
@@ -414,11 +419,42 @@ export function resolveRenderMonitorTargets(
 /**
  * Whether the target at `index` (of `count`, in
  * {@link resolveRenderMonitorTargets} order) draws its layout probes in the
- * five-minute `slot`: the first always, the rest one per slot in turn.
+ * five-minute `slot`. With `firstEveryRun`, the first always and the rest
+ * one per slot in turn; without it, one target per slot in turn, the first
+ * included — the mode for a run that draws a real page anyway (AGL-3928).
  */
-export function renderMonitorProbesLayout(index: number, count: number, slot: number): boolean {
+export function renderMonitorProbesLayout(
+  index: number,
+  count: number,
+  slot: number,
+  firstEveryRun = true,
+): boolean {
+  if (count <= 1) return true
+  if (!firstEveryRun) return Math.abs(slot) % count === index
   if (index <= 0 || count <= 2) return true
   return Math.abs(slot) % (count - 1) === index - 1
+}
+
+/** One site's page that the `page` probe renders this run. */
+export interface RenderMonitorPageTurn {
+  site: RenderMonitorPages
+  path: string
+}
+
+/**
+ * The page the five-minute `slot` renders: the sites' pages laid end to end
+ * in {@link resolveRenderMonitorPages} order, one per slot in turn, so a
+ * site with three pages is seen three times as often as a site with one and
+ * every page comes round within `pages × 5` minutes. Null when there is
+ * nothing to render.
+ */
+export function renderMonitorPageTurn(
+  pages: readonly RenderMonitorPages[],
+  slot: number,
+): RenderMonitorPageTurn | null {
+  const turns = pages.flatMap((site) => site.paths.map((path) => ({ site, path })))
+  if (!turns.length) return null
+  return turns[Math.abs(slot) % turns.length] ?? null
 }
 
 /** The state document id for one origin. */
@@ -611,18 +647,16 @@ function describeDuration(ms: number): string {
 }
 
 /**
- * The `page` probe's URL for one run: this run's page of the site's list
- * (rotating every five-minute slot), under this run's spelling of the site.
+ * The `page` probe's URL for one run: this run's page (see
+ * {@link renderMonitorPageTurn}) under this run's spelling of its site.
  */
 export function pageProbeUrl(
   renderOrigin: string,
-  site: RenderMonitorPages,
-  slot: number,
+  turn: RenderMonitorPageTurn,
   spelling: number,
 ): string {
-  const path = site.paths[Math.abs(slot) % site.paths.length] ?? '/'
-  const url = new URL(path, renderOrigin)
-  url.searchParams.set('tenantHost', freshHostSpelling(site.host, spelling))
+  const url = new URL(turn.path || '/', renderOrigin)
+  url.searchParams.set('tenantHost', freshHostSpelling(turn.site.host, spelling))
   return url.toString()
 }
 
@@ -744,27 +778,30 @@ export async function runRenderMonitor(
   const slot = Math.floor(runAt / 300_000)
 
   const targets = resolveRenderMonitorTargets(env)
+  // One real page a run, across every watched site; with one, the layout
+  // probes need no every-run site of their own.
+  const turn = canRenderPages ? renderMonitorPageTurn(pages, slot) : null
   const due = targets
     .map((origin, index) => ({
       origin,
-      layout: renderMonitorProbesLayout(index, targets.length, slot),
-      site: canRenderPages ? pages.find((page) => page.origin === origin) : undefined,
+      layout: renderMonitorProbesLayout(index, targets.length, slot, !turn),
+      page: turn && turn.site.origin === origin ? turn : undefined,
     }))
     // A site with nothing to draw this run keeps its state as it is.
-    .filter((target) => target.layout || target.site)
+    .filter((target) => target.layout || target.page)
 
   const sites = await Promise.all(
     due.map(
-      async ({ origin, layout, site }): Promise<RenderMonitorSiteResult> => {
+      async ({ origin, layout, page }): Promise<RenderMonitorSiteResult> => {
         const layoutProbes = layout
           ? RENDER_PROBES.map((spec) =>
               runProbe(`${origin}${spec.path(nonce())}`, spec, probeOptions),
             )
           : []
-        const pageProbe = site
+        const pageProbe = page
           ? [
               runProbe(
-                pageProbeUrl(renderOrigin, site, slot, renderSpellingNumber(runAt)),
+                pageProbeUrl(renderOrigin, page, renderSpellingNumber(runAt)),
                 { kind: 'page', expectStatus: 200 },
                 probeOptions,
               ),
