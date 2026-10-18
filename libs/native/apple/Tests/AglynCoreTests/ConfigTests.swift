@@ -59,6 +59,21 @@ final class ConfigTests: XCTestCase {
     }
   }
 
+  func testTheDocsAndLegalOriginsAreHTTPSOriginsOrTheDefaults() throws {
+    var env = base
+    XCTAssertEqual(try AglynConfig.read(env, app: .aglyn).docsOrigin, "https://docs.aglyn.com")
+    XCTAssertEqual(try AglynConfig.read(env, app: .aglyn).legalOrigin, "https://aglyn.com")
+    env["AGLYN_DOCS_ORIGIN"] = " https://Docs.Example.com/ "
+    env["AGLYN_LEGAL_ORIGIN"] = "https://example.com"
+    XCTAssertEqual(try AglynConfig.read(env, app: .aglyn).docsOrigin, "https://docs.example.com")
+    XCTAssertEqual(try AglynConfig.read(env, app: .aglyn).legalOrigin, "https://example.com")
+    // A plain-http address, a path or an unset build setting falls back.
+    for wrong in ["http://docs.example.com", "https://docs.example.com/help", "$(AGLYN_DOCS_ORIGIN)", ""] {
+      env["AGLYN_DOCS_ORIGIN"] = wrong
+      XCTAssertEqual(try AglynConfig.read(env, app: .aglyn).docsOrigin, "https://docs.aglyn.com", wrong)
+    }
+  }
+
   func testProblemsNameWhatIsMissingAndAnEmulatorOnALiveConsole() throws {
     let empty = try AglynConfig.read([:], app: .pos)
     XCTAssertEqual(

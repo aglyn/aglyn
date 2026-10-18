@@ -74,8 +74,9 @@ public struct AglynActionSheet<Fields: View>: View {
         }
       }
       .interactiveDismissDisabled(busy)
+      // A help or legal link in the sheet opens on the sheet's own stack, over the form it was opened from.
+      .aglynBrowserDestination()
     }
-    .aglynWebSheetHost()
     .aglynSheetMinimumSize(width: 420, height: 320)
   }
 }
