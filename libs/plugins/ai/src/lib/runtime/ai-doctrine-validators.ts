@@ -5200,7 +5200,11 @@ export function detectCreateBeforeReuse(
   }
   plan.create.forEach((entry, index) => {
     if (!REUSE_BEFORE_CREATE_KINDS.has(entry.kind) || entry.duplicateOf) return
-    const existing = rows[entry.kind].find((row) => aiNamesMatch(row.name, entry.name))
+    // A site start's dataset whose records are another site's is made again,
+    // never reused (AGL-3912), so a creation of its name is not a duplicate.
+    const existing = rows[entry.kind].find(
+      (row) => aiNamesMatch(row.name, entry.name) && !(row as { foreign?: boolean }).foreign,
+    )
     if (!existing) return
     violations.push({
       rule: 7,
