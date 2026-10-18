@@ -2333,7 +2333,9 @@ describe('appCheckAttestationHealth (AGL-2715)', () => {
 })
 
 describe('signupLandingHealth (AGL-3725)', () => {
-  const orgs = (...siteCounts: number[]) => siteCounts.map((hostCount) => ({ hostCount }))
+  // Newest first, one minute apart, each by a different person.
+  const orgs = (...siteCounts: number[]) =>
+    siteCounts.map((hostCount, i) => ({ hostCount, createdAtMs: 10_000_000 - i * 60_000 }))
 
   it('is green when every org made a site', () => {
     expect(signupLandingHealth(orgs(1, 2, 1), 5)).toMatchObject({
@@ -2350,14 +2352,56 @@ describe('signupLandingHealth (AGL-3725)', () => {
     expect(check.strandedOrgs).toBe(1)
   })
 
-  it('reds at two stranded orgs, the AGL-3724 night', () => {
+  it('reds when the two newest people are both stranded, the AGL-3724 night', () => {
     expect(MAX_STRANDED_SIGNUPS).toBe(2)
-    expect(signupLandingHealth(orgs(0, 1, 0), 5)).toMatchObject({
+    expect(signupLandingHealth(orgs(0, 0, 1), 5)).toMatchObject({
       ok: false,
       code: 'signups-stranded',
       strandedOrgs: 2,
+      strandedPeople: 2,
+      strandedStreak: 2,
       orgsInWindow: 3,
     })
+  })
+
+  it('is green for two drop-offs with a site made between them (2026-10-17)', () => {
+    // The newest person left, the one before made a site: the landing works.
+    const check = signupLandingHealth(orgs(0, 1, 0), 5)
+    expect(check).toMatchObject({ ok: true, strandedOrgs: 2, strandedPeople: 2, strandedStreak: 1 })
+    expect(check.code).toBeUndefined()
+  })
+
+  it('orders people by their latest org, not by the order the read returned them', () => {
+    const shuffled = [
+      { hostCount: 1, createdAtMs: 1_000 },
+      { hostCount: 0, createdAtMs: 3_000 },
+      { hostCount: 0, createdAtMs: 2_000 },
+    ]
+    expect(signupLandingHealth(shuffled, 5)).toMatchObject({ ok: false, strandedStreak: 2 })
+  })
+
+  it("counts one visitor's workspaces as one person, landed if any has a site (2026-10-17)", () => {
+    // Same browser: a password workspace and a Google one got sites, then a
+    // second Google account made a third under the same name and left.
+    const check = signupLandingHealth(
+      [
+        { hostCount: 0, createdAtMs: 5_000, visitor: 'first-touch:1' },
+        { hostCount: 0, createdAtMs: 4_000, visitor: 'first-touch:2' },
+        { hostCount: 1, createdAtMs: 3_000, visitor: 'first-touch:1' },
+        { hostCount: 1, createdAtMs: 2_000, visitor: 'first-touch:1' },
+      ],
+      5,
+    )
+    expect(check).toMatchObject({ ok: true, strandedOrgs: 2, strandedPeople: 1 })
+    // The duplicate is the NEWEST org, and it still does not start a streak.
+    expect(check.strandedStreak).toBe(0)
+  })
+
+  it('pins the streak at two: one stranded newest person never reds', () => {
+    expect(signupLandingHealth(orgs(0, 1, 1), 5).ok).toBe(true)
+    expect(signupLandingHealth(orgs(0, 0, 1), 5).ok).toBe(false)
+    expect(signupLandingHealth(orgs(0, 0, 0), 5, 3).ok).toBe(false)
+    expect(signupLandingHealth(orgs(0, 0, 1), 5, 3).ok).toBe(true)
   })
 
   it('counts a corrupt site count as no site, so it cannot hide one', () => {
@@ -2370,11 +2414,19 @@ describe('signupLandingHealth (AGL-3725)', () => {
       ok: false,
       code: 'orgs-unavailable',
       strandedOrgs: null,
+      strandedPeople: null,
+      strandedStreak: null,
       orgsInWindow: null,
     })
   })
 
   it('is green on a window with no sign-ups at all', () => {
-    expect(signupLandingHealth([], 5)).toMatchObject({ ok: true, strandedOrgs: 0, orgsInWindow: 0 })
+    expect(signupLandingHealth([], 5)).toMatchObject({
+      ok: true,
+      strandedOrgs: 0,
+      strandedPeople: 0,
+      strandedStreak: 0,
+      orgsInWindow: 0,
+    })
   })
 })

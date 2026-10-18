@@ -44,6 +44,8 @@ import {
   beaconWindow,
   countReturningLogins,
   countTruth,
+  countSigninDoorLogins,
+  SIGNIN_BOUNCE_MIN_GAP_MS,
   countWithin,
   doorWindow,
   doorWindowLabel,
@@ -505,11 +507,12 @@ test('tenant accounts never count as accounts created, and keep the returning-lo
     },
     { door: window, beacon: { startMs: 0, endMs: 1500 } },
   )
-  assert.deepEqual(truth.door, { createdAt: 1, lastLoginAt: 1 })
-  assert.deepEqual(truth.beacon, { createdAt: 0, lastLoginAt: 0 })
+  assert.deepEqual(truth.door, { createdAt: 1, lastLoginAt: 1, signinDoor: 1 })
+  assert.deepEqual(truth.beacon, { createdAt: 0, lastLoginAt: 0, signinDoor: 0 })
   assert.deepEqual(countTruth({}, { door: window }).door, {
     createdAt: 0,
     lastLoginAt: 0,
+    signinDoor: 0,
   })
 })
 
@@ -533,7 +536,7 @@ test('THE 2026-10-09 HOTMAIL RETURN: signed up inside the window, came back 1h43
     { byCreated: [HOTMAIL_RETURN], byLogin: [HOTMAIL_RETURN] },
     { door: OCTOBER_WINDOW },
   )
-  assert.deepEqual(truth.door, { createdAt: 1, lastLoginAt: 1 })
+  assert.deepEqual(truth.door, { createdAt: 1, lastLoginAt: 1, signinDoor: 1 })
   assert.equal(
     gradeDoor({ ...signinDoor, views: 9, users: 5, conversions: 1 }).verdict,
     'green',
@@ -567,8 +570,8 @@ test('an SSO tenant account: its first sign-in is its creation, its later return
   }
   const count = (page) =>
     countTruth({ tenantLogins: [page] }, { door: OCTOBER_WINDOW }).door
-  assert.deepEqual(count([first]), { createdAt: 0, lastLoginAt: 0 })
-  assert.deepEqual(count([back]), { createdAt: 0, lastLoginAt: 1 })
+  assert.deepEqual(count([first]), { createdAt: 0, lastLoginAt: 0, signinDoor: 0 })
+  assert.deepEqual(count([back]), { createdAt: 0, lastLoginAt: 1, signinDoor: 1 })
 })
 
 test('mapBounded keeps order and never runs more than the limit at once', async () => {
@@ -736,6 +739,66 @@ test('the say-it-once state is the previous scheduled conclusion, and the workfl
 
 test('the conversions are read from Auth, not from the GA4 event, and only counts leave', () => {
   assert.match(NETWORK_HALF, /accounts:query/)
-  assert.match(NETWORK_HALF, /conversions: truth\.door\[door\.truthField\]/)
+  assert.match(
+    NETWORK_HALF,
+    /conversions: truth\.door\[door\.doorTruthField \?\? door\.truthField\]/,
+  )
   assert.doesNotMatch(NETWORK_HALF, /console\.log\(.*userInfo/)
+})
+
+test('THE 2026-10-17 FALSE RED: a Google account CREATED on /signin got through the sign-in door', () => {
+  // 10:26Z–22:26Z: eight people viewed /signin, nobody returning signed in,
+  // and four came out of it with a new Google account. Each one was stood
+  // down on /signin and signed in again on /signup seconds later.
+  const window = {
+    startMs: Date.parse('2026-10-17T10:26:00Z'),
+    endMs: Date.parse('2026-10-17T22:26:00Z'),
+  }
+  const google = [{ providerId: 'google.com' }]
+  const at = (iso, gapMs, providers = google) => ({
+    createdAt: String(Date.parse(iso)),
+    lastLoginAt: String(Date.parse(iso) + gapMs),
+    providerUserInfo: providers,
+  })
+  const byLogin = [
+    at('2026-10-17T11:01:05Z', 97_970),
+    at('2026-10-17T11:06:07Z', 18_028),
+    at('2026-10-17T14:31:27Z', 11_214),
+    at('2026-10-17T16:50:20Z', 11_540),
+    // Started on /signup: one sign-in, 1 ms. Not a /signin conversion.
+    at('2026-10-17T11:32:06Z', 1),
+    at('2026-10-17T19:37:38Z', 1),
+    // A password account cannot be created on /signin, whatever its gap.
+    at('2026-10-17T10:48:56Z', 68_259, [{ providerId: 'password' }]),
+  ]
+  const truth = countTruth({ byCreated: byLogin, byLogin }, { door: window }).door
+  assert.equal(truth.lastLoginAt, 0, 'the login beacon still counts returns only')
+  assert.equal(truth.signinDoor, 4)
+  const door = FUNNEL_DOORS.find((d) => d.id === 'signin')
+  assert.equal(door.doorTruthField, 'signinDoor')
+  const graded = gradeDoor({ ...door, views: 16, users: 8, conversions: truth[door.doorTruthField] })
+  assert.equal(graded.verdict, 'green')
+})
+
+test('countSigninDoorLogins counts a return once, and the bounce floor is pinned', () => {
+  const window = { startMs: 1_000_000, endMs: 9_000_000 }
+  const google = [{ providerId: 'google.com' }]
+  // A return (account older than the window) and a bounce.
+  const records = [
+    { createdAt: '10', lastLoginAt: '2000000', providerUserInfo: google },
+    { createdAt: '2000000', lastLoginAt: '2009000', providerUserInfo: google },
+  ]
+  assert.equal(countReturningLogins(records, window), 1)
+  assert.equal(countSigninDoorLogins(records, window), 2)
+  assert.equal(SIGNIN_BOUNCE_MIN_GAP_MS, 1_000)
+  const gap = (ms) => [{ createdAt: '2000000', lastLoginAt: String(2_000_000 + ms), providerUserInfo: google }]
+  assert.equal(countSigninDoorLogins(gap(999), window), 0)
+  assert.equal(countSigninDoorLogins(gap(1_000), window), 1)
+  // No providers recorded: unprovable, so uncounted.
+  assert.equal(
+    countSigninDoorLogins([{ createdAt: '2000000', lastLoginAt: '2009000' }], window),
+    0,
+  )
+  // Still a real drought when nobody got through.
+  assert.equal(countSigninDoorLogins([], window), 0)
 })
