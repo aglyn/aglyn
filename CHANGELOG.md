@@ -26,6 +26,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **ai:** gallery and record covers show the moment, not a photographer or camera; teachers are shown teaching ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856), [AGL-3921](https://linear.app/aglyn/issue/AGL-3921))
+- **ai:** each category section lists only its own category's records, and photo alts drop leftover abstract words ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856), [AGL-3921](https://linear.app/aglyn/issue/AGL-3921))
 - **apple:** no minus on zero refunds, no empty actions card, one-line token values ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
 - **native:** quiet filter toolbar actions, empty tax period sentence, one-line id values ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
 - **native:** phone walk fixes for stat rows, metric cards, settings and shift reports ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
