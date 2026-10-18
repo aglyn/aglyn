@@ -264,7 +264,7 @@ private struct CollectionEntries: View {
             } label: {
               entryRow(entry)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
             .aglynListRow()
             .accessibilityIdentifier("entry-\(entry.id)")
           }

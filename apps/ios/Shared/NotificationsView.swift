@@ -380,7 +380,7 @@ struct NotificationsView: View {
       } else {
         // A phone follows the link at once, as the console's bell does.
         Button { openNotification(row, model: model, navigation: navigation) } label: { NotificationRow(row: row) }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
           .aglynListRow()
       }
     }

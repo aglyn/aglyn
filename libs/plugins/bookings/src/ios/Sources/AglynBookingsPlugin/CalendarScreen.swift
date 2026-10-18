@@ -244,7 +244,7 @@ struct BookingsCalendarScreen: View {
             } label: {
               BookingListRow(row: row, now: now, selected: row.id == selection)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
             .accessibilityIdentifier("booking-\(row.id)")
           }
         }
@@ -277,7 +277,7 @@ struct BookingsCalendarScreen: View {
           } label: {
             BookingListRow(row: row, now: now, selected: row.id == selection)
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
         }
       }
     }

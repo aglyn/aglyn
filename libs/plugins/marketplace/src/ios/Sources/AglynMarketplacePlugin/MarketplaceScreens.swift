@@ -168,7 +168,7 @@ struct BrowseScreen: View {
               Image(systemName: "chevron.right").font(AglynFont.caption.weight(.semibold)).foregroundStyle(.tertiary).accessibilityHidden(true)
             }
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
         }
       }
       .aglynListRow()
@@ -714,7 +714,7 @@ struct LicencesScreen: View {
         name(licence), subtitle: [detail, "Paid " + dollars(Double(licence.paidCents)), licence.createdAt.map { relativeTime($0) }].compactMap { $0 }
           .joined(separator: " · "), systemImage: "doc.text")
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.aglynRow)
   }
 
   @ViewBuilder

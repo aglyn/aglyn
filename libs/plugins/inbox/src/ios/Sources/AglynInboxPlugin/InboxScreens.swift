@@ -201,7 +201,7 @@ struct PeopleScreen: View {
               if let status = lead.statusLabel { StatusChip(status) }
             }
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
           .aglynListRow()
           .accessibilityIdentifier("lead-\(lead.id)")
         }

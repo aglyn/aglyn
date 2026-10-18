@@ -887,7 +887,7 @@ struct MediaDetailBody: View {
         if moveTarget == id { Image(systemName: "checkmark").foregroundStyle(AglynColor.tint) }
       }
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.aglynRow)
     .accessibilityAddTraits(moveTarget == id ? .isSelected : [])
   }
 }

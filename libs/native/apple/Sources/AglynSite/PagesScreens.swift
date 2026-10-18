@@ -827,7 +827,7 @@ struct PageSheetView: View {
         if parent == id { Image(systemName: "checkmark").foregroundStyle(AglynColor.tint) }
       }
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.aglynRow)
     .accessibilityAddTraits(parent == id ? .isSelected : [])
   }
 }

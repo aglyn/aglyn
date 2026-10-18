@@ -318,7 +318,7 @@ private struct RecordsBody: View {
                 .accessibilityHidden(true)
             }
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
         }
       }
       .aglynListRow()

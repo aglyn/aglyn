@@ -117,7 +117,7 @@ struct CardReadersScreen: View {
         } label: {
           AglynRow(DeviceCardCollector.title(kind), subtitle: DeviceCardCollector.detail(kind), systemImage: "wave.3.right")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.aglynRow)
         .disabled(connecting || readiness.value?.ready != true)
       }
     }

@@ -61,7 +61,7 @@ struct FieldsSection: View {
               if def.retired { StatusChip("Retired") }
             }
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
           .accessibilityIdentifier("field-\(def.key)")
         }
       } header: {

@@ -67,7 +67,7 @@ struct SetupScreen: View {
                 Image(systemName: "chevron.right").foregroundStyle(.tertiary).accessibilityHidden(true)
               }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
             .aglynListRow()
             .accessibilityIdentifier("setup-\(section.id)")
           }
@@ -621,7 +621,7 @@ private struct TrackingSection: View {
                 .foregroundStyle(mode == value ? AglynColor.tint : Color.secondary)
             }
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
           .disabled(!canEdit || runner.busy)
           .accessibilityAddTraits(mode == value ? .isSelected : [])
           .accessibilityIdentifier("consent-mode-\(value)")
@@ -1031,7 +1031,7 @@ private struct ThemeEditorForm: View {
           }
         }
       }
-      .buttonStyle(.plain)
+      .buttonStyle(.aglynRow)
       .disabled(!canEdit)
       .accessibilityIdentifier("font-family")
       .sheet(isPresented: $browsingFonts) {
@@ -1140,7 +1140,7 @@ private struct FontBrowserSheet: View {
       }
       .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.aglynRow)
     .accessibilityAddTraits(family == selection ? .isSelected : [])
     .accessibilityIdentifier("font-\(family)")
   }

@@ -352,7 +352,7 @@ struct ListRow: View {
         } label: {
           row
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.aglynRow)
       } else {
         row
       }

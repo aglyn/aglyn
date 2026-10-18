@@ -253,7 +253,7 @@ struct SiteOverview: View {
                 Image(systemName: "chevron.right").foregroundStyle(.tertiary).accessibilityHidden(true)
               }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
             .accessibilityIdentifier("site-area-\(area.screen)")
           }
         }
