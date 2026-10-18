@@ -407,7 +407,9 @@ struct PrinterFormSheet: View {
       #endif
       .toolbar {
         if adding && credentials != nil {
-          ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+          ToolbarItem(placement: .confirmationAction) {
+            Button("Done") { dismiss() }.accessibilityIdentifier("printer-connect-done")
+          }
         } else {
           ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(model.busy) }
           ToolbarItem(placement: .confirmationAction) {
