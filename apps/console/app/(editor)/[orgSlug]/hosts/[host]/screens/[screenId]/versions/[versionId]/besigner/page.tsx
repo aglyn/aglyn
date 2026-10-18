@@ -260,6 +260,15 @@ function BesignerPage(props) {
   // re-renders (and re-broadcasts) as the selection moves.
   const selectedNodeId = Besigner.focus.getLastSelected()?.$id
   const clearMirrorRef = useRef<(() => void) | undefined>(undefined)
+  /**
+   * True while Save & publish runs its save step. That save is half of one
+   * action, so it says nothing of its own: the publish step that follows
+   * drops the live pages' cache and reports the outcome once. Left to speak,
+   * one click stacked a "Page saved" toast and its own cache warning under
+   * the publish's "Saved and published" and that warning (four toasts for
+   * one press, five with a draft save before it).
+   */
+  const publishingRef = useRef(false)
   // The canvas element registry is how presence anchors a cursor and the
   // overlays anchor a selection box — the canvas renders into shadow roots,
   // so nothing here can be found with a document query.
@@ -623,7 +632,12 @@ function BesignerPage(props) {
       presence.status,
       presence.entries.length,
     ),
-    notify: enqueueSnackbar,
+    // A save inside Save & publish keeps its refusals (they stop the publish
+    // and say why) and drops its success, which the publish reports.
+    notify: (message, options) =>
+      publishingRef.current && options?.variant === 'success'
+        ? undefined
+        : enqueueSnackbar(message, options),
     // Tell the author what happens next when they are editing the LIVE
     // version. Without it the only feedback is "saved", the live page keeps
     // serving cached HTML for a moment, and the rational response is to save
@@ -666,7 +680,11 @@ function BesignerPage(props) {
       // page, and saves again — which is the loop this exists to end, and the
       // reason "did my change go out?" was never answerable from the editor.
       // Editing a DRAFT version changes nothing live, so it drops nothing.
-      if (versionId && versionId === screenResult?.data?.versionId) {
+      if (
+        versionId &&
+        versionId === screenResult?.data?.versionId &&
+        !publishingRef.current
+      ) {
         // Best effort and deliberately not awaited: the save has already
         // succeeded, and a cache hint that fails must never make a successful
         // save look failed. The revalidate window remains the backstop.
@@ -1223,7 +1241,12 @@ function BesignerPage(props) {
     if (refuseFormsOff(canvas.toJSON().nodes)) return
     savedLandedRef.current = false
     saveRefusedRef.current = false
-    await handleSave()
+    publishingRef.current = true
+    try {
+      await handleSave()
+    } finally {
+      publishingRef.current = false
+    }
     /**
      * A REFUSED save stops here, before anything promotes it.
      *
