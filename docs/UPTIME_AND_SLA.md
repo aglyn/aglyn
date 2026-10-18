@@ -2859,8 +2859,28 @@ The rule fires for exactly one stretch, 10/11 04:00Z–12:00Z. It would have
 paged at about 04:20Z, two hours before the third person. One stranded org
 alone never fires, because people do sign up and leave.
 
-The body carries counts only (`strandedOrgs`, `orgsInWindow`) and the rule
-(`windowHours`, `graceMinutes`, `maxStranded`), never an org id or slug.
+**Since 2026-10-17 it reads a streak of people, not a count of orgs.** That
+day the count rule was red for 85 and then 350 minutes while sign-ups worked,
+and UptimeRobot reported Signups down for six hours. One of the two "stranded"
+orgs was a person's third workspace, made with a second Google account under
+the same name after their first one got a site. The other was an ordinary
+drop-off nine hours earlier. Two fixes:
+
+- Orgs are grouped into people by the acquisition record's first-touch stamp
+  (the owner's uid when there is none). A person with a site in any of their
+  orgs has landed.
+- It reds when the **two newest people** in the window, ordered by their
+  latest org, **both** have no site. A broken landing strands every new
+  sign-up, so the newest ones are all stranded. A drop-off is cleared by the
+  next person who makes a site.
+
+Backtest, 2026-09-07 → 2026-10-17 (105 orgs, five-minute steps): the count
+rule was red for 1,125 minutes, 435 of them false. The streak rule was red
+only on 10/11 (AGL-3724). A streak of three missed AGL-3724 altogether.
+
+The body carries counts only (`strandedOrgs`, `strandedPeople`,
+`strandedStreak`, `orgsInWindow`) and the rule (`windowHours`,
+`graceMinutes`, `maxStranded`), never an org id, slug or visitor key.
 
 ### The blocking function's decisions are DATA now
 
