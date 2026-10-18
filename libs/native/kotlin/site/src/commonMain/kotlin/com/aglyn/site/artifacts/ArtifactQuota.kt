@@ -8,7 +8,9 @@ import com.aglyn.core.FilterOp
 import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreReader
-import com.aglyn.core.FirestoreTimestamp
+import com.aglyn.core.FirestoreDoc
+import com.aglyn.core.TOMBSTONE_FILTER
+import com.aglyn.core.liveCountQueries
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -44,16 +46,33 @@ fun artifactQuotaLimit(body: JsonElement?, kind: ArtifactKind): Long? {
 
 /**
  * The two aggregates that count what the create route counts. Components and layouts: every document less the tombstones
- * (a delete stamps `deletedAt` and leaves the document). Templates: everything that is not a starter's page.
+ * (a delete stamps `deletedAt` and leaves the document). Templates: everything that is not a starter's page, less the
+ * deleted ones, which [templateTombstoneQuery] reads (a second inequality beside the starter one needs a composite index).
  */
 fun artifactCountQueries(kind: ArtifactKind, hostId: String): Pair<FirestoreQuery, FirestoreQuery?> {
   val path = "hosts/$hostId/${kind.collection}"
   return when (kind) {
-    ArtifactKind.COMPONENT, ArtifactKind.LAYOUT ->
-      FirestoreQuery(path) to FirestoreQuery(path, filters = listOf(FirestoreFilter("deletedAt", FilterOp.GT, FirestoreTimestamp(0))))
+    ArtifactKind.COMPONENT, ArtifactKind.LAYOUT -> liveCountQueries(path)
     ArtifactKind.TEMPLATE -> FirestoreQuery(path, filters = listOf(FirestoreFilter("source.type", FilterOp.NE, "starter"))) to null
   }
 }
+
+/** How many deleted templates the readout reads to subtract; a site with more counts the rest as live, which only overstates. */
+const val TEMPLATE_TOMBSTONE_WINDOW = 500
+
+/** A site's deleted templates, for the template count to subtract (AGL-3918). */
+fun templateTombstoneQuery(hostId: String): FirestoreQuery =
+  FirestoreQuery("hosts/$hostId/${ArtifactKind.TEMPLATE.collection}", filters = listOf(TOMBSTONE_FILTER), limit = TEMPLATE_TOMBSTONE_WINDOW)
+
+/**
+ * Of a site's deleted templates, how many the `source.type != 'starter'` count included: a template whose `source.type`
+ * is set and is not a starter's (the filter skips a template without the field). The console's `deletedTemplatesCounted`.
+ */
+fun deletedTemplatesCounted(tombstones: List<FirestoreDoc>): Int =
+  tombstones.count { doc ->
+    val type = (doc.data["source"] as? Map<*, *>)?.get("type")
+    type != null && type != "starter"
+  }
 
 /** The count never goes below zero: the two aggregates are separate round trips and a delete between them can make the second the larger. */
 fun artifactLiveCount(total: Long, subtract: Long?): Int = maxOf(0L, total - (subtract ?: 0L)).toInt()
@@ -97,7 +116,12 @@ class ArtifactQuotaModel(
   suspend fun recount() {
     val (totalQuery, subtractQuery) = artifactCountQueries(kind, hostId)
     val total = runCatching { firestore.count(totalQuery) }.getOrNull() ?: return
-    val subtract = if (subtractQuery == null) null else runCatching { firestore.count(subtractQuery) }.getOrNull() ?: return
+    val subtract = when {
+      subtractQuery != null -> runCatching { firestore.count(subtractQuery) }.getOrNull() ?: return
+      kind == ArtifactKind.TEMPLATE ->
+        deletedTemplatesCounted(runCatching { firestore.page(templateTombstoneQuery(hostId)) }.getOrNull()?.docs ?: return).toLong()
+      else -> null
+    }
     count = artifactLiveCount(total, subtract)
   }
 }

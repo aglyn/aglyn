@@ -34,6 +34,12 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **ai:** a new site never reuses another site's dataset records ([AGL-3912](https://linear.app/aglyn/issue/AGL-3912))
+- **data:** a record photo of a deleted site is left out, never drawn broken ([AGL-3912](https://linear.app/aglyn/issue/AGL-3912))
+- **ai:** people photos show adults in the role, and alt text reads as a phrase ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+- **mui:** the search box honors its style settings, so starter headers fit on phones ([AGL-3917](https://linear.app/aglyn/issue/AGL-3917))
+- **apple:** an AI job link opens on its own workspace and site ([AGL-3911](https://linear.app/aglyn/issue/AGL-3911))
+- **ai:** each guided-start style previews its own kind of page ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
 - **console:** the subprocessor gate knows the guided-start run's stub mode ([AGL-3910](https://linear.app/aglyn/issue/AGL-3910))
 - **e2e:** emulated servers also get a placeholder Firebase app id ([AGL-3910](https://linear.app/aglyn/issue/AGL-3910))
 - **e2e:** the local guided-start run walks the stepped form with Next ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
@@ -70,7 +76,7 @@ content on the marketing site and is written separately.
 - **ai:** the guided start's steps, style pictures and funnel events ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
 
 <details>
-<summary>Also in this release: 3 test, 5 chore</summary>
+<summary>Also in this release: 4 test, 9 chore</summary>
 
 - **ai:** the guided-start local e2e is a mentions-only key file ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913))
 - **deps:** resync the cloud/functions lockfile so npm ci installs ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913))
@@ -80,6 +86,12 @@ content on the marketing site and is written separately.
 - **native:** the Besigner shows no browser chrome in the Mac app ([AGL-3894](https://linear.app/aglyn/issue/AGL-3894))
 - **native-seed:** a 3-level, 60-row page tree on the seeded cafe site ([AGL-3896](https://linear.app/aglyn/issue/AGL-3896))
 - **ai:** prove AI homes vary and the form stays on its own page ([AGL-3899](https://linear.app/aglyn/issue/AGL-3899))
+
+- **ai:** the cancel watch spec waits for the abort instead of racing a 1 ms timer ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913))
+- **deps:** Bump the mui-emotion group with 7 updates
+- **deps-dev:** Bump the nx-workspace group across 1 directory with 16 updates
+- **deps-dev:** Bump the linters group across 1 directory with 5 updates
+- **deps:** regenerate the realm host MUI tables for @mui/material 9.5.0 ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913))
 
 </details>
 

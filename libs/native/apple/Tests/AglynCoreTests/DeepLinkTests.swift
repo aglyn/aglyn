@@ -92,4 +92,15 @@ final class DeepLinkTests: XCTestCase {
     XCTAssertNil(follow(nil))
     XCTAssertEqual(DeepLinks.notificationLink("/h1/bookings", orgSlug: "acme", hostID: "h1", hostSubdomain: nil), "/h1/bookings")
   }
+
+  /// An AI job notice that built nothing of its own opens the job (AGL-3911): `/{hostId}?aiJob={jobId}` and its
+  /// followed form both read as a root with a query; a deeper path or a bare root does not.
+  func testARootLinkWithAQueryReadsItsQuery() {
+    XCTAssertEqual(DeepLinks.rootQuery("/h1?aiJob=j%201")?["aiJob"], "j 1")
+    XCTAssertEqual(DeepLinks.rootQuery("/acme/hosts/shop?aiJob=j1#top")?["aiJob"], "j1")
+    XCTAssertEqual(DeepLinks.rootQuery("https://app.aglyn.com/acme?aiJob=j1")?["aiJob"], "j1")
+    XCTAssertNil(DeepLinks.rootQuery("/acme/hosts/shop/bookings?aiJob=j1"))
+    XCTAssertNil(DeepLinks.rootQuery("/acme/hosts/shop"))
+    XCTAssertNil(DeepLinks.rootQuery("/admin?aiJob=j1"))
+  }
 }

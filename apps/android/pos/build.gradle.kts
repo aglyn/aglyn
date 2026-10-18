@@ -97,6 +97,18 @@ android {
   }
 }
 
+// Stripe Terminal calls okhttp3.internal.Util, which OkHttp 5 (Ktor 3's engine) no longer has: without this pin every
+// reader connect failed with "Unexpected failure" (NoClassDefFoundError) once a reader was found. Ktor's OkHttp engine
+// runs on 4.12, the version Stripe Terminal ships against; Aglyn POS only, never the Aglyn app.
+configurations.configureEach {
+  resolutionStrategy.eachDependency {
+    if (requested.group == "com.squareup.okhttp3" && requested.name in setOf("okhttp", "okhttp-tls")) {
+      useVersion(libs.versions.stripe.terminal.okhttp.get())
+      because("Stripe Terminal is built against OkHttp 4 and calls its internals")
+    }
+  }
+}
+
 dependencies {
   implementation(project(":native-shell"))
   implementation(project(":plugin-manifest"))

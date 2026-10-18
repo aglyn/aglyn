@@ -57,6 +57,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+import { posTerminalLocationKey } from './pos-terminal'
 import { posTerminalConnectionTokenHandler, readPosTerminalAddress } from './pos-terminal-connection-token'
 
 interface StripeCall {
@@ -229,12 +230,19 @@ describe('status', () => {
 })
 
 describe('location', () => {
+  it('keys each address apart, so a corrected address is not refused as a reused key', () => {
+    const first = posTerminalLocationKey('host-1', 'Corner Cafe', ADDRESS)
+    expect(posTerminalLocationKey('host-1', 'Corner Cafe', { ...ADDRESS })).toBe(first)
+    expect(posTerminalLocationKey('host-1', 'Corner Cafe', { ...ADDRESS, postalCode: '78702' })).not.toBe(first)
+    expect(posTerminalLocationKey('host-2', 'Corner Cafe', ADDRESS)).not.toBe(first)
+  })
+
   it('registers the Location once, from the store address, on the platform', async () => {
     fakeDocs.delete('hosts/host-1/terminal/config')
     const first = await call({ action: 'location', address: ADDRESS })
     expect(first).toEqual({ status: 200, body: { locationId: 'tml_new1' } })
     const created = stripeCalls.find((entry) => entry.path === 'terminal/locations')!
-    expect(created.key).toBe('pos-location:host-1')
+    expect(created.key).toMatch(/^pos-location:host-1:[0-9a-f]{16}$/)
     expect(created.params.get('address[country]')).toBe('US')
     expect(created.params.get('metadata[hostId]')).toBe('host-1')
     expect(created.params.get('display_name')).toBe('Corner Cafe')

@@ -57,6 +57,13 @@ struct CheckoutView: View {
       }
     }
     .sensoryFeedback(.success, trigger: isPaid)
+    // A typed card: the register's own card fields, over the checkout.
+    .sheet(item: cardForm) { session in CardFieldsSheet(session: session) }
+  }
+
+  private var cardForm: Binding<CardFormSession?> {
+    let presenter = model.keyedEntry as? CardFieldsPresenter
+    return Binding(get: { presenter?.session }, set: { next in if next == nil { presenter?.session?.cancel() } })
   }
 
   private var isPaid: Bool {
@@ -376,6 +383,13 @@ struct CheckoutView: View {
       Text(model.cardService(labeled: label)?.prompt ?? "Present the card on \(label)")
         .font(AglynFont.title2).multilineTextAlignment(.center)
       Text(model.money(checkout.amountCents + checkout.tipCents)).font(AglynFont.figure).monospacedDigit()
+      if case .card(_, let paymentID?) = checkout.step, model.cardService(labeled: label)?.kind == .smart,
+        model.context?.testMode == true
+      {
+        Button("Simulate a card tap (test mode)") { Task { await checkout.simulateTapOnReader(paymentID) } }
+          .buttonStyle(.bordered)
+          .accessibilityIdentifier("simulate-tap")
+      }
       Button("Cancel payment", role: .destructive) {
         Task {
           if let reader = model.cardService(labeled: label) { await checkout.cancelCard(reader) }

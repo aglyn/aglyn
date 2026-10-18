@@ -132,6 +132,8 @@ struct PosPaymentAnswer: Equatable {
   let completed: Bool
   let clientSecret: String?
   let paymentIntentID: String?
+  /// The publishable key a typed card's form loads Stripe with (`card-keyed` answers carry it).
+  var publishableKey: String? = nil
 
   /// The payment this answer started or re-read.
   var payment: PosSalePayment? { sale.payments.first { $0.id == paymentID } }
@@ -207,6 +209,21 @@ func readPosContext(_ body: JSONValue?) -> PosContext {
     publishableKey: record["publishableKey"].text ?? "")
 }
 
+/// The readers route's `list` answer (`commerce/pos-readers`).
+func readPosReadersList(_ body: JSONValue?) -> PosReadersList {
+  let record = body.object
+  return PosReadersList(
+    available: record["available"].flag, testMode: record["testMode"].flag, locationReady: record["locationReady"].flag,
+    readers: record["readers"].array.compactMap { entry in
+      let reader = entry.objectValue
+      guard let id = reader["id"].text else { return nil }
+      return PosReaderRow(
+        id: id, label: reader["label"].text ?? "Card reader", registerID: reader["registerId"].text,
+        deviceType: reader["deviceType"].text, serialNumber: reader["serialNumber"].text,
+        status: reader["status"].text ?? "offline", livemode: reader["livemode"].flag)
+    })
+}
+
 func readSalePayment(_ element: JSONValue) -> PosSalePayment? {
   let payment = element.objectValue
   guard let id = payment["id"].text else { return nil }
@@ -231,7 +248,8 @@ func readPaymentAnswer(_ body: JSONValue?) -> PosPaymentAnswer {
     paymentID: record["paymentId"].text,
     completed: record["completed"].flag,
     clientSecret: record["clientSecret"].text,
-    paymentIntentID: record["paymentIntentId"].text)
+    paymentIntentID: record["paymentIntentId"].text,
+    publishableKey: record["publishableKey"].text)
 }
 
 func readOpenedSale(_ body: JSONValue?) -> PosOpenedSale {
@@ -265,7 +283,8 @@ enum SaleStep: Equatable {
   /// The QR payment page: the customer pays on their phone.
   case cardLink(amountCents: Int, tipCents: Int)
   /// A card typed into Stripe's own card form (card not present); the server makes the intent and hands back its secret.
-  case cardKeyed(amountCents: Int, tipCents: Int)
+  /// A typed card: with `paymentMethodID` (the register's own card fields) the server confirms it at once.
+  case cardKeyed(amountCents: Int, tipCents: Int, paymentMethodID: String? = nil)
   case status(paymentID: String)
   case cancel(paymentID: String)
   /// Tries a declined reader payment again on the same reader.
@@ -331,9 +350,13 @@ enum SaleStep: Equatable {
     case .folio(let reservationID, let amount):
       record["reservationId"] = .string(reservationID)
       if let amount, amount > 0 { put("amountCents", amount) }
-    case .cardLink(let amount, let tip), .cardKeyed(let amount, let tip):
+    case .cardLink(let amount, let tip):
       put("amountCents", amount)
       put("tipCents", tip)
+    case .cardKeyed(let amount, let tip, let paymentMethodID):
+      put("amountCents", amount)
+      put("tipCents", tip)
+      if let paymentMethodID { record["paymentMethodId"] = .string(paymentMethodID) }
     case .status(let id), .cancel(let id), .retry(let id), .simulate(let id): record["paymentId"] = .string(id)
     case .receipt(let channel, let to, let marketingOptIn):
       record["channel"] = .string(channel)

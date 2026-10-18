@@ -17,6 +17,7 @@
 
 import {
   aggregateScreenDays,
+  referrerLabel,
   topDevice,
   topReferrer,
 } from './screen-analytics-aggregate'
@@ -139,4 +140,11 @@ it('drops a malformed referrer count rather than rendering NaN', () => {
     },
   ])
   expect(rows[0].referrers).toEqual({ 'good.example': 3 })
+})
+
+test('a referrer key reads as the address the collector stored it from', () => {
+  expect(referrerLabel('google_com')).toBe('google.com')
+  expect(referrerLabel('news_ycombinator_com')).toBe('news.ycombinator.com')
+  expect(referrerLabel('shop.example')).toBe('shop.example')
+  expect(referrerLabel('')).toBe('')
 })

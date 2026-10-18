@@ -12,6 +12,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +43,8 @@ import com.aglyn.contracts.workflowFunctionCalls
 import com.aglyn.contracts.workflowTestRunLine
 import com.aglyn.core.Live
 import com.aglyn.core.createResourceUid
+import com.aglyn.core.isLiveDoc
+import com.aglyn.core.liveCount
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
@@ -99,8 +102,21 @@ fun WorkflowsSection(context: NativePluginContext, hostId: String, entitlements:
           StatusTone.INFO,
         )
       }
-      // The head-count the quota gate compares: every stored workflow read, deleted ones too, as the route counts them.
-      val count = window.rows.size
+      // The head-count the quota gate compares: LIVE workflows, as the route counts them (AGL-3918), so a deleted one
+      // frees its slot and a disabled one keeps it. The server's two aggregates, re-read when the live list moves;
+      // the live rows read stand in until they answer.
+      val liveInWindow = window.rows.count(::isLiveDoc)
+      var serverCount by remember(hostId) { mutableStateOf<Long?>(null) }
+      LaunchedEffect(hostId, liveInWindow) {
+        try {
+          context.firestore.liveCount(workflowsPath(hostId))?.let { serverCount = it }
+        } catch (error: CancellationException) {
+          throw error
+        } catch (_: Throwable) {
+          // The live rows stand in: a lower bound, never a confident 0.
+        }
+      }
+      val count = workflowQuotaUsed(serverCount, window.rows)
       AddButton("Add workflow", "add-workflow") {
         when {
           entitlements != null && !entitlements.has("workflows") ->

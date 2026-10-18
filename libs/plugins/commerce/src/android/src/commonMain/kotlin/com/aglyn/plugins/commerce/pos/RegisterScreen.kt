@@ -1,6 +1,9 @@
 package com.aglyn.plugins.commerce.pos
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.layout.ContentScale
 import com.aglyn.hardware.CameraScanFilter
+import com.aglyn.site.media.mediaPreviewUrl
 import com.aglyn.ui.BarcodeScanSheet
 import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.LocalCameraScanner
@@ -99,6 +102,7 @@ import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.QuantityStepper
+import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SkeletonGrid
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.WidthClass
@@ -126,6 +130,15 @@ internal fun NoticeTone.status() = when (this) {
 
 @Composable
 fun RegisterScreen(context: NativePluginContext) {
+  // A product's picture is a media reference (`media:<scope>/<id>`) or a path on the console: both read through the console.
+  val pictures = remember(context.api.origin, context.hostId) {
+    { value: String? -> value?.let { mediaPreviewUrl(it, context.api.origin, context.hostId) } }
+  }
+  CompositionLocalProvider(LocalPosPictures provides pictures) { RegisterScreenBody(context) }
+}
+
+@Composable
+private fun RegisterScreenBody(context: NativePluginContext) {
   val hostId = context.hostId ?: return
   val scope = rememberCoroutineScope()
   val model = remember(hostId) {
@@ -147,6 +160,7 @@ fun RegisterScreen(context: NativePluginContext) {
       returnsApi = ConsolePosReturnsApi(context.api, hostId),
       displayApi = ConsolePosDisplayApi(context.api, hostId),
       kioskQueueApi = ConsolePosKioskQueueApi(context.api, hostId),
+      printersApi = ConsolePosPrintersApi(context.api, hostId),
     ).also { registerModel = it }
   }
   LaunchedEffect(model) { model.start() }
@@ -495,21 +509,24 @@ private fun ProductTile(item: PosItem, inBasket: Int, currency: String, onClick:
     color = MaterialTheme.colorScheme.surfaceContainerLowest,
     border = BorderStroke(1.dp, if (inBasket > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
   ) {
-    Column(Modifier.padding(space(1.5f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-      Row(verticalAlignment = Alignment.Top) {
-        Box(
-          Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
-          contentAlignment = Alignment.Center,
-        ) {
+    Column {
+      // The product's photo on top, as the Apple register draws it; its initial on a tonal ground when it has none.
+      Box(Modifier.fillMaxWidth().height(96.dp).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+        val picture = LocalPosPictures.current(item.imageUrl)
+        if (picture != null) {
+          RemoteImage(picture, null, Modifier.fillMaxSize().testTag("tile-photo-${item.id}"), contentScale = ContentScale.Crop)
+        } else {
           Text(
             item.name.trim().take(1).uppercase(),
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onPrimaryContainer,
           )
         }
-        Spacer(Modifier.weight(1f))
-        if (inBasket > 0) Badge(containerColor = MaterialTheme.colorScheme.primary) { Text(inBasket.toString()) }
+        if (inBasket > 0) {
+          Badge(Modifier.align(Alignment.TopEnd).padding(space(1f)), containerColor = MaterialTheme.colorScheme.primary) { Text(inBasket.toString()) }
+        }
       }
+    Column(Modifier.padding(space(1.5f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
       Text(
         item.name,
         style = MaterialTheme.typography.titleSmall,
@@ -530,6 +547,7 @@ private fun ProductTile(item: PosItem, inBasket: Int, currency: String, onClick:
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
+    }
     }
   }
 }

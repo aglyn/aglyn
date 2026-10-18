@@ -37,6 +37,7 @@ const mockDatasets: Record<string, Doc> = {}
 const mockRecords: Record<string, Doc[]> = {}
 const mockBindingDocs: Doc[] = []
 const mockQueries: Array<{ dataset: string; path: string; value: unknown }> = []
+const mockLiveHosts = new Set<string>()
 
 const read = (data: Record<string, unknown>, path: string) =>
   path.split('.').reduce<unknown>(
@@ -85,8 +86,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
+        // The sites a record's photos are in, by host id (AGL-3912).
+        getAll: async (...refs: Array<{ id: string }>) =>
+          refs.map((ref) => ({ id: ref.id, exists: mockLiveHosts.has(ref.id) })),
         collection: () => ({
-          doc: () => ({
+          doc: (id: string) => ({
+            id,
             collection: () => ({
               limit: () => ({
                 get: async () => ({
@@ -217,5 +222,16 @@ describe('the record an address names', () => {
       await readRecordPageRecord('host-1', { ...BINDING, slugField: 'gone' }, 'roofing'),
     ).toBeNull()
     expect(mockQueries).toEqual([])
+  })
+})
+
+describe('a record page’s photo of a site that no longer exists (AGL-3912)', () => {
+  it('is left out of the record, never drawn broken; a live site’s photo stays', async () => {
+    mockRecords['services'] = [
+      record('r1', { name: 'Roofing', slug: 'roofing', image: '/api/media/cdn/MEo5ZeWQB2/wSWoP1kjUG', logo: '/api/media/cdn/live-site/m1' }),
+    ]
+    mockLiveHosts.add('live-site')
+    const routed = await readRecordPageRecord('host-1', BINDING, 'roofing')
+    expect(routed?.record).toEqual({ name: 'Roofing', slug: 'roofing', logo: '/api/media/cdn/live-site/m1', $id: 'r1' })
   })
 })

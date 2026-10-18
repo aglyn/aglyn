@@ -239,6 +239,7 @@ extension AppModel {
     let outcome = await service.createWorkspace(name: name)
     if outcome.slug != nil { workspace?.reload() }
     if let slug = outcome.slug, let plan = authFlow.plan {
+      (push.pendingOrgID, push.pendingHostID) = (nil, nil)
       push.pendingLink = plan.destination(orgSlug: slug)
     }
   }
@@ -262,6 +263,7 @@ extension AppModel {
       // The new workspace is shown at once, not at the switcher's next read (AGL-3920).
       workspace.reload()
       if let plan = await service.consumePlanIntent(uid: user.uid, reader: reader) {
+        (push.pendingOrgID, push.pendingHostID) = (nil, nil)
         push.pendingLink = plan.destination(orgSlug: slug)
       }
       firstRun = .idle

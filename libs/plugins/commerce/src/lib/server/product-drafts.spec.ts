@@ -85,19 +85,24 @@ function docRef(path: string): Record<string, unknown> {
   }
 }
 
+/** Firestore's semantics: `!=` matches a document that HAS the field with another value. */
+const passes = (doc: ReturnType<typeof snapshotOf>, [field, op, value]: [string, string, unknown]) =>
+  op === 'in'
+    ? (value as unknown[]).includes(doc.get(field))
+    : op === '!='
+      ? doc.get(field) !== undefined && doc.get(field) !== value
+      : doc.get(field) === value
+
 function queryOf(path: string, filters: Array<[string, string, unknown]>): Record<string, unknown> {
+  const matching = () =>
+    childrenOf(path)
+      .map(snapshotOf)
+      .filter((doc) => filters.every((filter) => passes(doc, filter)))
   return {
     kind: 'query',
     where: (field: string, op: string, value: unknown) => queryOf(path, [...filters, [field, op, value]]),
-    get: async () => ({
-      docs: childrenOf(path)
-        .map(snapshotOf)
-        .filter((doc) =>
-          filters.every(([field, op, value]) =>
-            op === 'in' ? (value as unknown[]).includes(doc.get(field)) : doc.get(field) === value,
-          ),
-        ),
-    }),
+    get: async () => ({ docs: matching() }),
+    count: () => ({ kind: 'count', get: async () => ({ data: () => ({ count: matching().length }) }) }),
   }
 }
 
@@ -313,6 +318,19 @@ describe('the refusal', () => {
     expect(await writer.refusal(request({ org }))).toEqual(refusal)
     expect(await writer.write(request({ org }))).toEqual({ ok: false, ...refusal })
     expect(store.has('hosts/host-1/products/draft-1')).toBe(false)
+  })
+
+  it('counts live products: a deleted one frees its slot, an archived one keeps it (AGL-3918)', async () => {
+    const org = { ...BUSINESS, entitlements: { productsPerHost: 1 } }
+    store.set('hosts/host-1/products/gone', { name: 'Gone', slug: 'gone', deletedAt: { seconds: 1 } })
+    expect(await writer.refusal(request({ org }))).toBeNull()
+    expect((await writer.write(request({ org }))).ok).toBe(true)
+
+    store.delete('hosts/host-1/products/draft-1')
+    store.set('hosts/host-1/products/shelved', { name: 'Shelved', slug: 'shelved', status: 'archived', deletedAt: null })
+    const refusal = { status: 403, error: productDraftLimitRefusal(1) }
+    expect(await writer.refusal(request({ org }))).toEqual(refusal)
+    expect(await writer.write(request({ org }))).toEqual({ ok: false, ...refusal })
   })
 })
 

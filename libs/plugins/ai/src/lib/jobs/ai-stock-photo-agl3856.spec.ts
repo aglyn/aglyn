@@ -331,7 +331,7 @@ describe('the Juniper and Rye Photography home page (AGL-3856, beta.259)', () =>
     expect(placed.tags).toEqual(expect.arrayContaining(['wedding']))
     expect(photo?.alt).toBe(aiStockTagsAlt(placed.tags, aiStockProperWords(PHOTOGRAPHER)))
     expect(photo?.alt).not.toMatch(/^[^,]+, [^,]+, [^,]+$/)
-    expect(aiStockTagsAlt(byId('1485984').tags)).toBe('A wedding dress and a bride')
+    expect(aiStockTagsAlt(byId('1485984').tags)).toBe('A bride in a wedding dress')
   })
 
   it('describes a placed stand-in by the photo, and no longer hides it as decorative', async () => {

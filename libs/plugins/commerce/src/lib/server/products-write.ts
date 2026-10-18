@@ -19,6 +19,7 @@ import { createHash } from 'node:crypto'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
+import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getLockdownVerdict, getOrgForHost, isImpersonationSession } from '@aglyn/tenant-data-admin'
@@ -197,7 +198,7 @@ export function createProductSaveHandler(options: ProductsWriteDeps = {}): Plugi
           if (existing.exists) return { status: 200, body: { ok: true, id: productId, replayed: true } }
           const early = planRefusal(door.org as never)
           if (early) return { status: early.status, body: { error: early.error } }
-          const used = (await tx.get(products.count())).data().count
+          const used = await countLiveDocuments(products, (aggregate) => tx.get(aggregate))
           const room = roomRefusal(door.org as never, Number(used) || 0)
           if (room) return { status: room.status, body: { error: room.error } }
           tx.create(productRef, {
@@ -366,7 +367,7 @@ export function createProductDuplicateHandler(options: ProductsWriteDeps = {}): 
         if (existing.exists) return { status: 200, body: { ok: true, id: newProductId, replayed: true } }
         const early = planRefusal(door.org as never)
         if (early) return { status: early.status, body: { error: early.error } }
-        const used = (await tx.get(products.count())).data().count
+        const used = await countLiveDocuments(products, (aggregate) => tx.get(aggregate))
         const room = roomRefusal(door.org as never, Number(used) || 0)
         if (room) return { status: room.status, body: { error: room.error } }
         // The COPY's smart collections: its name differs from the source's.

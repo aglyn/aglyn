@@ -551,6 +551,12 @@ private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutSt
         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("pos-reader-prompt"),
       )
     }
+    val waiting = step.paymentId
+    if (waiting != null && reader?.kind == CardReaderKind.SMART && model.context?.testMode == true) {
+      OutlinedButton(onClick = { model.act { checkout.simulateTapOnReader(waiting) } }, modifier = Modifier.testTag("simulate-tap")) {
+        Text("Simulate a card tap (test mode)")
+      }
+    }
     OutlinedButton(onClick = { reader?.let { model.act { checkout.cancelCard(it) } } }, enabled = step.paymentId != null) { Text("Cancel payment") }
   }
 }

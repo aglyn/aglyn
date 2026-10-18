@@ -49,6 +49,12 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { isDuplicableHostResourceKind } from '@aglyn/aglyn/app-utils/duplicate-resource'
 import {
+  countLiveDocuments,
+  deletedTemplatesCounted,
+  liveDocumentCount,
+  TOMBSTONE_FIELD,
+} from '@aglyn/aglyn/app-utils/live-document-count'
+import {
   hostResourcePlatformCap,
   pluginHostResource,
 } from '@aglyn/aglyn/plugin-manager/plugin-host-resources'
@@ -196,6 +202,9 @@ const RESOURCES: Record<string, HostResource> = {
   template: {
     collection: 'templates',
     quotaKey: 'templatesPerHost',
+    // A deleted template frees its slot (AGL-3918); the count below keeps
+    // its own starter exclusion and subtracts the deleted ones from it.
+    softDeletes: true,
     label: 'templates',
     activity: { type: 'template', noun: 'template' },
     fields: [
@@ -224,6 +233,9 @@ const RESOURCES: Record<string, HostResource> = {
   layout: {
     collection: 'layouts',
     quotaKey: 'sharedLayoutsPerHost',
+    // Deleting a layout stamps `deletedAt` and keeps the document, so the
+    // allowance counts live ones (AGL-3918), as the layouts page reads it.
+    softDeletes: true,
     label: 'shared layouts',
     activity: { type: 'layout', noun: 'shared layout' },
     fields: ['displayName', 'description', 'versionId'],
@@ -812,11 +824,7 @@ async function handler(request: Request): Promise<Response> {
         // 'authored' or 'marketplace', both of which still count.
         const used =
           resourceKey === 'template'
-            ? (
-                await tx.get(
-                  collectionRef.where('source.type', '!=', 'starter').count(),
-                )
-              ).data().count
+            ? await liveTemplateCount(tx, collectionRef)
             : resourceKey === 'screen'
               ? billableScreenIds(screenRows, routingMap).size
               : resource.softDeletes
@@ -1039,12 +1047,13 @@ export { handler as POST }
 /**
  * The live documents a soft-deleting collection holds, for a plan quota.
  *
- * Read with a `deletedAt` projection and counted where it is `null` — the
- * same arithmetic the flat-cap branch uses — because a component created
- * here carries no `deletedAt` while a marketplace copy carries an explicit
- * `null`, and no single Firestore filter matches both. Every document is
- * read, so a plan whose allowance is unlimited is not counted at all: its
- * answer is yes whatever the number (AGL-3615).
+ * A deleted document frees its slot and an archived one keeps it (AGL-3918):
+ * every document less the tombstones, two aggregates inside the transaction
+ * (`countLiveDocuments`). A component created here carries no `deletedAt`
+ * while a marketplace copy carries an explicit `null`, and no single filter
+ * matches both shapes, which is why the TOMBSTONES are what is filtered. A
+ * plan whose allowance is unlimited is not counted at all: its answer is yes
+ * whatever the number (AGL-3615).
  */
 async function liveCount(
   tx: FirebaseFirestore.Transaction,
@@ -1053,9 +1062,29 @@ async function liveCount(
   quotaKey: string,
 ): Promise<number> {
   if (!Number.isFinite(checkQuota(org, quotaKey as any, 0).limit)) return 0
-  return (await tx.get(collectionRef.select('deletedAt'))).docs.filter(
-    (entry) => entry.get('deletedAt') == null,
-  ).length
+  return countLiveDocuments(collectionRef, (aggregate) => tx.get(aggregate))
+}
+
+/**
+ * The templates `templatesPerHost` counts: every one that is not a starter's
+ * page (AGL-687), less the deleted ones (AGL-3918).
+ *
+ * The starter exclusion is an inequality on `source.type`, and a second
+ * inequality on `deletedAt` beside it would need a composite index. The
+ * deleted templates are read instead, projected to `source.type`, and the
+ * ones the first count included are subtracted: those that are not starters
+ * and carry a `source.type` at all (the `!=` filter skips a document without
+ * the field).
+ */
+async function liveTemplateCount(
+  tx: FirebaseFirestore.Transaction,
+  collectionRef: FirebaseFirestore.CollectionReference,
+): Promise<number> {
+  const [counted, tombstones] = await Promise.all([
+    tx.get(collectionRef.where('source.type', '!=', 'starter').count()),
+    tx.get(collectionRef.where(TOMBSTONE_FIELD, '!=', null).select('source.type')),
+  ])
+  return liveDocumentCount(counted.data().count, deletedTemplatesCounted(tombstones.docs))
 }
 
 /** "1 form", never "1 forms": a label's last word in the singular. */

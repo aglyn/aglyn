@@ -18,8 +18,14 @@
    * file only binds the SDK to it. Aglyn POS alone links the SDK, and only on
    * iPhone and iPad: it publishes this collector as `DeviceCardReaders.shared`
    * at launch, and the commerce plugin's register, readers screen and kiosk
-   * (and a booking paid at the counter) see only `CardCollector`. The Aglyn
-   * app links no card reader SDK.
+   * (and a booking paid at the counter) see only `CardCollector` and
+   * `DeviceReaderControls`. The Aglyn app links no card reader SDK.
+   *
+   * Nothing is asked of the person until they choose to connect a reader on
+   * the readers screen: location (card networks require it for in-person
+   * payments) is asked then, and Bluetooth by the SDK as it scans. Opening the
+   * register only reconnects the reader connected last time, and only when
+   * those permissions were already given.
    *
    * Connection tokens come from `commerce/pos-terminal-connection-token` for
    * the site's Terminal Location. In test mode the SDK's simulated readers
@@ -35,8 +41,8 @@
   }
 
   /// The SDK asks for a connection token whenever it needs one; the site's
-  /// session source mints it. The first token of a connect is the one the
-  /// connect already fetched, so it is not minted twice.
+  /// session source mints it. The first token of a site is the one the setup
+  /// already fetched, so it is not minted twice.
   private final class TerminalTokens: NSObject, ConnectionTokenProvider, @unchecked Sendable {
     var hostID: String?
     var sessions: CardReaderSessionSource?
@@ -56,6 +62,40 @@
         } catch {
           completion(nil, error as NSError)
         }
+      }
+    }
+  }
+
+  /// Location, asked for when the person connects a reader and answered by the system prompt.
+  @MainActor
+  private final class LocationAsk: NSObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+    private var waiting: [CheckedContinuation<CLAuthorizationStatus, Never>] = []
+
+    override init() {
+      super.init()
+      manager.delegate = self
+    }
+
+    var status: CLAuthorizationStatus { manager.authorizationStatus }
+
+    var allowed: Bool { status == .authorizedWhenInUse || status == .authorizedAlways }
+
+    func request() async -> CLAuthorizationStatus {
+      guard status == .notDetermined else { return status }
+      return await withCheckedContinuation { continuation in
+        waiting.append(continuation)
+        if waiting.count == 1 { manager.requestWhenInUseAuthorization() }
+      }
+    }
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+      let status = manager.authorizationStatus
+      guard status != .notDetermined else { return }
+      Task { @MainActor in
+        let answered = self.waiting
+        self.waiting = []
+        for continuation in answered { continuation.resume(returning: status) }
       }
     }
   }
@@ -80,6 +120,18 @@
       send { $0.didDisconnect() }
     }
 
+    func reader(_ reader: Reader, didStartReconnect cancelable: Cancelable, disconnectReason: DisconnectReason) {
+      send { $0.didStartReconnect() }
+    }
+
+    func readerDidSucceedReconnect(_ reader: Reader) {
+      send { $0.didConnect(reader) }
+    }
+
+    func readerDidFailReconnect(_ reader: Reader) {
+      send { $0.didDisconnect() }
+    }
+
     func reader(_ reader: Reader, didRequestReaderInput inputOptions: ReaderInputOptions) {
       send { $0.prompt = "Present the card." }
     }
@@ -90,19 +142,27 @@
     }
 
     func reader(_ reader: Reader, didStartInstallingUpdate update: ReaderSoftwareUpdate, cancelable: Cancelable?) {
-      send { $0.prompt = "Updating the card reader. Keep it close and charged." }
+      let offered = readerUpdate(update)
+      send { $0.updateStarted(offered) }
     }
 
     func reader(_ reader: Reader, didReportReaderSoftwareUpdateProgress progress: Float) {
-      let percent = Int((progress * 100).rounded())
-      send { $0.prompt = "Updating the card reader: \(percent)%." }
+      send { $0.updateProgress(Double(progress)) }
     }
 
     func reader(_ reader: Reader, didFinishInstallingUpdate update: ReaderSoftwareUpdate?, error: Error?) {
-      send { $0.prompt = nil }
+      let failed = error.map { friendlyConnectError(code: terminalError($0).code, message: $0.localizedDescription) }
+      send { $0.updateFinished(reader, failed: failed) }
     }
 
-    func reader(_ reader: Reader, didReportAvailableUpdate update: ReaderSoftwareUpdate) {}
+    func reader(_ reader: Reader, didReportAvailableUpdate update: ReaderSoftwareUpdate) {
+      let offered = readerUpdate(update)
+      send { $0.update = offered }
+    }
+
+    func reader(_ reader: Reader, didReportBatteryLevel batteryLevel: Float, status: BatteryStatus, isCharging: Bool) {
+      send { $0.batteryChanged(Double(batteryLevel), charging: isCharging) }
+    }
 
     static func displayName(_ message: ReaderDisplayMessage) -> String {
       switch message {
@@ -168,22 +228,68 @@
     }
   }
 
+  private func readerKind(_ type: DeviceType) -> CardCollectorKind? {
+    switch type {
+    case .tapToPay: .tapToPay
+    case .stripeM2, .wisePad3, .chipper2X: .bluetooth
+    default: nil
+    }
+  }
+
+  private func readerUpdate(_ update: ReaderSoftwareUpdate) -> ReaderUpdate {
+    ReaderUpdate(
+      required: updateIsDue(requiredAt: update.requiredAt), version: update.deviceSoftwareVersion,
+      duration: ReaderSoftwareUpdate.string(from: update.durationEstimate))
+  }
+
+  /// The SDK reader as the screens see it.
+  private func deviceReader(_ reader: Reader) -> DeviceReader {
+    let kind = readerKind(reader.deviceType) ?? .bluetooth
+    let type = deviceTypeName(reader.deviceType)
+    return DeviceReader(
+      id: readerID(reader),
+      label: deviceReaderLabel(
+        kind: kind, deviceType: type, label: reader.label, serial: reader.serialNumber, simulated: reader.simulated),
+      kind: kind, simulated: reader.simulated, batteryLevel: reader.batteryLevel?.doubleValue,
+      charging: reader.isCharging?.boolValue ?? false, deviceType: type, softwareVersion: reader.deviceSoftwareVersion)
+  }
+
+  private func readerID(_ reader: Reader) -> String {
+    reader.serialNumber.isEmpty ? (reader.stripeId ?? deviceTypeName(reader.deviceType)) : reader.serialNumber
+  }
+
   @MainActor
   @Observable
-  final class StripeTerminalCollector: CardCollector, TerminalPaymentPort {
+  final class StripeTerminalCollector: CardCollector, DeviceReaderControls, TerminalPaymentPort {
     static let shared = StripeTerminalCollector()
 
     private(set) var state: CardCollectorState = .disconnected
     fileprivate(set) var prompt: String?
     let kinds: [CardCollectorKind]
+    private(set) var discovery: ReaderDiscovery = .idle
+    private(set) var connectedReader: DeviceReader?
+    fileprivate(set) var update: ReaderUpdate?
 
     @ObservationIgnored private let tokens = TerminalTokens()
     @ObservationIgnored private let events = TerminalEvents()
-    @ObservationIgnored private let location = CLLocationManager()
-    @ObservationIgnored private var hostID: String?
+    @ObservationIgnored private let location = LocationAsk()
+    @ObservationIgnored private let defaults = UserDefaults.standard
+    /// The site the SDK's tokens are for, and what its session said.
+    @ObservationIgnored private var siteID: String?
+    @ObservationIgnored private var locationID: String?
+    @ObservationIgnored private var merchantName = "Store"
+    @ObservationIgnored private var testMode = false
     @ObservationIgnored private var deviceType: String?
     @ObservationIgnored private var intent: PaymentIntent?
     @ObservationIgnored private var inFlight: Cancelable?
+    /// Discovered SDK readers by id, so a pick maps back to the SDK object.
+    @ObservationIgnored private var found: [String: Reader] = [:]
+    @ObservationIgnored private var discovering: Cancelable?
+    /// Bumped by each new discovery or connect, so a stale discovery's end does not overwrite a newer state.
+    @ObservationIgnored private var generation = 0
+
+    private static let rememberedKind = "aglyn.pos.reader.kind"
+    private static let rememberedReader = "aglyn.pos.reader.id"
 
     private init() {
       // Tap to Pay is on iPhone only; an iPad takes cards on a Bluetooth reader.
@@ -191,10 +297,198 @@
       events.collector = self
     }
 
-    private func start() {
+    // MARK: Setup
+
+    /// Points the SDK at `hostID` (initializing it once). False, with the
+    /// state or the discovery saying why, when location is refused or the site
+    /// is not set up for card readers. `ask` false never prompts.
+    private func prepare(hostID: String, sessions: CardReaderSessionSource, ask: Bool) async -> Bool {
+      if !location.allowed {
+        guard ask else { return false }
+        let answer = await location.request()
+        if answer != .authorizedWhenInUse && answer != .authorizedAlways {
+          discovery = .failed(readerLocationRefused)
+          return false
+        }
+      }
+      if siteID != hostID {
+        if Terminal.isInitialized() {
+          if Terminal.shared.connectedReader != nil { await disconnectSDK() }
+          try? Terminal.shared.clearCachedCredentials()
+        }
+        didDisconnect()
+        siteID = hostID
+        locationID = nil
+      }
+      tokens.hostID = hostID
+      tokens.sessions = sessions
+      if locationID == nil {
+        do {
+          let session = try await sessions.session(hostID: hostID)
+          locationID = session.locationID
+          merchantName = session.merchantDisplayName
+          testMode = session.testMode
+          tokens.prefetched = session.secret
+        } catch {
+          let words =
+            (error as? CardReaderSetupError)?.message ?? (error as? LocalizedError)?.errorDescription
+            ?? "Card readers are not set up for this store yet."
+          state = .unavailable(words)
+          if ask { discovery = .failed(words) }
+          return false
+        }
+      }
       if !Terminal.isInitialized() { Terminal.initWithTokenProvider(tokens, delegate: nil) }
+      if case .unavailable = state { state = .disconnected }
+      return true
     }
 
+    // MARK: DeviceReaderControls
+
+    func discover(_ kind: CardCollectorKind, hostID: String, sessions: CardReaderSessionSource) async {
+      guard kinds.contains(kind) else {
+        discovery = .failed("This device cannot use that card reader.")
+        return
+      }
+      guard await prepare(hostID: hostID, sessions: sessions, ask: true) else { return }
+      _ = await scan(kind, stopWhen: kind == .tapToPay ? { _ in true } : { _ in false })
+    }
+
+    /// Scans for `kind` and lists what it finds; ends at the SDK's timeout,
+    /// on Stop, or as soon as `stopWhen` picks a reader. Returns the readers found.
+    @discardableResult
+    private func scan(_ kind: CardCollectorKind, stopWhen: @escaping (Reader) -> Bool) async -> [Reader] {
+      await cancelDiscovery()
+      generation += 1
+      let mine = generation
+      found = [:]
+      discovery = .searching(kind, [])
+      let config: DiscoveryConfiguration
+      do {
+        config =
+          kind == .tapToPay
+          ? try TapToPayDiscoveryConfigurationBuilder().setSimulated(testMode).build()
+          : try BluetoothScanDiscoveryConfigurationBuilder().setSimulated(testMode).setTimeout(30).build()
+      } catch {
+        discovery = .failed(friendlyDiscoveryError(code: terminalError(error).code, message: error.localizedDescription))
+        return []
+      }
+      let error: Error? = await withCheckedContinuation { continuation in
+        events.onDiscovered = { [weak self] readers in
+          guard let self, self.generation == mine else { return }
+          let usable = readers.filter { readerKind($0.deviceType) == kind }
+          for reader in usable { self.found[readerID(reader)] = reader }
+          self.discovery = .searching(kind, usable.map(deviceReader))
+          if usable.contains(where: stopWhen), let pending = self.discovering, !pending.completed {
+            pending.cancel { _ in }
+          }
+        }
+        discovering = Terminal.shared.discoverReaders(config, delegate: events) { error in
+          Task { @MainActor in continuation.resume(returning: error) }
+        }
+      }
+      if generation == mine {
+        discovering = nil
+        let list = Array(found.values)
+        let code = error.map { terminalError($0).code } ?? ""
+        if let error, code != "CANCELED", !(code == "BLUETOOTH_SCAN_TIMED_OUT" && !list.isEmpty) {
+          discovery = .failed(friendlyDiscoveryError(code: code, message: error.localizedDescription))
+        } else {
+          discovery = .found(kind, list.map(deviceReader).sorted { $0.label < $1.label })
+        }
+      }
+      return Array(found.values)
+    }
+
+    func cancelDiscovery() async {
+      guard let pending = discovering else { return }
+      discovering = nil
+      guard !pending.completed else { return }
+      await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        pending.cancel { _ in continuation.resume() }
+      }
+    }
+
+    @discardableResult
+    func connect(to reader: DeviceReader, hostID: String, sessions: CardReaderSessionSource) async -> Bool {
+      guard await prepare(hostID: hostID, sessions: sessions, ask: true) else { return false }
+      guard let sdkReader = found[reader.id] else {
+        discovery = .failed("Find the reader again, then connect.")
+        return false
+      }
+      return await connectSDK(sdkReader, kind: reader.kind)
+    }
+
+    private func connectSDK(_ reader: Reader, kind: CardCollectorKind) async -> Bool {
+      guard let locationID else { return false }
+      generation += 1
+      await cancelDiscovery()
+      state = .connecting("Connecting \(deviceReader(reader).label)…")
+      do {
+        let config: ConnectionConfiguration
+        if kind == .tapToPay {
+          config = try TapToPayConnectionConfigurationBuilder(delegate: events, locationId: locationID)
+            .setMerchantDisplayName(merchantName)
+            .build()
+        } else {
+          // A simulated Bluetooth reader stays at its own mock location.
+          let builder = BluetoothConnectionConfigurationBuilder(
+            delegate: events, locationId: reader.simulated ? (reader.locationId ?? locationID) : locationID)
+          #if DEBUG
+            // `-AglynSimulateReaderUpdate available|required` offers the simulated reader an update to install.
+            switch UserDefaults.standard.string(forKey: "AglynSimulateReaderUpdate") {
+            case "available": _ = builder.setTestReaderUpdate(.available(.firmware))
+            case "required": _ = builder.setTestReaderUpdate(.required(.firmware))
+            default: break
+            }
+          #endif
+          config = try builder.build()
+        }
+        let connected = try await connectReader(reader, config)
+        didConnect(connected)
+        defaults.set(kind.rawValue, forKey: Self.rememberedKind)
+        defaults.set(readerID(connected), forKey: Self.rememberedReader)
+        discovery = .idle
+        return true
+      } catch {
+        state = .disconnected
+        discovery = .failed(
+          friendlyConnectError(code: terminalError(error).code, message: (error as NSError).localizedDescription))
+        return false
+      }
+    }
+
+    func forget() async {
+      defaults.removeObject(forKey: Self.rememberedKind)
+      defaults.removeObject(forKey: Self.rememberedReader)
+      await disconnect()
+    }
+
+    func installUpdate() async {
+      guard Terminal.isInitialized(), Terminal.shared.connectedReader != nil else { return }
+      update = ReaderUpdate(progress: 0, required: update?.required ?? false, version: update?.version)
+      Terminal.shared.installAvailableUpdate()
+    }
+
+    func reconnectRemembered(hostID: String, sessions: CardReaderSessionSource) async {
+      guard !state.isConnected, location.allowed,
+        let raw = defaults.string(forKey: Self.rememberedKind), let kind = CardCollectorKind(rawValue: raw),
+        kinds.contains(kind)
+      else { return }
+      guard await prepare(hostID: hostID, sessions: sessions, ask: false) else { return }
+      let remembered = defaults.string(forKey: Self.rememberedReader)
+      let readers = await scan(kind) { kind == .tapToPay || readerID($0) == remembered }
+      guard let match = readers.first(where: { kind == .tapToPay || readerID($0) == remembered }) else {
+        discovery = .idle
+        return
+      }
+      _ = await connectSDK(match, kind: kind)
+      if !state.isConnected { discovery = .idle }
+    }
+
+    // MARK: CardCollector
+
+    /// Connects the first reader of `kind` discovery finds (the kiosk's one-button setup).
     @discardableResult
     func connect(hostID: String, kind: CardCollectorKind, sessions: CardReaderSessionSource) async
       -> CardCollectorState
@@ -203,89 +497,20 @@
         state = .unavailable("This device cannot use that card reader.")
         return state
       }
-      if self.hostID != hostID, state.isConnected { await disconnect() }
-      if state.isConnected { return state }
-      if location.authorizationStatus == .notDetermined { location.requestWhenInUseAuthorization() }
-
+      if siteID == hostID, state.isConnected { return state }
+      guard await prepare(hostID: hostID, sessions: sessions, ask: true) else {
+        if case .failed(let words) = discovery, !state.isConnected { state = .unavailable(words) }
+        return state
+      }
       state = .connecting(kind == .tapToPay ? "Starting Tap to Pay…" : "Looking for card readers…")
-      let session: CardReaderSession
-      do {
-        session = try await sessions.session(hostID: hostID)
-      } catch {
-        state = .unavailable(error.localizedDescription)
+      guard let first = await scan(kind, stopWhen: { _ in true }).first else {
+        if case .failed(let words) = discovery { state = .unavailable(words) } else { state = .disconnected }
         return state
       }
-      tokens.hostID = hostID
-      tokens.sessions = sessions
-      tokens.prefetched = session.secret
-      start()
-
-      let reader: Reader
-      switch await discover(kind, simulated: session.testMode) {
-      case .failure(let error):
-        state = .unavailable(
-          friendlyDiscoveryError(code: terminalError(error).code, message: (error as NSError).localizedDescription))
-        return state
-      case .success(let found): reader = found
-      }
-
-      state = .connecting("Connecting \(label(reader, kind))…")
-      do {
-        let config: ConnectionConfiguration =
-          kind == .tapToPay
-          ? try TapToPayConnectionConfigurationBuilder(delegate: events, locationId: session.locationID)
-            .setMerchantDisplayName(session.merchantDisplayName)
-            .build()
-          : try BluetoothConnectionConfigurationBuilder(
-            delegate: events,
-            // A simulated Bluetooth reader stays at its own mock location.
-            locationId: reader.simulated ? (reader.locationId ?? session.locationID) : session.locationID
-          ).build()
-        let connected = try await connectReader(reader, config)
-        self.hostID = hostID
-        deviceType = deviceTypeName(connected.deviceType)
-        state = .connected(label: label(connected, kind), kind: kind, testMode: session.testMode)
-      } catch {
-        state = .unavailable(
-          friendlyConnectError(code: terminalError(error).code, message: (error as NSError).localizedDescription))
+      if !(await connectSDK(first, kind: kind)), case .failed(let words) = discovery {
+        state = .unavailable(words)
       }
       return state
-    }
-
-    private func label(_ reader: Reader, _ kind: CardCollectorKind) -> String {
-      deviceReaderLabel(
-        kind: kind, deviceType: deviceTypeName(reader.deviceType), label: reader.label,
-        serial: reader.serialNumber, simulated: reader.simulated)
-    }
-
-    /// The first reader discovery finds: Tap to Pay finds this device, a
-    /// Bluetooth scan the nearest reader (it gives up after 30 seconds).
-    private func discover(_ kind: CardCollectorKind, simulated: Bool) async -> Result<Reader, Error> {
-      let config: DiscoveryConfiguration
-      do {
-        config =
-          kind == .tapToPay
-          ? try TapToPayDiscoveryConfigurationBuilder().setSimulated(simulated).build()
-          : try BluetoothScanDiscoveryConfigurationBuilder().setSimulated(simulated).setTimeout(30).build()
-      } catch {
-        return .failure(error)
-      }
-      return await withCheckedContinuation { continuation in
-        var answered = false
-        func answer(_ result: Result<Reader, Error>) {
-          guard !answered else { return }
-          answered = true
-          continuation.resume(returning: result)
-        }
-        events.onDiscovered = { readers in
-          if let first = readers.first { answer(.success(first)) }
-        }
-        _ = Terminal.shared.discoverReaders(config, delegate: events) { error in
-          Task { @MainActor in
-            if let error { answer(.failure(error)) } else { answer(.failure(ReaderSetupError.notSetUp)) }
-          }
-        }
-      }
     }
 
     private func connectReader(_ reader: Reader, _ config: ConnectionConfiguration) async throws -> Reader {
@@ -299,20 +524,71 @@
     }
 
     func disconnect() async {
-      if Terminal.isInitialized(), Terminal.shared.connectedReader != nil {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-          Terminal.shared.disconnectReader { _ in continuation.resume() }
-        }
-      }
+      await cancelDiscovery()
+      await disconnectSDK()
       didDisconnect()
     }
 
+    private func disconnectSDK() async {
+      guard Terminal.isInitialized(), Terminal.shared.connectedReader != nil else { return }
+      await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        Terminal.shared.disconnectReader { _ in continuation.resume() }
+      }
+    }
+
+    // MARK: SDK events
+
+    fileprivate func didConnect(_ reader: Reader) {
+      let device = deviceReader(reader)
+      connectedReader = device
+      deviceType = device.deviceType
+      state = .connected(label: device.label, kind: device.kind, testMode: reader.simulated || !reader.livemode)
+      update = reader.availableUpdate.map(readerUpdate)
+    }
+
+    fileprivate func didStartReconnect() {
+      state = .connecting("Reconnecting \(connectedReader?.label ?? "the card reader")…")
+    }
+
     fileprivate func didDisconnect() {
-      state = .disconnected
+      if state.isConnected || { if case .connecting = state { return true } else { return false } }() {
+        state = .disconnected
+      }
+      connectedReader = nil
       deviceType = nil
       prompt = nil
-      hostID = nil
+      update = nil
     }
+
+    fileprivate func batteryChanged(_ level: Double, charging: Bool) {
+      connectedReader?.batteryLevel = level
+      connectedReader?.charging = charging
+    }
+
+    fileprivate func updateStarted(_ offered: ReaderUpdate) {
+      update = ReaderUpdate(progress: 0, required: offered.required, version: offered.version, duration: offered.duration)
+      prompt = "Updating the card reader. Keep it close and charged."
+    }
+
+    fileprivate func updateProgress(_ progress: Double) {
+      var next = update ?? ReaderUpdate()
+      next.progress = progress
+      update = next
+      prompt = "Updating the card reader: \(Int((progress * 100).rounded()))%."
+    }
+
+    fileprivate func updateFinished(_ reader: Reader, failed: String?) {
+      prompt = nil
+      if let failed {
+        update = ReaderUpdate(required: update?.required ?? false, version: update?.version)
+        discovery = .failed(failed)
+      } else {
+        update = nil
+        connectedReader?.softwareVersion = reader.deviceSoftwareVersion
+      }
+    }
+
+    // MARK: Payments
 
     func collect(_ request: CardCollectRequest) async -> CardCollectOutcome {
       prompt = nil

@@ -28,6 +28,7 @@ import {
 } from '@aglyn/aglyn/app-utils/reusable-component-kind'
 import { SCREEN_KIND_TEMPLATE, SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import { pluginRecordIndex } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
+import { hostScopeToken } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import {
@@ -232,6 +233,9 @@ async function readIndexedDatasets(
       // address field is the one its pages are reached by.
       const page = aiInventoryRecordPage(record.facts['recordPage'], fields)
       const address = page?.addressField ?? fields.find((field) => field.address && field.id)?.id
+      // Made for this site, where its scope names this site alone (AGL-3912).
+      const visibleTo = Array.isArray(record.facts['visibleTo']) ? (record.facts['visibleTo'] as unknown[]) : []
+      const siteOnly = visibleTo.length > 0 && visibleTo.every((token) => token === hostScopeToken(hostId))
       return {
         id: record.id,
         name: record.name,
@@ -240,6 +244,7 @@ async function readIndexedDatasets(
         ...(image ? { imageField: image.id } : {}),
         ...(address ? { addressField: address } : {}),
         ...(page ? { recordBase: page.recordBase } : {}),
+        ...(siteOnly ? { siteOnly: true as const } : {}),
       }
     }),
     truncated,
