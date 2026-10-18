@@ -214,6 +214,8 @@ private struct KioskMenuView: View {
           }
         }
         .padding(AglynSpace.two)
+        // The faint Staff control sits over the top-leading corner; the chips start after it, never under it.
+        .padding(.leading, kioskStaffInset)
       }
       Divider()
       if let notice = model.notice { AglynNotice(notice, tone: .warning) { model.notice = nil }.padding(AglynSpace.two) }
@@ -223,7 +225,11 @@ private struct KioskMenuView: View {
         } else if (model.catalog?.products ?? []).isEmpty {
           Text("Nothing here yet. Try another category.").font(AglynFont.title2).foregroundStyle(.secondary).padding(AglynSpace.four)
         } else {
-          LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: AglynSpace.two)], spacing: AglynSpace.two) {
+          // Tiles top-aligned in their row, each name keeping two lines: a one-line name beside a two-line one, or a
+          // tile with a photo beside one without, no longer sat the row's tiles at staggered heights.
+          LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 170), spacing: AglynSpace.two, alignment: .top)], spacing: AglynSpace.two
+          ) {
             ForEach(model.catalog?.products ?? [], id: \.id) { product in
               let soldOut = kioskProductSoldOut(product)
               Button {
@@ -233,7 +239,7 @@ private struct KioskMenuView: View {
                   if let url = product.imageUrl.flatMap({ URL(string: $0) }) {
                     AglynRemoteImage(url, systemImage: "photo", contentMode: .fill).frame(height: 110).clipped()
                   }
-                  Text(product.name).font(AglynFont.headline).multilineTextAlignment(.leading)
+                  Text(product.name).font(AglynFont.headline).multilineTextAlignment(.leading).lineLimit(2, reservesSpace: true)
                   Text(
                     soldOut ? "Sold out" : "\(product.variants.count > 1 ? "From " : "")\(model.money(kioskFromCents(product)))"
                   )
@@ -536,6 +542,9 @@ private struct KioskDoneView: View {
 /// Staff unlock: a corner button, then the staff PIN the register uses, checked on the server. No names are listed, the
 /// screen faces the public, and a right PIN opens the kiosk's settings for a few minutes: which card reader it sends
 /// payments to, and leaving kiosk mode.
+/// How far the menu's chips start from the leading edge, clear of the Staff control over that corner.
+private let kioskStaffInset: CGFloat = 48
+
 private struct KioskStaffControl: View {
   let model: PosKioskModel
   let onExit: () -> Void
