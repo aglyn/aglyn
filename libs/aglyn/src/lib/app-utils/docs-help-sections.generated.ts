@@ -139,7 +139,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#generate-for-several-sites-at-once': 'On the Sites page of your organization, Generate for several sites runs one brief across many of your sites, changing the business name, the city and the brand for each.',
   },
   aiSiteLooks: {
-    '#choose-a-style': 'The Style step of Start your site offers these styles, each as a card with a picture of the starter home page drawn in it.',
+    '#choose-a-style': 'The Style step of Start your site offers these styles, each as a card with a picture of an example home page of that kind, drawn in its style.',
   },
   aiStart: {
     '#audience': 'Who is it for? is optional. It is who every page and every search listing is written for, and it decides which questions the contact form asks.',
@@ -252,6 +252,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#choose-a-workspace': 'If you belong to more than one organization, signing in opens Workspaces: one card per workspace, with its name, its workspace address underneath, and Open, which takes you to its sites.',
     '#daily-digests': 'Weekly summary is on by default. Each Monday morning it emails you how the week before went, Monday to Sunday, for up to five of a workspace\'s busiest sites.',
     '#notification-settings': 'Everything about what reaches you lives on the second section, Settings.',
+    '#notification-sound': 'Pick the sound your notifications make under Notification sound in the Settings section.',
     '#organization-general': 'The General card renames the organization, changes its workspace URL and sets the time zone its sites inherit — "workspace" is the console\'s word for your organization\'s home.',
     '#organization-settings': 'Organization → Settings is where you run the workspace itself: its name and workspace URL under General, then — for owners and admins — Profile, Plugins, API keys, Branding, Single sign-on, Privacy, Holds & reviews…',
     '#recent-activity': 'The Recent Activity card on a site\'s dashboard lists the latest changes made to the site, newest first — who made each one and what it touched, linked straight to it.',

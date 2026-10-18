@@ -47,8 +47,13 @@
  * Each page is held to the page step's own check (`aiLayoutPageCheck`: the
  * reader, the compiler, the store, the copy check and the doctrine), and its
  * empty picture slots are filled from the starter photos as the page step
- * fills them. A page the check refuses is reported and written anyway, so a
- * shot still shows it. What it writes, per page, is a
+ * fills them. A run may name, in `photos`, what fills each slot in order
+ * (AGL-3898): a starter photo's key (`hero`, `about`, `desk`, `plants`,
+ * `craft`), a picture given whole (`{ src, width, height, alt }`), or `none`
+ * — as every slot past the list is — the treatment a slot gets where the
+ * stock library found nothing to fit; and, in `seed`, the look's seed, which
+ * also picks the site's design variants (`ai-layout-design.ts`). A page the
+ * check refuses is reported and written anyway, so a shot still shows it. What it writes, per page, is a
  * `render-layout-shots.mts` input: `<out>/<key>-<page>.json`.
  */
 import { mkdirSync, readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs'
@@ -132,6 +137,8 @@ async function main(): Promise<void> {
     layoutNodes?: Dict
     form?: { rootId: string; nodes: Dict } | null
     records?: Dict | null
+    /** What fills each picture slot, in order: a starter photo's key, a picture given whole, or `none` (AGL-3898). */
+    photos?: readonly (string | Dict)[] | null
   }) => {
     let site = given
     const inventory = {
@@ -262,6 +269,18 @@ async function main(): Promise<void> {
         sectionNames: screen.sections.map((s: Dict) => s.name),
         seed: `${unit.$id}:${page.id}`,
         kind: site.kind.id,
+        ...(site.photos
+          ? {
+              source: async (slots: readonly Dict[]) =>
+                slots.map((_slot, index) => {
+                  // A slot past the run's list keeps no photo, as one named `none` does.
+                  const named = site.photos?.[index] ?? 'none'
+                  if (named === 'none') return pictures.AI_LAYOUT_NO_PHOTO
+                  const photo = typeof named === 'string' ? (pictures.AI_LAYOUT_STARTER_PHOTOS as Record<string, Dict>)[named] : named
+                  return photo ? { src: photo['src'], width: photo['width'], height: photo['height'], alt: photo['alt'] } : null
+                }),
+            }
+          : {}),
       })
       const file = join(resolve(out), `${site.key}-${slugKey(page.title)}.json`)
       writeFileSync(
@@ -337,7 +356,8 @@ async function main(): Promise<void> {
         }
         form = { rootId: `${FORM_ID}__${parsed.rootId}`, nodes }
       }
-      const style = look.aiSiteStyleFor({ kind, answer: look.aiReadSiteLook(run['look']), seed: look.aiSiteSeed(`recorded:${key}`) })
+      const seed = typeof run['seed'] === 'number' ? (run['seed'] as number) >>> 0 : look.aiSiteSeed(`recorded:${key}`)
+      const style = look.aiSiteStyleFor({ kind, answer: look.aiReadSiteLook(run['look']), seed })
       // The posts a run recorded, as the blog serves them: each with a starter cover and the site's byline.
       const covers = Object.values(pictures.AI_LAYOUT_STARTER_PHOTOS as Record<string, { src: string }>).map((photo) => photo.src)
       const recordedPosts = Array.isArray(run['posts']) && run['posts'].length
@@ -356,7 +376,8 @@ async function main(): Promise<void> {
           }
         : null
       const records = givenRecords ?? (recordedPosts ? { posts: recordedPosts } : null)
-      await compileSite({ key, name, kind, style, facts, pages, frame: run['frame'], form, records })
+      const photos = Array.isArray(run['photos']) ? (run['photos'] as (string | Dict)[]) : null
+      await compileSite({ key, name, kind, style, facts, pages, frame: run['frame'], form, records, photos })
       continue
     }
     // A layout-eval brief: <dir>/<key>.

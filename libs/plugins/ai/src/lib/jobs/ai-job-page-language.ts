@@ -360,6 +360,23 @@ export function aiLayoutStartPageLines(start: AiLayoutStartPage | null | undefin
   ]
 }
 
+/**
+ * What a page is told about the site's form (AGL-3899). A page whose plan
+ * places the form, or a site whose form has no page of its own, is told the
+ * form; any other page is told where the form lives and that its call to
+ * action links there. Told "The site's form: …" on every page, two of the
+ * newest production homes drew the form on their own, beside the Contact
+ * page that held it.
+ */
+export function aiLayoutFormLine(screen: Pick<AiBuildPlanScreen, 'sections'>, targets: AiLayoutTargets): string {
+  if (!targets.forms.length) return 'The site has no saved form: place none.'
+  const ids = new Set(targets.forms.map((form) => form.id))
+  const placed = screen.sections.some((section) => section.uses.some((ref) => ids.has(ref)))
+  const page = targets.formPageId ? targets.pages.find((entry) => entry.id === targets.formPageId) : undefined
+  if (placed || !page) return `The site's form: ${targets.forms.map((form) => `${form.name} (${form.id})`).join(', ')}.`
+  return `The site's form is on the ${page.label} page (page:${page.id}): place no form on this page, and make a call to action that asks visitors to get in touch a button to that page.`
+}
+
 /** The page's user turn: the page, the brief, the plan, its sections and where its links may go. */
 export function aiLayoutPagePrompt(input: {
   job: Pick<AiJob, 'brief' | 'inputs' | '$id'>
@@ -426,9 +443,7 @@ export function aiLayoutPagePrompt(input: {
     pages.length
       ? `Other pages of this site: ${pages.join(', ')}.`
       : 'This site has no other page to link.',
-    targets.forms.length
-      ? `The site's form: ${targets.forms.map((form) => `${form.name} (${form.id})`).join(', ')}.`
-      : 'The site has no saved form: place none.',
+    aiLayoutFormLine(screen, targets),
     ...(components.length
       ? [`Components this page may place: ${components.join('; ')}.`]
       : []),
