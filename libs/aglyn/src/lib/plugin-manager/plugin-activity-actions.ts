@@ -137,9 +137,32 @@ export interface PluginActivityRegistration {
    * type needs no entry — the feed reads its noun off the type itself.
    */
   targetTypes?: Readonly<Record<string, string>>
+  /**
+   * Words for the plugin's rows that store a SENTENCE rather than a code
+   * (AGL-3892): rows its writers filed before codes existed, or still file as
+   * prose (`Action ran on formSubmission`). Answers what a person reads for
+   * such an action, or `undefined` for one that is not the plugin's. Pure and
+   * cheap: every feed row asks every plugin that declares one.
+   */
+  describeAction?: (action: string) => string | undefined
 }
 
-const registrations = new Map<string, PluginActivityRegistration>()
+/**
+ * The registrations live on `globalThis` under `Symbol.for`: each app's boot
+ * (`instrumentation.ts`) declares them and its routes read them, and Next
+ * compiles those apart, so a module-scoped map would be one copy per module
+ * graph: boot would fill its copy and a route would read an empty one
+ * (AGL-3412, AGL-3868).
+ */
+const PLUGIN_ACTIVITY_ACTIONS_KEY = Symbol.for('@aglyn/aglyn:plugin-activity-actions')
+
+const globalScope = globalThis as typeof globalThis & {
+  [PLUGIN_ACTIVITY_ACTIONS_KEY]?: Map<string, PluginActivityRegistration>
+}
+
+const registrations: Map<string, PluginActivityRegistration> =
+  globalScope[PLUGIN_ACTIVITY_ACTIONS_KEY] ??
+  (globalScope[PLUGIN_ACTIVITY_ACTIONS_KEY] = new Map<string, PluginActivityRegistration>())
 
 /**
  * The most codes one group may hold. A group's chip asks `action is any of`
@@ -281,6 +304,25 @@ export function pluginActivityActionLabel(action: unknown): string | undefined {
     const match = registration.actions.find((entry) => entry.key === action)
     if (match) return match.label
   }
+  return pluginActivityDescribedAction(action)
+}
+
+/**
+ * What a plugin's `describeAction` says of a stored sentence (AGL-3892), or
+ * `undefined` when no plugin claims it. A describer that throws is skipped,
+ * so one plugin's bug never blanks another's rows.
+ */
+export function pluginActivityDescribedAction(action: unknown): string | undefined {
+  if (typeof action !== 'string' || !action.trim()) return undefined
+  for (const registration of registrations.values()) {
+    if (!registration.describeAction) continue
+    try {
+      const words = registration.describeAction(action)
+      if (words) return words
+    } catch {
+      // A describer that throws describes nothing.
+    }
+  }
   return undefined
 }
 
@@ -305,10 +347,13 @@ export function listPluginActivityFilters(): Array<{
   group: PluginActivityGroup
   actions: string[]
 }> {
-  return listPluginActivityRegistrations().map((entry) => ({
-    group: entry.group,
-    actions: entry.actions.map((action) => action.key),
-  }))
+  // A plugin that only describes prose rows (no codes) has no chip: its chip could keep nothing.
+  return listPluginActivityRegistrations()
+    .filter((entry) => entry.actions.length > 0)
+    .map((entry) => ({
+      group: entry.group,
+      actions: entry.actions.map((action) => action.key),
+    }))
 }
 
 /**

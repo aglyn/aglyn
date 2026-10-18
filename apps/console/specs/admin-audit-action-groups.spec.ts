@@ -71,6 +71,8 @@ describe('the stamped Action group matches the registry', () => {
         prefixes: sorted(group.staffAuditPrefixes ?? []),
         accessActions: sorted(group.staffAuditAccessActions ?? []),
       }))
+      // A registration that only words prose rows (workflows' run lines, AGL-3892) classifies no audit row: nothing to stamp.
+      .filter((group) => group.codes.length + group.prefixes.length + group.accessActions.length > 0)
       .sort((a, b) => a.id.localeCompare(b.id))
     const copied = fixture.groups
       .map((group) => ({
