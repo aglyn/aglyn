@@ -1238,7 +1238,13 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
     for (field in fields.filter { ScreenValues.condition(it.whenCondition, filled) }) {
       FieldInput(field, scope, values[field.key] ?: initialValue(field, scope)) { values[field.key] = it }
     }
-    ActionSpec.parse(block["submit"])?.takeIf { ScreenValues.condition(it.whenCondition, scope) }?.let { action ->
+    // A settings form's Save shows once something in it changed: a screen of small forms (error pages, one select each)
+    // is not a column of Save buttons. Any other submit (Send, Generate, Invite) always shows.
+    val changed = fields.any { (values[it.key] ?: initialValue(it, scope)) != initialValue(it, scope) }
+    ActionSpec.parse(block["submit"])
+      ?.takeIf { ScreenValues.condition(it.whenCondition, scope) }
+      ?.takeIf { changed || fields.isEmpty() || ScreenValues.render(it.label, scope) != "Save" }
+      ?.let { action ->
       FilledTonalButton(
         colors = com.aglyn.ui.aglynTonalButtonColors(),
         onClick = { submit(action, visibleOnly(filled, fields)) },
