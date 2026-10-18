@@ -131,6 +131,23 @@ async function main() {
     values[name] = plainValue(loaded[name], name)
   }
 
+  // A value assembled from its module's half and the parts other modules
+  // declare (the nav manifest: the core's lists, each plugin's rows), so the
+  // core never names a plugin (docs/PACKAGES.md rule 3).
+  for (const [name, { with: assemble, collect = [], parts = [] }] of Object.entries(config.assembled ?? {})) {
+    const owner = model.values.find((value) => value.name === name)?.module
+    if (!owner) throw new Error(`assembled names ${name}, which no module's values list`)
+    const fn = (await load(owner))[assemble]
+    if (typeof fn !== 'function') throw new Error(`assembled.${name}: ${owner} exports no function ${assemble}`)
+    const gathered = collect.map(() => [])
+    for (const part of parts) {
+      if (!pure.has(part)) throw new Error(`assembled.${name} names ${part}, which is not on ${PURE}`)
+      const loaded = await load(part)
+      collect.forEach((exportName, index) => gathered[index].push(...(loaded[exportName] ?? [])))
+    }
+    values[name] = plainValue(fn(values[name], ...gathered), name)
+  }
+
   for (const module of [PLANNER, FILTER, NAME_SEARCH]) {
     if (!pure.has(module)) throw new Error(`${module} is not on ${PURE}`)
   }
@@ -162,7 +179,7 @@ async function main() {
     if (!pure.has(module)) throw new Error(`functionCases names ${module}, which is not on ${PURE}`)
     modules[module] = await load(module)
   }
-  const functions = functionCases(config.functionCases ?? {}, (module) => modules[module], plainValue)
+  const functions = functionCases(config.functionCases ?? {}, (module) => modules[module], plainValue, values)
 
   const settings = []
   for (const { module, name, label } of PLUGIN_SETTINGS) settings.push({ schema: (await load(module))[name], label })

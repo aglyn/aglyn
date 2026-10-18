@@ -290,17 +290,26 @@ function OrgJump() {
   // account — never on a re-render that merely changed an effect dependency's
   // identity.
   const consumedForRef = useRef<string | null>(null)
+  const currentUidRef = useRef(uid)
+  currentUidRef.current = uid
   useEffect(() => {
     // An intent on the URL already answers the question, and it outranks a
     // remembered one — it is what this visit says, not what a past one did.
     if (urlIntent) return void setStoredIntent(null)
     if (!uid || consumedForRef.current === uid) return void 0
     consumedForRef.current = uid
-    let active = true
+    // NOT cancelled on cleanup. The read happens once per account, so a
+    // result this drops is never read again, and `storedIntent` would stay
+    // `undefined` for good: the workspace provisioning below and the jump
+    // both HOLD on `undefined`, so the account sat on "0 workspaces" with its
+    // sign-up name never claimed. Any re-run of this effect while the read
+    // was in flight did that, and React's development StrictMode re-runs
+    // every effect once on mount, so locally it happened every time. The only
+    // result to discard is one for an account no longer signed in here.
     void consumeOnboardingPlanIntent(firestore, uid).then((intent) => {
-      if (active) setStoredIntent(intent)
+      if (currentUidRef.current === uid) setStoredIntent(intent)
     })
-    return () => void (active = false)
+    return undefined
   }, [firestore, uid, urlIntent])
 
   /**

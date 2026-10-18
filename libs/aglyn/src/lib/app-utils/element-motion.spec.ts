@@ -260,9 +260,73 @@ describe('applyElementMotion (AGL-3838)', () => {
     const zooming = applyElementMotion(split(), { character: { ...ELEMENT_MOTION_DEFAULT, mediaPreset: 'zoom-in' } })
     expect(motionOf(zooming, 'storyWordsCell')).toMatchObject({ aglynAnimation: 'slide-right' })
     expect(motionOf(zooming, 'storyPhotoCell')).toMatchObject({ aglynAnimation: 'zoom-in' })
-    // A character without sides moves the split as before.
-    const plain = applyElementMotion(split(), { character: { ...ELEMENT_MOTION_DEFAULT, sides: false } })
+    // A character without sides brings the columns in one after the other, the picture in the media preset.
+    const plain = applyElementMotion(split(), { character: { ...ELEMENT_MOTION_DEFAULT, sides: false, mediaPreset: 'zoom-out' } })
     expect(Object.values(plain).map((node: any) => node.props?.aglynAnimation).filter(Boolean)).not.toContain('slide-right')
+    expect(motionOf(plain, 'storyWordsCell')).toMatchObject({ aglynAnimation: ELEMENT_MOTION_DEFAULT.sectionPresets?.[0] })
+    expect(motionOf(plain, 'storyPhotoCell')).toMatchObject({ aglynAnimation: 'zoom-out', aglynAnimationDelay: ELEMENT_MOTION_DEFAULT.staggerStepMs })
+  })
+
+  it('moves a picture’s frame as the picture, though the picture is laid over it, and never a cover’s backdrop (AGL-3941)', () => {
+    const framed = (): Record<string, any> =>
+      buildStarterNodes([
+        { id: 'top', componentId: 'section', children: [text('topTitle', 'h1', 'A title')] },
+        {
+          id: 'story',
+          componentId: 'section',
+          children: [
+            {
+              id: 'storyGrid',
+              componentId: 'muiGrid',
+              props: { container: true },
+              children: [
+                {
+                  id: 'storyPhotoCell',
+                  componentId: 'muiGrid',
+                  children: [
+                    {
+                      id: 'storyFrame',
+                      componentId: 'muiBox',
+                      sx: { position: 'relative', overflow: 'hidden', aspectRatio: '4 / 3' },
+                      children: [
+                        { id: 'storyIcon', componentId: 'icon', props: { iconId: 'camera-outline' } },
+                        { id: 'storyPhoto', componentId: 'image', props: { alt: 'A picture' }, sx: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' } },
+                      ],
+                    },
+                  ],
+                },
+                {
+                  id: 'storyWordsCell',
+                  componentId: 'muiGrid',
+                  children: [{ id: 'storyWords', componentId: 'muiStack', children: [text('storyTitle', 'h2', 'Our story'), text('storyBody', 'body1', 'Words.')] }],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: 'closing',
+          componentId: 'section',
+          sx: { position: 'relative', overflow: 'hidden' },
+          children: [
+            {
+              id: 'closingBackdrop',
+              componentId: 'muiBox',
+              sx: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
+              children: [{ id: 'closingPhoto', componentId: 'image', props: { alt: 'A backdrop' } }],
+            },
+            { id: 'closingWords', componentId: 'muiContainer', sx: { position: 'relative', zIndex: 1 }, children: [text('closingTitle', 'h2', 'Visit us')] },
+          ],
+        },
+      ])
+    const nodes = applyElementMotion(framed())
+    // The picture on the left comes in from the left with its frame; the words from the right.
+    expect(motionOf(nodes, 'storyPhotoCell')).toMatchObject({ aglynAnimation: 'slide-right', aglynAnimationTrigger: 'scroll' })
+    expect(motionOf(nodes, 'storyWordsCell')).toMatchObject({ aglynAnimation: 'slide-left' })
+    for (const id of ['storyFrame', 'storyIcon', 'storyPhoto']) expect(motionOf(nodes, id)).toEqual({})
+    // A cover's backdrop is out of the flow itself: it stays with its band, and only the words move.
+    for (const id of ['closingBackdrop', 'closingPhoto']) expect(motionOf(nodes, id)).toEqual({})
+    expect(motionOf(nodes, 'closingWords')).toMatchObject({ aglynAnimationTrigger: 'scroll' })
   })
 
   it('never moves a form or its fields, nor the block that holds one', () => {
@@ -340,6 +404,24 @@ describe('applyElementMotion (AGL-3838)', () => {
     )
     expect(motionOf(nodes, 'records')).toMatchObject({ aglynAnimationStagger: true, aglynAnimation: 'zoom-in' })
     expect(motionOf(nodes, 'pictures')).toMatchObject({ aglynAnimationStagger: true, aglynAnimation: 'zoom-in' })
+  })
+
+  it('gives a group of like items the character’s group preset, whatever its section’s turn (AGL-3941)', () => {
+    const character: ElementMotionCharacter = { ...ELEMENT_MOTION_DEFAULT, sectionPresets: ['fade'], groupPreset: 'zoom-in' }
+    const nodes = applyElementMotion(page(), { character })
+    // The cards take the group's preset; the heading beside them keeps the section's.
+    expect(motionOf(nodes, 'servicesGrid')).toMatchObject({ aglynAnimation: 'zoom-in', aglynAnimationStagger: true })
+    expect(motionOf(nodes, 'servicesTitle')).toMatchObject({ aglynAnimation: 'fade' })
+    expect(motionOf(nodes, 'aboutWords')).toMatchObject({ aglynAnimation: 'fade' })
+    // A group whose every item leads with a picture still takes the media preset.
+    const gallery = applyElementMotion(
+      buildStarterNodes([
+        { id: 'top', componentId: 'section', children: [text('topTitle', 'h1', 'Top')] },
+        { id: 'gallery', componentId: 'section', children: [grid('pictures', [card('p1', true), card('p2', true)])] },
+      ]),
+      { character: { ...character, mediaPreset: 'fade' } },
+    )
+    expect(motionOf(gallery, 'pictures')).toMatchObject({ aglynAnimation: 'fade', aglynAnimationStagger: true })
   })
 
   it('climbs at most the ladder’s rungs, the rest sharing the last', () => {

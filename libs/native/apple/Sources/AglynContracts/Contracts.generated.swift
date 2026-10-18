@@ -1955,6 +1955,18 @@ public enum NativeNavConsoleSurface: String, Codable, CaseIterable, Hashable, Se
   }
 }
 
+public struct NativeNavContribution: Codable, Hashable, Sendable {
+  public var group: String
+  public var list: NativeNavListId
+  public var row: NativeNavRow
+
+  public init(group: String, list: NativeNavListId, row: NativeNavRow) {
+    self.group = group
+    self.list = list
+    self.row = row
+  }
+}
+
 public struct NativeNavElsewhere: Codable, Hashable, Sendable {
   public var console: NativeNavConsoleRef
   public var `where`: String
@@ -2038,13 +2050,14 @@ public struct NativeNavRow: Codable, Hashable, Sendable {
   public var id: String
   public var keywords: [String]?
   public var label: String
+  public var order: Double?
   public var params: [String: String]?
   public var pluginId: String?
   public var requiresHostAdmin: Bool?
   public var screen: String
   public var sections: [NativeNavSection]?
 
-  public init(actions: [NativeNavAction]? = nil, console: NativeNavConsoleRef, consoleLabel: String? = nil, description: String? = nil, icon: NativeNavIcon, id: String, keywords: [String]? = nil, label: String, params: [String: String]? = nil, pluginId: String? = nil, requiresHostAdmin: Bool? = nil, screen: String, sections: [NativeNavSection]? = nil) {
+  public init(actions: [NativeNavAction]? = nil, console: NativeNavConsoleRef, consoleLabel: String? = nil, description: String? = nil, icon: NativeNavIcon, id: String, keywords: [String]? = nil, label: String, order: Double? = nil, params: [String: String]? = nil, pluginId: String? = nil, requiresHostAdmin: Bool? = nil, screen: String, sections: [NativeNavSection]? = nil) {
     self.actions = actions
     self.console = console
     self.consoleLabel = consoleLabel
@@ -2053,6 +2066,7 @@ public struct NativeNavRow: Codable, Hashable, Sendable {
     self.id = id
     self.keywords = keywords
     self.label = label
+    self.order = order
     self.params = params
     self.pluginId = pluginId
     self.requiresHostAdmin = requiresHostAdmin

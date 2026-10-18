@@ -32,6 +32,8 @@ import React from 'react'
 
 const mockFirestore = {}
 const mockToggle = jest.fn()
+const mockReplace = jest.fn()
+let mockFull = false
 const mockLoadMore = jest.fn()
 let mockPinned: string[] = []
 let mockPlans: Record<string, string> = {}
@@ -39,7 +41,13 @@ const mockPlanReads = jest.fn()
 
 jest.mock('../hooks/use-pinned-orgs', () => ({
   __esModule: true,
-  usePinnedOrgs: () => ({ pinned: mockPinned, ready: true, toggle: mockToggle }),
+  usePinnedOrgs: () => ({
+    pinned: mockPinned,
+    ready: true,
+    full: mockFull,
+    toggle: mockToggle,
+    replace: mockReplace,
+  }),
 }))
 jest.mock('../hooks/use-org-plans', () => ({
   __esModule: true,
@@ -136,6 +144,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   jest.useRealTimers()
   mockPinned = []
+  mockFull = false
   mockPlans = {}
   mockScope = {
     orgs: REPORTED,
@@ -184,6 +193,22 @@ describe('AGL-3762 · the workspace chooser', () => {
     await flush()
     fireEvent.click(screen.getByRole('button', { name: 'Pin Ready To Roll' }))
     expect(mockToggle).toHaveBeenCalledWith('org-rtr')
+  })
+
+  it('asks which pin a sixth replaces, and replaces the one picked (AGL-3943)', async () => {
+    mockPinned = ['org-edr', 'org-elv', 'org-tst', 'org-agl', 'org-x']
+    mockFull = true
+    mockToggle.mockReturnValueOnce('full')
+    render(<OrgJump />)
+    await flush()
+    const pin = screen.getByRole('button', { name: 'Pin Ready To Roll' })
+    // Shown, never hidden: the pin stays enabled and opens the question.
+    expect((pin as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(pin)
+    expect(mockToggle).toHaveBeenCalledWith('org-rtr')
+    expect(screen.getByText('Pinned is full. Replace one?')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Replace Test Org' }))
+    expect(mockReplace).toHaveBeenCalledWith('org-tst', 'org-rtr')
   })
 
   it('keeps each page the same five workspaces, in order across pages', async () => {

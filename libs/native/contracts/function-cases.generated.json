@@ -48403,6 +48403,7 @@
     },
     "resolveNavList": {
       "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "leadingValue": "NATIVE_NAV_MANIFEST",
       "cases": [
         {
           "args": [
@@ -48442,6 +48443,7 @@
                     },
                     "id": "home",
                     "label": "Home",
+                    "order": 10,
                     "screen": "shell.home"
                   },
                   {
@@ -48461,6 +48463,7 @@
                       "visitors"
                     ],
                     "label": "Overview",
+                    "order": 20,
                     "screen": "shell.analytics"
                   }
                 ]
@@ -48488,6 +48491,7 @@
                     },
                     "id": "pages",
                     "label": "Pages",
+                    "order": 10,
                     "screen": "site.pages",
                     "sections": [
                       {
@@ -48548,6 +48552,7 @@
                     },
                     "id": "media",
                     "label": "Media",
+                    "order": 20,
                     "screen": "site.media"
                   },
                   {
@@ -48561,6 +48566,7 @@
                     },
                     "id": "forms",
                     "label": "Forms",
+                    "order": 30,
                     "pluginId": "forms",
                     "screen": "forms.list"
                   },
@@ -48579,6 +48585,7 @@
                       "variables"
                     ],
                     "label": "Logic",
+                    "order": 40,
                     "pluginId": "logic",
                     "screen": "logic.page"
                   }
@@ -48600,6 +48607,7 @@
                     },
                     "id": "orders",
                     "label": "Orders",
+                    "order": 10,
                     "pluginId": "commerce",
                     "screen": "commerce.orders",
                     "sections": [
@@ -48671,6 +48679,7 @@
                       "inventory"
                     ],
                     "label": "Products",
+                    "order": 20,
                     "pluginId": "commerce",
                     "screen": "commerce.products",
                     "sections": [
@@ -48714,6 +48723,7 @@
                     },
                     "id": "bookings",
                     "label": "Bookings",
+                    "order": 30,
                     "pluginId": "bookings",
                     "screen": "bookings.calendar"
                   },
@@ -48728,6 +48738,7 @@
                     },
                     "id": "events",
                     "label": "Events",
+                    "order": 40,
                     "pluginId": "events-calendar",
                     "screen": "events-calendar.events"
                   }
@@ -48749,6 +48760,7 @@
                     },
                     "id": "inbox",
                     "label": "Inbox",
+                    "order": 10,
                     "pluginId": "inbox",
                     "screen": "inbox.submissions",
                     "sections": [
@@ -48789,6 +48801,7 @@
                       "tasks"
                     ],
                     "label": "CRM",
+                    "order": 20,
                     "pluginId": "crm",
                     "screen": "crm.contacts",
                     "sections": [
@@ -48877,6 +48890,7 @@
                     },
                     "id": "emails",
                     "label": "Emails",
+                    "order": 30,
                     "pluginId": "email",
                     "screen": "email.messages",
                     "sections": [
@@ -48954,6 +48968,7 @@
                     },
                     "id": "automation",
                     "label": "Automation",
+                    "order": 10,
                     "pluginId": "workflows",
                     "screen": "workflows.automation"
                   },
@@ -48968,6 +48983,7 @@
                     },
                     "id": "redirects",
                     "label": "Redirects",
+                    "order": 20,
                     "pluginId": "redirects",
                     "screen": "redirects.list"
                   },
@@ -48982,6 +48998,7 @@
                     },
                     "id": "funnels",
                     "label": "Funnels",
+                    "order": 30,
                     "pluginId": "funnels",
                     "screen": "funnels.list"
                   },
@@ -48999,13 +49016,14 @@
                       "sms"
                     ],
                     "label": "Customer texts",
+                    "order": 40,
                     "pluginId": "sms",
                     "screen": "sms.texts"
                   },
                   {
                     "console": {
-                      "id": "/ai-jobs",
-                      "surface": "hostPluginTab"
+                      "id": "consoleTopBar/ai-jobs-indicator",
+                      "surface": "consoleWidget"
                     },
                     "icon": {
                       "android": "auto_awesome",
@@ -49013,6 +49031,7 @@
                     },
                     "id": "aiJobs",
                     "label": "AI jobs",
+                    "order": 50,
                     "pluginId": "ai",
                     "screen": "ai.jobs"
                   },
@@ -49027,6 +49046,7 @@
                     },
                     "id": "data",
                     "label": "Data",
+                    "order": 60,
                     "pluginId": "data",
                     "screen": "data.datasets"
                   }
@@ -49047,6 +49067,7 @@
                     },
                     "id": "siteSettings",
                     "label": "Site settings",
+                    "order": 10,
                     "screen": "shell.siteSettings"
                   }
                 ]
@@ -49082,6 +49103,7 @@
                     },
                     "id": "home",
                     "label": "Home",
+                    "order": 10,
                     "screen": "shell.home"
                   },
                   {
@@ -49101,6 +49123,7 @@
                       "visitors"
                     ],
                     "label": "Overview",
+                    "order": 20,
                     "screen": "shell.analytics"
                   }
                 ]
@@ -49128,6 +49151,7 @@
                     },
                     "id": "pages",
                     "label": "Pages",
+                    "order": 10,
                     "screen": "site.pages",
                     "sections": [
                       {
@@ -49188,6 +49212,7 @@
                     },
                     "id": "media",
                     "label": "Media",
+                    "order": 20,
                     "screen": "site.media"
                   },
                   {
@@ -49201,6 +49226,7 @@
                     },
                     "id": "forms",
                     "label": "Forms",
+                    "order": 30,
                     "pluginId": "forms",
                     "screen": "forms.list"
                   }
@@ -49222,6 +49248,7 @@
                     },
                     "id": "orders",
                     "label": "Orders",
+                    "order": 10,
                     "pluginId": "commerce",
                     "screen": "commerce.orders",
                     "sections": [
@@ -49293,6 +49320,7 @@
                       "inventory"
                     ],
                     "label": "Products",
+                    "order": 20,
                     "pluginId": "commerce",
                     "screen": "commerce.products",
                     "sections": [
@@ -49343,6 +49371,7 @@
                     },
                     "id": "inbox",
                     "label": "Inbox",
+                    "order": 10,
                     "pluginId": "inbox",
                     "screen": "inbox.submissions",
                     "sections": [
@@ -49383,6 +49412,7 @@
                     },
                     "id": "siteSettings",
                     "label": "Site settings",
+                    "order": 10,
                     "screen": "shell.siteSettings"
                   }
                 ]
@@ -49418,6 +49448,7 @@
                       "collaborators"
                     ],
                     "label": "Users",
+                    "order": 10,
                     "screen": "core.site.users"
                   }
                 ]
@@ -49439,6 +49470,7 @@
                     },
                     "id": "details",
                     "label": "Basic details",
+                    "order": 10,
                     "params": {
                       "section": "details"
                     },
@@ -49456,6 +49488,7 @@
                     },
                     "id": "business",
                     "label": "Business profile",
+                    "order": 20,
                     "params": {
                       "section": "business"
                     },
@@ -49476,6 +49509,7 @@
                       "search"
                     ],
                     "label": "SEO",
+                    "order": 30,
                     "params": {
                       "section": "seo"
                     },
@@ -49497,6 +49531,7 @@
                       "pixels"
                     ],
                     "label": "Tracking",
+                    "order": 40,
                     "params": {
                       "section": "tracking"
                     },
@@ -49518,6 +49553,7 @@
                       "fonts"
                     ],
                     "label": "Theme",
+                    "order": 50,
                     "screen": "site.theme"
                   },
                   {
@@ -49532,6 +49568,7 @@
                     },
                     "id": "emails",
                     "label": "Emails",
+                    "order": 60,
                     "params": {
                       "section": "emails"
                     },
@@ -49549,6 +49586,7 @@
                     },
                     "id": "integrations",
                     "label": "Integrations",
+                    "order": 70,
                     "params": {
                       "section": "integrations"
                     },
@@ -49588,6 +49626,7 @@
                       "collaborators"
                     ],
                     "label": "Users",
+                    "order": 10,
                     "screen": "core.site.users"
                   }
                 ]
@@ -49609,6 +49648,7 @@
                     },
                     "id": "details",
                     "label": "Basic details",
+                    "order": 10,
                     "params": {
                       "section": "details"
                     },
@@ -49626,6 +49666,7 @@
                     },
                     "id": "business",
                     "label": "Business profile",
+                    "order": 20,
                     "params": {
                       "section": "business"
                     },
@@ -49646,6 +49687,7 @@
                       "search"
                     ],
                     "label": "SEO",
+                    "order": 30,
                     "params": {
                       "section": "seo"
                     },
@@ -49667,6 +49709,7 @@
                       "pixels"
                     ],
                     "label": "Tracking",
+                    "order": 40,
                     "params": {
                       "section": "tracking"
                     },
@@ -49688,6 +49731,7 @@
                       "fonts"
                     ],
                     "label": "Theme",
+                    "order": 50,
                     "screen": "site.theme"
                   },
                   {
@@ -49702,6 +49746,7 @@
                     },
                     "id": "emails",
                     "label": "Emails",
+                    "order": 60,
                     "params": {
                       "section": "emails"
                     },
@@ -49719,6 +49764,7 @@
                     },
                     "id": "integrations",
                     "label": "Integrations",
+                    "order": 70,
                     "params": {
                       "section": "integrations"
                     },
@@ -49742,6 +49788,7 @@
                     },
                     "id": "general",
                     "label": "General",
+                    "order": 10,
                     "requiresHostAdmin": true,
                     "screen": "core.site.general"
                   },
@@ -49756,6 +49803,7 @@
                     },
                     "id": "plugins",
                     "label": "Plugins",
+                    "order": 20,
                     "requiresHostAdmin": true,
                     "screen": "core.site.plugins"
                   },
@@ -49770,6 +49818,7 @@
                     },
                     "id": "domain",
                     "label": "Custom Domain",
+                    "order": 30,
                     "requiresHostAdmin": true,
                     "screen": "core.site.domain"
                   },
@@ -49784,6 +49833,7 @@
                     },
                     "id": "security",
                     "label": "Security",
+                    "order": 40,
                     "requiresHostAdmin": true,
                     "screen": "core.site.security"
                   },
@@ -49798,6 +49848,7 @@
                     },
                     "id": "errorPages",
                     "label": "Error pages",
+                    "order": 50,
                     "requiresHostAdmin": true,
                     "screen": "core.site.errorPages"
                   },
@@ -49812,6 +49863,7 @@
                     },
                     "id": "activity",
                     "label": "Activity",
+                    "order": 60,
                     "requiresHostAdmin": true,
                     "screen": "core.site.activity"
                   },
@@ -49826,6 +49878,7 @@
                     },
                     "id": "backup",
                     "label": "Backup & template",
+                    "order": 70,
                     "requiresHostAdmin": true,
                     "screen": "core.site.backup"
                   },
@@ -49840,6 +49893,7 @@
                     },
                     "id": "danger",
                     "label": "Danger zone",
+                    "order": 80,
                     "requiresHostAdmin": true,
                     "screen": "core.site.delete"
                   }
@@ -49879,6 +49933,7 @@
                     },
                     "id": "home",
                     "label": "Home",
+                    "order": 10,
                     "screen": "shell.home"
                   }
                 ]
@@ -49905,41 +49960,8 @@
                     },
                     "id": "sites",
                     "label": "Sites",
+                    "order": 10,
                     "screen": "site.sites"
-                  },
-                  {
-                    "console": {
-                      "id": "/inbox",
-                      "surface": "orgPluginTab"
-                    },
-                    "icon": {
-                      "android": "inbox",
-                      "apple": "tray"
-                    },
-                    "id": "inbox",
-                    "label": "Inbox",
-                    "pluginId": "inbox",
-                    "screen": "inbox.submissions",
-                    "sections": [
-                      {
-                        "console": {
-                          "id": "/inbox/submissions",
-                          "surface": "orgPluginSection"
-                        },
-                        "id": "submissions",
-                        "label": "Submissions",
-                        "screen": "inbox.submissions"
-                      },
-                      {
-                        "console": {
-                          "id": "/inbox/contacts",
-                          "surface": "orgPluginSection"
-                        },
-                        "id": "contacts",
-                        "label": "Members & leads",
-                        "screen": "inbox.people"
-                      }
-                    ]
                   },
                   {
                     "console": {
@@ -49958,6 +49980,7 @@
                       "tasks"
                     ],
                     "label": "CRM",
+                    "order": 20,
                     "pluginId": "crm",
                     "screen": "crm.contacts",
                     "sections": [
@@ -50037,6 +50060,41 @@
                   },
                   {
                     "console": {
+                      "id": "/inbox",
+                      "surface": "orgPluginTab"
+                    },
+                    "icon": {
+                      "android": "inbox",
+                      "apple": "tray"
+                    },
+                    "id": "inbox",
+                    "label": "Inbox",
+                    "order": 30,
+                    "pluginId": "inbox",
+                    "screen": "inbox.submissions",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/inbox/submissions",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "submissions",
+                        "label": "Submissions",
+                        "screen": "inbox.submissions"
+                      },
+                      {
+                        "console": {
+                          "id": "/inbox/contacts",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "contacts",
+                        "label": "Members & leads",
+                        "screen": "inbox.people"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
                       "id": "/emails",
                       "surface": "orgPluginTab"
                     },
@@ -50046,6 +50104,7 @@
                     },
                     "id": "emails",
                     "label": "Emails",
+                    "order": 40,
                     "pluginId": "email",
                     "screen": "email.messages",
                     "sections": [
@@ -50116,6 +50175,7 @@
                     },
                     "id": "media",
                     "label": "Media",
+                    "order": 90,
                     "screen": "site.media"
                   },
                   {
@@ -50129,6 +50189,7 @@
                     },
                     "id": "data",
                     "label": "Data",
+                    "order": 100,
                     "pluginId": "data",
                     "screen": "data.datasets"
                   },
@@ -50143,6 +50204,7 @@
                     },
                     "id": "marketplace",
                     "label": "Marketplace",
+                    "order": 110,
                     "pluginId": "marketplace",
                     "screen": "marketplace.browse",
                     "sections": [
@@ -50212,6 +50274,7 @@
                       "people"
                     ],
                     "label": "Members",
+                    "order": 10,
                     "screen": "core.team"
                   },
                   {
@@ -50228,6 +50291,7 @@
                       "permissions"
                     ],
                     "label": "Custom roles",
+                    "order": 20,
                     "screen": "core.team.roles"
                   },
                   {
@@ -50244,6 +50308,7 @@
                       "audit log"
                     ],
                     "label": "Recent activity",
+                    "order": 30,
                     "screen": "core.team.activity"
                   }
                 ]
@@ -50269,6 +50334,7 @@
                       "subscription"
                     ],
                     "label": "Plan",
+                    "order": 10,
                     "screen": "core.billing"
                   },
                   {
@@ -50286,6 +50352,7 @@
                       "limits"
                     ],
                     "label": "Usage",
+                    "order": 20,
                     "screen": "core.billing.usage"
                   },
                   {
@@ -50302,6 +50369,7 @@
                       "billing"
                     ],
                     "label": "AI credits",
+                    "order": 30,
                     "pluginId": "ai",
                     "screen": "ai.credits"
                   },
@@ -50320,6 +50388,7 @@
                       "receipts"
                     ],
                     "label": "Invoices",
+                    "order": 40,
                     "screen": "core.billing.invoices"
                   },
                   {
@@ -50338,6 +50407,7 @@
                       "tax"
                     ],
                     "label": "Settings",
+                    "order": 50,
                     "screen": "core.billing.settings"
                   }
                 ]
@@ -50358,6 +50428,7 @@
                     },
                     "id": "plugins",
                     "label": "Plugins",
+                    "order": 10,
                     "screen": "core.plugins"
                   },
                   {
@@ -50376,6 +50447,7 @@
                       "colors"
                     ],
                     "label": "Branding",
+                    "order": 20,
                     "screen": "core.settings.branding"
                   },
                   {
@@ -50393,6 +50465,7 @@
                       "saml"
                     ],
                     "label": "Single sign-on",
+                    "order": 30,
                     "screen": "core.settings.sso"
                   },
                   {
@@ -50406,6 +50479,7 @@
                     },
                     "id": "profile",
                     "label": "Profile",
+                    "order": 40,
                     "screen": "core.settings.profile"
                   },
                   {
@@ -50419,6 +50493,7 @@
                     },
                     "id": "apiKeys",
                     "label": "API keys",
+                    "order": 50,
                     "screen": "core.settings.apiKeys"
                   },
                   {
@@ -50432,6 +50507,7 @@
                     },
                     "id": "integrations",
                     "label": "Integrations",
+                    "order": 60,
                     "screen": "core.settings.integrations"
                   },
                   {
@@ -50449,6 +50525,7 @@
                       "address"
                     ],
                     "label": "General",
+                    "order": 70,
                     "screen": "core.settings.general"
                   }
                 ]
@@ -50473,6 +50550,7 @@
                       "erase"
                     ],
                     "label": "Privacy",
+                    "order": 10,
                     "screen": "core.settings.privacy"
                   },
                   {
@@ -50486,6 +50564,7 @@
                     },
                     "id": "holds",
                     "label": "Holds & reviews",
+                    "order": 20,
                     "screen": "core.settings.holds"
                   },
                   {
@@ -50503,6 +50582,7 @@
                       "export"
                     ],
                     "label": "Import & export",
+                    "order": 30,
                     "screen": "core.settings.data"
                   }
                 ]
@@ -50526,6 +50606,7 @@
                       "transfer"
                     ],
                     "label": "Ownership",
+                    "order": 10,
                     "screen": "core.settings.ownership"
                   },
                   {
@@ -50539,6 +50620,7 @@
                     },
                     "id": "delete",
                     "label": "Delete",
+                    "order": 20,
                     "screen": "core.settings.delete"
                   }
                 ]
@@ -50571,6 +50653,7 @@
                     },
                     "id": "home",
                     "label": "Home",
+                    "order": 10,
                     "screen": "shell.home"
                   }
                 ]
@@ -50597,6 +50680,7 @@
                     },
                     "id": "sites",
                     "label": "Sites",
+                    "order": 10,
                     "screen": "site.sites"
                   },
                   {
@@ -50610,6 +50694,7 @@
                     },
                     "id": "media",
                     "label": "Media",
+                    "order": 90,
                     "screen": "site.media"
                   }
                 ]
@@ -53679,6 +53764,7 @@
     },
     "searchNavScreens": {
       "module": "libs/aglyn/src/lib/app-utils/one-box-search.ts",
+      "leadingValue": "NATIVE_NAV_MANIFEST",
       "cases": [
         {
           "args": [

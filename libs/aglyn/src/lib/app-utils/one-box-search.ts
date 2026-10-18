@@ -23,8 +23,8 @@
  * records together, plus the app's own screens and settings ("billing" finds
  * Plan). The apps ask `GET /api/search` (`ONE_BOX_SEARCH_PATH`) with the
  * person's ID token and get grouped rows back; this module is that payload,
- * the paging rules, and the screens-and-settings group, which comes from the
- * nav manifest and so needs no read at all.
+ * the paging rules, and the screens-and-settings group, which the apps
+ * answer themselves from the nav manifest, with no read at all.
  *
  * Request query: `q` (at least two characters), `orgId` and `hostId` (the
  * scope the person stands in; both optional), `limit` (rows per group,
@@ -36,7 +36,7 @@
  */
 
 import { compareScored, isSearchableQuery, scoreMatch } from './name-match'
-import { resolveNavList, type NativeNavListId } from './native-nav'
+import { resolveNavList, type NativeNavListId, type NativeNavManifest } from './native-nav'
 
 /** The console route the apps call. */
 export const ONE_BOX_SEARCH_PATH = '/api/search'
@@ -53,7 +53,12 @@ export const ONE_BOX_QUERY_MAX = 100
 /** The group of workspaces the person belongs to: the switcher's half. */
 export const ONE_BOX_WORKSPACES_GROUP = 'workspaces'
 
-/** The group of the app's own screens and settings, from the nav manifest. */
+/**
+ * The group of the app's own screens and settings. The apps answer it
+ * themselves, with no read, from the assembled manifest
+ * (`searchNavScreens(ContractValues.nativeNavManifest, …)`), and show it in
+ * the one box beside the route's groups.
+ */
 export const ONE_BOX_SCREENS_GROUP = 'appScreens'
 
 /** One result. */
@@ -164,12 +169,14 @@ const LIST_HEADINGS: Record<NativeNavListId, string> = {
 }
 
 /**
- * The screens-and-settings matches for where the person stands: the
+ * The screens-and-settings matches for where the person stands, from the
+ * assembled manifest (`ContractValues.nativeNavManifest` in the apps): the
  * workspace's lists with no site, the site's lists (and the workspace
  * settings) with one. `enabledPluginIds` is the effective set for that
  * scope, so a screen of a plugin that is off is never offered.
  */
 export function searchNavScreens(
+  manifest: NativeNavManifest,
   text: string,
   scope: 'account' | 'workspace' | 'site',
   enabledPluginIds: readonly string[],
@@ -181,7 +188,7 @@ export function searchNavScreens(
   const seen = new Set<string>()
   const out: OneBoxScored[] = []
   for (const listId of lists) {
-    const list = resolveNavList(listId, enabledPluginIds, hostAdmin)
+    const list = resolveNavList(manifest, listId, enabledPluginIds, hostAdmin)
     for (const group of list.groups) {
       for (const row of group.rows) {
         const where = group.label ? `${LIST_HEADINGS[listId]} · ${group.label}` : LIST_HEADINGS[listId]
