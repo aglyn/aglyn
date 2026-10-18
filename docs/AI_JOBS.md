@@ -2800,6 +2800,29 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   gallery, a portfolio or a lookbook is drawn as pictures on any kind of site
   (`aiLayoutGroupVariant`): Kasvora's "Selected work gallery" was four cards of
   icons, with no picture to fill. Nothing the model sees changed.
+- **Every kind's own common photos, last (AGL-3923).** Each kind of site the guided
+  start offers has its own set of plain, common photos of where its work happens
+  (`KIND_GENERIC`, `aiStockKindGenericTerms`): a restaurant's tables and plates, a
+  trade's tools, a school's library, a portfolio's art supplies, never the
+  business starter's office. An unlisted world's last rung is its kind's set,
+  else its starter's. A listed world (a craft, or a world read from the kind)
+  widens too, to its kind's set alone and only where its world agrees with that
+  kind (read from it, or naming one of its words): a gym whose owner picked
+  Business & services, or a ceramicist who picked Portfolio, keeps a slot nothing
+  fits without a photo (AGL-3831). Those searches take a hit whose first tags name
+  the set's words (the hero's first tag), never one led by a face or a portrait and
+  never one naming a child. A product, a portrait of the business's people and a
+  record's cover are unchanged. A picture's subject leaves out words that say only
+  that it is one of a set (`PLACEHOLDER_SUBJECTS`: "project", "piece", "sample",
+  "work", "selected", "four" and the ordinals), and the Portfolio kind's world never
+  leads with a bee, a tattoo or makeup. The beta.266 Mexicano portfolio (job
+  C75nFALn3H) titled its works "Project one" to "Project four", searched "project",
+  "project four" and "four" (students at a whiteboard, lavender, a running track),
+  and opened on "artist bee". Its seven recorded answers replay in
+  `ai-stock-photo-mexicano.spec.ts`. In those replays every slot but the tall
+  works chose a photo, while production's library got none and logged nothing: a
+  chosen photo that never reached the library is now logged and takes a starter
+  (above).
 - **Alt text that says what the photo shows (AGL-3805).** The slot's alt text is the model's,
   written before any photo was found, so a stock photo placed in it answers for its own
   words (`aiStockPhotoAlt`): the slot's words are kept on an English site when a word of
