@@ -609,6 +609,21 @@ export interface AiJob {
    * `canceled` at its next write. Absent on a job nobody canceled.
    */
   cancelRequested?: AiJobCancelRequest | null
+  /**
+   * The empty site this guided start was for was removed (AGL-3936): the
+   * job was cancelled or failed before it built anything, nobody chose what
+   * to do next within the grace period, and the AI jobs beat deleted the
+   * site. Written once, by the beat, after the site is gone. Absent on every
+   * other job.
+   */
+  siteRemoved?: AiJobSiteRemoved | null
+}
+
+/** When the AI jobs beat removed a guided start's empty site, and which (AGL-3936). */
+export interface AiJobSiteRemoved {
+  at: ITimestamp
+  /** The site's name as it was, for a sentence that names it. */
+  name: string | null
 }
 
 /** Who asked to cancel a job, and when (AGL-3616). */
@@ -733,4 +748,10 @@ export interface AiJobSummary {
    * the job is terminal, and on every job nobody canceled.
    */
   cancelRequested?: boolean
+  /**
+   * The empty site this guided start was for was removed (AGL-3936): its
+   * page is gone, and Start again opens Create site with the same answers.
+   * Absent on every other job.
+   */
+  siteRemoved?: boolean
 }

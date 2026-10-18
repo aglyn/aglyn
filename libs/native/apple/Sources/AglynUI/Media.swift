@@ -54,6 +54,46 @@ public struct AglynRemoteImage: View {
   }
 }
 
+/// A brand picture in a small square: a workspace's logo or a site's favicon, its dark-appearance art in dark mode
+/// when there is one, and `fallback` (the kit's symbol) while there is none, while it loads, or when it fails.
+public struct AglynBrandPicture<Fallback: View>: View {
+  @Environment(\.colorScheme) private var scheme
+  let url: URL?
+  let darkURL: URL?
+  let size: CGFloat
+  let cornerRadius: CGFloat
+  let fallback: Fallback
+
+  public init(
+    _ url: URL?, darkURL: URL? = nil, size: CGFloat, cornerRadius: CGFloat,
+    @ViewBuilder fallback: () -> Fallback
+  ) {
+    self.url = url
+    self.darkURL = darkURL
+    self.size = size
+    self.cornerRadius = cornerRadius
+    self.fallback = fallback()
+  }
+
+  public var body: some View {
+    if let shown = (scheme == .dark ? darkURL : nil) ?? url {
+      AsyncImage(url: shown) { phase in
+        if let image = phase.image {
+          image.resizable().scaledToFill()
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        } else {
+          fallback
+        }
+      }
+      .frame(width: size, height: size)
+      .accessibilityHidden(true)
+    } else {
+      fallback
+    }
+  }
+}
+
 /// A square tile in a media grid: the preview (or the kind's symbol), the
 /// file name, and a badge ("Private") in the corner.
 public struct AglynMediaTile: View {

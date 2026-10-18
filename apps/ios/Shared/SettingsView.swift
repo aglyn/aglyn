@@ -70,7 +70,7 @@ struct SettingsView: View {
         .accessibilityIdentifier("settings-notifications")
       }
       Section("About") {
-        LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
+        LabeledContent("Version", value: AppVersion.current)
         if let origin = model.config?.consoleOrigin {
           LabeledContent("Console", value: origin)
         }

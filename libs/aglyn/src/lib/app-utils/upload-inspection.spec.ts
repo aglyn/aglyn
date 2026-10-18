@@ -18,6 +18,7 @@
 import {
   EICAR_TEST_SIGNATURE,
   inspectUploadBytes,
+  sniffPhotoContentType,
   UPLOAD_INSPECTION_HEAD_BYTES,
   uploadInspectionNeedsTail,
 } from './upload-inspection'
@@ -347,6 +348,28 @@ describe('inspectUploadBytes', () => {
       expect(uploadInspectionNeedsTail('video/mp4')).toBe(false)
       expect(uploadInspectionNeedsTail('image/png')).toBe(false)
       expect(uploadInspectionNeedsTail('application/zip')).toBe(false)
+    })
+  })
+
+  describe('sniffPhotoContentType (AGL-3923)', () => {
+    it('names a photo by its bytes, as the type check reads them', () => {
+      const jpeg = bytes(0xff, 0xd8, 0xff, 0xe0, 0, 0x10)
+      const webp = Buffer.concat([Buffer.from('RIFF'), bytes(0x24, 0, 0, 0), Buffer.from('WEBPVP8 ')])
+      const wave = Buffer.concat([Buffer.from('RIFF'), bytes(0x24, 0, 0, 0), Buffer.from('WAVEfmt ')])
+      expect(sniffPhotoContentType(jpeg)).toBe('image/jpeg')
+      expect(sniffPhotoContentType(pngHead())).toBe('image/png')
+      expect(sniffPhotoContentType(Buffer.from('GIF89a....'))).toBe('image/gif')
+      expect(sniffPhotoContentType(webp)).toBe('image/webp')
+      expect(sniffPhotoContentType(wave)).toBeNull()
+      expect(sniffPhotoContentType(Buffer.from('<html>'))).toBeNull()
+      expect(sniffPhotoContentType(bytes())).toBeNull()
+      // What it names passes the upload check under that name.
+      for (const file of [jpeg, pngHead(), webp]) {
+        const contentType = sniffPhotoContentType(file) as string
+        expect(inspectUploadBytes({ bytes: file, contentType, fileName: 'photo' })).toBeNull()
+      }
+      // A JPEG labeled PNG is what the console refused for Pixabay 10157445.
+      expect(inspectUploadBytes({ bytes: jpeg, contentType: 'image/png', fileName: 'pixabay-10157445.png' })?.code).toBe('type_mismatch')
     })
   })
 })

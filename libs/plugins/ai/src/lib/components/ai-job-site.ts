@@ -33,7 +33,12 @@ import { useEffect, useRef, useState } from 'react'
 export type AiJobSite =
   | { status: 'loading' }
   | { status: 'ready'; orgId: string; name: string }
-  | { status: 'error' }
+  /**
+   * `removed`: the read answered and the site is not there — deleted, as the
+   * AI jobs beat deletes the empty site a stopped guided start left
+   * (AGL-3936). Without it, the read failed or named no workspace.
+   */
+  | { status: 'error'; removed?: boolean }
 
 /** How long the site's read may take before the page says it could not be read. */
 export const AI_JOB_SITE_TIMEOUT_MS = 15_000
@@ -60,6 +65,10 @@ export function useAiJobSite(hostId: string | null | undefined): AiJobSite {
     const timer = setTimeout(() => settle({ status: 'error' }), AI_JOB_SITE_TIMEOUT_MS)
     void getDoc(doc(firestoreRef.current, 'hosts', hostId))
       .then((snapshot) => {
+        if (snapshot.exists?.() === false) {
+          settle({ status: 'error', removed: true })
+          return
+        }
         const data = (snapshot.data() ?? {}) as { orgId?: unknown; displayName?: unknown }
         const orgId = typeof data.orgId === 'string' ? data.orgId : ''
         settle(

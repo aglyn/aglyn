@@ -98,7 +98,7 @@ public enum BesignerEntry {
 
   /// This build's version, for the marker.
   public static var appVersion: String {
-    Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+    AppVersion.current
   }
 
   private static func bareOf(_ path: String) -> String {

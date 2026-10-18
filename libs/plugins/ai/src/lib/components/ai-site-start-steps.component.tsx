@@ -34,18 +34,20 @@ import { HelpTip } from '@aglyn/shared-ui-jsx'
 import { OptionCardGrid } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
 import {
   Box,
-  Button,
   Divider,
   LinearProgress,
+  List,
+  ListItemButton,
   MenuItem,
   Stack,
   Step,
+  StepButton,
   StepLabel,
   Stepper,
   TextField,
   Typography,
 } from '@mui/material'
-import { Fragment, type ReactNode, type Ref } from 'react'
+import { Fragment, useId, type ReactNode, type Ref } from 'react'
 import { AI_SITE_FREE_PAGES_NOTE, AI_SITE_SUBMISSION_CHOICES, type AiSiteSubmissions } from '../model/ai-site-job'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
 import { AI_SITE_START_TYPES, aiSiteStartKind, type AiSiteStartAnswers } from '../model/ai-site-start'
@@ -116,8 +118,21 @@ export function startTypeTitle(type: string): string {
 /** The id the style grid gives "Pick for me", which is no kind: the answers' `kind: null`. */
 export const AI_SITE_STYLE_AUTO = 'auto'
 
-/** The progress through the steps: labeled steps on a wide screen, a bar and "Step 3 of 6" on a phone. */
-export function StartProgress({ step, compact }: { step: AiSiteStartStep; compact: boolean }) {
+/**
+ * The progress through the steps: labeled steps on a wide screen, a bar and
+ * "Step 3 of 6" on a phone. On a wide screen a step already answered is a
+ * button back to it (`onStep`), because a checked step reads as a link: the
+ * guided start's dead clicks were people clicking it to go back.
+ */
+export function StartProgress({
+  step,
+  compact,
+  onStep,
+}: {
+  step: AiSiteStartStep
+  compact: boolean
+  onStep?: (step: AiSiteStartStep) => void
+}) {
   const index = aiSiteStartStepIndex(step)
   const count = AI_SITE_START_STEPS.length
   const name = `Step ${index + 1} of ${count}`
@@ -133,9 +148,15 @@ export function StartProgress({ step, compact }: { step: AiSiteStartStep; compac
   }
   return (
     <Stepper activeStep={index} alternativeLabel aria-label={name} data-start-area="progress">
-      {AI_SITE_START_STEPS.map((id) => (
+      {AI_SITE_START_STEPS.map((id, at) => (
         <Step key={id}>
-          <StepLabel>{AI_SITE_START_STEP_LABELS[id]}</StepLabel>
+          {onStep && at < index ? (
+            <StepButton onClick={() => onStep(id)} aria-label={`Back to ${AI_SITE_START_STEP_LABELS[id].toLowerCase()}`}>
+              {AI_SITE_START_STEP_LABELS[id]}
+            </StepButton>
+          ) : (
+            <StepLabel>{AI_SITE_START_STEP_LABELS[id]}</StepLabel>
+          )}
         </Step>
       ))}
     </Stepper>
@@ -340,22 +361,32 @@ export function DetailsStep({
   )
 }
 
-/** One answer on the review, with the way back to the step that asks it. */
+/**
+ * One answer on the review, as one button back to the step that asks it. The
+ * whole row is the target, not only "Edit" at its end: people clicked the
+ * answer itself to change it, and nothing happened.
+ */
 function ReviewRow({ label, value, step, onEdit }: { label: string; value: ReactNode; step: AiSiteStartStep; onEdit: (step: AiSiteStartStep) => void }) {
+  const valueId = useId()
   return (
-    <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start', py: 1.5 }}>
+    <ListItemButton
+      onClick={() => onEdit(step)}
+      aria-label={`Edit ${label.toLowerCase()}`}
+      aria-describedby={valueId}
+      sx={{ alignItems: 'flex-start', gap: 2, py: 1.5, px: 1, mx: -1, borderRadius: 1 }}
+    >
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography variant="body2" color="text.secondary" component="dt">
+        <Typography variant="body2" color="text.secondary" component="span" sx={{ display: 'block' }}>
           {label}
         </Typography>
-        <Typography variant="body1" component="dd" sx={{ m: 0, overflowWrap: 'anywhere' }}>
+        <Typography id={valueId} variant="body1" component="span" sx={{ display: 'block', overflowWrap: 'anywhere' }}>
           {value}
         </Typography>
       </Box>
-      <Button size="small" onClick={() => onEdit(step)} aria-label={`Edit ${label.toLowerCase()}`}>
+      <Typography variant="button" color="primary" component="span" aria-hidden sx={{ fontSize: '0.8125rem', pt: 0.25 }}>
         {'Edit'}
-      </Button>
-    </Stack>
+      </Typography>
+    </ListItemButton>
   )
 }
 
@@ -383,14 +414,16 @@ export function ReviewStep({
   ]
   return (
     <Stack spacing={3}>
-      <Box component="dl" data-start-area="review" sx={{ m: 0 }}>
+      <List disablePadding data-start-area="review" aria-label="Your answers">
         {rows.map((row, index) => (
           <Fragment key={row.label}>
-            {index > 0 && <Divider component="div" />}
-            <ReviewRow {...row} onEdit={onEdit} />
+            {index > 0 && <Divider component="li" aria-hidden />}
+            <li>
+              <ReviewRow {...row} onEdit={onEdit} />
+            </li>
           </Fragment>
         ))}
-      </Box>
+      </List>
       {children}
     </Stack>
   )

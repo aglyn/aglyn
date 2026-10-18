@@ -777,6 +777,39 @@ describe('the questions become a site scaffold', () => {
   })
 })
 
+describe('the places people clicked that did nothing (2026-10-18)', () => {
+  it('goes back to a step already answered from the progress, keeping the answers', async () => {
+    await openCard({ host: null })
+    await answerTo('style')
+    // Only the steps behind are controls (MUI draws a stepper's buttons as
+    // tabs); the ones ahead are labels.
+    expect(screen.queryByRole('tab', { name: 'Back to review' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Back to details' })).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: 'Back to your site' }))
+    await onStep('kind')
+    expect(
+      (screen.getByLabelText(/What kind of site are you creating\?/) as HTMLInputElement).value,
+    ).toBe('a neighborhood dog groomer')
+  })
+
+  it('from the review, a step in the progress is Edit: its Next returns to the review', async () => {
+    await openCard({ host: null })
+    await answerTo('review')
+    fireEvent.click(screen.getByRole('tab', { name: 'Back to audience' }))
+    await onStep('audience')
+    fireEvent.click(screen.getByRole('button', { name: 'Back to review' }))
+    await onStep('review')
+  })
+
+  it('edits an answer from anywhere on its row, not only the word Edit', async () => {
+    await openCard({ host: null })
+    await answerTo('review')
+    // The answer itself, which is where people clicked.
+    fireEvent.click(screen.getByText('a neighborhood dog groomer'))
+    await onStep('kind')
+  })
+})
+
 describe('a Free workspace’s guided start (AGL-3594)', () => {
   async function openFreeCard(freeCredits?: Record<string, unknown>) {
     await openChoice({}, { jobs: [], freeTaste: true, ...(freeCredits ? { freeCredits } : {}) })
@@ -1140,6 +1173,20 @@ describe('before the site exists (AGL-3761)', () => {
   beforeEach(() => {
     leave = jest.fn()
     mockPush.mockReset()
+  })
+
+  it('opens on a removed start’s answers, its name and address still to type (AGL-3936)', async () => {
+    window.sessionStorage.setItem(
+      'aglyn:ai-site-start:answers',
+      JSON.stringify({ inputs: { businessType: 'trading card shop', audience: 'collectors', pages: 3 }, at: Date.now() }),
+    )
+    await openChoice(pendingProps(pendingSite()))
+    // The first question is still where the site's name and address are asked.
+    expect(screen.getByText('The site’s name and address')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await onStep('kind')
+    expect((screen.getByLabelText(/What kind of site are you creating\?/) as HTMLInputElement).value).toBe('trading card shop')
+    window.sessionStorage.clear()
   })
 
   it('draws the shell’s name and address on step 1, and tells the shell it is here', async () => {

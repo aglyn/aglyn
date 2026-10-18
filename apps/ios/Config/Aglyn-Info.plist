@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>AGLYN_VERSION</key>
+	<string>$(AGLYN_VERSION)</string>
 	<key>AGLYN_CONSOLE_URL</key>
 	<string>$(AGLYN_CONSOLE_URL)</string>
 	<key>AGLYN_FIREBASE_API_KEY</key>

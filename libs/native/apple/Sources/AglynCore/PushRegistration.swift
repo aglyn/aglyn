@@ -59,7 +59,7 @@ public struct PushDeviceRegistration: @unchecked Sendable {
   private let defaults: UserDefaults
 
   public init(
-    app: AglynAppID, appVersion: String? = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+    app: AglynAppID, appVersion: String? = AppVersion.current,
     environment: ApnsEnvironment = .current, defaults: UserDefaults = .standard
   ) {
     self.app = app

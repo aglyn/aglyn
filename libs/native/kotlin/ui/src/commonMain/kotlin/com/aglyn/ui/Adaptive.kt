@@ -8,6 +8,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -15,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.PermanentDrawerSheet
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -56,6 +58,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.testTag
 
+/**
+ * The narrowest pane that holds a list beside its detail (a 320dp list and a 400dp detail). Narrower, as on a
+ * 7-inch tablet held upright or a medium window beside the drawer, the list fills the pane and the detail opens
+ * over it, as on a phone, instead of squeezing the list to a column of clipped words.
+ */
+val TwoPaneMinWidth: Dp = 720.dp
+
 /** The window's width class, by the Material breakpoints (600 / 840 / 1200 dp). */
 enum class WidthClass { COMPACT, MEDIUM, EXPANDED, LARGE }
 
@@ -84,7 +93,7 @@ fun AglynNavigationSuite(
   selected: String,
   onSelect: (String) -> Unit,
   modifier: Modifier = Modifier,
-  /** Shown at the top of the permanent drawer (EXPANDED and wider). */
+  /** Pinned at the top of the permanent drawer (EXPANDED and wider), above the rows. */
   drawerHeader: @Composable () -> Unit = {},
   /** Shown at the foot of the permanent drawer: the workspace and site, opening the switcher. */
   drawerFooter: @Composable () -> Unit = {},
@@ -96,9 +105,11 @@ fun AglynNavigationSuite(
     Row(modifier.fillMaxSize().testTag("nav-drawer")) {
       PermanentDrawerSheet(Modifier.width(280.dp), drawerContainerColor = colors.surfaceContainerLow) {
         Column(Modifier.fillMaxHeight()) {
-          // The lockup scrolls with the rows, so it never sits over them; the switcher stays put at the foot.
+          // The lockup is pinned at the top above a divider and the rows scroll in the space below it, so no row ever
+          // passes under it; the switcher stays put at the foot the same way.
+          drawerHeader()
+          HorizontalDivider()
           Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            drawerHeader()
             Column(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
               for (destination in destinations) {
                 destination.section?.let {
@@ -227,8 +238,9 @@ fun CloseWhenGone(present: Boolean?) {
 }
 
 /**
- * A list beside its selected item's detail on medium and wider windows, and
- * list then detail (back returns to the list) on phones. Keys are strings so
+ * A list beside its selected item's detail when the pane is at least
+ * [TwoPaneMinWidth] wide, and list then detail (back returns to the list)
+ * when it is narrower, as on phones. Keys are strings so
  * the selection survives configuration changes, and the list keeps its scroll
  * position and filters while a phone shows the detail.
  *
@@ -257,36 +269,37 @@ fun AglynListDetail(
   val removed by rememberUpdatedState(onItemRemoved)
   val handle = remember(selection) { ListDetailSelection(clear = { selection.value = null }, onRemoved = { removed() }) }
   val panes = rememberSaveableStateHolder()
-  val wide = currentWidthClass() != WidthClass.COMPACT
   CompositionLocalProvider(LocalListDetailSelection provides handle) {
-    if (wide) {
-      Row(modifier.fillMaxSize()) {
-        Box(Modifier.weight(0.4f).fillMaxHeight()) { panes.SaveableStateProvider("list") { list(selected) { selected = it } } }
-        VerticalDivider()
-        Box(Modifier.weight(0.6f).fillMaxHeight()) {
-          AnimatedContent(selected, transitionSpec = { fadeIn() togetherWith fadeOut() }) { key ->
-            panes.SaveableStateProvider("detail:$key") { detail(key) }
+    BoxWithConstraints(modifier.fillMaxSize()) {
+      if (maxWidth >= TwoPaneMinWidth) {
+        Row(Modifier.fillMaxSize()) {
+          Box(Modifier.weight(0.4f).fillMaxHeight()) { panes.SaveableStateProvider("list") { list(selected) { selected = it } } }
+          VerticalDivider()
+          Box(Modifier.weight(0.6f).fillMaxHeight()) {
+            AnimatedContent(selected, transitionSpec = { fadeIn() togetherWith fadeOut() }) { key ->
+              panes.SaveableStateProvider("detail:$key") { detail(key) }
+            }
           }
         }
-      }
-    } else {
-      BackHandler(enabled = selected != null) { selected = null }
-      AnimatedContent(
-        selected,
-        modifier = modifier.fillMaxSize(),
-        transitionSpec = {
-          val forward = targetState != null
-          (slideInHorizontally { if (forward) it / 4 else -it / 4 } + fadeIn()) togetherWith
-            (slideOutHorizontally { if (forward) -it / 4 else it / 4 } + fadeOut())
-        },
-      ) { key ->
-        if (key == null) {
-          panes.SaveableStateProvider("list") { list(null) { selected = it } }
-        } else {
-          panes.SaveableStateProvider("detail:$key") {
-            Column(Modifier.fillMaxSize()) {
-              Column(Modifier.padding(horizontal = space(2f)).testTag("list-detail-banner"), verticalArrangement = Arrangement.spacedBy(space(1f))) { detailBanner() }
-              Box(Modifier.weight(1f).fillMaxWidth()) { detail(key) }
+      } else {
+        BackHandler(enabled = selected != null) { selected = null }
+        AnimatedContent(
+          selected,
+          modifier = Modifier.fillMaxSize(),
+          transitionSpec = {
+            val forward = targetState != null
+            (slideInHorizontally { if (forward) it / 4 else -it / 4 } + fadeIn()) togetherWith
+              (slideOutHorizontally { if (forward) -it / 4 else it / 4 } + fadeOut())
+          },
+        ) { key ->
+          if (key == null) {
+            panes.SaveableStateProvider("list") { list(null) { selected = it } }
+          } else {
+            panes.SaveableStateProvider("detail:$key") {
+              Column(Modifier.fillMaxSize()) {
+                Column(Modifier.padding(horizontal = space(2f)).testTag("list-detail-banner"), verticalArrangement = Arrangement.spacedBy(space(1f))) { detailBanner() }
+                Box(Modifier.weight(1f).fillMaxWidth()) { detail(key) }
+              }
             }
           }
         }

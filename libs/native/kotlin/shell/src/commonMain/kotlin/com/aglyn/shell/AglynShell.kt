@@ -236,12 +236,13 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
   AglynNavigationSuite(
     destinations, navigator.top, onSelect = navigator::select,
     drawerHeader = {
+      // The logo kit's lockup with the mark's height of clear space on every side.
       AglynLogo(
-        Modifier.padding(start = 26.dp, end = 24.dp, top = 24.dp, bottom = 12.dp).height(28.dp).semantics { heading() },
+        Modifier.padding(28.dp).height(28.dp).semantics { heading() },
         contentDescription = services.config.brandName,
       )
     },
-    drawerFooter = { WorkspaceFooter(workspace) { navigator.push(Route.Switcher) } },
+    drawerFooter = { WorkspaceFooter(workspace, services.api.origin) { navigator.push(Route.Switcher) } },
   ) {
     val route = navigator.current
     // A pushed screen may name itself once its data is in (an AI job by its brief); a fresh state per screen.
@@ -293,7 +294,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
           is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null) { navigator.back() }
           is Route.Besigner -> services.besigner(route.path, { navigator.back() }) { link -> navigator.back(); context.openLink(link) }
           Route.Analytics -> AnalyticsScreen(services, context)
-          Route.Switcher -> SwitcherScreen(services.workspace, workspace) { navigator.back() }
+          Route.Switcher -> SwitcherScreen(services.workspace, workspace, services.api.origin) { navigator.back() }
           Route.NotificationSettings -> NotificationSettingsScreen(services, uid)
           null -> when {
             navigator.top == ShellNavigator.HOME -> HomeScreen(services, context, workspace, widthClass, navigator)

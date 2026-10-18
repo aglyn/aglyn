@@ -107,25 +107,6 @@ func datasetPageScreenID(_ value: String) -> String? {
   return key
 }
 
-/// Where a photo value is served from, for the preview: a reference through the media CDN (qualified for
-/// the site being edited, as `resolveMediaSrc` does), a path on the console origin, or the https address.
-func datasetImagePreviewURL(_ value: String, origin: String, hostID: String?) -> URL? {
-  let trimmed = value.trimmingCharacters(in: .whitespaces)
-  guard !trimmed.isEmpty else { return nil }
-  let base = origin.hasSuffix("/") ? String(origin.dropLast()) : origin
-  if let reference = parseMediaReference(trimmed) {
-    var scope = reference.scope
-    if let hostID, isSegment(hostID), scope.hasPrefix("org:"),
-      let orgID = scope.dropFirst(4).split(separator: ":").first
-    {
-      scope = "org:\(orgID):\(hostID)"
-    }
-    return URL(string: "\(base)/api/media/cdn/\(scope)/\(reference.mediaID)?w=320")
-  }
-  if trimmed.hasPrefix("/") { return URL(string: base + trimmed) }
-  return URL(string: trimmed)
-}
-
 // MARK: Inputs
 
 /// A record's photo: Choose from media opens the library (this site's files and the workspace's), and the
@@ -148,7 +129,7 @@ struct DatasetImageInput: View {
     VStack(alignment: .leading, spacing: AglynSpace.one) {
       Text(label).font(AglynFont.caption).foregroundStyle(.secondary)
       HStack(spacing: AglynSpace.two) {
-        AglynRemoteImage(datasetImagePreviewURL(value, origin: context.api.origin, hostID: context.hostID), systemImage: "photo")
+        AglynRemoteImage(mediaPreviewURL(value, origin: context.api.origin, hostID: context.hostID), systemImage: "photo")
           .frame(width: 96, height: 72)
           .clipShape(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous))
           .accessibilityHidden(true)

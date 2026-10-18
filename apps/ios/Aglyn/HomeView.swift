@@ -29,7 +29,8 @@ struct HomeView: View {
           FirstRunView()
         } else {
           header
-          WideLayoutReader { wide in
+          // Inside the scroll view: the width class alone decides, as a measured width has no height to give here.
+          WideLayoutReader(minimumWidth: nil) { wide in
             if wide {
               HStack(alignment: .top, spacing: AglynSpace.three) {
                 VStack(alignment: .leading, spacing: AglynSpace.three) {
@@ -74,6 +75,7 @@ struct HomeView: View {
       workspace: model.workspace?.org?.name,
       name: picked?.name ?? (model.workspace?.ready == true ? "Pick a site" : "Loading site"),
       address: address,
+      iconURL: model.mediaURL(picked?.favicon, hostID: picked?.id, width: 160),
       status: site.chip,
       // Live needs no sentence: the pages card counts them.
       detail: site.status.flatMap { $0.kind == .live ? nil : $0.detail },

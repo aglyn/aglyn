@@ -17,6 +17,7 @@ import com.aglyn.contracts.PosReceiptChannel
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.hardware.CardCollectOutcome
 import com.aglyn.hardware.CardCollectRequest
 import com.aglyn.hardware.CardCollector
@@ -248,7 +249,9 @@ fun kioskFromCents(product: PosKioskProduct): Long = product.variants.minOfOrNul
 fun kioskProductSoldOut(product: PosKioskProduct): Boolean = product.variants.isNotEmpty() && product.variants.all { it.soldOut }
 
 /** The kiosk's branding as its context carries it. */
-fun PosKioskContextBranding.asDeviceBranding(): PosDeviceBranding = PosDeviceBranding(name, logoUrl, logoDarkUrl, message)
+/** The kiosk's branding as its context carries it, its logos served from [origin], the console the kiosk is paired with. */
+fun PosKioskContextBranding.asDeviceBranding(origin: String): PosDeviceBranding =
+  PosDeviceBranding(name, mediaPreviewUrl(logoUrl, origin, null, 640), mediaPreviewUrl(logoDarkUrl, origin, null, 640), message)
 
 sealed interface PosKioskPhase {
   data object Start : PosKioskPhase

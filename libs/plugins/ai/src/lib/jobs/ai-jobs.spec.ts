@@ -63,6 +63,9 @@ function mockMakeFirestore() {
     set: async (data: Record<string, unknown>, options?: { merge?: boolean }) => {
       mockDocs.set(path, applyData(mockDocs.get(path), data, Boolean(options?.merge)))
     },
+    delete: async () => {
+      mockDocs.delete(path)
+    },
   })
   type Filter = { field: string; op: string; value: unknown }
   const makeQuery = (
@@ -3192,5 +3195,76 @@ describe('canceling a job (AGL-3616)', () => {
     ])
     // The 23 credits the header used stay charged.
     expect(stored).toMatchObject({ status: 'canceled', creditsSpent: 23, creditsReserved: 0 })
+  })
+})
+
+describe('a site start that ends with nothing built schedules its empty site’s removal (AGL-3936)', () => {
+  const MARKER = 'aiEmptySiteSweeps/host-1'
+  const HOUR = 60 * 60_000
+  const newSiteJob = () =>
+    createAiJob(
+      firestore,
+      { orgId: ORG, hostId: 'host-1', kind: 'site', brief: 'A site for a card shop.', createdBy: 'uid-1' },
+      NOW,
+    )
+
+  it('cancelled before it starts, as kc-x-carder was 13 s in: an hour out, naming the job', async () => {
+    const job = await newSiteJob()
+    const cancelAt = new Date(NOW.getTime() + 13_000)
+    await cancelAiJob(firestore, ORG, job.$id, cancelAt, { uid: 'uid-1' })
+    expect(mockDocs.get(MARKER)).toEqual({
+      hostId: 'host-1',
+      orgId: ORG,
+      jobId: job.$id,
+      status: 'canceled',
+      settledAt: cancelAt,
+      dueAt: new Date(cancelAt.getTime() + HOUR),
+      attempts: 0,
+    })
+  })
+
+  it('failed with nothing built: scheduled too', async () => {
+    const job = await newSiteJob()
+    await claimNextStep(firestore, ORG, job.$id, 'route', NOW)
+    await failAiJob(firestore, ORG, job.$id, 'We could not build this site.', { ours: true }, NOW)
+    expect(mockDocs.get(MARKER)).toMatchObject({ jobId: job.$id, status: 'failed' })
+  })
+
+  it('a cancel whose runner never came back ends at the next claim, and schedules there', async () => {
+    const job = await newSiteJob()
+    await claimNextStep(firestore, ORG, job.$id, 'route', NOW)
+    await cancelAiJob(firestore, ORG, job.$id, NOW, { uid: 'uid-1' })
+    expect(mockDocs.has(MARKER)).toBe(false)
+    const expired = new Date(NOW.getTime() + AI_JOB_LEASE_MS + 1)
+    await claimNextStep(firestore, ORG, job.$id, 'beat', expired)
+    expect(mockDocs.get(MARKER)).toMatchObject({ jobId: job.$id, dueAt: new Date(expired.getTime() + HOUR) })
+  })
+
+  it('nothing for a site start that built a layout, or for any other kind', async () => {
+    const built = await newSiteJob()
+    mockDocs.set(`orgs/${ORG}/aiJobs/${built.$id}`, {
+      ...mockDocs.get(`orgs/${ORG}/aiJobs/${built.$id}`),
+      outputs: [{ resource: 'layout', id: 'l1', hostId: 'host-1', label: 'Header' }],
+    })
+    await cancelAiJob(firestore, ORG, built.$id, NOW, { uid: 'uid-1' })
+    const text = await newTextJob()
+    await cancelAiJob(firestore, ORG, text.$id, NOW, { uid: 'uid-1' })
+    expect(mockDocs.has(MARKER)).toBe(false)
+  })
+
+  it('a guided start begun again on the site drops the marker', async () => {
+    const job = await newSiteJob()
+    await cancelAiJob(firestore, ORG, job.$id, NOW, { uid: 'uid-1' })
+    expect(mockDocs.has(MARKER)).toBe(true)
+    await newSiteJob()
+    expect(mockDocs.has(MARKER)).toBe(false)
+  })
+
+  it('the summary says when the site was removed', async () => {
+    const job = await newSiteJob()
+    await cancelAiJob(firestore, ORG, job.$id, NOW, { uid: 'uid-1' })
+    const stored = (await getAiJob(firestore, ORG, job.$id)) as NonNullable<Awaited<ReturnType<typeof getAiJob>>>
+    expect(aiJobSummary(stored, NOW).siteRemoved).toBeUndefined()
+    expect(aiJobSummary({ ...stored, siteRemoved: { at: NOW as never, name: 'Kc x carder' } }, NOW).siteRemoved).toBe(true)
   })
 })

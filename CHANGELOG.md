@@ -9,6 +9,41 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.268 — 2026-10-18
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.267...v1.0.0-beta.268)
+
+### Added
+
+- **ai:** a removed start's Start again opens Create site with its answers ([AGL-3936](https://linear.app/aglyn/issue/AGL-3936))
+- **ai:** remove the empty site a stopped guided start left, an hour later ([AGL-3936](https://linear.app/aglyn/issue/AGL-3936))
+- **console:** core.site-erase runs the delete route's own path for a server removal ([AGL-3936](https://linear.app/aglyn/issue/AGL-3936))
+- **native:** app versions follow the repo's package.json version ([AGL-3924](https://linear.app/aglyn/issue/AGL-3924))
+
+### Fixed
+
+- **stock-photos:** name a photo by its bytes; one refused photo never stops a page ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923))
+- **native:** logos and favicons through one core resolver, pinned sidebar lockup ([AGL-3931](https://linear.app/aglyn/issue/AGL-3931))
+- **ai:** answered steps and review answers act; dead clicks count real content only ([AGL-3930](https://linear.app/aglyn/issue/AGL-3930))
+- **native:** release script passes the Android versionName ([AGL-3924](https://linear.app/aglyn/issue/AGL-3924))
+- **native:** product photos in the detail header, even kiosk tiles, library logos ([AGL-3925](https://linear.app/aglyn/issue/AGL-3925))
+- **native-android:** kiosk tile names hold two lines, so every row is even ([AGL-3906](https://linear.app/aglyn/issue/AGL-3906))
+- **native:** polish found while shooting store screenshots ([AGL-3922](https://linear.app/aglyn/issue/AGL-3922))
+
+### Documentation
+
+- **ai:** the empty site a stopped start left, and the issue ceiling to AGL-3938 ([AGL-3938](https://linear.app/aglyn/issue/AGL-3938), [AGL-3936](https://linear.app/aglyn/issue/AGL-3936))
+- **native:** console parity ticks record what was driven on each device ([AGL-3653](https://linear.app/aglyn/issue/AGL-3653))
+
+<details>
+<summary>Also in this release: 1 test, 2 chore</summary>
+
+- **deps:** lib peer ranges admit firebase 13 ([AGL-3940](https://linear.app/aglyn/issue/AGL-3940))
+- **console:** the empty-site sweep reads screens and creates none ([AGL-3936](https://linear.app/aglyn/issue/AGL-3936))
+- **deps:** Bump the firebase group across 1 directory with 2 updates
+
+</details>
+
 ## v1.0.0-beta.267 — 2026-10-18
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.266...v1.0.0-beta.267)

@@ -40,6 +40,7 @@ import com.aglyn.contracts.InstallTarget
 import com.aglyn.core.FirestoreOrder
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.Live
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.ActionRunner
@@ -252,7 +253,7 @@ private fun ListingBody(
     runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = runner::clear) { Text("Dismiss") } }) }
     SectionCard(null) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1.5f))) {
-        MediaThumb(listing.imageUrl, contentDescription = null, icon = if (plugin) "extension" else "widgets", modifier = Modifier.size(64.dp))
+        MediaThumb(mediaPreviewUrl(listing.imageUrl, context.api.origin, null, 160), contentDescription = null, icon = if (plugin) "extension" else "widgets", modifier = Modifier.size(64.dp))
         Column(Modifier.weight(1f)) {
           Text(listing.name, Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
           Text(
