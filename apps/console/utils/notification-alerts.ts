@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { notificationSound, type NotificationSound } from '@aglyn/aglyn/app-utils/notification-sounds'
+
 /** Unread badge for the tab title; caps so the title stays readable. */
 export function unreadBadge(count: number): string {
   if (!count || count < 1) return ''
@@ -55,47 +57,21 @@ export function stripUnreadBadge(title: string): string {
 }
 
 /**
- * A short two-note chime, synthesized rather than loaded (AGL-650).
+ * Plays the person's notification sound (the default when none is given).
  *
- * Generating it with Web Audio avoids shipping a binary asset that can 404 or
- * miss the cache, costs nothing to load, and works offline. Every failure path
- * is swallowed: audio is a nicety, and browsers block playback outright until
- * the page has been interacted with.
+ * The files are the ones the Apple and Android apps play for a push, so the
+ * console and the apps sound alike. A notification arriving passively plays
+ * only once the page has had a user interaction (sticky activation), which an
+ * in-use console always has; a refusal is silent.
  */
-export function playNotificationChime(): void {
+export function playNotificationChime(sound: NotificationSound = notificationSound(undefined)): void {
   try {
-    const Ctor =
-      typeof window === 'undefined'
-        ? undefined
-        : window.AudioContext ??
-          (window as unknown as { webkitAudioContext?: typeof AudioContext })
-            .webkitAudioContext
-    if (!Ctor) return
-    const ctx = new Ctor()
-    // A notification arriving passively creates a SUSPENDED context (unlike the
-    // click-triggered "Test" button, which unlocks audio via the gesture). Ask
-    // it to resume — succeeds once the page has any prior user interaction
-    // (sticky activation), which an in-use console always has.
-    void ctx.resume?.().catch(() => undefined)
-    const start = ctx.currentTime
-    const gain = ctx.createGain()
-    gain.connect(ctx.destination)
-    // Quiet, with a quick attack and a soft tail — a notification, not an alarm.
-    gain.gain.setValueAtTime(0.0001, start)
-    gain.gain.exponentialRampToValueAtTime(0.12, start + 0.02)
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.45)
-    // A major sixth reads as "arrived" rather than "something broke".
-    ;[880, 1318.5].forEach((frequency, index) => {
-      const osc = ctx.createOscillator()
-      osc.type = 'sine'
-      osc.frequency.value = frequency
-      osc.connect(gain)
-      osc.start(start + index * 0.08)
-      osc.stop(start + 0.45)
-    })
-    window.setTimeout(() => void ctx.close().catch(() => undefined), 900)
+    if (typeof window === 'undefined' || typeof window.Audio === 'undefined') return
+    const audio = new window.Audio(sound.web)
+    audio.volume = 0.7
+    void audio.play().catch(() => undefined)
   } catch {
-    // Autoplay policy, no audio device, or a locked-down context.
+    // Autoplay policy, no audio device, or a locked-down page.
   }
 }
 

@@ -165,9 +165,70 @@ export function namesWithValues(envFiles) {
   return names
 }
 
+/*
+ * THE EMULATOR PROJECT'S FIREBASE IDENTITY (AGL-3910).
+ *
+ * The Admin SDK's default app starts only when `FIREBASE_PRIVATE_KEY`,
+ * `FIREBASE_CLIENT_EMAIL` and `NEXT_PUBLIC_FIREBASE_PROJECT_ID` are all set
+ * (libs/shared/util/fbserver). The repo `.env` carries the service account
+ * and `FIREBASE_PROJECT_ID`, but the NEXT_PUBLIC id and the rest of the web
+ * config live only in the gitignored app env files. A checkout without those
+ * files therefore serves a console where every Admin-SDK route answers 500
+ * with `app/no-app` and the sign-in page dies on `auth/invalid-api-key`.
+ * Neither error names a missing file.
+ *
+ * The emulators answer for one project id, the one the harness's own Admin
+ * SDK and the seed scripts use (`FIREBASE_PROJECT_ID`, else `aglyn-main`), and
+ * every other value below follows from that id. The auth emulator accepts any
+ * web API key. So when an emulator host is named and nothing set a value, the
+ * value is filled in here. A value from the shell or an env file is never
+ * replaced.
+ */
+export const EMULATOR_PROJECT_FALLBACK = 'aglyn-main'
+export const EMULATOR_WEB_API_KEY = 'emulator-web-api-key'
+/**
+ * The sender id the placeholder app id is built from. Remote Config and
+ * Installations refuse to start without an app id, and the console boots both
+ * before sign-in, so a page served without one reloads on the boot error and
+ * never draws the sign-in form.
+ */
+export const EMULATOR_SENDER_ID = '000000000000'
+
+/** The web-config values an emulated server is given when nothing set them. */
+export function emulatorFirebaseIdentity(env) {
+  const project =
+    env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
+    env.FIREBASE_PROJECT_ID ||
+    env.GCLOUD_PROJECT ||
+    EMULATOR_PROJECT_FALLBACK
+  return {
+    NEXT_PUBLIC_FIREBASE_PROJECT_ID: project,
+    NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY: EMULATOR_WEB_API_KEY,
+    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: `${project}.firebaseapp.com`,
+    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: `${project}.appspot.com`,
+    NEXT_PUBLIC_FIREBASE_DATABASE_URL: `https://${project}-default-rtdb.firebaseio.com`,
+    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: EMULATOR_SENDER_ID,
+    NEXT_PUBLIC_FIREBASE_APP_ID: `1:${EMULATOR_SENDER_ID}:web:emulator`,
+  }
+}
+
+/** Whether `env` points the Firebase SDKs at an emulator. */
+export function namesAnEmulator(env) {
+  return Boolean(env.FIRESTORE_EMULATOR_HOST || env.FIREBASE_AUTH_EMULATOR_HOST)
+}
+
+/** The service-account variables the Admin SDK's default app cannot start without. */
+export const ADMIN_SDK_SERVICE_ACCOUNT = ['FIREBASE_PRIVATE_KEY', 'FIREBASE_CLIENT_EMAIL']
+
 /**
  * The environment an emulated server starts with, and the names of the
  * credentials that held a value before they were set empty.
+ *
+ * Beside an emulator, it also returns `identityFilled`: the
+ * {@link emulatorFirebaseIdentity} names that nothing set and that were
+ * filled in. It also returns `adminSdkMissing`: the
+ * {@link ADMIN_SDK_SERVICE_ACCOUNT} names that are still empty, without
+ * which every Admin-SDK route answers 500.
  *
  * Files fill only what is undefined, never an inherited '', which is the one
  * step where this differs from nx. Then every outbound credential, from a
@@ -199,7 +260,25 @@ export function emulatedServeEnvironment(inherited, envFiles, { liveAi = false }
   // A live-AI console answers the local beat pump: the secret the shell
   // exported, or the well-known local one — never the env file's.
   if (liveAi && !inherited.CRON_SECRET) env.CRON_SECRET = LOCAL_CRON_SECRET
-  return { env, blanked: blanked.sort(), passedThrough: passedThrough.sort() }
+  const identityFilled = []
+  const adminSdkMissing = []
+  if (namesAnEmulator(env)) {
+    for (const [name, value] of Object.entries(emulatorFirebaseIdentity(env))) {
+      if (env[name]) continue
+      env[name] = value
+      identityFilled.push(name)
+    }
+    for (const name of ADMIN_SDK_SERVICE_ACCOUNT) {
+      if (!env[name]) adminSdkMissing.push(name)
+    }
+  }
+  return {
+    env,
+    blanked: blanked.sort(),
+    passedThrough: passedThrough.sort(),
+    identityFilled: identityFilled.sort(),
+    adminSdkMissing,
+  }
 }
 
 /**
