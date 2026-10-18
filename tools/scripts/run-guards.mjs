@@ -131,6 +131,9 @@ const REPO_WIDE = new Set([
   // Parses every tracked source file for a Firestore document named by an id
   // the platform did not mint (AGL-3079): a new `.doc()` in any lib reds it.
   'check:id-minting',
+  // Walks every `register…` both apps' boot reaches, across apps/ and libs/
+  // (AGL-3947): a commit to any lib can add a module-scoped registry to it.
+  'check:boot-registries',
   // Compare a GENERATED artifact against a source that is no project's file.
   'check:pricing-tables',
   'generate:docs-help:check',

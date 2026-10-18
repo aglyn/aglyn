@@ -316,6 +316,8 @@
     "test:lib-boundaries": "node --test tools/scripts/lib/lib-boundaries.test.mjs",
     "check:id-minting": "node tools/scripts/check-id-minting.mjs",
     "test:id-minting": "node --test tools/scripts/lib/id-minting.test.mjs",
+    "check:boot-registries": "node tools/scripts/check-boot-registries.mjs",
+    "test:boot-registries": "node --test tools/scripts/lib/boot-registries.test.mjs",
     "test:deploy-args": "node --test tools/scripts/lib/deploy-args.test.mjs",
     "release:prepare": "node tools/scripts/release-prepare.mjs",
     "release:tag": "node tools/scripts/release-tag.mjs",
