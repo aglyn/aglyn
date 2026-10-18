@@ -34,6 +34,8 @@ import {
   type HostDatasetRecord,
   sortDatasetRecords,
 } from '../model/datasets'
+import { datasetRecordWithoutGonePhotos } from '../model/dataset-image-field'
+import { goneSitesOfRecords } from '../repeat/gone-site-photos.server'
 import {
   DATASET_RECORD_PAGES_COLLECTION,
   type DatasetRecordPageBinding,
@@ -196,7 +198,9 @@ async function readRecordUncached(
       .filter((record) => recordAddressOf(record.values, binding.slugField) === address),
   )
   if (!match) return null
-  const record = { ...(match.values ?? {}), $id: match.$id }
+  // A photo of a site since deleted is left out, never drawn broken (AGL-3912).
+  const values = { ...(match.values ?? {}), $id: match.$id }
+  const record = datasetRecordWithoutGonePhotos(values, await goneSitesOfRecords(hostId, [values]))
   return {
     dataset: { id: dataset.id, name: dataset.name, model: dataset.model },
     record,

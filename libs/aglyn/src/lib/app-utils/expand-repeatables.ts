@@ -141,18 +141,22 @@ const WHOLE_BINDING = new RegExp(
 
 /**
  * Whether a copy's element is a binding its record left empty (AGL-3616):
- * its text, `children`, was only `{{item.*}}` tokens and they printed
- * nothing. The copy leaves the element out rather than drawing an empty line
- * (an eyebrow with no venue), and a record that fills the field draws it.
+ * its text, `children`, or its picture, `src`, was only `{{item.*}}` tokens
+ * and they printed nothing. The copy leaves the element out rather than
+ * drawing an empty line (an eyebrow with no venue) or an empty frame (a card
+ * whose record has no photo, AGL-3912), and a record that fills the field
+ * draws it.
  */
 function isEmptyBinding(
   template: Record<string, unknown> | undefined,
   substituted: Record<string, unknown>,
 ): boolean {
-  const text = template?.['children']
-  if (typeof text !== 'string' || !WHOLE_BINDING.test(text)) return false
-  const printed = substituted['children']
-  return typeof printed === 'string' && printed.trim() === ''
+  return (['children', 'src'] as const).some((prop) => {
+    const text = template?.[prop]
+    if (typeof text !== 'string' || !WHOLE_BINDING.test(text)) return false
+    const printed = substituted[prop]
+    return typeof printed === 'string' && printed.trim() === ''
+  })
 }
 
 /**

@@ -33,6 +33,9 @@ firebase-appcheck = "19.4.1"
 play-integrity = "1.6.0"
 # Stripe Terminal Android (Tap to Pay + Bluetooth readers), Aglyn POS only.
 stripe-terminal = "5.8.2"
+# The OkHttp Stripe Terminal is built against (its pom names 4.12.0; 6.0.0 too): its code calls okhttp3.internal.Util,
+# which OkHttp 5 removed, so Aglyn POS pins OkHttp to this for its readers to connect (apps/android/pos/build.gradle.kts).
+stripe-terminal-okhttp = "4.12.0"
 # Stripe's card form (PaymentSheet) for a card typed in at the register, Aglyn POS only.
 stripe-android = "23.21.0"
 # Camera barcode scanning: CameraX preview + ML Kit's bundled barcode model.

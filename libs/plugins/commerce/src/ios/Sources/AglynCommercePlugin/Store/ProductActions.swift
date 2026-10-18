@@ -71,9 +71,9 @@ final class ProductQuotaModel {
     guard let hostID = context.hostID, key != hostID else { return }
     key = hostID
     ready = false
-    // The same count the create door counts (every product document of the site), asked beside the plan, not
-    // before it.
-    async let counted = try? await context.firestore.count(FirestoreQuery(productsPath(hostID)))
+    // The same count the create door counts, asked beside the plan, not before it: the LIVE products, every one
+    // less the deleted ones (AGL-3918), so a deleted product frees its slot and an archived one keeps it.
+    async let counted = try? await context.firestore.liveCount(productsPath(hostID))
     async let plan = context.api.request("/api/orgs/entitlements", query: [("hostId", hostID)])
     used = (await counted ?? nil) ?? used
     do {
@@ -88,6 +88,12 @@ final class ProductQuotaModel {
     } catch {
       key = nil
     }
+  }
+
+  /// Reads the count again once the list moved: a create spends a slot and a delete frees one (AGL-3918).
+  func recount(_ context: NativePluginContext) async {
+    guard let hostID = context.hostID, key == hostID else { return }
+    if let counted = try? await context.firestore.liveCount(productsPath(hostID)) { used = counted }
   }
 
   /// Whether one more product fits (unknown counts as room; the route checks again).
@@ -175,7 +181,7 @@ struct ProductKeysSheet: View {
         }
       }
     }
-    .frame(minWidth: 420, minHeight: 420)
+    .aglynSheetMinimumSize(width: 420, height: 420)
     .task(id: productID) {
       listener?.remove()
       guard let hostID = context.hostID else { return }

@@ -275,6 +275,7 @@ fun deviceReaderLabel(kind: CardCollectorKind, deviceType: String, label: String
     "CHIPPER_2X" -> "BBPOS Chipper 2X BT"
     else -> "Card reader"
   }
-  val name = label?.ifBlank { null } ?: listOfNotNull(model, serial?.ifBlank { null }).joinToString(" ")
+  // A simulated reader's serial is a long made-up id (CHB31SIMULATOR:<uuid>); its model alone names it.
+  val name = label?.ifBlank { null } ?: listOfNotNull(model, serial?.ifBlank { null }?.takeUnless { simulated }).joinToString(" ")
   return if (simulated) "$name (simulated)" else name
 }

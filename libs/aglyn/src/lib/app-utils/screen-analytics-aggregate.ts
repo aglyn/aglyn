@@ -108,3 +108,16 @@ export function topReferrer(row: ScreenTrafficRow): string {
   const top = Object.entries(row.referrers).sort(([, a], [, b]) => b - a)[0]
   return top?.[0] ?? ''
 }
+
+/**
+ * A referrer key as a person reads it: `google_com` → `google.com`.
+ *
+ * The collector keys `referrers` by the referring host with every `.` (and
+ * the other characters a Firestore field path refuses) written as `_`, so a
+ * stored key is never what the visitor's browser showed. Host names carry no
+ * `_` of their own in practice, so turning each back into a dot restores the
+ * address; an empty key stays empty for the caller's `--`.
+ */
+export function referrerLabel(key: string): string {
+  return key.replace(/_/g, '.')
+}

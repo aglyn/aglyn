@@ -111,6 +111,7 @@ import {
   entryTitleSearchFields,
 } from '@aglyn/aglyn/app-utils/content-query-fields'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
+import { isLiveDocument, TOMBSTONE_FIELD } from '@aglyn/aglyn/app-utils/live-document-count'
 import { withMatchableConditions } from '@aglyn/aglyn/app-utils/reusable-prop-values'
 import { decodeBundleTimestamps, encodeBundleTimestamps } from '../../_lib/bundle-timestamps'
 import {
@@ -574,6 +575,22 @@ async function existingDocIds(
   return new Set(snapshot.docs.map((doc) => doc.id))
 }
 
+/** The ids of the LIVE documents a capped collection holds, projected to
+ * `deletedAt` alone. A deleted document frees its slot (AGL-3918), as the
+ * create route counts it, so a soft-deleted id is not one the site holds: a
+ * bundle that writes over it brings it back, and that spends a slot. A
+ * collection that never soft-deletes has no `deletedAt`, so every id stays. */
+async function liveDocIds(
+  ref: FirebaseFirestore.CollectionReference,
+): Promise<Set<string>> {
+  const snapshot = await ref.select(TOMBSTONE_FIELD).get()
+  return new Set(
+    snapshot.docs
+      .filter((doc) => isLiveDocument(doc.get(TOMBSTONE_FIELD)))
+      .map((doc) => doc.id),
+  )
+}
+
 /**
  * The ids a bundle collection would WRITE — distinct, because two items sharing
  * an id are one document at `merge: false`, and because the count named in the
@@ -663,7 +680,7 @@ async function hostCapRefusal(options: {
     const limit = checkQuota(org as any, capped.quotaKey as any, 0).limit
     if (!Number.isFinite(limit)) continue
 
-    const existing = await existingDocIds(hostRef.collection(capped.collection))
+    const existing = await liveDocIds(hostRef.collection(capped.collection))
     const next = new Set([...existing, ...bundleIds]).size
     if (next <= existing.size) continue
     if (checkQuota(org as any, capped.quotaKey as any, next - 1).allowed) continue
@@ -691,7 +708,7 @@ async function hostCapRefusal(options: {
    *
    * ## The read is paid only when it could refuse
    *
-   * `count()` is one read; `existingDocIds` is one per document. So the cheap
+   * `count()` is one read; `liveDocIds` is one per document. So the cheap
    * question is asked first — could this bundle possibly cross the cap, taking
    * every id as new? — and the id scan happens only when the answer is yes.
    * For every real restore that is one read per collection instead of five
@@ -710,7 +727,7 @@ async function hostCapRefusal(options: {
     const held = (await ref.count().get()).data().count
     if (held + bundleIds.size <= max) continue
 
-    const existing = await existingDocIds(ref)
+    const existing = await liveDocIds(ref)
     const next = new Set([...existing, ...bundleIds]).size
     if (next <= existing.size || next <= max) continue
 

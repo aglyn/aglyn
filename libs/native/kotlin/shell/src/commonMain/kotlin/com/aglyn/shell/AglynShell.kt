@@ -159,6 +159,8 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     }
   }
 
+  // A link that switched workspace or site opens once that workspace is on screen.
+  LaunchedEffect(navigator.deferredLink, workspace) { context.settleDeferredLink() }
   LaunchedEffect(pendingLink, workspace.ready) {
     if (pendingLink != null && workspace.ready && !AuthFlow.isAuthLink(pendingLink)) {
       context.openLink(pendingLink)

@@ -72,6 +72,16 @@ const val EMAIL_MESSAGE_SCREEN = "email.message"
 
 internal fun problemText(error: Throwable) = error.message?.takeIf { it.isNotBlank() } ?: "Something went wrong. Try again."
 
+/**
+ * A list row's one word for an email: the detail's own word where it has one. A stopped send names why it stopped, so a canceled
+ * email reads "Canceled" in the list as on its page, never a third word of the row's own.
+ */
+fun sendChipWord(send: EmailSend): String = when (send.display.state) {
+  "draft", "held" -> send.display.label
+  "stopped" -> when (send.status) { "canceled" -> "Canceled"; "failed" -> "Failed"; else -> "Stopped" }
+  else -> send.display.state.replaceFirstChar { it.uppercase() }
+}
+
 fun sendTone(state: String): StatusTone = when (state) {
   "sent" -> StatusTone.SUCCESS
   "sending", "pending" -> StatusTone.INFO
@@ -131,7 +141,7 @@ fun EmailsScreen(context: NativePluginContext, initial: String? = null, composeC
             supporting = listOfNotNull(audienceLabel(send), (send.sendAtMs ?: send.createdAtMs)?.let { relativeTime(it, now) }).joinToString(" · "),
             icon = AglynIcons.named("mail"),
             selected = send.id == selected,
-            trailing = { StatusChip(if (send.display.state in setOf("draft", "held")) send.display.label else send.display.state.replaceFirstChar { it.uppercase() }, sendTone(send.display.state)) },
+            trailing = { StatusChip(sendChipWord(send), sendTone(send.display.state)) },
             onClick = { onSelect(send.id) },
             modifier = Modifier.testTag("email-${send.id}"),
           )
@@ -204,7 +214,7 @@ fun EmailDetail(context: NativePluginContext, orgId: String, hostId: String, sen
               }
             }
           }
-          SectionCard("Sent as", Modifier.fillMaxWidth()) {
+          SectionCard("Email", Modifier.fillMaxWidth()) {
             // What the send recorded, never today's identity; where it recorded none, why. A recorded sender names what an absent
             // display name or reply address meant, as the console does.
             val sentAs = emailSentAs(doc.data)

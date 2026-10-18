@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynPluginHost
 import AglynUI
 import SwiftUI
 import UserNotifications
@@ -27,6 +28,9 @@ struct NotificationSettingsView: View {
   @State private var sites: [(id: String, name: String)] = []
   @State private var scopeKey = "account"
   @State private var expanded: Set<String> = []
+  /// The sound picked on this screen, shown before the document echoes it back.
+  @State private var pendingSound: String?
+  @State private var soundPlayer = AglynNotificationSoundPlayer()
 
   private let catalog = NotificationCatalog.shared
 
@@ -66,6 +70,7 @@ struct NotificationSettingsView: View {
       } else if !loaded {
         Section { SkeletonRows(count: 4) }
       } else {
+        soundSection
         accountSections
         scopeSection
         digestSection
@@ -278,6 +283,66 @@ struct NotificationSettingsView: View {
     }
   }
 
+  // MARK: Sound
+
+  private var pickedSoundID: String {
+    pendingSound ?? AglynNotificationSounds.sound(for: data[AglynNotificationSounds.field])?.id ?? AglynNotificationSounds.defaultID
+  }
+
+  /// The sound every notification plays on this account's devices (the console's picker): choosing one plays it and
+  /// saves it; the speaker plays it again.
+  private var soundSection: some View {
+    Section {
+      ForEach(AglynNotificationSounds.all, id: \.id) { sound in
+        HStack(spacing: AglynSpace.one) {
+          Button {
+            pickSound(sound)
+          } label: {
+            HStack {
+              Text(sound.label).foregroundStyle(Color.primary)
+              Spacer(minLength: AglynSpace.one)
+              if sound.id == pickedSoundID {
+                Image(systemName: "checkmark").foregroundStyle(AglynColor.tint).fontWeight(.semibold)
+                  .accessibilityHidden(true)
+              }
+            }
+            .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .accessibilityAddTraits(sound.id == pickedSoundID ? [.isSelected] : [])
+          .accessibilityIdentifier("notification-sound-\(sound.id)")
+          Button {
+            soundPlayer.play(sound)
+          } label: {
+            Label("Play \(sound.label)", systemImage: "speaker.wave.2").labelStyle(.iconOnly)
+          }
+          .buttonStyle(.borderless)
+          .help("Play \(sound.label)")
+          .accessibilityIdentifier("notification-sound-play-\(sound.id)")
+        }
+      }
+    } header: {
+      Text("Sound")
+    } footer: {
+      Text("Plays with every notification on your devices and in the console.")
+    }
+  }
+
+  private func pickSound(_ sound: AglynNotificationSound) {
+    soundPlayer.play(sound)
+    guard sound.id != pickedSoundID, let uid = model.auth?.user?.uid, let reader = model.reader else { return }
+    pendingSound = sound.id
+    saveFailed = false
+    Task {
+      do {
+        try await reader.setDocument(["users", uid], [AglynNotificationSounds.field: sound.id], merge: true)
+      } catch {
+        pendingSound = nil
+        saveFailed = true
+      }
+    }
+  }
+
   // MARK: This device
 
   private var deviceSection: some View {
@@ -305,7 +370,7 @@ struct NotificationSettingsView: View {
     let content = UNMutableNotificationContent()
     content.title = "\(model.brandName) notifications are on"
     content.body = "This is what a notification looks like."
-    content.sound = .default
+    content.sound = AglynNotificationSounds.sound(for: pickedSoundID).map { UNNotificationSound(named: UNNotificationSoundName($0.apple)) } ?? .default
     let request = UNNotificationRequest(identifier: "aglyn-test", content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false))
     Task {
       let center = UNUserNotificationCenter.current()
@@ -334,6 +399,7 @@ struct NotificationSettingsView: View {
         loaded = true
         failed = false
         pending = [:]
+        pendingSound = nil
       case .failure:
         failed = true
       }

@@ -171,7 +171,7 @@ struct OfflineCashSheet: View {
         }
       }
     }
-    .frame(minWidth: 420, minHeight: 480)
+    .aglynSheetMinimumSize(width: 420, height: 480)
     .interactiveDismissDisabled(rung != nil)
   }
 

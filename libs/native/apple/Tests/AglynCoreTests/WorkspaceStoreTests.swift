@@ -115,6 +115,50 @@ final class WorkspaceStoreTests: XCTestCase {
     _ = restored
   }
 
+  /// A console link (`/{orgSlug}/hosts/{hostSlug}/…`) moves the switcher onto the workspace and site it names before
+  /// its screen reads them (AGL-3911); a site in another workspace is picked once that workspace's sites arrive.
+  func testALinkPicksTheWorkspaceAndSiteItNames() {
+    let reader = FakeReader()
+    let store = WorkspaceStore(uid: "u1", reader: reader, defaults: UserDefaults(suiteName: "workspace-\(UUID().uuidString)")!)
+    store.start()
+    reader.emit("users/u1/orgs", [.init(id: "a", data: ["slug": "alpha"]), .init(id: "b", data: ["slug": "beta"])])
+    reader.emit(
+      "users/u1/hostMemberships",
+      [.init(id: "s1", data: ["orgId": "a", "subdomain": "one"]), .init(id: "s2", data: ["orgId": "a", "subdomain": "two"])])
+    XCTAssertEqual(store.site?.id, "s1")
+
+    XCTAssertTrue(store.select(orgSlug: "alpha", hostSlug: "two"))
+    XCTAssertEqual(store.site?.id, "s2")
+
+    XCTAssertFalse(store.select(orgSlug: "h1", hostSlug: nil))
+    XCTAssertEqual(store.org?.id, "a")
+    XCTAssertEqual(store.site?.id, "s2")
+
+    XCTAssertTrue(store.select(orgSlug: "beta", hostSlug: "shop"))
+    XCTAssertEqual(store.org?.id, "b")
+    reader.emit(
+      "users/u1/hostMemberships",
+      [.init(id: "s8", data: ["orgId": "b", "subdomain": "eight"]), .init(id: "s9", data: ["orgId": "b", "subdomain": "shop"])])
+    XCTAssertEqual(store.site?.id, "s9")
+
+    XCTAssertTrue(store.select(orgSlug: "beta", hostSlug: nil))
+    XCTAssertEqual(store.site?.id, "s9")
+  }
+
+  /// A link that launched the app arrives before the person's workspaces do: it is picked once they and the site arrive.
+  func testALinkBeforeTheWorkspacesArrivePicksThemWhenTheyDo() {
+    let reader = FakeReader()
+    let store = WorkspaceStore(uid: "u1", reader: reader, defaults: UserDefaults(suiteName: "workspace-\(UUID().uuidString)")!)
+    store.start()
+    XCTAssertTrue(store.select(orgSlug: "beta", hostSlug: "shop"))
+    reader.emit("users/u1/orgs", [.init(id: "a", data: ["slug": "alpha"]), .init(id: "b", data: ["slug": "beta"])])
+    XCTAssertEqual(store.org?.id, "b")
+    reader.emit(
+      "users/u1/hostMemberships",
+      [.init(id: "s8", data: ["orgId": "b", "subdomain": "eight"]), .init(id: "s9", data: ["orgId": "b", "subdomain": "shop"])])
+    XCTAssertEqual(store.site?.id, "s9")
+  }
+
   /// A full window is a page, not the whole list: the console's `loadMoreOrgs` (AGL-2336).
   func testAFullWindowOffersMoreAndGrowingItListensAgain() {
     let reader = FakeReader()

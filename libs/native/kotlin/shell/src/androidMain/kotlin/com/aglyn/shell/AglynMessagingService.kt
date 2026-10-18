@@ -56,7 +56,8 @@ abstract class AglynMessagingService : FirebaseMessagingService() {
       tap,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
-    val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL)
+    // The message names the channel of its person's sound (FCM `channel_id`); a channel this build does not have falls back.
+    val notification = NotificationCompat.Builder(this, postingChannel(this, message.notification?.channelId))
       .setSmallIcon(applicationInfo.icon)
       .setContentTitle(title)
       .setContentText(body)
@@ -67,11 +68,13 @@ abstract class AglynMessagingService : FirebaseMessagingService() {
   }
 
   companion object {
+    /** The default channel, and one channel per notification sound this app carries (AGL-3890). */
     fun ensureChannel(context: Context) {
       val manager = context.getSystemService(NotificationManager::class.java) ?: return
       if (manager.getNotificationChannel(NOTIFICATION_CHANNEL) == null) {
         manager.createNotificationChannel(NotificationChannel(NOTIFICATION_CHANNEL, "Notifications", NotificationManager.IMPORTANCE_HIGH))
       }
+      ensureSoundChannels(context, manager)
     }
   }
 }

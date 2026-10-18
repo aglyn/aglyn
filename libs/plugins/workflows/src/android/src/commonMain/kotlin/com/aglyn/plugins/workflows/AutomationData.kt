@@ -24,6 +24,7 @@ import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreOrder
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreTimestamp
+import com.aglyn.core.isLiveDoc
 import com.aglyn.core.DEFAULT_TENANT_APEX
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -185,6 +186,13 @@ fun workflowRowOf(doc: FirestoreDoc): WorkflowRow = WorkflowRow(
 /** The console's list: live workflows by name, out of the ceilinged window. */
 fun visibleWorkflows(docs: List<FirestoreDoc>): List<WorkflowRow> =
   docs.filter { it.data["deletedAt"] == null }.map(::workflowRowOf).sortedWith(compareBy(nameOrder) { it.name })
+
+/**
+ * The workflows the plan's `workflowsPerHost` counts (AGL-3918): the server's live count when it has answered, else
+ * the live documents of the window read, a lower bound. A deleted workflow is not counted; a disabled one is.
+ */
+fun workflowQuotaUsed(serverLiveCount: Long?, docs: List<FirestoreDoc>): Int =
+  serverLiveCount?.toInt() ?: docs.count(::isLiveDoc)
 
 /** Whether another workflow already has [name] (case-insensitive, the computed-variable lookup's rule). */
 fun workflowNameTaken(rows: List<WorkflowRow>, name: String, selfId: String?): Boolean =

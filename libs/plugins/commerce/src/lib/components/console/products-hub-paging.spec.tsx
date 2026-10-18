@@ -165,11 +165,16 @@ jest.mock('firebase/firestore', () => ({
   documentId: () => '__name__',
   where: (field: string, op: string, value: unknown) => ({ field, op, value }),
   doc: () => ({}),
-  getCountFromServer: async () => {
+  getCountFromServer: async (target: { constraints?: Array<{ field?: string; op?: string }> }) => {
     // A server aggregate is a network round-trip: it cannot land in the same
     // microtask drain as the mount that asked for it.
     await new Promise((resolve) => setTimeout(resolve, 0))
-    return { data: () => ({ count: SERVER_PRODUCTS }) }
+    // The head-count is every product less the deleted ones (AGL-3918); this
+    // site has none deleted.
+    const tombstones = (target?.constraints ?? []).some(
+      (constraint) => constraint?.field === 'deletedAt' && constraint.op === '!=',
+    )
+    return { data: () => ({ count: tombstones ? 0 : SERVER_PRODUCTS }) }
   },
   addDoc: jest.fn().mockResolvedValue(undefined),
   deleteDoc: jest.fn().mockResolvedValue(undefined),

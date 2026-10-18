@@ -34,6 +34,7 @@ import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../constants/docs-links'
 import { formatDwell } from '@aglyn/aglyn/app-utils/analytics-summary'
+import { referrerLabel } from '@aglyn/aglyn/app-utils/screen-analytics-aggregate'
 import { hasEntitlement } from '../../constants/entitlements'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
@@ -319,7 +320,7 @@ export function ScreenAnalyticsCard(props: {
                   sx={{ justifyContent: 'space-between' }}
                 >
                   <Typography variant="body2" noWrap sx={{ maxWidth: '80%' }}>
-                    {host}
+                    {referrerLabel(host)}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {count.toLocaleString()}

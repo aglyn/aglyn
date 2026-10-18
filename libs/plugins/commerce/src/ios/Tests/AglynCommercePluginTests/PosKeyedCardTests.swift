@@ -9,224 +9,205 @@ import XCTest
 @testable import AglynCommercePlugin
 
 /*
- * "TYPE CARD": the console's Payment Element path on the device. The Stripe
- * card SDK is Aglyn POS's alone, so these tests hand the tender a fake
- * `KeyedCardEntry` (the seam the SDK sits behind) and hold everything else:
- * the route's words, the checks before the form opens, and how each way the
- * form can close ends the sale step.
+ * "ENTER CARD MANUALLY": the register's own card fields. These tests hand the
+ * tender a fake `KeyedCardEntry` that "types" PaymentMethods in order (what
+ * Stripe answers for each card) and hold everything else: the route's words,
+ * the key, how each server answer closes the form or keeps it open, and the
+ * attempt key each card is sent under.
  */
 
-private let secret = "pi_12345678abc_secret_abcdefgh"
-private let intent = "pi_12345678abc"
 private let opened = PosOpenedSale(
   orderID: "o1", subtotalCents: 1000, discountCents: 0, taxCents: 80, totalCents: 1080, dueCents: 1080, stockWarnings: [])
 
-private func keyedPayment(_ status: String, amount: Int = 1080, tip: Int = 0, failure: String? = nil) -> PosSalePayment {
+private func keyedPayment(_ status: String, id: String = "pay1", tip: Int = 0, failure: String? = nil) -> PosSalePayment {
   PosSalePayment(
-    id: "pay1", method: "card_keyed", amountCents: amount, tipCents: tip, status: status, cardBrand: status == "succeeded" ? "visa" : nil,
-    last4: status == "succeeded" ? "4242" : nil, changeCents: 0, readerID: nil, failureMessage: failure)
+    id: id, method: "card_keyed", amountCents: 1080, tipCents: tip, status: status,
+    cardBrand: status == "succeeded" ? "visa" : nil, last4: status == "succeeded" ? "4242" : nil, changeCents: 0,
+    readerID: nil, failureMessage: failure)
 }
 
-private func keyedAnswer(
-  due: Int, _ payment: PosSalePayment?, completed: Bool = false, secret: String? = nil, intent: String? = nil
-) -> PosPaymentAnswer {
+private func keyedAnswer(due: Int, _ payment: PosSalePayment?, completed: Bool = false) -> PosPaymentAnswer {
   PosPaymentAnswer(
     sale: PosSale(
       orderID: "o1", status: due == 0 ? "paid" : "pending", totalCents: 1080, paidCents: 1080 - due, dueCents: due,
       tenderableCents: due, tipCents: 0, payments: payment.map { [$0] } ?? []),
-    paymentID: payment?.id, completed: completed, clientSecret: secret, paymentIntentID: intent)
+    paymentID: payment?.id, completed: completed, clientSecret: nil, paymentIntentID: nil)
 }
 
-/// Stripe's card form, as the tests see it: it records what it was asked and answers from a script.
+/// The card fields, as the tests see them: each "card" is the PaymentMethod Stripe made from it.
 @MainActor
 private final class FakeCardForm: KeyedCardEntry {
-  var answer: KeyedCardOutcome
+  let cards: [String]
   private(set) var requests: [KeyedCardRequest] = []
+  private(set) var verdicts: [KeyedCardVerdict] = []
+  private(set) var dismissed = false
 
-  init(_ answer: KeyedCardOutcome) { self.answer = answer }
+  init(_ cards: [String]) { self.cards = cards }
 
-  func collect(_ request: KeyedCardRequest) async -> KeyedCardOutcome {
+  func collect(_ request: KeyedCardRequest, submit: @escaping @MainActor (String) async -> KeyedCardVerdict) async
+    -> KeyedCardOutcome
+  {
     requests.append(request)
-    return answer
+    for card in cards {
+      let verdict = await submit(card)
+      verdicts.append(verdict)
+      switch verdict {
+      case .paid: return .paid
+      case .lost(let words): return .lost(words)
+      case .declined: continue
+      }
+    }
+    return .canceled
   }
+
+  func dismiss() { dismissed = true }
 }
 
 @MainActor
 final class KeyedCardTenderTests: XCTestCase {
-  private func service(_ form: FakeCardForm) -> KeyedCardService {
-    KeyedCardService(entry: form, publishableKey: "pk_test_51Habc", merchantName: "Corner Shop")
+  private func service(_ form: FakeCardForm, key: String = "pk_test_51Habc") -> KeyedCardService {
+    KeyedCardService(entry: form, publishableKey: key, merchantName: "Corner Shop")
   }
 
   private func checkout(_ api: ScriptedSaleAPI) -> Checkout {
     Checkout(api: api, opened: opened, settings: PosRegisterSettings(tippingEnabled: true, tipPercentages: [20]), sleep: { _ in })
   }
 
-  func testTheRouteSpeaksTheConsolesWords() {
-    let step = SaleStep.cardKeyed(amountCents: 1080, tipCents: 200)
+  func testTheRouteSendsOnlyThePaymentMethodNeverTheCard() {
+    let step = SaleStep.cardKeyed(amountCents: 1080, tipCents: 200, paymentMethodID: "pm_1QabcDEF")
     let body = step.body(hostID: "h1", orderID: "o1").objectValue
     XCTAssertEqual(body["action"], "card-keyed")
     XCTAssertEqual(body["amountCents"], .number(1080))
     XCTAssertEqual(body["tipCents"], .number(200))
+    XCTAssertEqual(body["paymentMethodId"], "pm_1QabcDEF")
+    XCTAssertEqual(Set(body.keys), ["hostId", "orderId", "action", "amountCents", "tipCents", "paymentMethodId"])
+    XCTAssertNil(SaleStep.cardKeyed(amountCents: 1080, tipCents: 0).body(hostID: "h1", orderID: "o1").objectValue["paymentMethodId"])
     XCTAssertTrue(step.startsPayment, "a typed card takes money, so it needs its attempt key")
   }
 
-  func testTheContextCarriesTheSitesPublishableKey() {
-    let with = readPosContext(.object(["settings": .object([:]), "publishableKey": "pk_test_51Habc"]))
-    XCTAssertEqual(with.publishableKey, "pk_test_51Habc")
-    XCTAssertEqual(readPosContext(.object(["settings": .object([:])])).publishableKey, "", "no key, no typed card")
-  }
-
-  func testAConfirmedCardIsRecordedFromTheServersReadOfStripe() async {
+  func testAnApprovedCardSettlesTheSale() async {
     let api = ScriptedSaleAPI()
-    api.answers = [
-      .success(keyedAnswer(due: 1080, keyedPayment("pending"), secret: secret)),
-      .success(keyedAnswer(due: 0, keyedPayment("succeeded"), completed: true)),
-    ]
-    let form = FakeCardForm(.confirmed(paymentIntentID: intent))
+    api.answers = [.success(keyedAnswer(due: 0, keyedPayment("succeeded"), completed: true))]
+    let form = FakeCardForm(["pm_visa1234"])
     let checkout = checkout(api)
     await checkout.payCard(service(form))
     XCTAssertEqual(checkout.step, .receipt(changeCents: 0))
-    XCTAssertEqual(api.steps.map { $0.0.action }, ["card-keyed", "status"], "the form's say-so is never the record")
-    XCTAssertEqual(api.steps.first?.0, .cardKeyed(amountCents: 1080, tipCents: 0))
+    XCTAssertEqual(api.steps.first?.0, .cardKeyed(amountCents: 1080, tipCents: 0, paymentMethodID: "pm_visa1234"))
     XCTAssertNotNil(api.steps.first?.1, "the press carries its attempt key")
+    XCTAssertEqual(form.verdicts, [.paid])
     let request = form.requests.first
-    XCTAssertEqual(request?.paymentIntentID, intent, "the intent is named by its own secret")
-    XCTAssertEqual(request?.clientSecret, secret)
     XCTAssertEqual(request?.publishableKey, "pk_test_51Habc")
     XCTAssertEqual(request?.amountCents, 1080)
+    XCTAssertEqual(request?.amountText, "$10.80")
     XCTAssertEqual(request?.merchantName, "Corner Shop")
   }
 
   func testTheTipIsPartOfWhatTheFormCharges() async {
     let api = ScriptedSaleAPI()
-    api.answers = [
-      .success(keyedAnswer(due: 1080, keyedPayment("pending", tip: 200), secret: secret, intent: intent)),
-      .success(keyedAnswer(due: 0, keyedPayment("succeeded", tip: 200), completed: true)),
-    ]
-    let form = FakeCardForm(.confirmed(paymentIntentID: intent))
+    api.answers = [.success(keyedAnswer(due: 0, keyedPayment("succeeded", tip: 200), completed: true))]
+    let form = FakeCardForm(["pm_visa1234"])
     let checkout = checkout(api)
     checkout.customTip(200)
     await checkout.payCard(service(form))
-    XCTAssertEqual(api.steps.first?.0, .cardKeyed(amountCents: 1080, tipCents: 200))
+    XCTAssertEqual(api.steps.first?.0, .cardKeyed(amountCents: 1080, tipCents: 200, paymentMethodID: "pm_visa1234"))
     XCTAssertEqual(form.requests.first?.amountCents, 1280)
   }
 
-  func testClosingTheFormWithoutPayingReleasesTheAmount() async {
+  func testADeclineKeepsTheFormOpenAndTheNextCardIsANewAttempt() async {
     let api = ScriptedSaleAPI()
     api.answers = [
-      .success(keyedAnswer(due: 1080, keyedPayment("pending"), secret: secret)),
-      .success(keyedAnswer(due: 1080, keyedPayment("canceled"))),
+      .success(keyedAnswer(due: 1080, keyedPayment("failed", id: "pay1", failure: "Your card was declined."))),
+      .success(keyedAnswer(due: 0, keyedPayment("succeeded", id: "pay2"), completed: true)),
     ]
-    let form = FakeCardForm(.canceled(paymentIntentID: intent))
+    let form = FakeCardForm(["pm_declined1", "pm_visa1234"])
     let checkout = checkout(api)
     await checkout.payCard(service(form))
-    XCTAssertEqual(api.steps.map { $0.0.action }, ["card-keyed", "cancel"])
-    XCTAssertEqual(checkout.step, .tender)
-    XCTAssertEqual(checkout.dueCents, 1080)
-    XCTAssertFalse(checkout.busy)
-  }
-
-  func testAFormThatFailedReleasesTheAmountAndSaysWhy() async {
-    let api = ScriptedSaleAPI()
-    api.answers = [
-      .success(keyedAnswer(due: 1080, keyedPayment("pending"), secret: secret)),
-      .success(keyedAnswer(due: 1080, keyedPayment("canceled"))),
-    ]
-    let form = FakeCardForm(.failed(paymentIntentID: intent, message: "Your card was declined."))
-    let checkout = checkout(api)
-    await checkout.payCard(service(form))
-    XCTAssertEqual(api.steps.map { $0.0.action }, ["card-keyed", "cancel"])
-    XCTAssertEqual(checkout.step, .tender)
-    XCTAssertEqual(checkout.notice?.message, "Your card was declined.")
-  }
-
-  func testACardStripeTookJustBeforeTheFormFailedIsStillRecordedAsPaid() async {
-    let api = ScriptedSaleAPI()
-    // The server reads Stripe before it cancels, so the cancel itself answers "succeeded".
-    api.answers = [
-      .success(keyedAnswer(due: 1080, keyedPayment("pending"), secret: secret)),
-      .success(keyedAnswer(due: 0, keyedPayment("succeeded"), completed: true)),
-    ]
-    let form = FakeCardForm(.failed(paymentIntentID: intent, message: "The connection dropped."))
-    let checkout = checkout(api)
-    await checkout.payCard(service(form))
-    XCTAssertEqual(checkout.step, .receipt(changeCents: 0), "a charge that went through is never lost")
-  }
-
-  func testAnIntentForAnotherAmountNeverOpensTheForm() async {
-    let api = ScriptedSaleAPI()
-    api.answers = [
-      .success(keyedAnswer(due: 1080, keyedPayment("pending", amount: 9999), secret: secret)),
-      .success(keyedAnswer(due: 1080, nil)),
-    ]
-    let form = FakeCardForm(.confirmed(paymentIntentID: intent))
-    let checkout = checkout(api)
-    await checkout.payCard(service(form))
-    XCTAssertTrue(form.requests.isEmpty)
-    XCTAssertEqual(checkout.notice?.message, "The amount to charge does not match the register. Start the payment again.")
-    XCTAssertEqual(api.steps.map { $0.0.action }, ["card-keyed", "cancel"])
-  }
-
-  func testASecretThatDoesNotMatchItsIntentNeverOpensTheForm() async {
-    let api = ScriptedSaleAPI()
-    api.answers = [
-      .success(keyedAnswer(due: 1080, keyedPayment("pending"), secret: secret, intent: "pi_other0000000")),
-      .success(keyedAnswer(due: 1080, nil)),
-    ]
-    let form = FakeCardForm(.confirmed(paymentIntentID: intent))
-    let checkout = checkout(api)
-    await checkout.payCard(service(form))
-    XCTAssertTrue(form.requests.isEmpty)
-    XCTAssertEqual(checkout.notice?.message, "The payment to collect does not match its secret.")
-  }
-
-  func testAnAnswerWithNoSecretFailsWithTheServersWords() async {
-    let api = ScriptedSaleAPI()
-    api.answers = [.success(keyedAnswer(due: 1080, keyedPayment("failed", failure: "Card payments are not set up.")))]
-    let form = FakeCardForm(.confirmed(paymentIntentID: intent))
-    let checkout = checkout(api)
-    await checkout.payCard(service(form))
-    XCTAssertTrue(form.requests.isEmpty)
-    XCTAssertEqual(checkout.notice?.message, "Card payments are not set up.")
-    XCTAssertEqual(checkout.step, .tender)
-  }
-
-  func testAPaymentTheServerRefusesToStartShowsItsWords() async {
-    let api = ScriptedSaleAPI()
-    api.answers = [.failure(ConsoleAPIError(status: 409, message: "Card payments not set up"))]
-    let form = FakeCardForm(.confirmed(paymentIntentID: intent))
-    let checkout = checkout(api)
-    await checkout.payCard(service(form))
-    XCTAssertTrue(form.requests.isEmpty)
-    XCTAssertEqual(checkout.notice?.message, "Card payments not set up")
-  }
-
-  func testALostAnswerBlocksTendersUntilTheSaleIsReadAgain() async {
-    let api = ScriptedSaleAPI()
-    api.answers = [.failure(ConsoleAPIError(status: 0, message: "offline")), .failure(ConsoleAPIError(status: 0, message: "offline"))]
-    let form = FakeCardForm(.confirmed(paymentIntentID: intent))
-    let checkout = checkout(api)
-    await checkout.payCard(service(form))
-    XCTAssertTrue(checkout.lost)
-    XCTAssertTrue(form.requests.isEmpty)
-  }
-
-  func testAPressRetriedAfterTheFirstSettledDoesNotOpenTheFormAgain() async {
-    let api = ScriptedSaleAPI()
-    api.answers = [.success(keyedAnswer(due: 0, keyedPayment("succeeded"), completed: true, secret: secret))]
-    let form = FakeCardForm(.confirmed(paymentIntentID: intent))
-    let checkout = checkout(api)
-    await checkout.payCard(service(form))
-    XCTAssertTrue(form.requests.isEmpty)
+    XCTAssertEqual(form.verdicts, [.declined("Your card was declined."), .paid])
+    XCTAssertEqual(form.requests.count, 1, "one form for both cards")
+    XCTAssertNotEqual(api.steps[0].1, api.steps[1].1, "a declined card retires its attempt key")
     XCTAssertEqual(checkout.step, .receipt(changeCents: 0))
   }
 
-  func testTheCardStepReadsAsTypingNotTapping() {
-    let form = FakeCardForm(.canceled(paymentIntentID: intent))
+  func testClosingAfterADeclineLeavesTheSaleOpenForAnotherTender() async {
+    let api = ScriptedSaleAPI()
+    api.answers = [.success(keyedAnswer(due: 1080, keyedPayment("failed", failure: "Your card was declined.")))]
+    let form = FakeCardForm(["pm_declined1"])
+    let checkout = checkout(api)
+    await checkout.payCard(service(form))
+    XCTAssertEqual(checkout.step, .tender)
+    XCTAssertEqual(checkout.sale.payments.first?.status, "failed", "the decline stays in the ledger, as the console shows it")
+  }
+
+  func testAProcessingCardIsSettledByTheServersReadOfStripe() async {
+    let api = ScriptedSaleAPI()
+    api.answers = [
+      .success(keyedAnswer(due: 1080, keyedPayment("pending"))),
+      .success(keyedAnswer(due: 0, keyedPayment("succeeded"), completed: true)),
+    ]
+    let form = FakeCardForm(["pm_visa1234"])
+    let checkout = checkout(api)
+    await checkout.payCard(service(form))
+    XCTAssertEqual(api.steps.map { $0.0.action }, ["card-keyed", "status"])
+    XCTAssertEqual(checkout.step, .receipt(changeCents: 0))
+  }
+
+  func testALostAnswerClosesTheFormAndBlocksTendersUntilTheSaleIsReadAgain() async {
+    let api = ScriptedSaleAPI()
+    // The checkout re-reads the sale after a lost answer; that read is lost too.
+    api.answers = [.failure(ConsoleAPIError(status: 0, message: "offline")), .failure(ConsoleAPIError(status: 0, message: "offline"))]
+    let form = FakeCardForm(["pm_visa1234", "pm_never"])
+    let checkout = checkout(api)
+    await checkout.payCard(service(form))
+    XCTAssertEqual(form.verdicts, [.lost(lostAnswer)], "the second card is never sent")
+    XCTAssertTrue(checkout.lost)
+  }
+
+  func testARefusalToStartShowsTheServersWordsInTheForm() async {
+    let api = ScriptedSaleAPI()
+    api.answers = [.failure(ConsoleAPIError(status: 409, message: "Card payments not set up"))]
+    let form = FakeCardForm(["pm_visa1234"])
+    await checkout(api).payCard(service(form))
+    XCTAssertEqual(form.verdicts, [.declined("Card payments not set up")])
+  }
+
+  func testWithNoKeyAnywhereTheFormNeverOpens() async {
+    let api = ScriptedSaleAPI()
+    let form = FakeCardForm(["pm_visa1234"])
+    let checkout = checkout(api)
+    await checkout.payCard(service(form, key: ""))
+    XCTAssertTrue(form.requests.isEmpty)
+    XCTAssertTrue(api.steps.isEmpty, "nothing was started, so nothing is left to release")
+    XCTAssertEqual(checkout.notice?.message, "Card entry is not set up for this site.")
+  }
+
+  func testTheKeyIsReadAgainAtThePressWhenTheRegisterHasNone() async {
+    let api = ScriptedSaleAPI()
+    api.contextKey = "pk_test_fromContext"
+    api.answers = [.success(keyedAnswer(due: 0, keyedPayment("succeeded"), completed: true))]
+    let form = FakeCardForm(["pm_visa1234"])
+    await checkout(api).payCard(service(form, key: ""))
+    XCTAssertEqual(form.requests.first?.publishableKey, "pk_test_fromContext")
+  }
+
+  func testCancelingTheCardStepClosesTheForm() async {
+    let form = FakeCardForm([])
     let keyed = service(form)
-    XCTAssertEqual(keyed.label, "Type card")
+    await keyed.cancel(TenderDeps(api: ScriptedSaleAPI(), orderID: "o1"), paymentID: nil)
+    XCTAssertTrue(form.dismissed)
+  }
+
+  func testATestModeSmartReaderCanBeTappedWhileTheCustomerStepIsOpen() async {
+    let api = ScriptedSaleAPI()
+    api.answers = [.success(keyedAnswer(due: 1080, keyedPayment("pending")))]
+    await checkout(api).simulateTapOnReader("pay1")
+    XCTAssertEqual(api.steps.first?.0, .simulate(paymentID: "pay1"))
+  }
+
+  func testTheCardStepReadsAsTypingNotTapping() {
+    let keyed = service(FakeCardForm([]))
+    XCTAssertEqual(keyed.label, "Enter card manually")
     XCTAssertEqual(keyed.kind, .keyed)
-    XCTAssertEqual(keyed.prompt, "Type the card into the card form.")
+    XCTAssertEqual(keyed.prompt, "Enter the card in the card form.")
   }
 }
 
@@ -271,21 +252,23 @@ final class KeyedCardOfferTests: XCTestCase {
     return model
   }
 
-  func testTypeCardIsOfferedWithTheSitesKeyAndThisAppsCardForm() async {
-    let model = await register(key: "pk_test_51Habc", entry: FakeCardForm(.canceled(paymentIntentID: intent)))
-    XCTAssertEqual(model.keyedCard?.label, "Type card")
+  func testEnterCardManuallyIsOfferedWithTheSitesKeyAndThisAppsCardForm() async {
+    let model = await register(key: "pk_test_51Habc", entry: FakeCardForm([]))
+    XCTAssertEqual(model.keyedCard?.label, "Enter card manually")
     XCTAssertEqual(model.keyedCard?.publishableKey, "pk_test_51Habc")
-    XCTAssertEqual(model.cardService(labeled: "Type card")?.kind, .keyed)
+    XCTAssertEqual(model.cardService(labeled: "Enter card manually")?.kind, .keyed)
   }
 
-  func testTypeCardIsNotOfferedWithoutTheKeyAsTheConsoleDoesNot() async {
-    let model = await register(key: "", entry: FakeCardForm(.canceled(paymentIntentID: intent)))
-    XCTAssertNil(model.keyedCard)
+  func testEnterCardManuallyIsOfferedEvenWhenTheContextHasNoKey() async {
+    // The tender reads the key again at the press, so a missing (or unread) context never hides it.
+    let model = await register(key: "", entry: FakeCardForm([]))
+    XCTAssertEqual(model.keyedCard?.label, "Enter card manually")
+    XCTAssertEqual(model.keyedCard?.publishableKey, "")
   }
 
-  func testTypeCardIsNotOfferedWhereTheAppHasNoCardForm() async {
+  func testEnterCardManuallyIsNotOfferedWhereTheAppHasNoCardForm() async {
     let model = await register(key: "pk_test_51Habc", entry: nil)
     XCTAssertNil(model.keyedCard, "the Mac register and the Aglyn app carry no Stripe card SDK")
-    XCTAssertNil(model.cardService(labeled: "Type card"))
+    XCTAssertNil(model.cardService(labeled: "Enter card manually"))
   }
 }

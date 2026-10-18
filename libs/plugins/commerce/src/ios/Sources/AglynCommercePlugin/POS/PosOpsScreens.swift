@@ -62,7 +62,7 @@ struct RegisterOpsSheet: View {
       #endif
       .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
     }
-    .frame(minWidth: 420, minHeight: 420)
+    .aglynSheetMinimumSize(width: 420, height: 420)
     // The pairing code is presented from here, not from its row: a sheet anchored inside the Form went away
     // within a second, taking this sheet with it, as soon as the row redrew.
     .sheet(isPresented: Binding(get: { model.display.pairing != nil }, set: { if !$0 { model.display.closePairing() } })) {
@@ -257,7 +257,7 @@ private struct ShiftDialogSheet: View {
           ToolbarItem(placement: .confirmationAction) { Button("Done") { shift.dismiss() } }
         }
       }
-      .frame(minWidth: 420, minHeight: 480)
+      .aglynSheetMinimumSize(width: 420, height: 480)
     case .close:
       if let frozen = shift.closed {
         NavigationStack {
@@ -278,7 +278,7 @@ private struct ShiftDialogSheet: View {
             ToolbarItem(placement: .confirmationAction) { Button("Done") { shift.dismiss() } }
           }
         }
-        .frame(minWidth: 420, minHeight: 480)
+        .aglynSheetMinimumSize(width: 420, height: 480)
       } else {
         AglynActionSheet(
           "Close the shift", message: "Count the drawer, then enter what is in it.", confirmLabel: "Close shift",
@@ -403,7 +403,7 @@ struct PinPadSheet: View {
         }
       }
     }
-    .frame(minWidth: 360, minHeight: 520)
+    .aglynSheetMinimumSize(width: 360, height: 520)
     .interactiveDismissDisabled(!(dismissible || pad?.nobodyHasAPin == true))
     .task {
       let made = PosPinPadModel(api: model.opsAPI, registerID: model.register?.id ?? "", purpose: purpose) { assertion in
@@ -604,6 +604,6 @@ private struct PairingCodeSheet: View {
         }
       }
     }
-    .frame(minWidth: 420, minHeight: 440)
+    .aglynSheetMinimumSize(width: 420, height: 440)
   }
 }

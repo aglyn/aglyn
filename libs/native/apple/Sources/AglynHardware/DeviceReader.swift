@@ -193,6 +193,121 @@ public func deviceReaderLabel(
     case "CHIPPER_2X", "CHIPPER2X": "BBPOS Chipper 2X BT"
     default: "Card reader"
     }
-  let name = nonBlank(label) ?? ([model] + [nonBlank(serial)].compactMap { $0 }).joined(separator: " ")
+  // A simulated reader's serial is a long made-up id (CHB31SIMULATOR:<uuid>); its model alone names it.
+  let name = nonBlank(label) ?? ([model] + [simulated ? nil : nonBlank(serial)].compactMap { $0 }).joined(separator: " ")
   return simulated ? "\(name) (simulated)" : name
 }
+
+// MARK: - Reader management
+
+/// A reader found by discovery, or the one connected.
+public struct DeviceReader: Equatable, Identifiable, Sendable {
+  /// The SDK's serial number (Tap to Pay has a stable stand-in).
+  public let id: String
+  public let label: String
+  public let kind: CardCollectorKind
+  public let simulated: Bool
+  /// 0...1, when the reader reports one.
+  public var batteryLevel: Double?
+  /// The reader is on its charger, when it says.
+  public var charging: Bool
+  /// The reader's model as Stripe names it (`STRIPE_M2`, `WISEPAD_3`, `TAP_TO_PAY_DEVICE`, …).
+  public let deviceType: String
+  /// The reader's software version, when it reports one.
+  public var softwareVersion: String?
+
+  public init(
+    id: String, label: String, kind: CardCollectorKind, simulated: Bool, batteryLevel: Double? = nil,
+    charging: Bool = false, deviceType: String = "", softwareVersion: String? = nil
+  ) {
+    self.id = id
+    self.label = label
+    self.kind = kind
+    self.simulated = simulated
+    self.batteryLevel = batteryLevel
+    self.charging = charging
+    self.deviceType = deviceType
+    self.softwareVersion = softwareVersion
+  }
+}
+
+public enum ReaderDiscovery: Equatable, Sendable {
+  case idle
+  case searching(CardCollectorKind, [DeviceReader])
+  /// Discovery ended with readers to pick from (possibly none).
+  case found(CardCollectorKind, [DeviceReader])
+  case failed(String)
+
+  /// The readers listed so far.
+  public var readers: [DeviceReader] {
+    switch self {
+    case .searching(_, let found), .found(_, let found): found
+    case .idle, .failed: []
+    }
+  }
+}
+
+/// A reader software update: offered, installing, or due before the next payment.
+public struct ReaderUpdate: Equatable, Sendable {
+  /// 0...1 while installing; nil while only offered.
+  public var progress: Double?
+  /// Past its deadline: it installs before this reader takes another payment.
+  public var required: Bool
+  /// The version it brings, when the SDK says.
+  public var version: String?
+  /// Roughly how long it takes ("1 to 2 minutes"), when the SDK says.
+  public var duration: String?
+
+  public init(progress: Double? = nil, required: Bool = false, version: String? = nil, duration: String? = nil) {
+    self.progress = progress
+    self.required = required
+    self.version = version
+    self.duration = duration
+  }
+}
+
+/// The reader management a device reader adds to `CardCollector`: discover by
+/// kind, pick one, disconnect, install an update. Implementations are
+/// `@Observable`. The Kotlin kit's `DeviceReaderControls` is the same contract.
+@MainActor
+public protocol DeviceReaderControls: AnyObject {
+  var discovery: ReaderDiscovery { get }
+  var connectedReader: DeviceReader? { get }
+  var update: ReaderUpdate? { get }
+  /// Asks for location (and the SDK for Bluetooth) as it starts: the person
+  /// is choosing to connect a reader right now.
+  func discover(_ kind: CardCollectorKind, hostID: String, sessions: CardReaderSessionSource) async
+  func cancelDiscovery() async
+  /// Connects `reader` under the site's Terminal Location and remembers it for reconnects.
+  @discardableResult
+  func connect(to reader: DeviceReader, hostID: String, sessions: CardReaderSessionSource) async -> Bool
+  /// Disconnects and forgets the remembered reader, so opening the register does not reconnect it.
+  func forget() async
+  func installUpdate() async
+  /// Reconnects the reader connected last time, silently: no permission is asked for, and
+  /// nothing happens when none was connected or a permission is missing.
+  func reconnectRemembered(hostID: String, sessions: CardReaderSessionSource) async
+}
+
+/// The reader controls behind this collector, or nil (the simulated one, the Mac).
+@MainActor
+extension CardCollector {
+  public var deviceReaders: DeviceReaderControls? { self as? DeviceReaderControls }
+}
+
+/// Whether an optional update has reached its deadline; after it, it must install first.
+public func updateIsDue(requiredAt: Date?, now: Date = Date()) -> Bool {
+  guard let requiredAt else { return false }
+  return requiredAt <= now
+}
+
+/// A battery level as the readers screen shows it: `Battery 82%`, `Battery 82% · charging`.
+public func readerBatteryText(_ level: Double?, charging: Bool = false) -> String? {
+  guard let level, level >= 0 else { return nil }
+  let percent = Int((min(level, 1) * 100).rounded())
+  return charging ? "Battery \(percent)% · charging" : "Battery \(percent)%"
+}
+
+/// Why connecting needs the person's say-so, read out when they refused it.
+public let readerLocationRefused =
+  "Allow location for Aglyn POS in Settings to use a card reader. Card networks require the location of in-person payments."

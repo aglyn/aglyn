@@ -65,7 +65,7 @@ struct TrafficSummary {
     for day in current { for (key, value) in day.devices { deviceTotals[key, default: 0] += value } }
     devices = deviceSplit(deviceTotals)
     topPaths = rollUp(current.map(\.paths))
-    topReferrers = rollUp(current.map(\.referrers))
+    topReferrers = rollUp(current.map(\.referrers)).map { (key: referrerLabel($0.key), value: $0.value) }
     topUtmSources = Array(rollUp(current.map { $0.utm["source"] ?? [:] }).prefix(5))
     topUtmCampaigns = Array(rollUp(current.map { $0.utm["campaign"] ?? [:] }).prefix(5))
   }
@@ -309,7 +309,7 @@ struct AnalyticsView: View {
                   Text(count(Double(row.total))).monospacedDigit()
                   Text("\(Int((Double(row.total) * 100 / Double(sum) + 0.5).rounded(.down)))%").monospacedDigit()
                   Text(topDevice(row).capitalized)
-                  Text(topReferrer(row).isEmpty ? "—" : topReferrer(row)).lineLimit(1)
+                  Text(topReferrer(row).isEmpty ? "—" : referrerLabel(topReferrer(row))).lineLimit(1)
                 }
                 .font(AglynFont.subheadline)
                 .accessibilityElement(children: .combine)

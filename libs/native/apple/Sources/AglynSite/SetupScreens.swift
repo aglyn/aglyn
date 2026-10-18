@@ -1122,7 +1122,7 @@ private struct FontBrowserSheet: View {
       #endif
       .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
     }
-    .frame(minWidth: 380, minHeight: 480)
+    .aglynSheetMinimumSize(width: 380, height: 480)
   }
 
   private func row(_ title: String, detail: String?, family: String) -> some View {

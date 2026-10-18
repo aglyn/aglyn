@@ -21,11 +21,10 @@
  * `hosts/{id}/redirects` is read on this page as an unordered `limit(200)`
  * window and then filtered to drop soft-deleted rows, and that filtered length
  * was feeding both `checkQuota('redirectsPerHost')` and the readout beside it.
- * `app/api/hosts/resources` counts the collection plainly —
- * `collectionRef.count()`, every document, soft-deleted ones included — so the
- * two disagreed on both counts at once: a rule deleted in this console still
- * occupies a slot on the server, and a site past 200 rules has rows the window
- * never saw.
+ * `app/api/hosts/resources` counts the whole collection's LIVE rules — every
+ * document less the tombstones (AGL-3918) — so a site past 200 rules has rows
+ * the window never saw. The page now asks the same question with the same two
+ * aggregates, and a deleted rule frees its slot on both.
  *
  * The visible effect is the worst kind. The page shows room, the author fills
  * in the form, and the save is refused by a server counting something else.
@@ -44,7 +43,7 @@ import RedirectsConsolePage from './redirects-console-page'
 
 /**
  * One LIVE rule on screen, one soft-deleted beside it. The visible length is
- * 1; the server counts every document in the collection.
+ * 1; the server counts every live document in the collection.
  */
 const redirectDocs = [
   {
@@ -64,13 +63,19 @@ const redirectDocs = [
     kind: 'exact',
     priority: 100,
     enabled: false,
-    // Soft-deleted: hidden here, still counted there.
+    // Soft-deleted: hidden here, and not counted there either (AGL-3918).
     deletedAt: { toMillis: () => 0 },
   },
 ]
 
-/** What the enforcing route would count. Moved per test. */
+/** Every rule document the server holds, and how many are deleted. Moved per test. */
 let serverCount = 25
+let serverTombstones = 0
+/** The suffix the mocked `query` gives the tombstone aggregate's target. */
+const TOMBSTONES = ':tombstones'
+const countFor = (target: string) => ({
+  data: () => ({ count: target.endsWith(TOMBSTONES) ? serverTombstones : serverCount }),
+})
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
@@ -101,7 +106,13 @@ jest.mock('firebase/firestore', () => ({
   ...jest.requireActual('firebase/firestore'),
   collection: (_db: unknown, ...segments: string[]) =>
     segments[segments.length - 1],
-  query: (name: string) => name,
+  // The tombstone aggregate (`deletedAt != null`) is told apart by its
+  // filter; every other query keeps the collection's name.
+  query: (name: string, ...constraints: Array<{ field?: string; op?: string }>) =>
+    constraints.some((constraint) => constraint?.field === 'deletedAt' && constraint.op === '!=')
+      ? `${name}${TOMBSTONES}`
+      : name,
+  where: (field: string, op: string) => ({ field, op }),
   limit: () => undefined,
   doc: () => ({}),
   getDoc: jest.fn().mockResolvedValue({ get: () => ({}) }),
@@ -109,7 +120,7 @@ jest.mock('firebase/firestore', () => ({
   updateDoc: jest.fn().mockResolvedValue(undefined),
   // The aggregation the enforcing route uses. Recorded so the collection it
   // counts can be asserted, not just the number it returns.
-  getCountFromServer: jest.fn(async () => ({ data: () => ({ count: serverCount }) })),
+  getCountFromServer: jest.fn(async (target: string) => countFor(target)),
 }))
 
 const enqueueSnackbar = jest.fn()
@@ -135,9 +146,8 @@ const ORG = { plan: 'starter' } as never
 beforeEach(() => {
   jest.clearAllMocks()
   serverCount = CAP
-  ;(getCountFromServer as jest.Mock).mockImplementation(async () => ({
-    data: () => ({ count: serverCount }),
-  }))
+  serverTombstones = 0
+  ;(getCountFromServer as jest.Mock).mockImplementation(async (target: string) => countFor(target))
 })
 
 const renderPage = () =>
@@ -155,8 +165,10 @@ const addRedirect = () =>
  * who are inside their cap. Waiting here is therefore part of the case under
  * test, not test hygiene: it is the state in which the gate has an answer.
  */
-const countLanded = () =>
-  waitFor(() => expect(getCountFromServer).toHaveBeenCalled())
+const countLanded = async () => {
+  await waitFor(() => expect(getCountFromServer).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(screen.queryByText(/checking/i)).toBeNull())
+}
 
 describe('the redirects console counts what the server enforces on', () => {
   /**
@@ -202,6 +214,36 @@ describe('the redirects console counts what the server enforces on', () => {
     // The mocked `collection()` answers with its last segment, so this asserts
     // WHICH collection the count was taken over.
     expect(getCountFromServer).toHaveBeenCalledWith('redirects')
+    expect(getCountFromServer).toHaveBeenCalledWith(`redirects${TOMBSTONES}`)
+  })
+
+  /*
+   * AGL-3918: a deleted rule frees its slot. One over the cap stored, two of
+   * them deleted, is one under it live, so the form opens; one deleted is
+   * still at the cap, so it is refused.
+   */
+  it('frees the slot a deleted rule held (AGL-3918)', async () => {
+    serverCount = CAP + 1
+    serverTombstones = 2
+    renderPage()
+    await countLanded()
+    addRedirect()
+
+    await waitFor(() => expect(screen.queryByLabelText('To')).not.toBeNull())
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+  })
+
+  it('still refuses when what is left after the deletes fills the plan (AGL-3918)', async () => {
+    serverCount = CAP + 1
+    serverTombstones = 1
+    renderPage()
+    await countLanded()
+    addRedirect()
+
+    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    expect(enqueueSnackbar.mock.calls[0][0]).toEqual(
+      expect.stringMatching(/limit reached/i),
+    )
   })
 
   /*

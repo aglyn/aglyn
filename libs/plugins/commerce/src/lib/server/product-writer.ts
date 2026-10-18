@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import type {
   PluginProductWriter,
   SourcedProductWrite,
@@ -216,7 +217,8 @@ export async function upsertSourcedProduct(
     const now = Date.now()
     const ref = products.doc(productId)
     await firestore.runTransaction(async (tx) => {
-      const used = (await tx.get(products.count())).data().count
+      // Live products only: a deleted one frees its slot, an archived one keeps it (AGL-3918).
+      const used = await countLiveDocuments(products, (aggregate) => tx.get(aggregate))
       const quota = Aglyn.checkQuota(org as never, 'productsPerHost', Number(used) || 0)
       if (!quota.allowed) throw new WriteRefusal({ outcome: 'plan_limit', limit: Number(quota.limit) || 0 })
       tx.create(
