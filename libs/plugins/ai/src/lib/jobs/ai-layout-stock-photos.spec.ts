@@ -273,6 +273,17 @@ const STARTER_SRCS = new Set<string>(
   Object.values(AI_LAYOUT_STARTER_PHOTOS).map((starter) => starter.src),
 )
 
+/**
+ * Where the site has a library and it failed the page, only the neutral
+ * starters stand in (AGL-3923): the team in an office and the desk, each once;
+ * a slot past them shows no photo.
+ */
+const NEUTRAL_SRCS = new Set<string>([AI_LAYOUT_STARTER_PHOTOS.hero.src, AI_LAYOUT_STARTER_PHOTOS.desk.src])
+const neutralOnly = (nodes: NodesMap): boolean => {
+  const placed = srcs(nodes).filter((src): src is string => Boolean(src))
+  return placed.length > 0 && placed.every((src) => NEUTRAL_SRCS.has(src)) && new Set(placed).size === placed.length
+}
+
 describe('the stock photo searches (AGL-3660)', () => {
   it('reads the kind of business from the head of the business type', () => {
     expect(
@@ -506,7 +517,7 @@ describe('a language page filled from a stock photo library (AGL-3660)', () => {
     expect(downloads).not.toContain('1')
   })
 
-  it('falls back to the starter photos where the library refuses, finds nothing or fails', async () => {
+  it('falls back to the neutral starter photos where the library refuses, finds nothing or fails (AGL-3923)', async () => {
     const refusing = fakeLibrary({}, true)
     const { provider, downloads } = fakeProvider()
     const nodes = await aiResolveLayoutPictures(PAGE, {
@@ -519,7 +530,7 @@ describe('a language page filled from a stock photo library (AGL-3660)', () => {
         ingest: () => refusing.ingest,
       }),
     })
-    expect(srcs(nodes).every((src) => STARTER_SRCS.has(String(src)))).toBe(true)
+    expect(neutralOnly(nodes)).toBe(true)
     // A refusal to store holds for the page: the copies already under way
     // end there, and no slot tries another hit after it.
     expect(downloads.length).toBeLessThanOrEqual(3)
@@ -540,9 +551,7 @@ describe('a language page filled from a stock photo library (AGL-3660)', () => {
         ingest: () => fakeLibrary().ingest,
       }),
     })
-    expect(srcs(fallback).every((src) => STARTER_SRCS.has(String(src)))).toBe(
-      true,
-    )
+    expect(neutralOnly(fallback)).toBe(true)
 
     const nothing = fakeProvider({ search: async () => null })
     const empty = await aiResolveLayoutPictures(PAGE, {
@@ -555,10 +564,10 @@ describe('a language page filled from a stock photo library (AGL-3660)', () => {
         ingest: () => fakeLibrary().ingest,
       }),
     })
-    expect(srcs(empty).every((src) => STARTER_SRCS.has(String(src)))).toBe(true)
+    expect(neutralOnly(empty)).toBe(true)
   })
 
-  it('stops asking once the step is out of time, and the rest take starters', async () => {
+  it('stops asking once the step is out of time, and the rest take neutral starters (AGL-3923)', async () => {
     const { provider, searches } = fakeProvider()
     const controller = new AbortController()
     controller.abort()
@@ -573,7 +582,7 @@ describe('a language page filled from a stock photo library (AGL-3660)', () => {
       ),
     })
     expect(searches).toHaveLength(0)
-    expect(srcs(nodes).every((src) => STARTER_SRCS.has(String(src)))).toBe(true)
+    expect(neutralOnly(nodes)).toBe(true)
   })
 
   it('builds no source without a library or a media door, which leaves the starters', () => {

@@ -327,6 +327,40 @@ export function aiLayoutStarterPhotos(
 }
 
 /**
+ * The starters that show no one's business (AGL-3923): a team at a table in a
+ * bright office, a tidy desk. Never the workbench, the coffee shop's owner or
+ * the houseplants, which read as another business's own photos (AGL-3831).
+ */
+const NEUTRAL_STARTERS: readonly StarterName[] = ['hero', 'desk']
+
+/**
+ * A neutral starter for each slot a library could not fill, where the site
+ * has a library (AGL-3923): each at most once on a page, the hero served
+ * first and each pool turned by the seed, and none for a portrait of the
+ * business's people or a product, nor for a slot past the two. A slot given
+ * none keeps the no-photo treatment.
+ */
+export function aiLayoutNeutralStarterPhotos(
+  slots: readonly AiLayoutPictureSlot[],
+  seed: string,
+): Array<AiLayoutPicturePhoto | null> {
+  const pool = rotate(NEUTRAL_STARTERS, aiLayoutSeedNumber(seed))
+  const order: AiLayoutPictureRole[] = ['hero', 'gallery', 'about']
+  const served = slots
+    .map((slot, index) => ({ slot, index }))
+    .filter(({ slot }) => !slot.people && !slot.product)
+    .sort((a, b) => order.indexOf(a.slot.role) - order.indexOf(b.slot.role) || a.index - b.index)
+  const photos: Array<AiLayoutPicturePhoto | null> = slots.map(() => null)
+  served.forEach(({ index }, step) => {
+    const name = pool[step]
+    if (!name) return
+    const photo = AI_LAYOUT_STARTER_PHOTOS[name]
+    photos[index] = { src: photo.src, width: photo.width, height: photo.height, alt: photo.alt }
+  })
+  return photos
+}
+
+/**
  * The page with each slot filled by its photo: the `image` given its source,
  * its intrinsic size and how it loads (the hero eagerly, as the starter home
  * page loads its own), and the placeholder icon taken out of the frame. The
@@ -501,14 +535,28 @@ export async function aiResolveLayoutPictures(
     // The starters' words are English; a site in another language says it
     // shows an illustrative photo, true of any photo, as a stock photo's does.
     const otherLanguage = aiLayoutSpeaksOtherThanEnglish(input.language)
-    const starters = aiLayoutStarterPhotos(slots, input.seed).map((photo) =>
-      otherLanguage ? { ...photo, alt: aiLayoutLabel('illustrativePhoto', input.language) } : photo,
+    const said = (photo: AiLayoutPicturePhoto): AiLayoutPicturePhoto =>
+      otherLanguage ? { ...photo, alt: aiLayoutLabel('illustrativePhoto', input.language) } : photo
+    // With a library, a starter is only ever a neutral one (AGL-3923): the
+    // beta.267 Brightvale start, whose library refused its copies, showed a
+    // pottery bench and a coffee shop's owner as a marketer's pictures.
+    const starters = (input.source ? aiLayoutNeutralStarterPhotos(slots, input.seed) : aiLayoutStarterPhotos(slots, input.seed)).map(
+      (photo) => (photo ? said(photo) : null),
     )
     const photos = slots.map((_slot, index) => {
       const answer = found[index]
       if (answer) return answer.src ? answer : null
       return starters[index] ?? null
     })
+    // The page floor (AGL-3923; Zach, 2026-10-12: a starter photo before no
+    // photo at all): a page the library answered that would show no picture
+    // keeps one neutral starter, in its hero, else its first slot.
+    if (input.source && !photos.some((photo) => photo?.src)) {
+      const at = Math.max(0, slots.findIndex((slot) => slot.role === 'hero'))
+      const [floor] = rotate(NEUTRAL_STARTERS, aiLayoutSeedNumber(input.seed))
+      const photo = floor ? AI_LAYOUT_STARTER_PHOTOS[floor] : null
+      if (photo) photos[at] = said({ src: photo.src, width: photo.width, height: photo.height, alt: photo.alt })
+    }
     return aiLayoutDropEmptyPictures(aiLayoutPlacePictures(nodes, slots, photos), slots, photos, input.sectionIds)
   } catch (error) {
     console.error('ai layout pictures: the page keeps its empty picture slots', { error })

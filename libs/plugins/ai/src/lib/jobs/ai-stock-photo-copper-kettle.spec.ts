@@ -288,7 +288,7 @@ describe('the Copper Kettle Catering hero (AGL-3831, beta.257)', () => {
     expect(hero['loading']).toBe('eager')
   })
 
-  it('leaves the hero without a photo, not a starter, when the library answers and nothing fits', async () => {
+  it('gives the hero a neutral starter, never a caterer’s misfit, when the library answers and nothing fits (AGL-3923 floor)', async () => {
     // Only the Austin cars, parks and roses: the library is up, and none is a caterer's.
     const offTopic = FAMILY_RUN_AUSTIN_CATERER.filter(
       (photo) => !photo.tags.some((tag) => /cater/.test(tag)),
@@ -301,23 +301,28 @@ describe('the Copper Kettle Catering hero (AGL-3831, beta.257)', () => {
       pageInput(sourceOf(fakes(() => offTopic))),
     )
     const hero = heroOf(page)
-    // The cover keeps its section's own band: no source, nothing drawn on the published page.
-    expect(hero['src']).toBeUndefined()
-    expect(JSON.stringify(page)).not.toContain('/_static/starter/')
+    // A page the library answered keeps one picture (Zach, 2026-10-12): a
+    // neutral starter, the team in an office or the desk, never the pottery
+    // bench production once placed here (AGL-3831), nor the caterer's model words.
+    expect([AI_LAYOUT_STARTER_PHOTOS.hero.src, AI_LAYOUT_STARTER_PHOTOS.desk.src]).toContain(hero['src'])
+    expect(hero['alt']).not.toBe(HERO_ALT)
+    expect(JSON.stringify(page)).not.toContain(AI_LAYOUT_STARTER_PHOTOS.craft.src)
+    expect(JSON.stringify(page)).not.toContain(AI_LAYOUT_STARTER_PHOTOS.about.src)
     expect(deps.stored).toHaveLength(0)
   })
 
-  it('takes a starter described by its own words when the library is down (the beta.257 shape, its alt corrected)', async () => {
+  it('takes a neutral starter described by its own words when the library is down, never the beta.257 workbench (AGL-3923)', async () => {
     const deps = fakes(() => Promise.reject(new Error('library down')))
     const page = await aiResolveLayoutPictures(
       homePage(),
       pageInput(sourceOf(deps)),
     )
     const hero = heroOf(page)
-    // The same starter production placed for this job's home page.
-    expect(hero['src']).toBe(AI_LAYOUT_STARTER_PHOTOS.craft.src)
-    // Its alt is the workbench it shows, never the brisket the model wrote.
-    expect(hero['alt']).toBe(AI_LAYOUT_STARTER_PHOTOS.craft.alt)
+    // Production placed the starters' pottery workbench here (beta.257); with a library, only a neutral starter stands in.
+    const neutral = [AI_LAYOUT_STARTER_PHOTOS.hero, AI_LAYOUT_STARTER_PHOTOS.desk].find((photo) => photo.src === hero['src'])
+    expect(neutral).toBeDefined()
+    // Its alt is what it shows, never the brisket the model wrote.
+    expect(hero['alt']).toBe(neutral?.alt)
     expect(hero['alt']).not.toBe(HERO_ALT)
   })
 
