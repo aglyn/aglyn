@@ -209,17 +209,20 @@ public struct AglynItemTile: View {
     Button(action: action) {
       VStack(alignment: .leading, spacing: AglynSpace.one) {
         ZStack(alignment: .topTrailing) {
-          Group {
-            if let imageURL {
-              AsyncImage(url: imageURL) { phase in
-                if let image = phase.image { image.resizable().scaledToFill() } else { monogram }
+          // The 4:3 box sets the size and the picture fills it as an overlay, so a photo never widens its tile past
+          // the ones beside it.
+          Color.clear
+            .frame(maxWidth: .infinity)
+            .aspectRatio(4 / 3, contentMode: .fit)
+            .overlay {
+              if let imageURL {
+                AsyncImage(url: imageURL) { phase in
+                  if let image = phase.image { image.resizable().scaledToFill() } else { monogram }
+                }
+              } else {
+                monogram
               }
-            } else {
-              monogram
             }
-          }
-          .frame(maxWidth: .infinity)
-          .aspectRatio(4 / 3, contentMode: .fit)
           .clipShape(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous))
           if let badge {
             StatusChip(badge.text, tone: badge.tone)

@@ -63,6 +63,13 @@ struct RegisterOpsSheet: View {
       .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
     }
     .aglynSheetMinimumSize(width: 420, height: 420)
+    // The pairing code is presented from here, not from its row: a sheet anchored inside the Form went away
+    // within a second, taking this sheet with it, as soon as the row redrew.
+    .sheet(isPresented: Binding(get: { model.display.pairing != nil }, set: { if !$0 { model.display.closePairing() } })) {
+      if let pairing = model.display.pairing {
+        PairingCodeSheet(model: model, pairing: pairing, mode: model.display.pairingMode)
+      }
+    }
     .sheet(isPresented: $returning) { PosReturnSheet(model: model) }
     .sheet(isPresented: $switching) {
       PinPadSheet(model: model, purpose: "cashier", title: "Switch cashier", prompt: nil, dismissible: true) {
@@ -548,11 +555,6 @@ private struct DisplayDevicesSection: View {
       }
     }
     .task(id: model.register?.id) { await display.loadDevices() }
-    .sheet(isPresented: Binding(get: { display.pairing != nil }, set: { if !$0 { display.closePairing() } })) {
-      if let pairing = display.pairing {
-        PairingCodeSheet(model: model, pairing: pairing, mode: display.pairingMode)
-      }
-    }
   }
 
   private func seen(_ device: PosPairedDevice) -> String {
