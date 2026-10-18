@@ -9,6 +9,23 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.267 — 2026-10-18
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.266...v1.0.0-beta.267)
+
+### Fixed
+
+- **health:** the sign-up landing check grades whether a new owner reached the console, not whether they made a site ([AGL-3927](https://linear.app/aglyn/issue/AGL-3927))
+- **uptime:** the probe tries a request once more when the runner's own network failed it ([AGL-3927](https://linear.app/aglyn/issue/AGL-3927))
+- **ai:** widen a picture's search past an unknown world so pages keep photos ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923), [AGL-3856](https://linear.app/aglyn/issue/AGL-3856), [AGL-3831](https://linear.app/aglyn/issue/AGL-3831))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **guards:** record the AGL-3923 fixture's recorded Pixabay tag text in the spelling baseline ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923))
+
+</details>
+
 ## v1.0.0-beta.266 — 2026-10-18
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.265...v1.0.0-beta.266)

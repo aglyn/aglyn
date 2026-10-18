@@ -982,20 +982,51 @@ export function signupDroughtHealth(
  * 10/17's). The streak of two was red only on 10/11, AGL-3724, and nowhere
  * else. A streak of three missed AGL-3724 entirely.
  *
+ * ## A site is not the question; reaching the console is (2026-10-18)
+ *
+ * The streak rule went red on 2026-10-18 at 15:37Z for the same reason the
+ * count did: the two newest people had no site, and both had LEFT. One left
+ * nine seconds after the workspace appeared. The other reached the site list,
+ * walked four steps of the guided start, and stopped. Sign-ups on either side
+ * of them made sites on the same build. "No site" is an outcome that leaving
+ * produces as surely as a broken landing does, so no rule over sites alone
+ * can tell the two apart.
+ *
+ * What AGL-3724 broke was the landing itself: the person never REACHED the
+ * console after the workspace was made. That is recorded now. Every org is
+ * born with `landedAtMs: null` ({@link ORG_LANDED_AT_PATH}), and the org
+ * shell's activity beat, which fires the moment the workspace opens, sets it
+ * the first time (`stampOrgLastActivity`). So an org counts as stranded only
+ * when it has no site AND its owner never reached the console. A person who
+ * arrived and then left is a drop-off, which is not this check's business.
+ *
+ * An org without the field predates the marker, and the check has no
+ * evidence about it either way, so it ABSTAINS on it (`unmarkedOrgs`). It is
+ * never counted as stranded, the way a check that cannot see its subject
+ * says so instead of guessing.
+ *
  * Pure, like its siblings: the route reads, this decides. The body carries
  * counts only, never an org id, slug or visitor key, because the endpoint is
  * public.
  */
 export interface SignupLandingCheck extends HealthCheck {
-  /** Orgs in the window that have no site. Null when the read failed. */
+  /**
+   * Orgs in the window with no site whose owner never reached the console.
+   * Null when the read failed.
+   */
   strandedOrgs: number | null
-  /** People in the window with no site in any of their orgs. */
+  /** People in the window none of whose orgs has a site or a landing. */
   strandedPeople: number | null
   /**
-   * How many of the newest people in the window, in a row, have no site:
+   * How many of the newest people in the window, in a row, are stranded:
    * what the verdict reads. Null when the read failed.
    */
   strandedStreak: number | null
+  /**
+   * Orgs with no site that predate the landing marker, which the check
+   * abstains on. Null when the read failed.
+   */
+  unmarkedOrgs: number | null
   /** Every org in the window, the context for the counts above. */
   orgsInWindow: number | null
   /** How far back the window reaches. */
@@ -1024,12 +1055,22 @@ export const SIGNUP_LANDING_GRACE_MINUTES = 30
 export const MAX_STRANDED_SIGNUPS = 2
 
 /**
- * One org as the landing check reads it: whether it has any site, when it
- * was made, and who made it. `visitor` is an opaque key that never leaves
- * the check; an org without one is its own person.
+ * Where an org records that its owner reached the console (see
+ * {@link SignupLandingCheck}). `null` from birth, epoch millis once the
+ * workspace has been opened, absent on an org made before it existed.
+ */
+export const ORG_LANDED_AT_PATH = 'landedAtMs'
+
+/**
+ * One org as the landing check reads it: whether it has any site, whether
+ * its owner reached the console, when it was made, and who made it.
+ * `landed` is `undefined` for an org that predates the marker. `visitor` is
+ * an opaque key that never leaves the check; an org without one is its own
+ * person.
  */
 export interface SignupLandingOrg {
   hostCount: number
+  landed?: boolean
   createdAtMs?: number | null
   visitor?: string | null
 }
@@ -1052,6 +1093,7 @@ export function signupLandingHealth(
       strandedOrgs: null,
       strandedPeople: null,
       strandedStreak: null,
+      unmarkedOrgs: null,
       orgsInWindow: null,
       ...shape,
     }
@@ -1060,8 +1102,21 @@ export function signupLandingHealth(
   // reads as "no site" and cannot hide a stranded org.
   const hasSite = (landing: SignupLandingOrg) =>
     Number(landing.hostCount) > 0
-  const strandedOrgs = orgs.filter((landing) => !hasSite(landing)).length
-  const people = new Map<string, { latestMs: number; landed: boolean }>()
+  // Each org is one of: arrived (a site, or its owner reached the console),
+  // stranded (neither, and the marker says so), or unknown (neither, and it
+  // predates the marker).
+  const arrived = (landing: SignupLandingOrg) =>
+    hasSite(landing) || landing.landed === true
+  const isStranded = (landing: SignupLandingOrg) =>
+    !arrived(landing) && landing.landed === false
+  const strandedOrgs = orgs.filter(isStranded).length
+  const unmarkedOrgs = orgs.filter(
+    (landing) => !arrived(landing) && landing.landed === undefined,
+  ).length
+  const people = new Map<
+    string,
+    { latestMs: number; arrived: boolean; stranded: boolean }
+  >()
   orgs.forEach((landing, index) => {
     const key = landing.visitor ? `visitor:${landing.visitor}` : `org:${index}`
     const createdAtMs = Number(landing.createdAtMs)
@@ -1069,17 +1124,20 @@ export function signupLandingHealth(
     const person = people.get(key)
     people.set(key, {
       latestMs: Math.max(person?.latestMs ?? 0, latestMs),
-      landed: (person?.landed ?? false) || hasSite(landing),
+      arrived: (person?.arrived ?? false) || arrived(landing),
+      stranded: (person?.stranded ?? false) || isStranded(landing),
     })
   })
-  const newestFirst = [...people.values()].sort(
-    (a, b) => b.latestMs - a.latestMs,
-  )
-  const strandedPeople = newestFirst.filter((person) => !person.landed).length
+  // A person with nothing but unmarked orgs is not graded at all: neither
+  // arrived nor stranded, so they neither start nor break a streak.
+  const newestFirst = [...people.values()]
+    .filter((person) => person.arrived || person.stranded)
+    .sort((a, b) => b.latestMs - a.latestMs)
+  const strandedPeople = newestFirst.filter((person) => !person.arrived).length
   let strandedStreak = 0
   while (
     strandedStreak < newestFirst.length &&
-    !newestFirst[strandedStreak].landed
+    !newestFirst[strandedStreak].arrived
   ) {
     strandedStreak += 1
   }
@@ -1091,6 +1149,7 @@ export function signupLandingHealth(
     strandedOrgs,
     strandedPeople,
     strandedStreak,
+    unmarkedOrgs,
     orgsInWindow: orgs.length,
     ...shape,
   }
