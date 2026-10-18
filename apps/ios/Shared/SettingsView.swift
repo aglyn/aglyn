@@ -69,6 +69,10 @@ struct SettingsView: View {
         }
         .accessibilityIdentifier("settings-notifications")
       }
+      #if os(iOS)
+        // On the Mac these are the Help menu's, opening in the main window rather than the Settings window.
+        HelpSection()
+      #endif
       Section("About") {
         LabeledContent("Version", value: AppVersion.current)
         if let origin = model.config?.consoleOrigin {

@@ -32,7 +32,8 @@ struct RootView<Shell: View>: View {
           AglynLaunchView(name: model.brandName, caption: model.app == .pos ? "POS" : nil)
         } else if auth.user == nil || model.authFlow.landing {
           // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
-          SignedOutView()
+          // Its Terms of Service and Privacy Policy links open in the in-app browser screen, pushed over it.
+          AglynBrowserStack { SignedOutView() }
         } else if auth.user?.emailVerified == false && auth.impersonation == nil {
           // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
           VerifyEmailView()
@@ -59,8 +60,9 @@ struct RootView<Shell: View>: View {
     }
     .tint(AglynColor.tint)
     .font(AglynFont.body)
-    // Every plain web page (a live site, a preview, a docs or legal link) opens in the in-app web sheet (AGL-3893).
-    .aglynWebSheetHost()
+    // Every plain web page (a live site, a preview, a docs or legal page) opens in the in-app browser screen, pushed
+    // onto the section on screen (AGL-3935).
+    .aglynBrowserHost { page, disposition in navigation.openWeb(page, disposition) }
     .onChange(of: model.auth?.user, initial: true) { _, user in
       model.userChanged(user)
       openPendingPush()

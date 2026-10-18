@@ -91,4 +91,18 @@ class AglynConfigTest {
     assertFalse(AglynConfig.read(production.copy(appCheck = " OFF "), AglynAppId.POS).appCheck)
     assertFailsWith<IllegalArgumentException> { AglynConfig.read(production.copy(appCheck = "maybe"), AglynAppId.AGLYN) }
   }
+
+  @Test
+  fun theDocsAndLegalOriginsAreHttpsOriginsOrTheDefaults() {
+    val unset = AglynConfig.read(AglynEnv(), AglynAppId.AGLYN)
+    assertEquals("https://docs.aglyn.com", unset.docsOrigin)
+    assertEquals("https://aglyn.com", unset.legalOrigin)
+    val set = AglynConfig.read(AglynEnv(docsOrigin = " https://Docs.Example.com/ ", legalOrigin = "https://example.com"), AglynAppId.AGLYN)
+    assertEquals("https://docs.example.com", set.docsOrigin)
+    assertEquals("https://example.com", set.legalOrigin)
+    // A plain-http address or a path falls back.
+    for (wrong in listOf("http://docs.example.com", "https://docs.example.com/help", "")) {
+      assertEquals("https://docs.aglyn.com", AglynConfig.read(AglynEnv(docsOrigin = wrong), AglynAppId.AGLYN).docsOrigin, wrong)
+    }
+  }
 }

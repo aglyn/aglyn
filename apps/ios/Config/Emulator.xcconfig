@@ -21,6 +21,7 @@ AGLYN_BRAND_NAME = Aglyn
 AGLYN_APP_CHECK = off
 AGLYN_PASSKEY_RP_ID =
 AGLYN_LEGAL_ORIGIN = https:/$()/aglyn.com
+AGLYN_DOCS_ORIGIN = https:/$()/docs.aglyn.com
 AGLYN_APPLE_SIGN_IN = NO
 
 // Debug builds only: with `-AglynAutoSignIn YES` on the launch arguments,
