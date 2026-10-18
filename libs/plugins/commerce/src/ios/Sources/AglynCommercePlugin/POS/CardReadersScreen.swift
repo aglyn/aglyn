@@ -238,6 +238,8 @@ struct CardReadersScreen: View {
         } label: {
           Image(systemName: "ellipsis.circle").accessibilityLabel("\(reader.label) actions")
         }
+        // The ellipsis is the menu's affordance; the Mac's extra chevron beside it doubled it.
+        .menuIndicator(.hidden)
         .accessibilityIdentifier("reader-actions-\(reader.id)")
       }
     }
