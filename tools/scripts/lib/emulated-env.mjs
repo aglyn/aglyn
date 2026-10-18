@@ -186,6 +186,13 @@ export function namesWithValues(envFiles) {
  */
 export const EMULATOR_PROJECT_FALLBACK = 'aglyn-main'
 export const EMULATOR_WEB_API_KEY = 'emulator-web-api-key'
+/**
+ * The sender id the placeholder app id is built from. Remote Config and
+ * Installations refuse to start without an app id, and the console boots both
+ * before sign-in, so a page served without one reloads on the boot error and
+ * never draws the sign-in form.
+ */
+export const EMULATOR_SENDER_ID = '000000000000'
 
 /** The web-config values an emulated server is given when nothing set them. */
 export function emulatorFirebaseIdentity(env) {
@@ -200,6 +207,8 @@ export function emulatorFirebaseIdentity(env) {
     NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: `${project}.firebaseapp.com`,
     NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: `${project}.appspot.com`,
     NEXT_PUBLIC_FIREBASE_DATABASE_URL: `https://${project}-default-rtdb.firebaseio.com`,
+    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: EMULATOR_SENDER_ID,
+    NEXT_PUBLIC_FIREBASE_APP_ID: `1:${EMULATOR_SENDER_ID}:web:emulator`,
   }
 }
 

@@ -803,11 +803,19 @@ async function runOnce(context, index) {
     // 3. Start with AI, and the answers.
     await shot(page, '02-start-choice')
     await startWithAi.click()
+    // The guided start asks one thing to a step (AGL-3898): Next moves on
+    // once the step's heading for the next answer is on screen.
+    const next = async (heading) => {
+      await page.getByRole('button', { name: 'Next', exact: true }).click()
+      await page.getByText(heading).first().waitFor({ timeout: 30_000 })
+    }
     await page
       .getByLabel('What kind of site are you creating?')
       .fill(answers.siteType)
+    await next('Who is it for?')
     if (answers.audience)
       await page.getByLabel('Who is it for?').fill(answers.audience)
+    await next('Choose a style')
     // The style of site (AGL-3660): the one the brief suggests is already
     // picked; a named one is clicked.
     if (answers.style && answers.style !== 'auto') {
@@ -825,6 +833,7 @@ async function runOnce(context, index) {
         .getAttribute('aria-label')
         .catch(() => null),
     })
+    await next('A few details')
     await pickOption(
       page,
       'Where do form submissions go?',
@@ -834,6 +843,8 @@ async function runOnce(context, index) {
     // The Pages menu closes on a transition; the frame is the form, not it.
     await page.waitForTimeout(600)
     await shot(page, '03-answers', { fullPage: true })
+    await next('Review your site')
+    await shot(page, '03-review', { fullPage: true })
 
     // 4. Plan my site creates the site, empty, and starts its job. The beat
     // is not running yet, so the site is read as it was born.
