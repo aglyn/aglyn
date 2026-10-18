@@ -46,6 +46,10 @@ struct MainShell: View {
     .sheet(isPresented: $navigation.showAddAccount) { AddAccountView().environment(model) }
     .sheet(isPresented: $navigation.showAccount) { AccountSheet().environment(model).environment(navigation) }
     .sheet(isPresented: keepPinsShown) { KeepPinsSheet().environment(model) }
+    .sheet(isPresented: $navigation.showOneBox) { OneBoxView().environment(model).environment(navigation) }
+    .sheet(isPresented: $navigation.showAddWorkspace) {
+      AddWorkspaceSheet { navigation.showAddWorkspace = false }.environment(model)
+    }
     .environment(\.aglynScreenSession, model.screenSession)
     .preferredColorScheme(model.preferences?.appTheme.appearance.colorScheme)
     .onAppear { DebugLaunch.route(navigation) }
@@ -59,7 +63,10 @@ struct MainShell: View {
       if let orgID { model.preferences?.opened(orgID: orgID) }
     }
     .onChange(of: model.workspace?.orgs.map(\.id) ?? []) { _, ids in model.auth?.recordWorkspaces(ids) }
-    .onChange(of: navigation.section) { _, section in recordRecent(section) }
+    .onChange(of: navigation.section) { _, section in
+      navigation.record(section)
+      recordRecent(section)
+    }
     // Another account in use, or a support session: nothing open belonged to it.
     .onChange(of: model.auth?.user?.uid) {
       navigation.paths = [:]
@@ -191,6 +198,18 @@ struct AreaView: View {
         }
       }
       .toolbar {
+        if let row, let item = model.itemRef(for: row, navigation: navigation) {
+          ToolbarItem(placement: .primaryAction) {
+            let starred = model.preferences?.isStarred(item) == true
+            Button {
+              model.preferences?.toggleStar(item)
+            } label: {
+              Label(starred ? "Unstar \(row.label)" : "Star \(row.label)", systemImage: starred ? "star.fill" : "star")
+            }
+            .help(starred ? "Unstar" : "Star")
+            .accessibilityIdentifier("titlebar-star")
+          }
+        }
         if let actions = row?.actions, !actions.isEmpty {
           ToolbarItemGroup(placement: .primaryAction) {
             ForEach(actions.filter { model.registry.screen($0.screen) != nil }, id: \.id) { action in
@@ -205,21 +224,108 @@ struct AreaView: View {
   }
 }
 
-/// The title bar's own items on the Mac and iPad: the bell (the account menu lives at the foot of the rail).
+/// The title bar's own items on the Mac and iPad (Figma Mac/Titlebar): Back, Forward and the recent places, the
+/// "Search or jump to ⌘K" field that opens the one box, and the bell with its popover. The account menu lives at the
+/// foot of the rail.
 struct TitleBarItems: ToolbarContent {
+  @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   let unread: Int
 
   var body: some ToolbarContent {
+    @Bindable var navigation = navigation
+    ToolbarItemGroup(placement: .navigation) {
+      Button {
+        navigation.goBack()
+      } label: {
+        Label("Back", systemImage: "chevron.left")
+      }
+      .disabled(!navigation.canGoBack)
+      .help("Back")
+      .accessibilityIdentifier("titlebar-back")
+      Button {
+        navigation.goForward()
+      } label: {
+        Label("Forward", systemImage: "chevron.right")
+      }
+      .disabled(!navigation.canGoForward)
+      .help("Forward")
+      .accessibilityIdentifier("titlebar-forward")
+      RecentPlacesMenu()
+    }
     ToolbarItem(placement: .primaryAction) {
       Button {
-        navigation.select(.notifications)
+        navigation.showOneBox = true
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+          Text("Search or jump to").foregroundStyle(.secondary)
+          Spacer(minLength: 24)
+          Text("⌘K").font(AglynFont.caption).foregroundStyle(.secondary)
+        }
+        .font(AglynFont.subheadline)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .frame(minWidth: 220)
+        .background(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).fill(AglynColor.page))
+        .overlay(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).strokeBorder(AglynColor.divider))
+      }
+      .buttonStyle(.plain)
+      .help("Search or jump to (⌘K)")
+      .accessibilityLabel("Search or jump to")
+      .accessibilityIdentifier("titlebar-search")
+    }
+    ToolbarItem(placement: .primaryAction) {
+      Button {
+        navigation.showNotifications.toggle()
       } label: {
         Label(unread > 0 ? "Notifications, \(unread) unread" : "Notifications", systemImage: unread > 0 ? "bell.badge" : "bell")
       }
       .help("Notifications")
       .accessibilityIdentifier("titlebar-bell")
+      .popover(isPresented: $navigation.showNotifications, arrowEdge: .bottom) {
+        NotificationsPopover().environment(model).environment(navigation)
+      }
     }
+  }
+}
+
+/// The recent places beside Back and Forward: what the person opened lately, from the account's recents.
+struct RecentPlacesMenu: View {
+  @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
+
+  var body: some View {
+    Menu {
+      let recents = Array((model.preferences?.recents ?? []).prefix(12))
+      if recents.isEmpty { Text("Nothing opened yet") }
+      ForEach(recents, id: \.key) { item in
+        Button(recentTitle(item)) { open(item) }
+      }
+    } label: {
+      Label("Recent", systemImage: "clock")
+    }
+    .menuIndicator(.hidden)
+    .help("Recent")
+    .accessibilityIdentifier("titlebar-recent")
+  }
+
+  private func recentTitle(_ item: RecentItem) -> String {
+    let site = item.hostId.flatMap { id in model.workspace?.sites.first { $0.id == id }?.name }
+    let org = model.workspace?.orgs.first { $0.id == item.orgId }?.name
+    return "\(item.label) — \(site ?? org ?? "")"
+  }
+
+  private func open(_ item: RecentItem) {
+    if item.orgId != model.workspace?.org?.id { model.workspace?.open(orgID: item.orgId, hostID: item.hostId) }
+    if let hostID = item.hostId {
+      model.workspace?.selectSite(hostID)
+      navigation.inSite = true
+    } else {
+      navigation.inSite = false
+    }
+    navigation.mode = .main
+    navigation.select(ShellSection.opening(item.screen, item.params))
   }
 }
 
@@ -241,21 +347,37 @@ struct PhoneShell: View {
     }
     var out: [(ShellSection, String, String)] = [(.home, "Home", "house")]
     if let busiest = scope.inSite ? (tab("orders") ?? tab("pages")) : tab("sites") { out.append(busiest) }
+    out.append((PhoneShell.createTab, "Create", "plus.circle.fill"))
     if let inbox = tab("inbox") { out.append(inbox) }
     out.append((.more, "Menu", "line.3.horizontal"))
     return out
   }
 
+  /// The centre tab's tag: never a section of its own.
+  static let createTab = ShellSection.plugin("shell.create")
+
   var body: some View {
     let tabs = tabs
     TabView(selection: $navigation.section) {
       ForEach(tabs, id: \.section) { tab in
-        ShellStack(navigation: navigation, section: tab.section)
+        Group {
+          if tab.section == PhoneShell.createTab { Color.clear } else { ShellStack(navigation: navigation, section: tab.section) }
+        }
           .tabItem { Label(tab.title, systemImage: tab.icon) }
           .tag(tab.section)
       }
     }
-    .onChange(of: navigation.section, initial: true) { _, section in
+    .sheet(isPresented: $navigation.showNotifications) {
+      NotificationsPopover().environment(model).environment(navigation)
+    }
+    .sheet(isPresented: $navigation.showCreate) { CreateNewSheet().environment(model).environment(navigation) }
+    .onChange(of: navigation.section, initial: true) { previous, section in
+      // The centre tab is Create new: it opens the sheet and stays on the tab you were on.
+      if section == PhoneShell.createTab {
+        navigation.section = previous == PhoneShell.createTab ? .home : previous
+        navigation.showCreate = true
+        return
+      }
       // A section with no tab of its own opens in Menu.
       guard !tabs.contains(where: { $0.section == section }) else { return }
       navigation.section = .more
@@ -286,7 +408,13 @@ struct PhoneTopBar: ViewModifier {
         ToolbarItem(placement: .topBarLeading) { ScopeChip() }
         ToolbarItemGroup(placement: .topBarTrailing) {
           Button {
-            navigation.push(.notifications)
+            navigation.showOneBox = true
+          } label: {
+            Label("Search or jump to", systemImage: "magnifyingglass")
+          }
+          .accessibilityIdentifier("topbar-search")
+          Button {
+            navigation.showNotifications = true
           } label: {
             Label("Notifications", systemImage: "bell")
           }
@@ -485,15 +613,133 @@ private struct ThemeRow: View {
   }
 }
 
-/// Create new's items (Phase 2 fills them from the console's create actions for the scope).
+/// One thing Create new can make where the window stands.
+struct CreateAction: Identifiable {
+  let id: String
+  let label: String
+  let icon: String
+  let screen: String
+  let params: [String: String]
+  /// Why it cannot be made here, shown on the disabled item; nil when it can.
+  let blocked: String?
+}
+
+extension ShellScope {
+  /// What Create new lists for this scope: the site's own makes (a page, then each area's create action) or the
+  /// workspace's (a site). An area that is off for the site stays listed, disabled, saying how to turn it on.
+  var createActions: [CreateAction] {
+    var out: [CreateAction] = []
+    if inSite {
+      if model.registry.screen("site.pages") != nil {
+        let canEdit = ["admin", "editor", "author"].contains(site?.role ?? "") || hostAdmin
+        out.append(
+          CreateAction(
+            id: "page", label: "Page", icon: "doc.text", screen: "site.pages", params: ["new": "1"],
+            blocked: canEdit ? nil : "Your role on this site cannot add pages."))
+      }
+      let shown = Set(mainList.groups.flatMap(\.rows).map(\.id))
+      let every = resolveNavList(.site, enabledPluginIds: NativeNav.allPluginIDs, hostAdmin: true).groups.flatMap(\.rows)
+      for row in every {
+        for action in row.actions ?? [] where action.params?["new"] == "1" && model.registry.screen(action.screen) != nil {
+          out.append(
+            CreateAction(
+              id: action.id, label: action.label.replacingOccurrences(of: "New ", with: "").capitalizedFirst,
+              icon: row.appleIcon, screen: action.screen, params: action.params ?? [:],
+              blocked: shown.contains(row.id) ? nil : "Turn on \(row.label) in Site settings first."))
+        }
+      }
+    } else if model.registry.screen("site.sites") != nil {
+      let canCreate = ["owner", "admin"].contains(org?.role ?? "")
+      out.append(
+        CreateAction(
+          id: "site", label: "Site", icon: "globe", screen: "site.sites", params: ["new": "1"],
+          blocked: canCreate ? nil : "Only a workspace owner or admin creates sites."))
+    }
+    return out
+  }
+}
+
+extension NativeNav {
+  /// Every plugin a manifest row names, to read a list as if each were on.
+  static var allPluginIDs: [String] {
+    Array(Set(manifest.lists.flatMap(\.groups).flatMap(\.rows).compactMap(\.pluginId)))
+  }
+}
+
+extension String {
+  var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+}
+
+/// Create new on a phone: the same items as a sheet.
+struct CreateNewSheet: View {
+  @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    let scope = ShellScope(model: model, navigation: navigation)
+    NavigationStack {
+      List {
+        Section(scope.site.map { "In \($0.name)" } ?? scope.org.map { "In \($0.name)" } ?? "") {
+          ForEach(scope.createActions) { action in
+            Button {
+              dismiss()
+              navigation.mode = .main
+              navigation.push(.screen(action.screen, action.params))
+            } label: {
+              AglynRow(action.label, subtitle: action.blocked, systemImage: action.icon)
+            }
+            .buttonStyle(.aglynRow)
+            .disabled(action.blocked != nil)
+            .accessibilityIdentifier("create-\(action.id)")
+          }
+        }
+        Section {
+          Button {
+            dismiss()
+            navigation.showAddWorkspace = true
+          } label: {
+            AglynRow("Workspace", systemImage: "building.2")
+          }
+          .buttonStyle(.aglynRow)
+        }
+      }
+      .navigationTitle("Create new")
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+    }
+    .presentationDetents([.medium])
+  }
+}
+
+/// Create new's items: the scope's makes, a blocked one disabled with its reason; then Add workspace.
 struct CreateNewItems: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
 
   var body: some View {
-    Button("Site", systemImage: "globe") {
-      navigation.enterWorkspace()
-      navigation.select(.plugin("site.sites"))
+    let scope = ShellScope(model: model, navigation: navigation)
+    Section(scope.site.map { "In \($0.name)" } ?? scope.org.map { "In \($0.name)" } ?? "") {
+      ForEach(scope.createActions) { action in
+        Button {
+          navigation.mode = .main
+          navigation.push(.screen(action.screen, action.params))
+        } label: {
+          if let blocked = action.blocked {
+            Label("\(action.label) — \(blocked)", systemImage: action.icon)
+          } else {
+            Label(action.label, systemImage: action.icon)
+          }
+        }
+        .disabled(action.blocked != nil)
+        .accessibilityIdentifier("create-\(action.id)")
+      }
+    }
+    Section {
+      Button("Workspace", systemImage: "building.2") { navigation.showAddWorkspace = true }
+        .accessibilityIdentifier("create-workspace")
     }
   }
 }
