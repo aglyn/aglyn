@@ -1860,8 +1860,11 @@ the `theme` kind's proposal, and no site plan may propose one.
   finance, health and wellness, restaurant, store, portfolio, studio,
   photography, blog, events, fitness, yoga, beauty, real estate, education,
   nonprofit, music, personal, landing page, coming soon), each card a picture
-  of the starter home page in that kind's look (AGL-3898,
-  `scripts/render-site-style-previews.mts`, no model call), after "Pick for
+  of an example home page of that kind in its own shape and look — a
+  gallery, a menu, a product grid, a reading list, listings — written by hand
+  in the layout language (`scripts/site-style-previews.json`), compiled by
+  the real compiler with the starter photos and rendered by
+  `scripts/render-site-style-previews.mts` (AGL-3898, no model call), after "Pick for
   me", which leaves the kind unset so the one the first answer suggests is
   used; the job carries it as `inputs.siteKind`. The steps (kind of site,
   audience, style, details, review) hold the same answers object the single
