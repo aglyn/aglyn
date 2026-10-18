@@ -73,8 +73,11 @@ later AI job for the site reads.
 
 ## Style {#style}
 
-The **Style** step shows each style as a card with a picture: the starter home page drawn
-in that style, so you can see its colors, fonts, buttons and corners before you pick.
+The **Style** step shows each style as a card with a picture: an example home page of
+that kind of site, drawn in its style. A photographer's opens on a gallery, a café's on
+its menu, an online store's on its products, a blog's on its latest posts, an events
+site's on its program and a real estate site's on its listings, so you can see each
+style's colors, fonts, buttons and corners, and the shape of its pages, before you pick.
 **Pick for me** comes first and is chosen unless you choose another. It names the style
 your first answer suggests, such as *From your answer: Home services & trades*. The style
 decides how the site looks and which pages it usually has: an online store, a portfolio,
@@ -82,7 +85,7 @@ a restaurant, a blog and so on. Each site gets its own variation, so two sites w
 same style still look different, and yours will not match the picture exactly. See
 [Looks and themes for AI sites](./site-looks.md).
 
-![The Style step: Pick for me chosen, naming the style the answer suggests, beside cards for Business & services, Home services & trades and more, each with a picture of the starter home page drawn in that style and a line about the look](/img/ai/start-with-ai-style.png)
+![The Style step: Pick for me chosen, naming the style the answer suggests, beside cards for Business & services, Home services & trades and more, each with a picture of an example home page of that kind and a line about the look](/img/ai/start-with-ai-style.png)
 
 ## Details {#details}
 

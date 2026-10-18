@@ -42,7 +42,9 @@ import {
  * out of every answer.
  *
  * Each record is `datasetIndexedRecord`'s (`model/dataset-record.ts`): the
- * name, the fields and the scope tokens, never a record of the dataset.
+ * name, the fields and the scope tokens, never a record of the dataset. One
+ * read by `get` also says how many records it holds (`facts.records`,
+ * AGL-3912), which a list leaves out so it costs no count per dataset.
  *
  * Narrowed to a site, each also says where its records have pages of their
  * own on THAT site (AGL-3747), as `facts.recordPage`: the template screen,
@@ -93,6 +95,25 @@ function withRecordPage(
   return { ...record, facts: { ...record.facts, recordPage: pages.get(record.id) ?? null } }
 }
 
+/**
+ * A record with how many records the dataset holds, as `facts.records`
+ * (AGL-3912), counted by one aggregation; left out where the count fails. A
+ * site start reads it to tell a dataset another site filled from one it may
+ * fill itself.
+ */
+async function withRecordCount(
+  record: PluginIndexedRecord,
+  ref: FirebaseFirestore.DocumentReference,
+): Promise<PluginIndexedRecord> {
+  try {
+    const count = Number((await ref.collection('records').count().get()).data().count)
+    return Number.isFinite(count) ? { ...record, facts: { ...record.facts, records: count } } : record
+  } catch (error) {
+    console.error('dataset index: the records could not be counted', { id: record.id, error })
+    return record
+  }
+}
+
 export const datasetRecordIndex: PluginRecordIndex = {
   async list({ orgId, hostId, limit }) {
     if (!orgId || limit <= 0) return { records: [], truncated: false }
@@ -112,9 +133,10 @@ export const datasetRecordIndex: PluginRecordIndex = {
   async get({ orgId, hostId, id }) {
     if (!orgId || !id) return null
     const snapshot = await datasets(orgId).doc(id).get()
-    const record = snapshot.exists ? datasetIndexedRecord(snapshot.id, snapshot.data()) : null
-    if (!record || !hostId) return record
-    if (!visibleToHost(record.facts['visibleTo'] as string[], hostId)) return null
-    return withRecordPage(record, await siteRecordPages(hostId))
+    const found = snapshot.exists ? datasetIndexedRecord(snapshot.id, snapshot.data()) : null
+    if (!found) return null
+    if (hostId && !visibleToHost(found.facts['visibleTo'] as string[], hostId)) return null
+    const record = await withRecordCount(found, snapshot.ref)
+    return hostId ? withRecordPage(record, await siteRecordPages(hostId)) : record
   },
 }

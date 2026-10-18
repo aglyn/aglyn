@@ -147,6 +147,24 @@ export interface AiInventoryDataset {
    * listing's cards by it.
    */
   recordBase?: string
+  /**
+   * Whether it is shared with this site and no other (AGL-3912): its scope
+   * names this site alone, so it was made for this site. Absent where it is
+   * the workspace's, shared with every site, or with others besides.
+   */
+  siteOnly?: true
+  /**
+   * How many records it holds (AGL-3912), counted for a site start's plan
+   * only (`aiSiteInventoryWithRecordCounts`); absent where nobody counted, or
+   * the count failed. Never shown in the prompt.
+   */
+  records?: number
+  /**
+   * Set on a site start's plan only (AGL-3912), where its records are not
+   * this site's to show (`aiSiteDatasetIsThisSites`): the plan makes it
+   * again rather than reuse it, so a creation of its name is no duplicate.
+   */
+  foreign?: true
 }
 
 export interface AiInventoryCollection {

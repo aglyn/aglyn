@@ -1,0 +1,2064 @@
+{
+ "_note": "Stand-in home pages for the guided start's style previews (AGL-3898), one per AI_SITE_KINDS id, each in its own kind's shape (a gallery for photography, a menu for a café, a product grid for a store, a reading list for a blog, dates for events, listings for real estate, a class schedule for yoga), in the layout language a site job's page step answers in (ai-layout-language.ts). Written by hand, never by a model: render-site-style-previews.mts compiles each through compile-recorded-sites.mts (the real page check and compiler, the kind's design variants, the look the kind's look unit builds) and shoots it. `hero` (and any `choices`) are the design variants the seed is chosen for; `photos` fills each picture slot in order with a starter photo's key (hero, about, desk, plants, craft), a `{ photo, crop: [left, top, width, height], alt }` part of one, or `none`, the no-photo treatment a slot gets when nothing fits, so a kind no starter photo suits opens on type alone; a section's `items` says how many records it lists where its blocks carry none (a blog's posts); `products` are a store's records, `posts` a blog's, and `facts` what the brief says beside the kind (a time or a date the page shows must be in it).",
+ "kinds": {
+  "business": {
+   "name": "Fairway Office Co.",
+   "hero": "split",
+   "photos": [
+    "desk"
+   ],
+   "cta": "Get a quote",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Office supplies and cleaning"
+      },
+      {
+       "kind": "heading",
+       "text": "A clean, stocked office every Monday",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "Weekly cleaning and supply runs for small offices across the county, on one invoice."
+      },
+      {
+       "kind": "button",
+       "text": "Get a quote",
+       "to": "#3",
+       "style": "primary"
+      },
+      {
+       "kind": "button",
+       "text": "Our services",
+       "to": "#2",
+       "style": "secondary"
+      },
+      {
+       "kind": "image",
+       "text": "A tidy desk stocked with notebooks, pens and a lamp"
+      }
+     ]
+    },
+    {
+     "name": "services",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "What we take care of"
+      },
+      {
+       "kind": "cards",
+       "items": [
+        {
+         "title": "Weekly cleaning",
+         "text": "Desks, kitchens and floors, after hours.",
+         "icon": "sparkle"
+        },
+        {
+         "title": "Supply runs",
+         "text": "Coffee, paper and soap restocked before you run out.",
+         "icon": "truck"
+        },
+        {
+         "title": "One invoice",
+         "text": "Every service on one monthly bill.",
+         "icon": "money"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "contact",
+     "band": "brand",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Tell us about your office"
+      },
+      {
+       "kind": "button",
+       "text": "Get a quote",
+       "to": "form",
+       "style": "primary"
+      }
+     ],
+     "align": "center"
+    }
+   ]
+  },
+  "trades": {
+   "name": "Ridgeline Roofing",
+   "hero": "cover",
+   "photos": [
+    "none",
+    "none",
+    "none"
+   ],
+   "cta": "Free estimate",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "dark",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Roofing and gutters"
+      },
+      {
+       "kind": "heading",
+       "text": "Roofs fixed right, the first time",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "Leak repairs, full replacements and gutters, with a written estimate before any work starts."
+      },
+      {
+       "kind": "button",
+       "text": "Book a free estimate",
+       "to": "#3",
+       "style": "primary"
+      },
+      {
+       "kind": "button",
+       "text": "Our services",
+       "to": "#2",
+       "style": "secondary"
+      }
+     ]
+    },
+    {
+     "name": "services",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Roofing services"
+      },
+      {
+       "kind": "cards",
+       "items": [
+        {
+         "title": "Leak repair",
+         "text": "Found, patched and checked after the next rain.",
+         "icon": "wrench"
+        },
+        {
+         "title": "Roof replacement",
+         "text": "Tear-off to final inspection in days, not weeks.",
+         "icon": "home"
+        },
+        {
+         "title": "Gutters",
+         "text": "Cleaning, guards and new seamless gutters.",
+         "icon": "shield"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "how it works",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "How a job goes"
+      },
+      {
+       "kind": "steps",
+       "items": [
+        {
+         "title": "Inspection",
+         "text": "We look at the roof and photograph what we find."
+        },
+        {
+         "title": "Written estimate",
+         "text": "A fixed price, line by line."
+        },
+        {
+         "title": "The work",
+         "text": "Done, cleaned up and checked."
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "professional": {
+   "name": "Hale & Morrow",
+   "hero": "split",
+   "photos": [
+    "hero"
+   ],
+   "cta": "Book a consultation",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Operations consulting"
+      },
+      {
+       "kind": "heading",
+       "text": "Clear plans for growing teams",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "We help owners of ten- to fifty-person companies fix hiring, process and reporting."
+      },
+      {
+       "kind": "button",
+       "text": "Book a consultation",
+       "to": "#3",
+       "style": "primary"
+      },
+      {
+       "kind": "image",
+       "text": "Our consultants mapping a plan with a client at the board"
+      }
+     ]
+    },
+    {
+     "name": "practice areas",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Where we help"
+      },
+      {
+       "kind": "cards",
+       "items": [
+        {
+         "title": "Hiring",
+         "text": "Roles, interviews and onboarding that hold up.",
+         "icon": "people"
+        },
+        {
+         "title": "Process",
+         "text": "Fewer handoffs and clearer owners.",
+         "icon": "chart"
+        },
+        {
+         "title": "Reporting",
+         "text": "The few numbers worth a weekly look.",
+         "icon": "briefcase"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "consultation",
+     "band": "dark",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Start with a consultation"
+      },
+      {
+       "kind": "button",
+       "text": "Book a consultation",
+       "to": "form",
+       "style": "primary"
+      }
+     ],
+     "align": "center"
+    }
+   ]
+  },
+  "wellness": {
+   "name": "Stillwater Therapy",
+   "hero": "cover",
+   "photos": [
+    "plants"
+   ],
+   "cta": "Book a first session",
+   "facts": "Individual sessions are 50 minutes, couples sessions 80 minutes, and the Thursday evening group 90 minutes.",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Counseling for adults and couples"
+      },
+      {
+       "kind": "heading",
+       "text": "A calm place to talk it through",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "In-person and online sessions, with evening times through the week."
+      },
+      {
+       "kind": "button",
+       "text": "Book a first session",
+       "to": "#3",
+       "style": "primary"
+      },
+      {
+       "kind": "image",
+       "text": "A quiet, plant-filled room by the window"
+      }
+     ]
+    },
+    {
+     "name": "sessions",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Sessions"
+      },
+      {
+       "kind": "list",
+       "items": [
+        {
+         "title": "Individual therapy · 50 minutes",
+         "text": ""
+        },
+        {
+         "title": "Couples therapy · 80 minutes",
+         "text": ""
+        },
+        {
+         "title": "Thursday evening group · 90 minutes",
+         "text": ""
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "first session",
+     "band": "brand",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Your first session"
+      },
+      {
+       "kind": "button",
+       "text": "Book a first session",
+       "to": "form",
+       "style": "primary"
+      }
+     ],
+     "align": "center"
+    }
+   ]
+  },
+  "restaurant": {
+   "name": "Juniper & Rye",
+   "hero": "cover",
+   "photos": [
+    "about"
+   ],
+   "cta": "Book a table",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Café and bakery"
+      },
+      {
+       "kind": "heading",
+       "text": "Fresh bread, slow coffee, long breakfasts",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "A neighborhood café baking every morning, with seasonal plates until two."
+      },
+      {
+       "kind": "button",
+       "text": "See the menu",
+       "to": "#2",
+       "style": "primary"
+      },
+      {
+       "kind": "button",
+       "text": "Book a table",
+       "to": "#3",
+       "style": "secondary"
+      },
+      {
+       "kind": "image",
+       "text": "Our owner behind the café counter"
+      }
+     ]
+    },
+    {
+     "name": "menu highlights",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "From the menu"
+      },
+      {
+       "kind": "cards",
+       "items": [
+        {
+         "title": "Country sourdough",
+         "text": "Baked each morning, served with salted butter."
+        },
+        {
+         "title": "Shakshuka",
+         "text": "Eggs in spiced tomato with herbs and toast."
+        },
+        {
+         "title": "Cardamom buns",
+         "text": "Our weekend favorite, warm from the oven."
+        },
+        {
+         "title": "House pour-over",
+         "text": "Single-origin beans, brewed to order."
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "visit",
+     "band": "dark",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Come in and stay a while"
+      },
+      {
+       "kind": "button",
+       "text": "Book a table",
+       "to": "form",
+       "style": "primary"
+      }
+     ],
+     "align": "center"
+    }
+   ]
+  },
+  "store": {
+   "name": "Wren & Wax",
+   "hero": "split",
+   "photos": [
+    "craft",
+    "none",
+    "none"
+   ],
+   "cta": "Shop",
+   "products": [
+    {
+     "id": "p-seal-kit",
+     "name": "Wax seal kit",
+     "slug": "wax-seal-kit",
+     "priceUsd": 34,
+     "maxPriceUsd": 34,
+     "imageUrl": "/_static/starter/gallery-craft.jpg",
+     "soldOut": false
+    },
+    {
+     "id": "p-mug",
+     "name": "Stoneware mug",
+     "slug": "stoneware-mug",
+     "priceUsd": 28,
+     "maxPriceUsd": 28,
+     "imageUrl": "mug",
+     "soldOut": false
+    },
+    {
+     "id": "p-planter",
+     "name": "Hanging planter",
+     "slug": "hanging-planter",
+     "priceUsd": 42,
+     "maxPriceUsd": 42,
+     "imageUrl": "/_static/starter/gallery-plants.jpg",
+     "soldOut": false
+    }
+   ],
+   "sections": [
+    {
+     "name": "hero",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Handmade goods"
+      },
+      {
+       "kind": "heading",
+       "text": "Small-batch things for slow mornings",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "Wax seals, stoneware and planters, made in our studio and shipped in a week."
+      },
+      {
+       "kind": "button",
+       "text": "Shop the collection",
+       "to": "#2",
+       "style": "primary"
+      },
+      {
+       "kind": "image",
+       "text": "Hands pressing a wax seal at the workbench"
+      }
+     ]
+    },
+    {
+     "name": "featured products",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Featured products"
+      }
+     ]
+    },
+    {
+     "name": "why shop with us",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Made to last"
+      },
+      {
+       "kind": "cards",
+       "items": [
+        {
+         "title": "Made by hand",
+         "text": "Every piece is finished in our studio.",
+         "icon": "hand"
+        },
+        {
+         "title": "Ships in a week",
+         "text": "Packed in paper, never plastic.",
+         "icon": "truck"
+        },
+        {
+         "title": "Easy returns",
+         "text": "Thirty days, no questions.",
+         "icon": "refresh"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "portfolio": {
+   "name": "Ines Okafor",
+   "hero": "editorial",
+   "photos": [
+    {
+     "photo": "plants",
+     "crop": [
+      550,
+      300,
+      650,
+      600
+     ],
+     "alt": "A monstera beside the sofa and an orange cushion"
+    },
+    "desk",
+    {
+     "photo": "craft",
+     "crop": [
+      1150,
+      100,
+      450,
+      700
+     ],
+     "alt": "Blue wax seals drying on a plate"
+    }
+   ],
+   "cta": "Get in touch",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Set design and prop styling"
+      },
+      {
+       "kind": "heading",
+       "text": "Rooms and tables styled for the camera",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "Sets for brands, magazines and cookbooks, from the first sketch to the last prop."
+      },
+      {
+       "kind": "image",
+       "text": "A living room styled for a home magazine",
+       "col": 0
+      },
+      {
+       "kind": "text",
+       "text": "Living room for a home magazine",
+       "col": 0
+      },
+      {
+       "kind": "image",
+       "text": "A writing desk styled for a stationery brand",
+       "col": 1
+      },
+      {
+       "kind": "text",
+       "text": "Desk set for a stationery brand",
+       "col": 1
+      },
+      {
+       "kind": "image",
+       "text": "Wax seals styled for a maker",
+       "col": 2
+      },
+      {
+       "kind": "text",
+       "text": "Still life for a wax seal maker",
+       "col": 2
+      }
+     ],
+     "cols": [
+      1,
+      1,
+      1
+     ]
+    },
+    {
+     "name": "about",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Sets for print and screen"
+      },
+      {
+       "kind": "button",
+       "text": "About Ines",
+       "to": "form",
+       "style": "secondary"
+      }
+     ],
+     "align": "center"
+    },
+    {
+     "name": "commissions",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Commissions"
+      },
+      {
+       "kind": "button",
+       "text": "Get in touch",
+       "to": "form",
+       "style": "primary"
+      }
+     ],
+     "align": "center"
+    }
+   ]
+  },
+  "studio": {
+   "name": "Northlight Studio",
+   "hero": "cover",
+   "photos": [
+    "none",
+    {
+     "photo": "craft",
+     "crop": [
+      150,
+      150,
+      850,
+      850
+     ],
+     "alt": "Hands pressing a wax seal at the workbench"
+    },
+    {
+     "photo": "about",
+     "crop": [
+      0,
+      0,
+      760,
+      600
+     ],
+     "alt": "Bottles and warm lights on the café shelves"
+    }
+   ],
+   "cta": "Start a project",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "dark",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Brand and digital design"
+      },
+      {
+       "kind": "heading",
+       "text": "Brands people remember",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "Identity, websites and campaigns for companies with something to say."
+      },
+      {
+       "kind": "button",
+       "text": "Start a project",
+       "to": "#3",
+       "style": "primary"
+      },
+      {
+       "kind": "button",
+       "text": "Case studies",
+       "to": "#2",
+       "style": "secondary"
+      }
+     ]
+    },
+    {
+     "name": "case studies",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Selected work"
+      },
+      {
+       "kind": "cards",
+       "items": [
+        {
+         "title": "A wax seal maker, rebranded",
+         "text": "Identity and packaging"
+        },
+        {
+         "title": "A neighborhood café, rebranded",
+         "text": "Identity and menus"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "services",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "What we do"
+      },
+      {
+       "kind": "list",
+       "items": [
+        {
+         "title": "Brand identity",
+         "text": ""
+        },
+        {
+         "title": "Websites",
+         "text": ""
+        },
+        {
+         "title": "Campaigns",
+         "text": ""
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "photography": {
+   "name": "Mara Lind Photography",
+   "hero": "cover",
+   "photos": [
+    {
+     "photo": "about",
+     "crop": [
+      620,
+      0,
+      720,
+      900
+     ],
+     "alt": "A smiling café owner in her apron"
+    },
+    {
+     "photo": "plants",
+     "crop": [
+      0,
+      150,
+      600,
+      750
+     ],
+     "alt": "A hanging plant in a bright bay window"
+    },
+    {
+     "photo": "craft",
+     "crop": [
+      150,
+      150,
+      850,
+      850
+     ],
+     "alt": "Hands pressing a wax seal at the workbench"
+    }
+   ],
+   "cta": "Book a shoot",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "dark",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Portraits, interiors and brands"
+      },
+      {
+       "kind": "heading",
+       "text": "Honest pictures, in natural light",
+       "style": "large"
+      },
+      {
+       "kind": "button",
+       "text": "Book a shoot",
+       "to": "#3",
+       "style": "primary",
+       "col": -1
+      },
+      {
+       "kind": "image",
+       "text": "A portrait of a café owner at her counter",
+       "col": 0
+      },
+      {
+       "kind": "image",
+       "text": "A sunlit window full of hanging plants",
+       "col": 1
+      },
+      {
+       "kind": "image",
+       "text": "A maker pressing a wax seal at her workbench",
+       "col": 2
+      }
+     ],
+     "cols": [
+      1,
+      1,
+      1
+     ]
+    },
+    {
+     "name": "about",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Portraits, interiors and brand days"
+      },
+      {
+       "kind": "button",
+       "text": "See packages",
+       "to": "form",
+       "style": "secondary"
+      }
+     ],
+     "align": "center"
+    },
+    {
+     "name": "booking",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Booking a shoot"
+      },
+      {
+       "kind": "button",
+       "text": "Book a shoot",
+       "to": "form",
+       "style": "primary"
+      }
+     ],
+     "align": "center"
+    }
+   ]
+  },
+  "blog": {
+   "name": "The Slow Table",
+   "hero": "cover",
+   "photos": [
+    "none"
+   ],
+   "cta": "Subscribe",
+   "posts": [
+    {
+     "title": "A week of one-pot dinners",
+     "excerpt": "Seven suppers, one pot, very few dishes."
+    },
+    {
+     "title": "What to grow on a windowsill",
+     "excerpt": "Herbs that forgive a missed watering."
+    },
+    {
+     "title": "Learning to bake by hand",
+     "excerpt": "Notes from a year without a mixer."
+    }
+   ],
+   "sections": [
+    {
+     "name": "hero",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "A food and home journal"
+      },
+      {
+       "kind": "heading",
+       "text": "Notes on cooking slowly and living well",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "New essays and recipes every Sunday morning."
+      },
+      {
+       "kind": "button",
+       "text": "Read the latest",
+       "to": "#2",
+       "style": "primary"
+      }
+     ]
+    },
+    {
+     "name": "latest posts",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Latest posts"
+      }
+     ],
+     "items": 3
+    },
+    {
+     "name": "about",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "About the journal"
+      },
+      {
+       "kind": "text",
+       "text": "Written from a small kitchen, one season at a time."
+      }
+     ]
+    }
+   ],
+   "choices": {
+    "writing": "ruled"
+   }
+  },
+  "events": {
+   "name": "Harvest Moon Festival",
+   "hero": "cover",
+   "photos": [
+    "none"
+   ],
+   "cta": "Get tickets",
+   "facts": "The festival runs September 19 to 21 in Riverside Park: the opening concert and night market on Friday, September 19 from 6 pm; family day on Saturday, September 20; the lantern walk on Sunday, September 21 at dusk.",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "brand",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "September 19 to 21 · Riverside Park",
+       "col": 0
+      },
+      {
+       "kind": "heading",
+       "text": "Three days of music, food and lanterns",
+       "style": "large",
+       "col": 0
+      },
+      {
+       "kind": "lede",
+       "text": "Local bands, a night market and the lantern walk along the river.",
+       "col": 0
+      },
+      {
+       "kind": "button",
+       "text": "Get tickets",
+       "to": "#3",
+       "style": "primary",
+       "col": 0
+      },
+      {
+       "kind": "button",
+       "text": "See the program",
+       "to": "#2",
+       "style": "secondary",
+       "col": 0
+      },
+      {
+       "kind": "heading",
+       "text": "What’s on",
+       "col": 1
+      },
+      {
+       "kind": "list",
+       "items": [
+        {
+         "title": "Friday, September 19 · Opening concert and night market from 6 pm",
+         "text": ""
+        },
+        {
+         "title": "Saturday, September 20 · Family day with food stalls and two stages",
+         "text": ""
+        },
+        {
+         "title": "Sunday, September 21 · The lantern walk at dusk",
+         "text": ""
+        }
+       ],
+       "col": 1
+      }
+     ],
+     "cols": [
+      1,
+      1
+     ]
+    },
+    {
+     "name": "program",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Plan your days"
+      },
+      {
+       "kind": "cards",
+       "items": [
+        {
+         "title": "Night market",
+         "text": "Food stalls and makers along the river.",
+         "icon": "food"
+        },
+        {
+         "title": "Two stages",
+         "text": "Local bands from noon each day.",
+         "icon": "music"
+        },
+        {
+         "title": "Lantern walk",
+         "text": "Bring a lantern or make one with us.",
+         "icon": "sun"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "tickets",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Tickets"
+      },
+      {
+       "kind": "button",
+       "text": "Get tickets",
+       "to": "form",
+       "style": "primary"
+      }
+     ],
+     "align": "center"
+    }
+   ]
+  },
+  "fitness": {
+   "name": "Forge Strength Club",
+   "hero": "cover",
+   "photos": [
+    "none"
+   ],
+   "cta": "Try a class",
+   "facts": "Classes: barbell basics Monday and Wednesday at 6 am, conditioning Tuesday and Thursday at 6 pm, and open gym Saturday at 9 am.",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "dark",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Strength and conditioning"
+      },
+      {
+       "kind": "heading",
+       "text": "Get strong with a crew behind you",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "Coached small-group classes, mornings and evenings, for every level."
+      },
+      {
+       "kind": "button",
+       "text": "Try a free class",
+       "to": "#3",
+       "style": "primary"
+      },
+      {
+       "kind": "button",
+       "text": "Class times",
+       "to": "#2",
+       "style": "secondary"
+      }
+     ]
+    },
+    {
+     "name": "classes",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Classes this week"
+      },
+      {
+       "kind": "list",
+       "items": [
+        {
+         "title": "Barbell basics · Monday and Wednesday, 6 am",
+         "text": ""
+        },
+        {
+         "title": "Conditioning · Tuesday and Thursday, 6 pm",
+         "text": ""
+        },
+        {
+         "title": "Open gym · Saturday, 9 am",
+         "text": ""
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "first class",
+     "band": "brand",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Your first class is on us"
+      },
+      {
+       "kind": "button",
+       "text": "Try a free class",
+       "to": "form",
+       "style": "primary"
+      }
+     ],
+     "align": "center"
+    }
+   ]
+  },
+  "yoga": {
+   "name": "Quiet Hour Yoga",
+   "hero": "split",
+   "photos": [
+    "none"
+   ],
+   "cta": "See the schedule",
+   "facts": "Classes on Monday at 7 am, Wednesday at 6 pm, Friday at 7 am and Sunday at 10 am.",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Yoga and meditation",
+       "col": 0
+      },
+      {
+       "kind": "heading",
+       "text": "An hour to slow down and breathe",
+       "style": "large",
+       "col": 0
+      },
+      {
+       "kind": "lede",
+       "text": "Small classes in a sunny room above the bookshop.",
+       "col": 0
+      },
+      {
+       "kind": "button",
+       "text": "Book a class",
+       "to": "#3",
+       "style": "primary",
+       "col": 0
+      },
+      {
+       "kind": "heading",
+       "text": "This week",
+       "col": 1
+      },
+      {
+       "kind": "list",
+       "items": [
+        {
+         "title": "Monday 7 am · Gentle flow",
+         "text": ""
+        },
+        {
+         "title": "Wednesday 6 pm · Slow vinyasa",
+         "text": ""
+        },
+        {
+         "title": "Friday 7 am · Breath and stillness",
+         "text": ""
+        },
+        {
+         "title": "Sunday 10 am · Restorative",
+         "text": ""
+        }
+       ],
+       "col": 1
+      }
+     ],
+     "cols": [
+      3,
+      2
+     ]
+    },
+    {
+     "name": "new here",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "New to yoga?"
+      },
+      {
+       "kind": "cards",
+       "items": [
+        {
+         "title": "Gentle flow",
+         "text": "The place to start, at your own pace.",
+         "icon": "yoga"
+        },
+        {
+         "title": "Mats and blocks",
+         "text": "Everything you need is here.",
+         "icon": "leaf"
+        },
+        {
+         "title": "Small classes",
+         "text": "Never more than twelve on the floor.",
+         "icon": "people"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "book",
+     "band": "brand",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Save your spot"
+      },
+      {
+       "kind": "button",
+       "text": "Book a class",
+       "to": "form",
+       "style": "primary"
+      }
+     ],
+     "align": "center"
+    }
+   ]
+  },
+  "beauty": {
+   "name": "Velvet Hair Studio",
+   "hero": "split",
+   "photos": [
+    {
+     "photo": "desk",
+     "crop": [
+      650,
+      330,
+      850,
+      670
+     ],
+     "alt": "Pink roses and glass jars on a bright vanity"
+    }
+   ],
+   "cta": "Book now",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Hair salon"
+      },
+      {
+       "kind": "heading",
+       "text": "Color and cuts that grow out beautifully",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "Lived-in color, precise cuts and a cup of tea while you wait."
+      },
+      {
+       "kind": "button",
+       "text": "Book an appointment",
+       "to": "#3",
+       "style": "primary"
+      },
+      {
+       "kind": "image",
+       "text": "Pink roses and glass jars at the styling station"
+      }
+     ]
+    },
+    {
+     "name": "services",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Services"
+      },
+      {
+       "kind": "list",
+       "items": [
+        {
+         "title": "Cut and style",
+         "text": ""
+        },
+        {
+         "title": "Color and highlights",
+         "text": ""
+        },
+        {
+         "title": "Treatments and blow-dry",
+         "text": ""
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "booking",
+     "band": "brand",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Book your visit"
+      },
+      {
+       "kind": "button",
+       "text": "Book now",
+       "to": "form",
+       "style": "primary"
+      }
+     ],
+     "align": "center"
+    }
+   ]
+  },
+  "realestate": {
+   "name": "Cedar & Key Homes",
+   "hero": "cover",
+   "photos": [
+    "plants",
+    {
+     "photo": "about",
+     "crop": [
+      0,
+      0,
+      760,
+      600
+     ],
+     "alt": "Bottles and warm lights on the café shelves"
+    },
+    "desk"
+   ],
+   "cta": "Book a valuation",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Homes for sale in Oak Park"
+      },
+      {
+       "kind": "heading",
+       "text": "Find the home that fits your life",
+       "style": "large"
+      },
+      {
+       "kind": "button",
+       "text": "Book a valuation",
+       "to": "#3",
+       "style": "primary"
+      },
+      {
+       "kind": "image",
+       "text": "A plant-filled living room with a bay window",
+       "col": 0
+      },
+      {
+       "kind": "text",
+       "text": "Two-bed flat with a bay window",
+       "col": 0
+      },
+      {
+       "kind": "image",
+       "text": "A corner shop space with shelves and warm lights",
+       "col": 1
+      },
+      {
+       "kind": "text",
+       "text": "Corner shop space on Main Street",
+       "col": 1
+      },
+      {
+       "kind": "image",
+       "text": "A bright study corner with a desk",
+       "col": 2
+      },
+      {
+       "kind": "text",
+       "text": "Garden apartment with a study",
+       "col": 2
+      }
+     ],
+     "cols": [
+      1,
+      1,
+      1
+     ]
+    },
+    {
+     "name": "how we help",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Buying or selling"
+      },
+      {
+       "kind": "cards",
+       "items": [
+        {
+         "title": "Selling your home",
+         "text": "Pricing, staging and photos, then open houses.",
+         "icon": "home"
+        },
+        {
+         "title": "Buying a home",
+         "text": "Tours, offers and inspections, start to keys.",
+         "icon": "location"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "valuation",
+     "band": "dark",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "What is your home worth?"
+      },
+      {
+       "kind": "button",
+       "text": "Book a valuation",
+       "to": "form",
+       "style": "primary"
+      }
+     ],
+     "align": "center"
+    }
+   ]
+  },
+  "education": {
+   "name": "Brightpath Tutoring",
+   "hero": "cover",
+   "photos": [
+    {
+     "photo": "hero",
+     "crop": [
+      700,
+      150,
+      900,
+      917
+     ],
+     "alt": "A tutor talking a student through a plan at the board"
+    }
+   ],
+   "cta": "Book a trial lesson",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Tutoring for grades 6 to 12"
+      },
+      {
+       "kind": "heading",
+       "text": "Confidence in math, one lesson at a time",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "One-to-one and small-group tutoring after school and online."
+      },
+      {
+       "kind": "button",
+       "text": "Book a trial lesson",
+       "to": "#3",
+       "style": "primary"
+      },
+      {
+       "kind": "button",
+       "text": "Courses",
+       "to": "#2",
+       "style": "secondary"
+      },
+      {
+       "kind": "image",
+       "text": "A tutor talking a student through a plan at the board"
+      }
+     ]
+    },
+    {
+     "name": "courses",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Courses"
+      },
+      {
+       "kind": "cards",
+       "items": [
+        {
+         "title": "Algebra foundations",
+         "text": "Equations, graphs and word problems.",
+         "icon": "learn"
+        },
+        {
+         "title": "Geometry",
+         "text": "Proofs and shapes, drawn out step by step.",
+         "icon": "idea"
+        },
+        {
+         "title": "Exam prep",
+         "text": "Practice tests and a plan for the big day.",
+         "icon": "book"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "how it works",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "How it works"
+      },
+      {
+       "kind": "steps",
+       "items": [
+        {
+         "title": "Trial lesson",
+         "text": "We find where to start."
+        },
+        {
+         "title": "Weekly plan",
+         "text": "One goal a week."
+        },
+        {
+         "title": "Check-ins",
+         "text": "A short note home after each lesson."
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "nonprofit": {
+   "name": "Eastside Food Share",
+   "hero": "cover",
+   "photos": [
+    "none",
+    "none",
+    "none"
+   ],
+   "cta": "Donate",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "brand",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Neighborhood food bank"
+      },
+      {
+       "kind": "heading",
+       "text": "No neighbor should go to bed hungry",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "We share fresh groceries every week with families across the east side."
+      },
+      {
+       "kind": "button",
+       "text": "Donate",
+       "to": "#3",
+       "style": "primary"
+      },
+      {
+       "kind": "button",
+       "text": "Volunteer",
+       "to": "#2",
+       "style": "secondary"
+      }
+     ]
+    },
+    {
+     "name": "how to help",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "How you can help"
+      },
+      {
+       "kind": "cards",
+       "items": [
+        {
+         "title": "Give",
+         "text": "Every gift buys fresh food for the pantry.",
+         "icon": "heart"
+        },
+        {
+         "title": "Volunteer",
+         "text": "Sort, pack and hand out groceries on Saturdays.",
+         "icon": "users"
+        },
+        {
+         "title": "Host a drive",
+         "text": "Collect at your school or office.",
+         "icon": "box"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "donate",
+     "band": "soft",
+     "align": "center",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Give this week"
+      },
+      {
+       "kind": "button",
+       "text": "Donate",
+       "to": "form",
+       "style": "primary"
+      }
+     ]
+    }
+   ]
+  },
+  "music": {
+   "name": "The Paper Lanterns",
+   "hero": "cover",
+   "photos": [
+    "none",
+    "none",
+    "none"
+   ],
+   "cta": "Tour dates",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "dark",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "New album out now"
+      },
+      {
+       "kind": "heading",
+       "text": "The Paper Lanterns",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "Folk songs with loud drums, on tour this spring."
+      },
+      {
+       "kind": "button",
+       "text": "Tour dates",
+       "to": "#2",
+       "style": "primary"
+      },
+      {
+       "kind": "button",
+       "text": "Book the band",
+       "to": "#3",
+       "style": "secondary"
+      }
+     ]
+    },
+    {
+     "name": "tour dates",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "On tour"
+      },
+      {
+       "kind": "list",
+       "items": [
+        {
+         "title": "April 4 · The Blue Room, Asheville",
+         "text": ""
+        },
+        {
+         "title": "April 6 · Cat's Cradle, Carrboro",
+         "text": ""
+        },
+        {
+         "title": "April 11 · The Basement, Nashville",
+         "text": ""
+        },
+        {
+         "title": "April 13 · Eddie's Attic, Decatur",
+         "text": ""
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "booking",
+     "band": "brand",
+     "align": "center",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Book us for your venue"
+      },
+      {
+       "kind": "button",
+       "text": "Booking",
+       "to": "form",
+       "style": "primary"
+      }
+     ]
+    }
+   ]
+  },
+  "personal": {
+   "name": "Lena Ortiz",
+   "hero": "split",
+   "photos": [
+    {
+     "photo": "hero",
+     "crop": [
+      100,
+      250,
+      700,
+      750
+     ],
+     "alt": "Two colleagues going over notes together"
+    }
+   ],
+   "cta": "Contact",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Product manager"
+      },
+      {
+       "kind": "heading",
+       "text": "I help small teams ship the right thing",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "Ten years leading product at startups in health and education."
+      },
+      {
+       "kind": "button",
+       "text": "Get in touch",
+       "to": "#3",
+       "style": "primary"
+      },
+      {
+       "kind": "button",
+       "text": "Experience",
+       "to": "#2",
+       "style": "secondary"
+      },
+      {
+       "kind": "image",
+       "text": "Me going over notes with a teammate"
+      }
+     ]
+    },
+    {
+     "name": "experience",
+     "band": "soft",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Experience"
+      },
+      {
+       "kind": "steps",
+       "items": [
+        {
+         "title": "Head of Product, Lumen Health",
+         "text": "Grew the patient app from one clinic to forty."
+        },
+        {
+         "title": "Product Lead, Classwise",
+         "text": "Launched the teacher dashboard."
+        },
+        {
+         "title": "Product Manager, Fieldnote",
+         "text": "Shipped offline-first note taking."
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "contact",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Say hello"
+      },
+      {
+       "kind": "button",
+       "text": "Get in touch",
+       "to": "form",
+       "style": "primary"
+      }
+     ],
+     "align": "center"
+    }
+   ]
+  },
+  "landing": {
+   "name": "Tally Budget",
+   "hero": "cover",
+   "photos": [
+    "none",
+    "none",
+    "none"
+   ],
+   "cta": "Join the beta",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "brand",
+     "align": "center",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "A budgeting app for two"
+      },
+      {
+       "kind": "heading",
+       "text": "Plan your money together, in ten minutes a week",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "One shared budget, two phones, no spreadsheets."
+      },
+      {
+       "kind": "button",
+       "text": "Join the beta",
+       "to": "#3",
+       "style": "primary"
+      }
+     ]
+    },
+    {
+     "name": "why",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Why couples use it"
+      },
+      {
+       "kind": "cards",
+       "items": [
+        {
+         "title": "One shared plan",
+         "text": "Both of you see the same numbers.",
+         "icon": "users"
+        },
+        {
+         "title": "Ten-minute check-in",
+         "text": "A weekly review that never runs long.",
+         "icon": "clock"
+        },
+        {
+         "title": "Private by default",
+         "text": "Your data stays yours.",
+         "icon": "lock"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "join",
+     "band": "soft",
+     "align": "center",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Be first in line"
+      },
+      {
+       "kind": "button",
+       "text": "Join the beta",
+       "to": "form",
+       "style": "primary"
+      }
+     ]
+    }
+   ]
+  },
+  "coming-soon": {
+   "name": "Orchard Lane Café",
+   "hero": "cover",
+   "photos": [
+    {
+     "photo": "about",
+     "crop": [
+      0,
+      0,
+      760,
+      600
+     ],
+     "alt": "Bottles and warm lights on the café shelves"
+    }
+   ],
+   "cta": "Get notified",
+   "sections": [
+    {
+     "name": "hero",
+     "band": "dark",
+     "blocks": [
+      {
+       "kind": "eyebrow",
+       "text": "Opening this spring"
+      },
+      {
+       "kind": "heading",
+       "text": "Something warm is coming to Orchard Lane",
+       "style": "large"
+      },
+      {
+       "kind": "lede",
+       "text": "A neighborhood café is on its way. Leave your email and we will tell you the day we open."
+      },
+      {
+       "kind": "button",
+       "text": "Get notified",
+       "to": "#2",
+       "style": "primary"
+      },
+      {
+       "kind": "image",
+       "text": "Bottles and warm lights on the café shelves"
+      }
+     ]
+    },
+    {
+     "name": "notify",
+     "band": "plain",
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "Be the first to know"
+      },
+      {
+       "kind": "text",
+       "text": "One email on opening day, and nothing else."
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
