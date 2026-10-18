@@ -30,6 +30,7 @@
 import { getApp } from 'firebase-admin/app'
 import { getMessaging, type BatchResponse, type TokenMessage } from 'firebase-admin/messaging'
 import './firebase-admin'
+import type { NotificationSound } from '@aglyn/aglyn/app-utils/notification-sounds'
 import type { PushMessage, PushOutcome, PushTarget, PushTransport } from './push-delivery'
 
 /** `sendEach` takes at most 500 messages. */
@@ -46,13 +47,22 @@ export interface FcmMessaging {
   sendEach(messages: TokenMessage[]): Promise<BatchResponse>
 }
 
-export function fcmMessage(token: string, message: PushMessage): TokenMessage {
+/**
+ * One device's message. The person's sound is the channel's: an Android
+ * channel's sound is fixed when the app creates it, so the app makes one
+ * channel per sound and the message names it. A build that has no such
+ * channel yet shows it on the manifest's default channel.
+ */
+export function fcmMessage(token: string, message: PushMessage, sound?: NotificationSound): TokenMessage {
   return {
     token,
     notification: { title: message.title, ...(message.body ? { body: message.body } : {}) },
     // FCM data values are strings; MobilePushData's are.
     data: { ...message.data },
-    android: { priority: 'high', notification: { sound: 'default' } },
+    android: {
+      priority: 'high',
+      notification: sound ? { sound: sound.android, channelId: sound.android } : { sound: 'default' },
+    },
   }
 }
 
@@ -63,7 +73,7 @@ export function createFcmTransport(messaging: FcmMessaging): PushTransport {
       for (let start = 0; start < targets.length; start += FCM_BATCH) {
         const batch = targets.slice(start, start + FCM_BATCH)
         try {
-          const { responses } = await messaging.sendEach(batch.map((target) => fcmMessage(target.token, message)))
+          const { responses } = await messaging.sendEach(batch.map((target) => fcmMessage(target.token, message, target.sound)))
           for (const [index] of batch.entries()) {
             const response = responses[index]
             if (response?.success) outcomes.push('sent')
