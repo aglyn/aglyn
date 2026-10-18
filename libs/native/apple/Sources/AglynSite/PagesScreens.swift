@@ -377,7 +377,9 @@ struct PagesRunnerBanner: View {
     } else if let notice = runner.notice {
       AglynNotice(notice, tone: .success) { runner.clear() }.padding(AglynSpace.two)
         .task(id: notice) {
-          try? await Task.sleep(nanoseconds: 6_000_000_000)
+          // A banner that leaves (a deleted page's own screen) cancels its wait; it must not take the notice with it,
+          // or the list it returns to never shows it.
+          do { try await Task.sleep(nanoseconds: 6_000_000_000) } catch { return }
           if runner.notice == notice { runner.notice = nil }
         }
     }
