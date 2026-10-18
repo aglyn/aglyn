@@ -103,6 +103,10 @@ const ALLOWED = new Map<string, string>([
     'A storefront icon rule: the word "community" a shop owner writes in a reason to buy ("part of the community") draws the location icon — AGL-3676.',
   ],
   [
+    'libs/plugins/ai/src/lib/jobs/ai-layout-stock-photos.ts',
+    'The nonprofit kind\'s common photos: "community" is a Pixabay tag and search word for volunteering pictures — AGL-3923.',
+  ],
+  [
     'libs/plugins/ai/src/lib/model/ai-site-kinds.spec.ts',
     'Table-spec briefs for that kind ("a community food bank", "a community center") — AGL-3660.',
   ],
