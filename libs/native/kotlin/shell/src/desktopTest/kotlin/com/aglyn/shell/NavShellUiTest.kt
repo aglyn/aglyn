@@ -117,7 +117,7 @@ class NavShellUiTest {
     setContent { AglynShell(testServices(userDoc = emptyMap(), writer = writes), navigator) }
     signIn()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("workspace-rail") > 0 }
-    runOnIdle { navigator.command = ShellCommand.FIND }
+    runOnIdle { navigator.command = ShellCommand.SWITCH_WORKSPACE }
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("picker-pin-o1") > 0 }
     onNodeWithTag("picker-pin-o1").performClick()
     waitUntil(timeoutMillis = 3_000) { writes.all.any { "pinnedOrgs" in it.second } }

@@ -370,11 +370,12 @@ fun AiCreateButton(context: NativePluginContext, kind: AiCreateKind) {
  * requests. Leaving stops following; the job carries on in AI jobs.
  */
 @Composable
-fun AiCreateScreen(context: NativePluginContext, kind: AiCreateKind?, initialJobId: String?) {
+fun AiCreateScreen(context: NativePluginContext, kind: AiCreateKind?, initialJobId: String?, initialBrief: String? = null) {
   val scope = rememberCoroutineScope()
   var door by remember { mutableStateOf<AiCreateDoor?>(null) }
   var loadError by remember { mutableStateOf<String?>(null) }
-  var brief by remember { mutableStateOf("") }
+  // Home's one-line prompt hands over what was typed; nothing starts until it is sent from here.
+  var brief by remember { mutableStateOf(initialBrief.orEmpty()) }
   val picks = remember { mutableStateMapOf<String, String>() }
   var collectionId by remember { mutableStateOf<String?>(null) }
   var busy by remember { mutableStateOf(false) }

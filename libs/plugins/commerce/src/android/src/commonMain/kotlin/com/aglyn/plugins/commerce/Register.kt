@@ -90,7 +90,7 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
   SpecScreens.register(CommerceScreenJson.files.flatMap { ScreenSpec.parseFile(it) }, r)
 
   r.screen(COMMERCE_ORDERS_SCREEN, title = "Orders", requiresSite = true, icon = "receipt", layout = ScreenLayout.LIST_DETAIL) { context, params ->
-    OrdersScreen(context, initialOrderId = params["order"])
+    OrdersScreen(context, initialOrderId = params["order"], startNew = params["new"] == "1")
   }
   r.screen(COMMERCE_ORDER_SCREEN, title = "Order", requiresSite = true, icon = "receipt", layout = ScreenLayout.LIST_DETAIL) { context, params ->
     OrdersScreen(context, initialOrderId = params["order"] ?: params["orderId"])

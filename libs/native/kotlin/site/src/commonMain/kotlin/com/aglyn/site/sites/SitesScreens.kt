@@ -94,7 +94,7 @@ private fun hostDoc(context: NativePluginContext, hostId: String): Live<com.agly
  * one, with its status and addresses.
  */
 @Composable
-fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null) {
+fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null, startNew: Boolean = false) {
   val orgId = context.orgId ?: run {
     EmptyState("Pick a workspace first", icon = AglynIcons.named("workspaces"))
     return
@@ -102,8 +102,9 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null) {
   val scope = rememberCoroutineScope()
   val model = remember(orgId, context.uid) { SitesListModel(context.uid, orgId, context.firestore, scope) }
   LaunchedEffect(model) { model.reload() }
-  var creating by remember { mutableStateOf(false) }
   val canCreate = context.orgRole in setOf("owner", "admin")
+  // Opened from Create new: the new-site form comes up at once (for those who may make one).
+  var creating by remember { mutableStateOf(startNew && canCreate) }
 
   AglynListDetail(
     initialSelected = initialSiteId,

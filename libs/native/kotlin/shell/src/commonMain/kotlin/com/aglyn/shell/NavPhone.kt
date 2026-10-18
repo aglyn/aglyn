@@ -98,7 +98,7 @@ internal fun PhoneShell(
             if (route != null) TitleBarButton("Back", "arrow_back", "title-back") { navigator.back() }
           },
           actions = {
-            TitleBarButton("Search or jump to", "search", "phone-search") { chrome.picker = PickerStep.WORKSPACE }
+            TitleBarButton("Search or jump to", "search", "phone-search") { chrome.oneBox = true }
             BellButton(services, uid) { navigator.select(ShellNavigator.NOTIFICATIONS) }
             AccountAvatar(user, size = 32, onClick = { chrome.accountMenu = true }, modifier = Modifier.padding(end = 8.dp).testTag("phone-account"))
           },

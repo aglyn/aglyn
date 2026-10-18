@@ -129,13 +129,14 @@ private sealed interface PageDialog {
  * make a saved version live, and delete.
  */
 @Composable
-fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
+fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, startNew: Boolean = false) {
   val hostId = context.hostId ?: return
   val live = sitePages(context, hostId)
   val scope = rememberCoroutineScope()
   val runner = remember(hostId) { ActionRunner(scope) }
   val api = remember(hostId, context.api, context.writer) { PagesApi(context.api, context.writer, hostId) }
-  var dialog by remember { mutableStateOf<PageDialog?>(null) }
+  // Opened from Create new: the new-page form comes up at once.
+  var dialog by remember { mutableStateOf<PageDialog?>(if (startNew) PageDialog.NewPage else null) }
   val canEdit = context.siteRole in CONTENT_ROLES
   val canPublish = context.siteRole in PUBLISH_ROLES
 

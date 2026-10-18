@@ -36,6 +36,8 @@ internal class NavChromeState(private val device: KeyValueStore) {
   /** The settings list swapped in for the sidebar ("‹ Juniper Street Co. settings"), null for the everyday list. */
   var settingsMode by mutableStateOf<NativeNavListId?>(null)
   var picker by mutableStateOf<PickerStep?>(null)
+  /** The one box (Ctrl/⌘K, "Search or jump to"). */
+  var oneBox by mutableStateOf(false)
   var accountMenu by mutableStateOf(false)
   var workspaceMenu by mutableStateOf(false)
   var createMenu by mutableStateOf(false)

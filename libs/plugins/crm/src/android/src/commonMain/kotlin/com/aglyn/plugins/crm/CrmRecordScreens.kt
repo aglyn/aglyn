@@ -103,13 +103,15 @@ fun RecordsSection(
   reference: CrmReference,
   initial: String?,
   openEmail: String? = null,
+  /** Opened from Create new: the new record's form comes up at once. */
+  startNew: Boolean = false,
 ) {
   val coroutines = rememberCoroutineScope()
   val filters = remember(kind, scope, openEmail) { listOfNotNull(contactEmailFilter(openEmail)) + crmFilters(kind, scope) }
   var filterKey by rememberSaveable(kind) { mutableStateOf(filters.first().key) }
   var search by rememberSaveable(kind) { mutableStateOf("") }
   var asked by rememberSaveable(kind) { mutableStateOf("") }
-  var creating by remember(kind) { mutableStateOf(false) }
+  var creating by remember(kind) { mutableStateOf(startNew && scope.canWrite) }
   val list = remember(kind, scope, context.firestore) {
     LiveQueryList(context.firestore, coroutines, 25) { doc -> crmRow(kind, doc, scope) }
   }

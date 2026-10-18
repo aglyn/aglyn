@@ -131,14 +131,14 @@ private fun addressLines(address: OrderAddress?): List<String> = address?.let {
  * notification or a link to it does.
  */
 @Composable
-fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null) {
+fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null, startNew: Boolean = false) {
   val hostId = context.hostId ?: return
   val scope = rememberCoroutineScope()
   val model = remember(hostId, context.firestore) { OrdersListModel(hostId, context.firestore, scope) }
   LaunchedEffect(model) { model.reload() }
   AglynListDetail(
     initialSelected = initialOrderId,
-    list = { selected, onSelect -> OrdersList(context, model, selected, onSelect) },
+    list = { selected, onSelect -> OrdersList(context, model, selected, onSelect, startNew) },
     detail = { selected ->
       if (selected == null) {
         SelectionPlaceholder("Pick an order to see it here", icon = AglynIcons.named("receipt"))
@@ -150,7 +150,7 @@ fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null) {
 }
 
 @Composable
-private fun OrdersList(context: NativePluginContext, model: OrdersListModel, selected: String?, onSelect: (String) -> Unit) {
+private fun OrdersList(context: NativePluginContext, model: OrdersListModel, selected: String?, onSelect: (String) -> Unit, startNew: Boolean = false) {
   val listState = rememberLazyListState()
   // A new chip, filter or sort is a new list: it starts at its first row, not at the row that was on top before.
   // Coming back to the list (from an order, or Back) keeps where it was.
@@ -163,7 +163,8 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
   var confirming by remember { mutableStateOf(false) }
   var running by remember { mutableStateOf(false) }
   var outcome by remember { mutableStateOf<BulkFulfillResult?>(null) }
-  var drafting by remember { mutableStateOf(false) }
+  // Opened from Create new: the draft order comes up at once.
+  var drafting by remember { mutableStateOf(startNew) }
   var exportPreset by remember { mutableStateOf<String?>(null) }
   var presetMenu by remember { mutableStateOf(false) }
   var said by remember { mutableStateOf<String?>(null) }

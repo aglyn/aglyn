@@ -122,7 +122,7 @@ val PLATFORM_ENTRIES: List<com.aglyn.pluginhost.NativePluginManifestEntry> = lis
 const val SITE_PAGES_SCREEN_ID = "site.pages"
 
 /** What the desktop's menu bar can ask of the shell. */
-enum class ShellCommand { FIND, SWITCH_SITE, SETTINGS, TOGGLE_SIDEBAR, TOGGLE_RAIL, ADD_ACCOUNT, PIN_1, PIN_2, PIN_3, PIN_4, PIN_5 }
+enum class ShellCommand { FIND, SWITCH_WORKSPACE, SWITCH_SITE, SETTINGS, TOGGLE_SIDEBAR, TOGGLE_RAIL, ADD_ACCOUNT, PIN_1, PIN_2, PIN_3, PIN_4, PIN_5 }
 
 class ShellNavigator(initialTop: String = HOME) {
   var top by mutableStateOf(initialTop)
@@ -148,8 +148,35 @@ class ShellNavigator(initialTop: String = HOME) {
   /** The saved-state key of what is showing. */
   val currentKey: String get() = keys.last()
 
+  /** The destinations visited, for the title bar's back and forward (Mac, iPad, tablets and desktop). */
+  private val history = mutableStateListOf(initialTop)
+  private var historyAt by mutableStateOf(0)
+  val canGoBackInHistory: Boolean get() = historyAt > 0
+  val canGoForwardInHistory: Boolean get() = historyAt < history.lastIndex
+
   fun select(key: String) {
     top = key
+    stack.clear()
+    if (history.getOrNull(historyAt) != key) {
+      while (history.lastIndex > historyAt) history.removeAt(history.lastIndex)
+      history.add(key)
+      if (history.size > 50) history.removeAt(0)
+      historyAt = history.lastIndex
+    }
+  }
+
+  /** The destination before this one in the history, as the title bar's back arrow goes. */
+  fun historyBack() {
+    if (!canGoBackInHistory) return
+    historyAt -= 1
+    top = history[historyAt]
+    stack.clear()
+  }
+
+  fun historyForward() {
+    if (!canGoForwardInHistory) return
+    historyAt += 1
+    top = history[historyAt]
     stack.clear()
   }
 

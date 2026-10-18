@@ -31,15 +31,16 @@ internal data class CreateEntry(
   val pluginName: String? = null,
 )
 
-/** Every create action, in the console's order: the site's, then the workspace's. */
+/**
+ * Every create action whose form the apps have, in the console's order: the site's, then the workspace's. Each screen
+ * opens its own create form on `new=1`.
+ */
 internal val CREATE_ENTRIES = listOf(
   CreateEntry("page", "Page", "description", "site.pages", null, inSite = true),
   CreateEntry("product", "Product", "sell", "commerce.product", "commerce", inSite = true, pluginName = "Products"),
   CreateEntry("order", "Order", "shopping_basket", "commerce.orders", "commerce", inSite = true, pluginName = "Products"),
-  CreateEntry("booking", "Booking", "event_available", "bookings.calendar", "bookings", inSite = true, pluginName = "Bookings"),
   CreateEntry("event", "Event", "event", "events-calendar.events", "events-calendar", inSite = true, pluginName = "Events"),
   CreateEntry("form", "Form", "dynamic_form", "forms.list", "forms", inSite = true, pluginName = "Forms"),
-  CreateEntry("text", "Customer text", "sms", "sms.texts", "sms", inSite = true, pluginName = "Customer texts"),
   CreateEntry("site", "Site", "public", "site.sites", null, inSite = false),
   CreateEntry("contact", "Contact", "contact_mail", "crm.contacts", "crm", inSite = false, pluginName = "CRM"),
   CreateEntry("email", "Email", "mail", "email.messages", "email", inSite = false, pluginName = "Emails"),

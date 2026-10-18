@@ -258,7 +258,7 @@ data class SendingView(
 
 /** The Emails hub: the console's sections as chips over the chosen one. */
 @Composable
-fun EmailHubScreen(context: NativePluginContext, initialSection: EmailSection, initial: String? = null, composeCampaign: String? = null) {
+fun EmailHubScreen(context: NativePluginContext, initialSection: EmailSection, initial: String? = null, composeCampaign: String? = null, composeNew: Boolean = false) {
   val orgId = context.orgId ?: return
   // No site: the workspace's own Emails page. Audiences and topics are the workspace's already; messages, templates,
   // sending and suppressions are each site's own, read a site at a time as the console's workspace page reads them.
@@ -274,7 +274,7 @@ fun EmailHubScreen(context: NativePluginContext, initialSection: EmailSection, i
     )
     if (hostId != null) {
       when (section) {
-        EmailSection.MESSAGES -> EmailsScreen(context, initial, composeCampaign)
+        EmailSection.MESSAGES -> EmailsScreen(context, initial, composeCampaign, composeNew)
         EmailSection.TEMPLATES -> TemplatesSection(context, actions)
         EmailSection.AUDIENCES -> AudiencesSection(context, actions, initial)
         EmailSection.TOPICS -> TopicsSection(context, actions)
@@ -284,7 +284,7 @@ fun EmailHubScreen(context: NativePluginContext, initialSection: EmailSection, i
     } else {
       when (section) {
         EmailSection.MESSAGES -> PerSiteSection(context, "messages", "An email is sent as one site. Pick a site to see what it sent, or to write one.") { site ->
-          EmailsScreen(site, initial, composeCampaign)
+          EmailsScreen(site, initial, composeCampaign, composeNew)
         }
         EmailSection.TEMPLATES -> PerSiteSection(context, "templates", "Each template is one site's design. Pick a site to see its templates.") { site ->
           TemplatesSection(site, EmailActions(site, orgId, site.hostId))

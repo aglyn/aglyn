@@ -153,9 +153,8 @@ class ShellUiTest {
     onNodeWithTag("site-status").assertIsDisplayed()
     onNodeWithText("Live").assertIsDisplayed()
     onNodeWithText("shop.aglyn.app").assertIsDisplayed()
-    onNodeWithTag("quick-action-site.pages-open").assertIsDisplayed()
-    onNodeWithText("New order #1042").assertIsDisplayed()
-    onNodeWithText("5 min ago").assertIsDisplayed()
+    // Home says what waits on the person, and nothing does here (no plugin lines in this build, the plan is paid).
+    onNodeWithTag("needs-you-none").assertIsDisplayed()
   }
 
   /** Sign-up is the console's: the form, the agreement it is gated on, the console's routes, then the verification step. */
