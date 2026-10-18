@@ -81,7 +81,19 @@ interface Registration {
   detacher: PluginMembershipDetacher
 }
 
-const registrations: Registration[] = []
+/**
+ * On `globalThis` under `Symbol.for`, never at module scope (AGL-3947).
+ * The detachers are registered at boot, from `instrumentation.ts`, and Next
+ * compiles that file apart from the routes, so the boot and a route each hold
+ * their own copy of this module. At module scope, the boot filled its copy and
+ * every route read an empty one (AGL-3412, AGL-3868).
+ */
+const REGISTRY_KEY = Symbol.for('@aglyn/aglyn:plugin-membership-detachers')
+const globalScope = globalThis as typeof globalThis & {
+  [REGISTRY_KEY]?: Registration[]
+}
+const registrations: Registration[] =
+  globalScope[REGISTRY_KEY] ?? (globalScope[REGISTRY_KEY] = [])
 
 /**
  * Registers a plugin's membership detacher. Owner = the loader's marker

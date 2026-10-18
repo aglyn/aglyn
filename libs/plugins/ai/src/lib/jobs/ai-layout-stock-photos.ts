@@ -1342,9 +1342,21 @@ export function aiStockSiteTerms(businessType: string): AiStockSiteTerms {
   }
 }
 
+/**
+ * Words that say a picture is one of a set, never what it shows (AGL-3923):
+ * the beta.266 Mexicano portfolio's gallery was "Project one" to "Project
+ * four", and searched "project" (students at a whiteboard), "project four"
+ * (lavender) and "four" (a running track's lane numbers).
+ */
+const PLACEHOLDER_SUBJECTS = words(
+  'project projects piece pieces item items example examples sample samples entry entries untitled work works ' +
+    'selected recent latest ' +
+    'four five six seven eight nine ten first second third fourth fifth sixth seventh eighth ninth tenth',
+)
+
 /** A phrase's content words without its filler; all filler, and nothing is left. */
 function subjectOf(list: readonly string[]): string[] {
-  return list.filter((word) => !FILLER.has(word))
+  return list.filter((word) => !FILLER.has(word) && !PLACEHOLDER_SUBJECTS.has(word))
 }
 
 /**
@@ -3207,7 +3219,9 @@ export function aiStockIsAbbreviation(businessType: string): boolean {
  * photo of it is tagged with, and its broad searches. A kind whose subject
  * is a craft {@link CRAFT_KIN} lists takes that craft's own.
  */
-const KIND_SUBJECTS: Readonly<Record<string, { subject: string; kin?: readonly string[]; broad?: readonly string[] }>> = {
+const KIND_SUBJECTS: Readonly<
+  Record<string, { subject: string; kin?: readonly string[]; broad?: readonly string[]; shunLead?: readonly string[] }>
+> = {
   business: {
     subject: 'small business',
     kin: ['business', 'office', 'team', 'meeting', 'workplace', 'coworkers', 'entrepreneur', 'shop', 'service', 'customer'],
@@ -3242,6 +3256,9 @@ const KIND_SUBJECTS: Readonly<Record<string, { subject: string; kin?: readonly s
     subject: 'artist',
     kin: ['art', 'artist', 'design', 'creative', 'studio', 'workspace', 'painting', 'drawing'],
     broad: ['artist studio', 'creative workspace'],
+    // "Artist" names a bee and a tattooist as often as a painter (AGL-3923):
+    // the beta.266 Mexicano hero's first pick was "artist bee, giant artist bee".
+    shunLead: ['bee', 'insect', 'insects', 'tattoo', 'makeup', 'cosmetics'],
   },
   studio: {
     subject: 'design studio',
@@ -3342,6 +3359,7 @@ export function aiStockKindTerms(kind: string): AiStockSiteTerms | null {
     broad: [...(entry.broad ?? base.broad)],
     // A hero names one of the kind's own words, never only the subject's.
     core: [...new Set([...base.core, ...kin])],
+    ...(entry.shunLead?.length ? { shunLead: [...new Set([...base.shunLead, ...entry.shunLead.map(aiStockStem)])] } : {}),
   }
 }
 
@@ -3357,39 +3375,142 @@ const STARTER_KINDS: Readonly<Record<string, string>> = {
   landing: 'landing',
 }
 
+/** A kind's common photos ({@link KIND_GENERIC}): the words searched, and the words one of which a hit must name. */
+interface AiStockGenericSet {
+  kin: readonly string[]
+  broad: readonly string[]
+}
+
+const OFFICE: AiStockGenericSet = {
+  kin: ['office', 'workspace', 'desk', 'laptop', 'computer', 'meeting', 'business', 'work', 'workplace', 'team', 'notebook', 'coffee', 'teamwork', 'conference'],
+  broad: ['office workspace', 'business meeting', 'workspace desk laptop'],
+}
+
+const WORKSPACE: AiStockGenericSet = {
+  kin: ['workspace', 'desk', 'laptop', 'notebook', 'coffee', 'office', 'book', 'books', 'workplace'],
+  broad: ['workspace desk laptop', 'notebook coffee desk'],
+}
+
 /**
- * The last searches a picture tries, for each starter (AGL-3923): plain,
- * common photos of where such a site's work is done, which every library
- * holds many of, held only to their own words. Never a person's face, a
- * child, a product or a place a business could be mistaken for.
+ * The last searches a picture tries, for each kind of site the guided start
+ * offers (AGL-3923): plain, common photos of where that kind's work happens,
+ * which every library holds many of, held to their own words. Never a face
+ * as the lead, never a child, never a product nor a rival business: a
+ * restaurant's are its tables and plates, never an office. A kind with no set
+ * keeps a slot nothing fits without a photo (AGL-3831).
  */
-const STARTER_GENERIC: Readonly<Record<string, { subject: string; kin: readonly string[]; broad: readonly string[] }>> = {
-  business: {
-    subject: 'office',
-    kin: ['office', 'workspace', 'desk', 'laptop', 'computer', 'meeting', 'business', 'work', 'workplace', 'team', 'notebook', 'coffee', 'teamwork', 'conference'],
-    broad: ['office workspace', 'business meeting', 'workspace desk laptop'],
+const KIND_GENERIC: Readonly<Record<string, AiStockGenericSet>> = {
+  business: OFFICE,
+  trades: {
+    kin: ['tools', 'tool', 'toolbox', 'workbench', 'workshop', 'construction', 'repair', 'renovation', 'drill', 'hammer', 'wrench', 'roof', 'house', 'carpentry'],
+    broad: ['tools workbench', 'home renovation', 'construction tools'],
   },
-  'physical-shop': {
-    subject: 'shop',
+  professional: {
+    kin: ['office', 'desk', 'documents', 'document', 'meeting', 'conference', 'laptop', 'workplace', 'business', 'notebook', 'paperwork', 'consulting'],
+    broad: ['office desk documents', 'business meeting', 'conference room'],
+  },
+  wellness: {
+    kin: ['spa', 'massage', 'wellness', 'relaxation', 'relax', 'towel', 'towels', 'candle', 'stones', 'therapy', 'treatment', 'aromatherapy'],
+    broad: ['spa stones towel', 'massage room', 'wellness spa'],
+  },
+  restaurant: {
+    kin: ['restaurant', 'table', 'dining', 'food', 'plate', 'dish', 'meal', 'kitchen', 'cafe', 'dinner', 'lunch', 'cuisine'],
+    broad: ['restaurant interior', 'restaurant table food', 'food plate'],
+  },
+  store: {
     kin: ['shop', 'store', 'retail', 'shelf', 'shelves', 'display', 'interior', 'boutique', 'storefront', 'counter'],
     broad: ['shop interior', 'retail store'],
   },
   portfolio: {
-    subject: 'studio',
-    kin: ['studio', 'workspace', 'desk', 'art', 'design', 'creative', 'sketch', 'drawing', 'notebook', 'paper'],
-    broad: ['creative workspace', 'art studio', 'workspace desk laptop'],
+    kin: ['studio', 'workspace', 'desk', 'art', 'design', 'creative', 'sketch', 'drawing', 'paint', 'painting', 'brush', 'brushes', 'canvas', 'pencil', 'pencils', 'paper'],
+    broad: ['art supplies', 'creative workspace', 'art studio'],
   },
+  studio: {
+    kin: ['design', 'studio', 'workspace', 'desk', 'laptop', 'sketch', 'creative', 'office', 'drawing', 'pencil'],
+    broad: ['design studio workspace', 'creative workspace', 'workspace desk laptop'],
+  },
+  photography: {
+    kin: ['camera', 'cameras', 'photography', 'lens', 'photographer', 'studio', 'film', 'tripod'],
+    broad: ['camera lens', 'photography studio', 'vintage camera'],
+  },
+  blog: {
+    kin: ['notebook', 'desk', 'writing', 'laptop', 'coffee', 'journal', 'book', 'books', 'workspace', 'pen', 'typewriter'],
+    broad: ['writing desk notebook', 'laptop coffee desk'],
+  },
+  events: {
+    kin: ['event', 'venue', 'wedding', 'reception', 'party', 'celebration', 'table', 'decoration', 'banquet', 'hall', 'flowers'],
+    broad: ['event venue decoration', 'banquet table', 'party decoration'],
+  },
+  fitness: {
+    kin: ['gym', 'fitness', 'weights', 'dumbbell', 'dumbbells', 'barbell', 'kettlebell', 'workout', 'exercise', 'training'],
+    broad: ['gym equipment', 'dumbbells gym', 'fitness gym'],
+  },
+  yoga: {
+    kin: ['yoga', 'mat', 'meditation', 'studio', 'relaxation', 'candle', 'zen', 'mindfulness'],
+    broad: ['yoga mat', 'yoga studio', 'meditation candle'],
+  },
+  beauty: {
+    kin: ['salon', 'beauty', 'hair', 'makeup', 'cosmetics', 'nails', 'manicure', 'spa', 'mirror', 'brush', 'brushes'],
+    broad: ['beauty salon interior', 'makeup brushes cosmetics', 'hair salon chair'],
+  },
+  realestate: {
+    kin: ['house', 'home', 'interior', 'living', 'room', 'property', 'architecture', 'apartment', 'kitchen', 'estate'],
+    broad: ['house exterior', 'home interior living room', 'modern kitchen interior'],
+  },
+  education: {
+    kin: ['classroom', 'books', 'book', 'library', 'school', 'desk', 'education', 'learning', 'study', 'studying', 'notebook', 'chalkboard', 'blackboard', 'lecture'],
+    broad: ['library books', 'classroom', 'study desk books'],
+  },
+  nonprofit: {
+    kin: ['volunteer', 'volunteers', 'volunteering', 'charity', 'donation', 'donations', 'community', 'helping', 'help', 'hands'],
+    broad: ['volunteers charity', 'donation box', 'community volunteering'],
+  },
+  music: {
+    kin: ['music', 'guitar', 'piano', 'instrument', 'instruments', 'concert', 'stage', 'microphone', 'drums', 'studio', 'vinyl'],
+    broad: ['guitar instrument', 'concert stage lights', 'music studio microphone'],
+  },
+  personal: WORKSPACE,
   landing: {
-    subject: 'office',
     kin: ['office', 'workspace', 'desk', 'laptop', 'computer', 'meeting', 'business', 'work', 'workplace', 'team', 'technology', 'startup'],
     broad: ['modern office', 'workspace desk laptop', 'business meeting'],
   },
+  'coming-soon': WORKSPACE,
 }
+
+/** The kind of site whose common photos each starter falls back to. */
+const STARTER_GENERIC_KIND: Readonly<Record<string, string>> = {
+  business: 'business',
+  'physical-shop': 'store',
+  portfolio: 'portfolio',
+  landing: 'landing',
+}
+
+/** Stems no common photo leads with: a face, a portrait (AGL-3923). */
+const FACE_STEMS = ['face', 'portrait', 'selfie', 'headshot'].map(aiStockStem)
 
 /** The starter a kind of site follows ({@link STARTER_KINDS}); a kind not listed follows the business starter. */
 function starterOfKind(kind: string): string {
   const starter = aiSiteKind(kind)?.starter ?? 'business'
-  return STARTER_GENERIC[starter] ? starter : 'business'
+  return STARTER_KINDS[starter] ? starter : 'business'
+}
+
+/** A kind of site's common photos as a world to search and judge by ({@link KIND_GENERIC}); `null` for a kind with no set. */
+export function aiStockKindGenericTerms(kind: string): AiStockSiteTerms | null {
+  const set = KIND_GENERIC[kind]
+  if (!set) return null
+  const kin = [...new Set(set.kin.map(aiStockStem))]
+  return {
+    business: '',
+    craft: '',
+    domain: kin,
+    broad: [...set.broad],
+    making: [],
+    named: [],
+    rivals: [],
+    core: kin,
+    shun: [],
+    shunLead: [],
+  }
 }
 
 /**
@@ -3404,14 +3525,34 @@ export function aiStockWorldIsUnlisted(terms: Pick<AiStockSiteTerms, 'business' 
 }
 
 /**
+ * Whether a site's world agrees with the kind of site the person picked
+ * (AGL-3923): it was read from the kind, or names one of the kind's own
+ * words. A gym whose owner picked Business & services does not, and is never
+ * given an office.
+ */
+function worldOfKind(terms: Pick<AiStockSiteTerms, 'craft' | 'broad' | 'domain'>, kind: string): boolean {
+  const own = aiStockKindTerms(kind)
+  if (!own) return false
+  if (own.craft === terms.craft && own.broad.join('|') === terms.broad.join('|')) return true
+  const words = new Set([...own.domain, ...(aiStockKindGenericTerms(kind)?.domain ?? [])])
+  return terms.domain.some((stem) => words.has(stem))
+}
+
+/**
  * What a picture is searched by once nothing narrower found it a photo
- * (AGL-3923), widest last: the kind of site the person picked, the kind its
- * starter is the shape of, and the starter's own common photos
- * ({@link STARTER_GENERIC}). Only a site whose world is its own words alone
- * ({@link aiStockWorldIsUnlisted}) widens: a craft this module lists, or a
- * world read from the kind of site, keeps its slots to that world, and a slot
- * nothing in it fits keeps no photo rather than an office (AGL-3831). A rung
- * that would search what an earlier one did is left out.
+ * (AGL-3923), widest last.
+ *
+ * - A site whose world is its own words alone ({@link aiStockWorldIsUnlisted})
+ *   widens to the kind of site the person picked, the kind its starter is the
+ *   shape of, and last the kind's own common photos ({@link KIND_GENERIC}),
+ *   else its starter's.
+ * - Any other site widens only to its kind's own common photos, and only
+ *   where its world agrees with that kind ({@link worldOfKind}): a portfolio
+ *   read from its kind takes art supplies before no photo at all, and a
+ *   barbecue caterer whose kind says nothing of food never takes an office
+ *   (AGL-3831). A kind with no set keeps a slot nothing fits without a photo.
+ *
+ * A rung that would search what an earlier one did is left out.
  *
  * The beta.265 Kasvora Marketing Solutions start (job BK3r4I8bF1) typed its
  * business as "Freelencing site offer services": its world was the one word
@@ -3419,11 +3560,10 @@ export function aiStockWorldIsUnlisted(terms: Pick<AiStockSiteTerms, 'business' 
  * nothing, and shipped a flat dark band with no photo.
  */
 export function aiStockWiderTerms(
-  terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'broad'>,
+  terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'broad' | 'domain'>,
   kind: string,
 ): Array<{ rung: 'kind' | 'starter' | 'generic'; terms: AiStockSiteTerms }> {
   const rungs: Array<{ rung: 'kind' | 'starter' | 'generic'; terms: AiStockSiteTerms }> = []
-  if (!aiStockWorldIsUnlisted(terms)) return rungs
   const seen = new Set<string>([JSON.stringify([terms.craft, [...terms.broad]])])
   const add = (rung: 'kind' | 'starter' | 'generic', found: AiStockSiteTerms | null) => {
     if (!found || !found.broad.length) return
@@ -3432,23 +3572,14 @@ export function aiStockWiderTerms(
     seen.add(key)
     rungs.push({ rung, terms: found })
   }
+  if (!aiStockWorldIsUnlisted(terms)) {
+    if (kind && worldOfKind(terms, kind)) add('generic', aiStockKindGenericTerms(kind))
+    return rungs
+  }
   const starter = starterOfKind(kind)
   if (kind) add('kind', aiStockKindTerms(kind))
   add('starter', aiStockKindTerms(STARTER_KINDS[starter] ?? 'business'))
-  const generic = STARTER_GENERIC[starter] as (typeof STARTER_GENERIC)[string]
-  const kin = generic.kin.map(aiStockStem)
-  add('generic', {
-    business: '',
-    craft: '',
-    domain: kin,
-    broad: [...generic.broad],
-    making: [],
-    named: [],
-    rivals: [],
-    core: kin,
-    shun: [],
-    shunLead: [],
-  })
+  add('generic', aiStockKindGenericTerms(kind) ?? aiStockKindGenericTerms(STARTER_GENERIC_KIND[starter] ?? 'business'))
   return rungs
 }
 
@@ -3519,6 +3650,7 @@ export function aiLayoutStockPhotoSource(
   const terms = aiStockSourceTerms(input)
   // Where a picture's own world finds nothing, the wider worlds it tries (AGL-3923).
   const wider = aiStockWiderTerms(terms, input.kind ?? '')
+  const unlisted = aiStockWorldIsUnlisted(terms)
   const proper = aiStockProperWords(input.business)
   return async (slots) => {
     const timeout = AbortSignal.timeout(
@@ -3820,18 +3952,39 @@ export function aiLayoutStockPhotoSource(
         if (rung === 'generic') continue
         ask(world, [...aiStockSearchesFor(slot, world, subject, part, sectionName), ...craftSearches(slot, world)])
       }
-      if (subject) {
-        const orientation = aiStockOrientation(slot.aspect)
-        const size = slot.role === 'hero' ? { minWidth: 1600 } : orientation === 'vertical' ? { minHeight: 900 } : { minWidth: 900 }
+      const orientation = aiStockOrientation(slot.aspect)
+      const size = slot.role === 'hero' ? { minWidth: 1600 } : orientation === 'vertical' ? { minHeight: 900 } : { minWidth: 900 }
+      // The slot's own words, only where the site's world is its own words
+      // alone, held to the kind's common world (AGL-3923), never to no world:
+      // the beta.267 Brightvale closing band's "ready talk marketing" was
+      // answered with a tin-can telephone, and its pets-and-owners answers
+      // name no office either.
+      const common = wider.find((rung) => rung.rung === 'generic')?.terms
+      if (subject && unlisted && common) {
         const object = aiStockObjectWord(subject)
         const own = [...new Set([subject, object].map(clip).filter(Boolean))]
         ask(
-          terms,
-          own.map((query) => ({ query, orientation, ...size, subject, strict: true, worldless: true })),
+          common,
+          own.map((query) => ({ query, orientation, ...size, subject, strict: true })),
         )
       }
+      // The kind's common photos: OF its world among their first tags, never
+      // led by a face, never of a child (AGL-3923).
       for (const { rung, terms: world } of wider)
-        if (rung === 'generic') ask(world, craftSearches(slot, world))
+        if (rung === 'generic')
+          ask(
+            world,
+            world.broad.map((query) => ({
+              query: clip(query),
+              orientation,
+              ...size,
+              broad: true,
+              category: world.core,
+              ...(slot.role === 'hero' ? { first: true } : { leadWorld: true }),
+              refuse: CHILD_STEMS,
+              refuseLead: FACE_STEMS,
+            })),
+          )
       return asked
     }
 

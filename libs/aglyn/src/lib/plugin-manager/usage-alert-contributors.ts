@@ -196,7 +196,19 @@ export interface UsageAlertContributor {
   quotaChecks?: (context: UsageQuotaContext) => Promise<readonly UsageQuotaCheck[]>
 }
 
-const registrations: UsageAlertContributor[] = []
+/**
+ * On `globalThis` under `Symbol.for`, never at module scope (AGL-3947).
+ * The contributors are registered at boot, from `instrumentation.ts`, and Next
+ * compiles that file apart from the routes, so the boot and a route each hold
+ * their own copy of this module. At module scope, the boot filled its copy and
+ * every route read an empty one (AGL-3412, AGL-3868).
+ */
+const REGISTRY_KEY = Symbol.for('@aglyn/aglyn:usage-alert-contributors')
+const globalScope = globalThis as typeof globalThis & {
+  [REGISTRY_KEY]?: UsageAlertContributor[]
+}
+const registrations: UsageAlertContributor[] =
+  globalScope[REGISTRY_KEY] ?? (globalScope[REGISTRY_KEY] = [])
 
 const CATALOG_ORDER = new Map(
   FIRST_PARTY_PLUGINS.map((plugin, index) => [plugin.id, index]),
