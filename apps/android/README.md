@@ -193,9 +193,10 @@ node tools/scripts/native-release.mjs android-upload /private/tmp/aglyn-release/
 - **versionCode** is the minutes since 1970 (UTC), passed as
   `-Paglyn.versionCode`, so every bundle outnumbers the last and stays under
   Play's 2,100,000,000. A build without it is versionCode 1.
-- **versionName** is the repo's version, read from the root `package.json`
-  (`npm run release:prepare` bumps it), so an app build and the web name one
-  release (`1.0.0-beta.266`). `-Paglyn.versionName` overrides it.
+- **versionName** is the repo's version, the root `package.json`'s
+  (`npm run release:prepare` bumps it), passed as `-Paglyn.versionName`, so an
+  app build and the web name one release (`1.0.0-beta.266`). A build without it
+  is `1.0.0`, as Xcode's default is.
 - **The upload key** is one keystore for both apps, kept outside the repo at
   `~/.aglyn/release/aglyn-upload.jks` (alias `aglyn-upload`, RSA 4096, valid
   to 2056). Its password is in the login Keychain (service

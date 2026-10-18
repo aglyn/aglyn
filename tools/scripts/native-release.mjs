@@ -35,7 +35,7 @@
  *   `aglyn-upload`) unless AGLYN_UPLOAD_STORE_PASSWORD is set, and reaches
  *   Gradle through the environment only, never the command line. The
  *   versionCode is the minutes since 1970 (UTC); versionName is the root
- *   package.json's version.
+ *   package.json's version, passed as -Paglyn.versionName.
  *
  * android-upload: sends a bundle to a Play testing track (internal unless
  *   a track is named) through the Play Developer API: an edit, the bundle,
@@ -84,7 +84,7 @@ const ANDROID_APPS = { app: 'Aglyn', pos: 'AglynPOS' }
  * Apple's CFBundleShortVersionString takes only up to three integers, so the
  * Apple builds carry the numeric core as MARKETING_VERSION and the whole string
  * as AGLYN_VERSION (Info.plist), which the apps show; Android's versionName is
- * free text and Gradle reads the same file (apps/android/{app,pos}/build.gradle.kts).
+ * free text, so the bundles get the whole string as -Paglyn.versionName.
  */
 function releaseVersion() {
   const { version } = JSON.parse(
@@ -292,6 +292,7 @@ function androidBundle(module) {
         '--no-configuration-cache',
         `:${module}:bundleRelease`,
         `-Paglyn.versionCode=${versionCode}`,
+        `-Paglyn.versionName=${releaseVersion().version}`,
       ],
       { cwd: ANDROID, env },
     ),
