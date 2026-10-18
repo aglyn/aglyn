@@ -2725,12 +2725,13 @@ Assist panel.
   and asks the same admission of the plan before it is kept, so such a plan is
   refused before a member is shown a Confirm (AGL-3030).
 
-### Motion on an AI-built page (AGL-3838)
+### Motion on an AI-built page (AGL-3838, AGL-3941)
 
-Every page an AI job builds moves, and the model decides none of it: no prompt
-names a preset, no answer carries one, and no credit is spent on it. The motion
-is the element animation props an author sets in the Besigner's Animation
-section (`aglynAnimation*`, `libs/aglyn/src/lib/app-utils/element-animation.ts`),
+Every page an AI job builds moves. The site's look chooses HOW, from a small
+closed set of named motion styles (below); code does the rest, and no page
+prompt names a preset or page answer carries one. The motion is the element
+animation props an author sets in the Besigner's Animation section
+(`aglynAnimation*`, `libs/aglyn/src/lib/app-utils/element-animation.ts`),
 written by code.
 
 - **The pass.** `applyElementMotion` (`libs/aglyn/src/lib/app-utils/element-motion.ts`)
@@ -2747,17 +2748,52 @@ written by code.
   footer and navigation, anything pinned or laid over its band, anything
   hidden, and anything already carrying an animation prop (`none` included)
   are left alone, and a block that holds one is opened up so its other
-  children move instead. Later sections take the character's presets in
+  children move instead — except a picture's frame, a box whose picture is
+  laid over it (`position: absolute`), as the layout compiler draws every
+  picture slot: the frame is the picture, so it moves as one and counts as a
+  picture. Later sections take the character's presets in
   turn (`sectionPresets`), so a page is never one move repeated, and a split
   — a column of words beside a picture — comes in from its own sides
   (`sides`): the left column from the left, the right from the right, a
-  stagger step apart, while a picture that zooms keeps its zoom. The tenant's
+  stagger step apart, while a picture that zooms keeps its zoom. Without
+  `sides` a split's columns still come one after the other, the picture's in
+  the media preset. A group of like items takes `groupPreset` where the
+  character names one (a group of pictures keeps the media preset). The tenant's
   sheet clips the root's overflow-x on any page that slides sideways, so a
   phone never scrolls sideways while it plays. A page it already moved comes
   back as the same object, so no write is made for it.
-- **The site's character.** `aiSiteMotion` (`src/lib/layout-language/ai-layout-motion.ts`)
-  maps the site's kind to a mood and turns it by the site's design seed, so
-  every page of one site moves alike and two sites of one kind differ: calm
+- **The site's motion style (AGL-3941).** The look unit (`submit_site_look`,
+  `jobs/ai-job-site-look.ts`) asks for `motion` beside its other closed-set
+  choices, offering the styles that suit the kind (`AI_SITE_MOTION_SUITS`), in
+  the job's own order, each with a line on what it does. `aiReadSiteLook`
+  keeps only a style from the vocabulary; `aiSiteStyleFor` keeps the model's
+  choice at `AI_SITE_MOTION_KEEP` (0.6) and otherwise draws among the styles
+  that suit the kind, LAST, so every other look choice is the one the seed
+  always drew. It is stored on `hosts/{id}.siteStyle.motion` with the rest of
+  the look, and the site step hands it to the layout and page units in
+  `inputs.siteStyle.motion`, where `aiLayoutMotionSiteOf` reads it. The styles
+  (`AI_SITE_MOTION_STYLE_RANGES`), each of which says how the hero, a split,
+  a grid of cards and every other section arrive:
+  - **sides** — a split's picture slides in from its own side and its words
+    from the other; the rest rises and fades in turn; pictures never zoom,
+    so a split's picture always takes its side. 550–750 ms.
+  - **rise** — everything fades up; a split's columns rise one after the
+    other. 500–700 ms.
+  - **scale** — pictures scale into place (in or out); the hero and the words
+    fade. 550–750 ms.
+  - **cascade** — cards and lists ripple in at the widest stagger (105–120 ms)
+    on overshoot or smooth, rising or zooming. 450–600 ms.
+  - **still** — near-static: a short soft fade, nothing slides or scales.
+    400–500 ms.
+  The seed still picks within the style: the first section preset, the
+  hero's preset, the picture preset, the curve, the duration, the stagger and
+  the hero's step, so two sites that chose one style differ.
+- **The site's character without a style.** A job whose look chose none —
+  every site built before AGL-3941, a replay of one, an Assist job on an
+  existing site, a starter — moves exactly as AGL-3838 drew it:
+  `aiSiteMotion` maps the site's kind to a mood and turns it by the site's
+  design seed, so every page of one site moves alike and two sites of one
+  kind differ: calm
   (law and finance, health, yoga, beauty, blog) fades and rises in turn on a
   gentle curve, 650–800 ms; bold (studio, fitness, music, events) rises with
   overshoot and zooms pictures in, 450–600 ms; gallery (portfolio,
@@ -2765,6 +2801,12 @@ written by code.
   rise in turn; standard (every other kind) rises and fades in turn,
   500–700 ms. The seed picks which preset the second section starts on.
   Every mood brings a split in from its sides. Items stagger 60–120 ms apart.
+- **Never more than motion.** Under every style the first section's main
+  heading and largest picture never move, and the pass writes only the
+  `aglynAnimation*` props, which the tenant's sheet plays only inside
+  `prefers-reduced-motion: no-preference`, so a visitor who asked for reduced
+  motion sees none of it (`ai-layout-motion.spec.ts`,
+  `element-animation-assets.spec.ts`).
 - **Where it is written.** A layout-language page's check, once the page has
   passed (`aiLayoutPageCheck`, so the one write carries it); the page step's
   last pass, which settles a page built a section at a time the same way; and

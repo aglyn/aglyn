@@ -28,6 +28,12 @@ import type {
   HostThemeTypographyVariantKey,
 } from '@aglyn/shared-data-types'
 import { writeThemeFonts } from '@aglyn/shared-ui-theme/util/theme-editor-fields'
+import {
+  AI_SITE_MOTION_STYLES,
+  aiSiteMotionStyle,
+  aiSiteMotionStylesFor,
+  type AiSiteMotionStyle,
+} from '../layout-language/ai-layout-motion'
 import type { AiTool } from '../runtime/ai-runtime'
 import {
   AI_SITE_BASES,
@@ -119,13 +125,31 @@ export interface AiSiteStyle {
   density: AiSiteDensity
   /** A brand color the brief gave, used as the primary color. */
   brand: string | null
+  /**
+   * How the site's pages arrive (AGL-3941), from `ai-layout-motion.ts`'s
+   * vocabulary. Absent on a style stored before the look chose motion, whose
+   * pages move in its kind's mood.
+   */
+  motion?: AiSiteMotionStyle
 }
 
 /** What the model may choose, every field optional. */
 export type AiSiteLookAnswer = Partial<
   Pick<
     AiSiteStyle,
-    'base' | 'hue' | 'accent' | 'ground' | 'fonts' | 'corners' | 'buttons' | 'cards' | 'fields' | 'eyebrow' | 'header' | 'brand'
+    | 'base'
+    | 'hue'
+    | 'accent'
+    | 'ground'
+    | 'fonts'
+    | 'corners'
+    | 'buttons'
+    | 'cards'
+    | 'fields'
+    | 'eyebrow'
+    | 'header'
+    | 'brand'
+    | 'motion'
   >
 >
 
@@ -169,7 +193,7 @@ export const AI_SITE_LOOK_TOOL: AiTool = {
   inputSchema: {
     type: 'object',
     additionalProperties: false,
-    required: ['base', 'hue', 'accent', 'ground', 'fonts', 'corners', 'buttons', 'cards', 'fields', 'eyebrow', 'header', 'brand'],
+    required: ['base', 'hue', 'accent', 'ground', 'fonts', 'corners', 'buttons', 'cards', 'fields', 'eyebrow', 'header', 'brand', 'motion'],
     properties: {
       base: enumOf(AI_SITE_BASES, 'The base theme to start from, from the list in the request.'),
       hue: { type: 'integer', description: 'The brand color as a hue from 0 to 359 (0 red, 30 orange, 55 gold, 140 green, 190 teal, 220 blue, 270 violet, 330 pink).' },
@@ -183,6 +207,7 @@ export const AI_SITE_LOOK_TOOL: AiTool = {
       eyebrow: enumOf(AI_SITE_EYEBROWS, 'The small label above headings: caps (spaced capitals), small (quiet small text) or rule (capitals after a short line).'),
       header: enumOf(AI_SITE_HEADERS, 'What sets the header bar off the page: a line, a shadow, or flat.'),
       brand: { anyOf: [{ type: 'string' }, { type: 'null' }], description: 'A hex brand color the brief gives, exactly as written, or null.' },
+      motion: enumOf(AI_SITE_MOTION_STYLES, 'How the pages arrive as a visitor scrolls, from the motion list in the request.'),
     },
   },
 }
@@ -230,6 +255,8 @@ export function aiReadSiteLook(answer: unknown): AiSiteLookAnswer {
   if (header) look.header = header
   const brand = aiSiteBrandHex(raw['brand'])
   if (brand) look.brand = brand
+  const motion = aiSiteMotionStyle(raw['motion'])
+  if (motion) look.motion = motion
   return look
 }
 
@@ -393,8 +420,16 @@ function styleOnce(
     headingScale: Math.round(family.headingScale * (0.94 + next() * 0.12) * 100) / 100,
     density: family.density === 'regular' && next() < 0.25 ? pick(next, DENSITIES) : family.density,
     brand: aiSiteBrandHex(input.brand) ?? answer.brand ?? null,
+    // Drawn last, so every dimension above is drawn the same whether or not
+    // the answer chose a motion. The model's choice is kept more often than
+    // the other dimensions', because nothing else of the site says how it
+    // moves; the seed's draw is among the styles that suit the kind.
+    motion: choose(answer.motion, aiSiteMotionStylesFor(kind.id), AI_SITE_MOTION_KEEP),
   }
 }
+
+/** The chance a look keeps the motion style the model chose (AGL-3941). */
+export const AI_SITE_MOTION_KEEP = 0.6
 
 // ── Color ────────────────────────────────────────────────────────────────
 
