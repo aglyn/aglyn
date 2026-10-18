@@ -213,18 +213,7 @@ struct PagesScreen: View {
     sheet = next
   }
 
-  @ViewBuilder
-  private var banner: some View {
-    if sheet == nil, let error = runner.error {
-      AglynNotice(error, tone: .error) { runner.clear() }.padding(AglynSpace.two)
-    } else if let notice = runner.notice {
-      AglynNotice(notice, tone: .success) { runner.clear() }.padding(AglynSpace.two)
-        .task(id: notice) {
-          try? await Task.sleep(nanoseconds: 6_000_000_000)
-          if runner.notice == notice { runner.notice = nil }
-        }
-    }
-  }
+  private var banner: some View { PagesRunnerBanner(runner: runner, sheetOpen: sheet != nil) }
 
   @ViewBuilder
   private func list(hostID: String, api: PagesAPI, selectable: Bool) -> some View {
@@ -280,7 +269,7 @@ struct PagesScreen: View {
               NavigationLink {
                 PageDetail(
                   context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner,
-                  canEdit: canEdit, canPublish: canPublish
+                  canEdit: canEdit, canPublish: canPublish, pushed: true
                 )
                 .navigationTitle(row.page.name)
               } label: {
@@ -298,7 +287,7 @@ struct PagesScreen: View {
             if let row = rows.first(where: { $0.id == id }) {
               PageDetail(
                 context: context, hostID: hostID, pageID: id, model: model, api: api, runner: runner,
-                canEdit: canEdit, canPublish: canPublish
+                canEdit: canEdit, canPublish: canPublish, pushed: true
               )
               .navigationTitle(row.page.name)
             }
@@ -376,6 +365,27 @@ struct PageListRow: View {
   }
 }
 
+/// What the last page action did, or why it failed: under the list, and under a page pushed over it on a phone,
+/// where the list's own banner is out of sight.
+struct PagesRunnerBanner: View {
+  let runner: ActionRunner
+  var sheetOpen = false
+
+  var body: some View {
+    if !sheetOpen, let error = runner.error {
+      AglynNotice(error, tone: .error) { runner.clear() }.padding(AglynSpace.two)
+    } else if let notice = runner.notice {
+      AglynNotice(notice, tone: .success) { runner.clear() }.padding(AglynSpace.two)
+        .task(id: notice) {
+          // A banner that leaves (a deleted page's own screen) cancels its wait; it must not take the notice with it,
+          // or the list it returns to never shows it.
+          do { try await Task.sleep(nanoseconds: 6_000_000_000) } catch { return }
+          if runner.notice == notice { runner.notice = nil }
+        }
+    }
+  }
+}
+
 /// One page: its status, the Besigner, publishing, its details and saved versions.
 struct PageDetail: View {
   let context: NativePluginContext
@@ -386,13 +396,19 @@ struct PageDetail: View {
   let runner: ActionRunner
   let canEdit: Bool
   let canPublish: Bool
+  /// Pushed over the list on a phone: it shows the actions' banner itself, and a deleted page leaves.
+  var pushed = false
   @Environment(\.openURL) private var openURL
+  @Environment(\.dismiss) private var dismiss
   @State private var sheet: PageSheet?
   @State private var confirm: PageConfirm?
 
   var body: some View {
     if let row = model.row(pageID) {
       content(row)
+        .safeAreaInset(edge: .bottom) {
+          if pushed { PagesRunnerBanner(runner: runner, sheetOpen: sheet != nil) }
+        }
         .sheet(item: $sheet) { sheet in
           PageSheetRouter(context: context, hostID: hostID, sheet: sheet, model: model, api: api, runner: runner, open: { self.sheet = $0 }) {
             self.sheet = nil
@@ -412,7 +428,7 @@ struct PageDetail: View {
             }
           case .delete(let page, _):
             Button("Delete", role: .destructive) {
-              runner.run(page.isGroup ? "Group deleted." : "Page deleted.") {
+              runner.run(page.isGroup ? "Group deleted." : "Page deleted.", onDone: { if pushed { dismiss() } }) {
                 let inside = model.tree?.children[page.id] ?? []
                 if page.isGroup { try await api.deleteGroup(page.id) } else { try await api.delete(page.id) }
                 // The page leaves the cache; a deleted group's pages move up a level.
