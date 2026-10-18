@@ -386,13 +386,10 @@ private fun SpecBodyContent(
         icon = AglynIcons.named("workspace_premium"),
         tone = EmptyTone.UPSELL,
         action = {
-          FilledTonalButton(colors = com.aglyn.ui.aglynTonalButtonColors(), 
+          FilledTonalButton(
             onClick = { plugin.navigate(BILLING_ADDONS_SCREEN, emptyMap()) },
             modifier = Modifier.testTag("upsell-addons"),
-            colors = ButtonDefaults.filledTonalButtonColors(
-              containerColor = MaterialTheme.colorScheme.primaryContainer,
-              contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            ),
+            colors = com.aglyn.ui.aglynTonalButtonColors(),
           ) { Text("See add-ons") }
         },
         modifier = Modifier.testTag("spec-upsell"),
@@ -1242,7 +1239,8 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
       FieldInput(field, scope, values[field.key] ?: initialValue(field, scope)) { values[field.key] = it }
     }
     ActionSpec.parse(block["submit"])?.takeIf { ScreenValues.condition(it.whenCondition, scope) }?.let { action ->
-      FilledTonalButton(colors = com.aglyn.ui.aglynTonalButtonColors(), 
+      FilledTonalButton(
+        colors = com.aglyn.ui.aglynTonalButtonColors(),
         onClick = { submit(action, visibleOnly(filled, fields)) },
         enabled = !busy && !missing,
         modifier = Modifier.align(Alignment.End).testTag("submit-${block.id}"),
