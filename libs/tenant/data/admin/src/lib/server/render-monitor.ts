@@ -574,8 +574,47 @@ export type RenderMonitorStore = <T>(
 ) => Promise<T>
 
 /**
+ * How long a passing site's stored state may go without being rewritten.
+ *
+ * A run that changes nothing about a site's verdict — the common run — used
+ * to rewrite its document anyway, three documents every five minutes
+ * (AGL-3932). The `observation-stale` rule in {@link renderPagesHealth} reads
+ * `updatedAtMs` against {@link RENDER_PAGES_STALE_MS}, so the document is
+ * refreshed at half that, and on every change of verdict, count or blind
+ * stretch.
+ */
+export const RENDER_MONITOR_STATE_REFRESH_MS = 10 * 60_000
+
+/**
+ * Whether a run's state differs from the stored one in anything the reader
+ * or the next run decides by, or the stored one is old enough to refresh.
+ */
+export function renderMonitorStateNeedsWrite(
+  prior: Partial<RenderMonitorStateDoc> | null,
+  next: RenderMonitorStateDoc,
+  now: number,
+): boolean {
+  if (!prior) return true
+  const decided: Array<keyof RenderMonitorStateDoc> = [
+    'status',
+    'sinceMs',
+    'detail',
+    'consecutiveFailures',
+    'failingSinceMs',
+    'consecutiveBlindRuns',
+    'blindSinceMs',
+    'label',
+    'origin',
+  ]
+  if (decided.some((key) => (prior[key] ?? null) !== (next[key] ?? null))) return true
+  const updatedAtMs = typeof prior.updatedAtMs === 'number' ? prior.updatedAtMs : 0
+  return now - updatedAtMs >= RENDER_MONITOR_STATE_REFRESH_MS || now < updatedAtMs
+}
+
+/**
  * The default store: one Firestore transaction on the site's document, so
- * two overlapping runs cannot both decide they saw the edge.
+ * two overlapping runs cannot both decide they saw the edge. The document is
+ * written only when {@link renderMonitorStateNeedsWrite} says so.
  */
 const firestoreStore: RenderMonitorStore = async (checkId, work) => {
   const { default: firebaseAdmin } = await import('./firebase-admin')
@@ -587,7 +626,7 @@ const firestoreStore: RenderMonitorStore = async (checkId, work) => {
       ? (snapshot.data() as Partial<RenderMonitorStateDoc>)
       : null
     const { next, result } = work(prior)
-    transaction.set(ref, next)
+    if (renderMonitorStateNeedsWrite(prior, next, next.updatedAtMs)) transaction.set(ref, next)
     return result
   })
 }

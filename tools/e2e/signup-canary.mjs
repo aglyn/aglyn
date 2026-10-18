@@ -987,10 +987,22 @@ async function main() {
    * walk always runs Chromium.
    */
   const { defaultBrowserType: _webkit, ...phone } = devices['iPhone 13']
-  const LEGS = [
+  const ALL_LEGS = [
     { leg: 'desktop', device: {} },
     { leg: 'phone', device: phone },
   ]
+  /**
+   * One leg an hour, the two taking turns by the hour (AGL-3932). Each leg
+   * creates and reaps a whole workspace, and two of them every hour were a
+   * tenth of everything the platform wrote in a day. Either path is still
+   * walked every two hours, inside the auth doors' own grace, and
+   * `SIGNUP_CANARY_LEGS=both` walks both — for a hand-run after a sign-up
+   * change, when waiting two hours for the other path is not an answer.
+   */
+  const LEGS =
+    process.env['SIGNUP_CANARY_LEGS'] === 'both'
+      ? ALL_LEGS
+      : [ALL_LEGS[new Date().getUTCHours() % ALL_LEGS.length]]
   const results = []
   let failedStep = null
   let debugToken = ''
@@ -1196,8 +1208,9 @@ async function main() {
   const failedLeg = results.find((r) => !r.ok) ?? null
   failedStep = failedStep ?? failedLeg?.failedStep ?? null
   const reapedCleanly = results.every((r) => r.reapedCleanly)
+  // The desktop leg's, on the hours it walks; the other leg's otherwise.
   const outcome =
-    results.find((r) => r.leg === 'desktop')?.workspaceOutcome ?? null
+    (results.find((r) => r.leg === 'desktop') ?? results[0])?.workspaceOutcome ?? null
   const elapsedMs = Date.now() - t0
   const ok = failedStep === null && results.length === LEGS.length
 

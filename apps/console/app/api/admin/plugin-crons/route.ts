@@ -23,7 +23,7 @@ import { runPluginConsoleCrons } from '@aglyn/aglyn/plugin-manager/plugin-consol
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
-import { recordCronBeat } from '../../../../utils/cron-beat'
+import { batchedCronBeat, recordCronBeat } from '../../../../utils/cron-beat'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import { raiseConsoleOperatorAlert } from '../../../../utils/server/raise-operator-alert'
 
@@ -105,7 +105,8 @@ async function handler(request: Request): Promise<Response> {
     nowMs: startedAt,
     deadlineMs: startedAt + PLUGIN_CONSOLE_CRONS_BUDGET_MS,
     jobIds: named ? [named] : null,
-    beat: (jobId) => recordCronBeat(jobId),
+    // Every job's mark in one summary write, not two writes a job (AGL-3932).
+    beat: batchedCronBeat(),
   })
   if (named && !(named in reports)) {
     return Response.json({ error: `No plugin declares a console job "${named}".` }, { status: 404 })

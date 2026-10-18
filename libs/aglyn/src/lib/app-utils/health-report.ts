@@ -3152,6 +3152,8 @@ export interface CronBeatStore {
   collection(name: string): {
     doc(id: string): {
       set(data: Record<string, unknown>, options?: unknown): Promise<unknown>
+      /** Present on a real Firestore handle; {@link writeCronBeats} reads the summary through it. */
+      get?(): Promise<{ get(field: string): unknown }>
     }
   }
 }
@@ -3211,6 +3213,84 @@ export async function writeCronBeat(
   } catch {
     return false
   }
+}
+
+/**
+ * How long a job's own document may lag its summary entry when the jobs are
+ * marked together (AGL-3932).
+ *
+ * The reader judges from the summary and opens a job's own document only to
+ * confirm an entry the summary calls late, so a job marked every fifteen
+ * minutes does not need its own document rewritten every fifteen minutes:
+ * half an hour, under every plugin job's forty-five-minute grace, keeps the
+ * confirming mark fresh enough to agree with a summary that has stopped.
+ */
+export const CRON_BEAT_OWN_MARK_REFRESH_MS = 30 * 60_000
+
+/**
+ * The marks one run leaves for several jobs at once — the plugin-crons route
+ * stamps twenty jobs a run, and {@link writeCronBeat} per job was forty
+ * writes every fifteen minutes, half of everything the platform wrote
+ * (AGL-3932).
+ *
+ * One summary write carries every job's entry (merged, like the single mark's).
+ * A job's own document is rewritten only when the summary's current entry
+ * for it is missing or older than {@link CRON_BEAT_OWN_MARK_REFRESH_MS},
+ * which one read of the summary tells; a store without `get`, or a summary
+ * that cannot be read or written, falls back to the single-mark shape for
+ * every job, so no run can leave fewer marks than before.
+ *
+ * NEVER THROWS, as {@link writeCronBeat} never throws, and for the same
+ * reason. Returns false only when nothing landed for some job.
+ */
+export async function writeCronBeats(
+  store: CronBeatStore,
+  jobIds: readonly string[],
+  now: number = Date.now(),
+): Promise<boolean> {
+  const ids = [...new Set(jobIds)].filter((id) => !CRON_BEAT_RESERVED_DOCS.has(id))
+  if (!ids.length) return true
+  const beats = store.collection(CRON_BEAT_COLLECTION)
+  const summary = beats.doc(CRON_BEAT_SUMMARY_DOC)
+  let current: Map<string, number> | null = null
+  try {
+    if (summary.get) {
+      const snapshot = await summary.get()
+      current = new Map(cronBeatsFromSummary(snapshot.get('beats')).map((beat) => [beat.jobId, beat.atMs]))
+    }
+  } catch {
+    // Unreadable: every job gets its own mark below, as before.
+  }
+  const refresh =
+    current === null
+      ? ids
+      : ids.filter((id) => {
+          const last = current.get(id)
+          return last === undefined || now - last >= CRON_BEAT_OWN_MARK_REFRESH_MS || now < last
+        })
+  let landed = true
+  for (const id of refresh) {
+    try {
+      await beats.doc(id).set({ jobId: id, atMs: now, at: new Date(now).toISOString() }, { merge: true })
+    } catch {
+      landed = false
+    }
+  }
+  try {
+    await summary.set({ beats: Object.fromEntries(ids.map((id) => [id, now])) }, { merge: true })
+  } catch {
+    // The summary is what the reader reads first; without it, give every job
+    // the mark the reader confirms against, as the single mark would have.
+    for (const id of ids) {
+      if (refresh.includes(id)) continue
+      try {
+        await beats.doc(id).set({ jobId: id, atMs: now, at: new Date(now).toISOString() }, { merge: true })
+      } catch {
+        landed = false
+      }
+    }
+  }
+  return landed
 }
 
 /**
