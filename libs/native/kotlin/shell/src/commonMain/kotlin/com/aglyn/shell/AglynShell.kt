@@ -32,6 +32,7 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.graphics.graphicsLayer
 import com.aglyn.core.AuthState
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.ui.AglynIcons
@@ -60,6 +61,10 @@ fun AglynShell(
   onLinkOpened: () -> Unit = {},
   /** Light or dark regardless of the system's; null follows the system. */
   dark: Boolean? = null,
+  /** The desktop's first window plays the launch intro (Android's splash screen plays instead). */
+  playIntro: Boolean = false,
+  /** The intro has handed over to the destination (the desktop's window grows then). */
+  onIntroRevealed: () -> Unit = {},
 ) {
   AglynTheme(dark = dark ?: isSystemInDarkTheme()) {
     androidx.compose.runtime.CompositionLocalProvider(
@@ -82,14 +87,21 @@ fun AglynShell(
       }
       if (handled) onLinkOpened()
     }
-    when (val state = auth) {
-      AuthState.Restoring -> Loading()
-      AuthState.SignedOut -> SignedOutScreen(services, autoSignIn)
-      // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
-      is AuthState.SignedIn if services.authFlow.landing -> SignedOutScreen(services, autoSignIn)
-      // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
-      is AuthState.SignedIn if !state.user.emailVerified && impersonation == null -> VerifyEmailScreen(services, state.user.email)
-      is AuthState.SignedIn -> SignedInShell(services, navigator, state.user.uid, pendingLink, onLinkOpened)
+    val state = auth
+    val authScreen = state is AuthState.SignedOut ||
+      (state is AuthState.SignedIn && (services.authFlow.landing || (!state.user.emailVerified && impersonation == null)))
+    LaunchHost(services, ready = state !is AuthState.Restoring, backdrop = authScreen, playIntro = playIntro, onRevealed = onIntroRevealed) { reveal ->
+      when (state) {
+        AuthState.Restoring -> Unit
+        AuthState.SignedOut -> SignedOutScreen(services, autoSignIn)
+        // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
+        is AuthState.SignedIn if services.authFlow.landing -> SignedOutScreen(services, autoSignIn)
+        // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
+        is AuthState.SignedIn if !state.user.emailVerified && impersonation == null -> VerifyEmailScreen(services, state.user.email)
+        is AuthState.SignedIn -> Box(Modifier.graphicsLayer { alpha = reveal.alpha; translationY = reveal.rise.dp.toPx() }) {
+          SignedInShell(services, navigator, state.user.uid, pendingLink, onLinkOpened)
+        }
+      }
     }
     }
     }

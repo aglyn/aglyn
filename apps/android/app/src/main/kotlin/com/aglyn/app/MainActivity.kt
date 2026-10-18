@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.aglyn.shell.handOver
 import androidx.lifecycle.lifecycleScope
 import com.aglyn.shell.handleConsoleHandoffReturn
 import com.aglyn.core.AuthState
@@ -32,10 +33,12 @@ class MainActivity : ComponentActivity() {
   private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
   override fun onCreate(savedInstanceState: Bundle?) {
-    installSplashScreen()
+    val splash = installSplashScreen()
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     val services = (application as AglynApplication).services
+    // The splash stays up until the auth state is known, then hands over with the spec's exit (AGL-3934).
+    splash.handOver(services)
     // Single sign-on's console page handing the code back finishes the sign-in here; anything else opens in the shell.
     pendingLink = linkOf(intent)?.takeUnless { services.handleConsoleHandoffReturn(it, lifecycleScope) }
     // Debug builds only: `adb shell am start … --ez autoSignIn true` signs the seeded member in.
