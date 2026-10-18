@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { sniffPhotoContentType } from '@aglyn/aglyn/app-utils/upload-inspection'
 import {
   STOCK_PHOTO_QUERY_MAX_CHARS,
   type StockPhoto,
@@ -372,11 +373,10 @@ export function createPixabayClient(
             server: response.headers.get('server') ?? null,
             ray: response.headers.get('cf-ray') ? true : false,
           })
-        const contentType = String(response.headers.get('content-type') ?? '')
+        const labeled = String(response.headers.get('content-type') ?? '')
           .split(';')[0]
           .trim()
           .toLowerCase()
-        if (!IMAGE_TYPES.has(contentType)) return failed('type', { contentType: contentType.slice(0, 60), status: response.status })
         const declared = Number(response.headers.get('content-length'))
         if (Number.isFinite(declared) && declared > maxBytes) return failed('too-large', { declared, maxBytes })
         let bytes: Uint8Array
@@ -386,6 +386,14 @@ export function createPixabayClient(
           return failed(deadline.aborted ? 'timeout' : 'body', { error: String(error).slice(0, 160) })
         }
         if (!bytes.length || bytes.length > maxBytes) return failed('size', { bytes: bytes.length, maxBytes })
+        // The bytes say what the photo is, never the label (AGL-3923): photo
+        // 10157445 came labeled image/png and was not PNG, and the media
+        // library's own check refused it. The same signatures decide here.
+        const contentType = sniffPhotoContentType(bytes)
+        if (!contentType || !IMAGE_TYPES.has(contentType))
+          return failed('type', { declared: labeled.slice(0, 60), sniffed: contentType, status: response.status })
+        if (contentType !== labeled)
+          console.info('pixabay: a photo was labeled other than its bytes', { declared: labeled.slice(0, 60), sniffed: contentType })
         return { bytes, contentType }
       }
       return failed('too-many-redirects', { hops: MAX_REDIRECTS + 1 })
