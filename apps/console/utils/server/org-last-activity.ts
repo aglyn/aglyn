@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { ORG_LANDED_AT_PATH } from '@aglyn/aglyn/app-utils/health-report'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   ORG_LAST_ACTIVITY_INTERVAL_MS,
@@ -55,7 +56,9 @@ export interface OrgActivityStore {
 
 /**
  * Stamp `orgs/{orgId}.lastActivityAt` with the server's clock, unless it was
- * stamped within `ORG_LAST_ACTIVITY_INTERVAL_MS`. This is the per-org bound
+ * stamped within `ORG_LAST_ACTIVITY_INTERVAL_MS`. The first beat of a
+ * workspace also records that its owner reached the console
+ * (`ORG_LANDED_AT_PATH`), which the sign-up landing health check reads. This is the per-org bound
  * on writes: however many members and tabs are active at once, the document
  * is written at most once per interval (two racing requests can both write;
  * both write "now", so the race costs a write and never a wrong answer).
@@ -71,7 +74,16 @@ export async function stampOrgLastActivity(
   const ref = db.collection('orgs').doc(orgId)
   const snapshot = await ref.get()
   if (!snapshot.exists) return 'missing'
-  if (!orgActivityIsStale(snapshot.get(ORG_LAST_ACTIVITY_PATH), nowMs)) return 'fresh'
-  await ref.update({ [ORG_LAST_ACTIVITY_PATH]: FieldValue.serverTimestamp() })
+  const stale = orgActivityIsStale(snapshot.get(ORG_LAST_ACTIVITY_PATH), nowMs)
+  // The first beat of a workspace nobody had opened. Written whatever the
+  // interval says, because creation stamped `lastActivityAt` a moment ago
+  // and would otherwise make this beat a no-op. Only an explicit `null`
+  // qualifies: an org made before the marker keeps lacking the field.
+  const landing = snapshot.get(ORG_LANDED_AT_PATH) === null
+  if (!stale && !landing) return 'fresh'
+  await ref.update({
+    ...(stale ? { [ORG_LAST_ACTIVITY_PATH]: FieldValue.serverTimestamp() } : {}),
+    ...(landing ? { [ORG_LANDED_AT_PATH]: nowMs } : {}),
+  })
   return 'stamped'
 }

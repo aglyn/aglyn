@@ -2333,9 +2333,14 @@ describe('appCheckAttestationHealth (AGL-2715)', () => {
 })
 
 describe('signupLandingHealth (AGL-3725)', () => {
-  // Newest first, one minute apart, each by a different person.
+  // Newest first, one minute apart, each by a different person whose owner
+  // never reached the console (the marker says so).
   const orgs = (...siteCounts: number[]) =>
-    siteCounts.map((hostCount, i) => ({ hostCount, createdAtMs: 10_000_000 - i * 60_000 }))
+    siteCounts.map((hostCount, i) => ({
+      hostCount,
+      landed: false,
+      createdAtMs: 10_000_000 - i * 60_000,
+    }))
 
   it('is green when every org made a site', () => {
     expect(signupLandingHealth(orgs(1, 2, 1), 5)).toMatchObject({
@@ -2373,9 +2378,9 @@ describe('signupLandingHealth (AGL-3725)', () => {
 
   it('orders people by their latest org, not by the order the read returned them', () => {
     const shuffled = [
-      { hostCount: 1, createdAtMs: 1_000 },
-      { hostCount: 0, createdAtMs: 3_000 },
-      { hostCount: 0, createdAtMs: 2_000 },
+      { hostCount: 1, landed: false, createdAtMs: 1_000 },
+      { hostCount: 0, landed: false, createdAtMs: 3_000 },
+      { hostCount: 0, landed: false, createdAtMs: 2_000 },
     ]
     expect(signupLandingHealth(shuffled, 5)).toMatchObject({ ok: false, strandedStreak: 2 })
   })
@@ -2385,8 +2390,8 @@ describe('signupLandingHealth (AGL-3725)', () => {
     // second Google account made a third under the same name and left.
     const check = signupLandingHealth(
       [
-        { hostCount: 0, createdAtMs: 5_000, visitor: 'first-touch:1' },
-        { hostCount: 0, createdAtMs: 4_000, visitor: 'first-touch:2' },
+        { hostCount: 0, landed: false, createdAtMs: 5_000, visitor: 'first-touch:1' },
+        { hostCount: 0, landed: false, createdAtMs: 4_000, visitor: 'first-touch:2' },
         { hostCount: 1, createdAtMs: 3_000, visitor: 'first-touch:1' },
         { hostCount: 1, createdAtMs: 2_000, visitor: 'first-touch:1' },
       ],
@@ -2405,8 +2410,74 @@ describe('signupLandingHealth (AGL-3725)', () => {
   })
 
   it('counts a corrupt site count as no site, so it cannot hide one', () => {
-    const corrupt = [{ hostCount: Number.NaN }, { hostCount: '3' as unknown as number }, { hostCount: 0 }]
+    const corrupt = [
+      { hostCount: Number.NaN, landed: false },
+      { hostCount: '3' as unknown as number, landed: false },
+      { hostCount: 0, landed: false },
+    ]
     expect(signupLandingHealth(corrupt, 5).strandedOrgs).toBe(2)
+  })
+
+  it('THE 2026-10-18 FALSE RED: two newest people with no site, both of whom reached the console, is green', () => {
+    // 13:29Z left nine seconds after the workspace; 14:58Z walked four steps
+    // of the guided start. Both opened the workspace, then left.
+    const check = signupLandingHealth(
+      [
+        { hostCount: 0, landed: true, createdAtMs: 5_000 },
+        { hostCount: 0, landed: true, createdAtMs: 4_000 },
+        { hostCount: 1, landed: true, createdAtMs: 3_000 },
+      ],
+      5,
+    )
+    expect(check).toMatchObject({ ok: true, strandedOrgs: 0, strandedPeople: 0, strandedStreak: 0 })
+    expect(check.code).toBeUndefined()
+  })
+
+  it('still reds when the two newest people never reached the console, the AGL-3724 night', () => {
+    expect(
+      signupLandingHealth(
+        [
+          { hostCount: 0, landed: false, createdAtMs: 5_000 },
+          { hostCount: 0, landed: false, createdAtMs: 4_000 },
+          { hostCount: 1, landed: true, createdAtMs: 3_000 },
+        ],
+        5,
+      ),
+    ).toMatchObject({ ok: false, code: 'signups-stranded', strandedOrgs: 2, strandedStreak: 2 })
+  })
+
+  it('abstains on orgs made before the marker: never stranded, never break a streak', () => {
+    const check = signupLandingHealth(
+      [
+        { hostCount: 0, landed: false, createdAtMs: 6_000 },
+        { hostCount: 0, createdAtMs: 5_000 },
+        { hostCount: 0, createdAtMs: 4_000 },
+        { hostCount: 0, landed: false, createdAtMs: 3_000 },
+      ],
+      5,
+    )
+    expect(check).toMatchObject({
+      ok: false,
+      strandedOrgs: 2,
+      strandedStreak: 2,
+      unmarkedOrgs: 2,
+    })
+    // An unmarked org WITH a site is still evidence the person arrived.
+    expect(
+      signupLandingHealth(
+        [
+          { hostCount: 0, landed: false, createdAtMs: 6_000 },
+          { hostCount: 2, createdAtMs: 5_000 },
+          { hostCount: 0, landed: false, createdAtMs: 4_000 },
+        ],
+        5,
+      ).strandedStreak,
+    ).toBe(1)
+    expect(signupLandingHealth([{ hostCount: 0 }, { hostCount: 0 }], 5)).toMatchObject({
+      ok: true,
+      strandedOrgs: 0,
+      unmarkedOrgs: 2,
+    })
   })
 
   it('is degraded, never calm, when the orgs could not be read', () => {
@@ -2416,6 +2487,7 @@ describe('signupLandingHealth (AGL-3725)', () => {
       strandedOrgs: null,
       strandedPeople: null,
       strandedStreak: null,
+      unmarkedOrgs: null,
       orgsInWindow: null,
     })
   })

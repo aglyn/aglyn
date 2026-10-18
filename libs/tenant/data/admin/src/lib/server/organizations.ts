@@ -76,6 +76,7 @@ import {
   ORG_BILLING_SUBCOLLECTION,
 } from '@aglyn/aglyn/app-utils/org-billing-doc'
 import { MEMBER_EMAIL_ALIASES_COLLECTION } from '@aglyn/aglyn/app-utils/member-email-aliases'
+import { ORG_LANDED_AT_PATH } from '@aglyn/aglyn/app-utils/health-report'
 import { runPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
 import { FieldValue } from 'firebase-admin/firestore'
 import { cache } from 'react'
@@ -400,6 +401,12 @@ export async function createOrganization(
       // staff Organizations list sorts by this field: an `orderBy` drops a
       // document that lacks it, so it is written from birth, never later.
       lastActivityAt: FieldValue.serverTimestamp(),
+      // Nobody has opened the workspace yet. The org shell's first activity
+      // beat stamps it, and the sign-up landing health check reads an org
+      // that never got that stamp as a person who never reached the console
+      // (`ORG_LANDED_AT_PATH`). Written `null`, not left out, because a
+      // missing field is how the check recognizes an org made before it.
+      [ORG_LANDED_AT_PATH]: null,
     })
     tx.set(
       db.collection('orgs').doc(orgId).collection('members').doc(ownerUid),

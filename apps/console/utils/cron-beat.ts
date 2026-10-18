@@ -46,12 +46,46 @@
  * mocked that could make the assertion vacuous.
  */
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { writeCronBeat } from '@aglyn/aglyn/server'
+import { writeCronBeat, writeCronBeats } from '@aglyn/aglyn/server'
 
 export async function recordCronBeat(jobId: string): Promise<void> {
   try {
     await writeCronBeat(firebaseAdmin.app().firestore(), jobId)
   } catch {
     // Deliberately swallowed. See above.
+  }
+}
+
+/**
+ * One mark for several jobs stamped in the same breath (AGL-3932).
+ *
+ * The plugin-crons runner stamps each job's beat before that job's work and
+ * starts every job at once, so the beats arrive within the same tick. The
+ * function this returns gathers the ids it is handed until the tick ends,
+ * then leaves them as ONE summary write through `writeCronBeats`; every
+ * caller awaits that same write, so each job's mark still lands before its
+ * work, as the runner's contract asks. Swallows everything, like the single
+ * mark above.
+ */
+export function batchedCronBeat(): (jobId: string) => Promise<void> {
+  let pending: { ids: string[]; done: Promise<void> } | null = null
+  return (jobId) => {
+    if (!pending) {
+      const ids: string[] = []
+      const done = new Promise<void>((resolve) => {
+        setTimeout(async () => {
+          pending = null
+          try {
+            await writeCronBeats(firebaseAdmin.app().firestore(), ids)
+          } catch {
+            // Deliberately swallowed. See above.
+          }
+          resolve()
+        }, 0)
+      })
+      pending = { ids, done }
+    }
+    pending.ids.push(jobId)
+    return pending.done
   }
 }

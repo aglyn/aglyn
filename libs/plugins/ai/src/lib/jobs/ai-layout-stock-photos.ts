@@ -40,7 +40,7 @@ import {
 import { aiStorefrontSays } from '../layout-language/ai-layout-storefront'
 import { aiLayoutLabel, aiLayoutSpeaksOtherThanEnglish } from '../layout-language/ai-layout-labels'
 import type { AiBuildPlan } from '../model/ai-build-plan'
-import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
+import { aiSiteKind, aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { aiStockBusinessNoun } from './ai-stock-business-nouns'
 
 /**
@@ -3333,6 +3333,113 @@ export function aiStockKindTerms(kind: string): AiStockSiteTerms | null {
 }
 
 /**
+ * The kind of site each starter is the shape of (`AiSiteKind.starter`): what
+ * a picture is searched by, widened past the kind the person picked, where
+ * nothing narrower found one (AGL-3923).
+ */
+const STARTER_KINDS: Readonly<Record<string, string>> = {
+  business: 'business',
+  'physical-shop': 'store',
+  portfolio: 'portfolio',
+  landing: 'landing',
+}
+
+/**
+ * The last searches a picture tries, for each starter (AGL-3923): plain,
+ * common photos of where such a site's work is done, which every library
+ * holds many of, held only to their own words. Never a person's face, a
+ * child, a product or a place a business could be mistaken for.
+ */
+const STARTER_GENERIC: Readonly<Record<string, { subject: string; kin: readonly string[]; broad: readonly string[] }>> = {
+  business: {
+    subject: 'office',
+    kin: ['office', 'workspace', 'desk', 'laptop', 'computer', 'meeting', 'business', 'work', 'workplace', 'team', 'notebook', 'coffee', 'teamwork', 'conference'],
+    broad: ['office workspace', 'business meeting', 'workspace desk laptop'],
+  },
+  'physical-shop': {
+    subject: 'shop',
+    kin: ['shop', 'store', 'retail', 'shelf', 'shelves', 'display', 'interior', 'boutique', 'storefront', 'counter'],
+    broad: ['shop interior', 'retail store'],
+  },
+  portfolio: {
+    subject: 'studio',
+    kin: ['studio', 'workspace', 'desk', 'art', 'design', 'creative', 'sketch', 'drawing', 'notebook', 'paper'],
+    broad: ['creative workspace', 'art studio', 'workspace desk laptop'],
+  },
+  landing: {
+    subject: 'office',
+    kin: ['office', 'workspace', 'desk', 'laptop', 'computer', 'meeting', 'business', 'work', 'workplace', 'team', 'technology', 'startup'],
+    broad: ['modern office', 'workspace desk laptop', 'business meeting'],
+  },
+}
+
+/** The starter a kind of site follows ({@link STARTER_KINDS}); a kind not listed follows the business starter. */
+function starterOfKind(kind: string): string {
+  const starter = aiSiteKind(kind)?.starter ?? 'business'
+  return STARTER_GENERIC[starter] ? starter : 'business'
+}
+
+/**
+ * Whether a site's world is only its own words (AGL-3923): no craft this
+ * module lists and no kind of site named it, so its broad searches are its
+ * business and its craft read back ("freelencing"), which a library may not
+ * know at all.
+ */
+export function aiStockWorldIsUnlisted(terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'broad'>): boolean {
+  const own = [...new Set([terms.business, terms.craft].map((word) => word.trim()).filter(Boolean))]
+  return terms.broad.length > 0 && terms.broad.length === own.length && terms.broad.every((query, index) => query === own[index])
+}
+
+/**
+ * What a picture is searched by once nothing narrower found it a photo
+ * (AGL-3923), widest last: the kind of site the person picked, the kind its
+ * starter is the shape of, and the starter's own common photos
+ * ({@link STARTER_GENERIC}). Only a site whose world is its own words alone
+ * ({@link aiStockWorldIsUnlisted}) widens: a craft this module lists, or a
+ * world read from the kind of site, keeps its slots to that world, and a slot
+ * nothing in it fits keeps no photo rather than an office (AGL-3831). A rung
+ * that would search what an earlier one did is left out.
+ *
+ * The beta.265 Kasvora Marketing Solutions start (job BK3r4I8bF1) typed its
+ * business as "Freelencing site offer services": its world was the one word
+ * "freelencing", which no library tags, so its cover hero searched it, found
+ * nothing, and shipped a flat dark band with no photo.
+ */
+export function aiStockWiderTerms(
+  terms: Pick<AiStockSiteTerms, 'business' | 'craft' | 'broad'>,
+  kind: string,
+): Array<{ rung: 'kind' | 'starter' | 'generic'; terms: AiStockSiteTerms }> {
+  const rungs: Array<{ rung: 'kind' | 'starter' | 'generic'; terms: AiStockSiteTerms }> = []
+  if (!aiStockWorldIsUnlisted(terms)) return rungs
+  const seen = new Set<string>([JSON.stringify([terms.craft, [...terms.broad]])])
+  const add = (rung: 'kind' | 'starter' | 'generic', found: AiStockSiteTerms | null) => {
+    if (!found || !found.broad.length) return
+    const key = JSON.stringify([found.craft, found.broad])
+    if (seen.has(key)) return
+    seen.add(key)
+    rungs.push({ rung, terms: found })
+  }
+  const starter = starterOfKind(kind)
+  if (kind) add('kind', aiStockKindTerms(kind))
+  add('starter', aiStockKindTerms(STARTER_KINDS[starter] ?? 'business'))
+  const generic = STARTER_GENERIC[starter] as (typeof STARTER_GENERIC)[string]
+  const kin = generic.kin.map(aiStockStem)
+  add('generic', {
+    business: '',
+    craft: '',
+    domain: kin,
+    broad: [...generic.broad],
+    making: [],
+    named: [],
+    rivals: [],
+    core: kin,
+    shun: [],
+    shunLead: [],
+  })
+  return rungs
+}
+
+/**
  * The first word of a text that names a craft {@link CRAFT_KIN} lists, as
  * its table writes it: "gym" of "Synchronicity Gym", "law" of "Hartwell
  * Reyes Family Law". Empty where it names none, so a name that is only a
@@ -3397,6 +3504,8 @@ export function aiLayoutStockPhotoSource(
   // alt texts, in its own language, name no subject a search could use.
   const english = aiStockSourceSubject(input)
   const terms = aiStockSourceTerms(input)
+  // Where a picture's own world finds nothing, the wider worlds it tries (AGL-3923).
+  const wider = aiStockWiderTerms(terms, input.kind ?? '')
   const proper = aiStockProperWords(input.business)
   return async (slots) => {
     const timeout = AbortSignal.timeout(
@@ -3418,8 +3527,12 @@ export function aiLayoutStockPhotoSource(
     /** Asset srcs this page has placed. */
     const placedSrcs = new Set<string>()
     const answers = new Map<string, Promise<StockPhoto[] | null>>()
+    /** The wider world a widened search is judged by (AGL-3923); a search not listed is judged by the site's. */
+    const worldOf = new WeakMap<AiStockSearch, AiStockSiteTerms>()
     let searches = 0
     let storing = true
+    /** Slots a photo was chosen for and could not be copied into the library (AGL-3923). */
+    const uncopied = new Set<AiLayoutPictureSlot>()
     /** Whether the library answered any search of this page: a slot left empty then found nothing fitting. */
     let answered = false
     const remember = (sourceKey: string, src: string) => {
@@ -3506,7 +3619,14 @@ export function aiLayoutStockPhotoSource(
           maxBytes: AI_LAYOUT_STOCK_MAX_BYTES,
           signal,
         })
-        if (!bytes || signal.aborted || !storing) return null
+        if (!bytes || signal.aborted || !storing) {
+          // A copy the library would not hand over is otherwise silent (AGL-3923).
+          if (!bytes && !signal.aborted) {
+            uncopied.add(slot)
+            console.warn('ai layout pictures: a stock photo could not be downloaded', { provider: photo.provider, id: photo.id })
+          }
+          return null
+        }
         const credit = provider.credit(photo)
         const stored = await ingest.ingest({
           hostId: input.hostId,
@@ -3554,6 +3674,7 @@ export function aiLayoutStockPhotoSource(
           },
         )
       } catch (error) {
+        uncopied.add(slot)
         console.warn('ai layout pictures: a stock photo could not be kept', {
           error: String(error),
         })
@@ -3574,7 +3695,7 @@ export function aiLayoutStockPhotoSource(
       const refuse = [...(request.refuse ?? []), ...(terms.adults ? CHILD_STEMS : [])]
       const role = slot.people ? aiStockPeopleRole(slot.alt, input.sectionNames[slot.sectionIndex] ?? '') : null
       return {
-        ...judgementOf(slot, request, subject),
+        ...judgementOf(slot, request, subject, worldOf.get(request) ?? terms),
         ...(refuse.length ? { refuse: [...new Set(refuse)] } : {}),
         // An occupation is shown in it (a teacher, a coach); a team is any adult at work.
         ...(slot.people
@@ -3589,22 +3710,27 @@ export function aiLayoutStockPhotoSource(
           : {}),
       }
     }
-    /** A search's own judgement, as its words set it. */
+    /**
+     * A search's own judgement, as its words set it, held to the world it was
+     * asked for: the site's own, or a wider one where the site's found nothing
+     * (AGL-3923). What lets a sensitive topic in is always the site's own words.
+     */
     const judgementOf = (
       slot: AiLayoutPictureSlot,
       request: AiStockSearch,
       subject: string,
+      world: AiStockSiteTerms,
     ): AiStockJudgement => ({
       subject: request.subject ?? (request.broad ? '' : subject),
-      domain: terms.domain,
+      domain: world.domain,
       strict:
         (slot.role === 'gallery' && !request.broad) || !!request.requires || !!request.strict,
       named: request.allow?.length ? [...new Set([...terms.named, ...request.allow])] : terms.named,
-      rivals: terms.rivals,
-      ...(terms.shun.length || request.shun?.length
-        ? { shun: [...new Set([...terms.shun, ...(request.shun ?? [])])] }
+      rivals: world.rivals,
+      ...(world.shun.length || request.shun?.length
+        ? { shun: [...new Set([...world.shun, ...(request.shun ?? [])])] }
         : {}),
-      ...(terms.shunLead.length ? { shunLead: terms.shunLead } : {}),
+      ...(world.shunLead.length ? { shunLead: world.shunLead } : {}),
       ...(request.product ? { product: true } : {}),
       ...(request.leadAny?.length ? { leadAny: request.leadAny } : {}),
       ...(request.requires ? { requires: request.requires } : {}),
@@ -3625,9 +3751,9 @@ export function aiLayoutStockPhotoSource(
      * filled from (AGL-3660): its broad searches, any hit naming the craft
      * itself. Never a desk, a laptop or a living room for a soap shop.
      */
-    const craftSearches = (slot: AiLayoutPictureSlot): AiStockSearch[] => {
+    const craftSearches = (slot: AiLayoutPictureSlot, world: AiStockSiteTerms = terms): AiStockSearch[] => {
       // A portfolio's record of the work is never filled by the craft's own photos (AGL-3856).
-      if (!terms.core.length || aiStockShowsTheWork(slot, terms)) return []
+      if (!world.core.length || aiStockShowsTheWork(slot, world)) return []
       const orientation = aiStockOrientation(slot.aspect)
       const size =
         slot.role === 'hero'
@@ -3635,15 +3761,51 @@ export function aiLayoutStockPhotoSource(
           : orientation === 'vertical'
             ? { minHeight: 900 }
             : { minWidth: 900 }
-      return terms.broad.map((query) => ({
+      return world.broad.map((query) => ({
         query: clip(query),
         orientation,
         ...size,
         broad: true,
-        category: terms.core,
+        category: world.core,
         ...(slot.role === 'hero' ? { first: true } : {}),
         ...(slot.product ? { product: true, tier: 'weak' as const } : {}),
       }))
+    }
+
+    /**
+     * A slot's searches once its own world found it nothing (AGL-3923), in
+     * order: the kind of site's world, the starter's, the slot's own words
+     * alone held to no world, and last the starter's common photos. Each is
+     * judged by the world it was asked for. A product, a portrait of the
+     * business's people and a record's cover keep their own fallbacks.
+     */
+    const widerSearches = (slot: AiLayoutPictureSlot, subject: string, sectionName: string): AiStockSearch[] => {
+      if (!wider.length || slot.product || slot.people || slot.record) return []
+      const part = aiStockSlotPart(slot, sectionName)
+      const asked: AiStockSearch[] = []
+      const ask = (world: AiStockSiteTerms, requests: readonly AiStockSearch[]) => {
+        for (const request of requests) {
+          worldOf.set(request, world)
+          asked.push(request)
+        }
+      }
+      for (const { rung, terms: world } of wider) {
+        if (rung === 'generic') continue
+        ask(world, [...aiStockSearchesFor(slot, world, subject, part, sectionName), ...craftSearches(slot, world)])
+      }
+      if (subject) {
+        const orientation = aiStockOrientation(slot.aspect)
+        const size = slot.role === 'hero' ? { minWidth: 1600 } : orientation === 'vertical' ? { minHeight: 900 } : { minWidth: 900 }
+        const object = aiStockObjectWord(subject)
+        const own = [...new Set([subject, object].map(clip).filter(Boolean))]
+        ask(
+          terms,
+          own.map((query) => ({ query, orientation, ...size, subject, strict: true, worldless: true })),
+        )
+      }
+      for (const { rung, terms: world } of wider)
+        if (rung === 'generic') ask(world, craftSearches(slot, world))
+      return asked
     }
 
     // 1. Choose, slot by slot, so the page's choices never collide: each
@@ -3728,6 +3890,9 @@ export function aiLayoutStockPhotoSource(
       const unsure = slot.product
         ? requests.filter((request) => request.tier === 'weak')
         : []
+      // 3. Nothing of its own world at all: the wider worlds (AGL-3923), new
+      //    and then, for a hero, one the job already shows.
+      const widened = widerSearches(slot, subject, sectionName)
       const phases: Array<[readonly AiStockSearch[], boolean]> = [
         [sure, false],
         ...(repeats ? [[sure, true] as [readonly AiStockSearch[], boolean]] : []),
@@ -3737,6 +3902,8 @@ export function aiLayoutStockPhotoSource(
               [unsure, true] as [readonly AiStockSearch[], boolean],
             ]
           : []),
+        ...(widened.length ? [[widened, false] as [readonly AiStockSearch[], boolean]] : []),
+        ...(widened.length && repeats ? [[widened, true] as [readonly AiStockSearch[], boolean]] : []),
       ]
       for (const [tried, repeat] of phases) {
         if (choice || signal.aborted) break
@@ -3805,8 +3972,11 @@ export function aiLayoutStockPhotoSource(
     // The library answered and nothing in it fits: no photo rather than a
     // starter that shows another business (AGL-3831). A library that never
     // answered, or a site that refused to store, leaves the starters.
+    // A slot whose fitting photo could not be copied was failed by the
+    // library, as one that never answered is, and takes a starter rather
+    // than lose its picture (AGL-3923).
     return answered && storing
-      ? photos.map((photo) => photo ?? AI_LAYOUT_NO_PHOTO)
+      ? photos.map((photo, index) => photo ?? (uncopied.has(slots[index] as AiLayoutPictureSlot) ? null : AI_LAYOUT_NO_PHOTO))
       : photos
   }
 }
