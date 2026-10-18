@@ -19,6 +19,13 @@ final class ActivityLabelTests: XCTestCase {
     XCTAssertEqual(shown("host.reattach-domain"), "Site: reattach domain")
     XCTAssertEqual(shown("Saved the screen"), "Saved the screen")
   }
+
+  func testAWorkflowRunNamesItsTriggerInWordsNotItsKey() {
+    XCTAssertEqual(shown("Action ran on formSubmission"), "Action ran on form submitted")
+    XCTAssertEqual(
+      shown("Action ran on formSubmission with errors: webhook 500"), "Action ran on form submitted with errors: webhook 500")
+    XCTAssertEqual(shown("Action ran on myCustomEvent"), "Action ran on myCustomEvent", "a custom event keeps its name")
+  }
 }
 
 /// A list row's line made of parts leaves out a part that holds nothing, so it never ends on a dangling `set by `.
