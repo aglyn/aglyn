@@ -132,6 +132,31 @@ describe('AGL-1535 · the org jump honours the intent that survived verification
     expect(mockReplace).toHaveBeenCalledWith('/acme/billing?plan=pro&interval=year')
   })
 
+  it('still lands when the read outlives its effect: React StrictMode runs it twice (2026-10-18)', async () => {
+    // StrictMode mounts, cleans up and re-runs every effect. The read happens
+    // once per account, so the old code's cleanup dropped its only result
+    // and the page held on `undefined` forever. In the console that meant a
+    // new account sat on "0 workspaces" with its sign-up name never claimed.
+    mockStoredUserDoc = {
+      onboardingPlanIntent: {
+        query: 'plan=pro&interval=year',
+        createdAtMs: Date.now(),
+      },
+    }
+    await act(async () => {
+      render(
+        <React.StrictMode>
+          <OrgJump />
+        </React.StrictMode>,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(mockGetDoc).toHaveBeenCalledTimes(1)
+    expect(mockReplace).toHaveBeenCalledWith('/acme/billing?plan=pro&interval=year')
+  })
+
   it('consumes it — a second visit jumps to the sites as usual', async () => {
     mockStoredUserDoc = {
       onboardingPlanIntent: {
