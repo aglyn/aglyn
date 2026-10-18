@@ -1912,6 +1912,59 @@ the `theme` kind's proposal, and no site plan may propose one.
   every step — the look, the plan, the layout, each page — runs on it, and the
   estimate is priced by the pick's multiplier. A Free start offers none.
 
+### A site start never reuses another site's records (AGL-3912)
+
+Datasets, and their records, belong to the workspace: neither names the site it
+was written for (the data plugin keeps `visibleTo`, usually `['org']`, and
+nothing else of a site), and a dataset outlives the site that filled it. A site
+start's plan sees every dataset the site may, and reused them by name. On
+2026-10-17 a gym's start published a deleted photographer's wedding packages as
+its "Session packages" and a deleted strength studio's coaches, one bio naming
+that studio, with four broken photos; a photographer's start listed another
+photographer's gallery with six broken covers.
+
+- **The rule** (`aiSiteDatasetIsThisSites`, `src/lib/jobs/ai-job-site-datasets.ts`).
+  A site start reuses a dataset only when its records are this site's to show:
+  it holds **no records** (an empty list, such as the one a form writes its
+  submissions to, is the same list on any site); or its scope names **this site
+  alone** (`siteOnly`, read off `visibleTo` by the inventory reader); or this site
+  already serves its records **pages of their own** (`recordBase`). Anything
+  else — records in a dataset shared with the workspace or other sites, and a
+  dataset whose records could not be counted — is another site's.
+- **Counted once, before the plan.** The plan step of a `site` job counts each
+  dataset's records through the data plugin's `dataset` index, whose `get` now
+  answers `facts.records` (one aggregation; `list` never counts), and marks each
+  foreign row `foreign` (`aiSiteInventoryWithRecordCounts`). The counts never
+  reach the prompt, so the plan key and the model's prompt are unchanged.
+- **Settled in code, before the rules** (`aiSettleSiteForeignDatasets`, the
+  plan door's `settle`, and again on a reused plan). Each foreign reuse becomes a
+  `dataset` creation of the same name and fields (less its photo, its photo
+  description and its page address, which the dataset unit adds back with this
+  site's own stock photos), and every section, record template and form
+  `writesTo` that named its id names `new:<name>` instead. A plan that already
+  creates a dataset of that name is pointed at that one. Rule 7 does not hold
+  the creation against the foreign dataset as a duplicate. The cap on a start's
+  datasets then settles as it always did (`aiSettlePlanDatasets`). Where the job
+  may create no dataset (Free, Starter's two used), the reuse comes off instead:
+  each section that listed it writes its items out, a record template becomes a
+  page of its own, and a form sends its submissions to the Inbox only. Never a
+  refusal, a re-ask or a failed job.
+- **Assist keeps reusing.** A `page`, `build` or `edit` job changes a site that
+  exists, whose pages may well list the workspace's datasets on purpose; their
+  plans are not counted or settled.
+- **No broken photo of a deleted site.** A site's media library is deleted with
+  the site, so a record photo at `/api/media/cdn/{hostId}/…` (or
+  `media:{hostId}/…`) of a site that no longer exists answers 404 everywhere.
+  The data plugin's published reads — a repeat's rows
+  (`repeat/dataset-repeat-rows.server.ts`) and a record page's record
+  (`record-pages/record-page-read.server.ts`) — leave such a field out of the
+  record (`datasetRecordWithoutGonePhotos`), one batched read of the other sites'
+  host documents inside the render cache, none when no record names another
+  site's photo. The repeat then leaves out a copy's Image whose whole `src` is a
+  binding the record left empty (`expand-repeatables.ts`), as it already did for
+  text, so a card draws no empty frame. An organization-library photo
+  (`org:…`) outlives every site and is never asked about.
+
 ## The `build` kind: Assist builds from one request
 
 `build` (AGL-3616) turns one request typed into Assist — "create a few new
@@ -2703,13 +2756,50 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   words (`aiStockPhotoAlt`): the slot's words are kept on an English site when a word of
   their subject is among the hit's first tags or its page's address; otherwise the photo
   is described by the library's own description where it writes one (Pexels' `alt`),
-  else its first three tags ("Cake, homemade, dessert"). The libraries write in English
+  else by a short English phrase built from its own tags (`aiStockTagsAlt`), never the
+  library's tag list. The libraries write in English
   and no model translates them, so a site in another language takes the platform's own
   phrase in its language (`illustrativePhoto` in `ai-layout-labels.ts`: "Foto
   ilustrativa"), true of any photo. The library's asset keeps the same words. The
   beta.253 Panadería La Concha Dorada start (job eg4maZMGtN) captioned a round cake
   dusted "HOME MADE" as conchas on a tray, and none of its nine photos showed what its
   words said. `ai-stock-photo-alt.spec.ts` replays its recorded "bakery" answer.
+- **The phrase a photo's tags make (AGL-3856).** `aiStockTagsAlt` reads a hit's first
+  eight tags for the things and the person it shows, and its first ten for where it is
+  set. It says one person at most (a role over a man, a woman or a girl), what that
+  person holds or wears from the first three tags ("A photographer with a camera on a
+  bridge", "A bride in a wedding dress"), or one thing, with a second from the first
+  two tags only where no place is said, and then the place ("A kettlebell in a gym",
+  "An aisle at a wedding"). It leaves out ideas and doings ("law", "feedback",
+  "training", "read", "fitness", any word ending "-tion", "-ment", "-ity" and the
+  like), makers' names ("sony", "canon"), words for the photo itself ("photo",
+  "spot"), seasons, peoples and countries, and says a quality only before the one
+  thing it qualifies ("An analog camera", "An elderly couple"). Of two words for one
+  thing the first tag's stays ("book" over "bookwork", "camera" over "photo-camera"),
+  and no word is said twice. The beta.264 Brightpath, Ironwood Barbell and Silver Fir
+  starts shipped "A kettlebell and fitness", "A bookwork and a read", "A participation
+  in a classroom", "A photo-camera and a sony" and "An elderly couple and an elderly";
+  `ai-stock-photo-alt.spec.ts` replays each placed photo's recorded tags
+  (`fixtures/ai-stock-photo-agl3856-people-recordings.ts`) and holds the phrase each
+  now makes.
+- **People show adults in their role, and a site for adults shows no child
+  (AGL-3856).** A dataset of the business's people (a team, staff, instructors,
+  coaches) marks each record's picture `people` (`aiSiteDatasetRecordPhotos`). Its
+  role is read from the record's name, else the list's name (`aiStockPeopleRole`):
+  an occupation (a teacher, a coach, a chef, a stylist, a doctor) is searched first
+  as the role in the site's world ("teacher classroom"), and a photo must name it; a
+  team or a staff takes any adult at work, its role preferred. A people picture is
+  never a photo whose first tags or page address name a child, a girl, a boy or a
+  teen, and one naming the role among its first tags ranks first. A record no photo
+  fits takes a starter of people (the team, the owner), never the workbench or the
+  houseplants. A site whose audience, name or business type says adults and nothing
+  younger (`aiStockAdultsOnly`: "Adults finishing a high school diploma", "Brightpath
+  Adult Learning Center") is told so in its terms (`adults`), and no slot on it takes a
+  photo naming a child anywhere in its tags, whatever else its words name ("school"
+  lets children in otherwise). The kind of site alone never says adults. The beta.264
+  Brightpath Adult Learning Center (job Ysli21sB6K) showed a teen graduate, a
+  schoolgirl and kids as its instructors; `ai-stock-photo-brightpath-people.spec.ts`
+  replays its recorded searches. Nothing the model sees changed.
 - **The cap.** The compiler's per-page picture cap is unchanged; the resolver
   only fills the slots the compiler wrote.
 

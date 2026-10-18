@@ -238,6 +238,7 @@ extension AppModel {
     }
     let outcome = await service.createWorkspace(name: name)
     if let slug = outcome.slug, let plan = authFlow.plan {
+      (push.pendingOrgID, push.pendingHostID) = (nil, nil)
       push.pendingLink = plan.destination(orgSlug: slug)
     }
   }
@@ -259,6 +260,7 @@ extension AppModel {
     let outcome = await service.createWorkspace(name: pending.name)
     if let slug = outcome.slug {
       if let plan = await service.consumePlanIntent(uid: user.uid, reader: reader) {
+        (push.pendingOrgID, push.pendingHostID) = (nil, nil)
         push.pendingLink = plan.destination(orgSlug: slug)
       }
       firstRun = .idle
