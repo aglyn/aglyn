@@ -1964,6 +1964,29 @@ photographer's gallery with six broken covers.
   binding the record left empty (`expand-repeatables.ts`), as it already did for
   text, so a card draws no empty frame. An organization-library photo
   (`org:…`) outlives every site and is never asked about.
+- **A section named for one category lists that category (AGL-3921).** A plan's
+  section names the datasets it places and nothing more: it has no filter, and the
+  model is never asked for one. So the build reads it off the plan. A dataset unit
+  keeps what its records are filed under — its first field named Category, Type,
+  Kind, Collection, Genre, Group, Section, Subject, Occasion or Series (or one of
+  those after a word such as "Session type"), where at least two values are used and
+  some record shares one (`aiSiteDatasetCategoryOf`) — on its output as `groups`
+  (the written field's id and each record's value). Where one page lists the dataset
+  in more than one section, each section whose name names exactly one value
+  (`aiLayoutSectionGroup`: every word of the value in the name, "Weddings and
+  elopements gallery", or every word of the name past "gallery", "collection" and
+  the like in the value, "Weddings"; a name that also names part of another value
+  names none) lists only that value's records: its placement carries a `filter`, the
+  compiler writes the repeat's `repeatFilter` (`category == Family portraits`, the
+  platform's own repeat query), the section counts that group's records, and the
+  page's design is told only their names. A section named for no one value, and a
+  dataset a page lists once, list every record, as before. Settled in code, never a
+  refusal or a re-ask. The beta.265 Laurel Ridge Film & Portrait "Galleries" page
+  (job NyPDNIaYzN) planned "Weddings and elopements gallery" and "Family portrait
+  gallery" over one "Gallery collections" filed under those two categories, and both
+  listed all ten records; Northgate's /courses and Granite Peak's /services list
+  their datasets once and are unchanged. `ai-stock-photo-agl3856-beta265.spec.ts`
+  replays the real records and plan.
 
 ## The `build` kind: Assist builds from one request
 
@@ -2800,6 +2823,58 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   Brightpath Adult Learning Center (job Ysli21sB6K) showed a teen graduate, a
   schoolgirl and kids as its instructors; `ai-stock-photo-brightpath-people.spec.ts`
   replays its recorded searches. Nothing the model sees changed.
+- **A teacher is shown teaching (AGL-3856).** A role whose photos are often of
+  someone merely tagged with it carries the words of it being done and of something
+  else being done (`PEOPLE_ROLES`' `scene` and `refuse`): a teacher, an instructor,
+  a tutor or a lecturer's photo names a classroom, a class, a lecture, a lesson, a
+  board, a tutor, students or a presentation among its first six tags
+  (`AI_STOCK_ROLE_TAGS_READ`), and none of its first eight names a model, fashion, a
+  pose, an artist, a painting, an easel, drawing or calligraphy, less what the
+  record's own words name ("Drawing instructor"). A teacher's portrait alone is no
+  instructor's cover; a record nothing fits takes a starter of people, as before.
+  A coach, a trainer, a chef and the rest are held to nothing more. A team's
+  portraits prefer a photo of a shoot no card shows yet among the hits that fit
+  as well (`aiStockFreshShootsFirst`, `aiStockSameShoot`: one contributor's photos a
+  few uploads apart). The beta.265 Northgate Adult Learning Center (job wais118U3Q)
+  placed a woman painting at an easel, a model in a traditional dress, an elderly
+  man's portrait and a calligrapher at a market as its teachers.
+- **A portfolio's record shows the photographed moment (AGL-3856).** A record cover
+  of a craft whose work is people at a moment (`CRAFT_KIN`'s `scenes`: a
+  photographer) is marked `record`, with the value its list files it under
+  (`aiSiteDatasetRecordPhotos`' `categories`), and is searched as the moment
+  (`aiStockRecordScene`): read from the record's name, else its category ("Getting
+  Ready" filed under "Weddings and elopements" is a wedding couple), else as a
+  person's portrait ("Milestone Portraits"), set where its words, its category or
+  else the site's own words say (`setting`: "mountain weddings … in the Blue Ridge"
+  is the mountains), its searches ending on the people alone ("couple"). Its photo's
+  first tags name the people — a couple, a bride and groom, lovers, a family, a
+  father or a mother; never the moment with no one in it nor children alone — and
+  never the maker or the tools (`maker`: photographer, camera, lens), an animal, a
+  toy or a figurine, unless the record names them. It is never qualified by the
+  craft ("photographer getting ready"), held to the craft's world, or filled by the
+  craft's own photos. A collection tile of a shop is unchanged. The beta.265 Laurel
+  Ridge "Gallery collections" covers were a press photographer, a toy frog with a
+  camera, a cat, a photographer in a library and a lego figure.
+- **Alt text, further (AGL-3856).** `aiStockTagsAlt` also leaves out adjectives a tag
+  gives alone ("multicultural", "domestic", "traditional"), words for how the photo
+  was made ("cutout", "perspective", "silhouettes"), holidays ("tet"), camera
+  makers ("petri"), "press", "show" and words of time ("day", "month"); never
+  describes by a body part ("hand", "body"); says a kind of thing ("animal", "pet")
+  only where nothing names the thing; reads a bed, a sofa or a bench as where a
+  person is ("on a bed"), a class, a meadow, a lake, a river or sunset as a place
+  ("in a class", "by a lake", "at sunset", "in the mountains"), a journalist, a
+  master, lovers and a wife as people, and a model as whoever posed; says a role
+  only from the first six tags and a person only from the first four where things
+  come first, unless the photo is a portrait. The beta.265 starts' "Students with a
+  multicultural at a language school", "A student with a bed in a room", "A model",
+  "People", "A teacher with a calligraphy master at a tet market", "A photographer
+  with a press", "A photographer with a petri", "A photographer with a cutout", "A
+  domestic cat and an animal", "A girl with a hand", "A body in a gym" and "A
+  photographer with silhouettes" now read "Students at a language school", "A man
+  with a book on a bed", "A woman", "People in a class", "A calligraphy master at a
+  market", "A journalist", "A camera", "A photographer", "A cat", "A girl", "A gym"
+  and "Men with a camera at sunset"; `ai-stock-photo-agl3856-beta265.spec.ts`
+  replays each from its recorded tags. Nothing the model sees changed.
 - **The cap.** The compiler's per-page picture cap is unchanged; the resolver
   only fills the slots the compiler wrote.
 
