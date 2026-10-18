@@ -82,23 +82,35 @@ struct BookingsCalendarScreen: View {
     "\(context.hostID ?? ""):\(booker ?? ""):\(effectiveMode.rawValue):\(ms(calendarRange(effectiveMode, anchor: anchor).0)):\(serviceFilter ?? ""):\(shown)"
   }
 
+  /// The narrowest width that holds the week grid (420) beside the detail column (320) and its divider.
+  static let splitMinimum: CGFloat = 741
+
+  private var split: some View {
+    HStack(spacing: 0) {
+      calendar(wide: true).frame(minWidth: 420, maxWidth: .infinity)
+      Divider()
+      Group {
+        if let selection {
+          BookingDetailView(context: context, bookingID: selection) { email in
+            booker = email
+            self.selection = nil
+          }
+        } else {
+          AglynSelectionPlaceholder("No booking selected", systemImage: "calendar")
+        }
+      }
+      .frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
+    }
+  }
+
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          calendar(wide: true).frame(minWidth: 420, maxWidth: .infinity)
-          Divider()
-          Group {
-            if let selection {
-              BookingDetailView(context: context, bookingID: selection) { email in
-                booker = email
-                self.selection = nil
-              }
-            } else {
-              AglynSelectionPlaceholder("No booking selected", systemImage: "calendar")
-            }
-          }
-          .frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
+        // The week grid and the detail column side by side only where both fit at their minimums: an iPad in
+        // portrait, beside the sidebar, has less room, and the grid then ran off its leading edge (hours and the
+        // previous-week arrow cut off). There it takes the whole width and a booking opens on its own screen.
+        GeometryReader { proxy in
+          if proxy.size.width >= Self.splitMinimum { split } else { calendar(wide: false) }
         }
       } else {
         calendar(wide: false)
