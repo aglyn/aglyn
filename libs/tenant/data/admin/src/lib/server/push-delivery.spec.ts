@@ -20,6 +20,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
     `${scope.orgSlug ? `/${scope.orgSlug}` : ''}${link}`,
 }))
 
+import { notificationSound } from '@aglyn/aglyn/app-utils/notification-sounds'
 import type { Firestore } from 'firebase-admin/firestore'
 import type { MobilePushPayload } from './mobile-push-switch'
 import {
@@ -110,14 +111,16 @@ describe('native push delivery (AGL-3651)', () => {
       db,
       now: () => NOW,
       transport: async (kind) => (kind === 'apns' ? apns.transport : fcm.transport),
+      sounds: { 'uid-a': 'cowbell' },
     })
     expect(result).toEqual({ sent: 3, pruned: 0, failed: 0, skipped: 0 })
     expect(deleted).toEqual([])
     expect(apns.calls[0].targets).toEqual([
-      { token: APNS, app: 'aglyn', topic: 'com.aglyn.app', apnsEnvironment: 'production' },
-      { token: APNS_MAC, app: 'aglyn', topic: 'com.aglyn.app', apnsEnvironment: 'sandbox' },
+      { token: APNS, app: 'aglyn', topic: 'com.aglyn.app', apnsEnvironment: 'production', sound: notificationSound('cowbell') },
+      { token: APNS_MAC, app: 'aglyn', topic: 'com.aglyn.app', apnsEnvironment: 'sandbox', sound: notificationSound('cowbell') },
     ])
-    expect(fcm.calls[0].targets).toEqual([{ token: FCM, app: 'aglyn', topic: 'com.aglyn.app' }])
+    // uid-b never picked one, so it hears the default.
+    expect(fcm.calls[0].targets).toEqual([{ token: FCM, app: 'aglyn', topic: 'com.aglyn.app', sound: notificationSound(undefined) }])
     expect(apns.calls[0].message).toEqual({
       title: 'New order #1042',
       body: '$12.50 from Acme',
