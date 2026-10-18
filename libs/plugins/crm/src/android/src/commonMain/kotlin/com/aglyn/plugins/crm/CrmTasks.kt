@@ -259,6 +259,7 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
   }
   val busy = remember(editing, creating) { Busy() }
   if (creating) {
+    // The task routes take the workspace too: a task made from the workspace's CRM belongs to the workspace.
     TaskDialog("New task", TaskDraft(title = "", assigneeUid = scope.uid), reference, busy, onDismiss = { creating = false }) { draft ->
       busy.run(coroutines, { creating = false }) { api.saveTask(null, draft) }
     }

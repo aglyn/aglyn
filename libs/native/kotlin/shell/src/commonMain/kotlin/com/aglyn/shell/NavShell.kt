@@ -69,6 +69,9 @@ import com.aglyn.ui.shellColors
 import com.aglyn.ui.workspaceTint
 import kotlinx.coroutines.launch
 
+/** Areas whose screens draw their own section chips (the CRM, Emails, Marketing and Marketplace hubs): no tabs over them. */
+internal val SELF_SECTIONED_ROWS = setOf("crm", "emails", "marketing", "marketplace")
+
 /** Room the window leaves at the top for its own controls (the Mac's traffic lights over a transparent title bar). */
 val LocalTitleBarInset = androidx.compose.runtime.staticCompositionLocalOf { 0.dp }
 
@@ -272,7 +275,7 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
         }
       }
     }
-    val sections = row?.sections.orEmpty().takeIf { route == null && it.size > 1 }
+    val sections = row?.takeIf { it.rowId !in SELF_SECTIONED_ROWS }?.sections.orEmpty().takeIf { route == null && it.size > 1 }
     val staffList = chrome.settingsMode == STAFF_MODE
     val sidebar = SidebarContent(
       groups = settingsGroups ?: scopeGroups,

@@ -89,6 +89,26 @@ fun submissionsQuery(
   }
 
 /**
+ * Every site's submissions, for the workspace's own Inbox: the `formSubmissions` collection group narrowed to the
+ * workspace (`orgSubmissionBase`, the clause the rules require of the group read), newest first.
+ */
+fun workspaceSubmissionsQuery(orgId: String, read: ReadFilter, search: String, limit: Int): FirestoreQuery =
+  planListQuery(
+    Contracts.orgSubmissionListQuery,
+    submissionsRequest(read, null, search).copy(base = listOf(ListQueryFilter(ListQueryOp.EQUAL, "orgId", JsonPrimitive(orgId)))),
+  ).toFirestoreQuery("formSubmissions", limit).copy(collectionGroup = true)
+
+/**
+ * Every site's leads, for the workspace's own Inbox: `orgs/{orgId}/leads` unscoped, which the rules admit for a member who
+ * reaches every site (the console's org list does the same).
+ */
+fun workspaceLeadsQuery(orgId: String, search: String, limit: Int): FirestoreQuery =
+  planListQuery(
+    Contracts.leadListQuery,
+    ListQueryRequest(clauses = emptyList(), search = search.trim().ifEmpty { null }?.let { listOf(it) }),
+  ).toFirestoreQuery(leadsPath(orgId), limit)
+
+/**
  * The site's forms for the Form pick, by document id as the console reads
  * them (an `orderBy` on a name would drop a form saved without one).
  */
@@ -228,6 +248,8 @@ data class Submission(
   val chips: List<RoutingChip>,
   val capturedKind: String?,
   val capturedId: String?,
+  /** The site it came in on, from where it is filed (`hosts/{hostId}/formSubmissions/…`). */
+  val hostId: String? = null,
 ) {
   /** The row's second line: each field as `key: value`. */
   val preview: String get() = fields.joinToString(" · ") { (key, value) -> "$key: $value" }
@@ -251,6 +273,7 @@ fun submissionOf(doc: FirestoreDoc): Submission {
     chips = routingChips(doc.data["routing"] as? Map<String, Any?>),
     capturedKind = captured?.get("kind") as? String,
     capturedId = captured?.get("id") as? String,
+    hostId = doc.path.split('/').takeIf { it.size >= 2 && it[0] == "hosts" }?.get(1),
   )
 }
 
