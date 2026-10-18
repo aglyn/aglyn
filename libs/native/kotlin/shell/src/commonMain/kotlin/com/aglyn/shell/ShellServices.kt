@@ -74,6 +74,17 @@ class ShellServices(
   /** The signed-out screens and what a sign-up carries across them. */
   val authFlow = AuthFlow()
 
+  /** Every account signed in on this device (Add account), when the platform keeps more than one. */
+  val accounts: com.aglyn.core.AccountSessions? get() = auth as? com.aglyn.core.AccountSessions
+
+  /** What the person keeps on their account: pins, recent workspaces, starred, recents, workspace colors, the theme. */
+  val accountPrefs: com.aglyn.core.AccountPreferencesStore by lazy {
+    com.aglyn.core.AccountPreferencesStore(
+      kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default),
+      auth, firestore, writer, prefs,
+    )
+  }
+
   /** The console routes and account writes every sign-up door makes. */
   val signUp: com.aglyn.core.SignUpService by lazy { com.aglyn.core.SignUpService(api, writer, firestore) }
 
@@ -110,9 +121,18 @@ val PLATFORM_ENTRIES: List<com.aglyn.pluginhost.NativePluginManifestEntry> = lis
 /** The site's Pages screen, which the site registration (libs/native/kotlin/site) contributes. */
 const val SITE_PAGES_SCREEN_ID = "site.pages"
 
+/** What the desktop's menu bar can ask of the shell. */
+enum class ShellCommand { FIND, SETTINGS, TOGGLE_SIDEBAR, TOGGLE_RAIL, ADD_ACCOUNT, PIN_1, PIN_2, PIN_3, PIN_4, PIN_5 }
+
 class ShellNavigator(initialTop: String = HOME) {
   var top by mutableStateOf(initialTop)
   val stack = mutableStateListOf<Route>()
+
+  /** A command from outside the shell's own controls (the desktop's menu bar), handled once by the shell. */
+  var command by mutableStateOf<ShellCommand?>(null)
+
+  /** The account the shell last showed: a different one starts at Home. */
+  internal var shownUid: String? = null
 
   /** A link waiting for the workspace and site it belongs to to come on screen (`openLink`), with where that is. */
   internal var deferredLink by mutableStateOf<Pair<String, LinkScope>?>(null)
@@ -150,6 +170,8 @@ class ShellNavigator(initialTop: String = HOME) {
   companion object {
     const val HOME = "home"
     const val MORE = "more"
+    /** The phone's Menu tab: the scope's grouped list, as the sidebar shows it. */
+    const val MENU = "menu"
     const val NOTIFICATIONS = "notifications"
     const val SETTINGS = "settings"
     fun screenKey(screenId: String) = "screen:$screenId"

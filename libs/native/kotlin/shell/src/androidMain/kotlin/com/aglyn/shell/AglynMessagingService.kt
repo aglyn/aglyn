@@ -37,8 +37,13 @@ abstract class AglynMessagingService : FirebaseMessagingService() {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
   override fun onNewToken(token: String) {
-    val user = (services.auth.state.value as? AuthState.SignedIn)?.user ?: return
     val push = services.push as? FcmPushRegistrar ?: return
+    val accounts = (services.auth as? com.aglyn.core.AccountSessions)?.accounts?.value.orEmpty()
+    if (accounts.isNotEmpty()) {
+      scope.launch { push.rotated(token) }
+      return
+    }
+    val user = (services.auth.state.value as? AuthState.SignedIn)?.user ?: return
     scope.launch { push.write(user.uid, token) }
   }
 

@@ -50,7 +50,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /** An in-memory person with one password. */
-private class FakeAuth : AuthSession {
+internal class FakeAuth(private val uid: String = "u1") : AuthSession {
   private val mutable = MutableStateFlow<AuthState>(AuthState.SignedOut)
   override val state: StateFlow<AuthState> = mutable
   val support = MutableStateFlow<Impersonation?>(null)
@@ -63,7 +63,7 @@ private class FakeAuth : AuthSession {
   override suspend fun idToken(forceRefresh: Boolean) = if (mutable.value is AuthState.SignedIn) "token" else null
   override suspend fun signInWithEmail(email: String, password: String) {
     if (password != "right") throw AuthError("That email and password do not match.")
-    mutable.value = AuthState.SignedIn(AuthUser("u1", email, "Dana"))
+    mutable.value = AuthState.SignedIn(AuthUser(uid, email, "Dana"))
   }
   override suspend fun signUpWithEmail(email: String, password: String): AuthUser {
     val created = AuthUser("u2", email, null, emailVerified = false)
@@ -76,11 +76,52 @@ private class FakeAuth : AuthSession {
 }
 
 /** Documents by collection path, answered at once. */
-private class FakeFirestore(private val collections: Map<String, List<FirestoreDoc>>, private val docs: Map<String, FirestoreDoc>) : FirestoreReader {
+internal class FakeFirestore(private val collections: Map<String, List<FirestoreDoc>>, private val docs: Map<String, FirestoreDoc>) : FirestoreReader {
   override suspend fun get(path: String) = docs[path]
   override suspend fun page(query: FirestoreQuery) = FirestorePage(collections[query.collectionPath].orEmpty(), null)
   override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> = flowOf(Live.Ready(docs[path]))
   override fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>> = flowOf(Live.Ready(collections[query.collectionPath].orEmpty()))
+}
+
+/** The shell's services over the fakes: one workspace (Acme) with one site (Acme Shop) and one unread order notification. */
+internal fun testServices(
+  userDoc: Map<String, Any?>? = null,
+  writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
+  apiCalls: MutableList<String> = mutableListOf(),
+  /** The session the shell runs on; one person by default, or several accounts (Add account). */
+  authFor: (com.aglyn.core.KeyValueStore) -> AuthSession = { FakeAuth() },
+): ShellServices {
+  val prefs = InMemoryKeyValueStore()
+  val auth = authFor(prefs)
+  val firestore = FakeFirestore(
+    collections = mapOf(
+      "users/u1/orgs" to listOf(FirestoreDoc("o1", "users/u1/orgs/o1", mapOf("orgName" to "Acme", "slug" to "acme", "role" to "owner"))),
+      "users/u1/hostMemberships" to listOf(
+        FirestoreDoc("h1", "users/u1/hostMemberships/h1", mapOf("orgId" to "o1", "displayName" to "Acme Shop", "subdomain" to "shop", "role" to "admin")),
+      ),
+      "users/u1/notifications" to listOf(
+        FirestoreDoc(
+          "n1", "users/u1/notifications/n1",
+          mapOf("title" to "New order #1042", "body" to "Jordan Lee ordered 2 items.", "read" to false, "type" to "content.order",
+            "createdAt" to FirestoreTimestamp((nowMillis() - 5 * 60_000) / 1000)),
+        ),
+      ),
+    ),
+    docs = listOfNotNull(userDoc?.let { "users/u1" to FirestoreDoc("u1", "users/u1", it) }).toMap() + mapOf("hosts/h1" to FirestoreDoc("h1", "hosts/h1", mapOf("screens" to mapOf("home" to emptyMap<String, Any>(), "about" to emptyMap<String, Any>())))),
+  )
+  val config = AglynConfig.read(AglynEnv(consoleUrl = "https://app.example.com", firebaseProjectId = "demo-test"), AglynAppId.AGLYN)
+  return ShellServices(
+    app = NativeApp.AGLYN,
+    config = config,
+    auth = auth,
+    firestore = firestore,
+    api = ConsoleApiClient(config.consoleOrigin, HttpClient(MockEngine { request -> apiCalls += request.url.encodedPath; respondOk() }), { auth.idToken(it) }),
+    workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
+    prefs = prefs,
+    registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES) },
+    besigner = { _, _, _ -> },
+    writer = writer,
+  )
 }
 
 @OptIn(ExperimentalTestApi::class)
@@ -89,39 +130,7 @@ class ShellUiTest {
     userDoc: Map<String, Any?>? = null,
     writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
     apiCalls: MutableList<String> = mutableListOf(),
-  ): ShellServices {
-    val auth = FakeAuth()
-    val firestore = FakeFirestore(
-      collections = mapOf(
-        "users/u1/orgs" to listOf(FirestoreDoc("o1", "users/u1/orgs/o1", mapOf("orgName" to "Acme", "slug" to "acme", "role" to "owner"))),
-        "users/u1/hostMemberships" to listOf(
-          FirestoreDoc("h1", "users/u1/hostMemberships/h1", mapOf("orgId" to "o1", "displayName" to "Acme Shop", "subdomain" to "shop", "role" to "admin")),
-        ),
-        "users/u1/notifications" to listOf(
-          FirestoreDoc(
-            "n1", "users/u1/notifications/n1",
-            mapOf("title" to "New order #1042", "body" to "Jordan Lee ordered 2 items.", "read" to false, "type" to "content.order",
-              "createdAt" to FirestoreTimestamp((nowMillis() - 5 * 60_000) / 1000)),
-          ),
-        ),
-      ),
-      docs = listOfNotNull(userDoc?.let { "users/u1" to FirestoreDoc("u1", "users/u1", it) }).toMap() + mapOf("hosts/h1" to FirestoreDoc("h1", "hosts/h1", mapOf("screens" to mapOf("home" to emptyMap<String, Any>(), "about" to emptyMap<String, Any>())))),
-    )
-    val prefs = InMemoryKeyValueStore()
-    val config = AglynConfig.read(AglynEnv(consoleUrl = "https://app.example.com", firebaseProjectId = "demo-test"), AglynAppId.AGLYN)
-    return ShellServices(
-      app = NativeApp.AGLYN,
-      config = config,
-      auth = auth,
-      firestore = firestore,
-      api = ConsoleApiClient(config.consoleOrigin, HttpClient(MockEngine { request -> apiCalls += request.url.encodedPath; respondOk() }), auth::idToken),
-      workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
-      prefs = prefs,
-      registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES) },
-      besigner = { _, _, _ -> },
-      writer = writer,
-    )
-  }
+  ): ShellServices = testServices(userDoc, writer, apiCalls)
 
   @Test
   fun signsInAndShowsTheSiteDashboard() = runComposeUiTest {
@@ -194,27 +203,26 @@ class ShellUiTest {
     assertEquals(1, onAllNodesWithTagCount("switcher-org-o1"))
   }
   @Test
-  fun aWideWindowKeepsADrawerWithTheWorkspaceAndSiteAtItsFoot() = runComposeUiTest {
+  fun aWideWindowHasTheRailTheScopesSidebarAndItsSitePicker() = runComposeUiTest {
     val services = services()
     setContent { AglynShell(services) }
     onNodeWithTag("sign-in-email").performTextInput("dana@example.test")
     onNodeWithTag("sign-in-password").performTextInput("right")
     onNodeWithTag("sign-in-submit").performClick()
-    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-drawer") > 0 }
-    // Labelled destinations, not a rail of icons.
-    onNodeWithTag("nav-home").assertIsDisplayed()
-    onNodeWithTag("nav-notifications").assertIsDisplayed()
-    onNodeWithTag("nav-settings").assertIsDisplayed()
-    // The footer names the workspace and the site, and opens the switcher for both.
-    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("sidebar-switcher") > 0 }
-    onNodeWithTag("sidebar-switcher").assertIsDisplayed()
-    onNodeWithTag("sidebar-switcher").assertTextContains("Acme", substring = true)
-    onNodeWithTag("sidebar-switcher").assertTextContains("Acme Shop", substring = true)
-    onNodeWithTag("sidebar-switcher").performClick()
-    onNodeWithTag("switcher-org-o1").assertIsDisplayed()
-    onNodeWithTag("switcher-site-h1").assertIsDisplayed()
-    // The top-right chip is for narrower windows only.
-    assertEquals(0, onAllNodesWithTagCount("workspace-chip"))
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("workspace-rail") > 0 }
+    onNodeWithTag("nav-sidebar").assertIsDisplayed()
+    // One workspace: its tile, and no All tile (eight or fewer show them all).
+    onNodeWithTag("rail-tile-o1").assertIsDisplayed()
+    assertEquals(0, onAllNodesWithTagCount("rail-all"))
+    // Inside the site: "‹ Acme" back to the whole workspace, then the site's picker.
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-picker-button") > 0 }
+    onNodeWithTag("scope-back-to-workspace").assertTextContains("Acme", substring = true)
+    onNodeWithTag("site-picker-button").assertTextContains("Acme Shop", substring = true)
+    onNodeWithTag("site-picker-button").performClick()
+    onNodeWithTag("picker-site-h1").assertIsDisplayed()
+    onNodeWithTag("picker-whole-workspace").assertIsDisplayed()
+    // The phone's chip and tabs are for narrow windows only.
+    assertEquals(0, onAllNodesWithTagCount("scope-chip"))
   }
 
   private class RecordingWriter(private val fail: Boolean = false) : com.aglyn.core.FirestoreWriter {
@@ -305,9 +313,10 @@ class ShellUiTest {
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-n1") > 0 }
     onNodeWithTag("mark-read-n1").assertExists()
     onNodeWithTag("notifications-mark-all").performClick()
-    waitUntil(timeoutMillis = 3_000) { writer.writes.isNotEmpty() }
-    assertEquals("users/u1/notifications/n1", writer.writes.single().first)
-    assertEquals(true, writer.writes.single().second["read"])
+    waitUntil(timeoutMillis = 3_000) { writer.writes.any { it.first.contains("/notifications/") } }
+    val read = writer.writes.single { it.first.contains("/notifications/") }
+    assertEquals("users/u1/notifications/n1", read.first)
+    assertEquals(true, read.second["read"])
   }
 
   /** A support session wears the band on every screen, and its exit brings the staff member's own session back. */
@@ -370,7 +379,8 @@ class ShellUiTest {
     assertEquals(Route.Web("https://docs.aglyn.com/whats-new"), navigator.current)
     onNodeWithTag("web-page-heading").assertTextContains("docs.aglyn.com/whats-new", substring = true)
     // The navigation stays beside the page on a wide window.
-    onNodeWithTag("nav-drawer").assertIsDisplayed()
+    onNodeWithTag("workspace-rail").assertIsDisplayed()
+    onNodeWithTag("nav-sidebar").assertIsDisplayed()
     onNodeWithTag("web-page-menu").performClick()
     onNodeWithTag("web-page-open-browser").performClick()
     assertEquals(listOf("https://docs.aglyn.com/whats-new"), opened)

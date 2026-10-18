@@ -19,6 +19,7 @@ import kotlin.test.assertTrue
 
 /** Replays navcore's cases (AGL-3943) for the account preferences, the nav lists and the one box's screens. */
 class NavRulesCasesTest {
+  // navcore's cases record their args without the manifest, which the functions now take first: it is prepended here.
   private val functions = ContractJsonFormat.parseToJsonElement(ContractCaseJson.functionCases).jsonObject.getValue("functions").jsonObject
 
   private fun cases(name: String): List<Pair<JsonArray, JsonElement>> {
@@ -106,13 +107,13 @@ class NavRulesCasesTest {
   @Test
   fun navLists() = cases("resolveNavList").forEach { (args, result) ->
     val listId = NativeNavListId.entries.first { it.raw == text(args[0]) }
-    same(result, resolveNavList(listId, ids(args[1]), args[2].jsonPrimitive.booleanOrNull == true), ResolvedNavList.serializer(), args.toString())
+    same(result, resolveNavList(Contracts.nativeNavManifest, listId, ids(args[1]), args[2].jsonPrimitive.booleanOrNull == true), ResolvedNavList.serializer(), args.toString())
   }
 
   @Test
   fun screensInTheOneBox() = cases("searchNavScreens").forEach { (args, result) ->
     val scope = OneBoxScope.valueOf(text(args[1]).uppercase())
-    val actual = searchNavScreens(text(args[0]), scope, ids(args[2]), args[3].jsonPrimitive.booleanOrNull == true)
+    val actual = searchNavScreens(Contracts.nativeNavManifest, text(args[0]), scope, ids(args[2]), args[3].jsonPrimitive.booleanOrNull == true)
       .map { mapOf("row" to ContractJsonFormat.encodeToJsonElement(OneBoxRow.serializer(), it.row), "score" to JsonPrimitive(it.score)) }
     assertEquals(withoutNulls(expected(result)), withoutNulls(expected(JsonArray(actual.map { kotlinx.serialization.json.JsonObject(it) }))), args.toString())
   }

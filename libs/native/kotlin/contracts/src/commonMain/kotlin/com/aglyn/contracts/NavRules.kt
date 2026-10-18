@@ -14,8 +14,8 @@ val NativeNavManifestValue: NativeNavManifest get() = Contracts.nativeNavManifes
  * One list for the workspace or site in hand: rows of plugins that are off, and admin rows for a non-admin, left out; a
  * section of another plugin than its row's hides with that plugin; a group left empty is dropped unless the shell fills it.
  */
-fun resolveNavList(listId: NativeNavListId, enabledPluginIds: Collection<String>, hostAdmin: Boolean): ResolvedNavList {
-  val list = NativeNavManifestValue.lists.firstOrNull { it.id == listId } ?: return ResolvedNavList(emptyList(), listId)
+fun resolveNavList(manifest: NativeNavManifest, listId: NativeNavListId, enabledPluginIds: Collection<String>, hostAdmin: Boolean): ResolvedNavList {
+  val list = manifest.lists.firstOrNull { it.id == listId } ?: return ResolvedNavList(emptyList(), listId)
   val on = enabledPluginIds.toSet()
   fun shows(pluginId: String?) = pluginId == null || pluginId in on
   val groups = list.groups.mapNotNull { group ->
@@ -26,6 +26,10 @@ fun resolveNavList(listId: NativeNavListId, enabledPluginIds: Collection<String>
   }
   return ResolvedNavList(groups, list.id, list.title)
 }
+
+/** [resolveNavList] on the manifest this build carries. */
+fun resolveNavList(listId: NativeNavListId, enabledPluginIds: Collection<String>, hostAdmin: Boolean): ResolvedNavList =
+  resolveNavList(NativeNavManifestValue, listId, enabledPluginIds, hostAdmin)
 
 // ── Name matching (name-match.ts) ───────────────────────────────────────────
 
@@ -98,7 +102,10 @@ private val listHeadings = mapOf(
  * The screens-and-settings matches for where the person stands: the workspace's lists with no site, the site's lists (and
  * the workspace settings) with one, for the plugins on in that scope.
  */
-fun searchNavScreens(text: String, scope: OneBoxScope, enabledPluginIds: Collection<String>, hostAdmin: Boolean): List<OneBoxScored> {
+fun searchNavScreens(text: String, scope: OneBoxScope, enabledPluginIds: Collection<String>, hostAdmin: Boolean): List<OneBoxScored> =
+  searchNavScreens(NativeNavManifestValue, text, scope, enabledPluginIds, hostAdmin)
+
+fun searchNavScreens(manifest: NativeNavManifest, text: String, scope: OneBoxScope, enabledPluginIds: Collection<String>, hostAdmin: Boolean): List<OneBoxScored> {
   if (!isSearchableQuery(text) || scope == OneBoxScope.ACCOUNT) return emptyList()
   val lists = if (scope == OneBoxScope.SITE) {
     listOf(NativeNavListId.SITE, NativeNavListId.SITE_SETTINGS, NativeNavListId.WORKSPACE_SETTINGS)
@@ -110,7 +117,7 @@ fun searchNavScreens(text: String, scope: OneBoxScope, enabledPluginIds: Collect
   val out = mutableListOf<OneBoxScored>()
   for (listId in lists) {
     val heading = listHeadings.getValue(listId)
-    for (group in resolveNavList(listId, enabledPluginIds, hostAdmin).groups) {
+    for (group in resolveNavList(manifest, listId, enabledPluginIds, hostAdmin).groups) {
       for (row in group.rows) {
         val where = group.label?.let { "$heading · $it" } ?: heading
         val entries = listOf(Entry("${listId.raw}.${row.id}", row.label, row.screen, row.params, row.keywords.orEmpty() + (group.label ?: ""))) +

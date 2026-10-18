@@ -76,7 +76,7 @@ fun RemoteImage(
 
 /** The decoded image at [url] (cached), or null while it loads, with no loader, or when it cannot be read. */
 @Composable
-private fun rememberRemoteBitmap(url: String?): ImageBitmap? {
+internal fun rememberRemoteBitmap(url: String?): ImageBitmap? {
   val loader = LocalImageLoader.current
   var image by remember(url) { mutableStateOf(url?.let(ImageCache::get)) }
   LaunchedEffect(url, loader) {
