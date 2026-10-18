@@ -7,10 +7,10 @@ import AglynUI
 import AuthenticationServices
 import SwiftUI
 
-/// The doors under a sign-in or sign-up form besides the password: Google where the build has its OAuth clients, Sign in
-/// with Apple where the build offers it (App Store guideline 4.8 asks for it beside Google), and on sign-in single
-/// sign-on through the console and a passkey where the build has a relying party (the console's sign-in page offers
-/// both). On sign-up each is gated on the agreement first.
+/// The doors under a sign-in or sign-up form besides the password, after an "or", in the spec's order (Figma
+/// "Button/Provider" 28:764): Sign in with Apple where the build offers it (App Store guideline 4.8 asks for it beside
+/// Google), Google where the build has its OAuth clients, and on sign-in a passkey where the build has a relying party
+/// and single sign-on. Every one is 48 points tall, rounded 12, 8 apart. On sign-up each is gated on the agreement.
 struct ProviderSignInButtons: View {
   enum Mode { case signIn, signUp }
 
@@ -28,70 +28,67 @@ struct ProviderSignInButtons: View {
   /// Whether the sign-up's agreement is ticked (and signups are open), so Apple's sheet may open.
   var consented = true
   @State private var appleNonce = ""
+  @State private var working: String?
 
   private var googleOffered: Bool { model.config?.google != nil }
   private var appleOffered: Bool { model.config?.appleSignIn == true }
   private var passkeyOffered: Bool { mode == .signIn && model.config?.passkeyRelyingParty != nil && model.api != nil }
+  private var ssoOffered: Bool { mode == .signIn }
 
   var body: some View {
-    if googleOffered || appleOffered || passkeyOffered || mode == .signIn {
-      VStack(spacing: 8) {
-        HStack {
-          VStack { Divider() }
-          Text(mode == .signUp ? "Or sign up with" : "Or sign in with").font(AglynFont.caption).foregroundStyle(.secondary)
-            .fixedSize()
-          VStack { Divider() }
-        }
+    if googleOffered || appleOffered || passkeyOffered || ssoOffered {
+      VStack(spacing: AglynAuthTokens.Metrics.providerSpacing) {
+        AglynOrDivider().padding(.bottom, 4)
+        if appleOffered { apple }
         if googleOffered {
-          Button(action: google) {
-            Label("Google", systemImage: "g.circle").frame(maxWidth: .infinity, minHeight: AglynFieldStyle.height)
-          }
-          .buttonStyle(.bordered)
-          .buttonBorderShape(.roundedRectangle(radius: AglynRadius.tile))
+          // Google's approved title, unchanged while its sheet opens.
+          Button("Continue with Google", action: google)
+          .buttonStyle(AglynGoogleButtonStyle())
           .disabled(busy || !enabled)
           .accessibilityIdentifier("sign-in-google")
         }
-        if appleOffered {
-          SignInWithAppleButton(mode == .signUp ? .signUp : .signIn) { request in
-            let nonce = AppleSignInNonce.make()
-            appleNonce = nonce.raw
-            request.requestedScopes = [.fullName, .email]
-            request.nonce = nonce.hashed
-          } onCompletion: { result in
-            apple(result)
-          }
-          .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-          .frame(height: AglynFieldStyle.height)
-          .clipShape(RoundedRectangle(cornerRadius: AglynRadius.tile, style: .continuous))
-          .disabled(busy || !enabled)
-          // The agreement is checked before Apple's sheet opens: without it, a tap shows the reminder instead.
-          .overlay {
-            if mode == .signUp && !consented {
-              Color.clear.contentShape(Rectangle()).onTapGesture { _ = gate() }
-            }
-          }
-          .accessibilityIdentifier("sign-in-apple")
-        }
-        if mode == .signIn {
-          Button(action: singleSignOn) {
-            Label("Single sign-on (SSO)", systemImage: "key.viewfinder").frame(maxWidth: .infinity, minHeight: AglynFieldStyle.height)
-          }
-          .buttonStyle(.bordered)
-          .buttonBorderShape(.roundedRectangle(radius: AglynRadius.tile))
-          .disabled(busy || !enabled)
-          .accessibilityIdentifier("sign-in-sso")
-        }
         if passkeyOffered {
           Button(action: passkey) {
-            Label("Passkey", systemImage: "person.badge.key").frame(maxWidth: .infinity, minHeight: AglynFieldStyle.height)
+            AglynButtonLabel("Sign in with a passkey", systemImage: "lock", busy: working == "passkey")
           }
-          .buttonStyle(.bordered)
-          .buttonBorderShape(.roundedRectangle(radius: AglynRadius.tile))
+          .buttonStyle(AglynButtonStyle(.secondary))
           .disabled(busy || !enabled)
           .accessibilityIdentifier("sign-in-passkey")
         }
+        if ssoOffered {
+          Button { model.authFlow.screen = .singleSignOn } label: {
+            AglynButtonLabel("Continue with SSO", systemImage: "key")
+          }
+          .buttonStyle(AglynButtonStyle(.secondary))
+          .disabled(busy || !enabled)
+          .accessibilityIdentifier("sign-in-sso")
+        }
       }
     }
+  }
+
+  /// Apple's own button (HIG): black on a light ground, white on a dark one, with Apple's approved title.
+  private var apple: some View {
+    SignInWithAppleButton(mode == .signUp ? .signUp : .signIn) { request in
+      let nonce = AppleSignInNonce.make()
+      appleNonce = nonce.raw
+      request.requestedScopes = [.fullName, .email]
+      request.nonce = nonce.hashed
+    } onCompletion: { result in
+      apple(result)
+    }
+    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+    .frame(height: AglynAuthTokens.Metrics.buttonHeight)
+    .clipShape(RoundedRectangle(cornerRadius: AglynAuthTokens.Metrics.buttonRadius, style: .continuous))
+    .disabled(busy || !enabled)
+    .opacity(busy || !enabled ? AglynAuthTokens.Metrics.disabledOpacity : 1)
+    // The agreement is checked before Apple's sheet opens: without it, a tap shows the reminder instead.
+    .overlay {
+      if mode == .signUp && !consented {
+        Color.clear.contentShape(Rectangle()).onTapGesture { _ = gate() }
+      }
+    }
+    .accessibilityIdentifier("sign-in-apple")
   }
 
   private func google() {
@@ -101,22 +98,6 @@ struct ProviderSignInButtons: View {
     Task {
       do {
         try await model.continueWithGoogle(signingUp: mode == .signUp, marketing: marketing) { [webAuthentication] url, scheme in
-          try await webAuthentication.authenticate(using: url, callbackURLScheme: scheme, preferredBrowserSession: .shared)
-        }
-      } catch {
-        if !isCanceledSignIn(error) { self.error = providerErrorMessage(error) }
-      }
-      busy = false
-    }
-  }
-
-  /// Workspace single sign-on, through the console's `/sso` page and the one-time hand-off back to the app.
-  private func singleSignOn() {
-    busy = true
-    error = nil
-    Task {
-      do {
-        try await model.signInThroughConsole(start: .singleSignOn) { [webAuthentication] url, scheme in
           try await webAuthentication.authenticate(using: url, callbackURLScheme: scheme, preferredBrowserSession: .shared)
         }
       } catch {
@@ -156,6 +137,7 @@ struct ProviderSignInButtons: View {
   private func passkey() {
     guard let auth = model.auth, let api = model.api, let relyingParty = model.config?.passkeyRelyingParty else { return }
     busy = true
+    working = "passkey"
     error = nil
     Task {
       do {
@@ -166,6 +148,7 @@ struct ProviderSignInButtons: View {
         self.error = PasskeySignIn.failed(error) ? PasskeySignIn.message(for: error) : signInErrorMessage(error)
       }
       busy = false
+      working = nil
     }
   }
 

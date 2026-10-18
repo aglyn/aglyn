@@ -5,74 +5,138 @@ import AglynCore
 import AglynUI
 import SwiftUI
 
-/// The frame every signed-out screen shares: the logo, a heading and its line, the screen's content, and a footer
-/// (the console's `AuthFormComponent`).
-struct AuthCard<Content: View, Footer: View>: View {
+/// The one layout every signed-out screen shares (Figma "Sign in & launch", AGL-3934): the logo-kit lockup top-left over
+/// the Facets ground (which RootView draws behind every auth screen, so it holds still as screens change), then the
+/// raised card with the heading, an optional link at its top right, the screen's content, and the footer centered under
+/// the card. On a phone the card spans the screen less 16-point margins under the lockup; on iPad and the Mac it is 440
+/// (420) wide and centered in the window.
+struct AuthCard<Content: View, Footer: View, Accessory: View>: View {
   @Environment(AppModel.self) private var model
+  @Environment(\.authReveal) private var reveal
   let title: String
   let subtitle: String?
+  let systemImage: String?
+  @ViewBuilder let accessory: () -> Accessory
   @ViewBuilder let content: () -> Content
   @ViewBuilder let footer: () -> Footer
 
   init(
-    _ title: String, subtitle: String? = nil, @ViewBuilder content: @escaping () -> Content,
+    _ title: String, subtitle: String? = nil, systemImage: String? = nil,
+    @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() },
+    @ViewBuilder content: @escaping () -> Content,
     @ViewBuilder footer: @escaping () -> Footer = { EmptyView() }
   ) {
     self.title = title
     self.subtitle = subtitle
+    self.systemImage = systemImage
+    self.accessory = accessory
     self.content = content
     self.footer = footer
   }
 
-  /// The lockup's height; it keeps that much clear space around it (the logo kit's rule).
-  private static var logoHeight: CGFloat { 32 }
+  private typealias M = AglynAuthTokens.Metrics
+  private typealias C = AglynAuthTokens.Colors
 
   var body: some View {
     GeometryReader { proxy in
+      let compact = AglynAuthLayout.isCompact(width: proxy.size.width)
       ScrollView {
-        // One centered column, 400 points at most (spec 10), centered in the window while it fits.
-        VStack(alignment: .leading, spacing: AglynSpace.three) {
-          VStack(alignment: .leading, spacing: AglynSpace.one) {
-            AglynArtwork.logo
-              .resizable()
-              .scaledToFit()
-              .frame(height: Self.logoHeight)
-              .padding(.bottom, Self.logoHeight - AglynSpace.one)
-              .accessibilityLabel(model.appName)
-            Text(title).font(AglynFont.title).accessibilityAddTraits(.isHeader)
-            if let subtitle { Text(subtitle).font(AglynFont.body).foregroundStyle(.secondary) }
+        VStack(spacing: 0) {
+          AglynArtwork.logo
+            .resizable()
+            .scaledToFit()
+            .frame(height: M.lockupHeight)
+            .fixedSize()
+            .accessibilityLabel(model.appName)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, AglynAuthLayout.lockupLeading(compact: compact))
+            .padding(.top, AglynAuthLayout.lockupTop(compact: compact))
+          if compact {
+            Spacer().frame(height: M.cardGapBelowLockup)
+          } else {
+            Spacer(minLength: M.lockupClearSpace)
           }
-          content()
-          footer()
+          VStack(spacing: 14) {
+            card(compact: compact)
+            footer()
+              .font(AglynAuthFont.small)
+              .foregroundStyle(C.textSecondary.color)
+              .multilineTextAlignment(.center)
+          }
+          .frame(maxWidth: compact ? .infinity : AglynAuthLayout.cardWidth)
+          .padding(.horizontal, compact ? M.cardMarginCompact : M.cardPaddingRegular)
+          .offset(y: reveal.offset)
+          .opacity(reveal.opacity)
+          Spacer(minLength: M.lockupClearSpace)
         }
-        .padding(Self.logoHeight)
-        .frame(maxWidth: 400 + Self.logoHeight * 2)
-        .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+        .frame(minHeight: proxy.size.height)
       }
       .scrollBounceBehavior(.basedOnSize)
+      .scrollDismissesKeyboard(.interactively)
     }
-    .background(AglynColor.page.ignoresSafeArea())
+  }
+
+  private func card(compact: Bool) -> some View {
+    let shape = RoundedRectangle(cornerRadius: M.cardRadius, style: .continuous)
+    return VStack(alignment: .leading, spacing: compact ? M.cardSpacingCompact : M.cardSpacingRegular) {
+      if let systemImage {
+        Image(systemName: systemImage)
+          .font(.system(size: 24, weight: .medium))
+          .foregroundStyle(C.infoForeground.color)
+          .frame(width: 56, height: 56)
+          .background(C.infoBackground.color, in: Circle())
+          .frame(maxWidth: .infinity)
+          .accessibilityHidden(true)
+      }
+      HStack(alignment: .firstTextBaseline, spacing: 12) {
+        VStack(alignment: .leading, spacing: 6) {
+          Text(title).font(AglynAuthFont.title).accessibilityAddTraits(.isHeader)
+          if let subtitle {
+            Text(subtitle).font(AglynAuthFont.body).foregroundStyle(C.textSecondary.color)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        accessory()
+      }
+      content()
+    }
+    .foregroundStyle(C.textPrimary.color)
+    .padding(compact ? M.cardPaddingCompact : M.cardPaddingRegular)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(C.raised.color, in: shape)
+    .overlay(shape.strokeBorder(C.borderSubtle.color, lineWidth: 1))
+    // Elevation/Popover: 0 4 12 −2 at 10% and 0 16 40 −8 at 22%.
+    .shadow(color: C.shadow.color.opacity(0.10), radius: 5, y: 4)
+    .shadow(color: C.shadow.color.opacity(0.22), radius: 16, y: 16)
   }
 }
 
-/// A form error or notice line under the fields.
+/// How far the destination card still has to rise, and how visible it is, while the launch intro reveals it.
+struct AuthReveal: Equatable {
+  var offset: CGFloat = 0
+  var opacity: Double = 1
+}
+
+extension EnvironmentValues {
+  @Entry var authReveal = AuthReveal()
+}
+
+/// A form error under the fields: the field message's look, read out when it appears.
 struct AuthMessage: View {
   let text: String
   var tone: AglynTone = .error
 
   var body: some View {
     if tone == .error {
-      Label(text, systemImage: "exclamationmark.circle")
-        .foregroundStyle(AglynColor.error)
-        .font(AglynFont.subheadline)
-        .accessibilityIdentifier("auth-error")
+      AglynFieldMessage(text, isError: true).accessibilityIdentifier("auth-error")
     } else {
-      AglynNotice(text, tone: tone)
+      AglynAuthNotice(text, systemImage: "info.circle", tone: tone == .warning ? .warning : .info)
     }
   }
 }
 
-/// A full-width primary action that shows progress while busy.
+/// The card's primary action: full width, 48 points, a spinner beside the label while busy.
 struct AuthPrimaryButton: View {
   let title: String
   let busy: Bool
@@ -80,40 +144,73 @@ struct AuthPrimaryButton: View {
   let action: () -> Void
 
   var body: some View {
-    Button(action: action) {
-      Group {
-        if busy { ProgressView().controlSize(.small) } else { Text(title).fontWeight(.semibold) }
-      }
-      .frame(maxWidth: .infinity, minHeight: AglynPrimaryButtonMetrics.height)
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.borderedProminent)
-    .buttonBorderShape(.roundedRectangle(radius: AglynRadius.tile))
-    .disabled(busy || !enabled)
-    .keyboardShortcut(.defaultAction)
+    Button(action: action) { AglynButtonLabel(title, busy: busy) }
+      .buttonStyle(AglynButtonStyle(.primary))
+      .disabled(busy || !enabled)
+      .keyboardShortcut(.defaultAction)
   }
 }
 
-/// A labelled text field with the first rule its value breaks under it, once the person has tried to submit.
+/// A text link in a footer or at the card's top right ("Create account").
+struct AuthLink: View {
+  let title: String
+  var identifier: String?
+  let action: () -> Void
+
+  init(_ title: String, identifier: String? = nil, action: @escaping () -> Void) {
+    self.title = title
+    self.identifier = identifier
+    self.action = action
+  }
+
+  var body: some View {
+    Button(title, action: action)
+      .buttonStyle(AglynAuthLinkStyle())
+      .accessibilityIdentifier(identifier ?? title)
+  }
+}
+
+/// A footer line: a sentence and its link ("Having trouble logging in? Account recovery").
+struct AuthFooterLine: View {
+  let lead: String?
+  let link: String
+  var identifier: String?
+  let action: () -> Void
+
+  var body: some View {
+    HStack(spacing: 4) {
+      if let lead { Text(lead) }
+      AuthLink(link, identifier: identifier, action: action)
+    }
+    .font(AglynAuthFont.small)
+    .frame(maxWidth: .infinity)
+  }
+}
+
+/// A labelled text field with the first rule its value breaks under it, once the person has tried to submit; the error
+/// or helper line wraps to its full length.
 struct AuthField: View {
   let label: String
   @Binding var text: String
   var secure = false
   var content: AuthFieldContent = .plain
+  var placeholder: String?
   var message: String?
   var supporting: String?
   var identifier: String
+  @FocusState private var focused: Bool
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
+    AglynAuthFieldFrame(label, message: message, supporting: supporting, focused: focused) {
       Group {
         if secure {
-          SecureField(label, text: $text)
+          SecureField(label, text: $text, prompt: Text(placeholder ?? label))
         } else {
-          TextField(label, text: $text)
+          TextField(label, text: $text, prompt: Text(placeholder ?? label))
         }
       }
-      .textFieldStyle(.aglyn)
+      .textFieldStyle(.plain)
+      .focused($focused)
       .autocorrectionDisabled(content != .plain)
       #if os(iOS)
         .textInputAutocapitalization(content == .name || content == .organization ? .words : .never)
@@ -121,11 +218,7 @@ struct AuthField: View {
       #endif
       .textContentType(content.textContentType)
       .accessibilityIdentifier(identifier)
-      if let message {
-        Text(message).font(AglynFont.caption).foregroundStyle(AglynColor.error)
-      } else if let supporting {
-        Text(supporting).font(AglynFont.caption).foregroundStyle(.secondary)
-      }
+      .accessibilityHint(message ?? supporting ?? "")
     }
   }
 }
@@ -157,7 +250,7 @@ enum AuthFieldContent: Equatable {
   #endif
 }
 
-/// A checkbox row (the console's `AuthCheckboxRow`): a toggle with its sentence beside it.
+/// A checkbox row (the console's `AuthCheckboxRow`): a 22-point box with its sentence beside it.
 struct AuthCheckRow<Label: View>: View {
   @Binding var isOn: Bool
   let accessibilityLabel: String
@@ -170,15 +263,15 @@ struct AuthCheckRow<Label: View>: View {
         isOn.toggle()
       } label: {
         Image(systemName: isOn ? "checkmark.square.fill" : "square")
-          .font(.title3)
-          .foregroundStyle(isOn ? AglynColor.tint : .secondary)
+          .font(.system(size: 20))
+          .foregroundStyle(isOn ? AglynAuthTokens.Colors.primary.color : AglynAuthTokens.Colors.borderStrong.color)
       }
       .buttonStyle(.plain)
       .accessibilityLabel(accessibilityLabel)
       .accessibilityValue(isOn ? "Checked" : "Not checked")
       .accessibilityAddTraits(.isButton)
       .accessibilityIdentifier(identifier)
-      label().font(AglynFont.subheadline)
+      label().font(AglynAuthFont.small).fixedSize(horizontal: false, vertical: true)
     }
   }
 }

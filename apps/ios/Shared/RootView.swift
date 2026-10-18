@@ -16,46 +16,42 @@ struct RootView<Shell: View>: View {
     self.shell = shell
   }
 
+  @State private var intro = AglynLaunchIntro()
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  /// What the window shows once the app knows: each stage decides whether the Facets ground stays behind it.
+  private enum Stage { case configProblem, device, waiting, signedOut, verify, shell }
+
+  private var stage: Stage {
+    if !model.configProblems.isEmpty { return .configProblem }
+    if model.deviceScreen != nil, model.deviceContext() != nil { return .device }
+    guard let auth = model.auth else { return .waiting }
+    if !auth.ready { return .waiting }
+    if auth.user == nil || model.authFlow.landing { return .signedOut }
+    if auth.user?.emailVerified == false && auth.impersonation == nil { return .verify }
+    return .shell
+  }
+
   var body: some View {
-    Group {
-      if !model.configProblems.isEmpty {
-        AglynEmptyState(
-          "This build is not configured", systemImage: "wrench.and.screwdriver",
-          message: model.configProblems.joined(separator: "\n"))
-      } else if let device = model.deviceScreen, let context = model.deviceContext() {
-        // A paired customer display or kiosk: nobody signs in, and it comes back as it was after a relaunch.
-        device.make(context, [:]).id(device.id)
-      } else if let auth = model.auth {
-        // The launch view stays up until Auth has answered, so a signed-in
-        // relaunch goes from the launch screen straight to the shell.
-        if !auth.ready {
-          AglynLaunchView(name: model.brandName, caption: model.app == .pos ? "POS" : nil)
-        } else if auth.user == nil || model.authFlow.landing {
-          // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
-          SignedOutView()
-        } else if auth.user?.emailVerified == false && auth.impersonation == nil {
-          // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
-          VerifyEmailView()
-        } else {
-          shell(navigation)
-            .environment(navigation)
-            .focusedSceneValue(\.shellNavigation, navigation)
-            // A support session says so on every screen, with its way back to the staff member's own session.
-            // The first verified session of an account with no workspace creates the one its sign-up asked for.
-            .task(id: "\(auth.user?.uid ?? ""):\(model.workspace?.ready == true)") { await model.settleFirstRun() }
-            .safeAreaInset(edge: .top, spacing: 0) {
-              if let impersonation = auth.impersonation {
-                AglynNotice(
-                  impersonation.banner, tone: .warning, actionTitle: "Exit impersonation",
-                  action: { Task { await auth.endImpersonation() } }
-                )
-                .padding(AglynSpace.one)
-                .background(.bar)
-                .accessibilityIdentifier("impersonation-banner")
-              }
-            }
-        }
+    let stage = stage
+    ZStack {
+      // The Facets ground: under the launch intro, and behind every signed-out screen so it holds still as they change.
+      if !intro.finished || stage == .signedOut || stage == .verify {
+        AglynFacetsBackground(settle: intro.settle, light: intro.light)
+          // Reduce Motion cross-fades the launch frame into the ground at rest instead of moving the planes.
+          .id(intro.crossFades ? AnyHashable(intro.settled) : AnyHashable("ground"))
+          .transition(.opacity)
       }
+      destination(stage)
+      if !intro.finished {
+        AglynLaunchMark(intro, name: model.appName)
+          .allowsHitTesting(false)
+          .transition(.opacity)
+      }
+    }
+    .task {
+      // The intro ends when Auth has answered (signed out → sign-in, signed in → the shell), never on a fixed wait.
+      await intro.run(reduceMotion: reduceMotion) { [model] in model.auth?.ready ?? true }
     }
     .tint(AglynColor.tint)
     .font(AglynFont.body)
@@ -85,6 +81,54 @@ struct RootView<Shell: View>: View {
     }
     .onChange(of: model.push.pendingLink) { openPendingPush() }
     .task { await DebugLaunch.autoSignIn(model) }
+  }
+
+  @ViewBuilder
+  private func destination(_ stage: Stage) -> some View {
+    let reveal = AuthReveal(offset: intro.destinationOffset, opacity: intro.destinationOpacity)
+    switch stage {
+    case .configProblem:
+      AglynEmptyState(
+        "This build is not configured", systemImage: "wrench.and.screwdriver",
+        message: model.configProblems.joined(separator: "\n"))
+    case .device:
+      // A paired customer display or kiosk: nobody signs in, and it comes back as it was after a relaunch.
+      if let device = model.deviceScreen, let context = model.deviceContext() {
+        device.make(context, [:]).id(device.id).opacity(intro.destinationOpacity)
+      }
+    case .waiting:
+      // The intro holds its last frame until Auth has answered, so a signed-in relaunch goes from the launch screen
+      // straight to the shell.
+      Color.clear
+    case .signedOut:
+      // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
+      SignedOutView().environment(\.authReveal, reveal)
+    case .verify:
+      // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
+      VerifyEmailView().environment(\.authReveal, reveal)
+    case .shell:
+      if let auth = model.auth {
+        shell(navigation)
+          .environment(navigation)
+          .focusedSceneValue(\.shellNavigation, navigation)
+          // A support session says so on every screen, with its way back to the staff member's own session.
+          // The first verified session of an account with no workspace creates the one its sign-up asked for.
+          .task(id: "\(auth.user?.uid ?? ""):\(model.workspace?.ready == true)") { await model.settleFirstRun() }
+          .safeAreaInset(edge: .top, spacing: 0) {
+            if let impersonation = auth.impersonation {
+              AglynNotice(
+                impersonation.banner, tone: .warning, actionTitle: "Exit impersonation",
+                action: { Task { await auth.endImpersonation() } }
+              )
+              .padding(AglynSpace.one)
+              .background(.bar)
+              .accessibilityIdentifier("impersonation-banner")
+            }
+          }
+          .opacity(intro.destinationOpacity)
+          .offset(y: intro.destinationOffset)
+      }
+    }
   }
 
   /// A tapped push's link, opened once someone is signed in.
