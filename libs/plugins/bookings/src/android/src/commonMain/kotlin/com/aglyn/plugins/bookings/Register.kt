@@ -37,6 +37,7 @@ fun registerBookingsNative(r: NativePluginRegistrar) {
     icon = "event",
     placement = PosPlacement.MENU,
   ) { context, _ -> CounterBookingsScreen(context) }
+  r.widget("bookings.needs-you", title = "Needs you", order = 30, requiresSite = true, slot = "homeNeedsYou") { context -> BookingsNeedsYouWidget(context) }
   r.widget("bookings.today", title = "Today's bookings", order = 300, size = WidgetSize.HALF, requiresSite = true) { context ->
     BookingsTodayWidget(context)
   }

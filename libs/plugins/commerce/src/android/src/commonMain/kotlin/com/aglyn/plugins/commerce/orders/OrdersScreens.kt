@@ -135,11 +135,12 @@ private fun addressLines(address: OrderAddress?): List<String> = address?.let {
  * notification or a link to it does.
  */
 @Composable
-fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null, startNew: Boolean = false) {
+fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null, startNew: Boolean = false, initialFilter: OrderFilter? = null) {
   val hostId = context.hostId ?: return
   val scope = rememberCoroutineScope()
   val model = remember(hostId, context.firestore) { OrdersListModel(hostId, context.firestore, scope) }
-  LaunchedEffect(model) { model.reload() }
+  // Opened from Home on a chip (to get ready, disputes): the list starts on it.
+  LaunchedEffect(model) { if (initialFilter != null) model.pick(initialFilter) else model.reload() }
   AglynListDetail(
     initialSelected = initialOrderId,
     list = { selected, onSelect -> OrdersList(context, model, selected, onSelect, startNew) },
