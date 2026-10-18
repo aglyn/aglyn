@@ -334,8 +334,17 @@ export function createPixabayClient(
     async download(address, { maxBytes, signal }) {
       let url = address
       const deadline = withTimeout(DOWNLOAD_TIMEOUT_MS, signal)
+      // Every way a copy fails says why (AGL-3923): from 2026-10-18 07:38Z
+      // production stored no stock photo at all while its searches answered,
+      // and nothing said whether Pixabay refused, redirected or timed out.
+      // The address is signed, so only its host is ever logged.
+      const failed = (reason: string, detail: Record<string, unknown> = {}) => {
+        if (!signal?.aborted)
+          console.warn('pixabay: a photo download failed', { reason, ...detail })
+        return null
+      }
       for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-        if (!isPixabayImageUrl(url)) return null
+        if (!isPixabayImageUrl(url)) return failed('host', { host: hostOf(url), hop })
         let response: Response
         try {
           response = await doFetch(url, {
@@ -343,37 +352,52 @@ export function createPixabayClient(
             redirect: 'manual',
             signal: deadline,
           })
-        } catch {
-          return null
+        } catch (error) {
+          return failed(deadline.aborted ? 'timeout' : 'network', { host: hostOf(url), error: String(error).slice(0, 160) })
         }
         if (response.status >= 300 && response.status < 400) {
           const location = response.headers.get('location')
-          if (!location) return null
+          if (!location) return failed('redirect-without-location', { status: response.status })
           try {
             url = new URL(location, url).toString()
           } catch {
-            return null
+            return failed('redirect-unreadable', { status: response.status })
           }
           continue
         }
-        if (!response.ok) return null
+        if (!response.ok)
+          return failed('status', {
+            status: response.status,
+            host: hostOf(url),
+            server: response.headers.get('server') ?? null,
+            ray: response.headers.get('cf-ray') ? true : false,
+          })
         const contentType = String(response.headers.get('content-type') ?? '')
           .split(';')[0]
           .trim()
           .toLowerCase()
-        if (!IMAGE_TYPES.has(contentType)) return null
+        if (!IMAGE_TYPES.has(contentType)) return failed('type', { contentType: contentType.slice(0, 60), status: response.status })
         const declared = Number(response.headers.get('content-length'))
-        if (Number.isFinite(declared) && declared > maxBytes) return null
+        if (Number.isFinite(declared) && declared > maxBytes) return failed('too-large', { declared, maxBytes })
         let bytes: Uint8Array
         try {
           bytes = new Uint8Array(await response.arrayBuffer())
-        } catch {
-          return null
+        } catch (error) {
+          return failed(deadline.aborted ? 'timeout' : 'body', { error: String(error).slice(0, 160) })
         }
-        if (!bytes.length || bytes.length > maxBytes) return null
+        if (!bytes.length || bytes.length > maxBytes) return failed('size', { bytes: bytes.length, maxBytes })
         return { bytes, contentType }
       }
-      return null
+      return failed('too-many-redirects', { hops: MAX_REDIRECTS + 1 })
     },
+  }
+}
+
+/** A URL's host alone, for a log line: the rest of a Pixabay image address is signed. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return 'unreadable'
   }
 }

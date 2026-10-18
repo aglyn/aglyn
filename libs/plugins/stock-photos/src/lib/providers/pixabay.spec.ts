@@ -238,6 +238,46 @@ describe('the Pixabay client', () => {
     expect(calls).toHaveLength(1)
   })
 
+  it('says why a download failed, by host and status, never by its signed address (AGL-3923)', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const { fn } = fakeFetch([
+        new Response('blocked', { status: 403, headers: { server: 'cloudflare', 'cf-ray': 'abc-IAD' } }),
+        new Response(null, { status: 302, headers: { location: 'https://elsewhere.example/a.jpg' } }),
+        new Response('<html>', { status: 200, headers: { 'content-type': 'text/html' } }),
+      ])
+      const client = createPixabayClient({ apiKey: () => KEY, fetch: fn })
+      const signed = 'https://pixabay.com/get/g5aaf9c_signed_1280.jpg'
+      expect(await client.download(signed, { maxBytes: 1_000_000 })).toBeNull()
+      expect(await client.download(signed, { maxBytes: 1_000_000 })).toBeNull()
+      expect(await client.download(signed, { maxBytes: 1_000_000 })).toBeNull()
+      expect(warn.mock.calls.map(([message, detail]) => [message, (detail as { reason: string }).reason])).toEqual([
+        ['pixabay: a photo download failed', 'status'],
+        ['pixabay: a photo download failed', 'host'],
+        ['pixabay: a photo download failed', 'type'],
+      ])
+      expect(warn.mock.calls[0]?.[1]).toMatchObject({ status: 403, host: 'pixabay.com', server: 'cloudflare', ray: true })
+      expect(warn.mock.calls[1]?.[1]).toMatchObject({ host: 'elsewhere.example', hop: 1 })
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('g5aaf9c_signed')
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('says a download timed out or could not connect', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const fn = (async () => {
+        throw new TypeError('fetch failed')
+      }) as unknown as typeof fetch
+      const client = createPixabayClient({ apiKey: () => KEY, fetch: fn })
+      expect(await client.download('https://cdn.pixabay.com/photo/a.jpg', { maxBytes: 10 })).toBeNull()
+      expect(warn.mock.calls[0]?.[1]).toMatchObject({ reason: 'network', host: 'cdn.pixabay.com' })
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   it('refuses what is not an image, or is larger than asked', async () => {
     const { fn } = fakeFetch([
       new Response('<html>', { status: 200, headers: { 'content-type': 'text/html' } }),
