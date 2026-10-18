@@ -56,7 +56,7 @@ import com.aglyn.core.liveCount
 import com.aglyn.core.Live
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.plugins.commerce.pos.Load
-import com.aglyn.site.media.mediaPreviewUrl
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.FormSheet
 import com.aglyn.ui.AglynIcons

@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.aglyn.core.HostStatus
 import com.aglyn.core.HostStatusKind
 import com.aglyn.core.Live
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
 import com.aglyn.core.siteAddress
@@ -151,10 +152,14 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null) {
 private fun SiteListRow(context: NativePluginContext, row: SiteRow, selected: Boolean, onClick: () -> Unit) {
   val host = hostDoc(context, row.id)
   val status = (host as? Live.Ready)?.value?.let { HostStatus.describe(it.data, nowMillis()) }
+  // The site's favicon, as the console's Sites list shows it (`HostIcon`): the host's own `seo.favicon`, else the
+  // membership row's copy of it; the globe while there is none.
+  val favicon = siteFavicon((host as? Live.Ready)?.value) ?: row.favicon
   AglynListItem(
     title = row.name,
     supporting = listOfNotNull(siteAddress(row.subdomain), row.role?.replaceFirstChar { it.uppercase() }).joinToString(" · "),
     icon = AglynIcons.named("public"),
+    imageUrl = mediaPreviewUrl(favicon, context.api.origin, row.id, 160),
     selected = selected,
     trailing = {
       Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
@@ -166,6 +171,10 @@ private fun SiteListRow(context: NativePluginContext, row: SiteRow, selected: Bo
     modifier = Modifier.testTag("site-${row.id}"),
   )
 }
+
+/** A host document's favicon (`seo.favicon`), as the console stores it: a reference, a CDN path or an address. */
+internal fun siteFavicon(doc: com.aglyn.core.FirestoreDoc?): String? =
+  ((doc?.data?.get("seo") as? Map<*, *>)?.get("favicon") as? String)?.ifBlank { null }
 
 /**
  * One site: its status, addresses and what it holds, with the switch that
@@ -185,7 +194,7 @@ fun SiteOverview(context: NativePluginContext, hostId: String) {
       val name = doc.string("displayName")?.ifBlank { null } ?: doc.string("subdomain") ?: hostId
       val platform = siteAddress(doc.string("subdomain"))
       val custom = doc.string("cname")?.ifBlank { null }
-      val favicon = (doc.data["seo"] as? Map<*, *>)?.get("favicon") as? String
+      val favicon = siteFavicon(doc)
       val current = hostId == context.hostId
       Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("site-detail"),
@@ -193,7 +202,7 @@ fun SiteOverview(context: NativePluginContext, hostId: String) {
       ) {
         SectionCard(null) {
           Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1.5f))) {
-            RemoteImage(favicon?.takeIf { it.startsWith("http") }, null, Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)), icon = "public")
+            RemoteImage(mediaPreviewUrl(favicon, context.api.origin, hostId, 160), null, Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)), icon = "public")
             Column(Modifier.weight(1f)) {
               Text(name, Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
               Text(custom ?: platform ?: "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

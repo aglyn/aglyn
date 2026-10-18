@@ -3,24 +3,46 @@
 
 import SwiftUI
 
-/// Whether the window is wide enough for a sidebar and side-by-side panes:
-/// a regular width class on iPhone and iPad, always on the Mac.
+/// The narrowest pane that holds a list beside its detail: the list column's
+/// 320 points and a detail wide enough for a label beside its value (an
+/// address row), 360 points.
+public let listDetailMinimumWidth: CGFloat = 680
+
+/// Whether the pane is wide enough for side-by-side panes: a regular width
+/// class on iPhone and iPad, and on every platform at least `minimumWidth`
+/// points across (by default `listDetailMinimumWidth`). A narrow Mac window,
+/// or an iPad split that leaves a screen little room beside the sidebar, gets
+/// the list alone and pushes the detail at the pane's full width, so no
+/// detail is ever squeezed until its values are cut off. With `minimumWidth`
+/// nil (the app's own sidebar-or-tabs choice) only the width class decides.
 public struct WideLayoutReader<Content: View>: View {
   #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
   #endif
+  let minimumWidth: CGFloat?
   let content: (Bool) -> Content
 
-  public init(@ViewBuilder content: @escaping (_ isWide: Bool) -> Content) {
+  public init(
+    minimumWidth: CGFloat? = listDetailMinimumWidth, @ViewBuilder content: @escaping (_ isWide: Bool) -> Content
+  ) {
+    self.minimumWidth = minimumWidth
     self.content = content
   }
 
-  public var body: some View {
+  private var regular: Bool {
     #if os(iOS)
-      content(sizeClass == .regular)
+      sizeClass == .regular
     #else
-      content(true)
+      true
     #endif
+  }
+
+  public var body: some View {
+    if let minimumWidth {
+      GeometryReader { proxy in content(regular && proxy.size.width >= minimumWidth) }
+    } else {
+      content(regular)
+    }
   }
 }
 

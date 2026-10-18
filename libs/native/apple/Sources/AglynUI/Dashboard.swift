@@ -42,17 +42,32 @@ public struct IconBadge: View {
   let tone: AglynTone
   let size: CGFloat
   let circle: Bool
+  let imageURL: URL?
+  let darkImageURL: URL?
 
-  public init(_ systemImage: String, tone: AglynTone = .info, size: CGFloat = 32, circle: Bool = false) {
+  /// With `imageURL` (a workspace's logo, a site's favicon) the picture fills the badge, and the symbol shows while
+  /// there is none.
+  public init(
+    _ systemImage: String, tone: AglynTone = .info, size: CGFloat = 32, circle: Bool = false, imageURL: URL? = nil,
+    darkImageURL: URL? = nil
+  ) {
     self.systemImage = systemImage
     self.tone = tone
     self.size = size
     self.circle = circle
+    self.imageURL = imageURL
+    self.darkImageURL = darkImageURL
   }
 
   private var color: Color { tone == .neutral ? AglynColor.tint : tone.color }
 
   public var body: some View {
+    AglynBrandPicture(imageURL, darkURL: darkImageURL, size: size, cornerRadius: circle ? size / 2 : AglynRadius.control) {
+      symbol
+    }
+  }
+
+  private var symbol: some View {
     Image(systemName: systemImage)
       .font(.system(size: size * 0.5, weight: .semibold))
       .foregroundStyle(color)
@@ -88,19 +103,22 @@ public struct SiteHeaderCard: View {
   let workspace: String?
   let name: String
   let address: String?
+  let iconURL: URL?
   let status: (text: String, tone: AglynTone)?
   let detail: String?
   let loading: Bool
   let onVisit: (() -> Void)?
   let onSwitch: () -> Void
 
+  /// `iconURL` is the site's favicon; the globe shows while there is none.
   public init(
-    workspace: String?, name: String, address: String?, status: (text: String, tone: AglynTone)?,
+    workspace: String?, name: String, address: String?, iconURL: URL? = nil, status: (text: String, tone: AglynTone)?,
     detail: String? = nil, loading: Bool = false, onVisit: (() -> Void)?, onSwitch: @escaping () -> Void
   ) {
     self.workspace = workspace
     self.name = name
     self.address = address
+    self.iconURL = iconURL
     self.status = status
     self.detail = detail
     self.loading = loading
@@ -112,7 +130,7 @@ public struct SiteHeaderCard: View {
     VStack(alignment: .leading, spacing: AglynSpace.two) {
       HStack(alignment: .top, spacing: AglynSpace.two) {
         if !typeSize.isAccessibilitySize {
-          IconBadge("globe", tone: .neutral, size: 52, circle: true)
+          IconBadge("globe", tone: .neutral, size: 52, circle: true, imageURL: iconURL)
         }
         VStack(alignment: .leading, spacing: AglynSpace.half) {
           if typeSize.isAccessibilitySize, let status { StatusChip(status.text, tone: status.tone) }

@@ -3,7 +3,7 @@ package com.aglyn.plugins.commerce.pos
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.layout.ContentScale
 import com.aglyn.hardware.CameraScanFilter
-import com.aglyn.site.media.mediaPreviewUrl
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.ui.BarcodeScanSheet
 import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.LocalCameraScanner

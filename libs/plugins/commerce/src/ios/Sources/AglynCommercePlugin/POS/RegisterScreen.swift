@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynContracts
+import AglynCore
 import AglynHardware
 import AglynPluginHost
 import AglynSite
@@ -30,7 +31,8 @@ struct RegisterScreen: View {
   }
 
   var body: some View {
-    WideLayoutReader { wide in
+    // The register keeps its basket beside the products whenever the width class is regular.
+    WideLayoutReader(minimumWidth: nil) { wide in
       Group {
         if wide {
           HStack(spacing: 0) {

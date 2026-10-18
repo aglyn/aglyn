@@ -2,25 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynContracts
+import AglynCore
 import AglynPluginHost
 import AglynUI
 import SwiftUI
-
-/// Where a stored picture or film is shown from, for a preview: a reference is
-/// served by the media CDN (qualified for the site being edited, as the
-/// console's `resolveMediaSrc` does) at a thumbnail width, a path is on the
-/// console origin, and any other address is shown as it is.
-public func mediaPreviewURL(_ value: String, origin: String, hostID: String?, width: Int = 320) -> URL? {
-  let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-  guard let resolved = resolveMediaSrc(trimmed.isEmpty ? nil : trimmed, hostID: hostID) else { return nil }
-  var base = origin
-  while base.hasSuffix("/") { base.removeLast() }
-  if resolved.hasPrefix("\(mediaCDNRoute)/") && !resolved.contains("?") {
-    return URL(string: "\(base)\(resolved)?w=\(width)")
-  }
-  if resolved.hasPrefix("/") { return URL(string: base + resolved) }
-  return URL(string: resolved)
-}
 
 /// A picture or film chosen from the media library, the way the console's
 /// fields do: a preview, Choose from media (this site's files and the

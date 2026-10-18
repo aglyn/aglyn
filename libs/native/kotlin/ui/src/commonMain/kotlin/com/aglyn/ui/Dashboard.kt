@@ -123,11 +123,23 @@ private fun QuickActionTile(item: QuickActionItem, modifier: Modifier) {
 
 /** An icon on a soft disc of its own color. */
 @Composable
-fun IconBadge(icon: ImageVector, tint: Color, modifier: Modifier = Modifier, size: Dp = 40.dp) {
-  Box(
-    modifier.size(size).clip(CircleShape).background(tint.copy(alpha = 0.14f)),
-    contentAlignment = Alignment.Center,
-  ) { Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.55f)) }
+fun IconBadge(
+  icon: ImageVector,
+  tint: Color,
+  modifier: Modifier = Modifier,
+  size: Dp = 40.dp,
+  /** A workspace's logo or a site's favicon: the picture fills the badge, and [icon] shows while there is none. */
+  imageUrl: String? = null,
+  darkImageUrl: String? = null,
+) {
+  Box(modifier.size(size)) {
+    BrandPicture(imageUrl, darkImageUrl, size, CircleShape) {
+      Box(
+        Modifier.size(size).clip(CircleShape).background(tint.copy(alpha = 0.14f)),
+        contentAlignment = Alignment.Center,
+      ) { Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.55f)) }
+    }
+  }
 }
 
 /**
@@ -315,6 +327,8 @@ fun SiteHeaderCard(
   workspaceName: String?,
   siteName: String,
   address: String?,
+  /** The site's favicon; the globe shows while there is none. */
+  iconUrl: String? = null,
   statusLabel: String?,
   statusTone: StatusTone,
   statusDetail: String?,
@@ -331,7 +345,7 @@ fun SiteHeaderCard(
   ) {
     Column(Modifier.padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
       Row(verticalAlignment = Alignment.CenterVertically) {
-        IconBadge(AglynIcons.named("public"), MaterialTheme.colorScheme.primary, size = 48.dp)
+        IconBadge(AglynIcons.named("public"), MaterialTheme.colorScheme.primary, size = 48.dp, imageUrl = iconUrl)
         Column(Modifier.weight(1f).padding(start = space(1.5f)), verticalArrangement = Arrangement.spacedBy(2.dp)) {
           if (workspaceName != null) {
             Text(

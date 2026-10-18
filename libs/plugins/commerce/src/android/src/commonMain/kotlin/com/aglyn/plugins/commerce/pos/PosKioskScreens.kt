@@ -69,7 +69,7 @@ import com.aglyn.contracts.PosKioskProduct
 import com.aglyn.contracts.PosKioskSale
 import com.aglyn.contracts.PosKioskSaleStatus
 import com.aglyn.pluginhost.NativePluginContext
-import com.aglyn.site.media.mediaPreviewUrl
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.KeepScreenOn
@@ -157,14 +157,14 @@ private fun PosKioskScreenBody(context: NativePluginContext) {
           onPair = { code -> scope.launch { model.pair(code) } },
           onLeave = context::back,
         )
-        else -> key(model.turn) { KioskBody(model, onExit = { model.unpaired() }) }
+        else -> key(model.turn) { KioskBody(model, context.api.origin, onExit = { model.unpaired() }) }
       }
     }
   }
 }
 
 @Composable
-private fun KioskBody(model: PosKioskModel, onExit: () -> Unit) {
+private fun KioskBody(model: PosKioskModel, origin: String, onExit: () -> Unit) {
   val scope = rememberCoroutineScope()
   var itemSheet by remember { mutableStateOf<PosKioskProduct?>(null) }
   var cartOpen by remember { mutableStateOf(false) }
@@ -181,7 +181,7 @@ private fun KioskBody(model: PosKioskModel, onExit: () -> Unit) {
     }
   }
   Box(Modifier.fillMaxSize()) {
-    KioskScreen(model, onProduct = { product ->
+    KioskScreen(model, origin, onProduct = { product ->
       val item = kioskItemOf(product)
       if (item.needsSheet()) itemSheet = product else item.variants.firstOrNull()?.let { model.add(item, it) }
     }, onCart = { cartOpen = true })
@@ -204,9 +204,9 @@ private fun KioskBody(model: PosKioskModel, onExit: () -> Unit) {
 }
 
 @Composable
-private fun KioskScreen(model: PosKioskModel, onProduct: (PosKioskProduct) -> Unit, onCart: () -> Unit) {
+private fun KioskScreen(model: PosKioskModel, origin: String, onProduct: (PosKioskProduct) -> Unit, onCart: () -> Unit) {
   val scope = rememberCoroutineScope()
-  val branding = model.context?.branding?.asDeviceBranding()
+  val branding = model.context?.branding?.asDeviceBranding(origin)
   when (val phase = model.phase) {
     PosKioskPhase.Start -> PosDeviceBrandScreen(branding, title = null, message = branding?.message ?: "Order here") {
       Button(
@@ -215,7 +215,7 @@ private fun KioskScreen(model: PosKioskModel, onProduct: (PosKioskProduct) -> Un
       ) { Text("Start order", fontSize = 22.sp, fontWeight = FontWeight.SemiBold) }
     }
     PosKioskPhase.Menu -> KioskMenu(model, onProduct, onCart)
-    PosKioskPhase.Review -> model.sale?.let { KioskReview(model, it) }
+    PosKioskPhase.Review -> model.sale?.let { KioskReview(model, it, branding) }
     is PosKioskPhase.Tip -> {
       val sale = model.sale
       val context = model.context
@@ -447,7 +447,7 @@ private fun KioskCartSheet(model: PosKioskModel, close: () -> Unit) {
 
 /** The priced order: every line, the server's subtotal, discount, tax and total, and the ways to pay. Nothing here was computed on the kiosk. */
 @Composable
-private fun KioskReview(model: PosKioskModel, sale: PosKioskSale) {
+private fun KioskReview(model: PosKioskModel, sale: PosKioskSale, branding: PosDeviceBranding?) {
   val scope = rememberCoroutineScope()
   val none = !model.canPayByReader && !model.canPayByTap && !model.canPayAtCounter
 
@@ -459,7 +459,7 @@ private fun KioskReview(model: PosKioskModel, sale: PosKioskSale) {
       Text((if (negative) "−" else "") + model.money(cents), style = style)
     }
   }
-  DeviceScroll(model.context?.branding?.asDeviceBranding(), null) {
+  DeviceScroll(branding, null) {
     Column(Modifier.fillMaxWidth().testTag("kiosk-review"), verticalArrangement = Arrangement.spacedBy(space(2f))) {
       Text("Review your order", style = MaterialTheme.typography.displaySmall)
       sale.lines.forEach { line ->

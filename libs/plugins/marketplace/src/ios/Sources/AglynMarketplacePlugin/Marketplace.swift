@@ -163,9 +163,9 @@ struct ListingRow: Identifiable, Equatable {
   var offeredVersion: String? { artifactType == "plugin" ? latestApprovedVersion : latestVersion }
 
   init(_ doc: FirestoreDocument) {
-    func image(_ key: String) -> String? {
-      doc.text(key).flatMap { $0.hasPrefix("https://") || $0.hasPrefix("http://") ? $0 : nil }
-    }
+    // The stored picture as the listing editor keeps it (a reference, a CDN path or an https address); the screen
+    // resolves it against the console with `mediaPreviewURL`, as the console's listing image resolves it.
+    func image(_ key: String) -> String? { doc.text(key).flatMap { $0.isEmpty ? nil : $0 } }
     id = doc.id
     name = doc.text("displayName") ?? doc.id
     description = doc.text("description") ?? ""

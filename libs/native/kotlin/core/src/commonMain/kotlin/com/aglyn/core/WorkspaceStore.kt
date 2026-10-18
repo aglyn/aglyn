@@ -9,9 +9,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -23,7 +25,25 @@ data class WorkspaceSite(
   val name: String,
   val subdomain: String,
   val role: String,
+  /**
+   * The site's favicon as the membership row mirrors it (`favicon`, the host's `seo.favicon`): a reference, a CDN path
+   * or an address, shown through [mediaPreviewUrl] as the console's `HostIcon` resolves it.
+   */
+  val favicon: String? = null,
 )
+
+/**
+ * A workspace's logos as its own document keeps them (`logoUrl`, `logoDarkUrl`): the membership index carries none, so
+ * the console's switcher reads each workspace's document for them, and so does [WorkspaceStore].
+ */
+data class WorkspaceOrgLogo(val light: String?, val dark: String?) {
+  companion object {
+    fun from(data: Map<String, Any?>?): WorkspaceOrgLogo = WorkspaceOrgLogo(
+      light = (data?.get("logoUrl") as? String)?.ifBlank { null },
+      dark = (data?.get("logoDarkUrl") as? String)?.ifBlank { null },
+    )
+  }
+}
 
 @Serializable
 data class WorkspacePick(val orgId: String? = null, val hostId: String? = null)
@@ -41,7 +61,12 @@ data class WorkspaceState(
    * [WorkspaceStore.loadMoreOrgs] grows it.
    */
   val hasMoreOrgs: Boolean = false,
-)
+  /** Each workspace's logos read so far, by workspace id: the shown one's always, the others' once the switcher asks. */
+  val orgLogos: Map<String, WorkspaceOrgLogo> = emptyMap(),
+) {
+  /** The shown workspace's logos; null until read. */
+  val orgLogo: WorkspaceOrgLogo? get() = org?.let { orgLogos[it.id] }
+}
 
 /**
  * The workspace and site the person is working in: `users/{uid}/orgs` and
@@ -52,7 +77,7 @@ data class WorkspaceState(
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class WorkspaceStore(
-  scope: CoroutineScope,
+  private val scope: CoroutineScope,
   auth: AuthSession,
   private val firestore: FirestoreReader,
   private val prefs: KeyValueStore,
@@ -65,6 +90,10 @@ class WorkspaceStore(
 
   /** Whether the last answer filled the window. */
   private val orgsFull = MutableStateFlow(false)
+
+  /** Each workspace's logos read so far, and the ids already asked for. */
+  private val logos = MutableStateFlow<Map<String, WorkspaceOrgLogo>>(emptyMap())
+  private val logosAsked = mutableSetOf<String>()
 
   private val uid = auth.state
     .map { (it as? AuthState.SignedIn)?.user?.uid }
@@ -123,7 +152,17 @@ class WorkspaceStore(
     }
   }.stateIn(scope, SharingStarted.Eagerly, Live.Loading)
 
-  val state: StateFlow<WorkspaceState> = combine(restoredFor, orgs, sites, picked) { restored, orgs, sites, picked ->
+  init {
+    // The shown workspace's own document, read live, so a new logo reaches the drawer's footer.
+    orgId.flatMapLatest { pair ->
+      val orgId = pair?.second
+      if (orgId == null) flowOf(null) else firestore.observeDoc("orgs/$orgId").map { live ->
+        (live as? Live.Ready)?.let { orgId to WorkspaceOrgLogo.from(it.value?.data) }
+      }
+    }.onEach { entry -> if (entry != null) logos.value = logos.value + entry }.launchIn(scope)
+  }
+
+  val state: StateFlow<WorkspaceState> = combine(restoredFor, orgs, sites, picked, logos) { restored, orgs, sites, picked, logos ->
     val orgList = (orgs as? Live.Ready)?.value
     val siteList = (sites as? Live.Ready)?.value
     val error = when {
@@ -143,8 +182,23 @@ class WorkspaceStore(
       ready = orgList.isEmpty() || siteList != null,
       error = error,
       hasMoreOrgs = orgsFull.value,
+      orgLogos = logos,
     )
   }.stateIn(scope, SharingStarted.Eagerly, WorkspaceState())
+
+  /**
+   * Reads each of these workspaces' logos from its own document, once (the console's switcher reads its rows' logos the
+   * same way, `useOrgRows`).
+   */
+  fun loadLogos(orgIds: List<String>) {
+    for (orgId in orgIds) {
+      if (!logosAsked.add(orgId) || orgId in logos.value) continue
+      scope.launch {
+        val doc = runCatching { firestore.get("orgs/$orgId") }.getOrNull()
+        logos.value = logos.value + (orgId to WorkspaceOrgLogo.from(doc?.data))
+      }
+    }
+  }
 
   /** Grows the workspace window by a page (the console's `loadMoreOrgs`); the listener re-subscribes with it. */
   fun loadMoreOrgs() {
@@ -204,6 +258,7 @@ class WorkspaceStore(
         name = (data["displayName"] ?: subdomain.ifEmpty { id }).toString(),
         subdomain = subdomain,
         role = (data["role"] ?: "").toString(),
+        favicon = (data["favicon"] as? String)?.ifBlank { null },
       )
     }
 
