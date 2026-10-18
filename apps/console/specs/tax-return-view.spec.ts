@@ -105,6 +105,14 @@ function payload(overrides: Partial<TaxReturnPayload> = {}): TaxReturnPayload {
 const options = { now: new Date('2026-10-13T12:00:00Z'), floor: '2026-09', defaultPeriod: '2026-Q3' }
 
 describe('the prepared sales tax return', () => {
+  it('says a period with no invoices has none, never "All 0 invoices … fully readable"', () => {
+    expect(TAX_RETURN_COPY.cleanMessage(0)).toBe(
+      'There are no invoices in this period, so no invoice row was read or dropped.',
+    )
+    expect(TAX_RETURN_COPY.cleanMessage(1)).toMatch(/^The one invoice in this period was fully readable/)
+    expect(TAX_RETURN_COPY.cleanMessage(3)).toMatch(/^All 3 invoices in this period were fully readable/)
+  })
+
   it('reads cleanly when every row was readable, and lists the periods the menu offers', () => {
     const view = taxReturnView(payload(), options)
     expect(view.verdict).toMatchObject({

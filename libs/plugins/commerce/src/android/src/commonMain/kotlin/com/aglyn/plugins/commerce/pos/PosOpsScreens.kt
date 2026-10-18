@@ -401,7 +401,7 @@ fun ShiftReportView(report: PosShiftReport, shift: PosShift?, currency: String) 
     report.salesByTender.entries.sortedBy { it.key }.forEach { (method, cents) ->
       AmountRow(Contracts.posTenderLabels[method] ?: method, m(cents), muted = true)
     }
-    AmountRow("Refunds (${report.refundCount.toLong()})", "−" + m(report.refundsCents))
+    AmountRow("Refunds (${report.refundCount.toLong()})", (if (report.refundsCents > 0) "−" else "") + m(report.refundsCents))
     AmountRow("Net sales", m(report.netSalesCents), emphasized = true)
     HorizontalDivider(Modifier.padding(vertical = space(0.5f)))
     AmountRow("Opening float", m(report.openingFloatCents), muted = true)
