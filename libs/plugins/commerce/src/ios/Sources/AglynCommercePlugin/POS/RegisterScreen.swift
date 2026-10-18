@@ -82,6 +82,7 @@ struct RegisterScreen: View {
       if let checkout = model.checkout {
         CheckoutView(model: model, checkout: checkout)
           .interactiveDismissDisabled()
+          .checkoutSheetSizing()
       }
     }
     .alert("Discount", isPresented: $showDiscount) {
@@ -438,5 +439,12 @@ private struct DisplayMirrorKey: Equatable {
     tipCents = model.checkout?.tipCents ?? 0
     connected = model.display.connected
     asking = model.display.asking != nil
+  }
+}
+
+private extension View {
+  /// The checkout as a page-sized sheet on iPad and Mac, so every tender and the whole receipt show without scrolling.
+  @ViewBuilder func checkoutSheetSizing() -> some View {
+    if #available(iOS 18.0, macOS 15.0, *) { presentationSizing(.page) } else { self }
   }
 }

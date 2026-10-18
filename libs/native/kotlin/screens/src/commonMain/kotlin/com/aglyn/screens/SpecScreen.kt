@@ -3,6 +3,7 @@ package com.aglyn.screens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -78,9 +79,7 @@ import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
-import com.aglyn.ui.WidthClass
 import com.aglyn.ui.WithTooltip
-import com.aglyn.ui.currentWidthClass
 import com.aglyn.ui.space
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -176,27 +175,29 @@ fun SpecScreen(
   }
   var selection by remember(key) { mutableStateOf<Selection?>(null) }
   val split = !embedded && spec.blocks.any { it.type == "list" && it.flag("split") && it["open"] != null }
-  val wide = currentWidthClass() != WidthClass.COMPACT
   // A screen the plan does not include is one offer across the window, not a list beside an empty detail.
   val refused = (model.phase as? ScreenModel.Phase.Failed)?.upsell == true
-  if (split && wide && !refused) {
-    Row(Modifier.fillMaxSize()) {
-      Box(Modifier.weight(0.42f).fillMaxHeight()) {
-        SpecBody(model, plugin, selection, onSelect = { selection = it }, splitting = true)
-      }
-      VerticalDivider()
-      Box(Modifier.weight(0.58f).fillMaxHeight()) {
-        val picked = selection
-        val detail = picked?.let { ScreenCatalog.spec(it.screen) }
-        if (picked != null && detail != null) {
-          SpecScreen(detail, plugin, picked.params, embedded = true)
-        } else {
-          SelectionPlaceholder("Pick a row to see it here", icon = AglynIcons.named("list"))
+  // The list and its detail side by side only when the pane holds both (TwoPaneMinWidth).
+  BoxWithConstraints(Modifier.fillMaxSize()) {
+    if (split && maxWidth >= com.aglyn.ui.TwoPaneMinWidth && !refused) {
+      Row(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(0.42f).fillMaxHeight()) {
+          SpecBody(model, plugin, selection, onSelect = { selection = it }, splitting = true)
+        }
+        VerticalDivider()
+        Box(Modifier.weight(0.58f).fillMaxHeight()) {
+          val picked = selection
+          val detail = picked?.let { ScreenCatalog.spec(it.screen) }
+          if (picked != null && detail != null) {
+            SpecScreen(detail, plugin, picked.params, embedded = true)
+          } else {
+            SelectionPlaceholder("Pick a row to see it here", icon = AglynIcons.named("list"))
+          }
         }
       }
+    } else {
+      SpecBody(model, plugin, selection, onSelect = { selection = it }, splitting = false)
     }
-  } else {
-    SpecBody(model, plugin, selection, onSelect = { selection = it }, splitting = false)
   }
 }
 
