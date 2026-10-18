@@ -152,3 +152,14 @@ describe('staff audit rows (AGL-3660)', () => {
     }
   })
 })
+
+describe('automationRunSentence (AGL-3892)', () => {
+  it('says an automation run with its event in words, never the event key', () => {
+    const { automationRunSentence, activityActionSentence } =
+      require('./activity-labels') as typeof import('./activity-labels')
+    expect(automationRunSentence('Action ran on formSubmission')).toBe('Automation ran: Form submitted')
+    expect(automationRunSentence('Action ran on lead with errors: Send email failed')).toMatch(/^Automation failed: /)
+    expect(automationRunSentence('Published page')).toBeNull()
+    expect(activityActionSentence('Action ran on formSubmission')).toBe('Automation ran: Form submitted')
+  })
+})

@@ -41,6 +41,7 @@ import {
   type ActivityEntryLike,
   type ActivityTargetLike,
 } from './activity-presenter'
+import { hostEventLabel } from './host-events'
 import { orgOverrideReasonSummary } from './org-override-reason'
 import {
   isPluginJobTargetType,
@@ -107,7 +108,21 @@ export function activityActionSentence(
   const stored = action?.trim() ?? ''
   const sentence = pluginActivityActionSentence(stored)
   if (sentence) return sentence.replace('{target}', activityTargetPhrase(target))
+  const run = automationRunSentence(stored)
+  if (run) return run
   return activityActionLabel(stored)
+}
+
+/**
+ * An automation run as the run log writes it (`Action ran on formSubmission`,
+ * ` with errors: …` when a step failed), said with the event's own words:
+ * `Automation ran: Form submitted`, `Automation failed: Form submitted`.
+ * Null for any other action.
+ */
+export function automationRunSentence(action: string): string | null {
+  const match = /^Action ran on (\S+)( with errors:)?/.exec(action)
+  if (!match) return null
+  return `${match[2] ? 'Automation failed' : 'Automation ran'}: ${hostEventLabel(match[1])}`
 }
 
 /**

@@ -140,6 +140,12 @@ fun ChoiceChipRow(
       onClick = { onSelect(option.key) },
       label = { Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
       leadingIcon = option.icon?.let { name -> { Icon(AglynIcons.named(name), null, Modifier.size(FilterChipDefaults.IconSize)) } },
+      // A picked chip is selected the way every selection in the app is: primaryContainer, never the pink secondary.
+      colors = FilterChipDefaults.filterChipColors(
+        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+      ),
       modifier = Modifier.heightIn(min = 40.dp).testTag("chip-${option.key}"),
     )
   }
