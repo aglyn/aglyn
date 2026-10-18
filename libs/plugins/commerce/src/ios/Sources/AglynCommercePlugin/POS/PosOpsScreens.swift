@@ -328,7 +328,9 @@ struct ShiftReportView: View {
       ForEach(report.salesByTender.sorted(by: { $0.key < $1.key }), id: \.key) { method, cents in
         AglynAmountRow(ContractValues.shared.posTenderLabels[method] ?? method, amount: m(cents))
       }
-      AglynAmountRow("Refunds (\(Int(report.refundCount)))", amount: "−" + m(report.refundsCents))
+      // A minus sign only on an amount that takes something away: no refunds reads "$0.00", not "−$0.00".
+      AglynAmountRow(
+        "Refunds (\(Int(report.refundCount)))", amount: report.refundsCents > 0 ? "−" + m(report.refundsCents) : m(0))
       AglynAmountRow("Net sales", amount: m(report.netSalesCents), emphasized: true)
       Divider()
       AglynAmountRow("Opening float", amount: m(report.openingFloatCents))

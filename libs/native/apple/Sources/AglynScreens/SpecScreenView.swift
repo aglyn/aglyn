@@ -367,8 +367,11 @@ struct SpecScreenBody: View {
         }
       }
     case "actions":
+      // A card whose every action is hidden (the photo's Remove with no photo) draws nothing, not an empty card.
+      let shownActions = block["items"].array.compactMap(ActionSpec.init).filter { ScreenValues.condition($0.when, in: context) }
+      if !shownActions.isEmpty {
       section(title, footer) {
-        ForEach(block["items"].array.compactMap(ActionSpec.init).filter { ScreenValues.condition($0.when, in: context) }) { action in
+        ForEach(shownActions) { action in
           Button(role: action.destructive ? .destructive : nil) { trigger(action, scope: context) } label: {
             HStack {
               Label(ScreenValues.render(action.label, in: context), systemImage: action.icon ?? "arrow.forward.circle")
@@ -379,6 +382,7 @@ struct SpecScreenBody: View {
           .disabled(running != nil)
           .accessibilityIdentifier("action-\(action.id)")
         }
+      }
       }
     case "links":
       section(title, footer) {

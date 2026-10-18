@@ -26,9 +26,14 @@ struct FieldsBlock: View {
           if row["chip"] == .bool(true) {
             StatusChip(shown, tone: toneFor(row, value: value, in: scope))
           } else {
+            // One token (an email, an id, a link) keeps one line, shortened in the middle: wrapped, it broke at a dot
+            // and read as two values. Copy still copies the whole value.
+            let oneToken = !shown.contains(where: \.isWhitespace)
             Text(shown)
               .foregroundStyle(row["tone"] != nil ? toneFor(row, value: value, in: scope).color : .secondary)
               .multilineTextAlignment(.trailing)
+              .lineLimit(oneToken ? 1 : nil)
+              .truncationMode(.middle)
               .textSelection(.enabled)
           }
         }
