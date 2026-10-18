@@ -627,6 +627,32 @@ describe('functions: a bundle cap of 100 against a Pro 50', () => {
     expect(response.body.error).toContain(`60 of ${PRO.functionsPerHost}`)
     expect(writes).toEqual([])
   })
+
+  it('counts only the LIVE functions the site holds: a deleted one frees its slot (AGL-3918)', async () => {
+    // 40 held, 10 of them deleted: 30 live + 20 new = 50 against 50, allowed.
+    seedHost('host-1', { functions: ids(30, 'have') })
+    for (const id of ids(10, 'gone')) {
+      seed('hosts/host-1/functions', id, { name: `Gone ${id}`, deletedAt: { seconds: 1 } })
+    }
+    const response = await runImport('host-1', bundleOf({
+      functions: ids(20, 'fn').map((id) => named(id)),
+    }))
+
+    expect(response.status).toBe(200)
+  })
+
+  it('counts a deleted function the bundle writes over as a new slot (AGL-3918)', async () => {
+    // 50 live, plus one deleted the bundle brings back: 51 of 50, refused.
+    seedHost('host-1', { functions: ids(50, 'have') })
+    seed('hosts/host-1/functions', 'gone-0', { name: 'Gone', deletedAt: { seconds: 1 } })
+    const response = await runImport('host-1', bundleOf({
+      functions: [named('gone-0')],
+    }))
+
+    expect(response.status).toBe(403)
+    expect(response.body.error).toContain(`51 of ${PRO.functionsPerHost}`)
+    expect(writes).toEqual([])
+  })
 })
 
 describe('variables: the bundle cap TIES the plan cap', () => {

@@ -63,11 +63,18 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 jest.mock('firebase/firestore', () => ({
   ...jest.requireActual('firebase/firestore'),
   collection: (_db: unknown, ...segments: string[]) => segments[segments.length - 1],
-  query: (name: string) => name,
+  // The tombstone aggregate (`deletedAt != null`) is told apart by its
+  // filter, and this site has none deleted (AGL-3918).
+  query: (name: string, ...constraints: Array<{ field?: string; op?: string } | undefined>) =>
+    constraints.some((constraint) => constraint?.field === 'deletedAt' && constraint.op === '!=')
+      ? `${name}:tombstones`
+      : name,
   limit: () => undefined,
-  where: () => undefined,
+  where: (field: string, op: string) => ({ field, op }),
   doc: () => ({}),
-  getCountFromServer: async () => ({ data: () => ({ count: serverCount }) }),
+  getCountFromServer: async (target: string) => ({
+    data: () => ({ count: String(target).endsWith(':tombstones') ? 0 : serverCount }),
+  }),
   setDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
 }))

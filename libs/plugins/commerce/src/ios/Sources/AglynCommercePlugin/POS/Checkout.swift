@@ -297,6 +297,13 @@ final class Checkout {
     await recheck(quiet: true)
   }
 
+  /// TEST MODE: taps Stripe's simulated smart reader with a test card while the
+  /// customer step is open, as the console's "Simulate tap" does; the step's own
+  /// poll then sees the payment settle. The server refuses it on a live key.
+  func simulateTapOnReader(_ paymentID: String) async {
+    _ = try? await api.payment(orderID: opened.orderID, step: .simulate(paymentID: paymentID))
+  }
+
   /// Tries a declined reader payment again on the same reader.
   func retryReaderPayment(_ paymentID: String) async {
     guard canTender else { return }

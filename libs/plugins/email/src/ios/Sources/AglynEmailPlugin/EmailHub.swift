@@ -671,7 +671,7 @@ struct AddPeopleSheet: View {
         }
       }
     }
-    .frame(minWidth: 380, minHeight: 420)
+    .aglynSheetMinimumSize(width: 380, height: 420)
   }
 
   private func check() async {

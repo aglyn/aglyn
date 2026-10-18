@@ -408,7 +408,7 @@ struct FunnelEditorSheet: View {
         }
       }
     }
-    .frame(minWidth: 460, minHeight: 520)
+    .aglynSheetMinimumSize(width: 460, height: 520)
   }
 
   private var nameBinding: Binding<String> {
@@ -517,7 +517,7 @@ struct FunnelProposeSheet: View {
         }
       }
     }
-    .frame(minWidth: 420, minHeight: 320)
+    .aglynSheetMinimumSize(width: 420, height: 320)
   }
 }
 
@@ -563,6 +563,6 @@ struct DropOffSheet: View {
         }
       }
     }
-    .frame(minWidth: 420, minHeight: 320)
+    .aglynSheetMinimumSize(width: 420, height: 320)
   }
 }

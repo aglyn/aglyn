@@ -19,6 +19,20 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AutomationDataTest {
+  /** AGL-3918: the workflow allowance counts live workflows; a deleted one frees its slot, a disabled one keeps it. */
+  @Test
+  fun theWorkflowQuotaCountsLiveWorkflows() {
+    val docs = listOf(
+      FirestoreDoc("a", "hosts/h/workflows/a", mapOf("name" to "Live")),
+      FirestoreDoc("b", "hosts/h/workflows/b", mapOf("name" to "Off", "enabled" to false, "deletedAt" to null)),
+      FirestoreDoc("c", "hosts/h/workflows/c", mapOf("name" to "Gone", "deletedAt" to FirestoreTimestamp(1))),
+    )
+    // The server's live count wins once it answers; until then the live rows read stand in.
+    assertEquals(2, workflowQuotaUsed(null, docs))
+    assertEquals(7, workflowQuotaUsed(7L, docs))
+    assertEquals("2/25 workflows on your plan", quotaReadout(workflowQuotaUsed(null, docs), 25, true, "workflow"))
+  }
+
   private fun doc(id: String, data: Map<String, Any?>, path: String = "hosts/h1/x/$id") = FirestoreDoc(id, path, data)
 
   @Test

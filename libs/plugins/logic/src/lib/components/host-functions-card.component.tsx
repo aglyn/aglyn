@@ -64,11 +64,11 @@ import {
 import {
   collection,
   doc,
-  getCountFromServer,
   getDocs,
   limit,
   query,
 } from 'firebase/firestore'
+import { getLiveCountFromServer } from '@aglyn/aglyn/app-utils/live-document-count.client'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
@@ -363,10 +363,10 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
    * on those plans the gate compared 100 against hundreds and could never
    * refuse, while `api/hosts/resources` counted the collection and did.
    *
-   * UNFILTERED, matching that route's plain `collection('functions').count()`
-   * — soft-deleted functions have always counted server-side, so this is the
-   * card catching up with the verdict it exists to predict. Only a create
-   * moves the number, so that is where it is re-read.
+   * LIVE functions, as that route counts them (AGL-3918): a deleted
+   * function frees its slot. Every document less the tombstones
+   * (`getLiveCountFromServer`). A create or a delete moves the number, so
+   * both re-read it.
    */
   const [functionCountEpoch, setFunctionCountEpoch] = useState(0)
   const [serverFunctionCount, setServerFunctionCount] = useState<number | null>(
@@ -374,9 +374,9 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
   )
   useEffect(() => {
     let active = true
-    void getCountFromServer(collection(firestore, 'hosts', hostId, 'functions'))
-      .then((snapshot) => {
-        if (active) setServerFunctionCount(snapshot.data().count)
+    void getLiveCountFromServer(collection(firestore, 'hosts', hostId, 'functions'))
+      .then((count) => {
+        if (active) setServerFunctionCount(count)
       })
       .catch(() => {
         // Falls back to the loaded rows — a LOWER bound and the prior
@@ -649,6 +649,8 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
             { deletedAt: Timestamp.now() },
           ),
       })
+      // Deleting frees the slot (AGL-3918), so the head-count is re-read.
+      setFunctionCountEpoch((epoch) => epoch + 1)
       enqueueSnackbar('Function deleted', {
         variant: 'success',
         persist: false,

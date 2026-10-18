@@ -89,6 +89,11 @@ class PosLastReceiptModel(
     }
   }
 
+  /** The register's printers were read (or one was added or removed here): whether it has one to send to. */
+  fun noteCloudPrinter(has: Boolean) {
+    hasPrinter = has
+  }
+
   /** A sale was paid and the receipt chosen: it is now the last sale. */
   fun remember(orderId: String) {
     val register = registerId ?: return

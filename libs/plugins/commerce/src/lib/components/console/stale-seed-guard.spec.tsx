@@ -46,7 +46,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { addDoc, setDoc, updateDoc } from 'firebase/firestore'
+import { addDoc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import DiscountsCard from './discounts-card.component'
 import ProductEditorDialog from './product-editor-dialog.component'
@@ -503,6 +503,35 @@ describe('ProductEditorDialog (AGL-1358)', () => {
     // Still a full replace — the guard changes when it runs, not what it is.
     expect((setDoc as jest.Mock).mock.calls[0][2]).toEqual({ merge: false })
     expect(onClose).toHaveBeenCalled()
+  })
+
+  /**
+   * AGL-3918: a deleted product frees its plan slot, and this replace writes
+   * `deletedAt: null`. Saving a product deleted since the editor opened would
+   * bring it back with no allowance check, so the save refuses instead, as
+   * the app's save route does.
+   */
+  it('REFUSES to bring back a product deleted since the editor opened', async () => {
+    ;(getDoc as jest.Mock).mockResolvedValueOnce({
+      get: (field: string) => (field === 'deletedAt' ? { seconds: 1 } : undefined),
+    })
+    const onClose = jest.fn()
+    render(
+      <ProductEditorDialog
+        hostId="host-1"
+        product={product}
+        seedFromCache={false}
+        open
+        onClose={onClose}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save product' }))
+
+    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    expect(setDoc).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(enqueueSnackbar.mock.calls[0][0]).toEqual(expect.stringMatching(/was deleted/i))
   })
 
   it('REFUSES when the products read failed outright', async () => {

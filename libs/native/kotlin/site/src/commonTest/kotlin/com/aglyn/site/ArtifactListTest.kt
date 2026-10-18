@@ -2,6 +2,7 @@ package com.aglyn.site
 
 import com.aglyn.contracts.ListQuerySortDirection
 import com.aglyn.core.FilterOp
+import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreFilter
 import com.aglyn.core.FirestoreOrder
 import com.aglyn.core.FirestoreTimestamp
@@ -14,7 +15,9 @@ import com.aglyn.site.artifacts.artifactQuotaLimit
 import com.aglyn.site.artifacts.artifactQuotaReadout
 import com.aglyn.site.artifacts.artifactSortChoices
 import com.aglyn.site.artifacts.artifactSortLabel
+import com.aglyn.site.artifacts.deletedTemplatesCounted
 import com.aglyn.site.artifacts.quotaKey
+import com.aglyn.site.artifacts.templateTombstoneQuery
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -78,5 +81,22 @@ class ArtifactListTest {
     assertEquals(5, artifactLiveCount(7, 2))
     assertEquals(0, artifactLiveCount(1, 2))
     assertEquals(4, artifactLiveCount(4, null))
+
+    // AGL-3918: a deleted template frees its slot. The tombstones are read and the ones the starter-excluding count
+    // included are subtracted: set, and not a starter's.
+    val deletedTemplates = templateTombstoneQuery("h")
+    assertEquals("hosts/h/templates", deletedTemplates.collectionPath)
+    assertEquals(listOf(FirestoreFilter("deletedAt", FilterOp.GT, FirestoreTimestamp(0))), deletedTemplates.filters)
+    assertEquals(
+      2,
+      deletedTemplatesCounted(
+        listOf(
+          FirestoreDoc("a", "hosts/h/templates/a", mapOf("source" to mapOf("type" to "authored"))),
+          FirestoreDoc("b", "hosts/h/templates/b", mapOf("source" to mapOf("type" to "marketplace"))),
+          FirestoreDoc("c", "hosts/h/templates/c", mapOf("source" to mapOf("type" to "starter"))),
+          FirestoreDoc("d", "hosts/h/templates/d", emptyMap()),
+        ),
+      ),
+    )
   }
 }

@@ -64,7 +64,7 @@ struct SignInView: View {
         Divider()
         VStack(alignment: .leading, spacing: 8) {
           Text("Not a register?").font(AglynFont.headline)
-          Text("Set this tablet up as a screen for your customers. A code from a register pairs it.")
+          Text("Set this device up as a screen for your customers. A code from a register pairs it.")
             .font(AglynFont.subheadline).foregroundStyle(.secondary)
           ForEach(model.deviceScreens) { screen in
             Button(screen.title) { model.setDeviceMode(screen.id) }

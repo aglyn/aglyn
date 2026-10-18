@@ -52,6 +52,7 @@ import com.aglyn.contracts.ProductType
 import com.aglyn.contracts.isLowStock
 import com.aglyn.contracts.productInventory
 import com.aglyn.contracts.productPriceRange
+import com.aglyn.core.liveCount
 import com.aglyn.core.Live
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.plugins.commerce.pos.Load
@@ -153,13 +154,14 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
   }
   LaunchedEffect(nearEnd, model.hasMore) { if (nearEnd && model.hasMore) model.loadMore() }
   // The cap, standing rather than only on refusal (AGL-2113): the site's products against the plan's productsPerHost.
+  // LIVE products, as the create door counts them (AGL-3918): a deleted product frees its slot, an archived one keeps it.
   var used by remember { mutableStateOf(0L) }
   var limit by remember { mutableStateOf<Double?>(null) }
   var planReady by remember { mutableStateOf(false) }
   LaunchedEffect(context.hostId, editor.done) {
     val hostId = context.hostId ?: return@LaunchedEffect
     try {
-      used = context.firestore.count(com.aglyn.core.FirestoreQuery(productsPath(hostId))) ?: used
+      used = context.firestore.liveCount(productsPath(hostId)) ?: used
       limit = productsPerHostLimit(context.api, hostId)
       planReady = true
     } catch (error: Throwable) {

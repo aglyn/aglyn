@@ -125,7 +125,8 @@ class DeviceReaderTest {
   @Test
   fun namesReaders() {
     assertEquals("Tap to Pay (simulated)", deviceReaderLabel(CardCollectorKind.TAP_TO_PAY, "TAP_TO_PAY_DEVICE", null, null, simulated = true))
-    assertEquals("Stripe Reader M2 STRM2 (simulated)", deviceReaderLabel(CardCollectorKind.BLUETOOTH, "STRIPE_M2", null, "STRM2", simulated = true))
+    assertEquals("Stripe Reader M2 (simulated)", deviceReaderLabel(CardCollectorKind.BLUETOOTH, "STRIPE_M2", null, "CHB31SIMULATOR:3075dac0", simulated = true))
+    assertEquals("Stripe Reader M2 STRM2", deviceReaderLabel(CardCollectorKind.BLUETOOTH, "STRIPE_M2", null, "STRM2", simulated = false))
     assertEquals("Front counter", deviceReaderLabel(CardCollectorKind.BLUETOOTH, "WISEPAD_3", "Front counter", "WP3", simulated = false))
   }
 

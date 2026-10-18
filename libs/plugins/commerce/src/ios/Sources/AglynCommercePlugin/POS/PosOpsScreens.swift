@@ -62,7 +62,7 @@ struct RegisterOpsSheet: View {
       #endif
       .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
     }
-    .frame(minWidth: 420, minHeight: 420)
+    .aglynSheetMinimumSize(width: 420, height: 420)
     .sheet(isPresented: $returning) { PosReturnSheet(model: model) }
     .sheet(isPresented: $switching) {
       PinPadSheet(model: model, purpose: "cashier", title: "Switch cashier", prompt: nil, dismissible: true) {
@@ -250,7 +250,7 @@ private struct ShiftDialogSheet: View {
           ToolbarItem(placement: .confirmationAction) { Button("Done") { shift.dismiss() } }
         }
       }
-      .frame(minWidth: 420, minHeight: 480)
+      .aglynSheetMinimumSize(width: 420, height: 480)
     case .close:
       if let frozen = shift.closed {
         NavigationStack {
@@ -271,7 +271,7 @@ private struct ShiftDialogSheet: View {
             ToolbarItem(placement: .confirmationAction) { Button("Done") { shift.dismiss() } }
           }
         }
-        .frame(minWidth: 420, minHeight: 480)
+        .aglynSheetMinimumSize(width: 420, height: 480)
       } else {
         AglynActionSheet(
           "Close the shift", message: "Count the drawer, then enter what is in it.", confirmLabel: "Close shift",
@@ -396,7 +396,7 @@ struct PinPadSheet: View {
         }
       }
     }
-    .frame(minWidth: 360, minHeight: 520)
+    .aglynSheetMinimumSize(width: 360, height: 520)
     .interactiveDismissDisabled(!(dismissible || pad?.nobodyHasAPin == true))
     .task {
       let made = PosPinPadModel(api: model.opsAPI, registerID: model.register?.id ?? "", purpose: purpose) { assertion in
@@ -602,6 +602,6 @@ private struct PairingCodeSheet: View {
         }
       }
     }
-    .frame(minWidth: 420, minHeight: 440)
+    .aglynSheetMinimumSize(width: 420, height: 440)
   }
 }

@@ -59,7 +59,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, getCountFromServer } from 'firebase/firestore'
+import { collection, doc } from 'firebase/firestore'
+import { getLiveCountFromServer } from '@aglyn/aglyn/app-utils/live-document-count.client'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
@@ -346,16 +347,14 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
    * the collection and did. The card offered headroom that did not exist and
    * then failed the create.
    *
-   * UNFILTERED, matching the enforcing route: it runs a plain
-   * `collection('variables').count()` for this quota — its `softDeletes`
-   * branch governs only the flat per-host webhook cap — so a soft-deleted
-   * variable has always counted toward `variablesPerHost` server-side while
-   * this card excluded it. The card now asks the route's question in the
+   * LIVE variables, as the enforcing route counts them (AGL-3918): a
+   * deleted variable frees its slot. Every document less the tombstones
+   * (`getLiveCountFromServer`), so the card asks the route's question in the
    * route's terms, which is the only thing that makes a console gate a
    * useful prediction of the route's verdict.
    *
-   * THE LIST KEEPS ITS CAP. Only a create moves the number (deletes here are
-   * soft, and the route counts them), so that is where it is re-read.
+   * THE LIST KEEPS ITS CAP. A create or a delete moves the number, so both
+   * re-read it.
    */
   const [variableCountEpoch, setVariableCountEpoch] = useState(0)
   const [serverVariableCount, setServerVariableCount] = useState<number | null>(
@@ -363,9 +362,9 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
   )
   useEffect(() => {
     let active = true
-    void getCountFromServer(collection(firestore, 'hosts', hostId, 'variables'))
-      .then((snapshot) => {
-        if (active) setServerVariableCount(snapshot.data().count)
+    void getLiveCountFromServer(collection(firestore, 'hosts', hostId, 'variables'))
+      .then((count) => {
+        if (active) setServerVariableCount(count)
       })
       .catch(() => {
         // Falls back to the loaded rows below — a LOWER bound, and this
@@ -542,6 +541,8 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
             { deletedAt: Timestamp.now() },
           ),
       })
+      // Deleting frees the slot (AGL-3918), so the head-count is re-read.
+      setVariableCountEpoch((epoch) => epoch + 1)
       enqueueSnackbar('Variable deleted', {
         variant: 'success',
         persist: false,

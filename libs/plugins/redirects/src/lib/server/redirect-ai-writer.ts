@@ -17,6 +17,7 @@
 
 import { hostRoleCanPublish } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement, checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import type { ResolvedPluginHostResource } from '@aglyn/aglyn/plugin-manager/plugin-host-resources'
 import type {
   PluginDraftContext,
@@ -290,8 +291,8 @@ export function createRedirectAiWriter(deps: RedirectAiWriterDeps): PluginResour
           const existing = await tx.get(ref)
           if (existing.exists) return { existed: (existing.data() ?? {}) as StoredRule }
           if (declared.quotaKey) {
-            // Every document, soft-deleted ones included, as the create route counts.
-            const used = (await tx.get(rulesOf(request.hostId).count())).data().count
+            // Live rules only, as the create route counts: a deleted rule frees its slot (AGL-3918).
+            const used = await countLiveDocuments(rulesOf(request.hostId), (aggregate) => tx.get(aggregate))
             const quota = checkQuota((request.org ?? {}) as never, declared.quotaKey as never, Number(used) || 0)
             if (!quota.allowed) return { refusal: redirectAiLimitRefusal(quota.limit) }
           }

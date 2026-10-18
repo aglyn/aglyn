@@ -114,7 +114,7 @@ struct ProductLabelsSheet: View {
         isPresented: $saving, document: ZplFile(text: zpl), contentType: .plainText, defaultFilename: labelsZplFileName(productName)
       ) { _ in }
     }
-    .frame(minWidth: 420, minHeight: 440)
+    .aglynSheetMinimumSize(width: 420, height: 440)
     .accessibilityIdentifier("labels-sheet")
   }
 

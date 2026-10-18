@@ -68,13 +68,13 @@ import {
   collection,
   doc,
   documentId,
-  getCountFromServer,
   limit,
   orderBy,
   query,
   updateDoc,
   where,
 } from 'firebase/firestore'
+import { getLiveCountFromServer } from '@aglyn/aglyn/app-utils/live-document-count.client'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -360,13 +360,11 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
    * could never refuse — the card offered headroom and `api/hosts/resources`
    * then refused the create, which is the AGL-1716 shape exactly.
    *
-   * The aggregate is deliberately UNFILTERED, which also closes a second,
-   * quieter disagreement: `api/hosts/resources` enforces this quota with a
-   * plain `collection('products').count()`, and `softDeletes` there governs
-   * only the flat per-host cap on webhooks — so the server has always
-   * counted soft-deleted products toward `productsPerHost` while this card
-   * excluded them. The card now asks the enforcing route's question, in the
-   * enforcing route's terms.
+   * It counts LIVE products, as `api/hosts/resources` and every product
+   * writer count them (AGL-3918): a deleted product frees its slot, an
+   * archived or draft one keeps it. Every document less the tombstones
+   * (`getLiveCountFromServer`), so the card asks the enforcing route's
+   * question in the enforcing route's terms.
    *
    * The table pages its own query (AGL-3321) and answers a different
    * question — which products match — so it never stands in for this. A
@@ -382,9 +380,9 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   )
   useEffect(() => {
     let active = true
-    void getCountFromServer(collection(firestore, 'hosts', hostId, 'products'))
-      .then((snapshot) => {
-        if (active) setServerProductCount(snapshot.data().count)
+    void getLiveCountFromServer(collection(firestore, 'hosts', hostId, 'products'))
+      .then((count) => {
+        if (active) setServerProductCount(count)
       })
       .catch(() => {
         // Falls back to the live-row count below — a LOWER bound, and this
@@ -523,6 +521,8 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             deletedAt: Timestamp.now(),
           }),
       })
+      // Deleting frees the slot (AGL-3918), so the head-count is re-read.
+      setProductCountEpoch((epoch) => epoch + 1)
       enqueueSnackbar('Product deleted', { variant: 'success', persist: false })
     },
     [confirm, firestore, hostId, user, enqueueSnackbar],
