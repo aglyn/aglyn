@@ -92,6 +92,19 @@ export interface AiLayoutPictureSlot {
    * decorative once it is.
    */
   standIn?: boolean
+  /**
+   * A portrait of one of the business's people (AGL-3856): a record of a
+   * team, staff or instructors list. Its photo shows an adult, in the role
+   * its words or its list name where one is listed, never a child or a thing.
+   */
+  people?: boolean
+  /**
+   * A dataset record's cover (AGL-3856): what the record is filed under — the
+   * value of its list's category-like field ("Weddings and elopements") —
+   * read after its own name for what its photo is OF. A photographer's record
+   * is the photographed moment, never the photographer or the camera.
+   */
+  record?: { category?: string }
 }
 
 /** A photo a slot is filled with. */
@@ -290,8 +303,12 @@ export function aiLayoutStarterPhotos(
       turn,
     )
     // The owner's portrait is a picture of a person, and only a picture of
-    // people takes it: never a vase in a gallery (AGL-3660).
-    const candidates = [...pool, ...rest].filter((name) => slot.role === 'about' || name !== 'about')
+    // people takes it: never a vase in a gallery (AGL-3660). A portrait of
+    // one of the business's people takes only people, repeated before a
+    // workbench stands in for a teacher (AGL-3856).
+    const candidates = slot.people
+      ? [...STARTER_POOLS.about]
+      : [...pool, ...rest].filter((name) => slot.role === 'about' || name !== 'about')
     const unused = candidates.find((candidate) => !placedAt.has(candidate))
     const beside = new Set([names[index - 1], names[index + 1]].filter(Boolean))
     const name =

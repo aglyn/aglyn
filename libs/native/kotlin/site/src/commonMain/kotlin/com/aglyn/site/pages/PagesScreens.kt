@@ -112,10 +112,10 @@ private sealed interface PageDialog {
   data object NewGroup : PageDialog
   data class Rename(val page: PageNode) : PageDialog
   data class Publish(val page: PageNode, val currentSlug: String) : PageDialog
-  data class Unpublish(val page: PageNode) : PageDialog
+  data class Unpublish(val page: PageNode, val hasChildren: Boolean = false) : PageDialog
   data class Duplicate(val page: PageNode) : PageDialog
   data class Move(val page: PageNode) : PageDialog
-  data class Delete(val page: PageNode, val livePath: String?) : PageDialog
+  data class Delete(val page: PageNode, val livePath: String?, val hasChildren: Boolean = false) : PageDialog
   /** The page templates to start a new page from. */
   data object Gallery : PageDialog
   data class UseTemplate(val row: ArtifactRow) : PageDialog
@@ -308,9 +308,9 @@ private fun PageDetail(
             add(MenuAction("duplicate", "Duplicate", "content_copy", enabled = canEdit) { open(PageDialog.Duplicate(page)) })
             add(MenuAction("save-template", "Save as template", "bookmark", enabled = canEdit) { open(PageDialog.SaveTemplate(page)) })
             add(MenuAction("move", "Move", "drive_file_move", enabled = canPublish) { open(PageDialog.Move(page)) })
-            if (row.livePath != null) add(MenuAction("unpublish", "Unpublish", "visibility_off", enabled = canPublish) { open(PageDialog.Unpublish(page)) })
+            if (row.livePath != null) add(MenuAction("unpublish", "Unpublish", "visibility_off", enabled = canPublish) { open(PageDialog.Unpublish(page, row.childCount > 0)) })
           }
-          add(MenuAction("delete", if (page.isGroup) "Delete group" else "Delete", "delete", destructive = true, enabled = canPublish) { open(PageDialog.Delete(page, row.livePath)) })
+          add(MenuAction("delete", if (page.isGroup) "Delete group" else "Delete", "delete", destructive = true, enabled = canPublish) { open(PageDialog.Delete(page, row.livePath, row.childCount > 0)) })
         }
         OverflowMenu(actions)
       }
@@ -502,7 +502,7 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
     }
     is PageDialog.Unpublish -> ActionDialog(
       title = "Unpublish ${dialog.page.name}?",
-      body = "Visitors can no longer reach it. Pages inside it keep their addresses.",
+      body = pageUnpublishBody(dialog.hasChildren),
       icon = "visibility_off",
       confirmLabel = "Unpublish",
       destructive = true,
@@ -567,7 +567,7 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
       body = if (dialog.page.isGroup) {
         "Its pages move up a level and keep their addresses."
       } else {
-        listOfNotNull(dialog.livePath?.let { "It is live at $it and stops answering there." }, "Pages inside it keep their addresses.").joinToString(" ")
+        pageDeleteBody(dialog.livePath, dialog.hasChildren)
       },
       icon = "delete",
       confirmLabel = "Delete",
@@ -594,3 +594,13 @@ private fun MoveChoice(label: String, icon: String, selected: Boolean, onClick: 
     onClick = onClick,
   )
 }
+
+/** What unpublishing a page does; the pages inside it are named only when it has some. */
+internal fun pageUnpublishBody(hasChildren: Boolean): String =
+  "Visitors can no longer reach it." + if (hasChildren) " Pages inside it keep their addresses." else ""
+
+/** What deleting a page does: where it stops answering, and its pages only when it has some. */
+internal fun pageDeleteBody(livePath: String?, hasChildren: Boolean): String =
+  listOfNotNull(livePath?.let { "It is live at $it and stops answering there." }, "Pages inside it keep their addresses.".takeIf { hasChildren })
+    .joinToString(" ")
+    .ifEmpty { "It is not published, so no address stops working." }

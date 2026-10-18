@@ -169,6 +169,8 @@ export async function seedCrm({ put, uid, orgId, hostId, now }) {
     { email: 'lena.fischer@fernhill.example', name: 'Lena Fischer', phone: '+1 555 0118', stage: 'opportunity', company: 'co-fabrikam', title: 'Planner', owner: uid },
     { email: 'victor.santos@maplestreet.example', name: 'Victor Santos', stage: 'lead', company: 'co-litware', title: 'Manager' },
     { email: 'amelia.wright@cedaroak.example', name: 'Amelia Wright', phone: '+1 555 0119', stage: 'sales-qualified', company: 'co-tailspin', title: 'Owner', owner: uid },
+    // The bakery's regular (the store seed's orders and bookings name her), so the register's customer lookup finds her.
+    { email: 'maya@example.com', name: 'Maya Rodriguez', phone: '+1 555 0109', stage: 'customer' },
   ]
   const contactIds = {}
   for (const [index, contact] of contacts.entries()) {

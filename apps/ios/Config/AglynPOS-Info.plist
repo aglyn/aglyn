@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>AGLYN_VERSION</key>
+	<string>$(AGLYN_VERSION)</string>
 	<key>AGLYN_CONSOLE_URL</key>
 	<string>$(AGLYN_CONSOLE_URL)</string>
 	<key>AGLYN_FIREBASE_API_KEY</key>
@@ -40,6 +42,12 @@
 	<string>$(AGLYN_DEBUG_PASSWORD)</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Aglyn POS connects to your Bluetooth card reader to take card payments.</string>
+	<!-- Stripe Terminal stops the app at Bluetooth reader discovery without this (and a reader stays connected
+	     while the register is in the background). iOS only; macOS ignores the key. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Card payments need this device's location, as card networks require.</string>
 	<key>NSCameraUsageDescription</key>

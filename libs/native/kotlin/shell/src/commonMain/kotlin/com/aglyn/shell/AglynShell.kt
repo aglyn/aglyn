@@ -159,6 +159,8 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     }
   }
 
+  // A link that switched workspace or site opens once that workspace is on screen.
+  LaunchedEffect(navigator.deferredLink, workspace) { context.settleDeferredLink() }
   LaunchedEffect(pendingLink, workspace.ready) {
     if (pendingLink != null && workspace.ready && !AuthFlow.isAuthLink(pendingLink)) {
       context.openLink(pendingLink)
@@ -234,16 +236,19 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
   AglynNavigationSuite(
     destinations, navigator.top, onSelect = navigator::select,
     drawerHeader = {
+      // The logo kit's lockup with the mark's height of clear space on every side.
       AglynLogo(
-        Modifier.padding(start = 26.dp, end = 24.dp, top = 24.dp, bottom = 12.dp).height(28.dp).semantics { heading() },
+        Modifier.padding(28.dp).height(28.dp).semantics { heading() },
         contentDescription = services.config.brandName,
       )
     },
-    drawerFooter = { WorkspaceFooter(workspace) { navigator.push(Route.Switcher) } },
+    drawerFooter = { WorkspaceFooter(workspace, services.api.origin) { navigator.push(Route.Switcher) } },
   ) {
     val route = navigator.current
+    // A pushed screen may name itself once its data is in (an AI job by its brief); a fresh state per screen.
+    val screenTitle = remember(navigator.currentKey) { mutableStateOf<String?>(null) }
     val title = when (route) {
-      is Route.Screen -> services.registry.screen(route.screenId)?.title ?: "Not found"
+      is Route.Screen -> screenTitle.value ?: services.registry.screen(route.screenId)?.title ?: "Not found"
       is Route.Besigner -> "Besigner"
       Route.Analytics -> "Analytics"
       Route.Switcher -> "Switch workspace or site"
@@ -260,7 +265,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
             if (route == null && navigator.top == ShellNavigator.HOME) {
               if (!inDrawer) AglynLogo(Modifier.height(28.dp), contentDescription = services.config.brandName)
             } else {
-              Text(title)
+              Text(title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
           },
           navigationIcon = {
@@ -280,6 +285,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
         }
       },
     ) { padding ->
+      androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalScreenTitle provides screenTitle) {
       Box(Modifier.padding(padding).fillMaxSize()) {
         // Each destination and each pushed screen keeps its own saved state (selection, scroll, filters), so Back returns to
         // the screen below as it was left, and a destination never inherits the one before it.
@@ -288,7 +294,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
           is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null) { navigator.back() }
           is Route.Besigner -> services.besigner(route.path, { navigator.back() }) { link -> navigator.back(); context.openLink(link) }
           Route.Analytics -> AnalyticsScreen(services, context)
-          Route.Switcher -> SwitcherScreen(services.workspace, workspace) { navigator.back() }
+          Route.Switcher -> SwitcherScreen(services.workspace, workspace, services.api.origin) { navigator.back() }
           Route.NotificationSettings -> NotificationSettingsScreen(services, uid)
           null -> when {
             navigator.top == ShellNavigator.HOME -> HomeScreen(services, context, workspace, widthClass, navigator)
@@ -303,6 +309,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
           }
         }
         }
+      }
       }
     }
   }

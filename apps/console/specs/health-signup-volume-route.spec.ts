@@ -216,9 +216,17 @@ const orgsWithSites =
     orgsMadeBy(siteCounts.map((sites) => ({ sites })))()
 
 const orgsMadeBy =
-  (orgs: Array<{ sites: number; firstTouch?: number; owner?: string }>) =>
+  (
+    orgs: Array<{
+      sites: number
+      firstTouch?: number
+      owner?: string
+      // Absent means the org was born with the marker and never landed.
+      landedAtMs?: number | null | 'unmarked'
+    }>,
+  ) =>
   async () => ({
-    docs: orgs.map(({ sites, firstTouch, owner }, index) => ({
+    docs: orgs.map(({ sites, firstTouch, owner, landedAtMs }, index) => ({
       get: (field: string) => {
         if (field === 'hosts') {
           return Object.fromEntries(
@@ -232,6 +240,10 @@ const orgsMadeBy =
           return firstTouch === undefined ? undefined : { capturedAt: firstTouch }
         }
         if (field === 'ownerUid') return owner ?? `owner-${index}`
+        if (field === 'landedAtMs') {
+          if (landedAtMs === 'unmarked') return undefined
+          return landedAtMs === undefined ? null : landedAtMs
+        }
         return undefined
       },
     })),
@@ -888,6 +900,27 @@ describe('AGL-3725 · signupLanding: a workspace that never reached a site', () 
     const text = JSON.stringify(body)
     expect(text).not.toContain('1792233980958')
     expect(text).not.toContain('second-google')
+  })
+
+  it('reads the landing marker: owners who reached the console are not stranded (2026-10-18)', async () => {
+    mockCountGet.mockImplementation(countOf(1))
+    mockLandingGet.mockImplementation(
+      orgsMadeBy([
+        { sites: 0, landedAtMs: Date.now() - 3_600_000 },
+        { sites: 0, landedAtMs: Date.now() - 7_200_000 },
+        { sites: 0, landedAtMs: 'unmarked' },
+      ]),
+    )
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+    expect(response.status).toBe(200)
+    expect(body.checks.signupLanding).toMatchObject({
+      ok: true,
+      strandedOrgs: 0,
+      strandedStreak: 0,
+      unmarkedOrgs: 1,
+    })
   })
 
   it('stays green for one person who signed up and left', async () => {

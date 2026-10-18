@@ -882,7 +882,7 @@ export const NOTIFICATION_SETTINGS_FIELD = 'notificationSettings'
 /**
  * What a category does when nobody has said otherwise.
  *
- * Console on, email OFF, for every category. The types a person needs to hear
+ * Console on, email OFF, for every category but `staff`. The types a person needs to hear
  * about without opening the console are the exception, by type, in
  * {@link NOTIFICATION_TYPE_CHANNEL_DEFAULTS}. Email defaults off because the inbox is
  * not ours to fill: the product already sends transactional mail nobody opted
@@ -906,11 +906,11 @@ const CORE_CHANNEL_DEFAULTS: Record<
   content: { console: true, email: false },
   support: { console: true, email: false },
   system: { console: true, email: false },
-  // Console ON, because the complaint this answers is that staff never heard
-  // about a sign-up at all; email off, like everything else, because that is
-  // what the channel defaults to and a sign-up is not urgent enough to be the
-  // exception that starts filling inboxes by default.
-  staff: { console: true, email: false },
+  // Console and email ON: staff are the platform's own people, every one of
+  // them is meant to hear about growth and money moving, and an account that
+  // never opened its settings heard about almost none of it. The one category
+  // whose recipients are all us, so the inbox reasoning above does not apply.
+  staff: { console: true, email: true },
 }
 
 export const NOTIFICATION_CHANNEL_DEFAULTS = inCategoryOrder(
@@ -966,8 +966,6 @@ export const NOTIFICATION_TYPE_CHANNEL_DEFAULTS: Partial<
   'system.bandwidthCeilingTripped': { email: true },
   'system.billingWebhookHalfApplied': { email: true },
   'system.disputeUnattributed': { email: true },
-  // Staff hear when somebody starts building.
-  'staff.siteCreated': { email: true },
 }
 
 /**

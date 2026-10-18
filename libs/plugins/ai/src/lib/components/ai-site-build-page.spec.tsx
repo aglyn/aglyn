@@ -838,3 +838,42 @@ describe('canceling from the job’s page (AGL-3616)', () => {
     expect(screen.getByLabelText('This job already finished.')).toBeTruthy()
   })
 })
+
+describe('a start whose empty site was removed (AGL-3936)', () => {
+  const INPUTS = { businessType: 'trading card shop', audience: 'collectors', pages: 3, submissions: 'inbox' }
+  beforeEach(() => window.sessionStorage.clear())
+
+  it('says so plainly, and Start again opens Create site with the same answers', async () => {
+    await open(job({
+      status: 'canceled',
+      running: false,
+      plan: null,
+      steps: [{ name: 'plan', status: 'pending' }, { name: 'generate', status: 'pending' }] as never,
+      creditsSpent: 0,
+      siteInputs: INPUTS,
+      siteRemoved: true,
+    }))
+    expect(await screen.findByRole('heading', { name: 'This site was removed' })).toBeTruthy()
+    expect(
+      screen.getByText('Nothing was built before this start stopped, so the empty site was removed. Start again to create a site with the same answers.'),
+    ).toBeTruthy()
+    const again = screen.getByRole('link', { name: 'Start again' })
+    expect(again.getAttribute('href')).toBe('/acme/hosts?create=site')
+    // Nothing that needs the site is offered: it is gone.
+    expect(screen.queryByRole('button', { name: 'Use the starter site instead' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
+    // jsdom does not navigate; the click's own handler is what is under test.
+    again.addEventListener('click', (event) => event.preventDefault())
+    fireEvent.click(again)
+    const stored = JSON.parse(window.sessionStorage.getItem('aglyn:ai-site-start:answers') ?? '{}')
+    expect(stored.inputs).toEqual(INPUTS)
+  })
+
+  it('a site that is gone reads as removed, never as a read that failed', async () => {
+    mockGetDoc.mockResolvedValue({ exists: () => false, data: () => undefined })
+    await open(job())
+    expect(await screen.findByRole('heading', { name: 'This site was removed' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Create site' }).getAttribute('href')).toBe('/acme/hosts?create=site')
+    expect(screen.queryByText('This site could not be read')).toBeNull()
+  })
+})

@@ -69,6 +69,7 @@ import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
 import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
+import com.aglyn.ui.StatRow
 import com.aglyn.ui.StatTile
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -111,12 +112,8 @@ fun FunnelsScreen(context: NativePluginContext) {
   AglynListDetail(
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
-        Row(
-          Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1f)),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(space(1f)),
-        ) {
-          Text("Funnels", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // The shared list header: the title keeps its width, and actions that do not fit beside it wrap below it.
+        com.aglyn.ui.ListHeader("Funnels") {
           if (access.canManage) {
             val full = ((live as? Live.Ready)?.value?.size ?: 0) >= Contracts.funnelsMaxPerSite
             OutlinedButton(onClick = editor::askPropose, enabled = !full, modifier = Modifier.testTag("propose-funnel")) {
@@ -290,7 +287,7 @@ fun FunnelResultView(result: FunnelResult, row: FunnelRow, onActOnDropOff: ((Int
   }
   val top = maxOf(1L, result.entered)
   SectionCard("Results", Modifier.fillMaxWidth().testTag("funnel-result")) {
-    Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+    StatRow {
       StatTile("Entered", grouped(result.entered), Modifier.weight(1f))
       StatTile("Completed", grouped(result.completed), Modifier.weight(1f), caption = formatShare(result.overall))
     }

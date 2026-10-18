@@ -46,26 +46,34 @@ public struct AglynRow<Trailing: View>: View {
   let subtitle: String?
   let systemImage: String?
   let tint: Color?
+  let imageURL: URL?
+  let darkImageURL: URL?
   let trailing: Trailing
 
+  /// With `imageURL` (a workspace's logo, a site's favicon) the picture takes the symbol's place, and the symbol shows
+  /// while there is none.
   public init(
-    _ title: String, subtitle: String? = nil, systemImage: String? = nil, tint: Color? = nil,
-    @ViewBuilder trailing: () -> Trailing = { EmptyView() }
+    _ title: String, subtitle: String? = nil, systemImage: String? = nil, tint: Color? = nil, imageURL: URL? = nil,
+    darkImageURL: URL? = nil, @ViewBuilder trailing: () -> Trailing = { EmptyView() }
   ) {
     self.title = title
     self.subtitle = subtitle
     self.systemImage = systemImage
     self.tint = tint
+    self.imageURL = imageURL
+    self.darkImageURL = darkImageURL
     self.trailing = trailing()
   }
 
   public var body: some View {
     HStack(spacing: 12) {
       if let systemImage, !typeSize.isAccessibilitySize {
-        Image(systemName: systemImage)
-          .foregroundStyle(tint ?? AglynColor.tint)
-          .frame(width: 28)
-          .accessibilityHidden(true)
+        AglynBrandPicture(imageURL, darkURL: darkImageURL, size: 28, cornerRadius: AglynRadius.control) {
+          Image(systemName: systemImage)
+            .foregroundStyle(tint ?? AglynColor.tint)
+            .frame(width: 28)
+        }
+        .accessibilityHidden(true)
       }
       VStack(alignment: .leading, spacing: 2) {
         Text(title).font(AglynFont.body).lineLimit(typeSize.isAccessibilitySize ? nil : 2)

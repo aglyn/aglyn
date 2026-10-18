@@ -34,7 +34,9 @@ import {
   healthStatus,
   previousCronFire,
   writeCronBeat,
+  writeCronBeats,
   CRON_BEAT_EVERY_MINUTE_MIN_INTERVAL_MS,
+  CRON_BEAT_OWN_MARK_REFRESH_MS,
   resetCronBeatThrottleForTests,
   type CronBeat,
 } from './health-report'
@@ -488,6 +490,68 @@ describe('writeCronBeat', () => {
     await expect(writeCronBeat(exploding, 'audit-archive', NOW)).resolves.toBe(
       false,
     )
+  })
+})
+
+describe('writeCronBeats (AGL-3932)', () => {
+  /** A store whose summary holds `beats`; `get` is absent when `beats` is undefined. */
+  function fakeStore(beats?: Record<string, number>, failing: string[] = []) {
+    const writes: Array<{ doc: string; data: unknown }> = []
+    const store = {
+      collection: () => ({
+        doc: (doc: string) => ({
+          set: async (data: Record<string, unknown>) => {
+            if (failing.includes(doc)) throw new Error('firestore refused it')
+            writes.push({ doc, data })
+          },
+          ...(beats === undefined
+            ? {}
+            : { get: async () => ({ get: (field: string) => (field === 'beats' ? beats : undefined) }) }),
+        }),
+      }),
+    }
+    return { store, writes }
+  }
+
+  it('leaves one summary write for every job, and no own mark while the summary is fresh', async () => {
+    const { store, writes } = fakeStore({ 'acme-sync': NOW - 15 * MINUTE, 'acme-send': NOW - 15 * MINUTE })
+    expect(await writeCronBeats(store, ['acme-sync', 'acme-send'], NOW)).toBe(true)
+    expect(writes).toEqual([
+      { doc: CRON_BEAT_SUMMARY_DOC, data: { beats: { 'acme-sync': NOW, 'acme-send': NOW } } },
+    ])
+  })
+
+  it('refreshes a job’s own mark once its summary entry is old, or missing', async () => {
+    const { store, writes } = fakeStore({
+      'acme-sync': NOW - CRON_BEAT_OWN_MARK_REFRESH_MS,
+      'acme-send': NOW - MINUTE,
+    })
+    await writeCronBeats(store, ['acme-sync', 'acme-send', 'acme-new'], NOW)
+    expect(writes.map((write) => write.doc)).toEqual(['acme-sync', 'acme-new', CRON_BEAT_SUMMARY_DOC])
+    expect(writes[0].data).toEqual({ jobId: 'acme-sync', atMs: NOW, at: '2026-08-19T12:00:00.000Z' })
+  })
+
+  it('marks every job on its own when the summary cannot be read, as the single mark would', async () => {
+    const { store, writes } = fakeStore()
+    await writeCronBeats(store, ['acme-sync', 'acme-send'], NOW)
+    expect(writes.map((write) => write.doc)).toEqual(['acme-sync', 'acme-send', CRON_BEAT_SUMMARY_DOC])
+  })
+
+  it('gives every job its own mark when the summary write fails, and never throws', async () => {
+    const { store, writes } = fakeStore({ 'acme-sync': NOW - MINUTE, 'acme-send': NOW - MINUTE }, [CRON_BEAT_SUMMARY_DOC])
+    expect(await writeCronBeats(store, ['acme-sync', 'acme-send'], NOW)).toBe(true)
+    expect(writes.map((write) => write.doc).sort()).toEqual(['acme-send', 'acme-sync'])
+    const { store: broken } = fakeStore({}, ['acme-sync', 'acme-send', CRON_BEAT_SUMMARY_DOC])
+    await expect(writeCronBeats(broken, ['acme-sync', 'acme-send'], NOW)).resolves.toBe(false)
+  })
+
+  it('skips reserved documents and duplicates, and does nothing for no jobs', async () => {
+    const { store, writes } = fakeStore({})
+    await writeCronBeats(store, ['acme-sync', 'acme-sync', CRON_BEAT_SUMMARY_DOC], NOW)
+    expect(writes.map((write) => write.doc)).toEqual(['acme-sync', CRON_BEAT_SUMMARY_DOC])
+    const { store: idle, writes: none } = fakeStore({})
+    expect(await writeCronBeats(idle, [], NOW)).toBe(true)
+    expect(none).toEqual([])
   })
 })
 

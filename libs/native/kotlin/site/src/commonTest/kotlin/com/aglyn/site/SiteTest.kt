@@ -31,7 +31,6 @@ import com.aglyn.site.media.MediaScope
 import com.aglyn.site.media.formatBytes
 import com.aglyn.site.media.mediaPlan
 import com.aglyn.site.media.mediaPlanNotices
-import com.aglyn.site.media.mediaPreviewUrl
 import com.aglyn.site.media.mediaQuery
 import com.aglyn.site.media.megabytesInput
 import com.aglyn.site.pages.PageNode
@@ -231,15 +230,6 @@ class SiteTest {
     // A film's captured poster frame is recorded on its document; without one, its poster address is no picture.
     assertTrue(file("m8", "poster" to mapOf("width" to 640L)).hasPoster)
     assertEquals(false, file("m9").hasPoster)
-  }
-
-  @Test
-  fun showsAStoredPictureFromTheCdnForTheSiteBeingEdited() {
-    assertEquals("https://console.test/api/media/cdn/h/m1?w=320", mediaPreviewUrl("media:h/m1", "https://console.test/", "h"))
-    assertEquals("https://console.test/api/media/cdn/org:o1:h9/m2?w=320", mediaPreviewUrl("media:org:o1/m2", "https://console.test", "h9"))
-    assertEquals("https://example.com/a.png", mediaPreviewUrl("https://example.com/a.png", "https://console.test", "h"))
-    assertEquals("https://console.test/img/a.png", mediaPreviewUrl("/img/a.png", "https://console.test", "h"))
-    assertNull(mediaPreviewUrl("  ", "https://console.test", "h"))
   }
 
   @Test

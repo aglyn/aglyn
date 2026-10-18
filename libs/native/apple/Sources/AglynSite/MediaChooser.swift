@@ -101,7 +101,7 @@ public struct MediaChooserSheet: View {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
       }
     }
-    .frame(minWidth: 420, minHeight: 480)
+    .aglynSheetMinimumSize(width: 420, height: 480)
     .accessibilityIdentifier("media-chooser")
   }
 }

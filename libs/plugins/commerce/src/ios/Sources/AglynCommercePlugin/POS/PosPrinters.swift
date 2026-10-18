@@ -257,6 +257,8 @@ final class PosPrintersModel {
 
   func remove(_ row: PosPrinterRow) async {
     if await call(["action": .string("remove"), "printerId": .string(row.id)]) != nil {
+      // The row leaves now: a listener that re-reads on a timer (the unsigned Mac build) would show it until then.
+      rows.removeAll { $0.id == row.id }
       notice = "\(row.name) removed"
     }
   }
@@ -310,8 +312,9 @@ struct RegisterPrintersView: View {
         .accessibilityIdentifier("printer-add")
       }
     }
-    .sheet(isPresented: $adding) { PrinterFormSheet(model: model, editing: nil) }
-    .sheet(item: $editing) { row in PrinterFormSheet(model: model, editing: row) }
+    // A form's refusal belongs to the form: closing it (Cancel after "already added") never leaves it on the list.
+    .sheet(isPresented: $adding, onDismiss: { model.error = nil }) { PrinterFormSheet(model: model, editing: nil) }
+    .sheet(item: $editing, onDismiss: { model.error = nil }) { row in PrinterFormSheet(model: model, editing: row) }
     .alert(
       "Remove \(removing?.name ?? "this printer")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })
     ) {
@@ -404,7 +407,9 @@ struct PrinterFormSheet: View {
       #endif
       .toolbar {
         if adding && credentials != nil {
-          ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+          ToolbarItem(placement: .confirmationAction) {
+            Button("Done") { dismiss() }.accessibilityIdentifier("printer-connect-done")
+          }
         } else {
           ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(model.busy) }
           ToolbarItem(placement: .confirmationAction) {

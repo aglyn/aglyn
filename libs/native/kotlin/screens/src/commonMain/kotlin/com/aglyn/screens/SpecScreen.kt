@@ -3,6 +3,7 @@ package com.aglyn.screens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -78,9 +79,7 @@ import com.aglyn.ui.SkeletonList
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
-import com.aglyn.ui.WidthClass
 import com.aglyn.ui.WithTooltip
-import com.aglyn.ui.currentWidthClass
 import com.aglyn.ui.space
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -167,29 +166,38 @@ fun SpecScreen(
   model.createPasskey = if (session.passkeyRelyingParty != null) passkeys else null
   LaunchedEffect(key) { if (seed != null) model.seed(seed) else model.load() }
   LaunchedEffect(session.claims) { model.rebase(base) }
+  // A title drawn from the data (`{data.jobs.jobs[id=params.jobId].brief|'AI job'}`) replaces the registered one in the top
+  // bar once the data is in.
+  val screenTitle = com.aglyn.ui.LocalScreenTitle.current
+  if (!embedded && screenTitle != null && '{' in spec.title) {
+    val rendered = if (model.phase == ScreenModel.Phase.Ready) ScreenValues.render(spec.title, model.context).trim().ifEmpty { null } else null
+    LaunchedEffect(rendered) { screenTitle.value = rendered }
+  }
   var selection by remember(key) { mutableStateOf<Selection?>(null) }
   val split = !embedded && spec.blocks.any { it.type == "list" && it.flag("split") && it["open"] != null }
-  val wide = currentWidthClass() != WidthClass.COMPACT
   // A screen the plan does not include is one offer across the window, not a list beside an empty detail.
   val refused = (model.phase as? ScreenModel.Phase.Failed)?.upsell == true
-  if (split && wide && !refused) {
-    Row(Modifier.fillMaxSize()) {
-      Box(Modifier.weight(0.42f).fillMaxHeight()) {
-        SpecBody(model, plugin, selection, onSelect = { selection = it }, splitting = true)
-      }
-      VerticalDivider()
-      Box(Modifier.weight(0.58f).fillMaxHeight()) {
-        val picked = selection
-        val detail = picked?.let { ScreenCatalog.spec(it.screen) }
-        if (picked != null && detail != null) {
-          SpecScreen(detail, plugin, picked.params, embedded = true)
-        } else {
-          SelectionPlaceholder("Pick a row to see it here", icon = AglynIcons.named("list"))
+  // The list and its detail side by side only when the pane holds both (TwoPaneMinWidth).
+  BoxWithConstraints(Modifier.fillMaxSize()) {
+    if (split && maxWidth >= com.aglyn.ui.TwoPaneMinWidth && !refused) {
+      Row(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(0.42f).fillMaxHeight()) {
+          SpecBody(model, plugin, selection, onSelect = { selection = it }, splitting = true)
+        }
+        VerticalDivider()
+        Box(Modifier.weight(0.58f).fillMaxHeight()) {
+          val picked = selection
+          val detail = picked?.let { ScreenCatalog.spec(it.screen) }
+          if (picked != null && detail != null) {
+            SpecScreen(detail, plugin, picked.params, embedded = true)
+          } else {
+            SelectionPlaceholder("Pick a row to see it here", icon = AglynIcons.named("list"))
+          }
         }
       }
+    } else {
+      SpecBody(model, plugin, selection, onSelect = { selection = it }, splitting = false)
     }
-  } else {
-    SpecBody(model, plugin, selection, onSelect = { selection = it }, splitting = false)
   }
 }
 
@@ -382,10 +390,7 @@ private fun SpecBodyContent(
           FilledTonalButton(
             onClick = { plugin.navigate(BILLING_ADDONS_SCREEN, emptyMap()) },
             modifier = Modifier.testTag("upsell-addons"),
-            colors = ButtonDefaults.filledTonalButtonColors(
-              containerColor = MaterialTheme.colorScheme.primaryContainer,
-              contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            ),
+            colors = com.aglyn.ui.aglynTonalButtonColors(),
           ) { Text("See add-ons") }
         },
         modifier = Modifier.testTag("spec-upsell"),
@@ -432,7 +437,7 @@ private fun SpecBodyContent(
                     Icon(AglynIcons.named(action.icon ?: "add"), null, Modifier.size(18.dp))
                     Text(ScreenValues.render(action.label, context), Modifier.padding(start = space(1f)))
                   }
-                  if (index == 0) {
+                  if (index == 0 && !action.quietOn(model.spec.id)) {
                     Button(onClick = { trigger(action, context) }, enabled = running == null, modifier = Modifier.testTag("toolbar-${action.id}")) { content() }
                   } else {
                     OutlinedButton(onClick = { trigger(action, context) }, enabled = running == null, modifier = Modifier.testTag("toolbar-${action.id}")) { content() }
@@ -689,7 +694,8 @@ private fun Block(
         }
       }
     }
-    else -> SectionCard(title) {
+    // An actions block whose every item is hidden by its `when` draws no card at all, never an empty one.
+    else -> if (block.type != "actions" || footer != null || block.raw.arr("items").mapNotNull { ActionSpec.parse(it) }.any { ScreenValues.condition(it.whenCondition, context) }) SectionCard(title) {
       Column(Modifier.fillMaxWidth()) {
         when (block.type) {
           "fields" -> FieldsBlock(block, context, copy)
@@ -749,17 +755,25 @@ private fun FieldsBlock(block: BlockSpec, context: JsonElement, copy: (String) -
         if (row.isTrue("chip")) {
           StatusChip(shown, toneFor(row, value, scope))
         } else {
+          // One word (an email, an id, a link) stays on one line and gives up its middle, never breaking at a dot;
+          // a tap still copies all of it. A sentence wraps as before.
+          val oneLine = singleToken(shown)
           Text(
             shown,
             style = MaterialTheme.typography.bodyMedium,
             color = if (row.obj("tone") != null) toneColor(toneFor(row, value, scope)) else MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.End,
+            maxLines = if (oneLine) 1 else Int.MAX_VALUE,
+            overflow = if (oneLine) TextOverflow.MiddleEllipsis else TextOverflow.Clip,
           )
         }
       }
     }
   }
 }
+
+/** A value with no space in it: an email, an id or a link, which reads wrong broken across lines. */
+internal fun singleToken(value: String): Boolean = value.isNotEmpty() && value.none { it.isWhitespace() }
 
 @Composable
 private fun toneColor(tone: StatusTone) = when (tone) {
@@ -1234,8 +1248,15 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
     for (field in fields.filter { ScreenValues.condition(it.whenCondition, filled) }) {
       FieldInput(field, scope, values[field.key] ?: initialValue(field, scope)) { values[field.key] = it }
     }
-    ActionSpec.parse(block["submit"])?.takeIf { ScreenValues.condition(it.whenCondition, scope) }?.let { action ->
+    // A settings form's Save (or Save profile, Save image) shows once something in it changed: a screen of small forms (error pages, one select each)
+    // is not a column of Save buttons. Any other submit (Send, Generate, Invite) always shows.
+    val changed = fields.any { (values[it.key] ?: initialValue(it, scope)) != initialValue(it, scope) }
+    ActionSpec.parse(block["submit"])
+      ?.takeIf { ScreenValues.condition(it.whenCondition, scope) }
+      ?.takeIf { changed || fields.isEmpty() || !ScreenValues.render(it.label, scope).startsWith("Save") }
+      ?.let { action ->
       FilledTonalButton(
+        colors = com.aglyn.ui.aglynTonalButtonColors(),
         onClick = { submit(action, visibleOnly(filled, fields)) },
         enabled = !busy && !missing,
         modifier = Modifier.align(Alignment.End).testTag("submit-${block.id}"),

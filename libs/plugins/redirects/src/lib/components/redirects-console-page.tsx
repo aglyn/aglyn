@@ -45,11 +45,11 @@ import {
   collection,
   deleteField,
   doc,
-  getCountFromServer,
   getDoc,
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
+import { getLiveCountFromServer } from '@aglyn/aglyn/app-utils/live-document-count.client'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
@@ -192,28 +192,26 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
    * `hosts/{id}/redirects` is read here as an unordered `limit(200)` window
    * and then filtered to drop soft-deleted rows, and that filtered length was
    * feeding both `checkQuota('redirectsPerHost')` and the readout beside it.
-   * The route in `app/api/hosts/resources` counts the collection plainly —
-   * `collectionRef.count()`, every document, soft-deleted ones included — so
-   * the two disagreed on both counts at once: a rule deleted in this console
-   * still occupies a slot on the server, and a site past 200 rules has rows
-   * the window never saw.
+   * The route in `app/api/hosts/resources` counted the collection plainly,
+   * soft-deleted rules included, so the two disagreed on both counts at
+   * once: a rule deleted in this console still occupied a slot on the
+   * server, and a site past 200 rules has rows the window never saw.
    *
    * The visible effect is the worst kind: the page shows room, the author
    * fills in the form, and the save is refused by a server counting something
    * else. Same shape as AGL-1716.
    *
-   * An aggregation query, so it costs one read unit per thousand documents
-   * rather than reading them. Re-run when the document set changes, which
-   * covers an add; a soft delete leaves the document in place and so does not
-   * move this number — correctly, because it does not move the server's
-   * either.
-   *
-   * Only the COUNT is corrected here. Whether a soft-deleted rule should go on
-   * occupying a slot is the quota RULE, and that lives with the enforcing
-   * route.
+   * The RULE is now that a deleted rule frees its slot and a disabled one
+   * keeps it (AGL-3918), on the route and here alike: every document less
+   * the tombstones (`getLiveCountFromServer`), two aggregation queries that
+   * cost one read unit per thousand documents rather than reading them.
+   * Re-run when the LIVE set read here changes, which covers an add and a
+   * delete alike.
    */
   const [enforcedCount, setEnforcedCount] = useState<number | null>(null)
-  const redirectDocCount = redirectDocs?.length ?? 0
+  const liveRedirectDocCount = (redirectDocs ?? []).filter(
+    (redirect: any) => !redirect.deletedAt,
+  ).length
 
   /**
    * `null` when the count cannot be taken, never a number.
@@ -226,10 +224,9 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
    */
   const countRedirects = useCallback(async (): Promise<number | null> => {
     try {
-      const snapshot = await getCountFromServer(
+      return await getLiveCountFromServer(
         collection(firestore, 'hosts', hostId, 'redirects'),
       )
-      return snapshot.data().count
     } catch {
       return null
     }
@@ -243,7 +240,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
     return () => {
       active = false
     }
-  }, [countRedirects, redirectDocCount])
+  }, [countRedirects, liveRedirectDocCount])
 
   const [draft, setDraft] = useState<RedirectDraft | null>(null)
   const [testPath, setTestPath] = useState('')
@@ -794,8 +791,8 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
             `enforcedCount` is what the enforcing route counts and what
             `handleAdd` checks against, so the readout, the gate and the
             server cannot disagree. It is deliberately NOT the number of rows
-            on screen: a soft-deleted rule still occupies a slot, so showing
-            the visible count here would promise room the server refuses. */}
+            on screen: the list is a capped window, and the live count past
+            it is what the server refuses at. */}
         <QuotaReadoutComponent
           ready={org != null && enforcedCount != null}
           used={enforcedCount ?? 0}

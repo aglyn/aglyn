@@ -168,7 +168,7 @@ struct BrowseScreen: View {
               Image(systemName: "chevron.right").font(AglynFont.caption.weight(.semibold)).foregroundStyle(.tertiary).accessibilityHidden(true)
             }
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
         }
       }
       .aglynListRow()
@@ -342,7 +342,9 @@ private struct ListingBody: View {
       if let notice = runner.notice { Section { AglynNotice(notice, tone: .success) { runner.clear() } } }
       Section {
         HStack(spacing: AglynSpace.two) {
-          AglynRemoteImage(listing.imageURL.flatMap(URL.init(string:)), systemImage: plugin ? "puzzlepiece.extension" : "square.grid.2x2")
+          AglynRemoteImage(
+            mediaPreviewURL(listing.imageURL, origin: context.api.origin, hostID: nil, width: 160),
+            systemImage: plugin ? "puzzlepiece.extension" : "square.grid.2x2")
             .frame(width: 64, height: 64)
             .clipShape(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous))
             .accessibilityHidden(true)
@@ -714,7 +716,7 @@ struct LicencesScreen: View {
         name(licence), subtitle: [detail, "Paid " + dollars(Double(licence.paidCents)), licence.createdAt.map { relativeTime($0) }].compactMap { $0 }
           .joined(separator: " · "), systemImage: "doc.text")
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.aglynRow)
   }
 
   @ViewBuilder

@@ -309,7 +309,7 @@ struct TemplatesSection: View {
             Image(systemName: "paintbrush.pointed").foregroundStyle(.secondary)
           }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.aglynRow)
         .accessibilityIdentifier("template-\(row.id)")
         .contextMenu {
           Button("Open in the Besigner", systemImage: "paintbrush") { open(row) }
@@ -671,7 +671,7 @@ struct AddPeopleSheet: View {
         }
       }
     }
-    .frame(minWidth: 380, minHeight: 420)
+    .aglynSheetMinimumSize(width: 380, height: 420)
   }
 
   private func check() async {

@@ -79,6 +79,17 @@ function collectionRef(path: string): Record<string, unknown> {
     path,
     doc: (id: string) => docRef(`${path}/${id}`),
     count: () => ({ kind: 'count', get: async () => ({ data: () => ({ count: childrenOf(path).length }) }) }),
+    // The live count's second aggregate (AGL-3918): Firestore's `!=` matches a
+    // document that HAS the field with another value.
+    where: (field: string, op: string, value: unknown) => {
+      if (op !== '!=') throw new Error(`the double does not evaluate ${op}`)
+      const matching = () =>
+        childrenOf(path).filter((child) => {
+          const stored = (store.get(child) ?? {})[field]
+          return stored !== undefined && stored !== value
+        })
+      return { count: () => ({ kind: 'count', get: async () => ({ data: () => ({ count: matching().length }) }) }) }
+    },
     select: () => ({ kind: 'query', get: async () => ({ docs: childrenOf(path).map(snapshotOf) }) }),
   }
 }
@@ -253,11 +264,13 @@ describe('the variable writer', () => {
     expect(commits).toEqual([])
   })
 
-  it('meets the plan’s allowance, counting every variable as the route does', async () => {
+  it('meets the plan’s allowance, counting the live variables as the route does (AGL-3918)', async () => {
     store.set('hosts/host-1/variables/a', { name: 'a', type: 'text', value: '' })
     store.set('hosts/host-1/variables/b', { name: 'b', type: 'text', value: '' })
-    // Soft-deleted, and still counted, as `/api/hosts/resources` counts it.
+    // Soft-deleted: its slot is free, as `/api/hosts/resources` counts it.
     store.set('hosts/host-1/variables/c', { name: 'c', type: 'text', value: '', deletedAt: NOW })
+    await expect(variables.refusal(context({ org: FREE }))).resolves.toBeNull()
+    store.set('hosts/host-1/variables/d', { name: 'd', type: 'text', value: '', deletedAt: null })
     const refusal = { status: 403, error: logicDraftLimitRefusal('variable', 3) }
     await expect(variables.refusal(context({ org: FREE }))).resolves.toEqual(refusal)
     await expect(variables.write(request({ org: FREE }))).resolves.toEqual({ ok: false, ...refusal })
@@ -350,6 +363,12 @@ describe('the function writer', () => {
     const refusal = { status: 403, error: logicDraftLimitRefusal('function', 1) }
     await expect(functions.refusal(context({ org: FREE }))).resolves.toEqual(refusal)
     await expect(functions.write(fnRequest({ org: FREE }))).resolves.toEqual({ ok: false, ...refusal })
+  })
+
+  it('frees the Free plan’s one function when it is deleted (AGL-3918)', async () => {
+    store.set('hosts/host-1/functions/f-1', { name: 'other', deletedAt: NOW })
+    await expect(functions.refusal(context({ org: FREE }))).resolves.toBeNull()
+    expect((await functions.write(fnRequest({ org: FREE }))).ok).toBe(true)
   })
 })
 

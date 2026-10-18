@@ -156,7 +156,7 @@ public struct TransferExportSheet: View {
         if case .success = result { onDone(doneMessage) }
       }
     }
-    .frame(minWidth: 420, minHeight: 480)
+    .aglynSheetMinimumSize(width: 420, height: 480)
     .task(id: request.id) { await loadFields() }
     .sensoryFeedback(.success, trigger: ready?.name)
     .accessibilityIdentifier("export-dialog")

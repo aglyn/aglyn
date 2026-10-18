@@ -23,7 +23,8 @@
  *   -allowProvisioningUpdates (and -allowProvisioningDeviceRegistration, which
  *   registers this Mac with the team), so Xcode needs an account for that team
  *   (Xcode → Settings → Accounts). CURRENT_PROJECT_VERSION is the UTC time
- *   as yyyyMMddHHmm, so every archive outnumbers the last upload.
+ *   as yyyyMMddHHmm, so every archive outnumbers the last upload; the
+ *   version is the root package.json's (releaseVersion below).
  * ios-upload: `xcodebuild -exportArchive` with destination `upload`, which
  *   sends the archive to App Store Connect (TestFlight) under the same
  *   account. The app record must already exist.
@@ -33,7 +34,8 @@
  *   Keychain (service `aglyn-android-upload-keystore`, account
  *   `aglyn-upload`) unless AGLYN_UPLOAD_STORE_PASSWORD is set, and reaches
  *   Gradle through the environment only, never the command line. The
- *   versionCode is the minutes since 1970 (UTC).
+ *   versionCode is the minutes since 1970 (UTC); versionName is the root
+ *   package.json's version, passed as -Paglyn.versionName.
  *
  * android-upload: sends a bundle to a Play testing track (internal unless
  *   a track is named) through the Play Developer API: an edit, the bundle,
@@ -75,6 +77,23 @@ const PLATFORMS = {
   macos: 'generic/platform=macOS',
 }
 const ANDROID_APPS = { app: 'Aglyn', pos: 'AglynPOS' }
+
+/**
+ * The repo's release version, the root package.json's (`npm run release:prepare`
+ * bumps it), so a store build and the web it ships beside name one release.
+ * Apple's CFBundleShortVersionString takes only up to three integers, so the
+ * Apple builds carry the numeric core as MARKETING_VERSION and the whole string
+ * as AGLYN_VERSION (Info.plist), which the apps show; Android's versionName is
+ * free text, so the bundles get the whole string as -Paglyn.versionName.
+ */
+function releaseVersion() {
+  const { version } = JSON.parse(
+    readFileSync(join(ROOT, 'package.json'), 'utf8'),
+  )
+  const core = /^(\d+\.\d+\.\d+)(?:-[0-9A-Za-z.-]+)?$/.exec(version ?? '')?.[1]
+  if (!core) fail(`package.json version ${version} is not semver`)
+  return { version, core }
+}
 
 /** Stops the command. Thrown rather than exiting, so a held build lock is released on the way out. */
 class ReleaseError extends Error {}
@@ -139,6 +158,7 @@ function iosArchive(scheme, platform) {
   if (!destination)
     fail(`platform must be one of ${Object.keys(PLATFORMS).join(', ')}`)
   const build = utcStamp()
+  const { version, core } = releaseVersion()
   mkdirSync(OUT, { recursive: true })
   const archive = join(OUT, `${scheme}-${platform}-${build}.xcarchive`)
   withLock('/private/tmp/aglyn-xcodebuild.lock', () =>
@@ -167,6 +187,8 @@ function iosArchive(scheme, platform) {
         // build against itself (apps/ios/README.md, "Release to private testing").
         '-allowProvisioningDeviceRegistration',
         `CURRENT_PROJECT_VERSION=${build}`,
+        `MARKETING_VERSION=${core}`,
+        `AGLYN_VERSION=${version}`,
         // The schemes share package intermediates; coverage instrumentation would make Aglyn and
         // AglynPOS rebuild each other's (AGL-3783), and nothing reads coverage from an archive.
         'CLANG_COVERAGE_MAPPING=NO',
@@ -176,7 +198,9 @@ function iosArchive(scheme, platform) {
     ),
   )
   if (!existsSync(archive)) fail(`no archive at ${archive}`)
-  console.log(`\n${scheme} ${platform}: build ${build} from ${headCommit()}`)
+  console.log(
+    `\n${scheme} ${platform}: ${version} (${core}) build ${build} from ${headCommit()}`,
+  )
   console.log(`archive ${archive} (${sizeOf(archive)})`)
 }
 
@@ -268,6 +292,7 @@ function androidBundle(module) {
         '--no-configuration-cache',
         `:${module}:bundleRelease`,
         `-Paglyn.versionCode=${versionCode}`,
+        `-Paglyn.versionName=${releaseVersion().version}`,
       ],
       { cwd: ANDROID, env },
     ),
@@ -292,7 +317,7 @@ function androidBundle(module) {
   if (!/jar verified/.test(verify.stdout))
     fail(`${target} is not signed:\n${verify.stdout}${verify.stderr}`)
   console.log(
-    `\n${name} android: versionCode ${versionCode} from ${headCommit()}`,
+    `\n${name} android: ${releaseVersion().version} versionCode ${versionCode} from ${headCommit()}`,
   )
   console.log(`bundle ${target} (${sizeOf(target)})`)
 }
@@ -383,7 +408,7 @@ async function androidUpload(bundle, track = 'internal') {
       track,
       releases: [
         {
-          name: `${uploaded.versionCode} (${headCommit()})`,
+          name: `${releaseVersion().version} (${uploaded.versionCode})`,
           versionCodes: [String(uploaded.versionCode)],
           status: 'completed',
         },

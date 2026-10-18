@@ -9,6 +9,115 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.267 — 2026-10-18
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.266...v1.0.0-beta.267)
+
+### Changed
+
+- **firestore:** background work writes once per run, not once per job ([AGL-3932](https://linear.app/aglyn/issue/AGL-3932))
+- **monitoring:** the render monitor and the production canary take turns over the pages, instead of each reading every page on every run ([AGL-3928](https://linear.app/aglyn/issue/AGL-3928))
+- **notifications:** every staff notification (new account, workspace and site, subscriptions, plan changes, failed payments) emails every staff account by default ([AGL-3929](https://linear.app/aglyn/issue/AGL-3929))
+
+### Fixed
+
+- **health:** the sign-up landing check grades whether a new owner reached the console, not whether they made a site ([AGL-3927](https://linear.app/aglyn/issue/AGL-3927))
+- **uptime:** the probe tries a request once more when the runner's own network failed it ([AGL-3927](https://linear.app/aglyn/issue/AGL-3927))
+- **ai:** widen a picture's search past an unknown world so pages keep photos ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923), [AGL-3856](https://linear.app/aglyn/issue/AGL-3856), [AGL-3831](https://linear.app/aglyn/issue/AGL-3831))
+- **stock-photos:** a Pixabay download that fails says why, by host and status, never by its signed address ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **guards:** record the AGL-3923 fixture's recorded Pixabay tag text in the spelling baseline ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923))
+
+</details>
+
+## v1.0.0-beta.266 — 2026-10-18
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.265...v1.0.0-beta.266)
+
+### Added
+
+- **activity:** plugins word their prose activity rows; workflows says its runs ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892), [AGL-3412](https://linear.app/aglyn/issue/AGL-3412), [AGL-3868](https://linear.app/aglyn/issue/AGL-3868))
+- **pos-android:** add and manage receipt printers natively in Aglyn POS ([AGL-3909](https://linear.app/aglyn/issue/AGL-3909))
+- **apple:** pick the notification sound in Aglyn's notification settings ([AGL-3890](https://linear.app/aglyn/issue/AGL-3890))
+- **native-android:** notification sound channels and picker ([AGL-3890](https://linear.app/aglyn/issue/AGL-3890))
+- **console:** org activity route says each entry's action in words for the apps ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **commerce:** a test-mode smart reader can be tapped from the POS card step ([AGL-3849](https://linear.app/aglyn/issue/AGL-3849))
+- **commerce:** a typed card goes into the POS app's own native card fields ([AGL-3848](https://linear.app/aglyn/issue/AGL-3848))
+- **native:** the POS card readers screen finds, connects, updates and forgets readers ([AGL-3849](https://linear.app/aglyn/issue/AGL-3849))
+
+### Fixed
+
+- **ai:** gallery and record covers show the moment, not a photographer or camera; teachers are shown teaching ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856), [AGL-3921](https://linear.app/aglyn/issue/AGL-3921))
+- **ai:** each category section lists only its own category's records, and photo alts drop leftover abstract words ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856), [AGL-3921](https://linear.app/aglyn/issue/AGL-3921))
+- **apple:** no minus on zero refunds, no empty actions card, one-line token values ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **native:** quiet filter toolbar actions, empty tax period sentence, one-line id values ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **native:** phone walk fixes for stat rows, metric cards, settings and shift reports ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **native-android:** order actions, the Funnels header and unchanged Save buttons ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **pos-apple:** the printer connect step's Done carries an identifier for UI tests ([AGL-3909](https://linear.app/aglyn/issue/AGL-3909))
+- **auth:** the sign-up subtitle is sentence case on the console and both apps ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **workflows:** an event no plugin labels reads as a word in run activity ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **native-android:** one colors argument on the upsell's tonal button ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **native-android:** tonal buttons and CRM record actions follow the spec ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **native-android:** kiosk tiles keep one picture band, photo or initial ([AGL-3906](https://linear.app/aglyn/issue/AGL-3906))
+- **pos-apple:** the kiosk's chips clear the Staff control and its tiles line up ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **apple:** a workflow run's activity row names its trigger in words ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **apple:** back from the Besigner, a page's Published and Updated times read again ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **console:** a page's save and publish reports once, not four toasts deep ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **pos-apple:** a removed printer leaves the list at once; a refusal stays in its form ([AGL-3909](https://linear.app/aglyn/issue/AGL-3909))
+- **bookings-apple:** the week grid takes the full width where the detail cannot fit ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **apple:** the Home site card keeps the address on one line beside a wide status ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **native-seed:** real photos in the Storage emulator, so POS tiles show them ([AGL-3906](https://linear.app/aglyn/issue/AGL-3906))
+- **commerce:** the printers route signs a printer's URL before it writes ([AGL-3909](https://linear.app/aglyn/issue/AGL-3909))
+- **billing:** a deleted item frees its plan slot, an archived one keeps it ([AGL-3918](https://linear.app/aglyn/issue/AGL-3918))
+- **native-apple:** "Page deleted." stays on the list after a page leaves ([AGL-3907](https://linear.app/aglyn/issue/AGL-3907))
+- **pos-android:** printer steps card and the last removal's notice ([AGL-3909](https://linear.app/aglyn/issue/AGL-3909))
+- **native-android:** sheets clear the keyboard on tablets; chips, activity in words ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **pos-android:** the printer sheet shows the route's refusal ([AGL-3909](https://linear.app/aglyn/issue/AGL-3909))
+- **apple:** a new workspace shows at once after sign-up ([AGL-3920](https://linear.app/aglyn/issue/AGL-3920))
+- **pos-apple:** the pairing code stays open until Done ([AGL-3919](https://linear.app/aglyn/issue/AGL-3919))
+- **pos-apple:** kiosk tiles show product photos; a photo never widens its tile ([AGL-3906](https://linear.app/aglyn/issue/AGL-3906))
+- **native-android:** the POS store name stays on one line on a phone ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **commerce:** the Mac reader menu shows one affordance, not ellipsis plus chevron ([AGL-3849](https://linear.app/aglyn/issue/AGL-3849))
+- **native-android:** walk leftovers: keyboard, page, receipt, redirect, quota, titles ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **native:** android POS readers connect (OkHttp 4 pin), keep found readers, phone layout ([AGL-3849](https://linear.app/aglyn/issue/AGL-3849))
+- **apple:** list rows that open or pick answer a touch and the pointer ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **pos-apple:** the receipt preview pins TOTAL's amount to the paper's right edge ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **native-android:** long forms and the Register sheet get room; new products open ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **native-android:** human words for referrers, email states, reasons, categories ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **native:** referrer addresses, POS device copy, one email word ([AGL-3914](https://linear.app/aglyn/issue/AGL-3914), [AGL-3915](https://linear.app/aglyn/issue/AGL-3915), [AGL-3916](https://linear.app/aglyn/issue/AGL-3916))
+- **native:** an AI job link opens on its own site, or says the job isn't here ([AGL-3911](https://linear.app/aglyn/issue/AGL-3911))
+- **native-apple:** the last eight sheets keep their minimum size to the Mac ([AGL-3908](https://linear.app/aglyn/issue/AGL-3908))
+- **native-android:** aglyn POS loads remote pictures through the image loader ([AGL-3906](https://linear.app/aglyn/issue/AGL-3906))
+- **native-apple:** sheets keep their minimum size to the Mac, not wider than a phone ([AGL-3908](https://linear.app/aglyn/issue/AGL-3908))
+- **native-apple:** a page deleted on a phone leaves, and its notices show ([AGL-3907](https://linear.app/aglyn/issue/AGL-3907))
+- **native-android:** register and kiosk tiles show product photos ([AGL-3906](https://linear.app/aglyn/issue/AGL-3906))
+- **commerce:** the Android POS connects a reader while the search still runs ([AGL-3849](https://linear.app/aglyn/issue/AGL-3849))
+- **commerce:** a reader found by a running search can be connected in the POS app ([AGL-3849](https://linear.app/aglyn/issue/AGL-3849))
+- **commerce:** fast typing in the POS card fields lands in the next field ([AGL-3848](https://linear.app/aglyn/issue/AGL-3848))
+- **commerce:** the reader search keeps the POS app open; the address keys the Location ([AGL-3849](https://linear.app/aglyn/issue/AGL-3849))
+- **commerce:** the POS card fields keep every keystroke and name Stripe's switch ([AGL-3848](https://linear.app/aglyn/issue/AGL-3848))
+- **commerce:** the POS apps always offer a typed card, keyed by the intent's answer ([AGL-3848](https://linear.app/aglyn/issue/AGL-3848))
+
+### Reverted
+
+- **console:** leave automation-run activity words to a plugin seam ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **native-android:** drop the deleted-workflows quota note ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892), [AGL-3918](https://linear.app/aglyn/issue/AGL-3918))
+- **native-android:** leave referrer, email state and sign-in words to #1739 ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+
+<details>
+<summary>Also in this release: 3 chore</summary>
+
+- **realm:** regenerate realm host tables against @mui/material 9.5.0 ([AGL-3920](https://linear.app/aglyn/issue/AGL-3920))
+- **realm:** regenerate realm host tables against @mui/material 9.5.0 ([AGL-3906](https://linear.app/aglyn/issue/AGL-3906))
+- **apple:** -AglynAppearance light|dark draws a Mac debug build in either mode ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+
+</details>
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.265 — 2026-10-18
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.264...v1.0.0-beta.265)
@@ -34,6 +143,12 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **ai:** a new site never reuses another site's dataset records ([AGL-3912](https://linear.app/aglyn/issue/AGL-3912))
+- **data:** a record photo of a deleted site is left out, never drawn broken ([AGL-3912](https://linear.app/aglyn/issue/AGL-3912))
+- **ai:** people photos show adults in the role, and alt text reads as a phrase ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+- **mui:** the search box honors its style settings, so starter headers fit on phones ([AGL-3917](https://linear.app/aglyn/issue/AGL-3917))
+- **apple:** an AI job link opens on its own workspace and site ([AGL-3911](https://linear.app/aglyn/issue/AGL-3911))
+- **ai:** each guided-start style previews its own kind of page ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
 - **console:** the subprocessor gate knows the guided-start run's stub mode ([AGL-3910](https://linear.app/aglyn/issue/AGL-3910))
 - **e2e:** emulated servers also get a placeholder Firebase app id ([AGL-3910](https://linear.app/aglyn/issue/AGL-3910))
 - **e2e:** the local guided-start run walks the stepped form with Next ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
@@ -70,7 +185,7 @@ content on the marketing site and is written separately.
 - **ai:** the guided start's steps, style pictures and funnel events ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
 
 <details>
-<summary>Also in this release: 3 test, 5 chore</summary>
+<summary>Also in this release: 4 test, 9 chore</summary>
 
 - **ai:** the guided-start local e2e is a mentions-only key file ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913))
 - **deps:** resync the cloud/functions lockfile so npm ci installs ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913))
@@ -80,6 +195,12 @@ content on the marketing site and is written separately.
 - **native:** the Besigner shows no browser chrome in the Mac app ([AGL-3894](https://linear.app/aglyn/issue/AGL-3894))
 - **native-seed:** a 3-level, 60-row page tree on the seeded cafe site ([AGL-3896](https://linear.app/aglyn/issue/AGL-3896))
 - **ai:** prove AI homes vary and the form stays on its own page ([AGL-3899](https://linear.app/aglyn/issue/AGL-3899))
+
+- **ai:** the cancel watch spec waits for the abort instead of racing a 1 ms timer ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913))
+- **deps:** Bump the mui-emotion group with 7 updates
+- **deps-dev:** Bump the nx-workspace group across 1 directory with 16 updates
+- **deps-dev:** Bump the linters group across 1 directory with 5 updates
+- **deps:** regenerate the realm host MUI tables for @mui/material 9.5.0 ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913))
 
 </details>
 

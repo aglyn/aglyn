@@ -48,6 +48,11 @@ jest.mock('../utils/cron-beat', () => ({
   recordCronBeat: async (jobId: string) => {
     mockBeats.push(jobId)
   },
+  // The batched mark records the same ids; batching itself is specified in
+  // `cron-beat-wiring.spec.ts` against the real module.
+  batchedCronBeat: () => async (jobId: string) => {
+    mockBeats.push(jobId)
+  },
 }))
 
 jest.mock('../constants/plugins.declarations.server.generated', () => ({

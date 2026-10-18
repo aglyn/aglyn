@@ -23,10 +23,16 @@ final class FakeReader: FirestoreReader, @unchecked Sendable {
     return listener
   }
 
+  var documents: [(String, @MainActor (Result<FirestoreDocument?, Error>) -> Void, Listener)] = []
+
   @MainActor
   func listenDocument(_ path: [String], _ onChange: @escaping @MainActor (Result<FirestoreDocument?, Error>) -> Void)
     -> FirestoreListening
-  { Listener() }
+  {
+    let listener = Listener()
+    documents.append((path.joined(separator: "/"), onChange, listener))
+    return listener
+  }
 
   func setDocument(_ path: [String], _ fields: [String: Any], merge: Bool) async throws {}
   func deleteDocument(_ path: [String]) async throws {}
@@ -76,6 +82,32 @@ final class WorkspaceStoreTests: XCTestCase {
       WorkspaceSite(id: "h", orgID: "o", name: "shop", subdomain: "shop", role: ""))
   }
 
+  func testASiteCarriesItsFaviconAndEachWorkspaceItsLogosFromItsOwnDocument() {
+    XCTAssertEqual(
+      WorkspaceStore.site(from: .init(id: "h", data: ["orgId": "o", "favicon": "media:h/fav"])).favicon, "media:h/fav")
+    XCTAssertNil(WorkspaceStore.site(from: .init(id: "h", data: ["favicon": " "])).favicon)
+
+    let reader = FakeReader()
+    let store = WorkspaceStore(uid: "u1", reader: reader, defaults: UserDefaults(suiteName: "logos-\(UUID().uuidString)")!)
+    store.start()
+    reader.emit("users/u1/orgs", [.init(id: "a", data: ["orgName": "Alpha"]), .init(id: "b", data: ["orgName": "Beta"])])
+    // The shown workspace's document is read live: the membership index carries no logo.
+    let shown = try! XCTUnwrap(reader.documents.first { $0.0 == "orgs/a" })
+    shown.1(.success(.init(id: "a", data: ["logoUrl": "/api/media/cdn/org:a/logo", "logoDarkUrl": ""])))
+    XCTAssertEqual(store.orgLogo, WorkspaceOrgLogo(light: "/api/media/cdn/org:a/logo", dark: nil))
+    XCTAssertFalse(shown.2.removed)
+
+    // The switcher asks for every row's: each other workspace's document is read once.
+    store.loadLogos(["a", "b"])
+    XCTAssertEqual(reader.documents.filter { $0.0 == "orgs/a" }.count, 1)
+    let other = try! XCTUnwrap(reader.documents.first { $0.0 == "orgs/b" })
+    other.1(.success(.init(id: "b", data: ["logoUrl": "media:org:b/m1"])))
+    XCTAssertEqual(store.orgLogos["b"]?.light, "media:org:b/m1")
+    XCTAssertTrue(other.2.removed)
+    store.loadLogos(["b"])
+    XCTAssertEqual(reader.documents.filter { $0.0 == "orgs/b" }.count, 1)
+  }
+
   func testRunsTheConsoleQueriesAndRemembersThePick() {
     let defaults = UserDefaults(suiteName: "workspace-\(UUID().uuidString)")!
     let reader = FakeReader()
@@ -113,6 +145,65 @@ final class WorkspaceStoreTests: XCTestCase {
       try? JSONDecoder().decode(WorkspacePick.self, from: defaults.data(forKey: WorkspaceStore.storageKey("u1"))!),
       WorkspacePick(orgID: "b", hostID: "s9"))
     _ = restored
+  }
+
+  /// After this person creates a workspace the lists are read again at once (AGL-3920), and what is shown stays meanwhile.
+  func testReloadReadsTheListsAgainAndKeepsWhatIsShown() {
+    let reader = FakeReader()
+    let store = WorkspaceStore(uid: "u1", reader: reader, defaults: UserDefaults(suiteName: "workspace-\(UUID().uuidString)")!)
+    store.start()
+    reader.emit("users/u1/orgs", [])
+    XCTAssertTrue(store.ready)
+    XCTAssertTrue(store.orgs.isEmpty)
+    store.reload()
+    XCTAssertTrue(reader.queries[0].2.removed)
+    XCTAssertTrue(store.ready)
+    reader.emit("users/u1/orgs", [.init(id: "new", data: ["orgName": "Lane Test Co"])])
+    XCTAssertEqual(store.org?.id, "new")
+  }
+
+  /// A console link (`/{orgSlug}/hosts/{hostSlug}/…`) moves the switcher onto the workspace and site it names before
+  /// its screen reads them (AGL-3911); a site in another workspace is picked once that workspace's sites arrive.
+  func testALinkPicksTheWorkspaceAndSiteItNames() {
+    let reader = FakeReader()
+    let store = WorkspaceStore(uid: "u1", reader: reader, defaults: UserDefaults(suiteName: "workspace-\(UUID().uuidString)")!)
+    store.start()
+    reader.emit("users/u1/orgs", [.init(id: "a", data: ["slug": "alpha"]), .init(id: "b", data: ["slug": "beta"])])
+    reader.emit(
+      "users/u1/hostMemberships",
+      [.init(id: "s1", data: ["orgId": "a", "subdomain": "one"]), .init(id: "s2", data: ["orgId": "a", "subdomain": "two"])])
+    XCTAssertEqual(store.site?.id, "s1")
+
+    XCTAssertTrue(store.select(orgSlug: "alpha", hostSlug: "two"))
+    XCTAssertEqual(store.site?.id, "s2")
+
+    XCTAssertFalse(store.select(orgSlug: "h1", hostSlug: nil))
+    XCTAssertEqual(store.org?.id, "a")
+    XCTAssertEqual(store.site?.id, "s2")
+
+    XCTAssertTrue(store.select(orgSlug: "beta", hostSlug: "shop"))
+    XCTAssertEqual(store.org?.id, "b")
+    reader.emit(
+      "users/u1/hostMemberships",
+      [.init(id: "s8", data: ["orgId": "b", "subdomain": "eight"]), .init(id: "s9", data: ["orgId": "b", "subdomain": "shop"])])
+    XCTAssertEqual(store.site?.id, "s9")
+
+    XCTAssertTrue(store.select(orgSlug: "beta", hostSlug: nil))
+    XCTAssertEqual(store.site?.id, "s9")
+  }
+
+  /// A link that launched the app arrives before the person's workspaces do: it is picked once they and the site arrive.
+  func testALinkBeforeTheWorkspacesArrivePicksThemWhenTheyDo() {
+    let reader = FakeReader()
+    let store = WorkspaceStore(uid: "u1", reader: reader, defaults: UserDefaults(suiteName: "workspace-\(UUID().uuidString)")!)
+    store.start()
+    XCTAssertTrue(store.select(orgSlug: "beta", hostSlug: "shop"))
+    reader.emit("users/u1/orgs", [.init(id: "a", data: ["slug": "alpha"]), .init(id: "b", data: ["slug": "beta"])])
+    XCTAssertEqual(store.org?.id, "b")
+    reader.emit(
+      "users/u1/hostMemberships",
+      [.init(id: "s8", data: ["orgId": "b", "subdomain": "eight"]), .init(id: "s9", data: ["orgId": "b", "subdomain": "shop"])])
+    XCTAssertEqual(store.site?.id, "s9")
   }
 
   /// A full window is a page, not the whole list: the console's `loadMoreOrgs` (AGL-2336).

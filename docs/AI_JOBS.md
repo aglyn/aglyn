@@ -1912,6 +1912,82 @@ the `theme` kind's proposal, and no site plan may propose one.
   every step — the look, the plan, the layout, each page — runs on it, and the
   estimate is priced by the pick's multiplier. A Free start offers none.
 
+### A site start never reuses another site's records (AGL-3912)
+
+Datasets, and their records, belong to the workspace: neither names the site it
+was written for (the data plugin keeps `visibleTo`, usually `['org']`, and
+nothing else of a site), and a dataset outlives the site that filled it. A site
+start's plan sees every dataset the site may, and reused them by name. On
+2026-10-17 a gym's start published a deleted photographer's wedding packages as
+its "Session packages" and a deleted strength studio's coaches, one bio naming
+that studio, with four broken photos; a photographer's start listed another
+photographer's gallery with six broken covers.
+
+- **The rule** (`aiSiteDatasetIsThisSites`, `src/lib/jobs/ai-job-site-datasets.ts`).
+  A site start reuses a dataset only when its records are this site's to show:
+  it holds **no records** (an empty list, such as the one a form writes its
+  submissions to, is the same list on any site); or its scope names **this site
+  alone** (`siteOnly`, read off `visibleTo` by the inventory reader); or this site
+  already serves its records **pages of their own** (`recordBase`). Anything
+  else — records in a dataset shared with the workspace or other sites, and a
+  dataset whose records could not be counted — is another site's.
+- **Counted once, before the plan.** The plan step of a `site` job counts each
+  dataset's records through the data plugin's `dataset` index, whose `get` now
+  answers `facts.records` (one aggregation; `list` never counts), and marks each
+  foreign row `foreign` (`aiSiteInventoryWithRecordCounts`). The counts never
+  reach the prompt, so the plan key and the model's prompt are unchanged.
+- **Settled in code, before the rules** (`aiSettleSiteForeignDatasets`, the
+  plan door's `settle`, and again on a reused plan). Each foreign reuse becomes a
+  `dataset` creation of the same name and fields (less its photo, its photo
+  description and its page address, which the dataset unit adds back with this
+  site's own stock photos), and every section, record template and form
+  `writesTo` that named its id names `new:<name>` instead. A plan that already
+  creates a dataset of that name is pointed at that one. Rule 7 does not hold
+  the creation against the foreign dataset as a duplicate. The cap on a start's
+  datasets then settles as it always did (`aiSettlePlanDatasets`). Where the job
+  may create no dataset (Free, Starter's two used), the reuse comes off instead:
+  each section that listed it writes its items out, a record template becomes a
+  page of its own, and a form sends its submissions to the Inbox only. Never a
+  refusal, a re-ask or a failed job.
+- **Assist keeps reusing.** A `page`, `build` or `edit` job changes a site that
+  exists, whose pages may well list the workspace's datasets on purpose; their
+  plans are not counted or settled.
+- **No broken photo of a deleted site.** A site's media library is deleted with
+  the site, so a record photo at `/api/media/cdn/{hostId}/…` (or
+  `media:{hostId}/…`) of a site that no longer exists answers 404 everywhere.
+  The data plugin's published reads — a repeat's rows
+  (`repeat/dataset-repeat-rows.server.ts`) and a record page's record
+  (`record-pages/record-page-read.server.ts`) — leave such a field out of the
+  record (`datasetRecordWithoutGonePhotos`), one batched read of the other sites'
+  host documents inside the render cache, none when no record names another
+  site's photo. The repeat then leaves out a copy's Image whose whole `src` is a
+  binding the record left empty (`expand-repeatables.ts`), as it already did for
+  text, so a card draws no empty frame. An organization-library photo
+  (`org:…`) outlives every site and is never asked about.
+- **A section named for one category lists that category (AGL-3921).** A plan's
+  section names the datasets it places and nothing more: it has no filter, and the
+  model is never asked for one. So the build reads it off the plan. A dataset unit
+  keeps what its records are filed under — its first field named Category, Type,
+  Kind, Collection, Genre, Group, Section, Subject, Occasion or Series (or one of
+  those after a word such as "Session type"), where at least two values are used and
+  some record shares one (`aiSiteDatasetCategoryOf`) — on its output as `groups`
+  (the written field's id and each record's value). Where one page lists the dataset
+  in more than one section, each section whose name names exactly one value
+  (`aiLayoutSectionGroup`: every word of the value in the name, "Weddings and
+  elopements gallery", or every word of the name past "gallery", "collection" and
+  the like in the value, "Weddings"; a name that also names part of another value
+  names none) lists only that value's records: its placement carries a `filter`, the
+  compiler writes the repeat's `repeatFilter` (`category == Family portraits`, the
+  platform's own repeat query), the section counts that group's records, and the
+  page's design is told only their names. A section named for no one value, and a
+  dataset a page lists once, list every record, as before. Settled in code, never a
+  refusal or a re-ask. The beta.265 Laurel Ridge Film & Portrait "Galleries" page
+  (job NyPDNIaYzN) planned "Weddings and elopements gallery" and "Family portrait
+  gallery" over one "Gallery collections" filed under those two categories, and both
+  listed all ten records; Northgate's /courses and Granite Peak's /services list
+  their datasets once and are unchanged. `ai-stock-photo-agl3856-beta265.spec.ts`
+  replays the real records and plan.
+
 ## The `build` kind: Assist builds from one request
 
 `build` (AGL-3616) turns one request typed into Assist — "create a few new
@@ -2324,6 +2400,62 @@ running it.
   ladder lets staff through; the beat has no caller. A reader that cannot answer
   is not a pause, as the lockdown reads fail open.
 
+### The empty site a stopped start left (AGL-3936)
+
+Since AGL-3859 a site is created only when its start is admitted (the starter,
+Skip, or Plan my site). A site start cancelled or failed before it built
+anything left that site empty and public ("This site is coming soon") once the
+person left the build page without choosing Start again, Try again or Use the
+starter. Zach's decision (2026-10-18): after about an hour the empty site is
+REMOVED, and Create site is offered again; the starter is still written only
+when a person chooses it (`jobs/ai-empty-site-sweep.ts`).
+
+- **The marker.** Every write that ends a job `canceled` or `failed` (the
+  cancel door, a step's record, a finish or failure a pending cancel turned
+  into the cancel, a claim after an abandoned lease) calls
+  `scheduleAiEmptySiteSweep`. For a `site` job whose outputs hold nothing but
+  the `seo` listing proposal (`aiJobLeavesEmptySite`, the rule
+  `aiSiteStarterFallbackOffered` offers the starter by) it writes
+  `aiEmptySiteSweeps/{hostId}`: `hostId`, `orgId`, `jobId`, `status`,
+  `settledAt`, `dueAt` = settle + `AI_EMPTY_SITE_GRACE_MS` (1 h), `attempts`.
+  Server-only: the rules deny every client, staff included. A new job on the
+  site (`createAiJob`), a resume and a retry drop it.
+- **The beat decides it.** Before its sweep, each beat reads the markers due
+  (`dueAt <= now`, oldest first, `AI_EMPTY_SITE_SWEEP_MAX` = 3, inside
+  `AI_EMPTY_SITE_SWEEP_BUDGET_MS`), and the time they took comes off the
+  sweep's budget. `aiEmptySiteVerdict` reads everything again: the site exists
+  in the marker's workspace with no custom domain, no sending domain, no
+  routed page and no staff hold; the job is still the one that ended, still
+  ended and still built nothing (one that settled again waits a full hour from
+  then); no other job names the site; nothing in `screens` (pages and emails),
+  `layouts`, `forms`, `media`, `components`, `templates`, `collections`,
+  `redirects` or `pluginSettings`; and the site's feed holds only "Created the
+  site" and `ai.job.*` entries. Anything else keeps the site and drops the
+  marker. The visitors' `analytics` beacon is not a reason to keep it.
+- **The delete is the console's.** An empty site is deleted through
+  `core.site-erase` (`@aglyn/aglyn/plugin-manager/plugin-site-erase`), which the
+  console registers at boot (`utils/server/erase-site.ts`): the same
+  `eraseSiteAndRecord` the delete route runs — `eraseHost` with the console's
+  sending-domain teardown (Storage, `hostIndex`, the org's `hosts` map and
+  pooled seats, every member's projection, the Firestore tree), the tenant's
+  cached pages and names, "Removed an empty site" in the workspace feed with
+  no actor, and a `host.deleted` audit row by `system:cron` with the reason
+  `ai-start-empty`. A site in a consent group is kept. Once the site is gone
+  the job gets `siteRemoved: { at, name }` (`siteRemoved: true` on the wire).
+  An eraser that cannot answer is tried again 15 minutes later, five times.
+- **Coming back.** The site's own address is gone, so the console shows "This
+  site doesn't exist anymore". The job stays in the AI jobs drawer, which says
+  "Nothing was built, so the empty site was removed." with Start again: it
+  opens Create site (`/{org}/hosts?create=site`) with the start's answers,
+  handed over in the tab's session storage (`model/ai-site-start-handoff.ts`),
+  and the site's name and address asked again. The build page, if it is ever
+  drawn for such a job, says the same.
+- **Proved by** `jobs/ai-empty-site-sweep.spec.ts` (the production shapes:
+  kc-x-carder cancelled 13 s in with its plan pending and 0 credits, a failed
+  start, one started again, one with a layout written), `ai-jobs.spec.ts` (the
+  marker from each write that ends a job), and
+  `ai-empty-site-sweep.emulator.spec.ts` (the real queries and `eraseHost`).
+
 ## Running a guided start locally
 
 The live plan eval (`ai-job-site-plan-live.spec.ts`) covers the plan step only.
@@ -2698,18 +2830,133 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   provider caches each search 24 hours (`stockPhotoSearches`) and keeps the
   library's rate limit. No AI model is called, and the guided start's credit
   estimate is unchanged.
+- **A world of its own words alone widens (AGL-3923).** A business type that names
+  no craft this module lists and no kind of site named its world is searched by its
+  own words read back (`aiStockWorldIsUnlisted`: "Freelencing site offer services"
+  is the world "freelencing"). Where a picture's own searches find nothing it may
+  take, it widens, in order (`aiStockWiderTerms`): the kind of site the person
+  picked (`KIND_SUBJECTS`), the kind its starter is the shape of (business, store,
+  portfolio, landing), the picture's own words searched alone and held to no
+  world, and last the starter's plain common photos (`STARTER_GENERIC`: an office,
+  a meeting, a desk; a shop's interior; a studio). Each widened search is judged by
+  the world it was asked for; a rung that repeats an earlier one is left out, and a
+  hero then takes a photo the job already shows before none. A listed craft, a
+  world read from the kind (an "LMS" school) or from the name keeps its slots to
+  its world, and one nothing fits is still taken out rather than given an office
+  (AGL-3831). A product, a portrait of the business's people and a record's cover
+  keep their own fallbacks. A slot whose fitting photo could not be copied (the
+  download refused, or the library's door threw) was failed by the library, as one
+  that never answered is, and takes a starter rather than lose its picture; a
+  refused download is logged. The beta.265 Kasvora Marketing Solutions start (job
+  BK3r4I8bF1) searched only "freelencing", which Pixabay answered with nothing, and
+  its cover hero shipped as a flat dark band; ACCA FA2 (job j4EHPke1PN) held its
+  heroes to "related exam practice" and took none of the 80 photos answered. Both
+  replay from their recorded answers in `ai-stock-photo-agl3923.spec.ts`
+  (`fixtures/ai-stock-photo-agl3923-recordings.ts`). A section that calls itself a
+  gallery, a portfolio or a lookbook is drawn as pictures on any kind of site
+  (`aiLayoutGroupVariant`): Kasvora's "Selected work gallery" was four cards of
+  icons, with no picture to fill. Nothing the model sees changed.
 - **Alt text that says what the photo shows (AGL-3805).** The slot's alt text is the model's,
   written before any photo was found, so a stock photo placed in it answers for its own
   words (`aiStockPhotoAlt`): the slot's words are kept on an English site when a word of
   their subject is among the hit's first tags or its page's address; otherwise the photo
   is described by the library's own description where it writes one (Pexels' `alt`),
-  else its first three tags ("Cake, homemade, dessert"). The libraries write in English
+  else by a short English phrase built from its own tags (`aiStockTagsAlt`), never the
+  library's tag list. The libraries write in English
   and no model translates them, so a site in another language takes the platform's own
   phrase in its language (`illustrativePhoto` in `ai-layout-labels.ts`: "Foto
   ilustrativa"), true of any photo. The library's asset keeps the same words. The
   beta.253 Panadería La Concha Dorada start (job eg4maZMGtN) captioned a round cake
   dusted "HOME MADE" as conchas on a tray, and none of its nine photos showed what its
   words said. `ai-stock-photo-alt.spec.ts` replays its recorded "bakery" answer.
+- **The phrase a photo's tags make (AGL-3856).** `aiStockTagsAlt` reads a hit's first
+  eight tags for the things and the person it shows, and its first ten for where it is
+  set. It says one person at most (a role over a man, a woman or a girl), what that
+  person holds or wears from the first three tags ("A photographer with a camera on a
+  bridge", "A bride in a wedding dress"), or one thing, with a second from the first
+  two tags only where no place is said, and then the place ("A kettlebell in a gym",
+  "An aisle at a wedding"). It leaves out ideas and doings ("law", "feedback",
+  "training", "read", "fitness", any word ending "-tion", "-ment", "-ity" and the
+  like), makers' names ("sony", "canon"), words for the photo itself ("photo",
+  "spot"), seasons, peoples and countries, and says a quality only before the one
+  thing it qualifies ("An analog camera", "An elderly couple"). Of two words for one
+  thing the first tag's stays ("book" over "bookwork", "camera" over "photo-camera"),
+  and no word is said twice. The beta.264 Brightpath, Ironwood Barbell and Silver Fir
+  starts shipped "A kettlebell and fitness", "A bookwork and a read", "A participation
+  in a classroom", "A photo-camera and a sony" and "An elderly couple and an elderly";
+  `ai-stock-photo-alt.spec.ts` replays each placed photo's recorded tags
+  (`fixtures/ai-stock-photo-agl3856-people-recordings.ts`) and holds the phrase each
+  now makes.
+- **People show adults in their role, and a site for adults shows no child
+  (AGL-3856).** A dataset of the business's people (a team, staff, instructors,
+  coaches) marks each record's picture `people` (`aiSiteDatasetRecordPhotos`). Its
+  role is read from the record's name, else the list's name (`aiStockPeopleRole`):
+  an occupation (a teacher, a coach, a chef, a stylist, a doctor) is searched first
+  as the role in the site's world ("teacher classroom"), and a photo must name it; a
+  team or a staff takes any adult at work, its role preferred. A people picture is
+  never a photo whose first tags or page address name a child, a girl, a boy or a
+  teen, and one naming the role among its first tags ranks first. A record no photo
+  fits takes a starter of people (the team, the owner), never the workbench or the
+  houseplants. A site whose audience, name or business type says adults and nothing
+  younger (`aiStockAdultsOnly`: "Adults finishing a high school diploma", "Brightpath
+  Adult Learning Center") is told so in its terms (`adults`), and no slot on it takes a
+  photo naming a child anywhere in its tags, whatever else its words name ("school"
+  lets children in otherwise). The kind of site alone never says adults. The beta.264
+  Brightpath Adult Learning Center (job Ysli21sB6K) showed a teen graduate, a
+  schoolgirl and kids as its instructors; `ai-stock-photo-brightpath-people.spec.ts`
+  replays its recorded searches. Nothing the model sees changed.
+- **A teacher is shown teaching (AGL-3856).** A role whose photos are often of
+  someone merely tagged with it carries the words of it being done and of something
+  else being done (`PEOPLE_ROLES`' `scene` and `refuse`): a teacher, an instructor,
+  a tutor or a lecturer's photo names a classroom, a class, a lecture, a lesson, a
+  board, a tutor, students or a presentation among its first six tags
+  (`AI_STOCK_ROLE_TAGS_READ`), and none of its first eight names a model, fashion, a
+  pose, an artist, a painting, an easel, drawing or calligraphy, less what the
+  record's own words name ("Drawing instructor"). A teacher's portrait alone is no
+  instructor's cover; a record nothing fits takes a starter of people, as before.
+  A coach, a trainer, a chef and the rest are held to nothing more. A team's
+  portraits prefer a photo of a shoot no card shows yet among the hits that fit
+  as well (`aiStockFreshShootsFirst`, `aiStockSameShoot`: one contributor's photos a
+  few uploads apart). The beta.265 Northgate Adult Learning Center (job wais118U3Q)
+  placed a woman painting at an easel, a model in a traditional dress, an elderly
+  man's portrait and a calligrapher at a market as its teachers.
+- **A portfolio's record shows the photographed moment (AGL-3856).** A record cover
+  of a craft whose work is people at a moment (`CRAFT_KIN`'s `scenes`: a
+  photographer) is marked `record`, with the value its list files it under
+  (`aiSiteDatasetRecordPhotos`' `categories`), and is searched as the moment
+  (`aiStockRecordScene`): read from the record's name, else its category ("Getting
+  Ready" filed under "Weddings and elopements" is a wedding couple), else as a
+  person's portrait ("Milestone Portraits"), set where its words, its category or
+  else the site's own words say (`setting`: "mountain weddings … in the Blue Ridge"
+  is the mountains), its searches ending on the people alone ("couple"). Its photo's
+  first tags name the people — a couple, a bride and groom, lovers, a family, a
+  father or a mother; never the moment with no one in it nor children alone — and
+  never the maker or the tools (`maker`: photographer, camera, lens), an animal, a
+  toy or a figurine, unless the record names them. It is never qualified by the
+  craft ("photographer getting ready"), held to the craft's world, or filled by the
+  craft's own photos. A collection tile of a shop is unchanged. The beta.265 Laurel
+  Ridge "Gallery collections" covers were a press photographer, a toy frog with a
+  camera, a cat, a photographer in a library and a lego figure.
+- **Alt text, further (AGL-3856).** `aiStockTagsAlt` also leaves out adjectives a tag
+  gives alone ("multicultural", "domestic", "traditional"), words for how the photo
+  was made ("cutout", "perspective", "silhouettes"), holidays ("tet"), camera
+  makers ("petri"), "press", "show" and words of time ("day", "month"); never
+  describes by a body part ("hand", "body"); says a kind of thing ("animal", "pet")
+  only where nothing names the thing; reads a bed, a sofa or a bench as where a
+  person is ("on a bed"), a class, a meadow, a lake, a river or sunset as a place
+  ("in a class", "by a lake", "at sunset", "in the mountains"), a journalist, a
+  master, lovers and a wife as people, and a model as whoever posed; says a role
+  only from the first six tags and a person only from the first four where things
+  come first, unless the photo is a portrait. The beta.265 starts' "Students with a
+  multicultural at a language school", "A student with a bed in a room", "A model",
+  "People", "A teacher with a calligraphy master at a tet market", "A photographer
+  with a press", "A photographer with a petri", "A photographer with a cutout", "A
+  domestic cat and an animal", "A girl with a hand", "A body in a gym" and "A
+  photographer with silhouettes" now read "Students at a language school", "A man
+  with a book on a bed", "A woman", "People in a class", "A calligraphy master at a
+  market", "A journalist", "A camera", "A photographer", "A cat", "A girl", "A gym"
+  and "Men with a camera at sunset"; `ai-stock-photo-agl3856-beta265.spec.ts`
+  replays each from its recorded tags. Nothing the model sees changed.
 - **The cap.** The compiler's per-page picture cap is unchanged; the resolver
   only fills the slots the compiler wrote.
 

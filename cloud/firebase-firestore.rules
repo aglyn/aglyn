@@ -5172,6 +5172,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // When the empty site a cancelled or failed AI guided start left is due
+    // for removal (AGL-3936): one per site, keyed by the site's id, holding
+    // ids and instants only. Written by the AI jobs machine and read and
+    // deleted by the AI jobs beat, through the Admin SDK only. Deny ALL
+    // client access, staff included: a client that could write a marker
+    // could have the beat look at a site of its choosing, and one that could
+    // delete it could keep an empty placeholder up.
+    match /aiEmptySiteSweeps/{hostId} {
+      allow read, write: if false;
+    }
+
     // The per-recipient DELIVERY LOG: one document per message we sent an
     // address, carrying its subject, its lifecycle timestamps and its open
     // and click counts. Keyed by the same `sha256(address)` the suppression

@@ -96,7 +96,7 @@ fun FieldsSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, re
       ChoiceChipRow(Contracts.crmFieldObjectLabels.map { ChipOption(it.key, it.value) }, obj, { obj = it })
       notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }
       SectionCard("Custom fields", Modifier.fillMaxWidth(), action = if (scope.canWrite) ({
-        FilledTonalButton(onClick = { creating = true }, modifier = Modifier.testTag("crm-new-field")) {
+        FilledTonalButton(colors = com.aglyn.ui.aglynTonalButtonColors(), onClick = { creating = true }, modifier = Modifier.testTag("crm-new-field")) {
           Icon(AglynIcons.named("add"), contentDescription = null)
           Text("New field", Modifier.padding(start = space(0.5f)))
         }

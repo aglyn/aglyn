@@ -106,6 +106,15 @@ class EmailCasesTest {
   }
 
   @Test
+  fun aListRowNamesAStoppedSendWithTheDetailsWord() {
+    fun word(data: Map<String, Any?>) = sendChipWord(emailSendOf(com.aglyn.core.FirestoreDoc("e1", "orgs/o/emails/e1", data)))
+    assertEquals("Canceled", word(mapOf("status" to "canceled")))
+    assertEquals("Failed", word(mapOf("status" to "failed")))
+    assertEquals("Draft", word(mapOf("status" to "draft")))
+    assertEquals("Sent", word(mapOf("status" to "sent", "stats" to mapOf("sent" to 3))))
+  }
+
+  @Test
   fun aCanceledEmailThatNeverWentOutSaysSoAndNamesWhatAnAbsentSenderMeans() {
     val canceled = mapOf<String, Any?>("status" to "canceled")
     assertEquals("Canceled before it was sent", campaignSendDisplay(canceled).label)

@@ -234,7 +234,7 @@ struct FormsScreen: View {
                 .accessibilityHidden(true)
             }
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
         }
       }
       .contextMenu { rowActions(row) }
@@ -405,7 +405,7 @@ struct FormNameSheet: View {
       }
       .onAppear { focused = true }
     }
-    .frame(minWidth: 380, minHeight: 220)
+    .aglynSheetMinimumSize(width: 380, height: 220)
     .presentationDetents([.medium])
   }
 }

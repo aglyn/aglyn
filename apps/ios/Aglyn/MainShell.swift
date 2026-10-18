@@ -45,7 +45,8 @@ struct MainShell: View {
   @State private var columns: NavigationSplitViewVisibility = .all
 
   var body: some View {
-    WideLayoutReader { wide in
+    // The sidebar or the tab bar is the window's own choice, by its width class alone.
+    WideLayoutReader(minimumWidth: nil) { wide in
       if wide { sidebarLayout } else { tabLayout }
     }
     .sheet(isPresented: $navigation.showSwitcher) {
@@ -150,58 +151,66 @@ struct MainShell: View {
 
   private var sidebarLayout: some View {
     NavigationSplitView(columnVisibility: $columns) {
-      List {
-        // The lockup scrolls with the rows, so nothing ever floats over them, with the mark's height of clear space.
+      // The lockup is pinned at the top in a bar of its own and the list starts below it, so no row ever scrolls
+      // under it; the switcher's footer bar does the same at the foot.
+      VStack(spacing: 0) {
         SidebarBrandHeader(name: model.brandName)
-        Section {
-          sidebarRow("Home", systemImage: "house", .home)
-          sidebarRow("Notifications", systemImage: "bell", .notifications)
-        }
-        if model.workspace?.site != nil || !screens.isEmpty {
-          Section(model.workspace?.site?.name ?? "Site") {
-            if model.workspace?.site != nil {
-              sidebarRow("Analytics", systemImage: "chart.bar.xaxis", .analytics)
-            }
-            ForEach(screens) { item in
-              sidebarRow(item.title, systemImage: item.icon, .plugin(item.screen))
-            }
-          }
-        }
-        // The console's own areas (core screens, libs/native/screens), by group.
-        ForEach(CoreGroupList.groups(model), id: \.id) { group in
-          Section(group.heading) {
-            ForEach(group.screens) { screen in
-              sidebarRow(screen.label, systemImage: screen.icon, .plugin(screen.id), id: "sidebar-\(screen.id)")
-            }
-          }
-        }
-        #if os(iOS)
-          Section {
-            sidebarRow("Settings", systemImage: "gearshape", .settings)
-          }
-        #endif
+        sidebarList
       }
-      .listStyle(.sidebar)
-      .aglynSelectionKeys(sidebarOrder, selection: sidebarSelection)
-      .navigationTitle(model.brandName)
       #if os(iOS)
         .toolbar(.hidden, for: .navigationBar)
       #endif
       #if os(macOS)
         .navigationSplitViewColumnWidth(min: 210, ideal: 240)
       #endif
-      // The switcher sits in a footer bar of its own; the list insets above it, so it never covers a row.
-      .safeAreaInset(edge: .bottom, spacing: 0) { ScopeFooter() }
     } detail: {
       stack(navigation.section)
         .id(navigation.section)
     }
     .navigationSplitViewStyle(.balanced)
   }
+
+  private var sidebarList: some View {
+    List {
+      Section {
+        sidebarRow("Home", systemImage: "house", .home)
+        sidebarRow("Notifications", systemImage: "bell", .notifications)
+      }
+      if model.workspace?.site != nil || !screens.isEmpty {
+        Section(model.workspace?.site?.name ?? "Site") {
+          if model.workspace?.site != nil {
+            sidebarRow("Analytics", systemImage: "chart.bar.xaxis", .analytics)
+          }
+          ForEach(screens) { item in
+            sidebarRow(item.title, systemImage: item.icon, .plugin(item.screen))
+          }
+        }
+      }
+      // The console's own areas (core screens, libs/native/screens), by group.
+      ForEach(CoreGroupList.groups(model), id: \.id) { group in
+        Section(group.heading) {
+          ForEach(group.screens) { screen in
+            sidebarRow(screen.label, systemImage: screen.icon, .plugin(screen.id), id: "sidebar-\(screen.id)")
+          }
+        }
+      }
+      #if os(iOS)
+        Section {
+          sidebarRow("Settings", systemImage: "gearshape", .settings)
+        }
+      #endif
+    }
+    .listStyle(.sidebar)
+    .aglynSelectionKeys(sidebarOrder, selection: sidebarSelection)
+    .navigationTitle(model.brandName)
+    // The switcher sits in a footer bar of its own; the list insets above it, so it never covers a row.
+    .safeAreaInset(edge: .bottom, spacing: 0) { ScopeFooter() }
+  }
 }
 
-/// The brand lockup at the head of the sidebar: the logo kit's art (dark
-/// appearance included), never re-typed, with the mark's height of clear space.
+/// The brand lockup pinned at the head of the sidebar, in a bar of its own: the
+/// logo kit's art (dark appearance included), never re-typed, with the mark's
+/// height of clear space on every side.
 struct SidebarBrandHeader: View {
   let name: String
   #if os(macOS)
@@ -211,17 +220,17 @@ struct SidebarBrandHeader: View {
   #endif
 
   var body: some View {
-    AglynArtwork.logo.resizable().scaledToFit().frame(height: height)
-      .padding(.vertical, height)
-      .padding(.horizontal, height)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .listRowInsets(EdgeInsets())
-      .listRowBackground(Color.clear)
-      .listRowSeparator(.hidden)
-      .selectionDisabled()
-      .accessibilityLabel(name)
-      .accessibilityAddTraits(.isHeader)
-      .accessibilityIdentifier("sidebar-brand")
+    VStack(spacing: 0) {
+      AglynArtwork.logo.resizable().scaledToFit().frame(height: height)
+        .padding(.vertical, height)
+        .padding(.horizontal, height)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityLabel(name)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("sidebar-brand")
+      Divider()
+    }
+    .background(.bar)
   }
 }
 
@@ -238,7 +247,10 @@ struct ScopeFooter: View {
         navigation.showSwitcher = true
       } label: {
         HStack(spacing: 10) {
-          IconBadge("building.2", tone: .info, size: 28)
+          IconBadge(
+            "building.2", tone: .info, size: 28,
+            imageURL: model.mediaURL(model.workspace?.orgLogo?.light, hostID: nil),
+            darkImageURL: model.mediaURL(model.workspace?.orgLogo?.dark, hostID: nil))
           VStack(alignment: .leading, spacing: 1) {
             Text(model.workspace?.org?.name ?? "No workspace").font(AglynFont.strongSubheadline).lineLimit(1)
             Text(model.workspace?.site?.name ?? "Pick a site").font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -278,7 +290,7 @@ struct MoreView: View {
                 Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
               }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
             .accessibilityIdentifier("more-analytics")
           }
           ForEach(screens) { item in
@@ -289,7 +301,7 @@ struct MoreView: View {
                 Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
               }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
             .accessibilityIdentifier("more-\(item.id)")
           }
         }
@@ -300,13 +312,13 @@ struct MoreView: View {
         } label: {
           AglynRow("Notifications", systemImage: "bell")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.aglynRow)
         Button {
           navigation.push(.settings)
         } label: {
           AglynRow("Settings", systemImage: "gearshape")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.aglynRow)
       }
     }
     .aglynListBackground()

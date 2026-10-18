@@ -123,17 +123,31 @@ private fun QuickActionTile(item: QuickActionItem, modifier: Modifier) {
 
 /** An icon on a soft disc of its own color. */
 @Composable
-fun IconBadge(icon: ImageVector, tint: Color, modifier: Modifier = Modifier, size: Dp = 40.dp) {
-  Box(
-    modifier.size(size).clip(CircleShape).background(tint.copy(alpha = 0.14f)),
-    contentAlignment = Alignment.Center,
-  ) { Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.55f)) }
+fun IconBadge(
+  icon: ImageVector,
+  tint: Color,
+  modifier: Modifier = Modifier,
+  size: Dp = 40.dp,
+  /** A workspace's logo or a site's favicon: the picture fills the badge, and [icon] shows while there is none. */
+  imageUrl: String? = null,
+  darkImageUrl: String? = null,
+) {
+  Box(modifier.size(size)) {
+    BrandPicture(imageUrl, darkImageUrl, size, CircleShape) {
+      Box(
+        Modifier.size(size).clip(CircleShape).background(tint.copy(alpha = 0.14f)),
+        contentAlignment = Alignment.Center,
+      ) { Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.55f)) }
+    }
+  }
 }
 
 /**
- * A summary card: a label, one large number and a caption. The whole card
- * opens [onClick] and says so with a chevron and [actionLabel] for
- * accessibility; it never carries a bare "View" link.
+ * A summary card: a label, one large number and a caption. With [onClick] the
+ * whole card opens it and says so with a chevron and [actionLabel] for
+ * accessibility; it never carries a bare "View" link. Without one it is a
+ * plain figure with no chevron, so it never promises a tap that does nothing.
+ * A long value (a host, a split) steps down a size so it never breaks mid-word.
  */
 @Composable
 fun MetricCard(
@@ -146,12 +160,12 @@ fun MetricCard(
   tint: Color = MaterialTheme.colorScheme.primary,
   loading: Boolean = false,
   error: String? = null,
-  onClick: () -> Unit,
+  onClick: (() -> Unit)?,
 ) {
   Surface(
     modifier
       .clip(MaterialTheme.shapes.large)
-      .clickable(role = Role.Button, onClickLabel = actionLabel, onClick = onClick),
+      .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClickLabel = actionLabel, onClick = onClick) else Modifier),
     shape = MaterialTheme.shapes.large,
     color = MaterialTheme.colorScheme.surfaceContainerLowest,
     shadowElevation = 1.dp,
@@ -167,7 +181,7 @@ fun MetricCard(
           maxLines = 2,
           overflow = TextOverflow.Ellipsis,
         )
-        Icon(AglynIcons.named("chevron_right"), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (onClick != null) Icon(AglynIcons.named("chevron_right"), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
       }
       when {
         loading -> {
@@ -176,7 +190,17 @@ fun MetricCard(
         }
         error != null -> Text(error, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         else -> {
-          if (value != null) Text(value, style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.onSurface)
+          if (value != null) Text(
+            value,
+            style = when {
+              value.length <= 6 -> MaterialTheme.typography.displaySmall
+              value.length <= 9 -> MaterialTheme.typography.headlineMedium
+              else -> MaterialTheme.typography.titleLarge
+            },
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+          )
           if (caption != null) {
             Text(caption, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
           }
@@ -303,6 +327,8 @@ fun SiteHeaderCard(
   workspaceName: String?,
   siteName: String,
   address: String?,
+  /** The site's favicon; the globe shows while there is none. */
+  iconUrl: String? = null,
   statusLabel: String?,
   statusTone: StatusTone,
   statusDetail: String?,
@@ -319,7 +345,7 @@ fun SiteHeaderCard(
   ) {
     Column(Modifier.padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
       Row(verticalAlignment = Alignment.CenterVertically) {
-        IconBadge(AglynIcons.named("public"), MaterialTheme.colorScheme.primary, size = 48.dp)
+        IconBadge(AglynIcons.named("public"), MaterialTheme.colorScheme.primary, size = 48.dp, imageUrl = iconUrl)
         Column(Modifier.weight(1f).padding(start = space(1.5f)), verticalArrangement = Arrangement.spacedBy(2.dp)) {
           if (workspaceName != null) {
             Text(

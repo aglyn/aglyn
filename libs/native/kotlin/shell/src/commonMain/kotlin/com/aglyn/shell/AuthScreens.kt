@@ -270,7 +270,7 @@ fun SignUpScreen(services: ShellServices) {
   AuthCard(
     services,
     "Sign up",
-    flow.plan?.signUpHeadline ?: "Create a new $brand Account",
+    flow.plan?.signUpHeadline ?: "Create a new $brand account",
     footer = {
       AuthLinkRow("Already have an account?", "Sign in", "sign-up-to-sign-in") { flow.reset() }
     },

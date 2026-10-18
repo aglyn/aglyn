@@ -295,6 +295,19 @@ class Checkout(
     recheck(quiet = true)
   }
 
+  /**
+   * TEST MODE: taps Stripe's simulated smart reader with a test card while the
+   * customer step is open; the step's own poll then sees the payment settle.
+   * The server refuses it on a live key.
+   */
+  suspend fun simulateTapOnReader(paymentId: String) {
+    try {
+      api.payment(mutable.value.opened.orderId, SaleStep.Simulate(paymentId))
+    } catch (error: Throwable) {
+      if (error is CancellationException) throw error
+    }
+  }
+
   /** Tries a declined reader payment again on the same reader. */
   suspend fun retryReaderPayment(paymentId: String) {
     if (!mutable.value.canTender) return

@@ -26,7 +26,9 @@ android {
     // Every store upload needs a higher code: tools/scripts/native-release.mjs passes
     // -Paglyn.versionCode=<minutes since 1970, UTC>, which stays under Play's 2,100,000,000 for millennia.
     versionCode = setting("versionCode", "1").toInt()
-    versionName = "0.1.0"
+    // The repo's release version (the root package.json): tools/scripts/native-release.mjs passes
+    // -Paglyn.versionName, so a store build and the web name one release. 1.0.0 is Xcode's default too.
+    versionName = setting("versionName", "1.0.0")
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
@@ -93,6 +95,18 @@ android {
       buildConfigField("String", "DEBUG_EMAIL", quoted(""))
       buildConfigField("String", "DEBUG_PASSWORD", quoted(""))
       buildConfigField("boolean", "TERMINAL_LIVE_READERS", liveReaders)
+    }
+  }
+}
+
+// Stripe Terminal calls okhttp3.internal.Util, which OkHttp 5 (Ktor 3's engine) no longer has: without this pin every
+// reader connect failed with "Unexpected failure" (NoClassDefFoundError) once a reader was found. Ktor's OkHttp engine
+// runs on 4.12, the version Stripe Terminal ships against; Aglyn POS only, never the Aglyn app.
+configurations.configureEach {
+  resolutionStrategy.eachDependency {
+    if (requested.group == "com.squareup.okhttp3" && requested.name in setOf("okhttp", "okhttp-tls")) {
+      useVersion(libs.versions.stripe.terminal.okhttp.get())
+      because("Stripe Terminal is built against OkHttp 4 and calls its internals")
     }
   }
 }

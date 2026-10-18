@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynContracts
+import AglynCore
 import AglynHardware
 import AglynPluginHost
 import AglynSite
@@ -26,11 +27,12 @@ struct RegisterScreen: View {
     _model = State(
       initialValue: RegisterModel(
         hostID: context.hostID ?? "", reader: context.firestore, api: context.api,
-        collector: DeviceCardCollector.make(), keyedEntry: DeviceKeyedCardEntry.shared, uid: context.uid))
+        collector: DeviceCardCollector.make(), keyedEntry: CardFieldsPresenter(), uid: context.uid))
   }
 
   var body: some View {
-    WideLayoutReader { wide in
+    // The register keeps its basket beside the products whenever the width class is regular.
+    WideLayoutReader(minimumWidth: nil) { wide in
       Group {
         if wide {
           HStack(spacing: 0) {
@@ -82,6 +84,7 @@ struct RegisterScreen: View {
       if let checkout = model.checkout {
         CheckoutView(model: model, checkout: checkout)
           .interactiveDismissDisabled()
+          .checkoutSheetSizing()
       }
     }
     .alert("Discount", isPresented: $showDiscount) {
@@ -438,5 +441,12 @@ private struct DisplayMirrorKey: Equatable {
     tipCents = model.checkout?.tipCents ?? 0
     connected = model.display.connected
     asking = model.display.asking != nil
+  }
+}
+
+private extension View {
+  /// The checkout as a page-sized sheet on iPad and Mac, so every tender and the whole receipt show without scrolling.
+  @ViewBuilder func checkoutSheetSizing() -> some View {
+    if #available(iOS 18.0, macOS 15.0, *) { presentationSizing(.page) } else { self }
   }
 }

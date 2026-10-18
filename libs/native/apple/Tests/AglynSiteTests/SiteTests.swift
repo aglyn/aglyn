@@ -241,22 +241,6 @@ final class SiteTests: XCTestCase {
     XCTAssertFalse(try file("m9").hasPoster)
   }
 
-  func testShowsAStoredPictureFromTheCDNForTheSiteBeingEdited() {
-    XCTAssertEqual(
-      mediaPreviewURL("media:h/m1", origin: "https://console.test/", hostID: "h")?.absoluteString,
-      "https://console.test/api/media/cdn/h/m1?w=320")
-    XCTAssertEqual(
-      mediaPreviewURL("media:org:o1/m2", origin: "https://console.test", hostID: "h9")?.absoluteString,
-      "https://console.test/api/media/cdn/org:o1:h9/m2?w=320")
-    XCTAssertEqual(
-      mediaPreviewURL("https://example.com/a.png", origin: "https://console.test", hostID: "h")?.absoluteString,
-      "https://example.com/a.png")
-    XCTAssertEqual(
-      mediaPreviewURL("/img/a.png", origin: "https://console.test", hostID: "h")?.absoluteString,
-      "https://console.test/img/a.png")
-    XCTAssertNil(mediaPreviewURL("  ", origin: "https://console.test", hostID: "h"))
-  }
-
   func testReadsAFileAndBuildsItsAddresses() throws {
     let item = try XCTUnwrap(
       MediaItem(

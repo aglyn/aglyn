@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreOrder
 import com.aglyn.core.FirestoreQuery
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.core.FirestoreTimestamp
 import com.aglyn.core.HostStatus
 import com.aglyn.core.HostStatusKind
@@ -130,7 +131,7 @@ internal fun HomeScreen(
         FirstRunContent(services)
         return@Column
       }
-      SiteHeader(workspace, host, now, onSwitch = { navigator.push(Route.Switcher) }) { url -> runCatching { uriHandler.openUri(url) } }
+      SiteHeader(workspace, host, now, services.api.origin, onSwitch = { navigator.push(Route.Switcher) }) { url -> runCatching { uriHandler.openUri(url) } }
 
       val actionsSection: @Composable () -> Unit = {
         if (actions.isNotEmpty()) {
@@ -178,6 +179,8 @@ private fun SiteHeader(
   workspace: WorkspaceState,
   host: Live<FirestoreDoc?>,
   now: Long,
+  /** The console the app talks to, which serves the site's favicon. */
+  origin: String,
   onSwitch: () -> Unit,
   onVisit: (String) -> Unit,
 ) {
@@ -201,6 +204,7 @@ private fun SiteHeader(
     workspaceName = workspace.org?.name,
     siteName = site.name,
     address = address,
+    iconUrl = mediaPreviewUrl(site.favicon, origin, site.id, 160),
     statusLabel = status?.label,
     statusTone = when (status?.kind) {
       HostStatusKind.LIVE -> StatusTone.SUCCESS

@@ -17,6 +17,7 @@ import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.KeyValueStore
+import com.aglyn.core.mediaPreviewUrl
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -53,13 +54,15 @@ const val POS_DEVICE_BRANDING_REFRESH_MS = 10L * 60 * 1000
 /** The store's look for the idle and thank-you screens. */
 data class PosDeviceBranding(val name: String, val logoUrl: String?, val logoDarkUrl: String?, val message: String) {
   companion object {
-    fun read(element: JsonElement?): PosDeviceBranding? {
+    /** The branding the display route sends, its logos served from [origin]. */
+    fun read(element: JsonElement?, origin: String): PosDeviceBranding? {
       val record = element as? JsonObject ?: return null
       if (record.isEmpty()) return null
       return PosDeviceBranding(
         name = record["name"].str() ?: "Welcome",
-        logoUrl = record["logoUrl"].str()?.ifEmpty { null },
-        logoDarkUrl = record["logoDarkUrl"].str()?.ifEmpty { null },
+        // The routes send a library logo as a path on the console's media CDN, read from the paired console.
+        logoUrl = mediaPreviewUrl(record["logoUrl"].str(), origin, null, 640),
+        logoDarkUrl = mediaPreviewUrl(record["logoDarkUrl"].str(), origin, null, 640),
         message = record["message"].str() ?: "Welcome",
       )
     }
@@ -120,7 +123,7 @@ class ConsolePosDeviceApi(private val api: ConsoleApiClient) : PosDeviceApi {
       anonymous = true,
     ).obj()
     val token = answer["token"].str() ?: throw ConsoleApiError("The register did not answer with a token.", 502, null)
-    return PosPaired(token, if (answer["mode"].str() == "kiosk") PosDeviceMode.KIOSK else PosDeviceMode.DISPLAY, PosDeviceBranding.read(answer["branding"]))
+    return PosPaired(token, if (answer["mode"].str() == "kiosk") PosDeviceMode.KIOSK else PosDeviceMode.DISPLAY, PosDeviceBranding.read(answer["branding"], api.origin))
   }
 
   override suspend fun poll(token: String, withBranding: Boolean): PosDevicePoll {
@@ -134,7 +137,7 @@ class ConsolePosDeviceApi(private val api: ConsoleApiClient) : PosDeviceApi {
     val raw = answer["state"]
     val state = if (raw == null || raw is JsonNull) null else runCatching { ContractJsonFormat.decodeFromJsonElement(PosDisplayState.serializer(), raw) }.getOrNull()
     state ?: throw ConsoleApiError("The register did not answer with a screen.", 502, null)
-    return PosDevicePoll(PosDisplayView(state, raw.obj()["answered"].bool()), PosDeviceBranding.read(answer["branding"]))
+    return PosDevicePoll(PosDisplayView(state, raw.obj()["answered"].bool()), PosDeviceBranding.read(answer["branding"], api.origin))
   }
 
   override suspend fun respond(token: String, answer: PosDisplayAnswer) {

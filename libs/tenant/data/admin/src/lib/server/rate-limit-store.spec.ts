@@ -18,6 +18,7 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   BEACON_HEARTBEAT_DOC_PREFIX,
+  BEACON_HEARTBEAT_RECORD_MIN_INTERVAL_MS,
   consumeRateLimit,
   currentRateLimitDegradation,
   DEGRADATION_DOC_PREFIX,
@@ -29,6 +30,7 @@ import {
   recordServerError,
   recordSignupRefusal,
   recordSignupServed,
+  resetBeaconHeartbeatRecordForTests,
   resetRateLimitDegradationForTests,
   resetServerErrorsForTests,
   resetSignupServesForTests,
@@ -1260,6 +1262,24 @@ describe('the beacon last-landed marker (AGL-2713)', () => {
   }
   const NOW = 1_755_100_830_000
   const path = `${RATE_LIMIT_COLLECTION}/${BEACON_HEARTBEAT_DOC_PREFIX}console-web`
+
+  beforeEach(() => {
+    resetBeaconHeartbeatRecordForTests()
+  })
+
+  it('rewrites a service’s marker at most once per interval per instance (AGL-3932)', async () => {
+    const firestore = fakeFirestore()
+    recordBeaconHeartbeat('console-web', { firestore, now: NOW })
+    recordBeaconHeartbeat('console-web', { firestore, now: NOW + 60_000 })
+    // Another service is its own marker, spaced on its own.
+    recordBeaconHeartbeat('tenant-web', { firestore, now: NOW + 60_000 })
+    await settle()
+    expect(firestore.docs.get(path)?.['heartbeatAtMs']).toBe(NOW)
+    expect(firestore.docs.get(`${RATE_LIMIT_COLLECTION}/${BEACON_HEARTBEAT_DOC_PREFIX}tenant-web`)?.['heartbeatAtMs']).toBe(NOW + 60_000)
+    recordBeaconHeartbeat('console-web', { firestore, now: NOW + BEACON_HEARTBEAT_RECORD_MIN_INTERVAL_MS })
+    await settle()
+    expect(firestore.docs.get(path)?.['heartbeatAtMs']).toBe(NOW + BEACON_HEARTBEAT_RECORD_MIN_INTERVAL_MS)
+  })
 
   it('records the landing under its own field, in the collection with a TTL', async () => {
     const firestore = fakeFirestore()

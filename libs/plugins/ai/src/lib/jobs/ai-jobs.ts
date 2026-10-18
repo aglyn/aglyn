@@ -120,6 +120,7 @@ import {
   isAiJobCanceledError,
   watchAiJobCancel,
 } from './ai-job-cancel'
+import { clearAiEmptySiteSweep, scheduleAiEmptySiteSweep } from './ai-empty-site-sweep'
 
 /**
  * AI generation jobs — the Firestore state machine (AGL-2904).
@@ -455,6 +456,18 @@ export function aiJobTransitionListenerRegistered(): boolean {
   return transitionListener !== null
 }
 
+/**
+ * A job just ENDED `canceled` or `failed`, in the write the caller made
+ * (AGL-3936): a site start that built nothing schedules the removal of the
+ * empty site it was for, an hour out (`ai-empty-site-sweep.ts`). Every write
+ * that ends a job calls this once, after its transaction commits. Never
+ * throws.
+ */
+async function noteAiJobEnded(firestore: Firestore, job: AiJob | null, now: Date): Promise<void> {
+  if (!job || (job.status !== 'canceled' && job.status !== 'failed')) return
+  await scheduleAiEmptySiteSweep(firestore, job, now)
+}
+
 /** Tells the listener; a listener that throws never fails the write it follows. */
 async function announceAiJobTransition(
   job: AiJob,
@@ -625,6 +638,8 @@ export async function createAiJob(
     ...(input.creditsConfirmed ? { creditsConfirmed: input.creditsConfirmed } : {}),
   }
   await ref.set(data)
+  // A new job on the site — a guided start begun again — keeps it (AGL-3936).
+  await clearAiEmptySiteSweep(firestore, input.hostId)
   await logAiJobCreated(
     input.orgId,
     { uid: input.createdBy, email: input.createdByEmail ?? null },
@@ -763,6 +778,7 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
     ...(job.orchestration ? { orchestration: job.orchestration } : {}),
     ...(job.kind === 'build' && job.inputs?.['publish'] === true ? { publishAsked: true } : {}),
     ...(aiJobCancelPending(job) ? { cancelRequested: true } : {}),
+    ...(job.siteRemoved ? { siteRemoved: true } : {}),
   }
 }
 
@@ -863,14 +879,18 @@ export async function claimNextStep(
   now = new Date(),
 ): Promise<ClaimedAiJobStep | null> {
   const ref = jobsCollection(firestore, orgId).doc(jobId)
-  return firestore.runTransaction(async (tx: Transaction) => {
+  let ended: AiJob | null = null
+  const claimed = await firestore.runTransaction<ClaimedAiJobStep | null>(async (tx: Transaction) => {
+    ended = null
     const job = jobFrom(await tx.get(ref))
     if (!job) return null
     // A cancel asked while a step ran, whose runner never came back to end
     // it (AGL-3616): the lease ran out, so the job ends here, unclaimed.
     if (aiJobCancelPending(job)) {
       if (!leaseIsLive(job, owner, now.getTime())) {
-        tx.set(ref, aiJobCanceledPatch(job, now, cancelRequestOf(job, now)), { merge: true })
+        const patch = aiJobCanceledPatch(job, now, cancelRequestOf(job, now))
+        tx.set(ref, patch, { merge: true })
+        ended = { ...job, ...(patch as unknown as Partial<AiJob>) } as AiJob
       }
       return null
     }
@@ -903,6 +923,8 @@ export async function claimNextStep(
       stepIndex,
     }
   })
+  await noteAiJobEnded(firestore, ended, now)
+  return claimed
 }
 
 /**
@@ -954,13 +976,17 @@ export async function holdPausedAiJob(
   now = new Date(),
 ): Promise<AiJob | null> {
   const ref = jobsCollection(firestore, orgId).doc(jobId)
-  return firestore.runTransaction(async (tx: Transaction) => {
+  let ended: AiJob | null = null
+  const held = await firestore.runTransaction<AiJob | null>(async (tx: Transaction) => {
+    ended = null
     const job = jobFrom(await tx.get(ref))
     if (!job) return null
     // A paused workspace's job a person canceled ends canceled (AGL-3616).
     if (aiJobCancelPending(job)) {
       if (!leaseIsLive(job, owner, now.getTime())) {
-        tx.set(ref, aiJobCanceledPatch(job, now, cancelRequestOf(job, now)), { merge: true })
+        const patch = aiJobCanceledPatch(job, now, cancelRequestOf(job, now))
+        tx.set(ref, patch, { merge: true })
+        ended = { ...job, ...(patch as unknown as Partial<AiJob>) } as AiJob
       }
       return null
     }
@@ -968,6 +994,8 @@ export async function holdPausedAiJob(
     tx.set(ref, { updatedAt: now }, { merge: true })
     return { ...job, updatedAt: now as unknown as AiJob['updatedAt'] }
   })
+  await noteAiJobEnded(firestore, ended, now)
+  return held
 }
 
 export interface RecordStepInput {
@@ -1226,8 +1254,11 @@ export async function recordStep(
       remaining,
       // Entered `needs_review` in this write, rather than parked again.
       parked: parksForReview && job.status !== 'needs_review',
+      // Ended `canceled` in this write (AGL-3936).
+      ended: canceling && !isAiJobTerminal(job.status),
     }
   })
+  if (recorded.ended) await noteAiJobEnded(firestore, recorded.job, now)
   if (recorded.parked && !input.quiet) await announceAiJobTransition(recorded.job, 'needs-review')
   return { job: recorded.job, remaining: recorded.remaining, parked: recorded.parked }
 }
@@ -1274,6 +1305,7 @@ export async function completeAiJob(
           },
   )
   if (changed && job.status === 'done') await announceAiJobTransition(job, 'done')
+  if (changed) await noteAiJobEnded(firestore, job, now)
   return job
 }
 
@@ -1322,6 +1354,7 @@ export async function failAiJob(
       error: detail?.error instanceof Error ? detail.error.message : detail?.error == null ? null : String(detail.error),
     })
   }
+  if (changed) await noteAiJobEnded(firestore, job, now)
   return job
 }
 
@@ -1337,7 +1370,7 @@ export async function markAiJobNeedsInput(
   reason: string,
   now = new Date(),
 ): Promise<AiJob> {
-  const { job } = await transition(firestore, orgId, jobId, (current) =>
+  const { job, changed } = await transition(firestore, orgId, jobId, (current) =>
     isAiJobTerminal(current.status)
       ? null
       : aiJobCancelPending(current)
@@ -1358,6 +1391,7 @@ export async function markAiJobNeedsInput(
             updatedAt: now,
           },
   )
+  if (changed) await noteAiJobEnded(firestore, job, now)
   return job
 }
 
@@ -1419,6 +1453,7 @@ export async function cancelAiJob(
       kind: result.job.kind,
     })
   }
+  if (result.changed) await noteAiJobEnded(firestore, result.job, now)
   return result
 }
 
@@ -1802,6 +1837,8 @@ export async function retryAiBuildJob(
       updatedAt: now,
     }
   })
+  // A site start tried again keeps its site (AGL-3936).
+  if (result.changed) await clearAiEmptySiteSweep(firestore, result.job.hostId)
   return { ...result, retried: result.changed ? retried : [] }
 }
 
@@ -1843,7 +1880,7 @@ export async function resumeAiJob(
     reducePlan?: (plan: AiJobPlan) => AiJobPlan | null
   } = {},
 ): Promise<{ job: AiJob; changed: boolean }> {
-  return transition(firestore, orgId, jobId, (current) => {
+  const resumed = await transition(firestore, orgId, jobId, (current) => {
     // A job the meter paused (AGL-3660) carries on from the step it paused
     // on: that step is already pending, so it is queued again with nothing
     // else changed. Whether the credits are there now is the reservation's
@@ -1890,6 +1927,9 @@ export async function resumeAiJob(
       updatedAt: now,
     }
   })
+  // A site start resumed keeps its site (AGL-3936).
+  if (resumed.changed) await clearAiEmptySiteSweep(firestore, resumed.job.hostId)
+  return resumed
 }
 
 /**

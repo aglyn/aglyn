@@ -278,8 +278,9 @@ describe('readSiteInventory — what is listed', () => {
       templates: [{ id: 'tpl-1', name: 'Service page', kind: 'page' }],
       forms: [{ id: 'frm-live', name: 'contact', fields: ['email', 'message'] }],
       // A v1 dataset's model is derived by the core reader, which names the fields for display.
+      // Each is shared with this site alone, so it was made for it (AGL-3912).
       datasets: [
-        { id: 'ds-team', name: 'Team', fields: ['Name', 'Role'], fieldIds: ['name', 'role'] },
+        { id: 'ds-team', name: 'Team', fields: ['Name', 'Role'], fieldIds: ['name', 'role'], siteOnly: true },
         {
           id: 'ds-work',
           name: 'Work',
@@ -287,6 +288,7 @@ describe('readSiteInventory — what is listed', () => {
           fieldIds: ['title', 'image', 'slug'],
           imageField: 'image',
           addressField: 'slug',
+          siteOnly: true,
         },
       ],
       collections: [{ id: 'col-blog', name: 'Blog', slug: 'blog' }],
@@ -330,6 +332,7 @@ describe('readSiteInventory — what is listed', () => {
         name: 'Gone',
         fields: ['Title'],
         fieldIds: ['title'],
+        siteOnly: true,
       },
       {
         id: 'ds-team',
@@ -338,8 +341,21 @@ describe('readSiteInventory — what is listed', () => {
         fieldIds: ['name', 'handle', 'slug'],
         addressField: 'handle',
         recordBase: 'people',
+        siteOnly: true,
       },
-      { id: 'ds-work', name: 'Work', fields: ['Title'], fieldIds: ['title'] },
+      { id: 'ds-work', name: 'Work', fields: ['Title'], fieldIds: ['title'], siteOnly: true },
+    ])
+  })
+
+  it('says a dataset was made for this site only where its scope names this site alone (AGL-3912)', async () => {
+    docs.set(`orgs/${ORG}/datasets/ds-org`, { displayName: 'Coaches', fields: ['name'], visibleTo: ['org'] })
+    docs.set(`orgs/${ORG}/datasets/ds-two`, { displayName: 'Classes', fields: ['name'], visibleTo: [`host:${HOST}`, 'host:host-2'] })
+    docs.set(`orgs/${ORG}/datasets/ds-own`, { displayName: 'Menu', fields: ['name'], visibleTo: [`host:${HOST}`] })
+    const { datasets } = await readSiteInventory(ORG, HOST, { firestore })
+    expect(datasets.map((row) => [row.id, row.siteOnly])).toEqual([
+      ['ds-org', undefined],
+      ['ds-own', true],
+      ['ds-two', undefined],
     ])
   })
 

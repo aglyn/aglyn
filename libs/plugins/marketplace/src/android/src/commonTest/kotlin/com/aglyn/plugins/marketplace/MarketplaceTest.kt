@@ -65,4 +65,10 @@ class MarketplaceTest {
     assertEquals(listOf("You", "A colleague"), listOf(boughtByLabel(mine, "u1"), boughtByLabel(theirs, "u1")))
     assertEquals(listOf("This workspace", "Studio", "Every workspace you belong to"), listOf(mine, theirs, legacy).map { licensedToLabel(it, "o1", mapOf("o2" to "Studio")) })
   }
+
+  @Test
+  fun aListingCategoryReadsAsAWord() {
+    kotlin.test.assertEquals("SEO", listingCategoryLabel("seo"))
+    kotlin.test.assertEquals("Commerce", listingCategoryLabel("commerce"))
+  }
 }

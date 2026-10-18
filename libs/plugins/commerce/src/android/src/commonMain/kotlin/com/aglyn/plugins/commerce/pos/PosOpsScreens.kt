@@ -46,6 +46,7 @@ import com.aglyn.ui.AmountRow
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.PanelSheet
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -65,38 +66,38 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
   val shift = model.shift
   var switching by remember { mutableStateOf(false) }
   var returning by remember { mutableStateOf(false) }
-  AlertDialog(
-    onDismissRequest = onDismiss,
+  var printersOpen by remember { mutableStateOf(false) }
+  // The register's controls are a task with room, not an alert: a full-screen panel on a phone, a large one on a tablet.
+  PanelSheet(
+    title = "Register",
+    onDismiss = onDismiss,
     modifier = Modifier.testTag("pos-ops"),
-    title = { Text("Register") },
-    text = {
-      Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
-        shift.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { shift.notice = null }) { Text("Dismiss") } }) }
-        SectionCard("Cashier") {
-          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-            Text(
-              cashier.cashier?.name ?: "You",
-              Modifier.weight(1f).testTag("pos-cashier-name"),
-              style = MaterialTheme.typography.titleMedium,
-            )
-            if (cashier.cashier != null) TextButton(onClick = cashier::signOut) { Text("Sign out") }
-          }
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-            OutlinedButton(onClick = { switching = true }, enabled = model.register != null, modifier = Modifier.testTag("pos-switch-cashier")) { Text("Switch cashier") }
-            OutlinedButton(onClick = { cashier.lock(); onDismiss() }, enabled = model.register != null, modifier = Modifier.testTag("pos-lock")) { Text("Lock") }
-          }
-        }
-        SectionCard("Shift") { ShiftControls(model) }
-        DisplayDevicesSection(model)
-        SectionCard("Last receipt") { LastReceiptControls(model) }
-        SectionCard("Returns") {
-          OutlinedButton(onClick = { returning = true }, enabled = model.register != null, modifier = Modifier.testTag("pos-return")) { Text("Return items") }
-        }
-        StaffPinsSection(model)
+    subtitle = model.register?.name,
+  ) {
+    shift.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { shift.notice = null }) { Text("Dismiss") } }) }
+    SectionCard("Cashier", Modifier.fillMaxWidth()) {
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+        Text(
+          cashier.cashier?.name ?: "You",
+          Modifier.weight(1f).testTag("pos-cashier-name"),
+          style = MaterialTheme.typography.titleMedium,
+        )
+        if (cashier.cashier != null) TextButton(onClick = cashier::signOut) { Text("Sign out") }
       }
-    },
-    confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
-  )
+      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+        OutlinedButton(onClick = { switching = true }, enabled = model.register != null, modifier = Modifier.testTag("pos-switch-cashier")) { Text("Switch cashier") }
+        OutlinedButton(onClick = { cashier.lock(); onDismiss() }, enabled = model.register != null, modifier = Modifier.testTag("pos-lock")) { Text("Lock") }
+      }
+    }
+    SectionCard("Shift", Modifier.fillMaxWidth()) { ShiftControls(model) }
+    DisplayDevicesSection(model)
+    SectionCard("Last receipt", Modifier.fillMaxWidth()) { LastReceiptControls(model) { printersOpen = true } }
+    ReceiptPrintersSection(model) { printersOpen = true }
+    SectionCard("Returns", Modifier.fillMaxWidth()) {
+      OutlinedButton(onClick = { returning = true }, enabled = model.register != null, modifier = Modifier.testTag("pos-return")) { Text("Return items") }
+    }
+    StaffPinsSection(model)
+  }
   if (switching) {
     PinPadDialog(model, purpose = "cashier", title = "Switch cashier", prompt = null, dismissible = true, onDismiss = { switching = false }) {
       cashier.switchTo(it)
@@ -104,12 +105,36 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
     }
   }
   if (returning) PosReturnDialog(model) { returning = false }
+  if (printersOpen) ReceiptPrintersDialog(model.printers, model.register?.name) { printersOpen = false }
   ShiftDialogs(model)
+}
+
+/** The register's receipt printers at a glance, and the way in to add and manage them. */
+@Composable
+private fun ReceiptPrintersSection(model: RegisterModel, onOpen: () -> Unit) {
+  val printers = model.printers
+  SectionCard("Receipt printers", Modifier.fillMaxWidth()) {
+    val rows = printers.rows
+    Text(
+      when {
+        !printers.ready -> "Reading this register's printers…"
+        rows.isEmpty() -> "Print receipts, kitchen tickets and reports on a Star or Epson printer, and open its cash drawer on cash sales."
+        else -> rows.joinToString(" · ") { row ->
+          row.name + " (" + printerStateChip(printerDisplayState(row.statusState, row.statusAtMs, nowMs().toDouble())).first.lowercase() + ")"
+        }
+      },
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    OutlinedButton(onClick = onOpen, enabled = model.register != null, modifier = Modifier.testTag("pos-printers-open")) {
+      Text(if (rows.isEmpty()) "Add a receipt printer" else "Manage printers")
+    }
+  }
 }
 
 /** The last sale's receipt: shown, printed again here or as a gift receipt, and sent to the register's receipt printer. */
 @Composable
-private fun LastReceiptControls(model: RegisterModel) {
+private fun LastReceiptControls(model: RegisterModel, onAddPrinter: () -> Unit) {
   val last = model.lastReceipt
   last.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { last.notice = null }) { Text("Dismiss") } }) }
   last.error?.let { NoticeBanner(it, StatusTone.WARNING) }
@@ -122,10 +147,11 @@ private fun LastReceiptControls(model: RegisterModel) {
   val direct = model.peripherals.printers.isNotEmpty()
   if (!direct && !last.hasPrinter) {
     Text(
-      "This register has no receipt printer. Add one in the console, or connect one to this device, to print receipts here.",
+      "This register has no receipt printer. Add one, or connect one to this device, to print receipts here.",
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    TextButton(onClick = onAddPrinter, enabled = model.register != null, modifier = Modifier.testTag("pos-last-receipt-add-printer")) { Text("Add a receipt printer") }
     return
   }
   FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
@@ -153,7 +179,7 @@ private fun StaffPinsSection(model: RegisterModel) {
   val scope = rememberCoroutineScope()
   val pins = remember(model) { PosStaffPinsModel(model.opsApi, scope) }
   LaunchedEffect(pins) { pins.load() }
-  SectionCard("Staff PINs") {
+  SectionCard("Staff PINs", Modifier.fillMaxWidth()) {
     pins.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { pins.notice = null }) { Text("Dismiss") } }) }
     val status = pins.status
     when {
@@ -375,7 +401,7 @@ fun ShiftReportView(report: PosShiftReport, shift: PosShift?, currency: String) 
     report.salesByTender.entries.sortedBy { it.key }.forEach { (method, cents) ->
       AmountRow(Contracts.posTenderLabels[method] ?: method, m(cents), muted = true)
     }
-    AmountRow("Refunds (${report.refundCount.toLong()})", "−" + m(report.refundsCents))
+    AmountRow("Refunds (${report.refundCount.toLong()})", (if (report.refundsCents > 0) "−" else "") + m(report.refundsCents))
     AmountRow("Net sales", m(report.netSalesCents), emphasized = true)
     HorizontalDivider(Modifier.padding(vertical = space(0.5f)))
     AmountRow("Opening float", m(report.openingFloatCents), muted = true)
@@ -482,7 +508,7 @@ fun LockedRegister(model: RegisterModel) {
 private fun DisplayDevicesSection(model: RegisterModel) {
   val display = model.display
   LaunchedEffect(model.register?.id) { display.loadDevices() }
-  SectionCard("Customer display and kiosk") {
+  SectionCard("Customer display and kiosk", Modifier.fillMaxWidth()) {
     StatusChip(
       if (display.connected) "Display connected" else "No display connected",
       if (display.connected) StatusTone.SUCCESS else StatusTone.NEUTRAL,

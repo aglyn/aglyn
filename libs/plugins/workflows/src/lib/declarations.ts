@@ -18,8 +18,10 @@
 // The seam from its own module, not the plugin-manager barrel: both apps load
 // this at boot, and the barrel reaches the client contexts.
 import { registerInteractionStepChecks } from '@aglyn/aglyn/plugin-manager/interaction-step-checks'
+import { registerPluginActivityActions } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { hostActionStepProblem, SERVER_ACTION_STEP_TYPES } from './model/host-actions'
+import { describeAutomationRunAction } from './model/run-activity-words'
 
 /**
  * The automation editor's DECLARATIONS: what another surface reads of this
@@ -34,4 +36,11 @@ import { hostActionStepProblem, SERVER_ACTION_STEP_TYPES } from './model/host-ac
  */
 export function registerWorkflowsDeclarations(): void {
   registerInteractionStepChecks(SERVER_ACTION_STEP_TYPES, hostActionStepProblem, { pluginId: BUNDLE_ID })
+  // The run lines the engine files in a site's activity read in words in every feed and the apps' activity rows (AGL-3892).
+  registerPluginActivityActions({
+    pluginId: BUNDLE_ID,
+    group: { id: 'automation', label: 'Automation' },
+    actions: [],
+    describeAction: describeAutomationRunAction,
+  })
 }

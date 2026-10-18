@@ -1666,9 +1666,16 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               'products',
               product.$id,
             )
-            const liveHolds = await getDoc(productRef)
-              .then((snapshot) => snapshot.get('stockHolds'))
-              .catch(() => undefined)
+            const stored = await getDoc(productRef).catch(() => undefined)
+            // A product deleted since the editor opened stays deleted. This
+            // replace writes `deletedAt: null`, so saving it would bring the
+            // product back without the allowance check a create meets — a
+            // deleted product no longer holds a slot (AGL-3918). The app's
+            // save route refuses the same way.
+            if (stored?.get('deletedAt') != null) {
+              throw new Error('This product was deleted, so it can no longer be saved')
+            }
+            const liveHolds = stored?.get('stockHolds')
             // Edit stays client-direct (no quota consumed); full replace.
             // The product page renders it with no publish step, so the save
             // carries the site's cache drop with it (AGL-3386).

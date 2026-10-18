@@ -374,7 +374,11 @@ struct WorkflowsSection: View {
     }
     .task(id: hostID) {
       live.start(context.firestore, AutomationQueries.workflows(hostID))
-      serverCount = try? await context.firestore.count(FirestoreQuery(AutomationPaths.workflows(hostID)))
+    }
+    // The head-count the plan gate compares: LIVE workflows, as the create route counts them (AGL-3918), so a
+    // deleted one frees its slot and a disabled one keeps it. Re-read whenever the live list grows or shrinks.
+    .task(id: "\(hostID)|\(rows.count)") {
+      serverCount = try? await context.firestore.liveCount(AutomationPaths.workflows(hostID))
     }
     .onDisappear { live.stop() }
   }

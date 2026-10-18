@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.265",
+  "version": "1.0.0-beta.267",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -124,6 +124,7 @@
     "test:render-errors": "node --test tools/scripts/lib/render-errors.test.mjs",
     "test:uptime-red-report": "node --test tools/scripts/lib/uptime-red-report.test.mjs",
     "test:uptime-monitors": "node --test tools/scripts/lib/uptime-monitors.test.mjs",
+    "test:transport-retry": "node --test tools/scripts/lib/transport-retry.test.mjs",
     "test:week-one-preflight": "node tools/scripts/check-week-one-preflight.mjs --self-test",
     "test:runbook-commands": "node tools/scripts/check-runbook-commands.mjs --self-test",
     "test:ci-test-digest": "node --test tools/scripts/lib/ci-test-digest.test.mjs",

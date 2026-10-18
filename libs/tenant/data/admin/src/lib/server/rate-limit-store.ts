@@ -612,6 +612,17 @@ const BEACON_HEARTBEAT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 /** How long the failure path waits for the marker before giving up on it. */
 const BEACON_HEARTBEAT_READ_BUDGET_MS = 2_000
 
+/** How often one instance rewrites a service's marker (AGL-3932). */
+export const BEACON_HEARTBEAT_RECORD_MIN_INTERVAL_MS = 5 * 60_000
+
+/** When this instance last recorded each service's marker. */
+const lastBeaconHeartbeatRecord = new Map<string, number>()
+
+/** Test seam. */
+export function resetBeaconHeartbeatRecordForTests(): void {
+  lastBeaconHeartbeatRecord.clear()
+}
+
 /**
  * Record that a heartbeat reached Cloud Logging (AGL-2713).
  *
@@ -620,16 +631,25 @@ const BEACON_HEARTBEAT_READ_BUDGET_MS = 2_000
  * probe it is attached to fails. A write that does not land simply means the
  * next miss is graded without it, which is the safe direction.
  *
- * The caller is memoized per instance on a five-minute TTL, so the write rate
- * is one per instance per five minutes however hard the public endpoint is
- * hit — orders of magnitude under the per-document ceiling that produced
- * AGL-2404's contention storm.
+ * The write is spaced per instance to one per {@link BEACON_HEARTBEAT_RECORD_MIN_INTERVAL_MS}
+ * per service, however hard the public endpoint is hit — orders of magnitude
+ * under the per-document ceiling that produced AGL-2404's contention storm.
+ * The callers' own memo (two minutes since AGL-2947) was never enough on its
+ * own: three uptime regions and a probe service each land on their own
+ * instance, and the sample of 2026-10-18 showed a marker write for nearly
+ * every probe, ~1,000 a day (AGL-3932). A marker is only ever read to
+ * forgive a miss inside the fifteen-minute grace, so five minutes is fresh.
  */
 export function recordBeaconHeartbeat(
   service: string,
   options?: { now?: number; firestore?: any },
 ): void {
   const nowMs = options?.now ?? Date.now()
+  const last = lastBeaconHeartbeatRecord.get(service)
+  // `>= 0` so a clock that steps backwards records rather than going quiet.
+  if (last !== undefined && nowMs - last >= 0 && nowMs - last < BEACON_HEARTBEAT_RECORD_MIN_INTERVAL_MS) {
+    return
+  }
   let firestore: any
   try {
     firestore = options?.firestore ?? firebaseAdmin.app().firestore()
@@ -639,6 +659,7 @@ export function recordBeaconHeartbeat(
     // miss is lost, and a miss with no evidence reds.
     return
   }
+  lastBeaconHeartbeatRecord.set(service, nowMs)
   void Promise.resolve(
     firestore
       .collection(RATE_LIMIT_COLLECTION)
