@@ -206,14 +206,34 @@ async function freshRoute(): Promise<RouteModule> {
 const countOf = (count: number) => async () => ({ data: () => ({ count }) })
 
 /** Orgs as the landing read sees them: each with this many sites (AGL-3725). */
+/**
+ * Orgs NEWEST FIRST, one minute apart, each by a different visitor unless
+ * `visitors` names one: the landing check reads the newest people in order.
+ */
 const orgsWithSites =
   (...siteCounts: number[]) =>
+  async () =>
+    orgsMadeBy(siteCounts.map((sites) => ({ sites })))()
+
+const orgsMadeBy =
+  (orgs: Array<{ sites: number; firstTouch?: number; owner?: string }>) =>
   async () => ({
-    docs: siteCounts.map((n) => ({
-      get: (field: string) =>
-        field === 'hosts'
-          ? Object.fromEntries(Array.from({ length: n }, (_, i) => [`h${i}`, true]))
-          : undefined,
+    docs: orgs.map(({ sites, firstTouch, owner }, index) => ({
+      get: (field: string) => {
+        if (field === 'hosts') {
+          return Object.fromEntries(
+            Array.from({ length: sites }, (_, i) => [`h${i}`, true]),
+          )
+        }
+        if (field === 'createdAt') {
+          return { toMillis: () => Date.now() - 3_600_000 - index * 60_000 }
+        }
+        if (field === 'acquisition') {
+          return firstTouch === undefined ? undefined : { capturedAt: firstTouch }
+        }
+        if (field === 'ownerUid') return owner ?? `owner-${index}`
+        return undefined
+      },
     })),
   })
 
@@ -809,9 +829,9 @@ describe('AGL-3725 · signupLanding: a workspace that never reached a site', () 
    * 404 before the site list. Volume, refusals, drought and the canary all
    * stayed green for nine hours, because each of them asks about workspaces.
    */
-  it('goes red when two orgs past the grace period have no site', async () => {
+  it('goes red when the two newest people past the grace period have no site', async () => {
     mockCountGet.mockImplementation(countOf(1))
-    mockLandingGet.mockImplementation(orgsWithSites(0, 1, 0, 2))
+    mockLandingGet.mockImplementation(orgsWithSites(0, 0, 1, 2))
     const { GET } = await freshRoute()
     const response = await GET()
     const body = await response.json()
@@ -820,11 +840,54 @@ describe('AGL-3725 · signupLanding: a workspace that never reached a site', () 
       ok: false,
       code: 'signups-stranded',
       strandedOrgs: 2,
+      strandedPeople: 2,
+      strandedStreak: 2,
       orgsInWindow: 4,
       windowHours: 12,
       graceMinutes: 30,
       maxStranded: 2,
     })
+  })
+
+  it('stays green for two drop-offs with a person who made a site between them (2026-10-17)', async () => {
+    mockCountGet.mockImplementation(countOf(1))
+    mockLandingGet.mockImplementation(orgsWithSites(0, 1, 0, 2))
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+    expect(response.status).toBe(200)
+    expect(body.checks.signupLanding).toMatchObject({
+      ok: true,
+      strandedOrgs: 2,
+      strandedPeople: 2,
+      strandedStreak: 1,
+    })
+  })
+
+  it("counts one browser's workspaces as one person, and never prints who (2026-10-17)", async () => {
+    // A third workspace made with a second Google account, after the first
+    // one got a site: the same first-touch stamp, so the same person.
+    mockCountGet.mockImplementation(countOf(1))
+    mockLandingGet.mockImplementation(
+      orgsMadeBy([
+        { sites: 0, firstTouch: 1792233980958, owner: 'second-google' },
+        { sites: 0, owner: 'someone-else' },
+        { sites: 1, firstTouch: 1792233980958, owner: 'first-google' },
+      ]),
+    )
+    const { GET } = await freshRoute()
+    const response = await GET()
+    const body = await response.json()
+    expect(response.status).toBe(200)
+    expect(body.checks.signupLanding).toMatchObject({
+      ok: true,
+      strandedOrgs: 2,
+      strandedPeople: 1,
+      strandedStreak: 0,
+    })
+    const text = JSON.stringify(body)
+    expect(text).not.toContain('1792233980958')
+    expect(text).not.toContain('second-google')
   })
 
   it('stays green for one person who signed up and left', async () => {

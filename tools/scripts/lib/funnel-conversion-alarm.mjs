@@ -117,6 +117,9 @@ export const FUNNEL_DOORS = [
     pagePath: '/signin',
     conversionEvent: 'login',
     truthField: 'lastLoginAt',
+    // The door counts more than the beacon does: a Google account CREATED
+    // on /signin got through /signin too. See countSigninDoorLogins.
+    doorTruthField: 'signinDoor',
     truth: 'person signed in',
     truthPlural: 'people signed in',
   },
@@ -156,6 +159,17 @@ export const MIN_BEACON_TRUTH = 3
  * bounce); see {@link countReturningLogins}.
  */
 export const RETURN_GAP_MS = 60 * 60 * 1000
+
+/**
+ * The shortest gap between a Google account's creation and its latest
+ * sign-in that marks the /signin consent bounce (AGL-1497): the account is
+ * created on /signin, stood down, and signed in again on /signup. A sign-up
+ * that starts on /signup signs in once, so its gap is 0 or 1 ms. Measured
+ * 2026-10-11 → 10-17: bounces at 9.1, 9.9, 11.2, 11.5, 12.4, 13.1, 15.5,
+ * 16.5, 18.0, 23.5 and 98 s; one-door sign-ups at 0 and 1 ms. A second is
+ * far from both. See {@link countSigninDoorLogins}.
+ */
+export const SIGNIN_BOUNCE_MIN_GAP_MS = 1_000
 
 /**
  * The property's reporting zone, when the Admin API cannot be asked. GA4's
@@ -370,6 +384,44 @@ export function countReturningLogins(records, { startMs, endMs }) {
 }
 
 /**
+ * Everyone who got through /signin in the window: the returning sign-ins of
+ * {@link countReturningLogins}, plus the Google (or any non-password)
+ * accounts that were CREATED on /signin.
+ *
+ * "Sign in with Google" on /signin creates an account when the person has
+ * none, and the page then stands it down and sends them to /signup for the
+ * Terms. That person got through /signin's door; the beacon is right to call
+ * it a `sign_up`, but a door that counts only returns cannot see them. On
+ * 2026-10-17 eight people viewed /signin, four of them came out of it with a
+ * new Google account, nobody returning signed in, and the door read "not one
+ * person signed in" for a window in which /signin worked.
+ *
+ * The bounce is visible in the auth record: the account signs in a second
+ * time on /signup, seconds after it was created, so its `lastLoginAt` sits
+ * between {@link SIGNIN_BOUNCE_MIN_GAP_MS} and {@link RETURN_GAP_MS} past
+ * `createdAt`. A Google sign-up that starts on /signup signs in once, so it
+ * sits at 0 or 1 ms and is not counted. A password account cannot be created
+ * on /signin at all, so it is never counted here.
+ */
+export function countSigninDoorLogins(records, window) {
+  let n = countReturningLogins(records, window)
+  for (const record of records ?? []) {
+    const at = Number(record?.lastLoginAt)
+    const created = Number(record?.createdAt)
+    if (!Number.isFinite(at) || !Number.isFinite(created)) continue
+    if (at < window.startMs || at > window.endMs) continue
+    // Only the creations countReturningLogins left out, so none is counted
+    // twice.
+    if (!(created >= window.startMs && at - created < RETURN_GAP_MS)) continue
+    if (at - created < SIGNIN_BOUNCE_MIN_GAP_MS) continue
+    const providers = (record?.providerUserInfo ?? []).map((p) => p?.providerId)
+    if (providers.length === 0 || providers.includes('password')) continue
+    n += 1
+  }
+  return n
+}
+
+/**
  * The truth counts for every window, from the default tenant's two pages and
  * one sign-in page per Identity Platform tenant.
  *
@@ -395,9 +447,14 @@ export function countTruth({ byCreated, byLogin, tenantLogins = [] }, windows) {
     for (const page of tenantLogins) {
       lastLoginAt += countReturningLogins(page, window)
     }
+    let signinDoor = countSigninDoorLogins(byLogin, window)
+    for (const page of tenantLogins) {
+      signinDoor += countReturningLogins(page, window)
+    }
     counts[name] = {
       createdAt: countWithin(byCreated, 'createdAt', window),
       lastLoginAt,
+      signinDoor,
     }
   }
   return counts
