@@ -278,6 +278,40 @@ describe('the Pixabay client', () => {
     }
   })
 
+  it('names a photo by what its bytes are, never by its label (AGL-3923)', async () => {
+    const info = jest.spyOn(console, 'info').mockImplementation(() => undefined)
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      // Pixabay 10157445, the beta.267 Brightvale hero's pick: labeled image/png, its bytes another format.
+      const webp = Uint8Array.from([...Buffer.from('RIFF'), 0x24, 0, 0, 0, ...Buffer.from('WEBPVP8 '), 0, 0, 0, 0])
+      const wave = Uint8Array.from([...Buffer.from('RIFF'), 0x24, 0, 0, 0, ...Buffer.from('WAVEfmt '), 0, 0, 0, 0])
+      const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d])
+      const { fn } = fakeFetch([
+        new Response(TINY_JPEG, { status: 200, headers: { 'content-type': 'image/png' } }),
+        new Response(webp, { status: 200, headers: { 'content-type': 'image/jpeg' } }),
+        new Response(png, { status: 200, headers: { 'content-type': 'application/octet-stream' } }),
+        new Response(wave, { status: 200, headers: { 'content-type': 'image/webp' } }),
+      ])
+      const client = createPixabayClient({ apiKey: () => KEY, fetch: fn })
+      const url = 'https://pixabay.com/get/g56a761e2_signed_1280.png'
+      expect((await client.download(url, { maxBytes: 1_000_000 }))?.contentType).toBe('image/jpeg')
+      expect((await client.download(url, { maxBytes: 1_000_000 }))?.contentType).toBe('image/webp')
+      expect((await client.download(url, { maxBytes: 1_000_000 }))?.contentType).toBe('image/png')
+      // A RIFF file that is no WebP is no photo, whatever it is labeled.
+      expect(await client.download(url, { maxBytes: 1_000_000 })).toBeNull()
+      expect(info.mock.calls.map(([, detail]) => detail)).toEqual([
+        { declared: 'image/png', sniffed: 'image/jpeg' },
+        { declared: 'image/jpeg', sniffed: 'image/webp' },
+        { declared: 'application/octet-stream', sniffed: 'image/png' },
+      ])
+      expect(warn.mock.calls[0]).toEqual(['pixabay: a photo download failed', { reason: 'type', declared: 'image/webp', sniffed: null, status: 200 }])
+      expect(JSON.stringify([...info.mock.calls, ...warn.mock.calls])).not.toContain('g56a761e2_signed')
+    } finally {
+      info.mockRestore()
+      warn.mockRestore()
+    }
+  })
+
   it('refuses what is not an image, or is larger than asked', async () => {
     const { fn } = fakeFetch([
       new Response('<html>', { status: 200, headers: { 'content-type': 'text/html' } }),

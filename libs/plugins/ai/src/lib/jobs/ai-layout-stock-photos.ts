@@ -194,6 +194,16 @@ const AI_LAYOUT_STOCK_COPIES_AT_ONCE = 4
 export const AI_LAYOUT_STOCK_MAX_BYTES = 3 * 1024 * 1024
 
 /**
+ * The media library's refusals that are about ONE photo's own bytes, as the
+ * console's `ingestMedia` returns them (AGL-3923): 415 for a type or contents
+ * it does not accept, 413 for a photo too large to store, 451 for a file
+ * held in quarantine. The slot then tries its next hit, and the page goes on
+ * storing. Every other refusal (403 from the storage band, the site's scope
+ * or a lockdown; 500) holds for the whole page.
+ */
+export const AI_STOCK_PHOTO_OWN_REFUSALS: ReadonlySet<number> = new Set([413, 415, 451])
+
+/**
  * The unit job input naming the screen drafts the job's other pages were
  * written to, whose photos a page does not place again (AGL-3660).
  */
@@ -2508,6 +2518,9 @@ export function aiStockPlacedSrcs(
  * its own page keeps its own photos. Bounded; the oldest job goes first.
  */
 const JOB_PHOTOS = new Map<string, Map<string, string>>()
+
+/** What a job's photos map holds for a photo the media library refused for its own bytes: no page's scope (AGL-3923). */
+const REFUSED_BY_THE_LIBRARY = '\u0000refused'
 const JOB_PHOTOS_MAX = 200
 
 function jobPhotos(key: string | null): Map<string, string> | null {
@@ -3661,16 +3674,30 @@ export function aiLayoutStockPhotoSource(
             ...described,
           }
         }
-        storing = false
         const refusal = stored as Extract<
           PluginMediaIngestResult,
           { ok: false }
         >
+        // One photo's own bytes refused (AGL-3923): the beta.267 Brightvale
+        // start's first pick, Pixabay 10157445, came labeled image/png and was
+        // not PNG, and that one 415 stopped every copy on all four of its
+        // pages, which then showed the starters' pottery bench and coffee
+        // shop. Such a refusal is this photo's: the slot tries its next hit.
+        const ofThisPhoto = AI_STOCK_PHOTO_OWN_REFUSALS.has(refusal.status)
+        if (ofThisPhoto) {
+          uncopied.add(slot)
+          // Never tried again by this page's other slots, nor by the job's other pages.
+          claimed.add(sourceKey)
+          job?.set(sourceKey, REFUSED_BY_THE_LIBRARY)
+        } else storing = false
         console.warn(
           'ai layout pictures: the media library refused a stock photo',
           {
             status: refusal.status,
             reason: refusal.reason,
+            provider: photo.provider,
+            id: photo.id,
+            holds: ofThisPhoto ? 'this photo' : 'the page',
           },
         )
       } catch (error) {
@@ -3848,6 +3875,11 @@ export function aiLayoutStockPhotoSource(
             const key = stockPhotoSourceKey(hit)
             if (elsewhere(key)) blocked.add(key)
           }
+        }
+        // A photo the library refused for its own bytes is never a repeat either (AGL-3923).
+        for (const hit of found) {
+          const key = stockPhotoSourceKey(hit)
+          if (job?.get(key) === REFUSED_BY_THE_LIBRARY) blocked.add(key)
         }
         const judgement = judgementFor(slot, request, subject)
         const ranked = aiStockRank(found, blocked, `${input.seed}:${index}:${request.query}`, judgement)

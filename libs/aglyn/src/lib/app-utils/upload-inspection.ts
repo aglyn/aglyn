@@ -306,6 +306,29 @@ const LEGACY_OFFICE_TYPES = new Set([
   'application/vnd.ms-powerpoint',
 ])
 
+/** The photo types {@link sniffPhotoContentType} tells apart, in the order it checks them. */
+const SNIFFED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/gif'] as const
+
+/** WebP's own mark after its RIFF header: a RIFF file is a WebP only where it says so. */
+const WEBP_MARK: Signature = { magic: ascii('WEBP'), offset: 8, label: 'WebP' }
+
+/**
+ * The photo type a file's own bytes say it is (AGL-3923): JPEG, PNG, GIF or
+ * WebP, by the signatures {@link inspectUploadBytes} holds a declared type to,
+ * so a file labeled with what this returns passes the type check. `null` for
+ * any other bytes. A library's label is not proof: Pixabay served photo
+ * 10157445 as image/png, the upload check refused it as not PNG, and the
+ * beta.267 Brightvale start lost every stock photo it had chosen.
+ */
+export function sniffPhotoContentType(bytes: Uint8Array): string | null {
+  for (const type of SNIFFED_PHOTO_TYPES) {
+    if (TYPE_SIGNATURES[type]?.some((signature) => at(bytes, signature))) return type
+  }
+  const riff = TYPE_SIGNATURES['image/webp']?.[0]
+  if (riff && at(bytes, riff) && at(bytes, WEBP_MARK)) return 'image/webp'
+  return null
+}
+
 /**
  * Does a caller holding only a head window need to fetch the tail as well?
  *
