@@ -145,6 +145,20 @@ final class WorkspaceStoreTests: XCTestCase {
     XCTAssertEqual(store.site?.id, "s9")
   }
 
+  /// A link that launched the app arrives before the person's workspaces do: it is picked once they and the site arrive.
+  func testALinkBeforeTheWorkspacesArrivePicksThemWhenTheyDo() {
+    let reader = FakeReader()
+    let store = WorkspaceStore(uid: "u1", reader: reader, defaults: UserDefaults(suiteName: "workspace-\(UUID().uuidString)")!)
+    store.start()
+    XCTAssertTrue(store.select(orgSlug: "beta", hostSlug: "shop"))
+    reader.emit("users/u1/orgs", [.init(id: "a", data: ["slug": "alpha"]), .init(id: "b", data: ["slug": "beta"])])
+    XCTAssertEqual(store.org?.id, "b")
+    reader.emit(
+      "users/u1/hostMemberships",
+      [.init(id: "s8", data: ["orgId": "b", "subdomain": "eight"]), .init(id: "s9", data: ["orgId": "b", "subdomain": "shop"])])
+    XCTAssertEqual(store.site?.id, "s9")
+  }
+
   /// A full window is a page, not the whole list: the console's `loadMoreOrgs` (AGL-2336).
   func testAFullWindowOffersMoreAndGrowingItListensAgain() {
     let reader = FakeReader()

@@ -27,6 +27,8 @@ final class AppModel {
   let push: PushCenter
   private(set) var pluginFailures: [NativePluginLoadFailure] = []
   private(set) var workspace: WorkspaceStore?
+  /// The workspace and site (by address) of a link opened before anyone was signed in on this launch.
+  @ObservationIgnored private var pendingLinkScope: (orgSlug: String, hostSlug: String?)?
   /// The signed-in token's claims: the staff section shows only when they say staff.
   private(set) var claims = TokenClaims()
   /// Bumped by Refresh (⌘R); live lists re-subscribe on it.
@@ -119,6 +121,10 @@ final class AppModel {
     guard let user, let reader else { return }
     let store = WorkspaceStore(uid: user.uid, reader: reader)
     store.start()
+    if let (orgSlug, hostSlug) = pendingLinkScope {
+      pendingLinkScope = nil
+      store.select(orgSlug: orgSlug, hostSlug: hostSlug)
+    }
     workspace = store
   }
 
@@ -236,7 +242,7 @@ final class AppModel {
     switch registry.resolve(link) {
     case .screen(let screen, let params)?:
       // A link that names a workspace and site by address reads them, not whichever is picked (AGL-3911).
-      if let org = params["orgSlug"] { workspace?.select(orgSlug: org, hostSlug: params["hostSlug"]) }
+      if let org = params["orgSlug"] { select(orgSlug: org, hostSlug: params["hostSlug"]) }
       navigation.push(.screen(screen, params))
     case .besigner(let path)?: navigation.push(.besigner(path))
     case .unavailable(let path)?:
@@ -244,7 +250,7 @@ final class AppModel {
       let scope = DeepLinks.splitConsoleScope(path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? path)
       if let jobID = DeepLinks.rootQuery(path)?["aiJob"], !jobID.isEmpty, registry.screen("ai.job") != nil {
         // An AI job's notice that built nothing of its own to open (`/{hostId}?aiJob=…`) opens that job (AGL-3911).
-        if let org = scope.orgSlug { workspace?.select(orgSlug: org, hostSlug: scope.hostSlug) }
+        if let org = scope.orgSlug { select(orgSlug: org, hostSlug: scope.hostSlug) }
         navigation.push(.screen("ai.job", ["jobId": jobID]))
       } else if path.hasPrefix("/manage/notifications/settings") {
         navigation.select(.notifications)
@@ -260,6 +266,16 @@ final class AppModel {
         navigation.push(.unavailable(path))
       }
     case nil: break
+    }
+  }
+
+  /// Moves the switcher onto the workspace and site a link names by address; a link that launched the app before the
+  /// session was restored waits for the person's workspace store.
+  private func select(orgSlug: String, hostSlug: String?) {
+    if let workspace {
+      workspace.select(orgSlug: orgSlug, hostSlug: hostSlug)
+    } else {
+      pendingLinkScope = (orgSlug, hostSlug)
     }
   }
 
