@@ -186,8 +186,6 @@ public struct AglynBrowserScreen: View {
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
-        // The page takes the whole phone screen; the tab bar comes back with the screen it was opened from.
-        .toolbar(compact ? .hidden : .automatic, for: .tabBar)
       #endif
       .toolbar { toolbar }
       .accessibilityIdentifier("browser-screen")
