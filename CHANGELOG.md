@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Changed
 
+- **firestore:** background work writes once per run, not once per job ([AGL-3932](https://linear.app/aglyn/issue/AGL-3932))
 - **monitoring:** the render monitor and the production canary take turns over the pages, instead of each reading every page on every run ([AGL-3928](https://linear.app/aglyn/issue/AGL-3928))
 - **notifications:** every staff notification (new account, workspace and site, subscriptions, plan changes, failed payments) emails every staff account by default ([AGL-3929](https://linear.app/aglyn/issue/AGL-3929))
 
