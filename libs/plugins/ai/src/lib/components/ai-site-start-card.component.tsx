@@ -753,7 +753,7 @@ export function AiSiteStartCard({
     audience: { title: 'Who is it for?', lede: 'The pages and the contact form are written for them.' },
     style: {
       title: 'Choose a style',
-      lede: 'Each picture is the starter home page in that style. Your site gets its own colors and fonts within the style you pick.',
+      lede: 'Each picture is an example home page in that style. Yours is written for your business, with its own colors and fonts within the style you pick.',
     },
     details: { title: 'A few details', lede: 'Where messages go, how many pages, and what else to draft. All can be changed later.' },
     review: {

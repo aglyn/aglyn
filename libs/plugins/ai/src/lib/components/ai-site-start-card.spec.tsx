@@ -81,6 +81,7 @@ import {
 import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText, aiCreditRangeText } from '../model/ai-credit-estimate'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
 import { AI_SITE_START_ANSWERS, aiSiteStartBrief, aiSiteStartInputs, type AiSiteStartAnswers } from '../model/ai-site-start'
+import { AI_SITE_STYLE_PREVIEW_ALTS } from './ai-site-style-previews'
 import { resetAiModelOptionReadsForTests } from './use-ai-model-choice'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
@@ -654,16 +655,20 @@ describe('the questions become a site scaffold', () => {
     expect(pickForMe().getAttribute('aria-label')).toBe('Pick for me: From your answer: Music & bands')
   })
 
-  it('shows each style as a real picture of a page in it, lazily, at a fixed size (AGL-3898)', async () => {
+  it('shows each style as a picture of its own kind of page, lazily, at a fixed size (AGL-3898)', async () => {
     await openCard()
     await answerTo('style')
+    const alts = new Set<string>()
     for (const [index, kind] of AI_SITE_KINDS.entries()) {
       const picture = kindCard(index).querySelector('img') as HTMLImageElement
       expect(picture).toBeTruthy()
-      expect(picture.getAttribute('alt')).toBe(`The starter home page drawn in the ${kind.label} style`)
+      // Each says what its own page shows, so no two styles read alike to a screen reader.
+      expect(picture.getAttribute('alt')).toBe(AI_SITE_STYLE_PREVIEW_ALTS[kind.id])
+      alts.add(picture.getAttribute('alt') as string)
       expect(picture.getAttribute('loading')).toBe('lazy')
-      expect([picture.getAttribute('width'), picture.getAttribute('height')]).toEqual(['800', '500'])
+      expect([picture.getAttribute('width'), picture.getAttribute('height')]).toEqual(['800', '800'])
     }
+    expect(alts.size).toBe(AI_SITE_KINDS.length)
     // "Pick for me" is no style, so it has no picture of one.
     expect(pickForMe().querySelector('img')).toBeNull()
   })
