@@ -19,6 +19,7 @@ jest.mock('./firebase-admin', () => ({}))
 jest.mock('firebase-admin/app', () => ({ getApp: jest.fn() }))
 jest.mock('firebase-admin/messaging', () => ({ getMessaging: jest.fn() }))
 
+import { notificationSound } from '@aglyn/aglyn/app-utils/notification-sounds'
 import type { BatchResponse, TokenMessage } from 'firebase-admin/messaging'
 import type { PushMessage, PushTarget } from './push-delivery'
 import { createFcmTransport, FCM_BATCH, fcmMessage, type FcmMessaging } from './push-fcm'
@@ -29,7 +30,7 @@ const MESSAGE: PushMessage = {
   data: { type: 'content.order', link: '/acme/orders/o1', orgId: 'org-1' },
   urgent: false,
 }
-const target = (token: string): PushTarget => ({ token, app: 'aglyn', topic: 'com.aglyn.app' })
+const target = (token: string): PushTarget => ({ token, app: 'aglyn', topic: 'com.aglyn.app', sound: notificationSound(undefined) })
 
 function fakeMessaging(answer: (message: TokenMessage) => { success: boolean; code?: string }) {
   const batches: TokenMessage[][] = []
@@ -47,6 +48,13 @@ function fakeMessaging(answer: (message: TokenMessage) => { success: boolean; co
 }
 
 describe('FCM transport (AGL-3651)', () => {
+  it('plays the person’s sound through the channel the app made for it', () => {
+    expect(fcmMessage('tok', MESSAGE, notificationSound('steel_pan')).android).toEqual({
+      priority: 'high',
+      notification: { sound: 'aglyn_sound_steel_pan', channelId: 'aglyn_sound_steel_pan' },
+    })
+  })
+
   it('sends the notification with the tap data, at Android high priority', async () => {
     expect(fcmMessage('tok', MESSAGE)).toEqual({
       token: 'tok',
