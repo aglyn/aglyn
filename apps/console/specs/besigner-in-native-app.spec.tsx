@@ -68,7 +68,7 @@ jest.mock('../hooks/use-secondary-nav', () => ({
 jest.mock('../components/layouts/app-bar-menubar.component', () => ({ __esModule: true, default: () => null }))
 jest.mock('../components/global-search/global-search-trigger.component', () => ({ __esModule: true, default: () => null }))
 jest.mock('../components/notification-prompt.component', () => ({ __esModule: true, default: () => null }))
-jest.mock('../components/notifications-menu.component', () => ({ __esModule: true, default: () => null }))
+jest.mock('../components/notifications-menu.component', () => ({ __esModule: true, default: () => 'web bell' }))
 jest.mock('../components/offline-indicator.component', () => ({ __esModule: true, default: () => null }))
 jest.mock('../components/console-top-bar-slot.component', () => ({ __esModule: true, default: () => null }))
 jest.mock('../components/org-switcher-nav.component', () => ({ __esModule: true, default: () => null }))
@@ -137,6 +137,26 @@ describe('the editor\'s back arrow', () => {
     markNativeAppWebView()
     render(editor())
     await waitFor(() => expect(screen.queryByText('back')).toBeNull())
+  })
+})
+
+describe('the web notifications bell', () => {
+  const editor = () => (
+    <MainLayout besigner backButton={{ href: '/acme/hosts/demo/screens/s1/view' }}>
+      <div>canvas</div>
+    </MainLayout>
+  )
+
+  it('rings in a browser tab', () => {
+    render(editor())
+    expect(screen.getByText('web bell')).toBeTruthy()
+  })
+
+  it('is left out inside the apps, which keep their own notifications', async () => {
+    setUserAgent(MAC_APP_UA)
+    render(editor())
+    await waitFor(() => expect(screen.queryByText('web bell')).toBeNull())
+    expect(screen.getByText('canvas')).toBeTruthy()
   })
 })
 

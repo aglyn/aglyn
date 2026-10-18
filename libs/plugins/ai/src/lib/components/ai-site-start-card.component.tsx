@@ -21,34 +21,9 @@ import { lockdownRefusalText, parseLockdownRefusal, PLATFORM_BRAND_NAME } from '
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import type { ConsoleHostFirstRunZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
-import {
-  mdiAccount,
-  mdiBookOpenPageVariant,
-  mdiBriefcaseOutline,
-  mdiCalendarHeart,
-  mdiCamera,
-  mdiClockOutline,
-  mdiContentCut,
-  mdiCreation,
-  mdiDumbbell,
-  mdiHandHeart,
-  mdiHeartPulse,
-  mdiHomeCity,
-  mdiMusic,
-  mdiPaletteOutline,
-  mdiRocketLaunch,
-  mdiScaleBalance,
-  mdiSchool,
-  mdiShopping,
-  mdiSilverwareForkKnife,
-  mdiViewGridOutline,
-  mdiWrench,
-  mdiYoga,
-  mdiPageLayoutHeaderFooter,
-} from '@aglyn/shared-data-mdi'
+import { mdiCreation, mdiPageLayoutHeaderFooter } from '@aglyn/shared-data-mdi'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { OptionCardGrid } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -67,16 +42,12 @@ import {
   DialogContentText,
   DialogTitle,
   IconButton,
-  MenuItem,
   Stack,
-  Step,
-  StepLabel,
-  Stepper,
-  TextField,
   Toolbar,
   Typography,
+  useMediaQuery,
 } from '@mui/material'
-import { alpha, type Theme } from '@mui/material/styles'
+import { alpha, useTheme, type Theme } from '@mui/material/styles'
 import { useRouter } from 'next/navigation'
 import {
   useCallback,
@@ -84,14 +55,14 @@ import {
   useId,
   useRef,
   useState,
+  type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
   type SyntheticEvent,
 } from 'react'
 import {
   AI_JOB_AUTO_CONFIRM_INPUT,
   AI_SITE_FREE_PAGES,
-  AI_SITE_FREE_PAGES_NOTE,
-  AI_SITE_SUBMISSION_CHOICES,
   aiFreeCreditsNoneLeftText,
   aiFreeCreditsResetLabel,
   aiFreeSiteCreditRange,
@@ -99,7 +70,6 @@ import {
   aiSiteCreditRange,
   type AiFreeCreditsLeft,
   aiSitePagesBand,
-  type AiSiteSubmissions,
 } from '../model/ai-site-job'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import {
@@ -111,40 +81,33 @@ import {
 import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
 import {
   AI_SITE_START_ANSWERS,
-  AI_SITE_START_TYPES,
   aiSiteStartBrief,
-  aiSiteStartKind,
   aiSiteStartInputs,
   aiSiteStartRefusal,
   type AiSiteStartAnswers,
 } from '../model/ai-site-start'
+import {
+  aiSiteStartFieldErrors,
+  aiSiteStartFirstInvalidStep,
+  aiSiteStartNextStep,
+  aiSiteStartPreviousStep,
+  aiSiteStartStepErrors,
+  AI_SITE_START_STEP_FIELDS,
+  type AiSiteStartField,
+  type AiSiteStartStep,
+} from '../model/ai-site-start-steps'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { AI_SITE_KINDS, aiSiteKindOfInputs } from '../model/ai-site-kinds'
-
-/** The icon each kind of site's card shows. */
-const AI_SITE_KIND_ICONS: Record<string, string> = {
-  business: mdiBriefcaseOutline.path,
-  trades: mdiWrench.path,
-  professional: mdiScaleBalance.path,
-  wellness: mdiHeartPulse.path,
-  restaurant: mdiSilverwareForkKnife.path,
-  store: mdiShopping.path,
-  portfolio: mdiViewGridOutline.path,
-  studio: mdiPaletteOutline.path,
-  photography: mdiCamera.path,
-  blog: mdiBookOpenPageVariant.path,
-  events: mdiCalendarHeart.path,
-  fitness: mdiDumbbell.path,
-  yoga: mdiYoga.path,
-  beauty: mdiContentCut.path,
-  realestate: mdiHomeCity.path,
-  education: mdiSchool.path,
-  nonprofit: mdiHandHeart.path,
-  music: mdiMusic.path,
-  personal: mdiAccount.path,
-  landing: mdiRocketLaunch.path,
-  'coming-soon': mdiClockOutline.path,
-}
+import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
+import { aiSiteStartClickOf, useAiSiteStartTracking } from './ai-site-start-tracking'
+import {
+  AudienceStep,
+  DetailsStep,
+  KindStep,
+  ReviewStep,
+  StartProgress,
+  StepHelp,
+  StyleStep,
+} from './ai-site-start-steps.component'
 import { AiJobFollow } from './ai-job-follow.component'
 import { AiModelSelector } from './ai-model-selector.component'
 import { useAiModelChoice } from './use-ai-model-choice'
@@ -161,8 +124,8 @@ import { publishAiJob } from './ai-jobs-store'
  * Step 1 asks how to start, as two equal cards: the starter site — a
  * ready-made home page with a header and footer — or AI. The starter card is
  * the zone's `startBlank`, which gives a site born for the guided start the
- * starter every other new site is born with. The AI card moves to step 2, the
- * questions, which have a Back to step 1.
+ * starter every other new site is born with. The AI card moves on to the
+ * questions, one decision a step (AGL-3898; see {@link AiSiteStartCard}).
  *
  * ── A full screen dialog, and therefore three ways out ───────────────────
  *
@@ -234,8 +197,6 @@ import { publishAiJob } from './ai-jobs-store'
 
 type Verdict = 'checking' | 'ready' | 'hidden'
 
-type Step = 'choose' | 'describe'
-
 /** Labels the dialog for a reader, from its own heading. */
 const TITLE_ID = 'ai-site-start-title'
 
@@ -245,9 +206,6 @@ const TITLE_ID = 'ai-site-start-title'
  * which is what keeps MUI's dark-mode elevation overlay off it.
  */
 export const AI_SITE_START_SURFACE_SX = { bgcolor: 'background.default' } as const
-
-/** The two steps, as the indicator under the header names them. */
-const STEP_LABELS = ['Choose', 'Describe'] as const
 
 /** The soft round badge an icon sits in, in its accent's tint. */
 function IconBadge({ accent, children }: { accent: 'primary' | 'secondary'; children: ReactNode }) {
@@ -356,21 +314,6 @@ const START_HELP = {
     excerpt:
       'The starter site gives you a ready-made home page to edit. Start with AI asks a few questions, then plans, writes and publishes your pages.',
   }),
-  business: pluginDocsHelp('aiStart', {
-    anchor: '#your-business',
-    excerpt:
-      'What kind of site it is picks its style and pages; who it is for is who every page and the contact form are written for.',
-  }),
-  style: pluginDocsHelp('aiSiteLooks', {
-    anchor: '#choose-a-style',
-    excerpt:
-      'The style decides the look — theme, colors, fonts, buttons — and which pages the site usually has. Every site gets its own variation.',
-  }),
-  details: pluginDocsHelp('aiStart', {
-    anchor: '#details',
-    excerpt:
-      'Where contact form messages go, how many pages to write, and on paid plans whether to draft a welcome email. All can be changed later.',
-  }),
   estimate: pluginDocsHelp('aiCredits', {
     anchor: '#before-a-job-starts',
     excerpt:
@@ -398,6 +341,18 @@ export type AiSiteStartCardProps = ConsoleHostFirstRunZoneProps & {
   initialAnswers?: AiSiteStartAnswers | null
 }
 
+/**
+ * The questions are one decision a step (AGL-3898): what kind of site it is
+ * (typed, or a card), who it is for, the style (cards that show each one,
+ * "Pick for me" first and picked), the details, and a review that plans the
+ * site (`ai-site-start-steps.component.tsx`). Back and Next keep every
+ * answer; Enter in a text answer is Next; each step's heading takes the focus
+ * when it is drawn; a step that cannot go forward says why beside the field
+ * and puts the cursor in it. The answers are the same object the single form
+ * held, and only the review turns them into the job, through the same
+ * `aiSiteStartBrief` and `aiSiteStartInputs`. Each step is reported as a
+ * funnel, with where people struggle (`ai-site-start-tracking.ts`).
+ */
 export function AiSiteStartCard({
   hostId,
   orgId,
@@ -418,8 +373,19 @@ export function AiSiteStartCard({
   const [verdict, setVerdict] = useState<Verdict>('checking')
   // Read once: a start reopened on its answers stays one while it is open.
   const reopened = useRef(initialAnswers !== null)
-  const [step, setStep] = useState<Step>(initialAnswers ? 'describe' : 'choose')
+  // A start reopened on its answers opens on the review, every answer there to change.
+  const [step, setStep] = useState<AiSiteStartStep>(initialAnswers ? 'review' : 'choose')
   const [answers, setAnswers] = useState<AiSiteStartAnswers>(initialAnswers ?? AI_SITE_START_ANSWERS)
+  // The steps whose reasons not to go forward are shown: the ones Next was refused on.
+  const [checked, setChecked] = useState<ReadonlySet<AiSiteStartStep>>(() => new Set())
+  // A step opened from the review's Edit goes back to the review on Next.
+  const [returnTo, setReturnTo] = useState<AiSiteStartStep | null>(null)
+  // Each step's heading takes the focus when the step changes, never on the first draw.
+  const headingRef = useRef<HTMLHeadingElement | null>(null)
+  const drawnStep = useRef<AiSiteStartStep | null>(null)
+  const fieldRefs = useRef<Partial<Record<AiSiteStartField, HTMLInputElement | null>>>({})
+  const theme = useTheme()
+  const compact = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true })
   const [busy, setBusy] = useState(false)
   // The starter card's own busy state while `startBlank` runs (AGL-3594).
   const [startingStarter, setStartingStarter] = useState(false)
@@ -443,6 +409,8 @@ export function AiSiteStartCard({
   const pendingRef = useRef(pendingSite)
   pendingRef.current = pendingSite
   const creating = Boolean(pendingSite) && !pendingSite?.created
+  // The funnel (AGL-3898): each step drawn, left and abandoned, and where people struggle.
+  const tracker = useAiSiteStartTracking(step, verdict === 'ready')
 
   useEffect(() => {
     if (!orgId || !uid) return
@@ -512,7 +480,7 @@ export function AiSiteStartCard({
   // and the list is otherwise read when the picker opens.
   const { load: loadModels, model: rememberedModel } = modelChoice
   useEffect(() => {
-    if (!freeTaste && step === 'describe' && rememberedModel) loadModels()
+    if (!freeTaste && step === 'review' && rememberedModel) loadModels()
   }, [freeTaste, step, rememberedModel, loadModels])
   const pickedModel = freeTaste ? null : modelChoice.model
 
@@ -585,6 +553,9 @@ export function AiSiteStartCard({
       }
       // The indicator and the launcher count it from the moment it exists.
       publishAiJob(created)
+      // The funnel's last step: the site is started, and nothing after is leaving it.
+      tracker.complete()
+      tracker.finish()
       // Where the next step is (AGL-3594): the site's "Building your site"
       // page for this job. The zone closes without the starter first, so the
       // setup page does not ask again behind it.
@@ -600,7 +571,7 @@ export function AiSiteStartCard({
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel, pendingSite, siteKind])
+  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel, pendingSite, siteKind, tracker])
 
   // The zone's `startBlank`. Before the site exists it creates it with the
   // starter, and answers `false` when it could not — most often a name or
@@ -620,20 +591,80 @@ export function AiSiteStartCard({
     if (pendingSite && !pendingSite.created && !pendingSite.check()) return
     setStartingStarter(true)
     trackEvent('site_start_choice', { choice: 'starter' })
+    // The starter is a way to start, not a way to leave: no abandonment after it.
+    tracker.finish()
     runStartBlank()
-  }, [pendingSite, runStartBlank])
+  }, [pendingSite, runStartBlank, tracker])
 
   const chooseAi = useCallback(() => {
     if (pendingSite && !pendingSite.created && !pendingSite.check()) return
     trackEvent('site_start_choice', { choice: 'ai' })
-    setStep('describe')
-  }, [pendingSite])
+    tracker.complete()
+    setStep('kind')
+  }, [pendingSite, tracker])
+
+  // The heading of each step takes the focus as the step is drawn, so a
+  // keyboard and a screen reader start where the new question does.
+  useEffect(() => {
+    if (verdict !== 'ready') return
+    if (drawnStep.current !== null && drawnStep.current !== step) headingRef.current?.focus()
+    drawnStep.current = step
+  }, [step, verdict])
+
+  /** Forward from a question step, when its answers may go forward. */
+  const next = useCallback(() => {
+    if (step === 'choose' || step === 'review') return
+    const errors = aiSiteStartStepErrors(step, answers, { freeTaste })
+    if (errors.length) {
+      setChecked((current) => new Set(current).add(step))
+      for (const error of errors) tracker.fieldError(error.field, error.code)
+      fieldRefs.current[errors[0].field]?.focus()
+      return
+    }
+    tracker.complete()
+    const target = returnTo ?? aiSiteStartNextStep(step)
+    setReturnTo(null)
+    // A review reached with an answer that cannot go forward opens on that answer instead.
+    if (target === 'review') {
+      const invalid = aiSiteStartFirstInvalidStep(answers, { freeTaste })
+      if (invalid && invalid !== 'review') {
+        setChecked((current) => new Set(current).add(invalid))
+        setStep(invalid)
+        return
+      }
+    }
+    if (target) setStep(target)
+  }, [step, answers, freeTaste, returnTo, tracker])
+
+  /** Back one step, keeping every answer. */
+  const back = useCallback(() => {
+    const target = aiSiteStartPreviousStep(step)
+    if (!target) return
+    tracker.back()
+    setReturnTo(null)
+    setStep(target)
+  }, [step, tracker])
+
+  /** From the review, to the step that asks an answer, and back to the review on Next. */
+  const edit = useCallback(
+    (target: AiSiteStartStep) => {
+      tracker.back()
+      setReturnTo('review')
+      setStep(target)
+    },
+    [tracker],
+  )
 
   if (verdict !== 'ready') return null
 
   // Before a job is started Skip is the blank site, which writes the starter
   // (AGL-3594); after, it only closes — the job builds the site.
   const exit = started ? (leave ?? runStartBlank) : runStartBlank
+  // Skip, as the header draws it: before a site is started it is leaving the questions.
+  const skip = () => {
+    if (!started) tracker.abandon('skip')
+    exit()
+  }
   // Escape and the close control. Before "Create site" has made the site
   // (AGL-3761) there is nothing to give a starter to, so they only close,
   // and nothing is created; otherwise they are the same way out as Skip.
@@ -658,11 +689,16 @@ export function AiSiteStartCard({
       if (root && target instanceof Node && !root.contains(target)) return
     }
     if (drafted) setConfirmingLeave(true)
-    else dismissTo()
+    else closeTo()
+  }
+  // The dismissal itself, once nothing typed is in the way of it.
+  const closeTo = () => {
+    if (!started) tracker.abandon('close')
+    dismissTo()
   }
   const leaveDraft = () => {
     setConfirmingLeave(false)
-    dismissTo()
+    closeTo()
   }
 
   // The chosen model's cost against Auto's, as the model list states it.
@@ -687,6 +723,55 @@ export function AiSiteStartCard({
     : `${aiCreditRangeText(estimate)}, estimated`
 
   const choosing = step === 'choose' && !started
+  const reviewing = step === 'review' && !started
+  const asking = step !== 'choose' && !started
+  // Each answer's reason not to go forward, shown on a step once Next was refused there.
+  const fieldErrors = aiSiteStartFieldErrors(answers, { freeTaste })
+  const shownErrors = Object.fromEntries(
+    AI_SITE_START_STEP_FIELDS[step]
+      .filter((field) => checked.has(step) && fieldErrors[field])
+      .map((field) => [field, fieldErrors[field]]),
+  )
+  const stepProps = {
+    answers,
+    answer,
+    tracker,
+    errors: shownErrors,
+    fieldRef: (field: AiSiteStartField) => (node: HTMLInputElement | null) => {
+      fieldRefs.current[field] = node
+    },
+  }
+  const HEADINGS: Record<AiSiteStartStep, { title: string; lede: string }> = {
+    choose: {
+      title: 'How do you want to start?',
+      lede: creating ? 'Name your site, then choose how it starts. You can change everything later.' : 'You can change everything later.',
+    },
+    kind: {
+      title: 'What are you building?',
+      lede: `Say it in a few words, or pick the closest. ${PLATFORM_BRAND_NAME} AI plans and writes your pages from it.`,
+    },
+    audience: { title: 'Who is it for?', lede: 'The pages and the contact form are written for them.' },
+    style: {
+      title: 'Choose a style',
+      lede: 'Each picture is an example home page in that style. Yours is written for your business, with its own colors and fonts within the style you pick.',
+    },
+    details: { title: 'A few details', lede: 'Where messages go, how many pages, and what else to draft. All can be changed later.' },
+    review: {
+      title: 'Review your site',
+      lede: started
+        ? `${PLATFORM_BRAND_NAME} AI is on it.`
+        : `${PLATFORM_BRAND_NAME} AI plans and writes your pages from these answers, then publishes your site.`,
+    },
+  }
+  const heading = HEADINGS[step]
+  // Enter in a text answer is Next. A select, a card or a button keeps its own Enter.
+  const onStepKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing || !asking || reviewing) return
+    const target = event.target as HTMLElement
+    if (target.tagName !== 'INPUT' || (target as HTMLInputElement).type === 'hidden') return
+    event.preventDefault()
+    next()
+  }
 
   return (
     <Dialog
@@ -695,6 +780,11 @@ export function AiSiteStartCard({
       ref={dialogRef}
       onClose={dismiss}
       aria-labelledby={TITLE_ID}
+      // Where people get lost (AGL-3898): any input puts off the idle signal,
+      // and every click is read for rage and dead clicks.
+      onClickCapture={(event: MouseEvent<HTMLElement>) => tracker.click(aiSiteStartClickOf(event))}
+      onKeyDownCapture={() => tracker.activity()}
+      onInputCapture={() => tracker.activity()}
       // The console's own page surface, in both modes. A Dialog's paper sits
       // at elevation 24 by default, and in dark mode MUI lightens an elevated
       // paper with a white overlay, which turned the whole takeover a
@@ -712,6 +802,7 @@ export function AiSiteStartCard({
         color="inherit"
         elevation={0}
         enableColorOnDark
+        data-start-area="header"
         sx={{ ...AI_SITE_START_SURFACE_SX, borderBottom: 1, borderColor: 'divider' }}
       >
         <Toolbar variant="dense" sx={{ gap: 1 }}>
@@ -732,42 +823,45 @@ export function AiSiteStartCard({
           >
             {'Start your site'}
           </Typography>
-          <Button color="inherit" onClick={exit} aria-label={started ? 'Close' : 'Skip and start blank'}>
+          <Button color="inherit" onClick={skip} aria-label={started ? 'Close' : 'Skip and start blank'}>
             {started ? 'Close' : 'Skip'}
           </Button>
         </Toolbar>
       </AppBar>
-      <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
-        <Container maxWidth={choosing ? 'md' : 'sm'} disableGutters sx={{ py: { xs: 3, sm: 5 } }}>
+      <DialogContent sx={{ px: { xs: 2, sm: 3 } }} onKeyDown={onStepKeyDown}>
+        <Container
+          maxWidth={choosing || step === 'kind' || step === 'style' ? 'md' : 'sm'}
+          disableGutters
+          sx={{ py: { xs: 3, sm: 5 } }}
+        >
           <Stack spacing={4}>
-            <Stepper
-              activeStep={choosing ? 0 : 1}
-              aria-label={choosing ? 'Step 1 of 2' : 'Step 2 of 2'}
-              sx={{ maxWidth: (theme: Theme) => theme.spacing(40), width: '100%', mx: 'auto' }}
-            >
-              {STEP_LABELS.map((label) => (
-                <Step key={label}>
-                  <StepLabel>{label}</StepLabel>
-                </Step>
-              ))}
-            </Stepper>
-            <Stack spacing={1} sx={{ textAlign: choosing ? 'center' : 'left' }}>
-              <Typography variant="h4" component="h1">
-                {choosing ? 'How do you want to start?' : 'Tell us about your site'}
+            <Box sx={{ maxWidth: (t: Theme) => t.spacing(80), width: '100%', mx: 'auto' }}>
+              <StartProgress step={step} compact={compact} />
+            </Box>
+            <Stack spacing={1} sx={{ textAlign: choosing ? 'center' : 'left' }} data-start-area="heading">
+              <Typography
+                ref={headingRef}
+                tabIndex={-1}
+                variant="h4"
+                component="h1"
+                sx={{ '&:focus': { outline: 'none' }, '&:focus-visible': { outline: 'none' } }}
+              >
+                {heading.title}
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                {choosing ? <HelpTip sx={{ float: 'right' }} {...START_HELP.choose} /> : null}
-                {choosing
-                  ? creating
-                    ? 'Name your site, then choose how it starts. You can change everything later.'
-                    : 'You can change everything later.'
-                  : `A few answers and ${PLATFORM_BRAND_NAME} AI plans and writes your pages, then publishes your site.`}
+                {choosing ? <HelpTip sx={{ float: 'right' }} {...START_HELP.choose} /> : <StepHelp step={step} />}
+                {heading.lede}
               </Typography>
             </Stack>
-            {notice && <Alert severity="info">{notice}</Alert>}
-            {step === 'describe' && !started && noneLeft && freeCredits && (
+            {notice && (
+              <Alert severity="info" data-start-area="notice">
+                {notice}
+              </Alert>
+            )}
+            {asking && noneLeft && freeCredits && (
               <Alert
                 severity="warning"
+                data-start-area="notice"
                 action={
                   orgSlug ? (
                     <Button color="inherit" size="small" href={aiCreditsBillingHref(orgSlug)}>
@@ -779,16 +873,6 @@ export function AiSiteStartCard({
                 {aiFreeCreditsNoneLeftText(freeCredits.resetsOn)}
               </Alert>
             )}
-            {step === 'describe' && !started && !noneLeft && prompt && (
-              <AiCreditsPromptNotice
-                prompt={prompt}
-                noun="site"
-                orgSlug={orgSlug}
-                busy={busy}
-                onBuildWhatFits={() => void plan({ creditsConfirmed: true })}
-                onSmaller={() => void plan({ creditsConfirmed: true, pages: 1 })}
-              />
-            )}
             {choosing && creating && pendingSite ? (
               <Stack spacing={2} component="section" aria-label="Your site">
                 <SectionLabel>{'Your site'}</SectionLabel>
@@ -797,6 +881,7 @@ export function AiSiteStartCard({
             ) : null}
             {choosing ? (
               <Box
+                data-start-area="choose-cards"
                 sx={{
                   display: 'grid',
                   gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
@@ -844,122 +929,35 @@ export function AiSiteStartCard({
                 />
               </Card>
             ) : (
-              <>
-                <Stack spacing={2} component="section" aria-label="Your business">
-                  <SectionLabel help={START_HELP.business}>{'Your business'}</SectionLabel>
-                  <TextField
-                    fullWidth
-                    required
-                    label="What kind of site are you creating?"
-                    placeholder="a neighborhood dog groomer that takes bookings"
-                    value={answers.siteType}
-                    onChange={(event) => answer({ siteType: event.target.value })}
-                    helperText="A few words is enough, or pick one below."
-                  />
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {AI_SITE_START_TYPES.map((type) => (
-                      <Chip
-                        key={type}
-                        label={type}
-                        size="small"
-                        color={answers.siteType === type ? 'primary' : 'default'}
-                        variant={answers.siteType === type ? 'filled' : 'outlined'}
-                        onClick={() => answer({ siteType: type })}
+              <Box component="section">
+                {step === 'kind' && <KindStep {...stepProps} />}
+                {step === 'audience' && <AudienceStep {...stepProps} />}
+                {step === 'style' && <StyleStep {...stepProps} />}
+                {step === 'details' && <DetailsStep {...stepProps} freeTaste={freeTaste} band={band} />}
+                {step === 'review' && (
+                  <ReviewStep answers={answers} freeTaste={freeTaste} onEdit={edit}>
+                    {!noneLeft && prompt && (
+                      <AiCreditsPromptNotice
+                        prompt={prompt}
+                        noun="site"
+                        orgSlug={orgSlug}
+                        busy={busy}
+                        onBuildWhatFits={() => void plan({ creditsConfirmed: true })}
+                        onSmaller={() => void plan({ creditsConfirmed: true, pages: 1 })}
                       />
-                    ))}
-                  </Box>
-                  <TextField
-                    fullWidth
-                    label="Who is it for?"
-                    placeholder="local dog owners who want a regular groom booked online"
-                    value={answers.audience}
-                    onChange={(event) => answer({ audience: event.target.value })}
-                    helperText="Optional. It narrows who the pages are written for."
-                  />
-                </Stack>
-                <Stack spacing={2} component="section" aria-label="Style">
-                  <SectionLabel help={START_HELP.style}>{'Style'}</SectionLabel>
-                  <Typography variant="body2" color="text.secondary">
-                    {answers.kind
-                      ? 'This decides how your site looks and which pages it usually has.'
-                      : 'Picked from your answer above. Choose another to change how your site looks and which pages it usually has.'}
-                  </Typography>
-                  <OptionCardGrid
-                    label="Style of site"
-                    options={AI_SITE_KINDS.map((kind) => ({
-                      id: kind.id,
-                      title: kind.label,
-                      description: kind.blurb,
-                      icon: AI_SITE_KIND_ICONS[kind.id],
-                    }))}
-                    value={aiSiteStartKind(answers).id}
-                    onChange={(kind) => answer({ kind })}
-                  />
-                </Stack>
-                <Stack spacing={2} component="section" aria-label="Details">
-                  <SectionLabel help={START_HELP.details}>{'Details'}</SectionLabel>
-                  {/*
-                    The one setting a new site owner has to make, asked where
-                    they are already answering: a contact form nobody routed
-                    files its messages somewhere the person has not looked.
-                  */}
-                  <TextField
-                    select
-                    fullWidth
-                    label="Where do form submissions go?"
-                    value={answers.submissions}
-                    onChange={(event) =>
-                      answer({ submissions: event.target.value as AiSiteSubmissions })
-                    }
-                    helperText="You can change this on the form itself afterwards."
-                  >
-                    {AI_SITE_SUBMISSION_CHOICES.map((option) => (
-                      <MenuItem key={option.id} value={option.id}>
-                        {`${option.label} — ${option.blurb}`}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                    <TextField
-                      select
-                      fullWidth
-                      label="Pages"
-                      value={answers.pages}
-                      onChange={(event) => answer({ pages: Number(event.target.value) })}
-                      helperText={freeTaste ? AI_SITE_FREE_PAGES_NOTE : undefined}
-                    >
-                      {Array.from(
-                        { length: band.max - band.min + 1 },
-                        (_, index) => band.min + index,
-                      ).map((count) => (
-                        <MenuItem key={count} value={count}>
-                          {count}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                    {!freeTaste && (
-                      <TextField
-                        select
-                        fullWidth
-                        label="Welcome email"
-                        value={answers.welcomeEmail ? 'yes' : 'no'}
-                        onChange={(event) => answer({ welcomeEmail: event.target.value === 'yes' })}
-                      >
-                        <MenuItem value="yes">{'Draft one'}</MenuItem>
-                        <MenuItem value="no">{'No'}</MenuItem>
-                      </TextField>
                     )}
-                  </Stack>
-                </Stack>
-              </>
+                  </ReviewStep>
+                )}
+              </Box>
             )}
           </Stack>
         </Container>
       </DialogContent>
-      {step === 'describe' && !started && (
+      {asking && (
         /* The footer stays put while the questions scroll. It wraps, because
            the estimate, the reason and the buttons are wider than a phone. */
         <DialogActions
+          data-start-area="footer"
           sx={{
             px: { xs: 2, sm: 3 },
             py: 2,
@@ -971,28 +969,38 @@ export function AiSiteStartCard({
             ...AI_SITE_START_SURFACE_SX,
           }}
         >
-          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', mr: 'auto', minWidth: 0 }}>
-            <Typography variant="body2" color="text.secondary">
-              {`${estimateText}.`}
-            </Typography>
-            <HelpTip {...START_HELP.estimate} ariaLabel="How the estimate works" />
-          </Stack>
-          {refusal && (
+          {reviewing && (
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', mr: 'auto', minWidth: 0 }}>
+              <Typography variant="body2" color="text.secondary">
+                {`${estimateText}.`}
+              </Typography>
+              <HelpTip {...START_HELP.estimate} ariaLabel="How the estimate works" />
+            </Stack>
+          )}
+          {reviewing && refusal && (
             <Typography variant="body2" color="text.secondary">
               {refusal}
             </Typography>
           )}
-          {!freeTaste && <AiModelSelector choice={modelChoice} disabled={busy} />}
-          <Button onClick={() => setStep('choose')}>{'Back'}</Button>
-          <Button
-            variant="contained"
-            size="large"
-            disabled={busy || Boolean(refusal) || Boolean(prompt) || noneLeft}
-            onClick={() => void plan()}
-            startIcon={<MdiIcon path={mdiCreation.path} />}
-          >
-            {busy ? 'Starting…' : 'Plan my site'}
+          {reviewing && !freeTaste && <AiModelSelector choice={modelChoice} disabled={busy} />}
+          <Button onClick={back} sx={reviewing ? undefined : { mr: 'auto' }}>
+            {'Back'}
           </Button>
+          {reviewing ? (
+            <Button
+              variant="contained"
+              size="large"
+              disabled={busy || Boolean(refusal) || Boolean(prompt) || noneLeft}
+              onClick={() => void plan()}
+              startIcon={<MdiIcon path={mdiCreation.path} />}
+            >
+              {busy ? 'Starting…' : 'Plan my site'}
+            </Button>
+          ) : (
+            <Button variant="contained" size="large" onClick={next}>
+              {returnTo === 'review' ? 'Back to review' : 'Next'}
+            </Button>
+          )}
         </DialogActions>
       )}
       <Dialog

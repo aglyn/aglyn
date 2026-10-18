@@ -28,7 +28,9 @@ import {
 import { operatorAlertForNotificationType } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { notificationPushEnabled } from '@aglyn/aglyn/app-utils/notification-push'
-import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
+import { NOTIFICATION_SOUND_FIELD, notificationSound } from '@aglyn/aglyn/app-utils/notification-sounds'
+import { notificationEmailAction } from '@aglyn/aglyn/app-utils/notifications'
+import { PLATFORM_BRANDING_PROFILE, platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { FieldValue } from 'firebase-admin/firestore'
 import { withoutMailWithheldAccounts } from './account-mail'
 import { findUserByUidAcrossPools, listStaffUidsAcrossPools } from './auth-pools'
@@ -97,6 +99,12 @@ export interface NotifyUsersOptions {
    * place the visitor's answers are kept.
    */
   emailDetails?: readonly NotificationEmailDetail[]
+  /**
+   * Who a reply to the email reaches (AGL-3897): the visitor who filled in a
+   * form, so a manager answers an inquiry from the inbox it landed in. Never
+   * set on a staff fan-out.
+   */
+  replyTo?: string
 }
 
 /** One labeled line of a notification email's details. */
@@ -170,6 +178,7 @@ async function emailNotification(
   known: Readonly<Record<string, string | null | undefined>>,
   audience: NotifyUsersOptions['audience'],
   emailDetails: NotifyUsersOptions['emailDetails'],
+  replyTo?: string,
 ): Promise<void> {
   /*
    * `platformConsoleOrigin`, never `NEXT_PUBLIC_CONSOLE_URL` read bare: this
@@ -216,6 +225,12 @@ async function emailNotification(
             'notification.body': payload.body ?? '',
             'notification.details': details,
             'notification.url': url,
+            'notification.context': context.line ?? '',
+            'notification.replyNote': replyTo ? `Reply to this email to answer ${replyTo}.` : '',
+            'notification.action': notificationEmailAction(
+              payload.type,
+              context.brand.merge['brand.productName'] || PLATFORM_BRANDING_PROFILE.productName,
+            ),
             settingsUrl,
           },
           context.brand.options,
@@ -229,6 +244,7 @@ async function emailNotification(
       }),
       ...(context.brand.fromName ? { fromName: context.brand.fromName } : {}),
       context: 'notification',
+      ...(replyTo ? { replyTo } : {}),
       headers: { 'List-Unsubscribe': `<${settingsUrl}>` },
     })
     if (!result.sent) continue
@@ -248,6 +264,13 @@ interface NotificationEmailContext {
   brand: SystemEmailBrand
   orgSlug?: string
   hostSubdomain?: string
+  /**
+   * What the notification is about, for the line above its heading
+   * (AGL-3897): the site and the workspace, "Copper Kettle Catering · Acme",
+   * or the workspace alone. A person in several workspaces otherwise gets
+   * "New order" with nothing to say whose.
+   */
+  line?: string
 }
 
 /**
@@ -275,8 +298,13 @@ async function notificationEmailContext(
     ])
     const slug = org.get('slug')
     const subdomain = host?.get('subdomain')
+    const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+    const orgName = text(org.get('name'))
+    const siteName = text(host?.get('displayName')) || text(host?.get('name')) || text(subdomain)
+    const line = [siteName, orgName && orgName !== siteName ? orgName : ''].filter(Boolean).join(' · ')
     return {
       brand: systemEmailBrand(org.exists ? (org.data() ?? null) : null),
+      ...(line ? { line } : {}),
       ...(typeof slug === 'string' && slug ? { orgSlug: slug } : {}),
       ...(typeof subdomain === 'string' && subdomain
         ? { hostSubdomain: subdomain }
@@ -334,6 +362,7 @@ async function notifyUsersNow(
     let count = 0
     const mailTo: string[] = []
     const pushTo: string[] = []
+    const sounds: Record<string, string> = {}
     for (const userDoc of userDocs) {
       const settings = userDoc.get(NOTIFICATION_SETTINGS_FIELD) as
         | NotificationSettings
@@ -365,6 +394,7 @@ async function notifyUsersNow(
       // The mobile push channel (AGL-3620); unanswered, it follows the feed.
       if (notificationPushEnabled(settings, payload.type, scope, legacy)) {
         pushTo.push(userDoc.id)
+        sounds[userDoc.id] = notificationSound(userDoc.get(NOTIFICATION_SOUND_FIELD)).id
       }
       if (
         notificationChannelEnabled(settings, 'email', payload.type, scope, legacy) &&
@@ -383,7 +413,7 @@ async function notifyUsersNow(
     if (pushTo.length && mobilePushEnabled()) {
       for (const send of mobilePushSenders()) {
         try {
-          await send(pushTo, payload, { db })
+          await send(pushTo, payload, { db, sounds })
         } catch (error) {
           console.error('push delivery failed', error)
         }
@@ -419,6 +449,7 @@ async function notifyUsersNow(
         options.emails ?? {},
         options.audience,
         options.emailDetails,
+        options.audience === 'staff' ? undefined : options.replyTo,
       )
     }
   } catch (error) {
@@ -460,7 +491,10 @@ async function listStaffUids(): Promise<string[]> {
  * instead: the same console notification, plus staff's switches, the
  * operator email or digest, and the webhook. See `raiseOperatorAlert`.
  */
-async function notifyStaffNow(payload: NotificationPayload): Promise<void> {
+async function notifyStaffNow(
+  payload: NotificationPayload,
+  options: Pick<NotifyUsersOptions, 'emailDetails'> = {},
+): Promise<void> {
   try {
     const alert = operatorAlertForNotificationType(payload.type)
     if (alert) {
@@ -475,7 +509,7 @@ async function notifyStaffNow(payload: NotificationPayload): Promise<void> {
       })
       return
     }
-    await notifyStaffConsole(payload)
+    await notifyStaffConsole(payload, options)
   } catch (error) {
     console.error('staff notification failed', error)
   }
@@ -488,12 +522,15 @@ async function notifyStaffNow(payload: NotificationPayload): Promise<void> {
  */
 async function notifyStaffConsoleNow(
   payload: NotificationPayload,
-  options: { skipEmail?: boolean } = {},
+  options: Pick<NotifyUsersOptions, 'skipEmail' | 'emailDetails'> = {},
 ): Promise<void> {
   try {
     await notifyUsers(await listStaffUids(), payload, {
       audience: 'staff',
       ...(options.skipEmail ? { skipEmail: true } : {}),
+      // What the email alone carries — a new account's acquisition, a new
+      // site's workspace (AGL-3897) — beside the bell's one line.
+      ...(options.emailDetails?.length ? { emailDetails: options.emailDetails } : {}),
     })
   } catch (error) {
     console.error('staff notification failed', error)
@@ -590,6 +627,8 @@ async function notifyHostManagersNow(
     skipOwnerEmail?: boolean
     /** What the email alone carries; see {@link NotifyUsersOptions.emailDetails}. */
     emailDetails?: readonly NotificationEmailDetail[]
+    /** Who a reply reaches; see {@link NotifyUsersOptions.replyTo}. */
+    replyTo?: string
   } = {},
 ): Promise<void> {
   try {
@@ -621,6 +660,7 @@ async function notifyHostManagersNow(
       {
         ...(ownerUid ? { skipEmailFor: [ownerUid] } : {}),
         ...(options.emailDetails ? { emailDetails: options.emailDetails } : {}),
+        ...(options.replyTo ? { replyTo: options.replyTo } : {}),
       },
     )
   } catch (error) {

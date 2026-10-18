@@ -13,8 +13,9 @@ site, so two sites with the same style and the same answers still look different
 
 ## Choose a style {#choose-a-style}
 
-The **Style** step of **Start your site** offers these styles. One is picked for you from
-what you said the site is; choose another to change it.
+The **Style** step of **Start your site** offers these styles, each as a card with a
+picture of an example home page of that kind, drawn in its style. **Pick for me**, first and chosen unless you
+choose another, uses the style that what you said the site is suggests, and names it.
 
 | Style | For |
 | --- | --- |
@@ -40,7 +41,8 @@ what you said the site is; choose another to change it.
 | **Landing page** | One offer on one focused page. |
 | **Coming soon** | A placeholder that collects interest. |
 
-Each card says, in a line, what its look is like. A style also suggests the pages that kind
+Each card says, in a line, what its look is like. Its picture is one variation of the
+style; your site gets its own. A style also suggests the pages that kind
 of site usually has, such as a menu for a restaurant or services for a trade.
 
 ## How the look is made {#how-the-look-is-made}

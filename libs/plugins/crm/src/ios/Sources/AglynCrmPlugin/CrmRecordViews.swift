@@ -280,14 +280,9 @@ struct RecordDetail: View {
       if let notice { AglynNotice(notice, tone: .success) { self.notice = nil } }
       if let error { AglynNotice(error, tone: .error) { self.error = nil } }
       Section {
-        HStack(alignment: .firstTextBaseline) {
-          VStack(alignment: .leading, spacing: 4) {
-            Text(row.title).font(AglynFont.title2).accessibilityAddTraits(.isHeader)
-            if !row.subtitle.isEmpty { Text(row.subtitle).font(AglynFont.subheadline).foregroundStyle(.secondary) }
-          }
-          Spacer()
-          if let chip = row.chip { StatusChip(chip, tone: row.tone) }
-        }
+        // The kit's detail head (spec 7): the record's symbol, name, line and status.
+        AglynDetailHeader(
+          row.title, subtitle: row.subtitle, systemImage: kind.symbol, status: row.chip.map { ($0, row.tone) })
         if kind == .deal { DealStagePath(pipeline: pipeline, stageID: document.string("stageId"), status: document.string("status")) }
         if scope.canWrite { actionButtons(row) }
       }

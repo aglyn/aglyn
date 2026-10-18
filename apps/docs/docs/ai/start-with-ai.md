@@ -7,9 +7,9 @@ description: "Answer a few questions when you create a site and Aglyn AI plans, 
 # Start a new site with AI
 
 **Create site** opens **Start your site** straight away, before the site exists.
-**Start with AI** asks a few questions, then creates the site, plans it, writes every
-page, gives it a look of its own and publishes it at its address. This page walks
-through each question and what happens after you choose **Plan my site**.
+**Start with AI** asks a few questions, one per step, then creates the site, plans it,
+writes every page, gives it a look of its own and publishes it at its address. This page
+walks through each step and what happens after you choose **Plan my site**.
 
 To scaffold pages for a site that already exists, or for several sites at once, see
 [Generate a website from a prompt](./generate-a-site.md).
@@ -40,16 +40,29 @@ that may need more credits than you have left asks first, and the site is create
 you choose. If planning still cannot start after the site is created, the window says why;
 leaving then gives that site the starter home page, so it is never left empty.
 
-## Your business {#your-business}
+## The questions, one at a time {#the-questions}
+
+**Start with AI** asks one thing per step. The bar under the title shows where you are:
+**Start**, **Your site**, **Audience**, **Style**, **Details** and **Review** (on a phone,
+*Step 3 of 6* and a progress bar). **Next** moves on and **Back** goes back; your answers
+are kept either way. Pressing Enter in a text answer is the same as **Next**. If a step
+cannot move on, the reason shows under the field and the cursor goes to it. **Skip** and
+the close control stay in the bar at the top on every step.
+
+## Your site {#your-business}
 
 **What kind of site are you creating?** is the one required answer. A few words is
-enough, such as *a neighborhood dog groomer that takes bookings*, or pick one of the
-suggestions under the field: a local service business, a restaurant or cafe, a
-professional practice, a trades business, a shop, a nonprofit, a personal portfolio or an
-event. Keep it under 120 characters.
+enough, such as *a neighborhood dog groomer that takes bookings*, or pick the closest
+card under the field: **Local service business**, **Restaurant or cafe**, **Professional
+practice**, **Trades business**, **Shop**, **Nonprofit**, **Personal portfolio** or
+**Event**. A card fills in the field for you. Keep it under 120 characters.
 
-What you write here picks the site's [style](./site-looks.md#choose-a-style), which
-pages it usually has and what each page says.
+![The Your site step of Start your site: the progress bar on Your site, the question What kind of site are you creating? answered with a neighborhood dog groomer, and eight cards to pick the closest kind instead, with Back and Next at the bottom](/img/ai/start-with-ai-kind.png)
+
+What you write here picks the site's [style](./site-looks.md#choose-a-style), unless you
+choose one yourself, and decides which pages it usually has and what each page says.
+
+## Audience {#audience}
 
 **Who is it for?** is optional. It is who every page and every search listing is written
 for, and it decides which questions the contact form asks. For example, *local dog owners
@@ -60,11 +73,19 @@ later AI job for the site reads.
 
 ## Style {#style}
 
-The **Style** cards decide how the site looks and which pages it usually has: an online
-store, a portfolio, a restaurant, a blog and so on. One is picked for you from your first
-answer; choose another to change it. Each style gives the site its own variation, so two
-sites with the same style still look different. See
+The **Style** step shows each style as a card with a picture: an example home page of
+that kind of site, drawn in its style. A photographer's opens on a gallery, a café's on
+its menu, an online store's on its products, a blog's on its latest posts, an events
+site's on its program and a real estate site's on its listings, so you can see each
+style's colors, fonts, buttons and corners, and the shape of its pages, before you pick.
+**Pick for me** comes first and is chosen unless you choose another. It names the style
+your first answer suggests, such as *From your answer: Home services & trades*. The style
+decides how the site looks and which pages it usually has: an online store, a portfolio,
+a restaurant, a blog and so on. Each site gets its own variation, so two sites with the
+same style still look different, and yours will not match the picture exactly. See
 [Looks and themes for AI sites](./site-looks.md).
+
+![The Style step: Pick for me chosen, naming the style the answer suggests, beside cards for Business & services, Home services & trades and more, each with a picture of an example home page of that kind and a line about the look](/img/ai/start-with-ai-style.png)
 
 ## Details {#details}
 
@@ -82,16 +103,24 @@ sites with the same style still look different. See
   design. Nothing sends it until you put it in an automation or a campaign. Free starts
   do not draft one.
 
+## Review {#review}
+
+The last step lists every answer: the kind of site, who it is for, the style, where form
+submissions go, the pages and, on a paid plan, the welcome email. **Edit** beside an answer
+opens its step, and **Back to review** returns here. **Plan my site** starts the site.
+
+![The Review step: each answer with Edit beside it, and at the bottom the estimate, the model switch, Back and Plan my site](/img/ai/start-with-ai-review.png)
+
 On a paid plan a **Model** switch sits beside **Plan my site**. Leave it on **Auto**
 unless you have a reason to choose; see
 [Choosing a model](./ai-allotments.md#choosing-a-model).
 
 ## What it will cost {#what-it-will-cost}
 
-The bar at the bottom shows what the start will cost before you begin, as *About N
+The bar at the bottom of the review shows what the start will cost before you begin, as *About N
 credits (up to M)*: about what starts like it cost on real builds, and the most it can cost.
 On the Free plan it also shows how many of your free credits are left this month and when
-they renew. If the start will likely use more than you have left, the window says so and
+they renew. If the start will likely use more than you have left, the review says so and
 offers **Build what fits** (it builds what your credits cover, then pauses until you
 **Resume**), **Build the home page first** (a one-page start), and **Upgrade**. **Plan my
 site** waits until you choose. See [Before a job starts](./ai-credits.md#before-a-job-starts).
@@ -162,8 +191,8 @@ hour of credits being available.
 
 If the site cannot be built, the page says **Your site was not built** and why.
 
-- **Try again** reopens the questions with your answers filled in, so you can adjust them
-  and start a fresh job.
+- **Try again** reopens the questions on the review, with your answers filled in, so you
+  can adjust them and start a fresh job.
 - **Use the starter site instead** gives the site the starter home page. It is offered only
   while nothing has been built.
 

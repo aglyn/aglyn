@@ -145,6 +145,10 @@ try {
         '--external:react/jsx-runtime',
         '--external:react-dom',
         '--loader:.svg=text',
+        // A picture a plugin imports (the AI guided start's style previews,
+        // AGL-3898) is a file the bundler emits beside the code, as Next
+        // does; its bytes are never part of a chunk.
+        '--loader:.webp=file',
       ],
       { cwd: repoRoot, stdio: 'pipe' },
     )

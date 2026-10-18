@@ -80,6 +80,8 @@ import {
 } from '../model/ai-site-job'
 import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText, aiCreditRangeText } from '../model/ai-credit-estimate'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
+import { AI_SITE_START_ANSWERS, aiSiteStartBrief, aiSiteStartInputs, type AiSiteStartAnswers } from '../model/ai-site-start'
+import { AI_SITE_STYLE_PREVIEW_ALTS } from './ai-site-style-previews'
 import { resetAiModelOptionReadsForTests } from './use-ai-model-choice'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
@@ -178,12 +180,42 @@ async function openChoice(
   return view
 }
 
-/** Renders the dialog and takes the AI card to the questions (AGL-3594). */
+/** Each question step's heading (AGL-3898). */
+const HEADINGS = {
+  kind: 'What are you building?',
+  audience: 'Who is it for?',
+  style: 'Choose a style',
+  details: 'A few details',
+  review: 'Review your site',
+} as const
+
+type QuestionStep = keyof typeof HEADINGS
+
+/** The step on screen, by its heading. */
+const onStep = (step: QuestionStep) => screen.findByRole('heading', { level: 1, name: HEADINGS[step] })
+
+/** Renders the dialog and takes the AI card to the first question (AGL-3594, AGL-3898). */
 async function openCard(patch: Partial<ConsoleHostFirstRunZoneProps> = {}) {
   const view = await openChoice(patch)
   fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
-  await screen.findByText('Tell us about your site')
+  await onStep('kind')
   return view
+}
+
+/** Next, or "Back to review" on a step opened from the review's Edit. */
+const pressNext = () => fireEvent.click(screen.getByRole('button', { name: /^(Next|Back to review)$/ }))
+
+/**
+ * From the first question, types what kind of site it is and walks forward
+ * with Next to `target`, leaving every other answer as it starts (AGL-3898).
+ */
+async function answerTo(target: Exclude<QuestionStep, 'kind'>, siteType = 'a neighborhood dog groomer') {
+  typeAnswer(/What kind of site are you creating\?/, siteType)
+  for (const step of ['audience', 'style', 'details', 'review'] as const) {
+    pressNext()
+    await onStep(step)
+    if (step === target) return
+  }
 }
 
 /**
@@ -212,6 +244,12 @@ const kindCard = (index: number) =>
   screen.getByRole('radio', {
     name: `${AI_SITE_KINDS[index].label}: ${AI_SITE_KINDS[index].blurb}`,
   })
+
+/** "Pick for me", the style card that leaves the kind to the first answer (AGL-3898). */
+const pickForMe = () => screen.getByRole('radio', { name: /^Pick for me: From your answer: / })
+
+/** A kind-of-site card on the first question, by its title (AGL-3898). */
+const typeCard = (title: string) => screen.getByRole('radio', { name: title })
 
 describe('the start is on the first-run zone, gated as every generative door is', () => {
   it('names the zone in the catalog', () => {
@@ -306,14 +344,13 @@ describe('the skip', () => {
 
   it('is never disabled, including while the start would refuse to run', async () => {
     await openCard()
+    // Next IS refused with nothing answered, which is the state a skip most
+    // needs to work in.
+    pressNext()
+    expect(await screen.findByText('Say what kind of site this is.')).toBeTruthy()
     expect(
       (screen.getByRole('button', { name: 'Skip and start blank' }) as HTMLButtonElement).disabled,
     ).toBe(false)
-    // The plan button IS refused with nothing answered, which is the state a
-    // skip most needs to work in.
-    expect((screen.getByRole('button', { name: 'Plan my site' }) as HTMLButtonElement).disabled).toBe(
-      true,
-    )
   })
 
   it('hands the person back to the blank path the zone owns', async () => {
@@ -326,7 +363,7 @@ describe('the skip', () => {
     await openCard()
     // Half-answered, which is where somebody most plausibly leaves.
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
-    fireEvent.click(kindCard(0))
+    fireEvent.click(typeCard('Restaurant or cafe'))
     const asked = mockFetch.mock.calls.length
     fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
     await Promise.resolve()
@@ -336,7 +373,7 @@ describe('the skip', () => {
 
   it('is still the way out once a site has been started', async () => {
     await openCard({ host: null })
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await answerTo('review')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await screen.findByText(/Your site is being planned/)
@@ -347,7 +384,7 @@ describe('the skip', () => {
   it('closes through `leave` once a site has been started, so no starter is written over the job (AGL-3594)', async () => {
     const leave = jest.fn()
     await openCard({ leave, host: null })
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await answerTo('review')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await screen.findByText(/Your site is being planned/)
@@ -400,7 +437,7 @@ describe('leaving the full screen dialog', () => {
     await openCard()
     // Half-answered, which is where somebody most plausibly leaves.
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
-    fireEvent.click(kindCard(0))
+    fireEvent.click(typeCard('Restaurant or cafe'))
     const asked = mockFetch.mock.calls.length
     leave()
     await Promise.resolve()
@@ -410,7 +447,7 @@ describe('leaving the full screen dialog', () => {
 
   it('keeps the skip enabled while a request is in flight, and leaves on it', async () => {
     await openCard()
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await answerTo('review')
     // The request never answers, which is the whole of "in flight".
     mockFetch.mockReturnValue(new Promise(() => undefined))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
@@ -474,8 +511,12 @@ describe('a dismissal never trades a typed brief for the starter', () => {
 
   it('closes only the model menu on Escape, and keeps the dialog and the brief', async () => {
     await openCard()
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await answerTo('style')
     fireEvent.click(kindCard(1))
+    pressNext()
+    await onStep('details')
+    pressNext()
+    await onStep('review')
     mockFetch.mockResolvedValueOnce(json(MODELS))
     fireEvent.click(screen.getByRole('button', { name: 'AI model: Auto' }))
     await screen.findByText('Fast model')
@@ -483,20 +524,20 @@ describe('a dismissal never trades a typed brief for the starter', () => {
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
     expect(mockStartBlank).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog', { name: LEAVE_QUESTION })).toBeNull()
-    expect(screen.getByText('Tell us about your site')).toBeTruthy()
-    expect(briefField().value).toBe('a neighborhood dog groomer')
-    expect(kindCard(1).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('heading', { level: 1, name: HEADINGS.review })).toBeTruthy()
+    expect(screen.getByText('a neighborhood dog groomer')).toBeTruthy()
+    expect(screen.getByText(AI_SITE_KINDS[1].label)).toBeTruthy()
   })
 
   it('closes only an open select’s list on Escape', async () => {
     await openCard()
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await answerTo('details')
     fireEvent.mouseDown(screen.getByLabelText('Pages'))
     escapeOn(await screen.findByRole('listbox'))
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
     expect(mockStartBlank).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog', { name: LEAVE_QUESTION })).toBeNull()
-    expect(briefField().value).toBe('a neighborhood dog groomer')
+    expect(screen.getByRole('heading', { level: 1, name: HEADINGS.details })).toBeTruthy()
   })
 
   it.each([
@@ -555,8 +596,13 @@ describe('a dismissal never trades a typed brief for the starter', () => {
 
   it('opens no model menu from a style card', async () => {
     await openCard()
+    await answerTo('style')
     for (const index of [0, 1, 2]) fireEvent.click(kindCard(index))
     expect(screen.queryByRole('menu')).toBeNull()
+    pressNext()
+    await onStep('details')
+    pressNext()
+    await onStep('review')
     expect(
       screen.getByRole('button', { name: 'AI model: Auto' }).getAttribute('aria-expanded'),
     ).toBe('false')
@@ -564,40 +610,83 @@ describe('a dismissal never trades a typed brief for the starter', () => {
 })
 
 describe('the questions become a site scaffold', () => {
-  it('asks what the site is, who it is for and which style of site it is', async () => {
+  it('asks what the site is, who it is for and which style of site it is, one step each', async () => {
     await openCard()
     expect(screen.getByLabelText(/What kind of site are you creating\?/)).toBeTruthy()
-    expect(screen.getByLabelText(/Who is it for\?/)).toBeTruthy()
-    expect(screen.getByRole('region', { name: 'Style' })).toBeTruthy()
-    AI_SITE_KINDS.forEach((_kind, index) => expect(kindCard(index)).toBeTruthy())
-    // The answer above suggests the style until the person picks one (AGL-3660).
+    expect(screen.queryByLabelText(/Who is it for\?/)).toBeNull()
     typeAnswer(/What kind of site are you creating\?/, 'a roofing company')
-    const trades = AI_SITE_KINDS.findIndex((kind) => kind.id === 'trades')
-    expect(kindCard(trades).getAttribute('aria-checked')).toBe('true')
+    pressNext()
+    await onStep('audience')
+    expect(screen.getByLabelText(/Who is it for\?/)).toBeTruthy()
+    pressNext()
+    await onStep('style')
+    AI_SITE_KINDS.forEach((_kind, index) => expect(kindCard(index)).toBeTruthy())
+    // "Pick for me" is picked until the person picks a style, and names the one
+    // the answer suggests (AGL-3660, AGL-3898).
+    expect(pickForMe().getAttribute('aria-checked')).toBe('true')
+    expect(pickForMe().getAttribute('aria-label')).toBe('Pick for me: From your answer: Home services & trades')
     fireEvent.click(kindCard(0))
     expect(kindCard(0).getAttribute('aria-checked')).toBe('true')
-    expect(kindCard(trades).getAttribute('aria-checked')).toBe('false')
+    expect(pickForMe().getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(pickForMe())
+    expect(pickForMe().getAttribute('aria-checked')).toBe('true')
   })
 
-  it("selects Music & bands for a band's site as it is typed, and Business only when nothing is named", async () => {
+  it("names Music & bands for a band's site as it is typed, and Business only when nothing is named", async () => {
     await openCard()
-    const music = AI_SITE_KINDS.findIndex((kind) => kind.id === 'music')
     typeAnswer(
       /What kind of site are you creating\?/,
       'A website for an indie folk band from Asheville — tour dates, new album, merch and booking',
     )
-    expect(kindCard(music).getAttribute('aria-checked')).toBe('true')
-    expect(kindCard(0).getAttribute('aria-checked')).toBe('false')
+    pressNext()
+    await onStep('audience')
+    pressNext()
+    await onStep('style')
+    expect(pickForMe().getAttribute('aria-label')).toBe('Pick for me: From your answer: Music & bands')
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await onStep('audience')
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await onStep('kind')
     typeAnswer(/What kind of site are you creating\?/, 'a folk trio with a new record out')
-    expect(kindCard(music).getAttribute('aria-checked')).toBe('true')
+    pressNext()
+    await onStep('audience')
+    pressNext()
+    await onStep('style')
+    expect(pickForMe().getAttribute('aria-label')).toBe('Pick for me: From your answer: Music & bands')
+  })
+
+  it('shows each style as a picture of its own kind of page, lazily, at a fixed size (AGL-3898)', async () => {
+    await openCard()
+    await answerTo('style')
+    const alts = new Set<string>()
+    for (const [index, kind] of AI_SITE_KINDS.entries()) {
+      const picture = kindCard(index).querySelector('img') as HTMLImageElement
+      expect(picture).toBeTruthy()
+      // Each says what its own page shows, so no two styles read alike to a screen reader.
+      expect(picture.getAttribute('alt')).toBe(AI_SITE_STYLE_PREVIEW_ALTS[kind.id])
+      alts.add(picture.getAttribute('alt') as string)
+      expect(picture.getAttribute('loading')).toBe('lazy')
+      expect([picture.getAttribute('width'), picture.getAttribute('height')]).toEqual(['800', '800'])
+    }
+    expect(alts.size).toBe(AI_SITE_KINDS.length)
+    // "Pick for me" is no style, so it has no picture of one.
+    expect(pickForMe().querySelector('img')).toBeNull()
   })
 
   it('starts one site job for this site, carrying every answer', async () => {
     await openCard({ host: null })
     typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    pressNext()
+    await onStep('audience')
     typeAnswer(/Who is it for\?/, 'local dog owners')
+    pressNext()
+    await onStep('style')
     const restaurant = AI_SITE_KINDS.findIndex((kind) => kind.id === 'restaurant')
     fireEvent.click(kindCard(restaurant))
+    pressNext()
+    await onStep('details')
+    pressNext()
+    await onStep('review')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await screen.findByText(/Your site is being planned/)
@@ -626,6 +715,7 @@ describe('the questions become a site scaffold', () => {
    */
   it('asks where form submissions go, offering every answer the form step can bind', async () => {
     await openCard()
+    await answerTo('details')
     const field = screen.getByLabelText(/Where do form submissions go\?/)
     expect(field).toBeTruthy()
     fireEvent.mouseDown(field)
@@ -636,9 +726,11 @@ describe('the questions become a site scaffold', () => {
 
   it('carries the answer about submissions on the job', async () => {
     await openCard({ host: null })
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await answerTo('details')
     fireEvent.mouseDown(screen.getByLabelText(/Where do form submissions go\?/))
     fireEvent.click(screen.getByRole('option', { name: /CRM as a lead/ }))
+    pressNext()
+    await onStep('review')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await screen.findByText(/Your site is being planned/)
@@ -648,7 +740,7 @@ describe('the questions become a site scaffold', () => {
 
   it('starts on the Inbox, which is what an unanswered question has to mean', async () => {
     await openCard({ host: null })
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await answerTo('review')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await screen.findByText(/Your site is being planned/)
@@ -659,7 +751,7 @@ describe('the questions become a site scaffold', () => {
 
   it('says the site is built and published for them, and can be edited or unpublished', async () => {
     await openCard({ host: null })
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await answerTo('review')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     const said = await screen.findByText(/Your site is being planned/)
@@ -671,10 +763,13 @@ describe('the questions become a site scaffold', () => {
 
   it('says the door’s own words when it refuses, and keeps the answers', async () => {
     await openCard({ host: null })
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await answerTo('review')
     mockFetch.mockResolvedValueOnce(json({ error: 'Your workspace is out of AI credits' }, 429))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await screen.findByText('Your workspace is out of AI credits')
+    expect(screen.getByText('a neighborhood dog groomer')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit kind of site' }))
+    await onStep('kind')
     expect(
       (screen.getByLabelText(/What kind of site are you creating\?/) as HTMLInputElement).value,
     ).toBe('a neighborhood dog groomer')
@@ -683,27 +778,33 @@ describe('the questions become a site scaffold', () => {
 })
 
 describe('a Free workspace’s guided start (AGL-3594)', () => {
-  async function openFreeCard() {
-    await openChoice({}, { jobs: [], freeTaste: true })
+  async function openFreeCard(freeCredits?: Record<string, unknown>) {
+    await openChoice({}, { jobs: [], freeTaste: true, ...(freeCredits ? { freeCredits } : {}) })
     await screen.findByText('Up to 2 pages on the Free plan')
     fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
-    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
+    await onStep('kind')
   }
 
   it('offers one or two pages, starting on two, says paid plans generate more, and drafts no welcome email', async () => {
     await openFreeCard()
+    await answerTo('details')
+    expect(screen.getByText(AI_SITE_FREE_PAGES_NOTE)).toBeTruthy()
     fireEvent.mouseDown(screen.getByLabelText('Pages'))
     const options = (await screen.findAllByRole('option')).map((option) => option.textContent)
     expect(options).toEqual(['1', '2'])
     expect(screen.queryByLabelText('Welcome email')).toBeNull()
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape', code: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+    pressNext()
+    await onStep('review')
     // About what it is likely to cost, and at most (AGL-3722).
     expect(screen.getByText('About 113 credits (up to 243), of the 300 AI credits you get free each month.')).toBeTruthy()
+    expect(screen.queryByText('Welcome email')).toBeNull()
   })
 
   it('quotes what is left of the month, shared across the owner’s Free workspaces, and when it resets (AGL-3660)', async () => {
-    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left: 290, total: 300, resetsOn: '2026-11-01' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
-    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
+    await openFreeCard({ left: 290, total: 300, resetsOn: '2026-11-01' })
+    await answerTo('review')
     expect(
       screen.getByText(
         `${aiCreditRangeText(aiFreeSiteCreditRange(2))}. You have 290 of your 300 free AI credits left this month, until November 1.`,
@@ -711,15 +812,12 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
     ).toBeTruthy()
     // It fits: no prompt.
     expect(screen.queryByText(/Build what fits/)).toBeNull()
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     expect((screen.getByRole('button', { name: 'Plan my site' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('asks before a site past what is left, starts nothing until the go-ahead, then starts it confirmed (AGL-3722)', async () => {
-    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left: 70, total: 300, resetsOn: '2026-11-01' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
-    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await openFreeCard({ left: 70, total: 300, resetsOn: '2026-11-01' })
+    await answerTo('review')
     const prompt = aiFreeSitePrompt({ left: 70, resetsOn: '2026-11-01' }, 2)!
     const warning = screen.getByRole('alert', { name: 'More than your credits left' })
     expect(warning.textContent).toContain(aiCreditsPromptText(prompt, 'site'))
@@ -741,10 +839,8 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
   })
 
   it('offers the home page first, as a one-page start, with what it is likely to cost (AGL-3722)', async () => {
-    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left: 120, total: 300, resetsOn: '2026-11-01' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
-    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await openFreeCard({ left: 120, total: 300, resetsOn: '2026-11-01' })
+    await answerTo('review')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     const first = screen.getByRole('button', { name: 'Build the home page first' })
     expect(first.textContent).toContain(`About ${aiFreeSiteCreditRange(1).likely} credits`)
@@ -756,10 +852,10 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
   })
 
   it('stops only when nothing is left at all, with when the credits renew and Upgrade', async () => {
-    await openChoice({}, { jobs: [], freeTaste: true, freeCredits: { left: 0, total: 300, resetsOn: '2026-11-01' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
-    await screen.findByText(AI_SITE_FREE_PAGES_NOTE)
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await openFreeCard({ left: 0, total: 300, resetsOn: '2026-11-01' })
+    // Said from the first question, not only once the questions are answered.
+    expect(screen.getByText(aiFreeCreditsNoneLeftText('2026-11-01'))).toBeTruthy()
+    await answerTo('review')
     expect(screen.getByText(aiFreeCreditsNoneLeftText('2026-11-01'))).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Build what fits' })).toBeNull()
     expect((screen.getByRole('button', { name: 'Plan my site' }) as HTMLButtonElement).disabled).toBe(true)
@@ -767,7 +863,7 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
 
   it('a stale dialog meets the door’s prompt and can still build what fits (AGL-3722)', async () => {
     await openFreeCard()
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await answerTo('review')
     const prompt = aiFreeSitePrompt({ left: 60, resetsOn: '2026-11-01' }, 2)!
     mockFetch.mockResolvedValueOnce(json({ error: aiCreditsPromptText(prompt, 'site'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt }, 409))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
@@ -778,7 +874,7 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
 
   it('starts a two-page site job with no welcome email', async () => {
     await openFreeCard()
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await answerTo('review')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await waitFor(() => expect(mockPush).toHaveBeenCalled())
@@ -788,6 +884,7 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
 
   it('offers no model picker on the Free plan', async () => {
     await openFreeCard()
+    await answerTo('review')
     expect(screen.queryByRole('button', { name: /^AI model:/ })).toBeNull()
   })
 
@@ -797,6 +894,7 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
    */
   it('offers the model picker on a paid plan, prices the estimate by the pick, and starts the job on it', async () => {
     await openCard()
+    await answerTo('review')
     const picker = screen.getByRole('button', { name: 'AI model: Auto' })
     const auto = aiSiteCreditRange(5, { welcomeEmail: true })
     expect(screen.getByText(`${aiCreditRangeText(auto)}, estimated.`)).toBeTruthy()
@@ -819,7 +917,6 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
         `${aiCreditRangeText({ likely: Math.round(auto.likely * 0.4), p90: Math.round(auto.p90 * 0.4), ceiling: Math.round(auto.ceiling * 0.4) })}, estimated.`,
       ),
     ).toBeTruthy()
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await waitFor(() => expect(postCall()).toBeTruthy())
@@ -829,6 +926,7 @@ describe('a Free workspace’s guided start (AGL-3594)', () => {
 
   it('keeps a paid workspace’s four to eight pages', async () => {
     await openCard()
+    await answerTo('details')
     fireEvent.mouseDown(screen.getByLabelText('Pages'))
     const options = (await screen.findAllByRole('option')).map((option) => option.textContent)
     expect(options).toEqual(['4', '5', '6', '7', '8'])
@@ -876,7 +974,7 @@ describe('watching and confirming in place (AGL-3593)', () => {
 
   async function startWith(job: unknown) {
     await openCard({ host: null })
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await answerTo('review')
     mockFetch.mockResolvedValueOnce(json({ job }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await screen.findByText(/Your site is being planned/)
@@ -927,7 +1025,7 @@ describe('step 1: how the site starts (AGL-3594)', () => {
     const ai = screen.getByRole('button', { name: 'Start with AI' })
     expect(starter.querySelector('[data-icon="page-layout-header-footer"]')).toBeTruthy()
     expect(ai.querySelector('[data-icon="creation"]')).toBeTruthy()
-    expect(screen.getByLabelText('Step 1 of 2')).toBeTruthy()
+    expect(screen.getByLabelText('Step 1 of 6')).toBeTruthy()
     // The questions wait for step 2.
     expect(screen.queryByLabelText(/What kind of site are you creating\?/)).toBeNull()
   })
@@ -943,7 +1041,7 @@ describe('step 1: how the site starts (AGL-3594)', () => {
     await openChoice()
     fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
     expect(await screen.findByLabelText(/What kind of site are you creating\?/)).toBeTruthy()
-    expect(screen.getByLabelText('Step 2 of 2')).toBeTruthy()
+    expect(screen.getByLabelText('Step 2 of 6')).toBeTruthy()
     expect(mockTrack).toHaveBeenCalledWith('site_start_choice', { choice: 'ai' })
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(await screen.findByText('How do you want to start?')).toBeTruthy()
@@ -968,7 +1066,7 @@ describe('after "Plan my site": where the next step is (AGL-3594)', () => {
   it('asks for the plan to be confirmed for it, closes the zone without the starter, and opens the site’s build page for the job', async () => {
     const leave = jest.fn()
     await openCard({ leave })
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await answerTo('review')
     mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/acme/hosts/demo-legal/ai-jobs/job-1'))
@@ -1102,10 +1200,10 @@ describe('before the site exists (AGL-3761)', () => {
     const site = pendingSite()
     await openChoice(pendingProps(site))
     fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
-    await screen.findByText('Tell us about your site')
+    await onStep('kind')
+    await answerTo('review')
     // Nothing is created by answering.
     expect(site.create).not.toHaveBeenCalled()
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
     mockFetch.mockResolvedValueOnce(json({ ok: true }))
     mockFetch.mockResolvedValueOnce(json({ job: siteJob({ hostId: 'host-new' }) }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
@@ -1126,8 +1224,8 @@ describe('before the site exists (AGL-3761)', () => {
     })
     await openChoice(pendingProps(site))
     fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
-    await screen.findByText('Tell us about your site')
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await onStep('kind')
+    await answerTo('review')
     mockFetch.mockResolvedValueOnce(json({ ok: true }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     expect(await screen.findByText('That subdomain is taken')).toBeTruthy()
@@ -1144,8 +1242,8 @@ describe('before the site exists (AGL-3761)', () => {
     const site = pendingSite()
     await openChoice(pendingProps(site))
     fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
-    await screen.findByText('Tell us about your site')
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await onStep('kind')
+    await answerTo('review')
     mockFetch.mockResolvedValueOnce(json({ error: 'Too many AI jobs at once. Try again in a minute.' }, 429))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
     expect(await screen.findByText('Too many AI jobs at once. Try again in a minute.')).toBeTruthy()
@@ -1157,8 +1255,8 @@ describe('before the site exists (AGL-3761)', () => {
     const site = pendingSite()
     await openChoice(pendingProps(site), { jobs: [], freeTaste: true })
     fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
-    await screen.findByText('Tell us about your site')
-    typeAnswer(/What kind of site are you creating\?/, 'a neighborhood dog groomer')
+    await onStep('kind')
+    await answerTo('review')
     const prompt = aiFreeSitePrompt({ left: 60, resetsOn: '2026-11-01' }, 2)!
     mockFetch.mockResolvedValueOnce(json({ error: aiCreditsPromptText(prompt, 'site'), code: AI_CREDITS_CONFIRM_CODE, credits: prompt }, 409))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
@@ -1178,5 +1276,285 @@ describe('before the site exists (AGL-3761)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close the guided start' }))
     expect(mockStartBlank).toHaveBeenCalledTimes(1)
     expect(leave).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * One decision a step (AGL-3898): Back and Next walk the questions and keep
+ * every answer, a step that cannot go forward says why beside the field and
+ * puts the cursor in it, Enter in a text answer is Next, and each step's
+ * heading takes the focus.
+ */
+describe('one decision a step (AGL-3898)', () => {
+  beforeEach(() => mockTrack.mockReset())
+
+  it('refuses Next without what kind of site it is, says why beside the field, and puts the cursor in it', async () => {
+    await openCard()
+    pressNext()
+    const field = screen.getByLabelText(/What kind of site are you creating\?/) as HTMLInputElement
+    expect(await screen.findByText('Say what kind of site this is.')).toBeTruthy()
+    expect(field.getAttribute('aria-invalid')).toBe('true')
+    expect(document.getElementById(field.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Say what kind of site this is.')
+    expect(document.activeElement).toBe(field)
+    expect(screen.getByRole('heading', { level: 1, name: HEADINGS.kind })).toBeTruthy()
+    expect(mockTrack).toHaveBeenCalledWith('site_start_field_error', { step: 'kind', field: 'siteType', error: 'required' })
+    // The reason goes once the answer is there.
+    typeAnswer(/What kind of site are you creating\?/, 'a bakery')
+    expect(screen.queryByText('Say what kind of site this is.')).toBeNull()
+  })
+
+  it('refuses an answer longer than the job takes, with the same words the start always used', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'x'.repeat(121))
+    pressNext()
+    expect(await screen.findByText('Keep what kind of site this is under 120 characters.')).toBeTruthy()
+    expect(mockTrack).toHaveBeenCalledWith('site_start_field_error', { step: 'kind', field: 'siteType', error: 'too_long' })
+  })
+
+  it('takes Enter in a text answer as Next', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a bakery')
+    fireEvent.keyDown(screen.getByLabelText(/What kind of site are you creating\?/), { key: 'Enter', code: 'Enter' })
+    await onStep('audience')
+    fireEvent.keyDown(screen.getByLabelText(/Who is it for\?/), { key: 'Enter', code: 'Enter' })
+    await onStep('style')
+  })
+
+  it('moves the focus to each step’s heading as it is drawn', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a bakery')
+    pressNext()
+    const heading = await onStep('audience')
+    await waitFor(() => expect(document.activeElement).toBe(heading))
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    const first = await onStep('kind')
+    await waitFor(() => expect(document.activeElement).toBe(first))
+  })
+
+  it('keeps every answer when going back, and fills the kind of site from its card', async () => {
+    await openCard()
+    fireEvent.click(typeCard('Restaurant or cafe'))
+    expect((screen.getByLabelText(/What kind of site are you creating\?/) as HTMLInputElement).value).toBe('a restaurant or cafe')
+    expect(typeCard('Restaurant or cafe').getAttribute('aria-checked')).toBe('true')
+    pressNext()
+    await onStep('audience')
+    typeAnswer(/Who is it for\?/, 'families nearby')
+    pressNext()
+    await onStep('style')
+    fireEvent.click(kindCard(2))
+    pressNext()
+    await onStep('details')
+    fireEvent.mouseDown(screen.getByLabelText('Pages'))
+    fireEvent.click(await screen.findByRole('option', { name: '7' }))
+    for (const step of ['style', 'audience', 'kind'] as const) {
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+      await onStep(step)
+    }
+    expect((screen.getByLabelText(/What kind of site are you creating\?/) as HTMLInputElement).value).toBe('a restaurant or cafe')
+    pressNext()
+    await onStep('audience')
+    expect((screen.getByLabelText(/Who is it for\?/) as HTMLInputElement).value).toBe('families nearby')
+    pressNext()
+    await onStep('style')
+    expect(kindCard(2).getAttribute('aria-checked')).toBe('true')
+    pressNext()
+    await onStep('details')
+    expect(screen.getByLabelText('Pages').textContent).toBe('7')
+  })
+
+  it('opens a step from the review’s Edit and comes back to the review on its Next', async () => {
+    await openCard()
+    await answerTo('review')
+    fireEvent.click(screen.getByRole('button', { name: 'Edit style' }))
+    await onStep('style')
+    fireEvent.click(kindCard(4))
+    fireEvent.click(screen.getByRole('button', { name: 'Back to review' }))
+    await onStep('review')
+    expect(screen.getByText(AI_SITE_KINDS[4].label)).toBeTruthy()
+  })
+
+  it('draws the progress as six steps, and the step on screen', async () => {
+    await openCard()
+    expect(screen.getByLabelText('Step 2 of 6')).toBeTruthy()
+    for (const label of ['Start', 'Your site', 'Audience', 'Style', 'Details', 'Review']) expect(screen.getByText(label)).toBeTruthy()
+  })
+})
+
+/**
+ * What the job reads is what it always read (AGL-3898). The steps hold the
+ * same answers object the single form held and write the same values for the
+ * same choices; only the review turns it into the job, through the same
+ * builders. Pinned twice: against the builders, and against the literal
+ * inputs, so the two cannot drift together.
+ */
+describe('the job’s inputs are unchanged by the steps (AGL-3898)', () => {
+  async function plannedBody() {
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await waitFor(() => expect(postCall()).toBeTruthy())
+    return JSON.parse(postCall()[1].body)
+  }
+
+  it('sends a picked style, an audience, leads and seven pages exactly as the single form did', async () => {
+    await openCard({ host: null })
+    typeAnswer(/What kind of site are you creating\?/, '  a neighborhood dog groomer ')
+    pressNext()
+    await onStep('audience')
+    typeAnswer(/Who is it for\?/, 'local dog owners')
+    pressNext()
+    await onStep('style')
+    fireEvent.click(kindCard(AI_SITE_KINDS.findIndex((kind) => kind.id === 'restaurant')))
+    pressNext()
+    await onStep('details')
+    fireEvent.mouseDown(screen.getByLabelText(/Where do form submissions go\?/))
+    fireEvent.click(screen.getByRole('option', { name: /CRM as a lead/ }))
+    fireEvent.mouseDown(screen.getByLabelText('Pages'))
+    fireEvent.click(await screen.findByRole('option', { name: '7' }))
+    fireEvent.mouseDown(screen.getByLabelText('Welcome email'))
+    fireEvent.click(await screen.findByRole('option', { name: 'No' }))
+    pressNext()
+    await onStep('review')
+    const body = await plannedBody()
+    const expected: AiSiteStartAnswers = {
+      ...AI_SITE_START_ANSWERS,
+      siteType: '  a neighborhood dog groomer ',
+      audience: 'local dog owners',
+      kind: 'restaurant',
+      pages: 7,
+      submissions: 'lead',
+      welcomeEmail: false,
+    }
+    expect(body.brief).toBe(aiSiteStartBrief(expected))
+    expect(body.inputs).toEqual({ ...aiSiteStartInputs(expected), autoConfirm: true })
+    expect(body.inputs).toEqual({
+      businessType: 'a neighborhood dog groomer',
+      audience: 'local dog owners',
+      starter: 'business',
+      siteKind: 'restaurant',
+      pages: 7,
+      businessName: '',
+      city: '',
+      brand: '',
+      submissions: 'lead',
+      welcomeEmail: false,
+      autoConfirm: true,
+    })
+  })
+
+  it('sends "Pick for me" as no kind picked: the kind the answer suggests, as before', async () => {
+    await openCard({ host: null })
+    fireEvent.click(typeCard('Trades business'))
+    await answerTo('review', 'a roofing company')
+    const body = await plannedBody()
+    const expected: AiSiteStartAnswers = { ...AI_SITE_START_ANSWERS, siteType: 'a roofing company' }
+    expect(body.brief).toBe(aiSiteStartBrief(expected))
+    expect(body.inputs).toEqual({ ...aiSiteStartInputs(expected), autoConfirm: true })
+    expect(body.inputs).toEqual({
+      businessType: 'a roofing company',
+      audience: '',
+      starter: 'business',
+      siteKind: 'trades',
+      pages: 5,
+      businessName: '',
+      city: '',
+      brand: '',
+      submissions: 'inbox',
+      welcomeEmail: true,
+      autoConfirm: true,
+    })
+  })
+
+  it('sends a kind-of-site card as the words the chips always sent', async () => {
+    await openCard({ host: null })
+    fireEvent.click(typeCard('Restaurant or cafe'))
+    for (const step of ['audience', 'style', 'details', 'review'] as const) {
+      pressNext()
+      await onStep(step)
+    }
+    const body = await plannedBody()
+    expect(body.inputs.businessType).toBe('a restaurant or cafe')
+    expect(body.inputs.siteKind).toBe('restaurant')
+  })
+})
+
+/**
+ * The funnel (AGL-3898): each step drawn and left, the step the start was
+ * abandoned on, and never a word anybody typed.
+ */
+describe('the guided start reports where people get lost (AGL-3898)', () => {
+  beforeEach(async () => {
+    // A start the last case left open reports its own leaving a tick after it
+    // is unmounted; let it, before counting this case's events.
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 5))
+    })
+    mockTrack.mockReset()
+  })
+  const named = (name: string) => mockTrack.mock.calls.filter(([event]) => event === name).map(([, params]) => params)
+
+  it('reports each step drawn, each step left forward and back, with the time spent on it', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a bakery')
+    pressNext()
+    await onStep('audience')
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await onStep('kind')
+    expect(named('site_start_step_viewed').map((params) => params.step)).toEqual(['choose', 'kind', 'audience', 'kind'])
+    expect(named('site_start_step_viewed')[1]).toEqual({ step: 'kind', step_index: 1, step_count: 6 })
+    expect(named('site_start_step_completed').map((params) => params.step)).toEqual(['choose', 'kind'])
+    expect(named('site_start_step_back')).toEqual([{ step: 'audience', step_index: 2, duration_ms: expect.any(Number) }])
+  })
+
+  it('reports Skip as the start abandoned on the step it was on, once', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'a bakery')
+    pressNext()
+    await onStep('audience')
+    fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
+    expect(named('site_start_abandoned')).toEqual([
+      { step: 'audience', step_index: 2, reason: 'skip', duration_ms: expect.any(Number), total_ms: expect.any(Number) },
+    ])
+  })
+
+  it('reports the close control as the start abandoned', async () => {
+    await openCard()
+    fireEvent.click(screen.getByRole('button', { name: 'Close the guided start' }))
+    expect(named('site_start_abandoned')).toEqual([expect.objectContaining({ step: 'kind', reason: 'close' })])
+  })
+
+  it('reports no abandonment once the site is started, and the review as completed', async () => {
+    const view = await openCard()
+    await answerTo('review')
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await waitFor(() => expect(mockPush).toHaveBeenCalled())
+    view.unmount()
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 5))
+    })
+    expect(named('site_start_step_completed').map((params) => params.step)).toEqual(['choose', 'kind', 'audience', 'style', 'details', 'review'])
+    expect(named('site_start_abandoned')).toEqual([])
+  })
+
+  it('reports a page change under an unfinished start as abandoned', async () => {
+    const view = await openCard()
+    view.unmount()
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 5))
+    })
+    expect(named('site_start_abandoned')).toEqual([expect.objectContaining({ step: 'kind', reason: 'route' })])
+  })
+
+  it('never sends a word anybody typed', async () => {
+    await openCard()
+    typeAnswer(/What kind of site are you creating\?/, 'Zelda’s secret bakery')
+    pressNext()
+    await onStep('audience')
+    typeAnswer(/Who is it for\?/, 'zelda@example.com and friends')
+    pressNext()
+    await onStep('style')
+    fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
+    const sent = JSON.stringify(mockTrack.mock.calls)
+    expect(sent).not.toMatch(/Zelda|zelda|bakery|friends/)
   })
 })

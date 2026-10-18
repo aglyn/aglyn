@@ -192,18 +192,7 @@ func openNotification(_ row: FeedNotification, model: AppModel, navigation: Shel
     navigation.pendingInvite = row
     return
   }
-  var link = row.link
-  if let workspace = model.workspace {
-    let orgID = row.orgID ?? workspace.sites.first { $0.id == row.hostID }?.orgID
-    if let orgID, orgID != workspace.org?.id || (row.hostID != nil && row.hostID != workspace.site?.id) {
-      workspace.select(orgID: orgID, hostID: row.hostID ?? (orgID == workspace.org?.id ? workspace.site?.id : nil))
-    }
-    // Host notifications store `/{hostDocId}/…`; the console follows them at `/{orgSlug}/hosts/{subdomain}/…`.
-    let site = workspace.sites.first { $0.id == row.hostID }
-    let org = workspace.orgs.first { $0.id == (orgID ?? site?.orgID) }
-    link = DeepLinks.notificationLink(link, orgSlug: org?.slug, hostID: row.hostID, hostSubdomain: site?.subdomain)
-  }
-  if let link { model.open(link, in: navigation) }
+  model.follow(row.link, orgID: row.orgID, hostID: row.hostID, in: navigation)
 }
 
 struct NotificationRow: View {
@@ -268,6 +257,7 @@ struct NotificationsView: View {
         Label(markingAll ? "Marking…" : "Mark all read", systemImage: "checkmark.circle")
       }
       .disabled(markingAll)
+      .help("Mark every notification read")
       .accessibilityIdentifier("notifications-mark-all")
     }
     ToolbarItem(placement: .secondaryAction) {
@@ -276,6 +266,7 @@ struct NotificationsView: View {
       } label: {
         Label("Notification settings", systemImage: "gearshape")
       }
+      .help("Choose what reaches you, and the sound it plays")
       .accessibilityIdentifier("notifications-settings")
     }
   }

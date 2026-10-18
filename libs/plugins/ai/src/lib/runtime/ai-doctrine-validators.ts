@@ -4828,6 +4828,122 @@ export function aiSettlePlanForms(
   }
 }
 
+/** A page whose title or address says it is where a visitor gets in touch. */
+const CONTACT_PAGE_NAME =
+  /\b(?:contact|get in touch|book(?:ing)?|reserve|reservations?|visit|enroll|enrol|register|rsvp|inquir(?:e|y)|enquir(?:e|y)|quote|appointments?|join|start a project|hire)\b/i
+
+/** A section name's words that ask for a form, and what each reads as once the form is on another page. */
+const HOME_FORM_WORDS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\s*(?:,\s*)?\b(?:with|and|plus|including|via|through)\s+(?:an?\s+|the\s+|our\s+)?(?:[\p{L}-]+\s+){0,3}?form\b/giu, ''],
+  [/\b(?:(?:contact|inquiry|enquiry|booking|consultation|request|quote|lead|intake|reservation|appointment)\s+)?form\b/gi, ''],
+  [/\bcontact us\b/gi, 'get in touch'],
+  [/\b(?:get|request) a quote\b/gi, 'quote call to action'],
+  [/\b(?:en|in)quiry\b/gi, 'call to action'],
+  [/\bregist(?:er|ration)\b/gi, 'call to action'],
+]
+
+/** A home section's name once the form it asked for lives on another page: still what it was about, never a form. */
+function homeSectionWithoutForm(name: string, last: boolean): string {
+  let next = name
+  for (const [words, instead] of HOME_FORM_WORDS) next = next.replace(words, instead)
+  next = next.replace(/\s{2,}/g, ' ').replace(/^[\s\-–—:,&+]+|[\s\-–—:,&+]+$/g, '').trim()
+  if (!next || FORM_SECTION_NAME.test(next) || !/\p{L}/u.test(next)) return last ? 'Closing call to action' : 'Call to action'
+  return next.charAt(0).toUpperCase() + next.slice(1)
+}
+
+/**
+ * The home page places no form where another page holds it (AGL-3899).
+ *
+ * Told that one form may be placed on several pages, 17 of the 22 newest
+ * production site starts (2026-10-12 → 10-16) placed the contact form on the
+ * home as well as on its Contact page, 16 of them in the last band, so every
+ * home ended on the same form. The form belongs to the page a visitor opens
+ * to get in touch (`aiLayoutFormPageOfPlan` already sends every call to
+ * action there); the home closes with a call to action whose button links it.
+ *
+ * Settled, never re-asked, after the forms are (`aiSettlePlanForms`), once
+ * the plan's references are resolved:
+ *  - where another page places the form, every home section that places it
+ *    takes it out of its uses, and a section named for the form is renamed
+ *    for what it still is — "Closing call to action with contact form" is
+ *    the closing call to action, "Contact us" is get in touch — so rule 3
+ *    asks for nothing;
+ *  - where no other page places it but one reads as the contact page (its
+ *    title or address: Contact, Book, Visit, Enroll…), the form moves there,
+ *    into the section that reads as a way to reach the business, else its
+ *    last;
+ *  - where neither, the home keeps it: a missing form is never invented,
+ *    and a form with no page is no form at all.
+ * A section named for a sign-up or a newsletter keeps what it places: that
+ * is a different ask, and a store's sign-up is its own platform part.
+ *
+ * `keep` is a start whose home keeps its form: a one-page site, a landing
+ * or coming-soon page, or a brief that asks for it there.
+ */
+export function aiSettlePlanHomeForms(
+  plan: AiBuildPlan,
+  inventory: AiSiteInventory | null,
+  options: { keep: boolean },
+): AiBuildPlan {
+  if (options.keep || plan.screens.length < 2) return plan
+  const homeIndex = plan.screens.findIndex((screen) => screen.slug.trim().replace(/^\/+|\/+$/g, '') === '')
+  if (homeIndex < 0) return plan
+  const kinds = inventoryKinds(inventory)
+  const isForm = (ref: string) => refKind(ref, plan, kinds) === 'form'
+  const signup = (name: string) => NEWSLETTER_NAME.test(name)
+  const home = plan.screens[homeIndex]
+  const placing = home.sections.flatMap((section, index) =>
+    !signup(section.name) && section.uses.some(isForm) ? [index] : [],
+  )
+  if (!placing.length) return plan
+  let screens = plan.screens
+  const elsewhere = screens.some(
+    (screen, index) => index !== homeIndex && screen.sections.some((section) => section.uses.some(isForm)),
+  )
+  if (!elsewhere) {
+    const target = screens.findIndex(
+      (screen, index) => index !== homeIndex && screen.sections.length > 0 && CONTACT_PAGE_NAME.test(`${screen.title} ${screen.slug.replace(/[-/]+/g, ' ')}`),
+    )
+    if (target < 0) return plan
+    const form = home.sections[placing[0]].uses.find(isForm) as string
+    const page = screens[target]
+    const roomy = page.sections.flatMap((section, index) => (section.uses.length < AI_BUILD_PLAN_LIMITS.uses ? [index] : []))
+    const at =
+      roomy.find((index) => FORM_SECTION_NAME.test(page.sections[index].name)) ??
+      roomy.find((index) => index > 0 && REACH_SECTION_NAME.test(page.sections[index].name)) ??
+      roomy.filter((index) => index > 0).at(-1) ??
+      roomy.at(-1)
+    if (at === undefined) return plan
+    screens = screens.map((screen, index) =>
+      index !== target
+        ? screen
+        : {
+            ...screen,
+            sections: screen.sections.map((section, sectionIndex) =>
+              sectionIndex === at ? { ...section, uses: [...section.uses, form] } : section,
+            ),
+          },
+    )
+  }
+  const lastIndex = home.sections.length - 1
+  return {
+    ...plan,
+    screens: screens.map((screen, index) =>
+      index !== homeIndex
+        ? screen
+        : {
+            ...screen,
+            sections: screen.sections.map((section, sectionIndex) => {
+              if (!placing.includes(sectionIndex) && !(FORM_SECTION_NAME.test(section.name) && !signup(section.name))) return section
+              const uses = section.uses.filter((ref) => !isForm(ref))
+              const name = FORM_SECTION_NAME.test(section.name) ? homeSectionWithoutForm(section.name, sectionIndex === lastIndex) : section.name
+              return { ...section, name, uses }
+            }),
+          },
+    ),
+  }
+}
+
 /** The forms a section that collects answers can place, as the re-ask names them. */
 function planFormChoicesText(plan: AiBuildPlan, inventory: AiSiteInventory | null): string {
   const choices = planFormChoices(plan, inventory)
@@ -5084,7 +5200,11 @@ export function detectCreateBeforeReuse(
   }
   plan.create.forEach((entry, index) => {
     if (!REUSE_BEFORE_CREATE_KINDS.has(entry.kind) || entry.duplicateOf) return
-    const existing = rows[entry.kind].find((row) => aiNamesMatch(row.name, entry.name))
+    // A site start's dataset whose records are another site's is made again,
+    // never reused (AGL-3912), so a creation of its name is not a duplicate.
+    const existing = rows[entry.kind].find(
+      (row) => aiNamesMatch(row.name, entry.name) && !(row as { foreign?: boolean }).foreign,
+    )
     if (!existing) return
     violations.push({
       rule: 7,
@@ -5661,11 +5781,16 @@ export const AI_FREE_WALL_SETTLE_MAX_OVER = 2
 const REACH_SECTION_NAME =
   /\b(?:contact|get in touch|visit(?: us)?|find us|locations?|hours|book(?:ing)?|reserve|reservations?)\b/i
 
+/** A section that asks a visitor to act: a call to action, "Start your practice", "Get started". */
+const CALL_TO_ACTION_NAME =
+  /\b(?:call to action|cta|get started|start (?:your|a|here|now|today)|join (?:us|now|today|the)|ready to)\b/i
+
 /**
  * Whether the Free wall's trim keeps a section of a page (AGL-3737): the
  * page's opening, any section that places something (a dataset it lists, a
  * form, a component — dropping it would leave a creation unplaced), one that
- * collects answers or says how to reach the owner, and a storefront's
+ * collects answers, says how to reach the owner or asks a visitor to act
+ * (AGL-3899: a home's call to action is its way to the form), and a storefront's
  * listing parts — the bestsellers, the collections, the sign-up, and a Shop
  * page's product grid.
  */
@@ -5673,6 +5798,8 @@ function freeWallKeeps(screen: AiBuildPlan['screens'][number], index: number): b
   const section = screen.sections[index]
   if (index === 0 || section.uses.length > 0) return true
   if (FORM_SECTION_NAME.test(section.name) || REACH_SECTION_NAME.test(section.name)) return true
+  // A call to action is how a home with no form reaches the page that has it (AGL-3899).
+  if (CALL_TO_ACTION_NAME.test(section.name)) return true
   if (
     aiStorefrontSays('featured', section.name) ||
     aiStorefrontSays('collections', section.name) ||

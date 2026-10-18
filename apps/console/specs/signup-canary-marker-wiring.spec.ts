@@ -314,8 +314,10 @@ describe('the canary does not announce itself to staff', () => {
       join(REPO_ROOT, 'apps/console/app/api/_lib/growth-announcements.ts'),
       'utf8',
     )
+    // The guard opens the block the notice is sent from; the reads that
+    // gather its details (AGL-3897) sit inside it, after the guard.
     expect(ANNOUNCER).toMatch(
-      /if \(!isSignupCanaryOrgSlug\(slug\) && !isSignupCanaryEmail\(owner\.email\)\) \{\s*await notifyStaff\(\{\s*type: 'staff\.orgCreated'/,
+      /if \(!isSignupCanaryOrgSlug\(slug\) && !isSignupCanaryEmail\(owner\.email\)\) \{[\s\S]{0,1500}?await notifyStaff\(\s*\{\s*type: 'staff\.orgCreated'/,
     )
     const SITE_ROUTE = readFileSync(
       join(REPO_ROOT, 'apps/console/app/api/hosts/create/route.ts'),
@@ -333,8 +335,15 @@ describe('the canary does not announce itself to staff', () => {
       'utf8',
     )
     expect(SESSION_ROUTE).toMatch(
-      /!isSignupCanaryEmail\(decoded\.email\) &&\s*\(await claimNewAccountAnnouncement\([\s\S]{0,200}?\)\)\s*\) \{\s*await notifyStaff\(\{\s*type: 'staff\.userSignedUp'/,
+      /!isSignupCanaryEmail\(decoded\.email\) &&\s*\(await claimNewAccountAnnouncement\([\s\S]{0,200}?\)\)\s*\) \{[\s\S]{0,120}?await announceNewAccount\(\{/,
     )
+    // The announcer is the only place the notice is raised (AGL-3897).
+    expect(SESSION_ROUTE).not.toMatch(/type: 'staff\.userSignedUp'/)
+    const ANNOUNCER = readFileSync(
+      join(REPO_ROOT, 'apps/console/app/api/_lib/growth-announcements.ts'),
+      'utf8',
+    )
+    expect(ANNOUNCER).toMatch(/export async function announceNewAccount[\s\S]{0,1500}?type: 'staff\.userSignedUp'/)
   })
 
   it('the tag the console reads is the tag the canary refuses to start without', () => {

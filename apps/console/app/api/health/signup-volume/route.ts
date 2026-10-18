@@ -366,7 +366,14 @@ const attemptsProbe = memoizeWithTtl<{
  *
  * Both edges are on `createdAt`, so the automatic single-field index the
  * volume count above already uses serves it and no composite index is
- * needed. Only the size of each org's `hosts` map leaves this function.
+ * needed. Only the size of each org's `hosts` map, its creation time and an
+ * opaque key for who made it leave this function, and the route's body
+ * carries none of them, only counts.
+ *
+ * Who made it: the acquisition record's first-touch stamp is set once per
+ * browser and copied onto every workspace that browser makes, so it groups
+ * one person's second Google account with their first. An org with no stamp
+ * falls back to its owner's uid.
  *
  * Bounded at 200. That is several weeks of sign-ups at today's rate packed
  * into twelve hours; a wave that large is `signupVolume`'s alarm, not this.
@@ -399,9 +406,24 @@ const landingProbe = memoizeWithTtl<{
     const orgs: SignupLandingOrg[] = snapshot.docs.map(
       (doc: { get: (field: string) => unknown }) => {
         const hosts = doc.get('hosts')
+        const createdAt = doc.get('createdAt') as Timestamp | null
+        const capturedAt = (
+          doc.get('acquisition') as { capturedAt?: unknown } | null
+        )?.capturedAt
+        const owner = doc.get('ownerUid')
         return {
           hostCount:
             hosts && typeof hosts === 'object' ? Object.keys(hosts).length : 0,
+          createdAtMs:
+            createdAt && typeof createdAt.toMillis === 'function'
+              ? createdAt.toMillis()
+              : null,
+          visitor:
+            typeof capturedAt === 'number' && Number.isFinite(capturedAt)
+              ? `first-touch:${capturedAt}`
+              : typeof owner === 'string' && owner
+                ? `owner:${owner}`
+                : null,
         }
       },
     )

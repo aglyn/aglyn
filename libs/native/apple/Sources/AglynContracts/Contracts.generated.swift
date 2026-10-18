@@ -1795,6 +1795,22 @@ public struct NativeCrmPicklist: Codable, Hashable, Sendable {
   }
 }
 
+public struct NotificationSound: Codable, Hashable, Sendable {
+  public var android: String
+  public var apple: String
+  public var id: String
+  public var label: String
+  public var web: String
+
+  public init(android: String, apple: String, id: String, label: String, web: String) {
+    self.android = android
+    self.apple = apple
+    self.id = id
+    self.label = label
+    self.web = web
+  }
+}
+
 public struct OrderAddress: Codable, Hashable, Sendable {
   public var city: String?
   public var country: String?
@@ -3356,6 +3372,18 @@ public enum PosTenderMethod: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PrinterBrand: String, Codable, CaseIterable, Hashable, Sendable {
+  case epson = "epson"
+  case star = "star"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct ProductChannelFacts: Codable, Hashable, Sendable {
   public var brand: String?
   public var condition: ProductChannelFactsCondition?
@@ -3904,6 +3932,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let datasetFilterPrefixMax: Int
   public let dealListDeclaration: ListQueryDeclaration
   public let defaultDealStages: [CrmDealStage]
+  public let defaultNotificationSound: String
   public let defaultTitlePattern: String
   public let dropOffMaxHours: Double
   public let dropOffWaitHours: [Double]
@@ -3998,6 +4027,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let nativeSiteCampaignsQuery: ListQueryDeclaration
   public let nativeSiteEmailsQuery: ListQueryDeclaration
   public let nothingMoved: String
+  public let notificationSoundField: String
+  public let notificationSounds: [NotificationSound]
   public let openDisputeClause: ListFilterClause
   public let orderChannelLabels: [String: String]
   public let orderChannelOptions: [ListFilterOption]
@@ -4052,6 +4083,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let posOfflineSyncRoute: String
   public let posTenderLabels: [String: String]
   public let priceRangeMaxLength: Int
+  public let printerBrandLabels: [String: String]
+  public let printerBrands: [PrinterBrand]
+  public let printerModelSuggestions: [String: [String]]
+  public let printerOfflineAfterMs: Double
+  public let printerStateLabels: [String: String]
   public let productListBase: [ListQueryFilter]
   public let productListHeaders: [String: String]
   public let productListOptions: [String: [ListFilterOption]]
@@ -4146,6 +4182,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case datasetFilterPrefixMax = "DATASET_FILTER_PREFIX_MAX"
     case dealListDeclaration = "DEAL_LIST_DECLARATION"
     case defaultDealStages = "DEFAULT_DEAL_STAGES"
+    case defaultNotificationSound = "DEFAULT_NOTIFICATION_SOUND"
     case defaultTitlePattern = "DEFAULT_TITLE_PATTERN"
     case dropOffMaxHours = "DROP_OFF_MAX_HOURS"
     case dropOffWaitHours = "DROP_OFF_WAIT_HOURS"
@@ -4240,6 +4277,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case nativeSiteCampaignsQuery = "NATIVE_SITE_CAMPAIGNS_QUERY"
     case nativeSiteEmailsQuery = "NATIVE_SITE_EMAILS_QUERY"
     case nothingMoved = "NOTHING_MOVED"
+    case notificationSoundField = "NOTIFICATION_SOUND_FIELD"
+    case notificationSounds = "NOTIFICATION_SOUNDS"
     case openDisputeClause = "OPEN_DISPUTE_CLAUSE"
     case orderChannelLabels = "ORDER_CHANNEL_LABELS"
     case orderChannelOptions = "ORDER_CHANNEL_OPTIONS"
@@ -4294,6 +4333,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case posOfflineSyncRoute = "POS_OFFLINE_SYNC_ROUTE"
     case posTenderLabels = "POS_TENDER_LABELS"
     case priceRangeMaxLength = "PRICE_RANGE_MAX_LENGTH"
+    case printerBrandLabels = "PRINTER_BRAND_LABELS"
+    case printerBrands = "PRINTER_BRANDS"
+    case printerModelSuggestions = "PRINTER_MODEL_SUGGESTIONS"
+    case printerOfflineAfterMs = "PRINTER_OFFLINE_AFTER_MS"
+    case printerStateLabels = "PRINTER_STATE_LABELS"
     case productListBase = "PRODUCT_LIST_BASE"
     case productListHeaders = "PRODUCT_LIST_HEADERS"
     case productListOptions = "PRODUCT_LIST_OPTIONS"

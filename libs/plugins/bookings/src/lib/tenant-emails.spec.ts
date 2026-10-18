@@ -52,9 +52,10 @@ describe('booking emails name the business and the zone (AGL-3432)', () => {
       'booking.payment': '',
       'booking.ref': 'bk_1',
     })
+    expect(text).toContain('Hi Rhea, your booking with Harbor Spa is confirmed.')
+    // The service, the time with its zone, and the reference, as a details panel (AGL-3897).
     expect(text).toContain(
-      'Hi Rhea, your booking with Harbor Spa is confirmed: "Deep tissue ' +
-        'massage" on Thursday, April 23, 2026 at 10:06 PM (America/Chicago).',
+      'Service: Deep tissue massage\nWhen: Thursday, April 23, 2026 at 10:06 PM (America/Chicago)\nReference: bk_1',
     )
     expect(text).not.toContain('You paid')
     expect(text).not.toMatch(/\n\s*\n\s*\n/)
@@ -71,10 +72,7 @@ describe('booking emails name the business and the zone (AGL-3432)', () => {
 
   it('the reminder names the business and the zone', () => {
     const text = render('booking-reminder', WHEN)
-    expect(text).toContain(
-      'Hi Rhea, this is a reminder of your booking with Harbor Spa: "Deep ' +
-        'tissue massage" on Thursday, April 23, 2026 at 10:06 PM ' +
-        '(America/Chicago).',
-    )
+    expect(text).toContain('Hi Rhea, this is a reminder of your booking with Harbor Spa.')
+    expect(text).toContain('Service: Deep tissue massage\nWhen: Thursday, April 23, 2026 at 10:06 PM (America/Chicago)')
   })
 })

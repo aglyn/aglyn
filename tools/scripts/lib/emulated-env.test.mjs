@@ -30,6 +30,8 @@ import { describe, it } from 'node:test'
 
 import {
   credentialPreflight,
+  EMULATOR_PROJECT_FALLBACK,
+  EMULATOR_WEB_API_KEY,
   emulatedServeEnvironment,
   heldCredentials,
   isOutboundCredential,
@@ -168,6 +170,63 @@ describe('emulatedServeEnvironment', () => {
       emulatedServeEnvironment({ CRON_SECRET: 'shell' }, liveFiles, { liveAi: true }).env.CRON_SECRET,
       'shell',
     )
+  })
+
+  // AGL-3910: a checkout without the app env files served a console whose
+  // Admin SDK never started, so /api/orgs/create answered 500 (app/no-app).
+  describe('the emulator project identity', () => {
+    const emulator = { FIRESTORE_EMULATOR_HOST: 'localhost:8082' }
+    const rootEnvOnly = [
+      file({ FIREBASE_PROJECT_ID: 'repo-project', FIREBASE_PRIVATE_KEY: 'placeholder', FIREBASE_CLIENT_EMAIL: 'sa@example.test' }),
+    ]
+
+    it("fills the web config from the service account's project when no env file sets it", () => {
+      const { env, identityFilled, adminSdkMissing } = emulatedServeEnvironment(emulator, rootEnvOnly)
+      assert.equal(env.NEXT_PUBLIC_FIREBASE_PROJECT_ID, 'repo-project')
+      assert.equal(env.NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY, EMULATOR_WEB_API_KEY)
+      assert.equal(env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, 'repo-project.firebaseapp.com')
+      assert.equal(env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, 'repo-project.appspot.com')
+      assert.equal(env.NEXT_PUBLIC_FIREBASE_DATABASE_URL, 'https://repo-project-default-rtdb.firebaseio.com')
+      assert.equal(identityFilled.length, 7)
+      assert.equal(env.NEXT_PUBLIC_FIREBASE_APP_ID, '1:000000000000:web:emulator')
+      assert.deepEqual(adminSdkMissing, [])
+    })
+
+    it('falls back to the project the emulators and the seed scripts use', () => {
+      const { env } = emulatedServeEnvironment({ FIREBASE_AUTH_EMULATOR_HOST: 'localhost:9099' }, [])
+      assert.equal(env.NEXT_PUBLIC_FIREBASE_PROJECT_ID, EMULATOR_PROJECT_FALLBACK)
+    })
+
+    it('never replaces a value the shell or an env file set', () => {
+      const { env, identityFilled } = emulatedServeEnvironment({ ...emulator, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'shell.example' }, [
+        ...rootEnvOnly,
+        file({ NEXT_PUBLIC_FIREBASE_PROJECT_ID: 'file-project', NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY: 'file-key' }),
+      ])
+      assert.equal(env.NEXT_PUBLIC_FIREBASE_PROJECT_ID, 'file-project')
+      assert.equal(env.NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY, 'file-key')
+      assert.equal(env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, 'shell.example')
+      assert.equal(env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, 'file-project.appspot.com')
+      assert.deepEqual(identityFilled, [
+        'NEXT_PUBLIC_FIREBASE_APP_ID',
+        'NEXT_PUBLIC_FIREBASE_DATABASE_URL',
+        'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+        'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+      ])
+    })
+
+    it('fills nothing for a server that names no emulator', () => {
+      const { env, identityFilled, adminSdkMissing } = emulatedServeEnvironment({}, rootEnvOnly)
+      assert.equal(env.NEXT_PUBLIC_FIREBASE_PROJECT_ID, undefined)
+      assert.deepEqual(identityFilled, [])
+      assert.deepEqual(adminSdkMissing, [])
+    })
+
+    it('names the service account the Admin SDK cannot start without', () => {
+      assert.deepEqual(emulatedServeEnvironment(emulator, []).adminSdkMissing, [
+        'FIREBASE_PRIVATE_KEY',
+        'FIREBASE_CLIENT_EMAIL',
+      ])
+    })
   })
 
   it('reads the opt-in from AGLYN_EMULATED_LIVE_AI', () => {

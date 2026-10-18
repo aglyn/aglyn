@@ -59,6 +59,8 @@ struct RootView<Shell: View>: View {
     }
     .tint(AglynColor.tint)
     .font(AglynFont.body)
+    // Every plain web page (a live site, a preview, a docs or legal link) opens in the in-app web sheet (AGL-3893).
+    .aglynWebSheetHost()
     .onChange(of: model.auth?.user, initial: true) { _, user in
       model.userChanged(user)
       openPendingPush()
@@ -88,8 +90,11 @@ struct RootView<Shell: View>: View {
   /// A tapped push's link, opened once someone is signed in.
   private func openPendingPush() {
     guard let link = model.push.pendingLink, model.auth?.user != nil else { return }
+    let (orgID, hostID) = (model.push.pendingOrgID, model.push.pendingHostID)
     model.push.pendingLink = nil
-    model.open(link, in: navigation)
+    model.push.pendingOrgID = nil
+    model.push.pendingHostID = nil
+    model.follow(link, orgID: orgID, hostID: hostID, in: navigation)
   }
 }
 

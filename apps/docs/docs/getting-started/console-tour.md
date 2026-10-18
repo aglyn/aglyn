@@ -487,6 +487,13 @@ off to stop both the notification and the email for everything in it; a single t
 silenced by clearing its **Remind me** field. See
 [Reminders](../content-and-data/crm/tasks.md#reminders).
 
+### Notification sound
+
+Pick the sound your notifications make under **Notification sound** in the
+**Settings** section. Choosing one plays it, and **Play** plays it again.
+**Xylophone** is the default. The choice belongs to your account, so the same
+sound plays here and in the Aglyn apps on your phone, tablet and computer.
+
 ### Alerts on this device
 
 At the foot of the **Settings** section, three switches control how a new
@@ -494,9 +501,9 @@ notification reaches you in **this browser**:
 
 - **Unread count in tab title** — badges the browser tab, e.g. `(3) Aglyn`,
   so you can see new activity from another tab. On by default.
-- **Sound** — a short chime when a notification arrives. On by default on a
-  browser you haven't set it on before; a device where you already turned it off
-  keeps your choice.
+- **Play sound** — plays your [notification sound](#notification-sound) when a
+  notification arrives. On by default on a browser you haven't set it on
+  before; a device where you already turned it off keeps your choice.
 - **Desktop notifications** — a system notification, shown only while the
   Aglyn tab is in the background (in the foreground, the bell and chime
   already tell you). Off by default; switching it on asks your browser for
@@ -507,10 +514,10 @@ These are per-device, not per-account: notification permission is granted
 per browser, so muting sound on your laptop leaves your other devices alone.
 Everything above them is account-wide and applies everywhere you sign in.
 
-**Send test alert** plays the chime and, if you've allowed them, fires a desktop
-notification — so you can confirm your setup works instead of discovering weeks
-later that you never heard a thing. The chime always plays, even with **Sound**
-switched off, so you can hear it before deciding.
+**Send test alert** plays your notification sound and, if you've allowed them,
+fires a desktop notification — so you can confirm your setup works instead of
+discovering weeks later that you never heard a thing. The sound always plays,
+even with **Play sound** switched off, so you can hear it before deciding.
 
 Aglyn asks you in-app before triggering your browser's own permission prompt.
 That's deliberate: **browsers allow exactly one permission request per site**.

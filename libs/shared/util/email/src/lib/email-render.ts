@@ -51,7 +51,12 @@ import {
 } from '@aglyn/shared-util-http/safe-url-scheme'
 
 import { linkifyEscapedText } from './email-linkify'
-import { emailAccent, resolveEmailColor, type EmailPalette } from './email-palette'
+import {
+  emailAccent,
+  PLATFORM_EMAIL_PALETTE,
+  resolveEmailColor,
+  type EmailPalette,
+} from './email-palette'
 import { resolveEmailMediaSrc } from './email-media-src'
 
 export interface EmailRenderProduct {
@@ -163,6 +168,19 @@ export interface EmailRenderOptions {
    * the Besigner canvas draws the button with. Absent is MUI's default, 4.
    */
   buttonRadius?: number
+  /**
+   * How a button's label is set: the theme's own button type — its case,
+   * weight and letter spacing — so a button reads like the buttons on the
+   * console or the site it comes from (AGL-3897). Absent, mixed case at 600.
+   */
+  buttonText?: EmailButtonText
+}
+
+/** A button label's type, from a theme's `typography.button`. */
+export interface EmailButtonText {
+  transform?: 'uppercase' | 'none' | 'capitalize' | 'lowercase'
+  weight?: number
+  letterSpacing?: string
 }
 
 /**
@@ -221,7 +239,7 @@ export interface EmailChrome {
  * every color an author picked and colors what they did not, and its button
  * radius. Spread into {@link EmailRenderOptions}.
  */
-export type EmailTheme = Pick<EmailRenderOptions, 'palette' | 'buttonRadius'>
+export type EmailTheme = Pick<EmailRenderOptions, 'palette' | 'buttonRadius' | 'buttonText'>
 
 export interface RenderedEmail {
   html: string
@@ -273,7 +291,44 @@ const TEXT_STYLES: Record<string, string> = {
   heading: `font-size:28px;font-weight:700;line-height:1.25`,
   subheading: `font-size:20px;font-weight:600;line-height:1.3`,
   body: `font-size:15px;font-weight:400;line-height:1.55`,
-  caption: `font-size:12px;font-weight:400;line-height:1.4`,
+  caption: `font-size:12px;font-weight:400;line-height:1.5`,
+  // A small label above a heading saying what the email is about: the site,
+  // the workspace (AGL-3897).
+  eyebrow: `font-size:12px;font-weight:700;line-height:1.4;letter-spacing:0.06em;text-transform:uppercase`,
+  // The rows of a details panel; see `detailsHtml`.
+  details: `font-size:14px;font-weight:400;line-height:1.45`,
+  // A list of next steps or help, each a link; see `linksHtml`.
+  links: `font-size:15px;font-weight:600;line-height:1.4`,
+}
+
+/** The space around each text style's row: a heading needs room below it, an eyebrow sits tight above one. */
+const TEXT_PADDING: Record<string, string> = {
+  heading: 'padding:4px 0 10px;',
+  subheading: 'padding:14px 0 4px;',
+  body: 'padding:5px 0;',
+  caption: 'padding:5px 0;',
+  eyebrow: 'padding:0 0 2px;',
+  details: 'padding:10px 0;',
+  links: 'padding:8px 0;',
+}
+
+/** A details value longer than this reads as a paragraph under its label rather than beside it. */
+const DETAIL_INLINE_MAX = 48
+
+/** The styles whose words are secondary, drawn in the theme's muted text color unless a color is set. */
+const MUTED_TEXT_STYLES: ReadonlySet<string> = new Set(['caption'])
+
+/**
+ * One line of a details panel split into its label and its value: at the
+ * first ": " ("Device: Chrome on macOS"), else at the last " — " ("House
+ * Blend × 2 — $24.00"). A line with neither is drawn across both columns.
+ */
+export function splitEmailDetailLine(line: string): { label: string; value: string } | null {
+  const colon = line.indexOf(': ')
+  if (colon > 0 && colon <= 48) return { label: line.slice(0, colon).trim(), value: line.slice(colon + 2).trim() }
+  const dash = line.lastIndexOf(' — ')
+  if (dash > 0) return { label: line.slice(0, dash).trim(), value: line.slice(dash + 3).trim() }
+  return null
 }
 
 /** One full-width table row wrapping arbitrary cell HTML. */
@@ -305,11 +360,21 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
     chrome,
     palette,
     buttonRadius,
+    buttonText,
   } = options
   const radius =
     Number.isFinite(buttonRadius) && Number(buttonRadius) >= 0
       ? Math.min(Number(buttonRadius), 48)
       : 4
+  const labelWeight =
+    Number.isFinite(buttonText?.weight) && Number(buttonText?.weight) >= 100 ? Number(buttonText?.weight) : 600
+  const labelCase =
+    (buttonText?.transform && /^(uppercase|none|capitalize|lowercase)$/.test(buttonText.transform)
+      ? `text-transform:${buttonText.transform};`
+      : '') +
+    (buttonText?.letterSpacing && /^-?[\d.]+(em|px|rem)$/.test(buttonText.letterSpacing)
+      ? `letter-spacing:${buttonText.letterSpacing};`
+      : '')
 
   /**
    * A stored color, resolved: a palette token against the theme, a literal
@@ -319,6 +384,92 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
    */
   const colorOf = (value: unknown, fallback: string): string =>
     resolveEmailColor(value, palette) ?? fallback
+
+  /** A theme token's color, from the email's palette, else the platform's, which resolves every one. */
+  const themeColor = (token: string): string =>
+    resolveEmailColor(token, palette) ?? resolveEmailColor(token, PLATFORM_EMAIL_PALETTE) ?? 'inherit'
+
+  /**
+   * A list of links (AGL-3897): each "Label — https://…" line a row whose
+   * label is the link, in the theme's link color, with an arrow after it and
+   * a hairline between rows — next steps, help pages. A line with no address
+   * is drawn as plain text; an address the link check refuses drops the link
+   * and keeps the words.
+   */
+  const linksHtml = (text: string, style: string): string => {
+    const rule = themeColor('divider')
+    const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+    const rows = lines.map((line, index) => {
+      const split = splitEmailDetailLine(line)
+      const href = split ? linkHref(split.value) : undefined
+      const label = escapeEmailHtml(split ? split.label : line)
+      const border = index > 0 ? `border-top:1px solid ${rule};` : ''
+      const inner = href
+        ? `<a href="${escapeEmailHtml(href)}" target="_blank" style="color:${accent.link};text-decoration:none;">${label}&nbsp;&rarr;</a>`
+        : `<span style="color:${themeColor('text.primary')};">${label}</span>`
+      return `<tr><td style="font-family:${FONT};${style};padding:10px 0;${border}">${inner}</td></tr>`
+    })
+    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows.join('')}</table>`
+  }
+
+  /**
+   * A details panel (AGL-3897): each line a row, its label muted on the left
+   * and its value on the right, on a tinted ground with a hairline between
+   * rows. A row whose label begins "Total" is the sum of the rows above it,
+   * so it is drawn bold with a rule over it. A line that empties out — a
+   * token the send left blank — draws no row.
+   */
+  const detailsHtml = (text: string, style: string, valueColor: string): string => {
+    const muted = themeColor('text.secondary')
+    const rule = themeColor('divider')
+    // A line whose value a token left blank ("Location:") is not drawn.
+    const lines = text
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.endsWith(':'))
+    const cell = (value: string) => linkifyEscapedText(escapeEmailHtml(value), accent.link).replace(/\n/g, '<br />')
+    // A line with no label of its own continues the value above it: a form
+    // answer that ran over two lines is one row, not two.
+    const entries: Array<{ label: string | null; value: string }> = []
+    for (const line of lines) {
+      const split = splitEmailDetailLine(line)
+      const last = entries[entries.length - 1]
+      if (!split && last?.label) last.value += `\n${line}`
+      else entries.push(split ? { label: split.label, value: split.value } : { label: null, value: line })
+    }
+    const rows = entries.map((entry, index) => {
+      const total = Boolean(entry.label && /^total\b/i.test(entry.label))
+      const border = index > 0 ? `border-top:1px solid ${rule};` : ''
+      const base = `font-family:${FONT};${style};padding:9px 0;vertical-align:top;${border}`
+      if (!entry.label) {
+        return `<tr><td colspan="2" style="${base}color:${valueColor};">${cell(entry.value)}</td></tr>`
+      }
+      // A long answer — a message, a note — reads as a paragraph under its
+      // label, not as a bold run squeezed against the right edge.
+      if (!total && (entry.value.length > DETAIL_INLINE_MAX || entry.value.includes('\n'))) {
+        return (
+          `<tr><td colspan="2" style="${base}">` +
+          `<div style="color:${muted};padding-bottom:2px;">${cell(entry.label)}</div>` +
+          `<div style="color:${valueColor};">${cell(entry.value)}</div>` +
+          `</td></tr>`
+        )
+      }
+      return (
+        `<tr>` +
+        `<td style="${base}color:${total ? valueColor : muted};${total ? 'font-weight:700;' : ''}padding-right:16px;">${cell(entry.label)}</td>` +
+        `<td style="${base}color:${valueColor};font-weight:${total ? 700 : 600};text-align:right;word-break:break-word;">${cell(entry.value)}</td>` +
+        `</tr>`
+      )
+    })
+    return (
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ` +
+      // On the theme's primary tint, the brand's own light ground.
+      `style="background-color:${resolveEmailColor('tint.primary', palette) ?? themeColor('grey.50')};border-radius:8px;">` +
+      `<tr><td style="padding:4px 16px;">` +
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows.join('')}</table>` +
+      `</td></tr></table>`
+    )
+  }
   /**
    * The theme's accent, for what the author left unset: the fill, its label,
    * and the accent AS TEXT (`primary.dark`, where the fill itself may be too
@@ -466,20 +617,42 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
         )
       }
       case 'emailText': {
-        const text = sub(props.children)
+        const merged = sub(props.children)
+        // An eyebrow is a few parts joined by " · "; one a token left empty
+        // ("{{host.businessName}} · Order #1042" on a site with no name) loses
+        // its separator rather than starting with one.
+        const text =
+          props.variant === 'eyebrow'
+            ? merged.replace(/^(\s*·\s*)+|(\s*·\s*)+$/g, '').replace(/(\s*·\s*){2,}/g, ' · ')
+            : merged
         // A block whose copy is only a token the send left empty (a
         // notification with no detail line, AGL-3367) draws nothing, rather
         // than an empty row and a blank paragraph in the text part.
         if (!text.trim()) return ''
         textParts.push(text)
-        const style = TEXT_STYLES[props.variant as string] ?? TEXT_STYLES['body']
-        const color = colorOf(props.color, '#1a1a1a')
+        const variant = TEXT_STYLES[props.variant as string] ? (props.variant as string) : 'body'
+        const style = TEXT_STYLES[variant]
+        // Unpicked, secondary words take the theme's muted text, and an
+        // eyebrow its brand color in the shade that reads as text.
+        const color = props.color
+          ? colorOf(props.color, '#1a1a1a')
+          : variant === 'eyebrow'
+            ? themeColor('primary.dark')
+            : MUTED_TEXT_STYLES.has(variant)
+              ? themeColor('text.secondary')
+              : '#1a1a1a'
         const align = props.align || 'left'
+        if (variant === 'links') {
+          return row(linksHtml(text, style), TEXT_PADDING['links'])
+        }
+        if (variant === 'details') {
+          return row(detailsHtml(text, style, props.color ? color : themeColor('text.primary')), TEXT_PADDING['details'])
+        }
         return row(
           `<div style="font-family:${FONT};${style};color:${color};text-align:${align};">` +
             linkifyEscapedText(escapeEmailHtml(text), accent.link).replace(/\n/g, '<br />') +
             `</div>`,
-          'padding:4px 0;',
+          TEXT_PADDING[variant] ?? TEXT_PADDING['body'],
         )
       }
       case 'emailRichtext':
@@ -512,6 +685,12 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
         )
       }
       case 'emailButton': {
+        // A button written as merge tokens that the send left empty is one
+        // this email has nothing to point at (an alert about no one item),
+        // so it is left out rather than drawn going nowhere.
+        const tokenOnly = (value: unknown): boolean =>
+          /\{\{[^}]+\}\}/.test(String(value ?? '')) && !sub(value).trim()
+        if (tokenOnly(props.href) || tokenOnly(props.children)) return ''
         const label = sub(props.children ?? 'Call to action')
         // A refused href falls back to the placeholder the empty case already
         // uses, so the button keeps its place in the layout and goes nowhere.
@@ -530,7 +709,7 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
           `<a href="${escapeEmailHtml(href)}" target="_blank" ` +
             `style="display:inline-block;padding:12px 28px;border-radius:${radius}px;` +
             `background-color:${background};color:${color};font-family:${FONT};` +
-            `font-size:15px;font-weight:600;text-decoration:none;">` +
+            `font-size:15px;font-weight:${labelWeight};text-decoration:none;${labelCase}">` +
             escapeEmailHtml(label) +
             `</a>`,
           `padding:12px 0;text-align:${align};`,
@@ -737,6 +916,12 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
   const html =
     `<!DOCTYPE html><html><head><meta charset="utf-8" />` +
     `<meta name="viewport" content="width=device-width, initial-scale=1" />` +
+    // Drawn for a light ground in the theme's colors: a client that offers
+    // its own dark rendering (Apple Mail) is asked to show it as designed
+    // rather than invert the brand's colors (AGL-3897).
+    `<meta name="color-scheme" content="light only" />` +
+    `<meta name="supported-color-schemes" content="light only" />` +
+    `<style>:root{color-scheme:light only;supported-color-schemes:light only;}</style>` +
     `<title>${escapeEmailHtml(sub(subject))}</title></head>` +
     `<body style="margin:0;padding:0;background-color:#f4f4f4;">` +
     preheaderHtml +

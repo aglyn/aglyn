@@ -88,6 +88,10 @@ public final class WorkspaceStore {
   @ObservationIgnored private var orgListener: FirestoreListening?
   @ObservationIgnored private var siteListener: FirestoreListening?
   @ObservationIgnored private var sitesFor: String?
+  /// The site a console link named by its address (`/{orgSlug}/hosts/{hostSlug}/…`) before its workspace's sites arrived.
+  @ObservationIgnored private var pendingHostSlug: String?
+  /// The workspace a console link named by address before the person's workspaces arrived (a link that launched the app).
+  @ObservationIgnored private var pendingOrgSlug: String?
 
   public static func storageKey(_ uid: String) -> String { "aglyn.workspace.\(uid)" }
 
@@ -119,6 +123,11 @@ public final class WorkspaceStore {
           $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
         self.orgsLoaded = true
+        if let slug = self.pendingOrgSlug {
+          let hostSlug = self.pendingHostSlug
+          (self.pendingOrgSlug, self.pendingHostSlug) = (nil, nil)
+          self.select(orgSlug: slug, hostSlug: hostSlug)
+        }
         self.syncSites()
       case .failure:
         self.error = "Could not load your workspaces."
@@ -143,6 +152,8 @@ public final class WorkspaceStore {
   }
 
   public func selectOrg(_ orgID: String) {
+    pendingOrgSlug = nil
+    pendingHostSlug = nil
     picked = WorkspacePick(orgID: orgID, hostID: nil)
     syncSites()
   }
@@ -150,13 +161,42 @@ public final class WorkspaceStore {
   /// Picks a workspace and one of its sites at once, as a notification about
   /// that site does; the site holds once the workspace's sites name it.
   public func select(orgID: String, hostID: String?) {
+    pendingOrgSlug = nil
+    pendingHostSlug = nil
     picked = WorkspacePick(orgID: orgID, hostID: hostID)
     syncSites()
   }
 
   public func selectSite(_ hostID: String?) {
+    pendingOrgSlug = nil
+    pendingHostSlug = nil
     picked.hostID = hostID
     persist()
+  }
+
+  /// Picks the workspace and site a console link names by address (`/{orgSlug}/hosts/{hostSlug}/…`), so the screen it
+  /// opens reads them; each is matched (the workspace by slug or id, the site by subdomain or id) at once when the
+  /// lists are here and otherwise as soon as they arrive, as for a link that launched the app. Returns false, changing
+  /// nothing, when the person's workspaces are here and none is that one.
+  @discardableResult
+  public func select(orgSlug: String, hostSlug: String?) -> Bool {
+    guard orgsLoaded else {
+      pendingOrgSlug = orgSlug
+      pendingHostSlug = hostSlug
+      return true
+    }
+    guard let org = orgs.first(where: { $0.slug == orgSlug || $0.id == orgSlug }) else { return false }
+    let sitesHere = sitesLoaded && sitesFor == org.id
+    let site = hostSlug.flatMap { slug in sitesHere ? sites.first { $0.subdomain == slug || $0.id == slug } : nil }
+    if let site {
+      if org.id != effective.orgID || site.id != effective.hostID { select(orgID: org.id, hostID: site.id) }
+    } else if org.id != effective.orgID {
+      select(orgID: org.id, hostID: nil)
+      pendingHostSlug = hostSlug
+    } else if hostSlug != nil, !sitesHere {
+      pendingHostSlug = hostSlug
+    }
+    return true
   }
 
   /// Keeps the site listener on the org that is actually shown.
@@ -183,6 +223,10 @@ public final class WorkspaceStore {
             self.error = nil
             self.sites = docs.map { Self.site(from: $0) }
             self.sitesLoaded = true
+            if let slug = self.pendingHostSlug {
+              self.pendingHostSlug = nil
+              if let site = self.sites.first(where: { $0.subdomain == slug || $0.id == slug }) { self.picked.hostID = site.id }
+            }
             self.persist()
           case .failure:
             self.error = "Could not load the sites in this workspace."

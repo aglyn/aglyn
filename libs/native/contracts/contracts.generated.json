@@ -1770,6 +1770,7 @@
       "probability": 0
     }
   ],
+  "DEFAULT_NOTIFICATION_SOUND": "xylophone",
   "DEFAULT_TITLE_PATTERN": "{{page.name}} {{site.separator}} {{site.name}}",
   "DROP_OFF_MAX_HOURS": 720,
   "DROP_OFF_WAIT_HOURS": [
@@ -4403,6 +4404,72 @@
     ]
   },
   "NOTHING_MOVED": "Aglyn has not refunded or canceled anything.",
+  "NOTIFICATION_SOUND_FIELD": "notificationSound",
+  "NOTIFICATION_SOUNDS": [
+    {
+      "android": "aglyn_sound_xylophone",
+      "apple": "aglyn-xylophone.caf",
+      "id": "xylophone",
+      "label": "Xylophone",
+      "web": "/sounds/notifications/xylophone.wav"
+    },
+    {
+      "android": "aglyn_sound_signature",
+      "apple": "aglyn-signature.caf",
+      "id": "signature",
+      "label": "Signature",
+      "web": "/sounds/notifications/signature.wav"
+    },
+    {
+      "android": "aglyn_sound_tada",
+      "apple": "aglyn-tada.caf",
+      "id": "tada",
+      "label": "Ta-da",
+      "web": "/sounds/notifications/tada.wav"
+    },
+    {
+      "android": "aglyn_sound_plink",
+      "apple": "aglyn-plink.caf",
+      "id": "plink",
+      "label": "Plink",
+      "web": "/sounds/notifications/plink.wav"
+    },
+    {
+      "android": "aglyn_sound_arcade",
+      "apple": "aglyn-arcade.caf",
+      "id": "arcade",
+      "label": "Arcade",
+      "web": "/sounds/notifications/arcade.wav"
+    },
+    {
+      "android": "aglyn_sound_cowbell",
+      "apple": "aglyn-cowbell.caf",
+      "id": "cowbell",
+      "label": "Cowbell",
+      "web": "/sounds/notifications/cowbell.wav"
+    },
+    {
+      "android": "aglyn_sound_bubbles",
+      "apple": "aglyn-bubbles.caf",
+      "id": "bubbles",
+      "label": "Bubbles",
+      "web": "/sounds/notifications/bubbles.wav"
+    },
+    {
+      "android": "aglyn_sound_steel_pan",
+      "apple": "aglyn-steel_pan.caf",
+      "id": "steel_pan",
+      "label": "Steel pan",
+      "web": "/sounds/notifications/steel_pan.wav"
+    },
+    {
+      "android": "aglyn_sound_cash_register",
+      "apple": "aglyn-cash_register.caf",
+      "id": "cash_register",
+      "label": "Cash register",
+      "web": "/sounds/notifications/cash_register.wav"
+    }
+  ],
   "OPEN_DISPUTE_CLAUSE": {
     "field": "disputeKey",
     "op": "equals",
@@ -5179,6 +5246,37 @@
     "gift_card": "Gift card"
   },
   "PRICE_RANGE_MAX_LENGTH": 100,
+  "PRINTER_BRAND_LABELS": {
+    "epson": "Epson (Server Direct Print)",
+    "star": "Star Micronics (CloudPRNT)"
+  },
+  "PRINTER_BRANDS": [
+    "star",
+    "epson"
+  ],
+  "PRINTER_MODEL_SUGGESTIONS": {
+    "epson": [
+      "TM-m30III",
+      "TM-m30II",
+      "TM-m50II",
+      "TM-T88VII"
+    ],
+    "star": [
+      "mC-Print3",
+      "TSP143IV",
+      "TSP100IV SK",
+      "mC-Label3"
+    ]
+  },
+  "PRINTER_OFFLINE_AFTER_MS": 120000,
+  "PRINTER_STATE_LABELS": {
+    "cover_open": "Cover open",
+    "error": "Printer error",
+    "online": "Online",
+    "paper_low": "Paper low",
+    "paper_out": "Out of paper",
+    "unknown": "Waiting for the printer"
+  },
   "PRODUCT_LIST_BASE": [
     {
       "op": "==",
@@ -5896,13 +5994,23 @@
       "defaultBody": [
         {
           "block": "text",
-          "text": "Booking confirmed",
+          "text": "{{host.businessName}} · Booking",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
+          "text": "You’re booked: {{service.name}}",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "Hi {{name}}, your booking with {{host.businessName}} is confirmed: \"{{service.name}}\" on {{when}} ({{timezone}}).",
+          "text": "Hi {{name}}, your booking with {{host.businessName}} is confirmed. Here are the details to keep.",
           "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "Service: {{service.name}}\nWhen: {{when}} ({{timezone}})\nReference: {{booking.ref}}",
+          "variant": "details"
         },
         {
           "block": "text",
@@ -5911,7 +6019,7 @@
         },
         {
           "block": "text",
-          "text": "Reference: {{booking.ref}}",
+          "text": "Need to change it? Reply to this email and {{host.businessName}} will help.",
           "variant": "caption"
         }
       ],
@@ -5960,8 +6068,28 @@
       "defaultBody": [
         {
           "block": "text",
-          "text": "Hi {{name}}, this is a reminder of your booking with {{host.businessName}}: \"{{service.name}}\" on {{when}} ({{timezone}}).",
+          "text": "{{host.businessName}} · Booking",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
+          "text": "Your booking is coming up",
+          "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "Hi {{name}}, this is a reminder of your booking with {{host.businessName}}.",
           "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "Service: {{service.name}}\nWhen: {{when}} ({{timezone}})",
+          "variant": "details"
+        },
+        {
+          "block": "text",
+          "text": "Can no longer make it? Reply to this email so {{host.businessName}} can offer the time to someone else.",
+          "variant": "caption"
         }
       ],
       "defaultSubject": "Reminder: {{service.name}} is coming up",
@@ -5999,17 +6127,27 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Booking",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "Your booking has a new time",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "Hi {{name}}, your booking with {{host.businessName}} for \"{{service.name}}\" is now on {{when}} ({{timezone}}). It was on {{previousWhen}}.",
+          "text": "Hi {{name}}, your booking with {{host.businessName}} moved. The new time is below; the old one no longer applies.",
           "variant": "body"
         },
         {
           "block": "text",
-          "text": "Reference: {{booking.ref}}",
+          "text": "Service: {{service.name}}\nNew time: {{when}} ({{timezone}})\nWas: {{previousWhen}}\nReference: {{booking.ref}}",
+          "variant": "details"
+        },
+        {
+          "block": "text",
+          "text": "Does the new time not work? Reply to this email and {{host.businessName}} will help.",
           "variant": "caption"
         }
       ],
@@ -6058,23 +6196,23 @@
       "defaultBody": [
         {
           "block": "text",
-          "text": "Thanks for your purchase!",
+          "text": "{{host.businessName}} · Order {{order.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
+          "text": "Thanks for your order",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "Here is the receipt for your order from {{host.businessName}}.",
+          "text": "Here is the receipt for your order from {{host.businessName}}. We will email you again as your order moves along, and the order page always shows where it is.",
           "variant": "body"
         },
         {
           "block": "text",
-          "text": "{{order.summary}}",
-          "variant": "body"
-        },
-        {
-          "block": "text",
-          "text": "Total charged: {{order.total}}",
-          "variant": "body"
+          "text": "{{order.summary}}\nTotal charged: {{order.total}}",
+          "variant": "details"
         },
         {
           "block": "text",
@@ -6088,7 +6226,7 @@
         },
         {
           "block": "text",
-          "text": "Order reference: {{order.ref}}",
+          "text": "Order {{order.number}} · payment reference {{order.ref}}. Questions about your order? Reply to this email and {{host.businessName}} will get back to you.",
           "variant": "caption"
         }
       ],
@@ -6137,18 +6275,23 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Order {{order.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "Your order is on its way",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "{{host.businessName}} shipped items from order {{order.number}}.",
+          "text": "{{host.businessName}} shipped these items from order {{order.number}}.",
           "variant": "body"
         },
         {
           "block": "text",
           "text": "{{shipment.summary}}",
-          "variant": "body"
+          "variant": "details"
         },
         {
           "block": "text",
@@ -6164,6 +6307,11 @@
           "block": "button",
           "href": "{{order.statusUrl}}",
           "label": "Track your order"
+        },
+        {
+          "block": "text",
+          "text": "The order page shows every shipment and its tracking as it moves. Questions about your order? Reply to this email and {{host.businessName}} will get back to you.",
+          "variant": "caption"
         }
       ],
       "defaultSubject": "Your order {{order.number}} has shipped",
@@ -6216,18 +6364,23 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Order {{order.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "Your order was delivered",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "{{host.businessName}} marked order {{order.number}} as delivered.",
+          "text": "{{host.businessName}} marked order {{order.number}} as delivered. We hope you enjoy it.",
           "variant": "body"
         },
         {
           "block": "text",
           "text": "{{order.summary}}",
-          "variant": "body"
+          "variant": "details"
         },
         {
           "block": "button",
@@ -6236,7 +6389,7 @@
         },
         {
           "block": "text",
-          "text": "If something is missing or not right, reply to this email or contact {{host.businessName}}.",
+          "text": "Something missing or not right? Reply to this email and {{host.businessName}} will sort it out.",
           "variant": "caption"
         }
       ],
@@ -6270,6 +6423,11 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Order {{order.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "Your refund is on its way",
           "variant": "heading"
         },
@@ -6280,8 +6438,8 @@
         },
         {
           "block": "text",
-          "text": "{{refund.summary}}",
-          "variant": "body"
+          "text": "{{refund.summary}}\nTotal refunded: {{refund.amount}}",
+          "variant": "details"
         },
         {
           "block": "text",
@@ -6289,14 +6447,14 @@
           "variant": "body"
         },
         {
-          "block": "text",
-          "text": "Refunds go back to the original payment method and usually appear within 5 to 10 business days, depending on your bank.",
-          "variant": "caption"
-        },
-        {
           "block": "button",
           "href": "{{order.statusUrl}}",
           "label": "View your order"
+        },
+        {
+          "block": "text",
+          "text": "Refunds go back to the original payment method and usually appear within 5 to 10 business days, depending on your bank.",
+          "variant": "caption"
         }
       ],
       "defaultSubject": "Refund for your order {{order.number}}",
@@ -6339,18 +6497,23 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Order {{order.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "Your order was canceled",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "{{host.businessName}} canceled order {{order.number}}.",
+          "text": "{{host.businessName}} canceled order {{order.number}}. These items will not be sent.",
           "variant": "body"
         },
         {
           "block": "text",
           "text": "{{order.summary}}",
-          "variant": "body"
+          "variant": "details"
         },
         {
           "block": "text",
@@ -6361,6 +6524,11 @@
           "block": "button",
           "href": "{{order.statusUrl}}",
           "label": "View your order"
+        },
+        {
+          "block": "text",
+          "text": "Questions about your order? Reply to this email and {{host.businessName}} will get back to you.",
+          "variant": "caption"
         }
       ],
       "defaultSubject": "Your order {{order.number}} was canceled",
@@ -6398,18 +6566,23 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Order {{order.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "Your order is ready for pickup",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "Order {{order.number}} is ready at {{pickup.location}}.",
+          "text": "Order {{order.number}} is packed and waiting for you at {{pickup.location}}.",
           "variant": "body"
         },
         {
           "block": "text",
-          "text": "{{order.summary}}",
-          "variant": "body"
+          "text": "{{order.summary}}\nPick up at: {{pickup.location}}",
+          "variant": "details"
         },
         {
           "block": "text",
@@ -6422,14 +6595,14 @@
           "variant": "body"
         },
         {
-          "block": "text",
-          "text": "Bring your order number, {{order.number}}.",
-          "variant": "caption"
-        },
-        {
           "block": "button",
           "href": "{{order.statusUrl}}",
           "label": "View your order"
+        },
+        {
+          "block": "text",
+          "text": "Bring your order number, {{order.number}}. Questions about your order? Reply to this email and {{host.businessName}} will get back to you.",
+          "variant": "caption"
         }
       ],
       "defaultSubject": "Your order {{order.number}} is ready for pickup",
@@ -6477,22 +6650,32 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Order {{order.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "Thanks for picking up your order",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "Order {{order.number}} was picked up from {{pickup.location}}.",
+          "text": "Order {{order.number}} was picked up from {{pickup.location}}. Enjoy it.",
           "variant": "body"
         },
         {
           "block": "text",
-          "text": "{{order.summary}}",
-          "variant": "body"
+          "text": "{{order.summary}}\nPicked up at: {{pickup.location}}",
+          "variant": "details"
+        },
+        {
+          "block": "button",
+          "href": "{{order.statusUrl}}",
+          "label": "View your order"
         },
         {
           "block": "text",
-          "text": "If something is missing or not right, reply to this email or contact {{host.businessName}}.",
+          "text": "Something missing or not right? Reply to this email and {{host.businessName}} will sort it out.",
           "variant": "caption"
         }
       ],
@@ -6531,23 +6714,33 @@
       "defaultBody": [
         {
           "block": "text",
-          "text": "Your order is on its way",
+          "text": "{{host.businessName}} · Order {{order.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
+          "text": "Your order is out for delivery",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "{{host.businessName}} is out delivering order {{order.number}}. Your window: {{delivery.window}}.",
+          "text": "{{host.businessName}} is on the way with order {{order.number}}.",
           "variant": "body"
         },
         {
           "block": "text",
-          "text": "{{order.summary}}",
-          "variant": "body"
+          "text": "{{order.summary}}\nDelivery window: {{delivery.window}}",
+          "variant": "details"
         },
         {
           "block": "button",
           "href": "{{order.statusUrl}}",
           "label": "View your order"
+        },
+        {
+          "block": "text",
+          "text": "Questions about your order? Reply to this email and {{host.businessName}} will get back to you.",
+          "variant": "caption"
         }
       ],
       "defaultSubject": "Your order {{order.number}} is out for delivery",
@@ -6585,27 +6778,32 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{site.name}} · New order",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "You made a sale",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "A new order came in on {{site.name}}.",
+          "text": "A new paid order came in on {{site.name}}. Here is what was bought and who bought it.",
           "variant": "body"
         },
         {
           "block": "text",
-          "text": "{{order.summary}}",
-          "variant": "body"
+          "text": "{{order.summary}}\nTotal: {{order.total}}\nBuyer: {{buyer.email}}\nPayment reference: {{order.ref}}",
+          "variant": "details"
+        },
+        {
+          "block": "button",
+          "href": "{{orders.url}}",
+          "label": "Open orders"
         },
         {
           "block": "text",
-          "text": "Total: {{order.total}}",
-          "variant": "body"
-        },
-        {
-          "block": "text",
-          "text": "Buyer: {{buyer.email}} · Order {{order.ref}}",
+          "text": "Fulfill it from Orders: as you mark it shipped, ready for pickup or delivered, the buyer is emailed at each step.",
           "variant": "caption"
         }
       ],
@@ -6638,6 +6836,11 @@
           "description": "Order reference id",
           "name": "order.ref",
           "sample": "cs_test_123"
+        },
+        {
+          "description": "The site’s Orders page in the console",
+          "name": "orders.url",
+          "sample": "https://app.example.com/northwind/hosts/northwind/products/orders"
         }
       ],
       "name": "New sale",
@@ -6649,28 +6852,23 @@
       "defaultBody": [
         {
           "block": "text",
-          "text": "Reservation confirmed",
+          "text": "{{host.businessName}} · Reservation",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
+          "text": "Your stay is confirmed",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "Your stay at {{host.businessName}} is confirmed.",
+          "text": "Your reservation at {{host.businessName}} is booked. Here are the details to keep.",
           "variant": "body"
         },
         {
           "block": "text",
-          "text": "Check-in: {{reservation.checkIn}}",
-          "variant": "body"
-        },
-        {
-          "block": "text",
-          "text": "Nights: {{reservation.nights}}",
-          "variant": "body"
-        },
-        {
-          "block": "text",
-          "text": "Paid today: {{reservation.paid}}",
-          "variant": "body"
+          "text": "Check-in: {{reservation.checkIn}}\nNights: {{reservation.nights}}\nPaid today: {{reservation.paid}}\nReference: {{reservation.ref}}",
+          "variant": "details"
         },
         {
           "block": "text",
@@ -6679,7 +6877,7 @@
         },
         {
           "block": "text",
-          "text": "Reference: {{reservation.ref}}",
+          "text": "Questions before you arrive? Reply to this email and {{host.businessName}} will get back to you.",
           "variant": "caption"
         }
       ],
@@ -6723,7 +6921,12 @@
       "defaultBody": [
         {
           "block": "text",
-          "text": "Your gift card",
+          "text": "{{host.businessName}} · Gift card",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
+          "text": "Your {{giftcard.value}} gift card",
           "variant": "heading"
         },
         {
@@ -6738,8 +6941,8 @@
         },
         {
           "block": "text",
-          "text": "Gift card code: {{giftcard.code}}",
-          "variant": "body"
+          "text": "Value: {{giftcard.value}}\nGift card code: {{giftcard.code}}",
+          "variant": "details"
         },
         {
           "block": "text",
@@ -6749,7 +6952,12 @@
         {
           "block": "button",
           "href": "{{host.url}}",
-          "label": "Visit {{host.businessName}}"
+          "label": "Shop {{host.businessName}}"
+        },
+        {
+          "block": "text",
+          "text": "Keep this email: the code is what you spend the card with.",
+          "variant": "caption"
         }
       ],
       "defaultSubject": "Your gift card for {{host.businessName}}",
@@ -6790,13 +6998,28 @@
       "defaultBody": [
         {
           "block": "text",
-          "text": "{{product.name}} is back in stock at {{host.businessName}}.",
+          "text": "{{host.businessName}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
+          "text": "{{product.name}} is back in stock",
+          "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "You asked to hear when {{product.name}} was back at {{host.businessName}}. It is, and you can order it now.",
           "variant": "body"
         },
         {
           "block": "button",
           "href": "{{product.url}}",
-          "label": "View product"
+          "label": "Shop {{product.name}}"
+        },
+        {
+          "block": "text",
+          "text": "You asked {{host.businessName}} to tell you when it was back. Nothing is held for you.",
+          "variant": "caption"
         }
       ],
       "defaultSubject": "Back in stock: {{product.name}}",
@@ -6824,13 +7047,23 @@
       "defaultBody": [
         {
           "block": "text",
-          "text": "You left items in your cart at {{host.businessName}}. Pick up where you left off.",
+          "text": "{{host.businessName}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
+          "text": "You left something in your cart",
+          "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "Your cart at {{host.businessName}} still has your items in it. Pick up where you left off whenever you are ready.",
           "variant": "body"
         },
         {
           "block": "button",
           "href": "{{cart.url}}",
-          "label": "Return to cart"
+          "label": "Return to your cart"
         },
         {
           "block": "text",
@@ -6859,18 +7092,23 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Order {{order.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "How did we do?",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "Thanks again for your order {{order.number}} from {{host.businessName}}. Would you tell other shoppers what you think? Each link opens the product with a review form.",
+          "text": "Thanks again for your order {{order.number}} from {{host.businessName}}. Would you tell other shoppers what you think? Each link opens the product with a review form ready.",
           "variant": "body"
         },
         {
           "block": "text",
           "text": "{{review.products}}",
-          "variant": "body"
+          "variant": "links"
         },
         {
           "block": "button",
@@ -6919,6 +7157,11 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Members",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "{{post.title}}",
           "variant": "heading"
         },
@@ -6926,6 +7169,11 @@
           "block": "text",
           "text": "{{post.body}}",
           "variant": "body"
+        },
+        {
+          "block": "button",
+          "href": "{{host.url}}",
+          "label": "Visit {{host.businessName}}"
         }
       ],
       "defaultSubject": "{{post.title}}",
@@ -6951,6 +7199,11 @@
     {
       "control": "besigner",
       "defaultBody": [
+        {
+          "block": "text",
+          "text": "{{site.name}} · Account security",
+          "variant": "eyebrow"
+        },
         {
           "block": "text",
           "text": "Reset your password",
@@ -7007,6 +7260,11 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{site.name}} · Account security",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "Your password was changed",
           "variant": "heading"
         },
@@ -7022,7 +7280,7 @@
         },
         {
           "block": "text",
-          "text": "If you did not expect this, contact the site owner.",
+          "text": "If you did not expect this, contact the site owner straight away.",
           "variant": "caption"
         }
       ],
@@ -7051,13 +7309,23 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "Confirm your subscription",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "Please confirm that you want to get {{stream.name}} emails from {{host.businessName}} at this address.",
+          "text": "Please confirm that you want {{stream.name}} emails from {{host.businessName}} at this address. Nothing is sent until you do.",
           "variant": "body"
+        },
+        {
+          "block": "text",
+          "text": "List: {{stream.name}}\nFrom: {{host.businessName}}",
+          "variant": "details"
         },
         {
           "block": "button",
@@ -7066,7 +7334,7 @@
         },
         {
           "block": "text",
-          "text": "The link works for three days. If you did not sign up, ignore this message — nothing will be sent.",
+          "text": "The link works for three days. If you did not sign up, ignore this message and nothing will be sent.",
           "variant": "caption"
         }
       ],
@@ -7095,18 +7363,23 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Order {{order.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "A buyer asked for a return",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "{{buyer.email}} wants to return items from order {{order.number}}.",
+          "text": "{{buyer.email}} wants to return items from order {{order.number}}. Approve or decline it, and the buyer is emailed your answer.",
           "variant": "body"
         },
         {
           "block": "text",
-          "text": "{{return.items}}",
-          "variant": "body"
+          "text": "{{return.items}}\nBuyer: {{buyer.email}}",
+          "variant": "details"
         },
         {
           "block": "text",
@@ -7114,8 +7387,13 @@
           "variant": "body"
         },
         {
+          "block": "button",
+          "href": "{{return.url}}",
+          "label": "Review the return"
+        },
+        {
           "block": "text",
-          "text": "Approve or decline it under Products → Returns.",
+          "text": "Returns are under Products → Returns, beside the order they are for.",
           "variant": "caption"
         }
       ],
@@ -7143,6 +7421,11 @@
           "description": "What the buyer wrote; empty when they wrote nothing",
           "name": "return.customerNote",
           "sample": "The lid was cracked."
+        },
+        {
+          "description": "The return in the console, to approve or decline",
+          "name": "return.url",
+          "sample": "https://app.example.com/northwind/hosts/northwind/products/returns?return=ret_123"
         }
       ],
       "name": "Return requested",
@@ -7154,18 +7437,28 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Order {{order.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "Your return is approved",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "{{host.businessName}} approved the return of:",
+          "text": "{{host.businessName}} approved the return of these items from order {{order.number}}.",
           "variant": "body"
         },
         {
           "block": "text",
           "text": "{{return.items}}",
-          "variant": "body"
+          "variant": "details"
+        },
+        {
+          "block": "text",
+          "text": "What to do next",
+          "variant": "subheading"
         },
         {
           "block": "text",
@@ -7181,6 +7474,11 @@
           "block": "button",
           "href": "{{order.statusUrl}}",
           "label": "View your order"
+        },
+        {
+          "block": "text",
+          "text": "Your refund is sent once {{host.businessName}} receives the items, and you will get an email when it is.",
+          "variant": "caption"
         }
       ],
       "defaultSubject": "Your return for order {{order.number}} is approved",
@@ -7223,18 +7521,23 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Order {{order.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "We could not accept this return",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "{{host.businessName}} declined the return of:",
+          "text": "{{host.businessName}} declined the return of these items from order {{order.number}}.",
           "variant": "body"
         },
         {
           "block": "text",
           "text": "{{return.items}}",
-          "variant": "body"
+          "variant": "details"
         },
         {
           "block": "text",
@@ -7245,6 +7548,11 @@
           "block": "button",
           "href": "{{order.statusUrl}}",
           "label": "View your order"
+        },
+        {
+          "block": "text",
+          "text": "Questions about it? Reply to this email and {{host.businessName}} will get back to you.",
+          "variant": "caption"
         }
       ],
       "defaultSubject": "About your return for order {{order.number}}",
@@ -7282,6 +7590,11 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Order {{order.number}}",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "Your return is refunded",
           "variant": "heading"
         },
@@ -7292,13 +7605,18 @@
         },
         {
           "block": "text",
-          "text": "{{return.items}}",
-          "variant": "body"
+          "text": "{{return.items}}\nTotal refunded: {{return.refundTotal}}",
+          "variant": "details"
         },
         {
           "block": "button",
           "href": "{{order.statusUrl}}",
           "label": "View your order"
+        },
+        {
+          "block": "text",
+          "text": "Refunds usually appear within 5 to 10 business days, depending on your bank.",
+          "variant": "caption"
         }
       ],
       "defaultSubject": "Your refund for order {{order.number}}",
@@ -7356,22 +7674,27 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Rewards",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "You earned {{loyalty.points}} points",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "Thanks for your order with {{host.businessName}}.",
+          "text": "Thanks for your order with {{host.businessName}}, {{name}}. Here is where your rewards stand.",
           "variant": "body"
         },
         {
           "block": "text",
-          "text": "You have {{loyalty.balance}} points (worth {{loyalty.value}}) and {{loyalty.credit}} in store credit.",
-          "variant": "body"
+          "text": "Points: {{loyalty.balance}} (worth {{loyalty.value}})\nStore credit: {{loyalty.credit}}\nRewards code: {{loyalty.code}}",
+          "variant": "details"
         },
         {
           "block": "text",
-          "text": "Your rewards code is {{loyalty.code}}. Enter it at checkout on {{host.url}}, or give it at the register, to spend your balance.",
+          "text": "Enter your rewards code at checkout on {{host.url}}, or give it at the register, to spend your balance.",
           "variant": "body"
         },
         {
@@ -7435,8 +7758,18 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Rewards",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "You have {{loyalty.amount}} in store credit",
           "variant": "heading"
+        },
+        {
+          "block": "text",
+          "text": "{{host.businessName}} added {{loyalty.amount}} of store credit to your rewards.",
+          "variant": "body"
         },
         {
           "block": "text",
@@ -7445,12 +7778,12 @@
         },
         {
           "block": "text",
-          "text": "You have {{loyalty.balance}} points (worth {{loyalty.value}}) and {{loyalty.credit}} in store credit.",
-          "variant": "body"
+          "text": "Points: {{loyalty.balance}} (worth {{loyalty.value}})\nStore credit: {{loyalty.credit}}\nRewards code: {{loyalty.code}}",
+          "variant": "details"
         },
         {
           "block": "text",
-          "text": "Your rewards code is {{loyalty.code}}. Enter it at checkout on {{host.url}}, or give it at the register, to spend your balance.",
+          "text": "Enter your rewards code at checkout on {{host.url}}, or give it at the register, to spend your balance.",
           "variant": "body"
         },
         {
@@ -7514,22 +7847,27 @@
       "defaultBody": [
         {
           "block": "text",
+          "text": "{{host.businessName}} · Rewards",
+          "variant": "eyebrow"
+        },
+        {
+          "block": "text",
           "text": "Your referral paid off",
           "variant": "heading"
         },
         {
           "block": "text",
-          "text": "A friend used your referral code at {{host.businessName}}, so you have {{loyalty.amount}} more in store credit.",
+          "text": "A friend used your referral code at {{host.businessName}}, so you have {{loyalty.amount}} more in store credit. Thanks for spreading the word.",
           "variant": "body"
         },
         {
           "block": "text",
-          "text": "You have {{loyalty.balance}} points (worth {{loyalty.value}}) and {{loyalty.credit}} in store credit.",
-          "variant": "body"
+          "text": "Points: {{loyalty.balance}} (worth {{loyalty.value}})\nStore credit: {{loyalty.credit}}\nRewards code: {{loyalty.code}}",
+          "variant": "details"
         },
         {
           "block": "text",
-          "text": "Your rewards code is {{loyalty.code}}. Enter it at checkout on {{host.url}}, or give it at the register, to spend your balance.",
+          "text": "Enter your rewards code at checkout on {{host.url}}, or give it at the register, to spend your balance.",
           "variant": "body"
         },
         {

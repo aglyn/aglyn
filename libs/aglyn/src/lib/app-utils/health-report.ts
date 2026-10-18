@@ -956,22 +956,53 @@ export function signupDroughtHealth(
  * month, 10/11 04:00Z–12:00Z, which is AGL-3724, and it would have paged
  * at about 04:20Z, two hours before the third person was lost.
  *
- * One stranded org is never enough on its own. People do sign up and leave,
- * and at a handful of sign-ups a day a single one carries no signal.
+ * ## It reads a streak of PEOPLE, not a count of orgs (2026-10-17)
+ *
+ * The first rule was "two orgs with no site in twelve hours". On 2026-10-17
+ * it was red for 85 minutes and then for 350, while sign-ups worked, which
+ * UptimeRobot reported as Signups down for six hours. Two things were wrong
+ * with it.
+ *
+ * - It counted orgs. One phone visitor made a workspace with a password and
+ *   then two more with two Google accounts, all under one name, in sixteen
+ *   minutes. Two got sites, and the third read as a stranded sign-up. So
+ *   orgs are grouped by `visitor` (the browser's first-touch stamp, or the
+ *   owner's uid when there is none), and a person with a site in any of
+ *   their orgs has landed.
+ * - It counted. At nine sign-ups a day, two unrelated people leaving inside
+ *   twelve hours is an ordinary Saturday, and no threshold on a count tells
+ *   that apart from a broken landing. A broken landing strands EVERY new
+ *   sign-up, so the newest people are all stranded. When people only leave,
+ *   the next person who makes a site clears it. So the verdict is red when
+ *   the newest {@link MAX_STRANDED_SIGNUPS} people in the window, in order of
+ *   their latest org, all have no site.
+ *
+ * Backtest, 2026-09-07 → 2026-10-17, 105 orgs, five-minute steps: the count
+ * of orgs was red for 1,125 minutes, and 435 of them were false (both of
+ * 10/17's). The streak of two was red only on 10/11, AGL-3724, and nowhere
+ * else. A streak of three missed AGL-3724 entirely.
  *
  * Pure, like its siblings: the route reads, this decides. The body carries
- * counts only, never an org id or slug, because the endpoint is public.
+ * counts only, never an org id, slug or visitor key, because the endpoint is
+ * public.
  */
 export interface SignupLandingCheck extends HealthCheck {
   /** Orgs in the window that have no site. Null when the read failed. */
   strandedOrgs: number | null
-  /** Every org in the window, the context for the count above. */
+  /** People in the window with no site in any of their orgs. */
+  strandedPeople: number | null
+  /**
+   * How many of the newest people in the window, in a row, have no site:
+   * what the verdict reads. Null when the read failed.
+   */
+  strandedStreak: number | null
+  /** Every org in the window, the context for the counts above. */
   orgsInWindow: number | null
   /** How far back the window reaches. */
   windowHours: number
   /** How old an org must be before having no site counts against it. */
   graceMinutes: number
-  /** Stranded orgs at which this goes red. */
+  /** The stranded streak at which this goes red. */
   maxStranded: number
 }
 
@@ -986,12 +1017,21 @@ export const SIGNUP_LANDING_WINDOW_HOURS = 12
  */
 export const SIGNUP_LANDING_GRACE_MINUTES = 30
 
-/** Red at two stranded orgs in the window. See {@link SignupLandingCheck}. */
+/**
+ * Red when the two newest people in the window are both stranded. See
+ * {@link SignupLandingCheck}.
+ */
 export const MAX_STRANDED_SIGNUPS = 2
 
-/** One org as the landing check reads it: only whether it has any site. */
+/**
+ * One org as the landing check reads it: whether it has any site, when it
+ * was made, and who made it. `visitor` is an opaque key that never leaves
+ * the check; an org without one is its own person.
+ */
 export interface SignupLandingOrg {
   hostCount: number
+  createdAtMs?: number | null
+  visitor?: string | null
 }
 
 export function signupLandingHealth(
@@ -1010,21 +1050,47 @@ export function signupLandingHealth(
       ms,
       code: 'orgs-unavailable',
       strandedOrgs: null,
+      strandedPeople: null,
+      strandedStreak: null,
       orgsInWindow: null,
       ...shape,
     }
   }
   // `!(n > 0)` rather than `n === 0`, so a corrupt count (NaN, a string)
   // reads as "no site" and cannot hide a stranded org.
-  const strandedOrgs = orgs.filter(
-    (landing) => !(Number(landing.hostCount) > 0),
-  ).length
-  const stranded = strandedOrgs >= maxStranded
+  const hasSite = (landing: SignupLandingOrg) =>
+    Number(landing.hostCount) > 0
+  const strandedOrgs = orgs.filter((landing) => !hasSite(landing)).length
+  const people = new Map<string, { latestMs: number; landed: boolean }>()
+  orgs.forEach((landing, index) => {
+    const key = landing.visitor ? `visitor:${landing.visitor}` : `org:${index}`
+    const createdAtMs = Number(landing.createdAtMs)
+    const latestMs = Number.isFinite(createdAtMs) ? createdAtMs : 0
+    const person = people.get(key)
+    people.set(key, {
+      latestMs: Math.max(person?.latestMs ?? 0, latestMs),
+      landed: (person?.landed ?? false) || hasSite(landing),
+    })
+  })
+  const newestFirst = [...people.values()].sort(
+    (a, b) => b.latestMs - a.latestMs,
+  )
+  const strandedPeople = newestFirst.filter((person) => !person.landed).length
+  let strandedStreak = 0
+  while (
+    strandedStreak < newestFirst.length &&
+    !newestFirst[strandedStreak].landed
+  ) {
+    strandedStreak += 1
+  }
+  const stranded = strandedStreak >= maxStranded
   return {
     ok: !stranded,
     ms,
     ...(stranded ? { code: 'signups-stranded' } : {}),
     strandedOrgs,
+    strandedPeople,
+    strandedStreak,
     orgsInWindow: orgs.length,
     ...shape,
   }

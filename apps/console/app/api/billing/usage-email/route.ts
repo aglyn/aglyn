@@ -23,6 +23,7 @@ import {
   pluginRequestFromWeb,
   resolveBrandingProfile,
 } from '@aglyn/aglyn/server'
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   PLAN_LABELS,
   readOrgPlanComp,
@@ -309,9 +310,12 @@ async function handler(request: Request): Promise<Response> {
             ? ` (overage ${formatUsd(dataOverageUsd)})`
             : ''),
         meteredUsageLine(billedUsd, Boolean(rollup.get('reportedAt'))),
-        '',
-        'Full meters and plan limits: your console → Manage → Billing.',
       ].join('\n')
+      // The workspace's Billing page, where the full meters and limits are.
+      const orgSlug = String(orgDoc.get('slug') ?? '').trim()
+      const billingUrl = orgSlug
+        ? `${platformConsoleOrigin()}/${orgSlug}/billing`
+        : platformConsoleOrigin()
       // White-label brand (White-Label Phase 1): a white-label org's usage
       // mail reads as their brand — from-name, product name, support footer —
       // resolved through the one shared resolver so it can't drift from the
@@ -327,7 +331,8 @@ async function handler(request: Request): Promise<Response> {
       const orgName = orgDoc.get('name') ?? 'your organization'
       const fallbackText =
         `Here is how ${orgName} used ${branding.productName} in ${monthLabel}.\n\n` +
-        `${usageSummary}${brandSupportLine(branding)}`
+        `${usageSummary}\n\nFull meters and plan limits: ${billingUrl}` +
+        brandSupportLine(branding)
       // Render the batch-resolved template for this org's values and in its
       // header and footer (AGL-768, AGL-3322); the copy above is the last
       // resort behind it.
@@ -344,6 +349,7 @@ async function handler(request: Request): Promise<Response> {
               'month.label': monthLabel,
               'org.name': String(orgName),
               'usage.summary': usageSummary,
+              billingUrl,
             },
             {
               brandLogoUrl: branding.emailLogoUrl,

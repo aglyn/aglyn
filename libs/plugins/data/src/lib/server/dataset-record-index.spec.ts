@@ -26,6 +26,7 @@
 
 type Doc = Record<string, unknown>
 let mockDocs: Record<string, Doc> = {}
+let mockCountFails = false
 
 jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
   // The org-scoped query narrowed to what the site may see, as the real one
@@ -51,8 +52,18 @@ jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => {
     },
   })
   const ref = (path: string): any => ({
-    collection: (name: string) => ({ ...query(`${path}/${name}`), doc: (id: string) => ref(`${path}/${name}/${id}`) }),
-    get: async () => ({ id: path.split('/').pop(), exists: path in mockDocs, data: () => mockDocs[path] }),
+    collection: (name: string) => ({
+      ...query(`${path}/${name}`),
+      doc: (id: string) => ref(`${path}/${name}/${id}`),
+      count: () => ({
+        get: async () => {
+          if (mockCountFails) throw new Error('count unavailable')
+          const prefix = `${path}/${name}/`
+          return { data: () => ({ count: Object.keys(mockDocs).filter((one) => one.startsWith(prefix) && !one.slice(prefix.length).includes('/')).length }) }
+        },
+      }),
+    }),
+    get: async () => ({ id: path.split('/').pop(), exists: path in mockDocs, data: () => mockDocs[path], ref: ref(path) }),
   })
   return {
     firebaseAdmin: {
@@ -64,6 +75,7 @@ jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => {
 import { datasetRecordIndex } from './dataset-record-index'
 
 beforeEach(() => {
+  mockCountFails = false
   mockDocs = {
     'orgs/o1/datasets/orders': {
       displayName: 'Wholesale orders',
@@ -166,5 +178,17 @@ describe('the dataset index', () => {
     expect(await datasetRecordIndex.get({ orgId: 'o1', id: 'missing' })).toBeNull()
     expect(await datasetRecordIndex.get({ orgId: null, id: 'orders' })).toBeNull()
     expect((await datasetRecordIndex.list({ orgId: null, limit: 5 })).records).toEqual([])
+  })
+
+  it('says, read one at a time, how many records a dataset holds, and a list never counts (AGL-3912)', async () => {
+    expect((await datasetRecordIndex.get({ orgId: 'o1', id: 'orders' }))?.facts['records']).toBe(1)
+    expect((await datasetRecordIndex.get({ orgId: 'o1', hostId: 'h1', id: 'team' }))?.facts['records']).toBe(0)
+    const listed = await datasetRecordIndex.list({ orgId: 'o1', limit: 10 })
+    expect(listed.records.every((record) => !('records' in record.facts))).toBe(true)
+    // A count that fails leaves the fact out rather than saying none.
+    mockCountFails = true
+    const uncounted = await datasetRecordIndex.get({ orgId: 'o1', id: 'orders' })
+    expect(uncounted?.name).toBe('Wholesale orders')
+    expect(uncounted?.facts).not.toHaveProperty('records')
   })
 })

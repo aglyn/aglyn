@@ -386,9 +386,13 @@ describe('a guided start that failed on our side (AGL-3596)', () => {
     expect(screen.getByText(REFUNDED)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Use the starter site instead' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
-    // The guided start reopens on its questions, filled in with what the person answered.
+    // The guided start reopens on its review, every answer what the person answered (AGL-3898)…
+    expect(await screen.findByRole('heading', { level: 1, name: 'Review your site' })).toBeTruthy()
+    expect(screen.getByText('dog grooming salon')).toBeTruthy()
+    expect(screen.getByText('dog owners in Hillside')).toBeTruthy()
+    // …and each one's Edit opens its question, filled in.
+    fireEvent.click(screen.getByRole('button', { name: 'Edit kind of site' }))
     expect(await screen.findByDisplayValue('dog grooming salon')).toBeTruthy()
-    expect(screen.getByDisplayValue('dog owners in Hillside')).toBeTruthy()
   })
 
   it('keeps following a job that parks for an instant, so its credits and state are the job’s last', async () => {

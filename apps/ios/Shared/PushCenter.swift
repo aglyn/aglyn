@@ -25,6 +25,9 @@ import UserNotifications
 final class PushCenter: NSObject {
   /// A tapped push's link, waiting for the window to open it.
   var pendingLink: String?
+  /// The workspace and site the tapped push is about, followed before its link (AGL-3911).
+  var pendingOrgID: String?
+  var pendingHostID: String?
   /// What the person answered when asked; nil until known.
   private(set) var authorization: UNAuthorizationStatus?
 
@@ -105,7 +108,10 @@ extension PushCenter: UNUserNotificationCenterDelegate {
   ) async {
     let data = MobilePushData(userInfo: response.notification.request.content.userInfo)
     await MainActor.run {
-      if let link = data?.link { self.pendingLink = link }
+      guard let data, let link = data.link else { return }
+      self.pendingOrgID = data.orgID
+      self.pendingHostID = data.hostID
+      self.pendingLink = link
     }
   }
 }
@@ -126,6 +132,12 @@ extension PushCenter: UNUserNotificationCenterDelegate {
 #elseif os(macOS)
   final class PushAppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static var push: PushCenter?
+
+    /// A second window is opened on purpose (File › New Window) and stands on its own: macOS never folds the app's
+    /// windows into a tab bar, so a restored or extra window never shows as a duplicate tab under the toolbar.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+      MainActor.assumeIsolated { NSWindow.allowsAutomaticWindowTabbing = false }
+    }
 
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
       MainActor.assumeIsolated { Self.push?.didRegister(token: deviceToken) }

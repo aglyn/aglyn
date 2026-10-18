@@ -9,6 +9,92 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.265 — 2026-10-18
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.264...v1.0.0-beta.265)
+
+### Added
+
+- **pos-apple:** add and manage receipt printers natively in Aglyn POS ([AGL-3909](https://linear.app/aglyn/issue/AGL-3909))
+- **apple:** Pages list reads its tree a level at a time, collapsed ([AGL-3896](https://linear.app/aglyn/issue/AGL-3896))
+- **email:** curate every email for its own reader ([AGL-3897](https://linear.app/aglyn/issue/AGL-3897))
+- **apple:** one in-app web sheet for live sites, previews and plain links ([AGL-3893](https://linear.app/aglyn/issue/AGL-3893))
+- **native-android:** pages tree starts collapsed and reads as far as it shows ([AGL-3896](https://linear.app/aglyn/issue/AGL-3896))
+- **email:** polish the form submission email; buttons name what they open ([AGL-3897](https://linear.app/aglyn/issue/AGL-3897))
+- **ai:** draw the compiler's hero, group style and photo sections at even odds ([AGL-3899](https://linear.app/aglyn/issue/AGL-3899))
+- **ai:** tell a site plan its home arc, where the form goes, and varied item counts ([AGL-3899](https://linear.app/aglyn/issue/AGL-3899))
+- **ai:** home arcs per site kind, drawn by the job's seed ([AGL-3899](https://linear.app/aglyn/issue/AGL-3899))
+- **native-android:** one in-app web sheet for sites, previews and links ([AGL-3893](https://linear.app/aglyn/issue/AGL-3893))
+- **ai:** the guided start asks one decision a step, styles shown as pictures ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
+- **ai:** the guided start reports its funnel and where people struggle ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
+- **shared-ui:** the option card grid draws a picture card, lazy and fixed-size ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
+- **ai:** real style previews for the guided start's style cards ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
+- **email:** polish every system and site email; staff alerts say who and how ([AGL-3897](https://linear.app/aglyn/issue/AGL-3897))
+- **notifications:** pick your notification sound for the console and app pushes ([AGL-3890](https://linear.app/aglyn/issue/AGL-3890))
+
+### Fixed
+
+- **ai:** a new site never reuses another site's dataset records ([AGL-3912](https://linear.app/aglyn/issue/AGL-3912))
+- **data:** a record photo of a deleted site is left out, never drawn broken ([AGL-3912](https://linear.app/aglyn/issue/AGL-3912))
+- **ai:** people photos show adults in the role, and alt text reads as a phrase ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+- **mui:** the search box honors its style settings, so starter headers fit on phones ([AGL-3917](https://linear.app/aglyn/issue/AGL-3917))
+- **apple:** an AI job link opens on its own workspace and site ([AGL-3911](https://linear.app/aglyn/issue/AGL-3911))
+- **ai:** each guided-start style previews its own kind of page ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
+- **console:** the subprocessor gate knows the guided-start run's stub mode ([AGL-3910](https://linear.app/aglyn/issue/AGL-3910))
+- **e2e:** emulated servers also get a placeholder Firebase app id ([AGL-3910](https://linear.app/aglyn/issue/AGL-3910))
+- **e2e:** the local guided-start run walks the stepped form with Next ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
+- **health:** false reds — signupLanding counts people, /signin door sees Google bounces ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913), [AGL-3724](https://linear.app/aglyn/issue/AGL-3724))
+- **e2e:** emulated servers start the Admin SDK without app env files ([AGL-3910](https://linear.app/aglyn/issue/AGL-3910))
+- **native-android:** medium windows keep a short rail; plan offer spans the window ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **apple:** order and CRM record pages open on the shared detail head ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **native-android:** product header and menu, even quick actions, no page id ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
+- **apple:** a spec form's Save row keeps its section's card ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **apple:** no window tab bar on the Mac; a quota readout never sits on "checking" ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **apple:** a Pages search says when nothing matches and draws no chevrons ([AGL-3896](https://linear.app/aglyn/issue/AGL-3896))
+- **apple:** split screens' title no longer sits over scrolling rows on iPad ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **apple:** a failed or refused split list folds its detail column ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **console:** leave the web notifications bell out of the apps ([AGL-3894](https://linear.app/aglyn/issue/AGL-3894))
+- **email:** keep sample hosts generic and the store named in receipts ([AGL-3897](https://linear.app/aglyn/issue/AGL-3897))
+- **apple:** receipt TOTAL spans the paper; whole discount row; plain price copy ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **ai:** the guided start's header comment fits the sweep specs; Try again opens on the review ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
+- **pos:** register tiles show the product's photo, not its initial ([AGL-3906](https://linear.app/aglyn/issue/AGL-3906))
+- **apple:** tooltips on the notifications toolbar; first run card radius token ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
+- **native-apple:** deleting a product on a phone returns to the list ([AGL-3905](https://linear.app/aglyn/issue/AGL-3905))
+- **native:** a confirm dialog no longer repeats the screen's earlier error ([AGL-3903](https://linear.app/aglyn/issue/AGL-3903))
+- **android:** Besigner web view fills its screen so CSS vh is not 0 ([AGL-3850](https://linear.app/aglyn/issue/AGL-3850))
+- **ai:** a nonprofit's gallery arc says the people it serves, never community ([AGL-3899](https://linear.app/aglyn/issue/AGL-3899))
+- **ai:** settle a stray home form onto the contact page, never by refusing ([AGL-3899](https://linear.app/aglyn/issue/AGL-3899))
+- **tools:** the plugin budget bundle emits a webp a plugin imports as a file ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
+- **native:** email cases read a details panel as label then value ([AGL-3897](https://linear.app/aglyn/issue/AGL-3897))
+- **notifications:** the signature sound is named Signature, not the brand ([AGL-3890](https://linear.app/aglyn/issue/AGL-3890))
+
+### Documentation
+
+- **ai:** the guided start's steps are sections the Assist index answers from ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
+- **ai:** shoot the guided start's kind, style and review steps on the emulator stack ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
+- **ai:** home arcs, the form on the contact page and even design odds ([AGL-3899](https://linear.app/aglyn/issue/AGL-3899))
+- **ai:** the guided start's steps, style pictures and funnel events ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
+
+<details>
+<summary>Also in this release: 4 test, 9 chore</summary>
+
+- **ai:** the guided-start local e2e is a mentions-only key file ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913))
+- **deps:** resync the cloud/functions lockfile so npm ci installs ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913))
+- **linear:** raise the issue ceiling to AGL-3913, read off Linear ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913), [AGL-3853](https://linear.app/aglyn/issue/AGL-3853))
+- **deps-dev:** Bump the functions-minor-patch group across 1 directory with 2 updates
+- **native:** regenerate contracts on today's main ([AGL-3897](https://linear.app/aglyn/issue/AGL-3897))
+- **native:** the Besigner shows no browser chrome in the Mac app ([AGL-3894](https://linear.app/aglyn/issue/AGL-3894))
+- **native-seed:** a 3-level, 60-row page tree on the seeded cafe site ([AGL-3896](https://linear.app/aglyn/issue/AGL-3896))
+- **ai:** prove AI homes vary and the form stays on its own page ([AGL-3899](https://linear.app/aglyn/issue/AGL-3899))
+
+- **ai:** the cancel watch spec waits for the abort instead of racing a 1 ms timer ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913))
+- **deps:** Bump the mui-emotion group with 7 updates
+- **deps-dev:** Bump the nx-workspace group across 1 directory with 16 updates
+- **deps-dev:** Bump the linters group across 1 directory with 5 updates
+- **deps:** regenerate the realm host MUI tables for @mui/material 9.5.0 ([AGL-3913](https://linear.app/aglyn/issue/AGL-3913))
+
+</details>
+
 ## v1.0.0-beta.264 — 2026-10-17
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.263...v1.0.0-beta.264)

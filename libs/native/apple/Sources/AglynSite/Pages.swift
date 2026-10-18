@@ -5,12 +5,12 @@ import AglynCore
 import Foundation
 
 // A site's pages as the console's Pages hub reads and changes them
-// (`hosts/[host]/screens`): the whole collection by document id with one
-// probe row, deleted pages and email screens left out, built into the tree
-// the hub draws (groups are folders; a page's parent is `parentId`), each
-// page live when the host's routing map holds it.
+// (`hosts/[host]/screens`), deleted pages and email screens left out, built
+// into the tree the hub draws (groups are folders; a page's parent is
+// `parentId`), each page live when the host's routing map holds it. The
+// list reads the tree a level at a time (PagesTree.swift).
 
-/// The hub's own window: the site's screens by document id, plus one probe row.
+/// A window over a site's screens by document id, for a picker that lists them (Custom fields' page choice).
 public let pagesWindow = 200
 
 public let screenKindGroup = "group"
@@ -240,8 +240,9 @@ public struct PagesAPI: Sendable {
     return (id, versionID)
   }
 
-  /// A new group at the top of the list, as the hub's New group adds one.
-  public func createGroup(name: String, topOrder: Double) async throws {
+  /// A new group at the top of the list, as the hub's New group adds one; answers its id.
+  @discardableResult
+  public func createGroup(name: String, topOrder: Double) async throws -> String {
     let id = newDocumentID()
     try await api.request(
       hostResourcesRoute, method: .post,
@@ -251,6 +252,7 @@ public struct PagesAPI: Sendable {
           "data": ["displayName": name.trimmed, "kind": screenKindGroup] as [String: Any?],
         ] as [String: Any?]))
     try await writer.merge(path(id), ["order": min(0, topOrder) - 1])
+    return id
   }
 
   /// A draft copy with a unique slug and no address; answers its id.
