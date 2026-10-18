@@ -142,6 +142,8 @@ fun ReceiptPrintersDialog(model: PosPrintersModel, registerName: String?, onDism
           when {
             !model.ready -> Box(Modifier.padding(space(2f))) { SkeletonList(rows = 2) }
             model.rows.isEmpty() -> Column(Modifier.fillMaxSize()) {
+              // "Counter printer removed" is still said when it was the last one.
+              model.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, Modifier.padding(space(2f)).testTag("printer-notice")) }
               model.error?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.padding(space(2f))) }
               EmptyState(
                 "No receipt printer yet",
@@ -389,7 +391,7 @@ private fun ModelField(draft: PrinterDraft, onChange: (PrinterDraft) -> Unit) {
 private fun ConnectSection(credentials: PrinterCredentials, canRegenerate: Boolean, onCopied: () -> Unit, onRegenerate: () -> Unit) {
   val clipboard = LocalClipboardManager.current
   val star = credentials.brand == PrinterBrand.STAR.raw
-  SectionCard("Connect the printer", Modifier.fillMaxWidth().testTag("printer-connect")) {
+  SectionCard("Steps", Modifier.fillMaxWidth().testTag("printer-connect")) {
     printerSetupSteps(credentials.brand).forEachIndexed { index, step ->
       Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
         Text("${index + 1}.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
