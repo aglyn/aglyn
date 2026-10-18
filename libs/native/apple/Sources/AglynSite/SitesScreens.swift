@@ -154,11 +154,15 @@ struct SiteListRow: View {
   var body: some View {
     let doc = host.state.value ?? nil
     let status = doc.map { HostStatus.describe($0.data) }
+    // The site's favicon, as the console's Sites list shows it (`HostIcon`): the host's own `seo.favicon`, else the
+    // membership row's copy of it; the globe while there is none.
+    let favicon = siteFavicon(doc) ?? row.favicon
     AglynRow(
       row.name,
       subtitle: [HostStatus.siteAddress(row.subdomain), row.role.map(\.capitalized)].compactMap { $0 }
         .joined(separator: " · "),
-      systemImage: SiteSymbols.site
+      systemImage: SiteSymbols.site,
+      imageURL: mediaPreviewURL(favicon, origin: context.api.origin, hostID: row.id, width: 96)
     ) {
       HStack(spacing: AglynSpace.half) {
         if row.id == context.hostID { StatusChip("Current", tone: .info) }
@@ -167,6 +171,11 @@ struct SiteListRow: View {
     }
     .task(id: row.id) { await host.bind(context.firestore, ["hosts", row.id]) }
   }
+}
+
+/// A host document's favicon (`seo.favicon`), as the console stores it: a reference, a CDN path or an address.
+func siteFavicon(_ doc: FirestoreDocument?) -> String? {
+  ((doc?.data["seo"] as? [String: Any])?["favicon"] as? String).flatMap { $0.trimmed.isEmpty ? nil : $0 }
 }
 
 /// One site: its status, addresses and what it holds, with the switch that
@@ -200,13 +209,13 @@ struct SiteOverview: View {
     let name = doc.string("displayName").flatMap { $0.trimmed.isEmpty ? nil : $0 } ?? subdomain ?? hostID
     let platform = HostStatus.siteAddress(subdomain)
     let custom = doc.string("cname").flatMap { $0.trimmed.isEmpty ? nil : $0 }
-    let favicon = (doc.data["seo"] as? [String: Any])?["favicon"] as? String
+    let favicon = siteFavicon(doc)
     let current = hostID == context.hostID
     let domain = custom ?? platform
     return Form {
       Section {
         HStack(spacing: AglynSpace.oneAndHalf) {
-          AglynRemoteImage(favicon.flatMap { $0.hasPrefix("http") ? URL(string: $0) : nil }, systemImage: SiteSymbols.site)
+          AglynRemoteImage(mediaPreviewURL(favicon, origin: context.api.origin, hostID: hostID, width: 160), systemImage: SiteSymbols.site)
             .frame(width: 48, height: 48)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
           VStack(alignment: .leading, spacing: 2) {

@@ -196,8 +196,9 @@ extension PosDeviceBranding {
   /// The kiosk's branding as its context carries it, its logos served from the console the kiosk is paired with.
   static func from(_ branding: PosKioskContextBranding, origin: String) -> PosDeviceBranding {
     PosDeviceBranding(
-      name: branding.name, logoURL: posBrandingLogoURL(branding.logoUrl, origin: origin),
-      logoDarkURL: posBrandingLogoURL(branding.logoDarkUrl, origin: origin), message: branding.message)
+      name: branding.name, logoURL: mediaPreviewURL(branding.logoUrl, origin: origin, hostID: nil, width: 640),
+      logoDarkURL: mediaPreviewURL(branding.logoDarkUrl, origin: origin, hostID: nil, width: 640),
+      message: branding.message)
   }
 }
 

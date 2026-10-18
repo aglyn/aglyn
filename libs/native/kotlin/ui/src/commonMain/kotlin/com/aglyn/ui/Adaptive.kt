@@ -84,7 +84,7 @@ fun AglynNavigationSuite(
   selected: String,
   onSelect: (String) -> Unit,
   modifier: Modifier = Modifier,
-  /** Shown at the top of the permanent drawer (EXPANDED and wider). */
+  /** Pinned at the top of the permanent drawer (EXPANDED and wider), above the rows. */
   drawerHeader: @Composable () -> Unit = {},
   /** Shown at the foot of the permanent drawer: the workspace and site, opening the switcher. */
   drawerFooter: @Composable () -> Unit = {},
@@ -96,9 +96,11 @@ fun AglynNavigationSuite(
     Row(modifier.fillMaxSize().testTag("nav-drawer")) {
       PermanentDrawerSheet(Modifier.width(280.dp), drawerContainerColor = colors.surfaceContainerLow) {
         Column(Modifier.fillMaxHeight()) {
-          // The lockup scrolls with the rows, so it never sits over them; the switcher stays put at the foot.
+          // The lockup is pinned at the top above a divider and the rows scroll in the space below it, so no row ever
+          // passes under it; the switcher stays put at the foot the same way.
+          drawerHeader()
+          HorizontalDivider()
           Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            drawerHeader()
             Column(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
               for (destination in destinations) {
                 destination.section?.let {

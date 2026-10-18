@@ -69,7 +69,7 @@ import com.aglyn.contracts.PosKioskProduct
 import com.aglyn.contracts.PosKioskSale
 import com.aglyn.contracts.PosKioskSaleStatus
 import com.aglyn.pluginhost.NativePluginContext
-import com.aglyn.site.media.mediaPreviewUrl
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.KeepScreenOn

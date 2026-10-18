@@ -4,7 +4,6 @@
 import AglynContracts
 import AglynCore
 import AglynPluginHost
-import AglynSite
 import XCTest
 
 @testable import AglynDataPlugin

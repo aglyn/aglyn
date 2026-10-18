@@ -24,13 +24,34 @@ public struct WorkspaceSite: Equatable, Hashable, Identifiable, Sendable {
   public let name: String
   public let subdomain: String
   public let role: String
+  /// The site's favicon as the membership row mirrors it (`favicon`, the host's `seo.favicon`): a reference, a CDN path
+  /// or an address, shown through `mediaPreviewURL` as the console's `HostIcon` resolves it.
+  public let favicon: String?
 
-  public init(id: String, orgID: String, name: String, subdomain: String, role: String) {
+  public init(id: String, orgID: String, name: String, subdomain: String, role: String, favicon: String? = nil) {
     self.id = id
     self.orgID = orgID
     self.name = name
     self.subdomain = subdomain
     self.role = role
+    self.favicon = favicon
+  }
+}
+
+/// A workspace's logos as its own document keeps them (`logoUrl`, `logoDarkUrl`): the membership index carries none,
+/// so the console's switcher reads each workspace's document for them, and so does this store.
+public struct WorkspaceOrgLogo: Equatable, Hashable, Sendable {
+  public let light: String?
+  public let dark: String?
+
+  public init(light: String?, dark: String?) {
+    self.light = light
+    self.dark = dark
+  }
+
+  public init(_ doc: FirestoreDocument?) {
+    func text(_ key: String) -> String? { doc?.string(key).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } }
+    self.init(light: text("logoUrl"), dark: text("logoDarkUrl"))
   }
 }
 
@@ -67,6 +88,9 @@ public final class WorkspaceStore {
   /// How many memberships the listener holds: a page, not a ceiling (the console's `ORG_PAGE_SIZE`, AGL-2336).
   public private(set) var orgWindowSize = WorkspaceStore.orgWindow
   public private(set) var sites: [WorkspaceSite] = []
+  /// Each workspace's logos read so far, by workspace id: the shown workspace's always, the others' once the switcher
+  /// asks for them (`loadLogos`).
+  public private(set) var orgLogos: [String: WorkspaceOrgLogo] = [:]
   public private(set) var error: String?
   /// False until the org list (and, with an org, its sites) has arrived once.
   public var ready: Bool { orgsLoaded && (orgs.isEmpty || sitesLoaded) }
@@ -87,6 +111,7 @@ public final class WorkspaceStore {
   private var sitesLoaded = false
   @ObservationIgnored private var orgListener: FirestoreListening?
   @ObservationIgnored private var siteListener: FirestoreListening?
+  @ObservationIgnored private var logoListeners: [String: FirestoreListening] = [:]
   @ObservationIgnored private var sitesFor: String?
   /// The site a console link named by its address (`/{orgSlug}/hosts/{hostSlug}/…`) before its workspace's sites arrived.
   @ObservationIgnored private var pendingHostSlug: String?
@@ -160,6 +185,28 @@ public final class WorkspaceStore {
     orgListener = nil
     siteListener = nil
     sitesFor = nil
+    logoListeners.values.forEach { $0.remove() }
+    logoListeners = [:]
+  }
+
+  /// The shown workspace's logo, as its document has it; nil until read, or when it has none.
+  public var orgLogo: WorkspaceOrgLogo? { effective.orgID.flatMap { orgLogos[$0] } }
+
+  /// Reads each of these workspaces' logos from its own document, once (the console's switcher reads its rows' logos
+  /// the same way, `useOrgRows`). The shown workspace's is read live, so a new logo reaches the footer.
+  public func loadLogos(_ orgIDs: [String], live: Bool = false) {
+    for orgID in orgIDs where logoListeners[orgID] == nil && (live || orgLogos[orgID] == nil) {
+      let listener = reader.listenDocument(["orgs", orgID]) { [weak self] result in
+        guard let self else { return }
+        if case .success(let doc) = result { self.orgLogos[orgID] = WorkspaceOrgLogo(doc) }
+        if !live {
+          self.logoListeners[orgID]?.remove()
+          self.logoListeners[orgID] = nil
+        }
+      }
+      // An answer from the cache can land before the listener is kept; a one-time read then ends at once.
+      if !live && orgLogos[orgID] != nil { listener.remove() } else { logoListeners[orgID] = listener }
+    }
   }
 
   public func selectOrg(_ orgID: String) {
@@ -222,6 +269,7 @@ public final class WorkspaceStore {
       sitesFor = orgID
       sites = []
       sitesLoaded = false
+      if let orgID { loadLogos([orgID], live: true) }
       if let orgID {
         siteListener = reader.listen(
           FirestoreQuery(
@@ -266,7 +314,8 @@ public final class WorkspaceStore {
     return WorkspaceSite(
       id: doc.id, orgID: doc.string("orgId") ?? "",
       name: doc.string("displayName") ?? (subdomain.isEmpty ? doc.id : subdomain),
-      subdomain: subdomain, role: doc.string("role") ?? "")
+      subdomain: subdomain, role: doc.string("role") ?? "",
+      favicon: doc.string("favicon").flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 })
   }
 
   /// Which org and site to show, given what is remembered and what exists.

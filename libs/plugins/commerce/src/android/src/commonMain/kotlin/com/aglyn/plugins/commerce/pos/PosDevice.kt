@@ -17,7 +17,7 @@ import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.KeyValueStore
-import com.aglyn.site.media.mediaPreviewUrl
+import com.aglyn.core.mediaPreviewUrl
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -51,13 +51,6 @@ const val POS_DISPLAY_IDLE_POLL_MS = 3_000L
 /** The store's name and logo are re-read this often, so an edit reaches the screen. */
 const val POS_DEVICE_BRANDING_REFRESH_MS = 10L * 60 * 1000
 
-/**
- * Where a store logo is shown from: the routes send the site's logo as a path on the console's media CDN (or a reference,
- * or an https address), read from [origin], the console the screen is paired with.
- */
-fun posBrandingLogoUrl(value: String?, origin: String): String? =
-  value?.ifEmpty { null }?.let { mediaPreviewUrl(it, origin, null, 640) }
-
 /** The store's look for the idle and thank-you screens. */
 data class PosDeviceBranding(val name: String, val logoUrl: String?, val logoDarkUrl: String?, val message: String) {
   companion object {
@@ -67,8 +60,9 @@ data class PosDeviceBranding(val name: String, val logoUrl: String?, val logoDar
       if (record.isEmpty()) return null
       return PosDeviceBranding(
         name = record["name"].str() ?: "Welcome",
-        logoUrl = posBrandingLogoUrl(record["logoUrl"].str(), origin),
-        logoDarkUrl = posBrandingLogoUrl(record["logoDarkUrl"].str(), origin),
+        // The routes send a library logo as a path on the console's media CDN, read from the paired console.
+        logoUrl = mediaPreviewUrl(record["logoUrl"].str(), origin, null, 640),
+        logoDarkUrl = mediaPreviewUrl(record["logoDarkUrl"].str(), origin, null, 640),
         message = record["message"].str() ?: "Welcome",
       )
     }

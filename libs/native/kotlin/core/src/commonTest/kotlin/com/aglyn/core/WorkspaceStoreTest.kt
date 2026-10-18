@@ -41,6 +41,24 @@ class WorkspaceStoreTest {
   }
 
   @Test
+  fun aSiteCarriesItsFaviconAndAWorkspaceDocumentItsLogos() {
+    // The membership row mirrors the host's `seo.favicon` as `favicon`, the console's HostIcon reads it there.
+    assertEquals(
+      "media:h/fav",
+      WorkspaceStore.siteFromMembership("h", mapOf("orgId" to "o", "subdomain" to "shop", "favicon" to "media:h/fav")).favicon,
+    )
+    assertEquals(null, WorkspaceStore.siteFromMembership("h", mapOf("favicon" to " ")).favicon)
+    // A workspace's logos live on its own document; the membership index carries none.
+    assertEquals(
+      WorkspaceOrgLogo("/api/media/cdn/org:o/logo", null),
+      WorkspaceOrgLogo.from(mapOf("logoUrl" to "/api/media/cdn/org:o/logo", "logoDarkUrl" to "")),
+    )
+    assertEquals(WorkspaceOrgLogo(null, null), WorkspaceOrgLogo.from(null))
+    val state = WorkspaceState(org = orgs[0], orgLogos = mapOf("a" to WorkspaceOrgLogo("l", "d")))
+    assertEquals(WorkspaceOrgLogo("l", "d"), state.orgLogo)
+  }
+
+  @Test
   fun orgAccessFollowsTheConsolePredicate() {
     assertTrue(OrgAccess.isOrgWideMember(mapOf("role" to "editor")))
     assertFalse(OrgAccess.isOrgWideMember(mapOf("role" to "editor", "hostAccess" to mapOf("h1" to "editor"))))

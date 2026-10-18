@@ -27,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -47,12 +48,14 @@ import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.Live
 import com.aglyn.core.WorkspaceState
 import com.aglyn.core.WorkspaceStore
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.pluginhost.NativeParams
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.pluginhost.WidgetSize
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
+import com.aglyn.ui.BrandPicture
 import com.aglyn.ui.EmptyState
 import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.LocalAglynPalette
@@ -75,7 +78,7 @@ internal fun WorkspaceChip(workspace: WorkspaceState, onClick: () -> Unit) {
 
 /** The workspace and site at the foot of the permanent drawer; opens the switcher. */
 @Composable
-internal fun WorkspaceFooter(workspace: WorkspaceState, onClick: () -> Unit) {
+internal fun WorkspaceFooter(workspace: WorkspaceState, origin: String, onClick: () -> Unit) {
   androidx.compose.material3.Surface(
     onClick = onClick,
     modifier = Modifier.fillMaxWidth().padding(12.dp).testTag("sidebar-switcher").semantics { contentDescription = "Switch workspace or site" },
@@ -83,7 +86,13 @@ internal fun WorkspaceFooter(workspace: WorkspaceState, onClick: () -> Unit) {
     color = MaterialTheme.colorScheme.surface,
   ) {
     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-      Icon(AglynIcons.named("workspaces"), null, tint = MaterialTheme.colorScheme.primary)
+      // The workspace's logo (dark-theme art in dark mode), as the console's workspace switcher shows it.
+      BrandPicture(
+        mediaPreviewUrl(workspace.orgLogo?.light, origin, null, 160),
+        mediaPreviewUrl(workspace.orgLogo?.dark, origin, null, 160),
+        size = 28.dp,
+        shape = MaterialTheme.shapes.small,
+      ) { Icon(AglynIcons.named("workspaces"), null, tint = MaterialTheme.colorScheme.primary) }
       Column(Modifier.weight(1f)) {
         Text(workspace.org?.name ?: "No workspace", style = MaterialTheme.typography.titleSmall, maxLines = 1)
         Text(workspace.site?.name ?: "Pick a site", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
@@ -95,7 +104,9 @@ internal fun WorkspaceFooter(workspace: WorkspaceState, onClick: () -> Unit) {
 
 /** The workspace and site picker. */
 @Composable
-internal fun SwitcherScreen(store: WorkspaceStore, workspace: WorkspaceState, onDone: () -> Unit) {
+internal fun SwitcherScreen(store: WorkspaceStore, workspace: WorkspaceState, origin: String, onDone: () -> Unit) {
+  // Each workspace's logo, read from its own document as the console's switcher reads them.
+  LaunchedEffect(workspace.orgs.map { it.id }) { store.loadLogos(workspace.orgs.map { it.id }) }
   LazyColumn(Modifier.fillMaxSize()) {
     item { SectionHeader("Workspaces") }
     items(workspace.orgs, key = { "org-${it.id}" }) { org ->
@@ -103,6 +114,8 @@ internal fun SwitcherScreen(store: WorkspaceStore, workspace: WorkspaceState, on
         title = org.name,
         supporting = org.role.replaceFirstChar { it.uppercase() },
         icon = AglynIcons.named("workspaces"),
+        imageUrl = mediaPreviewUrl(workspace.orgLogos[org.id]?.light, origin, null, 160),
+        darkImageUrl = mediaPreviewUrl(workspace.orgLogos[org.id]?.dark, origin, null, 160),
         trailing = { RadioButton(selected = org.id == workspace.org?.id, onClick = null) },
         onClick = { store.selectOrg(org.id) },
         modifier = Modifier.testTag("switcher-org-${org.id}"),
@@ -128,6 +141,7 @@ internal fun SwitcherScreen(store: WorkspaceStore, workspace: WorkspaceState, on
         title = site.name,
         supporting = site.subdomain.ifEmpty { null },
         icon = AglynIcons.named("public"),
+        imageUrl = mediaPreviewUrl(site.favicon, origin, site.id, 160),
         trailing = { RadioButton(selected = site.id == workspace.site?.id, onClick = null) },
         onClick = {
           store.selectSite(site.id)
