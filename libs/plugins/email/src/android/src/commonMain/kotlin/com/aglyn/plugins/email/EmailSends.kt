@@ -219,6 +219,18 @@ data class EmailSend(
   val canFollowUp: Boolean get() = !held && status == "sent"
   val canCancel: Boolean get() = status == "scheduled" && !midFlight
   val canCompose: Boolean get() = (status == "draft" || status == "scheduled") && !midFlight && !held
+
+  /**
+   * The state in one word, the same on the list's chip and the detail's: a stopped send says why it stopped (Canceled,
+   * Failed), never a bare "Stopped" beside a detail that says "Canceled". The full sentence is [SendDisplay.label].
+   */
+  val statusWord: String get() = when (display.state) {
+    "draft", "held" -> display.label
+    "pending" -> if (status == "sending") "Sending" else "Scheduled"
+    "sending" -> "Sending"
+    "stopped" -> when (status) { "canceled" -> "Canceled"; "failed" -> "Failed"; else -> "Stopped" }
+    else -> "Sent"
+  }
 }
 
 /** The sender a message actually left with, as the send recorded it (`emailSentAs`): the address is what makes it a record. */

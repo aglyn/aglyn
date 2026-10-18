@@ -109,7 +109,7 @@ fun SignInScreen(
       HorizontalDivider()
       Text("Not a register?", style = MaterialTheme.typography.titleMedium)
       Text(
-        "Set this tablet up as a screen for your customers. A code from a register pairs it.",
+        "Use this device as a screen for your customers. A code from a register pairs it.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )

@@ -212,7 +212,7 @@ internal fun AnalyticsScreen(services: ShellServices, context: ShellPluginContex
               )
               FlowRow(horizontalArrangement = Arrangement.spacedBy(space(3f)), verticalArrangement = Arrangement.spacedBy(space(2f))) {
                 TopList("Top pages", summary.topPaths.take(5))
-                TopList("Top referrers", summary.topReferrers.take(5))
+                TopList("Top referrers", summary.topReferrers.take(5).map { (host, views) -> referrerHostLabel(host) to views })
                 TopList("Top campaign sources (UTM)", summary.topUtmSources)
                 TopList("Top campaigns (UTM)", summary.topUtmCampaigns)
               }
@@ -227,6 +227,12 @@ internal fun AnalyticsScreen(services: ShellServices, context: ShellPluginContex
     }
   }
 }
+
+/**
+ * A referrer as people know it: the collector stores a host with its dots as underscores (a Firestore map key cannot
+ * hold a dot), so `google_com` reads `google.com` again. Hostnames hold no underscores of their own.
+ */
+internal fun referrerHostLabel(key: String): String = key.replace('_', '.')
 
 @Composable
 private fun TrafficTiles(summary: TrafficSummary, range: Int) {
@@ -249,7 +255,7 @@ private fun TrafficTiles(summary: TrafficSummary, range: Int) {
       add(GridSpan.HALF to { m -> MetricCard("Top page · ${count(views)} views", path, null, "description", "Top page", m, onClick = {}) })
     }
     summary.topReferrers.firstOrNull()?.let { (host, views) ->
-      add(GridSpan.HALF to { m -> MetricCard("Top referrer · ${count(views)} views", host, null, "link", "Top referrer", m, onClick = {}) })
+      add(GridSpan.HALF to { m -> MetricCard("Top referrer · ${count(views)} views", referrerHostLabel(host), null, "link", "Top referrer", m, onClick = {}) })
     }
   }
   DashboardGrid(3, tiles, Modifier.testTag("analytics-tiles"))
@@ -336,7 +342,7 @@ private fun PageRow(row: ScreenTrafficRow, path: String, sum: Long) {
     Text(count(row.total.toDouble()), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
     Text("${kotlin.math.floor(row.total * 100.0 / sum + 0.5).toLong()}%", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
     Text(topDevice(row).replaceFirstChar { it.uppercaseChar() }, Modifier.weight(1.4f), style = MaterialTheme.typography.bodyMedium)
-    Text(topReferrer(row).ifEmpty { "—" }, Modifier.weight(2f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+    Text(referrerHostLabel(topReferrer(row)).ifEmpty { "—" }, Modifier.weight(2f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
   }
 }
 

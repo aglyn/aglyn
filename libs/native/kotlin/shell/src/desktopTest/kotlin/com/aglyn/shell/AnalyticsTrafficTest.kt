@@ -21,4 +21,11 @@ class AnalyticsTrafficTest {
     assertEquals("2026-10-16", days.first())
     assertEquals("2026-09-19", days.last())
   }
+
+  @Test
+  fun aReferrerReadsAsItsHostAgain() {
+    assertEquals("google.com", referrerHostLabel("google_com"))
+    assertEquals("m.facebook.com", referrerHostLabel("m_facebook_com"))
+    assertEquals("", referrerHostLabel(""))
+  }
 }
