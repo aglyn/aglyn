@@ -317,7 +317,7 @@ private fun SmartReadersSection(
     if (loading) {
       SkeletonList(rows = 2)
     } else if (readers.isEmpty()) {
-      Text("No smart reader is paired with this store. Pair a WisePOS E or S700 with the code it shows.")
+      Text("No smart reader is paired with this store. Pair a WisePOS E or S700 with the code it shows.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     } else {
       for (reader in readers) {
         AglynListItem(

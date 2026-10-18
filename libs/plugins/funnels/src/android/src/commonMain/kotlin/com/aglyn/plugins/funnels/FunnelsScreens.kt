@@ -69,6 +69,7 @@ import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
 import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
+import com.aglyn.ui.StatRow
 import com.aglyn.ui.StatTile
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -286,7 +287,7 @@ fun FunnelResultView(result: FunnelResult, row: FunnelRow, onActOnDropOff: ((Int
   }
   val top = maxOf(1L, result.entered)
   SectionCard("Results", Modifier.fillMaxWidth().testTag("funnel-result")) {
-    Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+    StatRow {
       StatTile("Entered", grouped(result.entered), Modifier.weight(1f))
       StatTile("Completed", grouped(result.completed), Modifier.weight(1f), caption = formatShare(result.overall))
     }

@@ -263,9 +263,11 @@ internal fun SettingsScreen(
   val workspace by services.workspace.state.collectAsState()
   Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
     SectionHeader("Account")
+    // A blank display name falls back to the email as the title, so the row never shows an empty line above it.
+    val accountTitle = user?.displayName?.takeIf { it.isNotBlank() } ?: user?.email ?: "Signed in"
     AglynListItem(
-      title = user?.displayName ?: user?.email ?: "Signed in",
-      supporting = user?.email,
+      title = accountTitle,
+      supporting = user?.email?.takeIf { it != accountTitle },
       icon = AglynIcons.named("account_circle"),
     )
     // The console's own areas, as core screens (libs/native/screens), by group.

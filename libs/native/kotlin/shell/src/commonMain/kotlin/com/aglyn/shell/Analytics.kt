@@ -236,21 +236,21 @@ private fun TrafficTiles(summary: TrafficSummary, range: Int) {
       MetricCard(
         "Page views", count(summary.total),
         summary.deltaPct?.let { "${if (it > 0) "+" else ""}${it}% vs prior $range days" } ?: "No earlier window to compare",
-        "visibility", "Page views", m, onClick = {},
+        "visibility", "Page views", m, onClick = null,
       )
     })
     if (summary.visitors > 0) {
-      add(GridSpan.HALF to { m -> MetricCard("Visitors (approx.)", count(summary.visitors), "One per browser tab a day", "person", "Visitors", m, onClick = {}) })
+      add(GridSpan.HALF to { m -> MetricCard("Visitors (approx.)", count(summary.visitors), "One per browser tab a day", "person", "Visitors", m, onClick = null) })
     }
-    add(GridSpan.HALF to { m -> MetricCard("Avg / day", count(summary.avgPerDay.toDouble()), "Over $range days", "trending_up", "Average a day", m, onClick = {}) })
+    add(GridSpan.HALF to { m -> MetricCard("Avg / day", count(summary.avgPerDay.toDouble()), "Over $range days", "trending_up", "Average a day", m, onClick = null) })
     if (summary.devices.isNotEmpty()) {
-      add(GridSpan.HALF to { m -> MetricCard(deviceSplitLabel(summary.devices), deviceSplitValue(summary.devices), "Device split", "devices", "Device split", m, onClick = {}) })
+      add(GridSpan.HALF to { m -> MetricCard(deviceSplitLabel(summary.devices), deviceSplitValue(summary.devices), "Device split", "devices", "Device split", m, onClick = null) })
     }
     summary.topPaths.firstOrNull()?.let { (path, views) ->
-      add(GridSpan.HALF to { m -> MetricCard("Top page · ${count(views)} views", path, null, "description", "Top page", m, onClick = {}) })
+      add(GridSpan.HALF to { m -> MetricCard("Top page · ${count(views)} views", path, null, "description", "Top page", m, onClick = null) })
     }
     summary.topReferrers.firstOrNull()?.let { (host, views) ->
-      add(GridSpan.HALF to { m -> MetricCard("Top referrer · ${count(views)} views", host, null, "link", "Top referrer", m, onClick = {}) })
+      add(GridSpan.HALF to { m -> MetricCard("Top referrer · ${count(views)} views", host, null, "link", "Top referrer", m, onClick = null) })
     }
   }
   DashboardGrid(3, tiles, Modifier.testTag("analytics-tiles"))
