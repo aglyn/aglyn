@@ -42,6 +42,7 @@ import {
   splitTrafficWindows,
   trafficDeltaPct,
 } from '@aglyn/aglyn/app-utils/analytics-summary'
+import { referrerLabel } from '@aglyn/aglyn/app-utils/screen-analytics-aggregate'
 import { docsHelp } from '../../constants/docs-links'
 
 interface DayStat {
@@ -211,7 +212,9 @@ export function HostAnalyticsCard(props: {
   const visitors = windowDays.reduce((sum, day) => sum + day.visitors, 0)
   const max = Math.max(1, ...windowDays.map((day) => day.total))
   const allPaths = rollUp(windowDays, 'paths')
-  const allReferrers = rollUp(windowDays, 'referrers')
+  const allReferrers = rollUp(windowDays, 'referrers').map(
+    ([key, count]): [string, number] => [referrerLabel(key), count],
+  )
   const topPaths = allPaths.slice(0, 5)
   const topReferrers = allReferrers.slice(0, 5)
   const deviceTotals = windowDays.reduce<Record<string, number>>(
