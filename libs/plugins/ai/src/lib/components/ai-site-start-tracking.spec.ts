@@ -179,12 +179,40 @@ describe('dead clicks', () => {
       <div data-start-area="field-siteType"><div class="MuiInputBase-root" id="base"><input id="input" /></div></div>
       <p id="loose">Words</p>`
     const at = (id: string) => aiSiteStartClickOf({ clientX: 1, clientY: 2, target: document.getElementById(id) })
-    expect(at('title')).toEqual({ x: 1, y: 2, interactive: false, area: 'heading' })
-    expect(at('inner')).toEqual({ x: 1, y: 2, interactive: true, area: 'style-cards' })
-    expect(at('base')).toEqual({ x: 1, y: 2, interactive: true, area: 'field-siteType' })
+    expect(at('title')).toEqual({ x: 1, y: 2, interactive: false, area: 'heading', blank: false })
+    expect(at('inner')).toMatchObject({ x: 1, y: 2, interactive: true, area: 'style-cards' })
+    expect(at('base')).toMatchObject({ x: 1, y: 2, interactive: true, area: 'field-siteType' })
     expect(at('input').interactive).toBe(true)
-    expect(at('loose')).toEqual({ x: 1, y: 2, interactive: false, area: 'form' })
+    // Outside every named part of the form: never a dead click.
+    expect(at('loose')).toEqual({ x: 1, y: 2, interactive: false, area: 'form', blank: true })
     document.body.innerHTML = ''
+  })
+
+  it('reads empty space, a popup backdrop and a picture the way a person sees them (2026-10-18)', () => {
+    document.body.innerHTML = `
+      <div data-start-area="style-cards" id="grid"><div id="gap"></div><img id="picture" alt="" /></div>
+      <div data-start-area="field-pages"><div class="MuiBackdrop-root MuiBackdrop-invisible" id="backdrop"></div></div>
+      <div data-start-area="progress"><span id="label">Review</span></div>`
+    const at = (id: string) => aiSiteStartClickOf({ clientX: 0, clientY: 0, target: document.getElementById(id) })
+    // The space between cards, and the grid itself: nothing to mistake for a control.
+    expect(at('gap').blank).toBe(true)
+    expect(at('grid').blank).toBe(true)
+    // The click that closes a select's menu is not a click on nothing.
+    expect(at('backdrop').blank).toBe(true)
+    // A picture and a word are things a person might expect to act.
+    expect(at('picture').blank).toBe(false)
+    expect(at('label').blank).toBe(false)
+    document.body.innerHTML = ''
+  })
+
+  it('reports no dead click for a blank click, and still reads it for rage', () => {
+    const t = tracker()
+    t.view('details')
+    t.click({ ...click(10, 10, false, 'field-pages'), blank: true })
+    expect(named('site_start_dead_click')).toEqual([])
+    t.click({ ...click(10, 10, false, 'field-pages'), blank: true })
+    t.click({ ...click(10, 10, false, 'field-pages'), blank: true })
+    expect(named('site_start_rage_click')).toHaveLength(1)
   })
 })
 
@@ -211,13 +239,20 @@ describe('struggle', () => {
     expect(named('site_start_struggle')).toEqual([])
   })
 
-  it('counts each pick of a choice as an edit', () => {
+  it('never counts picking card after card as a struggle: that is comparing (2026-10-18)', () => {
     const t = tracker()
     t.view('style')
+    for (let index = 0; index < 6; index += 1) t.fieldPicked('kind')
+    expect(named('site_start_struggle')).toEqual([])
+  })
+
+  it('puts off the idle signal on a pick', () => {
+    const t = tracker()
+    t.view('style')
+    jest.advanceTimersByTime(20_000)
     t.fieldPicked('kind')
-    t.fieldPicked('kind')
-    t.fieldPicked('kind')
-    expect(named('site_start_struggle')).toEqual([{ step: 'style', signal: 'edits', field: 'kind', count: 3 }])
+    jest.advanceTimersByTime(20_000)
+    expect(named('site_start_struggle')).toEqual([])
   })
 
   it('reports a step left idle for 30 seconds, once a visit', () => {

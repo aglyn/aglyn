@@ -92,6 +92,7 @@ import {
   aiSiteStartNextStep,
   aiSiteStartPreviousStep,
   aiSiteStartStepErrors,
+  aiSiteStartStepIndex,
   AI_SITE_START_STEP_FIELDS,
   type AiSiteStartField,
   type AiSiteStartStep,
@@ -655,6 +656,18 @@ export function AiSiteStartCard({
     [tracker],
   )
 
+  /** From the progress, back to a step already answered: from the review it is Edit. */
+  const goBackTo = (target: AiSiteStartStep) => {
+    if (aiSiteStartStepIndex(target) >= aiSiteStartStepIndex(step)) return
+    if (step === 'review') {
+      edit(target)
+      return
+    }
+    tracker.back()
+    setReturnTo(null)
+    setStep(target)
+  }
+
   if (verdict !== 'ready') return null
 
   // Before a job is started Skip is the blank site, which writes the starter
@@ -836,7 +849,7 @@ export function AiSiteStartCard({
         >
           <Stack spacing={4}>
             <Box sx={{ maxWidth: (t: Theme) => t.spacing(80), width: '100%', mx: 'auto' }}>
-              <StartProgress step={step} compact={compact} />
+              <StartProgress step={step} compact={compact} onStep={started ? undefined : goBackTo} />
             </Box>
             <Stack spacing={1} sx={{ textAlign: choosing ? 'center' : 'left' }} data-start-area="heading">
               <Typography
