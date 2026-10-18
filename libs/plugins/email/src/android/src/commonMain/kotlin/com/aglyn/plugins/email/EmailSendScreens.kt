@@ -131,7 +131,7 @@ fun EmailsScreen(context: NativePluginContext, initial: String? = null, composeC
             supporting = listOfNotNull(audienceLabel(send), (send.sendAtMs ?: send.createdAtMs)?.let { relativeTime(it, now) }).joinToString(" · "),
             icon = AglynIcons.named("mail"),
             selected = send.id == selected,
-            trailing = { StatusChip(send.statusWord, sendTone(send.display.state)) },
+            trailing = { StatusChip(if (send.display.state in setOf("draft", "held")) send.display.label else send.display.state.replaceFirstChar { it.uppercase() }, sendTone(send.display.state)) },
             onClick = { onSelect(send.id) },
             modifier = Modifier.testTag("email-${send.id}"),
           )
@@ -181,11 +181,10 @@ fun EmailDetail(context: NativePluginContext, orgId: String, hostId: String, sen
           SectionCard(null, Modifier.fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
               Text(send.subject, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
-              StatusChip(send.statusWord, sendTone(send.display.state))
+              StatusChip(send.display.label, sendTone(send.display.state))
             }
             Text(
               listOfNotNull(
-                send.display.label.takeIf { it != send.statusWord },
                 audienceLabel(send),
                 send.sendAtMs?.takeIf { send.status == "scheduled" }?.let { "Scheduled for ${formatReceiptTime(it)}" },
                 send.createdAtMs?.let { "Written ${formatReceiptTime(it)}" },
@@ -209,7 +208,7 @@ fun EmailDetail(context: NativePluginContext, orgId: String, hostId: String, sen
             // What the send recorded, never today's identity; where it recorded none, why. A recorded sender names what an absent
             // display name or reply address meant, as the console does.
             val sentAs = emailSentAs(doc.data)
-            PropertyRow("From address", sentAs?.from ?: sentAsMissing(doc.data), Modifier.testTag("email-sent-as"))
+            PropertyRow("Sent as", sentAs?.from ?: sentAsMissing(doc.data), Modifier.testTag("email-sent-as"))
             if (sentAs != null) {
               PropertyRow("From name", sentAs.fromName ?: "The address on its own")
               PropertyRow("Reply-to", sentAs.replyTo ?: "The sending address")
