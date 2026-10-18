@@ -42,5 +42,13 @@ export function describeAutomationRunAction(action: string): string | undefined 
       : verb === 'is waiting,'
         ? 'is waiting'
         : 'ran'
-  return `${who} ${what}: ${hostEventLabel(event)}`
+  return `${who} ${what}: ${eventWords(event)}`
+}
+
+/** The event's label; a key no plugin labels (an inbound `webhook`) reads as a word, never as the key. */
+function eventWords(event: string): string {
+  const label = hostEventLabel(event)
+  if (label !== event) return label
+  const words = event.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[._:-]+/g, ' ').toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
 }

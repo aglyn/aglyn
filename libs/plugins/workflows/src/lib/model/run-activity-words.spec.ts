@@ -26,6 +26,8 @@ describe('describeAutomationRunAction (AGL-3892)', () => {
     expect(describeAutomationRunAction('Workflow ran on formSubmission')).toBe('Workflow ran: Form submitted')
     expect(describeAutomationRunAction('Action is waiting, on formSubmission')).toBe('Automation is waiting: Form submitted')
     expect(describeAutomationRunAction('Action skipped on formSubmission')).toBe('Automation skipped: Form submitted')
+    expect(describeAutomationRunAction('Action ran on webhook')).toBe('Automation ran: Webhook')
+    expect(describeAutomationRunAction('Action ran on customThingHappened')).toBe('Automation ran: Custom thing happened')
   })
 
   it('leaves every other action alone', () => {
