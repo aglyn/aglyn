@@ -32,8 +32,9 @@ import {
  * product analytics: each step drawn, left forward or back and how long it
  * took, the step the start was abandoned on, the field a step refused on,
  * and the signs of a struggle — one field changed again and again, a step
- * left idle, fast repeated clicks on one spot (rage) and clicks on parts of
- * the form that do nothing (dead).
+ * left idle, fast repeated clicks on one spot (rage) and clicks on words, a
+ * picture or an icon in the form that do nothing (dead). A click on empty
+ * space or on a popup's backdrop is not a dead click (2026-10-18).
  *
  * Every event goes through `trackEvent`, the one door the console's GA4
  * taxonomy has, so it is consent-gated exactly as every other console event
@@ -80,6 +81,13 @@ export interface AiSiteStartClick {
   interactive: boolean
   /** The closed id of the part of the form it landed in. */
   area: string
+  /**
+   * Whether it landed on nothing a person could mistake for a control: empty
+   * space, a popup's backdrop (the click that closes a menu or a help
+   * popover), or anything outside the form's named parts. A blank click is
+   * never a dead click.
+   */
+  blank?: boolean
 }
 
 export interface AiSiteStartTracker {
@@ -95,7 +103,7 @@ export interface AiSiteStartTracker {
   fieldChanged(field: AiSiteStartField): void
   /** A text answer was left. */
   fieldLeft(field: AiSiteStartField): void
-  /** A choice was picked, which is one edit. */
+  /** A choice was picked: input, but not an edit (comparing cards is not a struggle). */
   fieldPicked(field: AiSiteStartField): void
   /** Any input on the step, which puts off the idle signal. */
   activity(): void
@@ -181,8 +189,11 @@ export function createAiSiteStartTracker(options: AiSiteStartTrackerOptions = {}
       if (!dirty.delete(field)) return
       edited(field)
     },
-    fieldPicked(field) {
-      edited(field)
+    fieldPicked() {
+      // Picking card after card is how a person compares styles or kinds; it
+      // read as "one answer changed again and again" (2026-10-18) and is not.
+      // Only a typed answer rewritten is a struggle.
+      armIdle()
     },
     activity() {
       armIdle()
@@ -203,7 +214,7 @@ export function createAiSiteStartTracker(options: AiSiteStartTrackerOptions = {}
       } else {
         burst = { x: click.x, y: click.y, at, count: 1, reported: false }
       }
-      if (!click.interactive && deadClicks < AI_SITE_START_DEAD_CLICKS_PER_STEP) {
+      if (!click.interactive && !click.blank && deadClicks < AI_SITE_START_DEAD_CLICKS_PER_STEP) {
         deadClicks += 1
         send('site_start_dead_click', { step, area: click.area })
       }
@@ -259,11 +270,29 @@ const INTERACTIVE = [
 /** The attribute naming the part of the form an element is in (a closed id, never content). */
 export const AI_SITE_START_AREA_ATTRIBUTE = 'data-start-area'
 
+/** A popup's backdrop (a menu's, a select's, a help popover's): a click on it closes the popup. */
+const BACKDROP = '.MuiBackdrop-root'
+
+/**
+ * Whether an element is something a person sees and might click: its own
+ * words, a picture or an icon. A bare layout box (the space around and
+ * between things) is not.
+ */
+function isContent(element: Element): boolean {
+  if (element.closest('img, svg, picture, video, canvas')) return true
+  for (const node of Array.from(element.childNodes)) {
+    if (node.nodeType === 3 && (node.textContent ?? '').trim()) return true
+  }
+  return false
+}
+
 /** A DOM click, as the detector reads it. */
 export function aiSiteStartClickOf(event: { clientX: number; clientY: number; target: EventTarget | null }): AiSiteStartClick {
   const target = event.target instanceof Element ? event.target : null
-  const area = target?.closest(`[${AI_SITE_START_AREA_ATTRIBUTE}]`)?.getAttribute(AI_SITE_START_AREA_ATTRIBUTE) ?? 'form'
-  return { x: event.clientX, y: event.clientY, interactive: Boolean(target?.closest(INTERACTIVE)), area }
+  const named = target?.closest(`[${AI_SITE_START_AREA_ATTRIBUTE}]`) ?? null
+  const area = named?.getAttribute(AI_SITE_START_AREA_ATTRIBUTE) ?? 'form'
+  const blank = !target || !named || Boolean(target.closest(BACKDROP)) || !isContent(target)
+  return { x: event.clientX, y: event.clientY, interactive: Boolean(target?.closest(INTERACTIVE)), area, blank }
 }
 
 /**
