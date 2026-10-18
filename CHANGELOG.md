@@ -13,6 +13,10 @@ content on the marketing site and is written separately.
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.266...v1.0.0-beta.267)
 
+### Changed
+
+- **notifications:** every staff notification (new account, workspace and site, subscriptions, plan changes, failed payments) emails every staff account by default ([AGL-3929](https://linear.app/aglyn/issue/AGL-3929))
+
 ### Fixed
 
 - **health:** the sign-up landing check grades whether a new owner reached the console, not whether they made a site ([AGL-3927](https://linear.app/aglyn/issue/AGL-3927))
