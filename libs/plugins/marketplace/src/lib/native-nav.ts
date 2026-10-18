@@ -42,10 +42,11 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       screen: 'marketplace.browse',
       pluginId: 'marketplace',
       order: 110,
+      // Licenses open from the account menu's Marketplace entry
+      // (`marketplace.licenses`), where the proposal puts installs and licenses.
       sections: [
         nativeNavHubSection('org', '/marketplace', 'browse', 'Browse All', 'marketplace.browse'),
         nativeNavHubSection('org', '/marketplace', 'installed', 'Installed', 'marketplace.installed'),
-        nativeNavHubSection('org', '/marketplace', 'licences', 'Licenses', 'marketplace.licenses'),
       ],
       console: nativeNavRef('orgPluginTab', '/marketplace'),
     },

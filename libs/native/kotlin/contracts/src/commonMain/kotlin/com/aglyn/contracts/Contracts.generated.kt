@@ -1257,6 +1257,7 @@ data class MobilePushData(
     val link: String? = null,
     val orgId: String? = null,
     val type: String,
+    val uid: String? = null,
 )
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */

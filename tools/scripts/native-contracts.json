@@ -2776,6 +2776,20 @@
         ],
         [
           "text"
+        ],
+        [
+          {
+            "type": "content.order",
+            "link": "/h1/orders",
+            "orgId": "o1",
+            "uid": "u-2"
+          }
+        ],
+        [
+          {
+            "type": "content.order",
+            "uid": 7
+          }
         ]
       ]
     },

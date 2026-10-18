@@ -4815,15 +4815,6 @@
                     "id": "installed",
                     "label": "Installed",
                     "screen": "marketplace.installed"
-                  },
-                  {
-                    "console": {
-                      "id": "/marketplace/licences",
-                      "surface": "orgPluginSection"
-                    },
-                    "id": "licences",
-                    "label": "Licenses",
-                    "screen": "marketplace.licenses"
                   }
                 ]
               }

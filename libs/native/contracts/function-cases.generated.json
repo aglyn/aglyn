@@ -30886,6 +30886,33 @@
             "text"
           ],
           "result": null
+        },
+        {
+          "args": [
+            {
+              "type": "content.order",
+              "link": "/h1/orders",
+              "orgId": "o1",
+              "uid": "u-2"
+            }
+          ],
+          "result": {
+            "link": "/h1/orders",
+            "orgId": "o1",
+            "type": "content.order",
+            "uid": "u-2"
+          }
+        },
+        {
+          "args": [
+            {
+              "type": "content.order",
+              "uid": 7
+            }
+          ],
+          "result": {
+            "type": "content.order"
+          }
         }
       ]
     },
@@ -50225,15 +50252,6 @@
                         "id": "installed",
                         "label": "Installed",
                         "screen": "marketplace.installed"
-                      },
-                      {
-                        "console": {
-                          "id": "/marketplace/licences",
-                          "surface": "orgPluginSection"
-                        },
-                        "id": "licences",
-                        "label": "Licenses",
-                        "screen": "marketplace.licenses"
                       }
                     ]
                   }

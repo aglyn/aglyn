@@ -1850,12 +1850,14 @@ public struct MobilePushData: Codable, Hashable, Sendable {
   public var link: String?
   public var orgId: String?
   public var type: String
+  public var uid: String?
 
-  public init(hostId: String? = nil, link: String? = nil, orgId: String? = nil, type: String) {
+  public init(hostId: String? = nil, link: String? = nil, orgId: String? = nil, type: String, uid: String? = nil) {
     self.hostId = hostId
     self.link = link
     self.orgId = orgId
     self.type = type
+    self.uid = uid
   }
 }
 
