@@ -23,6 +23,16 @@
  * light ground, so it is the light appearance, and `-light` the dark one.
  */
 
+import {
+  AUTH_COLORS,
+  authThemeKotlin,
+  authThemeSwift,
+  facetsSvg,
+  INTRO_TIMELINE,
+  LAUNCH_ART,
+  LAUNCH_BACKGROUND,
+} from './native-auth-theme.mjs'
+
 export const BRAND_DIR = 'apps/console/public/_static/images/brand'
 export const APPLE_CATALOG =
   'libs/native/apple/Sources/AglynUI/Resources/Brand.xcassets'
@@ -97,17 +107,17 @@ export const iconSources = () =>
   ].sort()
 
 /**
- * The launch screen's logo (`UILaunchScreen` → `UIImageName`), in each app's
- * own asset catalog: the console's full logo, light and dark, at the size
- * `AglynLaunchView` draws it (its 200 x 56 frame, fitted to the 79:24 logo),
- * so the system's first frame and the SwiftUI launch view line up.
+ * The launch screen's mark (LaunchScreen.storyboard), in each app's own asset
+ * catalog: the logo kit's multi-color mark alone, centered over the Facets
+ * launch art at 96 pt (iPhone) / 120 pt (iPad), as the intro's first frame
+ * draws it (AGL-3934). The storyboard sizes it; the SVG stays a vector.
  */
 export const LAUNCH_LOGO = {
   apple: 'LaunchLogo',
-  light: 'aglyn-logo-full-dark.svg',
-  dark: 'aglyn-logo-full-light.svg',
-  width: 184,
-  height: 56,
+  light: 'aglyn-logo-mark-multi.svg',
+  dark: 'aglyn-logo-mark-multi.svg',
+  width: 96,
+  height: 96,
 }
 
 export const appleLaunchSet = (app) =>
@@ -203,9 +213,11 @@ export function iconContainers() {
 }
 
 /** Files an earlier icon layout wrote: removed by a write, refused by `--check`. */
-export const RETIRED_OUTPUTS = APP_ICONS.map(
-  (icon) => `${appleIconSet(icon.apple)}/AppIcon-512.png`,
-)
+export const RETIRED_OUTPUTS = APP_ICONS.flatMap((icon) => [
+  `${appleIconSet(icon.apple)}/AppIcon-512.png`,
+  // The launch screen showed the full logo, light and dark, until AGL-3934; the mark has one ink.
+  `apps/ios/${icon.apple}/Assets.xcassets/LaunchLogo.imageset/LaunchLogo-dark.svg`,
+])
 
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`
 const XCODE_INFO = { author: 'xcode', version: 1 }
@@ -665,7 +677,9 @@ export function brandTextOutputs(read) {
     })
     for (const [suffix, source] of [
       ['', LAUNCH_LOGO.light],
-      ['-dark', LAUNCH_LOGO.dark],
+      ...(LAUNCH_LOGO.dark === LAUNCH_LOGO.light
+        ? []
+        : [['-dark', LAUNCH_LOGO.dark]]),
     ]) {
       outputs.push({
         file: `${launch}/${LAUNCH_LOGO.apple}${suffix}.svg`,
@@ -698,6 +712,178 @@ export function brandTextOutputs(read) {
       file: `${res}/drawable/ic_launcher_monochrome.xml`,
       content: adaptiveForeground(icon, read, { monochrome: true }),
     })
+  }
+  outputs.push(...authOutputs(read))
+  return outputs
+}
+
+/** Where the sign-in theme's token files go (AGL-3934). */
+export const AUTH_THEME_SWIFT =
+  'libs/native/apple/Sources/AglynUI/AuthTheme.generated.swift'
+export const AUTH_THEME_KOTLIN =
+  'libs/native/kotlin/ui/src/commonMain/kotlin/com/aglyn/ui/AuthTheme.generated.kt'
+
+export const appleLaunchArtSet = (app) =>
+  `apps/ios/${app}/Assets.xcassets/${LAUNCH_BACKGROUND}.imageset`
+const launchArtFile = (art, dark) =>
+  `${LAUNCH_BACKGROUND}-${art.idiom}${dark ? '-dark' : ''}.png`
+
+/** The launch art's image set: iPhone and iPad, light and dark, each at the one scale it is drawn at. */
+export function launchArtContents() {
+  return json({
+    images: LAUNCH_ART.flatMap((art) =>
+      [false, true].map((dark) => ({
+        ...(dark
+          ? { appearances: [{ appearance: 'luminosity', value: 'dark' }] }
+          : {}),
+        filename: launchArtFile(art, dark),
+        idiom: art.idiom,
+        scale: `${art.scale}x`,
+      })),
+    ),
+    info: XCODE_INFO,
+  })
+}
+
+/**
+ * The iOS launch art (LaunchScreen.storyboard's full-bleed image): the Facets
+ * ground at intro frame 1, per app, idiom and appearance. Rendered with sharp
+ * from `facetsSvg`; `--check` holds each by its pixel size, and the lock by
+ * the SVG it was drawn from.
+ */
+export function launchArt() {
+  return APP_ICONS.flatMap((icon) =>
+    LAUNCH_ART.flatMap((art) =>
+      [false, true].map((dark) => ({
+        file: `${appleLaunchArtSet(icon.apple)}/${launchArtFile(art, dark)}`,
+        width: art.width * art.scale,
+        height: art.height * art.scale,
+        scale: art.scale,
+        svg: facetsSvg(art.width, art.height, { dark, settle: 0 }),
+      })),
+    ),
+  )
+}
+
+/** The 288 dp splash-icon canvas and the mark's box in it (spec: 288 dp canvas, 192 dp mask; the mark at 112). */
+const SPLASH_CANVAS = 288
+const SPLASH_MARK = 112
+
+/** The mark's paths on the splash canvas, each inside its own named group. */
+function splashMarkGroups(read, { clips = false } = {}) {
+  const source = LAUNCH_LOGO.light
+  const { paths, width } = svgPaths(read(source).toString('utf8'), source)
+  const offset = (SPLASH_CANVAS - SPLASH_MARK) / 2
+  const scale = num(SPLASH_MARK / width)
+  // The mark's first path is the pink frame, its second the blue pen.
+  const names = ['frame', 'pen']
+  const groups = paths.map((path, i) => {
+    const name = names[i] ?? `part${i}`
+    const clip = clips
+      ? `        <clip-path\n            android:name="${name}_clip"\n            android:pathData="${SPLASH_REVEAL[name]?.from ?? FULL_CLIP}" />\n`
+      : ''
+    return (
+      `      <group android:name="${name}">\n${clip}` +
+      `${pathXml(path, '        ')}\n      </group>`
+    )
+  })
+  return (
+    `    <group\n        android:translateX="${offset}"\n        android:translateY="${offset}"\n` +
+    `        android:scaleX="${scale}"\n        android:scaleY="${scale}">\n${groups.join('\n')}\n    </group>`
+  )
+}
+
+const FULL_CLIP = 'M0,0 L24,0 L24,24 L0,24 Z'
+/**
+ * How each part of the mark draws in: a triangle growing from a corner of
+ * its 24 grid until it covers the whole mark (the art itself never changes).
+ * The frame grows from the top left, the pen from the bottom left, along it.
+ */
+const SPLASH_REVEAL = {
+  frame: {
+    from: 'M0,0 L0,0 L0,0 Z',
+    to: 'M0,0 L48,0 L0,48 Z',
+    start: INTRO_TIMELINE.androidFrameStartMs,
+    end: INTRO_TIMELINE.androidFrameEndMs,
+  },
+  pen: {
+    from: 'M0,24 L0,24 L0,24 Z',
+    to: 'M0,24 L0,-24 L48,24 Z',
+    start: INTRO_TIMELINE.androidPenStartMs,
+    end: INTRO_TIMELINE.androidPenEndMs,
+  },
+}
+
+const splashVectorOpen = (indent = '') =>
+  `${indent}<vector xmlns:android="http://schemas.android.com/apk/res/android"\n` +
+  `${indent}    android:width="${SPLASH_CANVAS}dp"\n${indent}    android:height="${SPLASH_CANVAS}dp"\n` +
+  `${indent}    android:viewportWidth="${SPLASH_CANVAS}"\n${indent}    android:viewportHeight="${SPLASH_CANVAS}">\n`
+
+/** The splash icon before Android 12 (the compat splash draws it still): the mark at rest. */
+export function splashIconStatic(read) {
+  return (
+    `<?xml version="1.0" encoding="utf-8"?>\n${GENERATED_XML(LAUNCH_LOGO.light)}\n` +
+    `${splashVectorOpen()}${splashMarkGroups(read)}\n</vector>\n`
+  )
+}
+
+/**
+ * The Android 12+ animated splash icon: the frame draws in, then the pen
+ * (spec: frame 0–450 ms, pen 250–700 ms, 800 ms in all).
+ */
+export function splashIconAnimated(read) {
+  const targets = Object.entries(SPLASH_REVEAL).map(
+    ([name, reveal]) =>
+      `  <target android:name="${name}_clip">\n` +
+      '    <aapt:attr name="android:animation">\n' +
+      '      <objectAnimator\n' +
+      '          android:propertyName="pathData"\n' +
+      `          android:startOffset="${reveal.start}"\n` +
+      `          android:duration="${reveal.end - reveal.start}"\n` +
+      `          android:valueFrom="${reveal.from}"\n` +
+      `          android:valueTo="${reveal.to}"\n` +
+      '          android:valueType="pathType"\n' +
+      '          android:interpolator="@android:interpolator/fast_out_slow_in" />\n' +
+      '    </aapt:attr>\n  </target>',
+  )
+  return (
+    `<?xml version="1.0" encoding="utf-8"?>\n${GENERATED_XML(LAUNCH_LOGO.light)}\n` +
+    '<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"\n' +
+    '    xmlns:aapt="http://schemas.android.com/aapt">\n' +
+    '  <aapt:attr name="android:drawable">\n' +
+    `${splashVectorOpen('    ')}${splashMarkGroups(read, { clips: true }).replace(/^/gm, '    ')}\n    </vector>\n` +
+    '  </aapt:attr>\n' +
+    `${targets.join('\n')}\n</animated-vector>\n`
+  )
+}
+
+/** The splash ground (bg/canvas), light in values/ and dark in values-night/. */
+const splashColors = (dark) =>
+  `<?xml version="1.0" encoding="utf-8"?>\n<!-- GENERATED by tools/scripts/generate-native-brand-assets.mjs from tools/scripts/lib/native-auth-theme.mjs — do not edit. -->\n` +
+  `<resources>\n  <color name="aglyn_splash_ground">${AUTH_COLORS.canvas[dark ? 'dark' : 'light']}</color>\n` +
+  `  <integer name="aglyn_splash_duration">${INTRO_TIMELINE.androidIconMs}</integer>\n</resources>\n`
+
+/** Every text file the sign-in and launch theme writes (AGL-3934). */
+export function authOutputs(read) {
+  const outputs = [
+    { file: AUTH_THEME_SWIFT, content: authThemeSwift() },
+    { file: AUTH_THEME_KOTLIN, content: authThemeKotlin() },
+  ]
+  for (const icon of APP_ICONS) {
+    outputs.push({
+      file: `${appleLaunchArtSet(icon.apple)}/Contents.json`,
+      content: launchArtContents(),
+    })
+    const res = androidRes(icon.android)
+    outputs.push(
+      { file: `${res}/values/splash.xml`, content: splashColors(false) },
+      { file: `${res}/values-night/splash.xml`, content: splashColors(true) },
+      { file: `${res}/drawable/splash_icon.xml`, content: splashIconStatic(read) },
+      {
+        file: `${res}/drawable-v31/splash_icon.xml`,
+        content: splashIconAnimated(read),
+      },
+    )
   }
   return outputs
 }

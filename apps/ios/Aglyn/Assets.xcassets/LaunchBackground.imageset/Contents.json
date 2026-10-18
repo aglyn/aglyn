@@ -1,0 +1,40 @@
+{
+  "images": [
+    {
+      "filename": "LaunchBackground-iphone.png",
+      "idiom": "iphone",
+      "scale": "3x"
+    },
+    {
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ],
+      "filename": "LaunchBackground-iphone-dark.png",
+      "idiom": "iphone",
+      "scale": "3x"
+    },
+    {
+      "filename": "LaunchBackground-ipad.png",
+      "idiom": "ipad",
+      "scale": "2x"
+    },
+    {
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ],
+      "filename": "LaunchBackground-ipad-dark.png",
+      "idiom": "ipad",
+      "scale": "2x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

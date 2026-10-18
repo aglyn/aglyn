@@ -3,16 +3,6 @@
     {
       "filename": "LaunchLogo.svg",
       "idiom": "universal"
-    },
-    {
-      "appearances": [
-        {
-          "appearance": "luminosity",
-          "value": "dark"
-        }
-      ],
-      "filename": "LaunchLogo-dark.svg",
-      "idiom": "universal"
     }
   ],
   "info": {
