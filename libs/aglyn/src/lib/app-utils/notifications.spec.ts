@@ -150,7 +150,33 @@ describe('per-scope, per-channel notification settings (AGL-3223)', () => {
     expect(notificationChannelEnabled(undefined, 'console', FORM)).toBe(true)
     expect(notificationChannelEnabled({}, 'email', 'team.roleChanged')).toBe(false)
     expect(notificationChannelEnabled(undefined, 'email', 'content.lowStock')).toBe(false)
-    expect(notificationChannelEnabled(undefined, 'email', 'staff.userSignedUp')).toBe(false)
+  })
+
+  it('emails every staff notification to staff who never said otherwise', () => {
+    for (const type of [
+      'staff.userSignedUp',
+      'staff.orgCreated',
+      'staff.siteCreated',
+      'staff.subscriptionStarted',
+      'staff.subscriptionCanceled',
+      'staff.planChanged',
+      'staff.paymentFailed',
+    ]) {
+      expect(notificationTypeChannelDefault(type, 'email')).toBe(true)
+      expect(notificationChannelEnabled(undefined, 'email', type)).toBe(true)
+      expect(notificationChannelEnabled({}, 'email', type)).toBe(true)
+    }
+    // A stored no, the category's or the type's, still wins.
+    expect(
+      notificationChannelEnabled({ account: { staff: { email: false } } }, 'email', 'staff.orgCreated'),
+    ).toBe(false)
+    expect(
+      notificationChannelEnabled(
+        { accountTypes: { 'staff.userSignedUp': { email: false } } },
+        'email',
+        'staff.userSignedUp',
+      ),
+    ).toBe(false)
   })
 
   it('emails work, bills, answers and stoppages to everyone who never said otherwise', () => {
@@ -176,7 +202,6 @@ describe('per-scope, per-channel notification settings (AGL-3223)', () => {
       'system.bandwidthCeilingTripped',
       'system.billingWebhookHalfApplied',
       'system.disputeUnattributed',
-      'staff.siteCreated',
     ]) {
       expect(notificationTypeChannelDefault(type, 'email')).toBe(true)
       expect(notificationChannelEnabled({}, 'email', type, { orgId: 'o', hostId: 'h' })).toBe(true)
@@ -380,10 +405,12 @@ describe('the platform-growth category (AGL-3225)', () => {
     ).toBe(true)
   })
 
-  it('arrives in the console and not the inbox until somebody asks', () => {
-    // Console on is the complaint this answers — staff heard nothing at all.
+  it('arrives in the console and the inbox until somebody switches it off', () => {
+    // Console on is the complaint this answers — staff heard nothing at all —
+    // and email on, because a staff account that never opened its settings
+    // was mailed only new sites.
     expect(notificationChannelEnabled(undefined, 'console', 'staff.orgCreated')).toBe(true)
-    expect(notificationChannelEnabled(undefined, 'email', 'staff.orgCreated')).toBe(false)
+    expect(notificationChannelEnabled(undefined, 'email', 'staff.orgCreated')).toBe(true)
   })
 
   it('describes itself in words a reader can check against their own feed', () => {
