@@ -5,6 +5,7 @@ import AglynContracts
 import AglynCore
 import AglynHardware
 import AglynPluginHost
+import AglynSite
 import AglynUI
 import SwiftUI
 
@@ -42,7 +43,7 @@ struct PosKioskScreen: View {
           mode: .kiosk, busy: model.pairing, error: model.pairError,
           onPair: { code in Task { await model.pair(code: code) } }, onLeave: { context.back() })
       } else {
-        KioskBody(model: model, onExit: { model.unpaired() })
+        KioskBody(model: model, origin: context.api.origin, onExit: { model.unpaired() })
           .id(model.turn)
       }
     }
@@ -81,6 +82,8 @@ private struct CatalogKey: Equatable {
 
 private struct KioskBody: View {
   let model: PosKioskModel
+  /// The console the kiosk was paired with, whose media CDN serves the products' photos.
+  let origin: String
   let onExit: () -> Void
   @State private var itemSheet: PosKioskProduct?
   @State private var cartOpen = false
@@ -134,7 +137,7 @@ private struct KioskBody: View {
           .accessibilityIdentifier("kiosk-start")
       }
     case .menu:
-      KioskMenuView(model: model, onProduct: tap, onCart: { cartOpen = true })
+      KioskMenuView(model: model, origin: origin, onProduct: tap, onCart: { cartOpen = true })
     case .review:
       if let sale = model.sale { KioskReviewView(model: model, sale: sale) }
     case .tip(let method):
@@ -201,6 +204,7 @@ extension PosDeviceBranding {
 /// The menu: category chips, the product tiles, and the cart bar.
 private struct KioskMenuView: View {
   let model: PosKioskModel
+  let origin: String
   let onProduct: (PosKioskProduct) -> Void
   let onCart: () -> Void
 
@@ -230,8 +234,12 @@ private struct KioskMenuView: View {
                 onProduct(product)
               } label: {
                 VStack(alignment: .leading, spacing: AglynSpace.half) {
-                  if let url = product.imageUrl.flatMap({ URL(string: $0) }) {
-                    AglynRemoteImage(url, systemImage: "photo", contentMode: .fill).frame(height: 110).clipped()
+                  // The server sends a `/api/media/cdn/…` path (or a media reference); the register's tiles resolve it
+                  // the same way (AGL-3906).
+                  if let url = product.imageUrl.flatMap({ mediaPreviewURL($0, origin: origin, hostID: nil) }) {
+                    Color.clear.frame(maxWidth: .infinity).frame(height: 110)
+                      .overlay { AglynRemoteImage(url, systemImage: "photo", contentMode: .fill) }
+                      .clipped()
                   }
                   Text(product.name).font(AglynFont.headline).multilineTextAlignment(.leading)
                   Text(
