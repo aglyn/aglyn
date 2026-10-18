@@ -234,12 +234,19 @@ final class AppModel {
   /// web view, and otherwise a note that the app has no screen for it yet.
   func open(_ link: String, in navigation: ShellNavigation) {
     switch registry.resolve(link) {
-    case .screen(let screen, let params)?: navigation.push(.screen(screen, params))
+    case .screen(let screen, let params)?:
+      // A link that names a workspace and site by address reads them, not whichever is picked (AGL-3911).
+      if let org = params["orgSlug"] { workspace?.select(orgSlug: org, hostSlug: params["hostSlug"]) }
+      navigation.push(.screen(screen, params))
     case .besigner(let path)?: navigation.push(.besigner(path))
     case .unavailable(let path)?:
       // The app's own screens answer the console's own pages.
-      let scope = DeepLinks.splitConsoleScope(path)
-      if path.hasPrefix("/manage/notifications/settings") {
+      let scope = DeepLinks.splitConsoleScope(path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? path)
+      if let jobID = DeepLinks.rootQuery(path)?["aiJob"], !jobID.isEmpty, registry.screen("ai.job") != nil {
+        // An AI job's notice that built nothing of its own to open (`/{hostId}?aiJob=…`) opens that job (AGL-3911).
+        if let org = scope.orgSlug { workspace?.select(orgSlug: org, hostSlug: scope.hostSlug) }
+        navigation.push(.screen("ai.job", ["jobId": jobID]))
+      } else if path.hasPrefix("/manage/notifications/settings") {
         navigation.select(.notifications)
         navigation.push(.notificationSettings)
       } else if path.hasPrefix("/manage/notifications") {
@@ -254,5 +261,22 @@ final class AppModel {
       }
     case nil: break
     }
+  }
+
+  /// Follows a link that says which workspace and site it is about (a notification row, a tapped push): onto them
+  /// first, so the screen it opens reads that site (AGL-3911), then the link in the form the console follows it.
+  func follow(_ link: String?, orgID: String?, hostID: String?, in navigation: ShellNavigation) {
+    var link = link
+    if let workspace {
+      let orgID = orgID ?? workspace.sites.first { $0.id == hostID }?.orgID
+      if let orgID, orgID != workspace.org?.id || (hostID != nil && hostID != workspace.site?.id) {
+        workspace.select(orgID: orgID, hostID: hostID ?? (orgID == workspace.org?.id ? workspace.site?.id : nil))
+      }
+      // Host notifications store `/{hostDocId}/…`; the console follows them at `/{orgSlug}/hosts/{subdomain}/…`.
+      let site = workspace.sites.first { $0.id == hostID }
+      let org = workspace.orgs.first { $0.id == (orgID ?? site?.orgID) }
+      link = DeepLinks.notificationLink(link, orgSlug: org?.slug, hostID: hostID, hostSubdomain: site?.subdomain)
+    }
+    if let link { open(link, in: navigation) }
   }
 }
