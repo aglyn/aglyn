@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Changed
 
+- **monitoring:** the render monitor and the production canary take turns over the pages, instead of each reading every page on every run ([AGL-3928](https://linear.app/aglyn/issue/AGL-3928))
 - **notifications:** every staff notification (new account, workspace and site, subscriptions, plan changes, failed payments) emails every staff account by default ([AGL-3929](https://linear.app/aglyn/issue/AGL-3929))
 
 ### Fixed
@@ -22,6 +23,7 @@ content on the marketing site and is written separately.
 - **health:** the sign-up landing check grades whether a new owner reached the console, not whether they made a site ([AGL-3927](https://linear.app/aglyn/issue/AGL-3927))
 - **uptime:** the probe tries a request once more when the runner's own network failed it ([AGL-3927](https://linear.app/aglyn/issue/AGL-3927))
 - **ai:** widen a picture's search past an unknown world so pages keep photos ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923), [AGL-3856](https://linear.app/aglyn/issue/AGL-3856), [AGL-3831](https://linear.app/aglyn/issue/AGL-3831))
+- **stock-photos:** a Pixabay download that fails says why, by host and status, never by its signed address ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923))
 
 <details>
 <summary>Also in this release: 1 chore</summary>
