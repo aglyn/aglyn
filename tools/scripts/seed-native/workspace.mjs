@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 /*
  * Seed for the Aglyn app's workspace screens (AGL-3622): Sites, the media
  * library, and team and users, in the shapes the console's own writers leave
@@ -91,7 +94,13 @@ function mediaKeys({ fileName, contentType, alt, width, height }) {
 
 const BUCKET = 'demo-aglyn.appspot.com'
 
-export async function seedWorkspace({ put, uid, orgId, hostId, now }) {
+/** Sample photos the repository ships, one per seeded JPEG, uploaded when the seed is given a Storage emulator. */
+const SAMPLE_PHOTOS = {
+  'seed-media-storefront': 'gallery-plants.jpg',
+  'seed-media-croissants': 'gallery-craft.jpg',
+}
+
+export async function seedWorkspace({ put, uid, orgId, hostId, now, putObject = null, root = null }) {
   const day = 24 * 60 * 60 * 1000
   const ago = (days) => new Date(now.getTime() - days * day)
 
@@ -226,6 +235,12 @@ export async function seedWorkspace({ put, uid, orgId, hostId, now }) {
     const base = `${collection}/${scopeId}`
     const storagePath = `${base}/media/${folderId ? `${folderId}/` : ''}${id}`
     const image = contentType.startsWith('image/')
+    // A real file behind the document, when there is a Storage emulator: it lists no delivery copies yet, so the
+    // console's CDN serves the original and makes them on the first request, as it does for any older upload.
+    const sample = putObject && root ? SAMPLE_PHOTOS[id] : undefined
+    if (sample) {
+      await putObject(storagePath, readFileSync(join(root, 'apps/console/public/_static/starter', sample)), contentType)
+    }
     await put(`${base}/media/${id}`, {
       fileName,
       contentType,
@@ -238,7 +253,7 @@ export async function seedWorkspace({ put, uid, orgId, hostId, now }) {
       ...(alt ? { alt } : {}),
       tags: [],
       uploadedBy: uid,
-      variants: image ? [320, 640, 1280].filter((size) => size < width) : [],
+      variants: image && !sample ? [320, 640, 1280].filter((size) => size < width) : [],
       cdnPath: `/api/media/cdn/${collection === 'orgs' ? `org:${scopeId}` : scopeId}/${id}`,
       ...(collection === 'orgs' ? { visibleTo: ['org'] } : {}),
       createdAt: ago(days),

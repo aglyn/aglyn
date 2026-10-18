@@ -235,8 +235,17 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
     topBar = {
       TopAppBar(
         title = {
+          // One line each, whatever the store's name: a phone's bar also holds the menu's icons, so the name ellipsizes and
+          // steps down to TitleMedium there (M3's small top app bar never wraps its title).
+          val compact = com.aglyn.ui.currentWidthClass() == com.aglyn.ui.WidthClass.COMPACT
           Column {
-            Text(workspace.site?.name ?: "", style = MaterialTheme.typography.titleLarge)
+            Text(
+              workspace.site?.name ?: "",
+              style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
+              maxLines = 1,
+              overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+              modifier = Modifier.testTag("pos-store-name"),
+            )
             Text(
               when (route) {
                 is Route.Besigner -> "Besigner"
@@ -245,6 +254,8 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
               },
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
+              maxLines = 1,
+              overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
           }
         },

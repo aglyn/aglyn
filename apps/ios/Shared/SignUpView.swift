@@ -37,7 +37,7 @@ struct SignUpView: View {
   var body: some View {
     AuthCard(
       "Sign up",
-      subtitle: flow.plan?.signUpHeadline ?? "Create a new \(model.brandName) Account"
+      subtitle: flow.plan?.signUpHeadline ?? "Create a new \(model.brandName) account"
     ) {
       VStack(alignment: .leading, spacing: 12) {
         HStack(alignment: .top, spacing: 12) {

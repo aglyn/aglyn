@@ -1,5 +1,7 @@
 package com.aglyn.plugins.crm
 
+import com.aglyn.ui.MenuAction
+import com.aglyn.ui.OverflowMenu
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -134,7 +136,7 @@ fun RecordsSection(
           Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
             SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search ${kind.plural.lowercase()}", modifier = Modifier.weight(1f), onSearch = { asked = search })
             if (scope.canWrite) {
-              FilledTonalButton(onClick = { creating = true }, modifier = Modifier.testTag("crm-new-${kind.collection}")) {
+              FilledTonalButton(colors = com.aglyn.ui.aglynTonalButtonColors(), onClick = { creating = true }, modifier = Modifier.testTag("crm-new-${kind.collection}")) {
                 Icon(AglynIcons.named("add"), contentDescription = null)
                 Text("New", Modifier.padding(start = space(0.5f)))
               }
@@ -285,21 +287,33 @@ private fun RecordActions(kind: CrmKind, row: CrmRow, open: (RecordDialog) -> Un
     }
     add(Triple(if (kind == CrmKind.CONTACT) "Remove" else "Delete", "delete", RecordDialog.DELETE))
   }
-  FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-    actions.forEachIndexed { index, (label, icon, dialog) ->
-      val tag = Modifier.testTag("crm-action-${dialog.name.lowercase()}")
-      if (index == 0) {
-        Button(onClick = { open(dialog) }, modifier = tag) {
-          Icon(AglynIcons.named(icon), contentDescription = null)
-          Text(label, Modifier.padding(start = space(1f)))
-        }
-      } else {
-        OutlinedButton(onClick = { open(dialog) }, modifier = tag) {
-          Icon(AglynIcons.named(icon), contentDescription = null)
-          Text(label, Modifier.padding(start = space(1f)))
+  // Edit and the next two acts in view; the rest in the ⋮ menu, with Remove/Delete last in the error color (the
+  // spec's two or three visible actions, never a wall of outlined buttons).
+  val shown = actions.take(3)
+  val more = actions.drop(3)
+  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+    FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+      shown.forEachIndexed { index, (label, icon, dialog) ->
+        val tag = Modifier.testTag("crm-action-${dialog.name.lowercase()}")
+        if (index == 0) {
+          Button(onClick = { open(dialog) }, modifier = tag) {
+            Icon(AglynIcons.named(icon), contentDescription = null)
+            Text(label, Modifier.padding(start = space(1f)))
+          }
+        } else {
+          OutlinedButton(onClick = { open(dialog) }, modifier = tag) {
+            Icon(AglynIcons.named(icon), contentDescription = null)
+            Text(label, Modifier.padding(start = space(1f)))
+          }
         }
       }
     }
+    OverflowMenu(
+      more.map { (label, icon, dialog) ->
+        MenuAction("crm-action-${dialog.name.lowercase()}", label, icon, destructive = dialog == RecordDialog.DELETE) { open(dialog) }
+      },
+      contentDescription = "More actions for ${row.title}",
+    )
   }
 }
 

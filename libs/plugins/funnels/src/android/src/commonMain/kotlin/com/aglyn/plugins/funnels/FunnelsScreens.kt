@@ -111,12 +111,8 @@ fun FunnelsScreen(context: NativePluginContext) {
   AglynListDetail(
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
-        Row(
-          Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1f)),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(space(1f)),
-        ) {
-          Text("Funnels", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // The shared list header: the title keeps its width, and actions that do not fit beside it wrap below it.
+        com.aglyn.ui.ListHeader("Funnels") {
           if (access.canManage) {
             val full = ((live as? Live.Ready)?.value?.size ?: 0) >= Contracts.funnelsMaxPerSite
             OutlinedButton(onClick = editor::askPropose, enabled = !full, modifier = Modifier.testTag("propose-funnel")) {

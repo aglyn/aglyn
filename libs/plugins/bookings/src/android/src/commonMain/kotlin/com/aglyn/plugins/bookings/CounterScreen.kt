@@ -187,7 +187,7 @@ private fun BookingRow(booking: CounterBooking, canPay: Boolean, onPay: () -> Un
       }
     }
     if (booking.state == BookingInPersonState.PAYABLE) {
-      FilledTonalButton(onClick = onPay, enabled = canPay, modifier = Modifier.heightIn(min = 48.dp).testTag("pay-${booking.id}")) { Text("Take payment") }
+      FilledTonalButton(colors = com.aglyn.ui.aglynTonalButtonColors(), onClick = onPay, enabled = canPay, modifier = Modifier.heightIn(min = 48.dp).testTag("pay-${booking.id}")) { Text("Take payment") }
     }
   }
 }

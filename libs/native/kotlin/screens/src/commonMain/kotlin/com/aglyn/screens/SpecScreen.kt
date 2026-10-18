@@ -167,6 +167,13 @@ fun SpecScreen(
   model.createPasskey = if (session.passkeyRelyingParty != null) passkeys else null
   LaunchedEffect(key) { if (seed != null) model.seed(seed) else model.load() }
   LaunchedEffect(session.claims) { model.rebase(base) }
+  // A title drawn from the data (`{data.jobs.jobs[id=params.jobId].brief|'AI job'}`) replaces the registered one in the top
+  // bar once the data is in.
+  val screenTitle = com.aglyn.ui.LocalScreenTitle.current
+  if (!embedded && screenTitle != null && '{' in spec.title) {
+    val rendered = if (model.phase == ScreenModel.Phase.Ready) ScreenValues.render(spec.title, model.context).trim().ifEmpty { null } else null
+    LaunchedEffect(rendered) { screenTitle.value = rendered }
+  }
   var selection by remember(key) { mutableStateOf<Selection?>(null) }
   val split = !embedded && spec.blocks.any { it.type == "list" && it.flag("split") && it["open"] != null }
   val wide = currentWidthClass() != WidthClass.COMPACT
@@ -382,10 +389,7 @@ private fun SpecBodyContent(
           FilledTonalButton(
             onClick = { plugin.navigate(BILLING_ADDONS_SCREEN, emptyMap()) },
             modifier = Modifier.testTag("upsell-addons"),
-            colors = ButtonDefaults.filledTonalButtonColors(
-              containerColor = MaterialTheme.colorScheme.primaryContainer,
-              contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            ),
+            colors = com.aglyn.ui.aglynTonalButtonColors(),
           ) { Text("See add-ons") }
         },
         modifier = Modifier.testTag("spec-upsell"),
@@ -1234,8 +1238,15 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
     for (field in fields.filter { ScreenValues.condition(it.whenCondition, filled) }) {
       FieldInput(field, scope, values[field.key] ?: initialValue(field, scope)) { values[field.key] = it }
     }
-    ActionSpec.parse(block["submit"])?.takeIf { ScreenValues.condition(it.whenCondition, scope) }?.let { action ->
+    // A settings form's Save shows once something in it changed: a screen of small forms (error pages, one select each)
+    // is not a column of Save buttons. Any other submit (Send, Generate, Invite) always shows.
+    val changed = fields.any { (values[it.key] ?: initialValue(it, scope)) != initialValue(it, scope) }
+    ActionSpec.parse(block["submit"])
+      ?.takeIf { ScreenValues.condition(it.whenCondition, scope) }
+      ?.takeIf { changed || fields.isEmpty() || ScreenValues.render(it.label, scope) != "Save" }
+      ?.let { action ->
       FilledTonalButton(
+        colors = com.aglyn.ui.aglynTonalButtonColors(),
         onClick = { submit(action, visibleOnly(filled, fields)) },
         enabled = !busy && !missing,
         modifier = Modifier.align(Alignment.End).testTag("submit-${block.id}"),
