@@ -296,3 +296,12 @@ final class AppModel {
     if let link { open(link, in: navigation) }
   }
 }
+
+extension AppModel {
+  /// A stored picture (a site's favicon, a workspace's logo) as an address on the console this app talks to: the
+  /// shared resolver every screen uses (`mediaPreviewURL`).
+  func mediaURL(_ value: String?, hostID: String?, width: Int = 160) -> URL? {
+    guard let origin = api?.origin else { return nil }
+    return mediaPreviewURL(value, origin: origin, hostID: hostID, width: width)
+  }
+}

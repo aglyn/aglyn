@@ -2,6 +2,7 @@ package com.aglyn.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -16,8 +17,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import org.jetbrains.compose.resources.decodeToImageBitmap
@@ -60,6 +64,19 @@ fun RemoteImage(
   contentScale: ContentScale = ContentScale.Crop,
   icon: String = "image",
 ) {
+  val shown = rememberRemoteBitmap(url)
+  if (shown != null) {
+    Image(shown, contentDescription, modifier, contentScale = contentScale)
+  } else {
+    Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+      Icon(AglynIcons.named(icon), contentDescription, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+  }
+}
+
+/** The decoded image at [url] (cached), or null while it loads, with no loader, or when it cannot be read. */
+@Composable
+private fun rememberRemoteBitmap(url: String?): ImageBitmap? {
   val loader = LocalImageLoader.current
   var image by remember(url) { mutableStateOf(url?.let(ImageCache::get)) }
   LaunchedEffect(url, loader) {
@@ -72,13 +89,21 @@ fun RemoteImage(
       null
     }
   }
-  val shown = image
-  if (shown != null) {
-    Image(shown, contentDescription, modifier, contentScale = contentScale)
+  return image
+}
+
+/**
+ * A brand picture in a small square: a workspace's logo or a site's favicon, its dark-theme art in dark mode when there
+ * is one, and [fallback] (the kit's icon) while there is none, while it loads, or when it fails.
+ */
+@Composable
+fun BrandPicture(url: String?, darkUrl: String? = null, size: Dp, shape: Shape, fallback: @Composable () -> Unit) {
+  val shown = (if (isSystemInDarkTheme()) darkUrl else null) ?: url
+  val image = rememberRemoteBitmap(shown)
+  if (image != null) {
+    Image(image, contentDescription = null, modifier = Modifier.size(size).clip(shape), contentScale = ContentScale.Crop)
   } else {
-    Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-      Icon(AglynIcons.named(icon), contentDescription, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+    fallback()
   }
 }
 

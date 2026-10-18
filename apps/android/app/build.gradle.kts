@@ -26,7 +26,9 @@ android {
     // Every store upload needs a higher code: tools/scripts/native-release.mjs passes
     // -Paglyn.versionCode=<minutes since 1970, UTC>, which stays under Play's 2,100,000,000 for millennia.
     versionCode = setting("versionCode", "1").toInt()
-    versionName = "0.1.0"
+    // The repo's release version (the root package.json): tools/scripts/native-release.mjs passes
+    // -Paglyn.versionName, so a store build and the web name one release. 1.0.0 is Xcode's default too.
+    versionName = setting("versionName", "1.0.0")
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     // The console host whose sign-up, verification and reset links open the app (App Links, verified by the console's
     // assetlinks.json).

@@ -158,7 +158,9 @@ data class ListingRow(
 
   companion object {
     fun from(doc: FirestoreDoc): ListingRow {
-      fun image(key: String) = doc.text(key)?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+      // The stored picture as the listing editor keeps it (a reference, a CDN path or an https address); the screen
+      // resolves it against the console with `mediaPreviewUrl`, as the console's listing image resolves it.
+      fun image(key: String) = doc.text(key)?.ifEmpty { null }
       return ListingRow(
         id = doc.id,
         name = doc.text("displayName") ?: doc.id,

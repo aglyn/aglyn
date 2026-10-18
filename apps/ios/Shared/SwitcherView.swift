@@ -15,7 +15,8 @@ struct SwitcherView: View {
     NavigationStack {
       Group {
         if let workspace = model.workspace {
-          List {
+          // A grouped form, so a section's title sits above its rows and never floats over the first one.
+          Form {
             Section("Workspace") {
               if !workspace.ready && workspace.orgs.isEmpty {
                 SkeletonRows(count: 2)
@@ -24,7 +25,11 @@ struct SwitcherView: View {
                 Button {
                   workspace.selectOrg(org.id)
                 } label: {
-                  AglynRow(org.name, subtitle: org.role.capitalized, systemImage: "building.2") {
+                  AglynRow(
+                    org.name, subtitle: org.role.capitalized, systemImage: "building.2",
+                    imageURL: model.mediaURL(workspace.orgLogos[org.id]?.light, hostID: nil),
+                    darkImageURL: model.mediaURL(workspace.orgLogos[org.id]?.dark, hostID: nil)
+                  ) {
                     if org.id == workspace.org?.id { checkmark }
                   }
                 }
@@ -48,7 +53,10 @@ struct SwitcherView: View {
                     workspace.selectSite(site.id)
                     dismiss()
                   } label: {
-                    AglynRow(site.name, subtitle: site.subdomain, systemImage: "globe") {
+                    AglynRow(
+                      site.name, subtitle: site.subdomain, systemImage: "globe",
+                      imageURL: model.mediaURL(site.favicon, hostID: site.id)
+                    ) {
                       if site.id == workspace.site?.id { checkmark }
                     }
                   }
@@ -59,8 +67,11 @@ struct SwitcherView: View {
               }
             }
           }
+          .formStyle(.grouped)
           .sensoryFeedback(.selection, trigger: workspace.effective)
           .aglynListBackground()
+          // Each workspace's logo, read from its own document as the console's switcher reads them.
+          .task(id: workspace.orgs.map(\.id)) { workspace.loadLogos(workspace.orgs.map(\.id)) }
         } else {
           ProgressView()
         }

@@ -440,6 +440,13 @@ func formatCents(_ cents: Int64, currency: String? = "usd") -> String {
   return value.formatted(.currency(code: code).precision(.fractionLength(value.rounded() == value ? 0 : 2)))
 }
 
+/// A list row's second line: the organization parts when there are any, else the fallback (the email address).
+/// An address shares no line with anything else, since it has no break point and would wrap mid-word.
+func crmRowLine(_ parts: [String?], fallback: String?) -> String {
+  let line = parts.compactMap { $0 }.joined(separator: " · ")
+  return line.isEmpty ? fallback ?? "" : line
+}
+
 func crmRow(_ kind: CrmKind, _ doc: FirestoreDocument, _ scope: CrmScope, stages: [String: String] = [:]) -> CrmRow {
   let data = kind == .contact ? contactView(doc.data, groupID: scope.groupID) : doc.data
   func s(_ key: String) -> String? { (data[key] as? String).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } }
@@ -447,12 +454,12 @@ func crmRow(_ kind: CrmKind, _ doc: FirestoreDocument, _ scope: CrmScope, stages
   case .lead:
     return CrmRow(
       id: doc.id, kind: kind, title: s("name") ?? s("email") ?? "Lead",
-      subtitle: [s("email") == s("name") ? nil : s("email"), s("company")].compactMap { $0 }.joined(separator: " · "),
+      subtitle: crmRowLine([s("company")], fallback: s("email") == s("name") ? nil : s("email")),
       chip: s("statusLabel") ?? s("status").map(leadStatusLabel), data: data)
   case .contact:
     return CrmRow(
       id: doc.id, kind: kind, title: s("name") ?? s("email") ?? "Contact",
-      subtitle: [s("email") == s("name") ? nil : s("email"), s("companyName"), s("jobTitle")].compactMap { $0 }.joined(separator: " · "),
+      subtitle: crmRowLine([s("companyName"), s("jobTitle")], fallback: s("email") == s("name") ? nil : s("email")),
       chip: stageLabel(s("lifecycleStage")), data: data)
   case .company:
     let count = (data["contactsCount"] as? NSNumber)?.intValue ?? 0

@@ -45,7 +45,7 @@ import com.aglyn.site.media.ChosenMedia
 import com.aglyn.site.media.MediaApi
 import com.aglyn.site.media.MediaChooserDialog
 import com.aglyn.site.media.MediaScope
-import com.aglyn.site.media.mediaPreviewUrl
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.EmptyState

@@ -323,6 +323,17 @@ class ConsolePosDeviceApiTest {
   }
 
   @Test
+  fun aLogoFromTheSitesLibraryIsServedFromTheConsoleTheScreenIsPairedWith() = runTest {
+    // The route resolves a library logo to a path on the console's media CDN; a path is not an address on its own.
+    val paired = api(
+      mutableListOf(),
+      """{"token":"abc","mode":"kiosk","branding":{"name":"Corner Cafe","logoUrl":"/api/media/cdn/h1/logo","logoDarkUrl":"media:h1/dark","message":"Hi"}}""",
+    ).pair("123456", PosDeviceMode.KIOSK)
+    assertEquals("https://console.test/api/media/cdn/h1/logo?w=640", paired.branding?.logoUrl)
+    assertEquals("https://console.test/api/media/cdn/h1/dark?w=640", paired.branding?.logoDarkUrl)
+  }
+
+  @Test
   fun aPollCarriesTheTokenInItsHeaderAndReadsTheScreen() = runTest {
     val seen = mutableListOf<Seen>()
     val answer = api(

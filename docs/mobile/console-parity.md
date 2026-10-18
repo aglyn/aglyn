@@ -1,13 +1,29 @@
 # Console parity in the native apps
 
-Zach, 2026-10-07: everything you can do on the website you can do in the
-app. Every console area is a native screen on iPhone, iPad, Android phone and
-tablet, Mac and Windows. Only the Besigner opens, in the in-app web view
-(`native-architecture.md`, "Native console, Besigner-only web view").
+The rule since 2026-10-07: everything you can do on the website you can do in
+the app. Every console area is a native screen on iPhone, iPad, Android phone
+and tablet, Mac and Windows. Only the Besigner opens in the in-app web view
+(`native-architecture.md`, "Native console, Besigner-only web view"). A site's
+live address, its preview and any plain web link open in the apps' in-app web
+sheet, which has Open in browser (#1705 Android and desktop, #1712 Apple).
 
-This is the checklist. A row is done when its screens and actions work on BOTH
-platform trees (SwiftUI and Compose), verified on the seeded emulator stack.
-The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
+This is the checklist. A box is ticked only when the row's screens and actions
+were driven in the running apps on the seeded local stack (Firebase emulators,
+`tools/scripts/seed-native-emulator.mjs` and a real local console), on every
+device of that platform tree:
+
+- Apple (SwiftUI): iPhone and iPad in the Simulator, and the Mac app through a
+  local XCUITest driver.
+- Kotlin (Compose): Android phone and tablet in the emulator.
+
+Unit tests and builds do not tick a box. The Windows desktop build shares the
+Kotlin tree, but it was not driven: on Windows the rows are verified by
+`desktopTest` and builds only, so a Kotlin tick covers Android phone and
+tablet. When the main flow of a row was driven but a part of it was not
+(because the local stack cannot host it, or no drive reached it), the box stays
+ticked and the part is listed under "Not yet driven" below, so a tick never
+hides it. A row or platform that was not driven is unticked and listed there
+too. The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 
 | area | console routes / plugin | lane | Apple | Kotlin |
 | -- | -- | -- | -- | -- |
@@ -15,7 +31,7 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Orders, products, stock, sales | `commerce` | leads | [x] | [x] |
 | POS register, readers, kiosk | `commerce` POS, `kiosk/[pluginId]` | leads | [x] | [x] |
 | Redirects | `redirects` | leads | [x] | [x] |
-| Commerce integrations cards | `accounting`, `shipping`, `post-purchase`, `tax-engines`, `marketing-platforms`, `fulfillment-networks`, `couriers`, `sales-channels` | next lane | [x] | [x] |
+| Commerce integrations cards | `accounting`, `shipping`, `post-purchase`, `tax-engines`, `marketing-platforms`, `fulfillment-networks`, `couriers`, `sales-channels` | next lane | [ ] | [ ] |
 | Sites, pages and their versions | `hosts/[host]/screens/*` (opening a page = Besigner) | AGL-3668 | [x] | [x] |
 | Components, layouts, templates | `hosts/[host]/components/*`, `layouts/*`, `templates/*` (lists native, editing = Besigner) | AGL-3668 | [x] | [x] |
 | Site setup | `hosts/[host]/setup/{details,business,emails,seo,theme,tracking,integrations}`, `theme` (the theme's Advanced overrides are a raw JSON editor: not built, people are not asked to write code) | AGL-3668 | [x] | [x] |
@@ -23,12 +39,12 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Media | `hosts/[host]/media`, `[orgSlug]/media` (`video-delivery` has no console page: it is server-side only) | AGL-3668 | [x] | [x] |
 | Forms and submissions | `forms` | AGL-3668 | [x] | [x] |
 | Datasets and data | `data`, `[orgSlug]/data` | AGL-3668 | [x] | [x] |
-| Fonts, theme presets, logic | `fonts`, `theme-presets`, `logic` | AGL-3668 | [x] | [x] |
-| Plugin marketplace | `marketplace` (browse, listings, install, my installs and licenses native) | AGL-3668 | [x] | [x] |
+| Fonts, theme presets, logic | `fonts`, `theme-presets`, `logic` | AGL-3668 | [ ] | [ ] |
+| Plugin marketplace | `marketplace` (browse, listings, install, my installs and licenses native) | AGL-3668 | [ ] | [ ] |
 | CRM | `crm` | AGL-3669 | [x] | [x] |
 | Inbox | `inbox` | AGL-3669 | [x] | [x] |
 | Emails, campaigns, funnels, texts | `email`, `marketing`, `funnels`, `sms` (email design = Besigner) | AGL-3669 | [x] | [x] |
-| Sequences (internal only) | `outreach`, where the console shows it | AGL-3669 | [x] | [x] |
+| Sequences (internal only) | `outreach`, where the console shows it | AGL-3669 | [ ] | [ ] |
 | Bookings, events calendar | `bookings`, `events-calendar` | AGL-3670 | [x] | [x] |
 | Analytics | `hosts/[host]/analytics` | AGL-3670 | [x] | [x] |
 | Automations | `workflows` | AGL-3670 | [x] | [x] |
@@ -40,33 +56,168 @@ The owning lane ticks its own rows: `[x]` Apple · `[x]` Kotlin.
 | Billing and usage | `billing`, `[orgSlug]/billing/*` (paying = Stripe's hosted pages) | AGL-3671 | [x] | [x] |
 | Your account | `manage/user/*`, `manage/report-issue` | AGL-3671 | [x] | [x] |
 | Support | `support`, `[orgSlug]/support/*` | AGL-3671 | [x] | [x] |
-| Staff | `admin/*` (staff claims only) | AGL-3667 in AGL-3671 | [x] | [x] |
+| Staff | `admin/*` (staff claims only) | AGL-3667 in AGL-3671 | [ ] | [x] |
+
+### Driven, 2026-10-16 to 2026-10-18
+
+"All five" is iPhone and iPad (Simulator), Mac (XCUITest), Android phone and
+Android tablet (emulator), each against the seeded local stack. The lanes are
+the smoke test (AGL-3851: apple-smoke, android-smoke), the POS cards lane, the
+two design lanes and the AGL-3841 commerce lane. A pull request named here
+carries a fix the drive found, or its body records the drive.
+
+| area | driven on | by |
+| -- | -- | -- |
+| Home, site switcher | all five | apple-smoke (25 Home quick actions on iPhone; #1677 on Mac; #1745 Home site card), android-smoke |
+| Orders, products, stock, sales | all five | AGL-3841 lane (iPhone, iPad, Android phone and tablet), apple-smoke on Mac (create, edit, duplicate, delete), android-smoke (#1684 delete closes the detail), android-design (#1741 product form) |
+| POS register, readers, kiosk | all five | POS cards lane (#1664: typed card 4242, decline, 3-D Secure, cash, smart and Bluetooth readers, readers screen), apple-smoke (register, cash, refund, receipt on iPhone; kiosk pairing #1748), apple-design (#1745 iPad cash sale, receipt and printers; Mac printers), android-smoke (POS phone and tablet walks), android-design (#1737 printers, #1719 photos, #1750 shift reports and the return dialog) |
+| Redirects | all five | apple-smoke (#1677 delete on Mac), android-smoke |
+| Commerce integrations cards | Mac, Android phone and tablet (opening the list only) | apple-smoke, android-smoke (#1688: a card shows only where its console card draws) |
+| Sites, pages and their versions | all five | apple-smoke (#1721 iPhone delete; Besigner edit, save and publish on iPhone, iPad and Mac), apple-design (#1716 Pages tree on iPad), android-smoke (#1715 Besigner on the phone), android-design (#1710 Pages tree on phone and tablet) |
+| Components, layouts, templates | all five | apple-smoke, android-smoke (new, duplicate, save as template, publish to marketplace refusal, #1684) |
+| Site setup | all five | apple-smoke, android-smoke (Theme library, #1688) |
+| Content collections | all five | apple-smoke, android-smoke (new, publish, unpublish, delete, #1684 phone banners) |
+| Media | all five | apple-smoke (Mac grid and detail), android-smoke (upload, edit image, delete) |
+| Forms and submissions | all five | apple-smoke, android-smoke |
+| Datasets and data | all five | apple-smoke, android-smoke (records add, edit, delete; dataset delete copy, #1688) |
+| Fonts, theme presets, logic | all five (logic) | apple-smoke, android-smoke (variables, functions, reference health) |
+| Plugin marketplace | Mac (Browse, empty), Android phone and tablet (Browse, Installed, Licenses, Publish hub) | apple-smoke, android-smoke |
+| CRM | all five | apple-smoke (contact create, edit, remove on Mac), android-smoke (#1688 deal stages), android-design (#1741 record header) |
+| Inbox | all five | apple-smoke, android-smoke |
+| Emails, campaigns, funnels, texts | all five | apple-smoke (#1677 funnel delete), android-smoke (#1688 and #1739 email states) |
+| Sequences (internal only) | none recorded | |
+| Bookings, events calendar | all five | apple-smoke (Mac week calendar, event create), apple-design (#1745 iPad Bookings), android-smoke (check in, Upcoming default, #1684) |
+| Analytics | all five | apple-smoke (#1677), android-smoke (#1688, #1739 referrers) |
+| Automations | all five | apple-smoke, apple-design (iPhone workflow quota), android-smoke |
+| Notifications and their settings | all five | apple-smoke (#1685 every seeded notification opens its screen; #1744 AI job links), apple-design (sound picker on iPhone, #1713), android-smoke (deep links, #1738 AI job links), android-design (sound picker on phone and tablet, #1707) |
+| AI | all five (jobs and job links) | apple-smoke (#1744), android-smoke (#1738) |
+| Site admin | all five | apple-smoke (#1677 Site activity), android-smoke |
+| Workspace settings | all five | apple-smoke, android-smoke |
+| Team and roles | all five | apple-smoke, android-smoke (invite sent, revoke), android-design (#1746 activity in words) |
+| Billing and usage | all five | apple-smoke, android-smoke |
+| Your account | all five | apple-smoke, android-smoke (support ticket opened, close account screen), android-design (#1750 profile photo) |
+| Support | all five | apple-smoke, android-smoke |
+| Staff | Android phone and tablet | android-smoke (the staff pages in the phone and tablet walks) |
+
+Light and dark: the design lanes walked both apps in light and dark (#1745 on
+the Mac; #1741 and #1750 on Android phone and tablet). Late polish from
+the store screenshot shoot is in #1754, which was open when this was written.
 
 ## Sign in, sign up and first run (AGL-3819, AGL-3816)
 
 The apps are a direct alternative to the web app before sign-in too: every
 door of the console's `(auth)` pages, through the console's own routes in the
 console's order, with the same server checks (`beforeSignupCreate`, the abuse
-and fraud checks, the signups lockdown). The Kotlin column covers Android and
-the Windows desktop build; a row the desktop answers through the console
-hand-off says so.
+and fraud checks, the signups lockdown). The Kotlin column records the
+Android phone and tablet drives; the Windows desktop build shares the code and
+was not driven. A row the desktop answers through the console hand-off says
+so. Rows that need a real account with a provider, or a real device, are
+unticked until someone drives them; "Not yet driven" says what each needs.
 
 | door | console routes | Apple | Kotlin |
 | -- | -- | -- | -- |
 | Sign in with email and password, retrying with the primary address when the typed one is a confirmed secondary | `/signin`, `/api/auth/resolve-identifier` | [x] | [x] |
 | Sign up: name, workspace name (`signupOrgNameField`), email, password; the Terms of Service and Privacy Policy agreement and its acceptance record; the product-updates opt-in | `/signup`, `/api/auth/legal-acceptance`, `/api/auth/acquisition`, `/api/auth/marketing-consent` | [x] | [x] |
-| The plan and campaign a sign-up link carries (`aglyn://signup?plan=…`, the console's `/signup?plan=…`), kept on the account and landing the new workspace on billing | `/signup`, `users/{uid}.onboardingPlanIntent`, `users/{uid}.signupCampaign` | [x] | [x] |
-| The signups-paused notice | `/api/lockdown-status?feature=signups` | [x] | [x] |
+| The plan and campaign a sign-up link carries (`aglyn://signup?plan=…`, the console's `/signup?plan=…`), kept on the account and landing the new workspace on billing | `/signup`, `users/{uid}.onboardingPlanIntent`, `users/{uid}.signupCampaign` | [ ] | [ ] |
+| The signups-paused notice | `/api/lockdown-status?feature=signups` | [ ] | [ ] |
 | Email verification: sent on arrival, resend, re-checked every few seconds and on return, "I’ve verified — continue", and the emailed link confirming in the app | `/verify-email`, `/api/auth/send-verification` | [x] | [x] |
 | First verified session: the workspace the sign-up named created once, the AGL-1523 notice with "Create it now", and "Create an organization" | the `(home)` chooser, `/api/orgs/create` | [x] | [x] |
 | Account recovery and choosing a new password from the emailed link | `/account-recovery`, `/reset-password`, `/api/auth/send-password-reset` | [x] | [x] |
-| Passkey sign-in (shown once the build has a relying party) | `/api/auth/passkeys/signin/*` | [x] | [x] |
-| Continue with Google, sign in and sign up; a new person goes through the agreement and the workspace step (AGL-1415, AGL-1497) | `/signin`, `/signup` | [x] | [x] |
-| Sign in with Apple, sign in and sign up (App Store guideline 4.8) | `apple.com` through `accounts:signInWithIdp` | [x] | n/a |
-| Single sign-on, through the console in the system auth session and a one-time hand-off back to the app; an address on an SSO domain is routed there from the email field and signs in as its tenant account | `/sso`, `/api/auth/sso-lookup`, `/api/auth/sso-jit`, `/auth/native`, `/api/auth/native-handoff/*` | [x] | [x] |
-| Desktop (Windows) sign in and sign up through the console and the same hand-off, with console-minted App Check tokens for the signed-in session | `/signin`, `/signup`, `/auth/native`, `/api/auth/native-app-check` | n/a | [x] |
-| The workspace switcher pages past 50 workspaces ("Load more workspaces") | `use-org-scope` `loadMoreOrgs` | [x] | [x] |
-| Workspace invites: the invite email opens the app, and pending invites are answered from the empty workspace list (an existing member's arrive as notifications) | `/api/orgs/invites?mine=1`, `/api/orgs/invites` | [x] | [x] |
+| Passkey sign-in (shown once the build has a relying party) | `/api/auth/passkeys/signin/*` | [ ] | [ ] |
+| Continue with Google, sign in and sign up; a new person goes through the agreement and the workspace step (AGL-1415, AGL-1497) | `/signin`, `/signup` | [ ] | [ ] |
+| Sign in with Apple, sign in and sign up (App Store guideline 4.8) | `apple.com` through `accounts:signInWithIdp` | [ ] | n/a |
+| Single sign-on, through the console in the system auth session and a one-time hand-off back to the app; an address on an SSO domain is routed there from the email field and signs in as its tenant account | `/sso`, `/api/auth/sso-lookup`, `/api/auth/sso-jit`, `/auth/native`, `/api/auth/native-handoff/*` | [ ] | [x] |
+| Desktop (Windows) sign in and sign up through the console and the same hand-off, with console-minted App Check tokens for the signed-in session | `/signin`, `/signup`, `/auth/native`, `/api/auth/native-app-check` | n/a | [ ] |
+| The workspace switcher pages past 50 workspaces ("Load more workspaces") | `use-org-scope` `loadMoreOrgs` | [ ] | [ ] |
+| Workspace invites: the invite email opens the app, and pending invites are answered from the empty workspace list (an existing member's arrive as notifications) | `/api/orgs/invites?mine=1`, `/api/orgs/invites` | [ ] | [ ] |
+
+Driven: email sign-in on all five, and a wrong password, session restore on
+relaunch and the single sign-on sheet opened and canceled on iPhone
+(apple-smoke, android-smoke); sign-up with the agreement, verification and the
+held workspace on the Mac, and Create an organization on iPhone, where the new
+workspace now shows at once (#1749); on the Android tablet, single sign-on
+against an emulator tenant and a test identity provider, the hand-off back to
+the app (fixed in #1714), then sign-out and an email sign-in in the same run.
+The 2026-10-18 release summary records sign-up and recovery as driven on every
+platform. Aglyn POS was signed in and used on all five (#1664).
+
+## Not yet driven
+
+Unticked rows and platforms, and what each needs:
+
+- Commerce integrations cards (Apple, Kotlin): only the Connected services list
+  was opened (Mac, Android phone and tablet). The seeded stack connects none of
+  these services, so after #1688 only Review platforms and Sales channels show,
+  and only those two were opened (Android). The accounting, shipping,
+  post-purchase, tax service, fulfillment network and courier cards need a site
+  with each service connected in test mode, and were not opened on any device.
+- Plugin marketplace (Apple, Kotlin): the seed has no marketplace listings, so
+  Browse was empty wherever it was opened (Mac, Android phone and tablet). A
+  listing's page, install, purchase and update, and the seller panel, were not
+  driven. Installed, Licenses and the Publish hub were opened on Android, and a
+  component's publish to the marketplace showed the publisher-profile refusal.
+  No record names the marketplace on iPhone or iPad. It needs a seeded
+  listing.
+- Fonts, theme presets, logic (Apple, Kotlin): logic was driven on all five; no
+  drive record names the Fonts or Theme presets screens.
+- Sequences (Apple, Kotlin): no drive record names the Sequences screens.
+- Staff (Apple): the staff section was not driven on iPhone, iPad or Mac. It
+  was driven on the Android phone and tablet.
+- Sign-up link with a plan and campaign (Apple, Kotlin): not driven.
+- Signups-paused notice (Apple, Kotlin): not driven; it needs the signups
+  lockdown turned on in the local stack.
+- Passkey sign-in (Apple, Kotlin): not driven; it needs a build with a relying
+  party and a real device that holds a passkey.
+- Continue with Google (Apple, Kotlin): not driven; the local stack has no
+  Google provider (#1705). It needs a real Google account on a signed build.
+- Sign in with Apple (Apple): not driven; it needs a real Apple Account on a
+  signed build and a real device.
+- Single sign-on (Apple): on the iPhone Simulator the sheet opened and was
+  canceled, and a full SSO sign-in in the app was made once on a real iPhone in
+  production after #1714 shipped. It was not driven on iPad or Mac, and the
+  routing from the email field was not recorded. The production sign-in from
+  iPhone Safari that must leave exactly one device row is AGL-3843 (real
+  device).
+- Desktop (Windows) sign in and sign up (Kotlin): not driven; `desktopTest` and
+  builds only.
+- Workspace switcher past 50 workspaces (Apple, Kotlin): not driven.
+- Workspace invites (Apple, Kotlin): sending an invite was driven on Android
+  (Team); the invite email opening the app and answering a pending invite from
+  the empty workspace list were not driven on either platform.
+
+Parts of ticked rows that no drive reached:
+
+- POS register: Tap to Pay takes no tap in a Simulator or emulator (an iPad has
+  no Tap to Pay, the Android emulator has no NFC), so it needs a real device.
+  Offline cash sales, the customer display, gift cards, store credit, a room
+  charge, the QR payment page itself and the delivery-app queue (no delivery
+  service is connected on the seeded stack) were not driven. Fast typing in
+  the Mac card fields is recorded as owed (#1664). The customer lookup was
+  driven on Android (#1741), and the shift X and Z reports only on the Android
+  phone (#1751 on Apple was built and unit-tested). Receipt printers were not
+  driven on iPhone.
+- Media: Undo after a delete could not restore, because the Storage emulator
+  has no object restore. It needs a real Storage bucket.
+- Emails, campaigns, funnels, texts: the local stack has no text provider, so
+  Customer texts showed only its not-set-up notice, and a receipt sent by text
+  was not driven.
+- Notifications: on Apple the sound pick and a Simulator push were checked; on
+  Android the picker and its nine channels were, but no push reached the
+  emulator (the debug build receives no FCM, #1707). A real push playing the
+  picked sound has not been confirmed on a device yet. Push delivery itself
+  was confirmed on a real iPhone and Mac in production. Android push on a real
+  device is AGL-3852.
+- AI: Create with AI (AGL-3854) was driven on Android only; no record shows it
+  on iPhone, iPad or Mac.
+- Billing and usage: no drive record shows Stripe's hosted Checkout or Customer
+  Portal opened from the apps.
+- Sign in with email: the retry with the primary address, when the typed one
+  is a confirmed secondary, was not recorded.
+- Sign up: on the iPhone and iPad Simulators, the lane notes record the
+  Simulator's AutoFill strong-password cover blocking the sign-up form; the
+  lane tables record sign-up on the Mac. The emailed verification link and the
+  emailed reset-password link opening the app, and the AGL-1523 notice, were
+  not recorded on either platform.
 
 ## Staff gaps (AGL-3667)
 
@@ -74,8 +225,10 @@ The audit of every page under the console `admin/*` route and the plugin staff
 pages that render at `/admin/{id}` (`apps/console/app/(app)/admin`,
 `constants/admin-nav-tabs.ts`, the `staffPages` of the AI and marketplace
 plugins), against `libs/native/screens/staff.screens.json` and the AI plugin's
-`ai.signals`. The Staff row above is ticked on both platforms because every
-line here is done; each line names the console source it was read from.
+`ai.signals`. Every line here is built, and each names the console source it
+was read from. The Staff row above is ticked for Kotlin because the Android
+phone and tablet walks drove the staff pages; it stays unticked for Apple
+until the staff section is driven there (see "Not yet driven").
 
 | page | what the console has that the screens lack | state |
 | -- | -- | -- |
@@ -115,23 +268,39 @@ line here is done; each line names the console source it was read from.
 | Do not contact | The list read `createdAt` (the rows carry `updatedAt`) and the record form lacked how it arrived, the channels, the erase-the-number switch and the account uid; the count of active numbers is back. Now the console's form (calls and texts, calls, or texts, where the console toggles two chips and refuses none) and "Opted back in" | done |
 | Disabled files | The screen sent a quarantine the route refused (no workspace or site, no `by: media`) and read a `records` list. Rebuilt: look a file up by workspace or site and media id, what is set right now (each key, what it reaches, the digest warnings, the trash note, what disabling will and will not do from `media-takedown-reach.ts`), disable (reason, auto-lift hours, customer message, internal note, only this copy, kill the raw link) and release, the whole deny list with its filters and search and a per-key release, the used and clearable counts. "Actions taken in this session" is kept as on Lockdown (`quarantine-log-lines.ts`), and the full-list banners are carried: the lookup and the deny list say the list is FULL (the route sends `full`), and a file not already on a full list cannot be disabled (`takedownBlocked`), as the console's button is disabled | done |
 
-POS register, readers, kiosk: ticked on both platforms. Everything the console
-register does is native, verified by tests and builds (no app was launched): the
-register, returns, the customer lookup, the last receipt and printing (cloud
-printer, then the device's print sheet, as the console prints), offline cash
-sales, the customer display, the self-service kiosk and its queue, every tender
-(cash, card readers and Tap to Pay, the typed card in Stripe's own card form,
-gift cards, store credit, a room charge, the QR payment page), the delivery-app
-queue in the register's `posOrders` zone (the delivery-apps plugin's own native
-package), and the shift, cashier PIN and drawer operations. The typed card is on
-iPhone, iPad and Android phone and tablet, where Stripe has a card SDK; the Mac
-and desktop registers take cards on smart readers and the QR payment page.
+POS register, readers, kiosk: ticked on both platforms, driven in Aglyn POS on
+all five against the seeded stack and a Stripe test-mode connected account.
+Everything the console register does is native: the register, returns, the
+customer lookup, the last receipt and printing (cloud printer, then the
+device's print sheet, as the console prints), offline cash sales, the customer
+display, the self-service kiosk and its queue, every tender (cash, card readers
+and Tap to Pay, the typed card, gift cards, store credit, a room charge, the QR
+payment page), the delivery-app queue in the register's `posOrders` zone (the
+delivery-apps plugin's own native package), and the shift, cashier PIN and
+drawer operations. The typed card goes through Aglyn POS's own native card
+fields on iPhone, iPad and Mac (tokenized with the site's publishable key) and
+through Stripe's own form on Android phone and tablet (#1664).
+
+What was driven (#1664, #1718, #1719, #1737, #1745, #1748, #1750): the typed
+card with 4242 (paid, sale recorded, receipt), a declined card (no sale, cart
+kept, every tender still offered) and a 3-D Secure card (refused or canceled,
+no sale) on all five; cash with change on all five; a test-mode smart reader
+paired and collecting on iPhone, Mac and Android phone and tablet; a simulated
+Bluetooth reader on iPhone, iPad and Android phone and tablet (between them:
+find, connect, update, collect, disconnect and forget); the readers screen on
+all five; a refund and its receipt on iPhone and the return dialog on Android;
+product photos on the register tiles on all five; receipt printers added, test
+printed and removed on iPad and Mac, and on Android phone and tablet also the
+open drawer, settings and Regenerate URL actions; kiosk pairing and its tiles
+on iPhone, Mac and Android phone and tablet; shift X and Z reports on the
+Android phone.
 
 Orders, products, stock, sales: ticked on both platforms (AGL-3841), driven in
 the running apps on iPhone, iPad and Android phone and tablet against the seeded
-emulator stack. Everything the console's Orders and Products pages do is
-native: the list filters (any clause the grid takes, through the shared filter
-bar) and every header sort; Fulfill items with carrier, tracking and shipping
+emulator stack, and on the Mac by the smoke test (orders list and detail,
+product create, edit, duplicate and delete). Everything the console's Orders
+and Products pages do is native: the list filters (any clause the grid takes,
+through the shared filter bar) and every header sort; Fulfill items with carrier, tracking and shipping
 cost, each shipment's Edit tracking, Cancel shipment and Print label; Refund
 and Refund line; the dispute and payment-risk notices; Draft order, Export for
 shipping and Import tracking; View customer in CRM (the CRM's Contacts list
@@ -161,7 +330,8 @@ Setup's Integrations section (the cards of the plugins running on the site)
 - Site setup, deliberately not built: the theme's Advanced overrides, a raw
   JSON editor. Everything else in the row is native, including the AI plugin's
   widgets in the Business profile and SEO areas.
-- Plugin marketplace: ticked again (AGL-3668). Publishing a plugin (its
+- Plugin marketplace: built (AGL-3668), unticked until a listing is driven
+  (see "Not yet driven"). Publishing a plugin (its
   bundle and manifest, the listing and every publisher statement), a
   component, layout, site template, theme, dataset schema, email template or
   email starter; the publisher agreement asked for and resumed by every
@@ -181,8 +351,9 @@ state. The AI plugin's `ai.create` screen reads `/api/ai/create` (whether the en
 as what, the brief's words and choices, a template's collections, the month's credits) and
 follows the job through `/api/ai/create/:jobId` (plan, estimated cost, Confirm, Cancel, the draft
 opened natively or in the Besigner); it starts, confirms and cancels through the console's own
-jobs routes. Driven on the Android phone and tablet against the local stack; the iPhone and iPad
-run waits on the Simulator (see the issue).
+jobs routes. Driven on the Android phone and tablet against the local stack. No drive record
+shows it on iPhone, iPad or Mac yet (see "Not yet driven"); the AI job screen and AI job links
+were driven on iPhone and Mac (#1744).
 
 The media library's "Default sharing for new media" card is in Workspace
 settings, where the apps keep the workspace's defaults.

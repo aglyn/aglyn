@@ -337,7 +337,7 @@ describe('the notification settings page (AGL-3226)', () => {
     ).toBe(true)
     expect(
       isOn(screen.getByRole('switch', { name: 'Platform growth — Email' })),
-    ).toBe(false)
+    ).toBe(true)
   })
 
   it('saves the picked notification sound to the account and lists Xylophone as the default', async () => {

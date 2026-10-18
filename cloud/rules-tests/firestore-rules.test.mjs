@@ -7518,6 +7518,37 @@ describe("the stock photo search cache is the server's alone (AGL-3660)", () => 
   })
 })
 
+describe("the empty-site removal markers are the server's alone (AGL-3936)", () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'aiEmptySiteSweeps', 'host-1'), {
+        hostId: 'host-1',
+        orgId: ORG,
+        jobId: 'job-1',
+        dueAt: new Date(Date.now() + 3_600_000),
+      })
+    })
+  })
+
+  it('nobody reads, writes or deletes one from a client, staff included', async () => {
+    const principals = [
+      ['the owner', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+      ['super staff', authed(STAFF, { staff: true, staffRole: 'super' })],
+      ['anonymous', anon()],
+    ]
+    for (const [who, db] of principals) {
+      await mustDeny(`${who} reading a marker`, getDoc(doc(db, 'aiEmptySiteSweeps', 'host-1')))
+      // A marker a client could write would point the beat at a site of its choosing.
+      await mustDeny(
+        `${who} writing a marker`,
+        setDoc(doc(db, 'aiEmptySiteSweeps', 'host-2'), { hostId: 'host-2', orgId: ORG, jobId: 'job-2' }),
+      )
+      await mustDeny(`${who} deleting a marker`, deleteDoc(doc(db, 'aiEmptySiteSweeps', 'host-1')))
+    }
+  })
+})
+
 /**
  * The host half of AGL-1501 (AGL-1507): `suspendedAt`/`suspendedReasonCode`/
  * `suspendedMessage`/`suspendedUntilMs` on `hosts/{hostId}` are the STAFF

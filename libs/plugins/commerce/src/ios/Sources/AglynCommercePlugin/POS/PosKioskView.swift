@@ -128,7 +128,7 @@ private struct KioskBody: View {
   }
 
   @ViewBuilder private var screen: some View {
-    let branding = model.context.map { PosDeviceBranding.from($0.branding) }
+    let branding = model.context.map { PosDeviceBranding.from($0.branding, origin: origin) }
     switch model.phase {
     case .start:
       PosDeviceBrandScreen(branding: branding, title: nil, message: branding?.message ?? "Order here", busy: false) {
@@ -139,7 +139,7 @@ private struct KioskBody: View {
     case .menu:
       KioskMenuView(model: model, origin: origin, onProduct: tap, onCart: { cartOpen = true })
     case .review:
-      if let sale = model.sale { KioskReviewView(model: model, sale: sale) }
+      if let sale = model.sale { KioskReviewView(model: model, sale: sale, branding: branding) }
     case .tip(let method):
       if let sale = model.sale, let context = model.context {
         DeviceScroll(branding: branding, notice: nil) {
@@ -193,11 +193,12 @@ private struct KioskBody: View {
 extension PosKioskProduct: @retroactive Identifiable {}
 
 extension PosDeviceBranding {
-  /// The kiosk's branding as its context carries it.
-  static func from(_ branding: PosKioskContextBranding) -> PosDeviceBranding {
+  /// The kiosk's branding as its context carries it, its logos served from the console the kiosk is paired with.
+  static func from(_ branding: PosKioskContextBranding, origin: String) -> PosDeviceBranding {
     PosDeviceBranding(
-      name: branding.name, logoURL: branding.logoUrl.flatMap { URL(string: $0) },
-      logoDarkURL: branding.logoDarkUrl.flatMap { URL(string: $0) }, message: branding.message)
+      name: branding.name, logoURL: mediaPreviewURL(branding.logoUrl, origin: origin, hostID: nil, width: 640),
+      logoDarkURL: mediaPreviewURL(branding.logoDarkUrl, origin: origin, hostID: nil, width: 640),
+      message: branding.message)
   }
 }
 
@@ -218,8 +219,8 @@ private struct KioskMenuView: View {
           }
         }
         .padding(AglynSpace.two)
-        // The faint Staff control sits over the top-leading corner; the chips start after it, never under it.
-        .padding(.leading, kioskStaffInset)
+        // The faint Staff control sits in the top-leading corner; the chips start on the line below it, as on Android.
+        .padding(.top, kioskStaffClearance)
       }
       Divider()
       if let notice = model.notice { AglynNotice(notice, tone: .warning) { model.notice = nil }.padding(AglynSpace.two) }
@@ -229,36 +230,21 @@ private struct KioskMenuView: View {
         } else if (model.catalog?.products ?? []).isEmpty {
           Text("Nothing here yet. Try another category.").font(AglynFont.title2).foregroundStyle(.secondary).padding(AglynSpace.four)
         } else {
-          // Tiles top-aligned in their row, each name keeping two lines: a one-line name beside a two-line one, or a
-          // tile with a photo beside one without, no longer sat the row's tiles at staggered heights.
+          // The register's tile, so every tile keeps the same picture band (the photo, or the product's initial) and a
+          // two-line name: a row with one photo, or one long name, stays even, as on Android (AGL-3925).
           LazyVGrid(
             columns: [GridItem(.adaptive(minimum: 170), spacing: AglynSpace.two, alignment: .top)], spacing: AglynSpace.two
           ) {
             ForEach(model.catalog?.products ?? [], id: \.id) { product in
               let soldOut = kioskProductSoldOut(product)
-              Button {
-                onProduct(product)
-              } label: {
-                VStack(alignment: .leading, spacing: AglynSpace.half) {
-                  // The server sends a `/api/media/cdn/…` path (or a media reference); the register's tiles resolve it
-                  // the same way (AGL-3906).
-                  if let url = product.imageUrl.flatMap({ mediaPreviewURL($0, origin: origin, hostID: nil) }) {
-                    Color.clear.frame(maxWidth: .infinity).frame(height: 110)
-                      .overlay { AglynRemoteImage(url, systemImage: "photo", contentMode: .fill) }
-                      .clipped()
-                  }
-                  Text(product.name).font(AglynFont.headline).multilineTextAlignment(.leading).lineLimit(2, reservesSpace: true)
-                  Text(
-                    soldOut ? "Sold out" : "\(product.variants.count > 1 ? "From " : "")\(model.money(kioskFromCents(product)))"
-                  )
-                  .font(AglynFont.subheadline).foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(AglynSpace.one)
-                .aglynCardSurface()
-              }
-              .buttonStyle(.plain)
+              AglynItemTile(
+                product.name,
+                subtitle: soldOut ? "Sold out" : "\(product.variants.count > 1 ? "From " : "")\(model.money(kioskFromCents(product)))",
+                // The server sends a `/api/media/cdn/…` path (or a media reference), served from the paired console.
+                imageURL: product.imageUrl.flatMap { mediaPreviewURL($0, origin: origin, hostID: nil) }
+              ) { onProduct(product) }
               .disabled(soldOut)
+              .opacity(soldOut ? 0.5 : 1)
               .accessibilityIdentifier("kiosk-tile-\(product.id)")
             }
           }
@@ -435,10 +421,11 @@ private struct KioskCartSheet: View {
 private struct KioskReviewView: View {
   let model: PosKioskModel
   let sale: PosKioskSale
+  let branding: PosDeviceBranding?
 
   var body: some View {
     let none = !model.canPayByReader && !model.canPayByTap && !model.canPayAtCounter
-    DeviceScroll(branding: model.context.map { PosDeviceBranding.from($0.branding) }, notice: nil) {
+    DeviceScroll(branding: branding, notice: nil) {
       VStack(alignment: .leading, spacing: AglynSpace.two) {
         Text("Review your order").font(AglynFont.largeTitle)
         ForEach(Array(sale.lines.enumerated()), id: \.offset) { _, line in
@@ -547,12 +534,12 @@ private struct KioskDoneView: View {
   }
 }
 
+/// How far below the top the menu's chips start, clear of the Staff control in that corner.
+private let kioskStaffClearance: CGFloat = AglynSpace.three
+
 /// Staff unlock: a corner button, then the staff PIN the register uses, checked on the server. No names are listed, the
 /// screen faces the public, and a right PIN opens the kiosk's settings for a few minutes: which card reader it sends
 /// payments to, and leaving kiosk mode.
-/// How far the menu's chips start from the leading edge, clear of the Staff control over that corner.
-private let kioskStaffInset: CGFloat = 48
-
 private struct KioskStaffControl: View {
   let model: PosKioskModel
   let onExit: () -> Void

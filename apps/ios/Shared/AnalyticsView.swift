@@ -242,7 +242,7 @@ struct AnalyticsView: View {
       }
       MetricCard("Avg / day", systemImage: "chart.line.uptrend.xyaxis", value: count(Double(summary.avgPerDay)), caption: "Over \(range) days")
       if !summary.devices.isEmpty {
-        MetricCard(deviceSplitLabel(summary.devices), systemImage: "iphone.and.ipad", value: deviceSplitValue(summary.devices), caption: "Device split")
+        MetricCard(deviceSplitLabel(summary.devices), systemImage: "ipad.and.iphone", value: deviceSplitValue(summary.devices), caption: "Device split")
       }
       if let top = summary.topPaths.first {
         MetricCard("Top page · \(count(top.value)) views", systemImage: "doc.text", value: top.key, caption: "")

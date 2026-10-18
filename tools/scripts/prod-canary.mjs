@@ -334,7 +334,9 @@ async function runCanary(label, deploymentHost = null) {
   for (let index = 0; index < config.maxRounds; index++) {
     if (index > 0) await sleep(config.roundIntervalMs)
     const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
-    const plan = canaryPlan({ project, tenantHosts, consoleHost, nonce, deploymentHost })
+    // The public plan rotates by the quarter hour; a candidate renders it all.
+    const turn = deploymentHost ? null : Math.floor(Date.now() / 900_000)
+    const plan = canaryPlan({ project, tenantHosts, consoleHost, nonce, deploymentHost, turn })
     const results = await Promise.all(plan.map(check))
     const round = { ...gradeRound(results, config), results }
     rounds.push(round)

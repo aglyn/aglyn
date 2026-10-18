@@ -24,27 +24,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.parseMediaRef
-import com.aglyn.contracts.resolveMediaSrc
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.space
-
-/**
- * Where a stored picture or film is shown from, for a preview: a reference is
- * served by the media CDN (qualified for the site being edited, as the
- * console's `resolveMediaSrc` does) at a thumbnail width, a path is on the
- * console origin, and any other address is shown as it is.
- */
-fun mediaPreviewUrl(value: String, origin: String, hostId: String?, width: Int = 320): String? {
-  val resolved = resolveMediaSrc(value.trim().ifEmpty { null }, hostId) ?: return null
-  val base = origin.trimEnd('/')
-  return when {
-    resolved.startsWith("/api/media/cdn/") && "?" !in resolved -> "$base$resolved?w=$width"
-    resolved.startsWith("/") -> base + resolved
-    else -> resolved
-  }
-}
 
 /**
  * A picture or film chosen from the media library, the way the console's

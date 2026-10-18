@@ -295,13 +295,13 @@ final class DataTests: XCTestCase {
 
   func testImagePreviewQualifiesAnOrganizationPhotoForTheSite() {
     XCTAssertEqual(
-      datasetImagePreviewURL("media:org:o1/m1", origin: "https://console.test/", hostID: "h1")?.absoluteString,
+      mediaPreviewURL("media:org:o1/m1", origin: "https://console.test/", hostID: "h1")?.absoluteString,
       "https://console.test/api/media/cdn/org:o1:h1/m1?w=320")
     XCTAssertEqual(
-      datasetImagePreviewURL("media:h1/m1", origin: "https://console.test", hostID: "h2")?.absoluteString,
+      mediaPreviewURL("media:h1/m1", origin: "https://console.test", hostID: "h2")?.absoluteString,
       "https://console.test/api/media/cdn/h1/m1?w=320")
-    XCTAssertEqual(datasetImagePreviewURL("/api/media/cdn/h1/m1", origin: "https://console.test", hostID: nil)?.absoluteString, "https://console.test/api/media/cdn/h1/m1")
-    XCTAssertNil(datasetImagePreviewURL("", origin: "https://console.test", hostID: nil))
+    XCTAssertEqual(mediaPreviewURL("/api/media/cdn/h1/m1", origin: "https://console.test", hostID: nil)?.absoluteString, "https://console.test/api/media/cdn/h1/m1?w=320")
+    XCTAssertNil(mediaPreviewURL("", origin: "https://console.test", hostID: nil))
   }
 
   func testPageFieldValues() {

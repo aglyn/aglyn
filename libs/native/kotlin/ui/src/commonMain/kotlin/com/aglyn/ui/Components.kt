@@ -73,6 +73,9 @@ fun AglynListItem(
   emphasized: Boolean = false,
   trailing: (@Composable () -> Unit)? = null,
   onClick: (() -> Unit)? = null,
+  /** A workspace's logo or a site's favicon in the icon's place; the icon shows while there is none. */
+  imageUrl: String? = null,
+  darkImageUrl: String? = null,
 ) {
   val colors = MaterialTheme.colorScheme
   val shape = MaterialTheme.shapes.large
@@ -100,10 +103,12 @@ fun AglynListItem(
     horizontalArrangement = Arrangement.spacedBy(16.dp),
   ) {
     if (icon != null) {
-      Box(
-        Modifier.size(40.dp).clip(CircleShape).background(if (selected) colors.primary else colors.primaryContainer),
-        contentAlignment = Alignment.Center,
-      ) { Icon(icon, contentDescription = null, tint = if (selected) colors.onPrimary else colors.onPrimaryContainer) }
+      BrandPicture(imageUrl, darkImageUrl, 40.dp, CircleShape) {
+        Box(
+          Modifier.size(40.dp).clip(CircleShape).background(if (selected) colors.primary else colors.primaryContainer),
+          contentAlignment = Alignment.Center,
+        ) { Icon(icon, contentDescription = null, tint = if (selected) colors.onPrimary else colors.onPrimaryContainer) }
+      }
     }
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
       Text(

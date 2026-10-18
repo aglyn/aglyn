@@ -50,14 +50,23 @@ jest.mock('./ai-jobs', () => ({
   sweepAiJobs: (...args: unknown[]) => mockSweep(...args),
 }))
 
+const mockEmptySites = jest.fn()
+jest.mock('./ai-empty-site-sweep', () => ({
+  __esModule: true,
+  sweepAiEmptySites: (...args: unknown[]) => mockEmptySites(...args),
+}))
+
 import { AI_JOBS_BEAT_CRON_ID, AI_JOBS_BEAT_PATH, runAiJobsBeat } from './ai-jobs-beat'
 
 const SWEPT = { due: 2, ran: 1, skipped: 1, paused: 1, remaining: 0, budgetExhausted: false }
+const NO_EMPTY_SITES = { due: 0, removed: 0, kept: 0, later: 0 }
 
 beforeEach(() => {
   mockLocked = null
   mockSweep.mockReset()
   mockSweep.mockResolvedValue(SWEPT)
+  mockEmptySites.mockReset()
+  mockEmptySites.mockResolvedValue(NO_EMPTY_SITES)
   jest.spyOn(console, 'warn').mockImplementation(() => undefined)
   jest.spyOn(console, 'info').mockImplementation(() => undefined)
 })
@@ -71,13 +80,16 @@ describe('the AI jobs beat', () => {
   })
 
   it('sweeps under the machine’s budget with a fresh owner per beat, and reports the sweep', async () => {
-    expect(await runAiJobsBeat()).toEqual({ held: false, ...SWEPT })
+    expect(await runAiJobsBeat()).toEqual({ held: false, emptySites: NO_EMPTY_SITES, ...SWEPT })
     await runAiJobsBeat()
     expect(mockSweep).toHaveBeenCalledTimes(2)
     const [first, second] = mockSweep.mock.calls.map(
       (call) => call[0] as { firestore: unknown; owner: string; budgetMs: number },
     )
-    expect(first).toMatchObject({ firestore: mockFirestore, budgetMs: 280_000 })
+    expect(first).toMatchObject({ firestore: mockFirestore })
+    // What the removals took comes off the sweep's budget, never added to it.
+    expect(first.budgetMs).toBeLessThanOrEqual(280_000)
+    expect(first.budgetMs).toBeGreaterThan(279_000)
     expect(first.owner).toMatch(/^beat:/)
     // Two beats overlapping inside the lease window must not share an
     // owner, or the second would read the first's lease as its own.
@@ -93,10 +105,33 @@ describe('the AI jobs beat', () => {
     expect(console.info).not.toHaveBeenCalled()
   })
 
+  it('removes the due empty sites first, and their time comes off the sweep (AGL-3936)', async () => {
+    let clock = 1_000_000
+    jest.spyOn(Date, 'now').mockImplementation(() => clock)
+    mockEmptySites.mockImplementation(async (options: { firestore: unknown }) => {
+      expect(options.firestore).toBe(mockFirestore)
+      expect(mockSweep).not.toHaveBeenCalled()
+      clock += 12_000
+      return { due: 1, removed: 1, kept: 0, later: 0 }
+    })
+    const result = await runAiJobsBeat()
+    expect(result).toMatchObject({ held: false, emptySites: { removed: 1 } })
+    expect((mockSweep.mock.calls[0][0] as { budgetMs: number }).budgetMs).toBe(268_000)
+    expect(console.info).toHaveBeenCalledWith(expect.stringContaining('1 empty site(s) removed'))
+  })
+
+  it('still runs the jobs when the empty site sweep fails', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockEmptySites.mockRejectedValue(new Error('index'))
+    expect(await runAiJobsBeat()).toEqual({ held: false, emptySites: null, ...SWEPT })
+    expect(mockSweep).toHaveBeenCalledTimes(1)
+  })
+
   it('does nothing while ai-generate is locked, and says so', async () => {
     mockLocked = Response.json({ error: 'locked' }, { status: 423 })
     expect(await runAiJobsBeat()).toEqual({ held: true })
     expect(mockSweep).not.toHaveBeenCalled()
+    expect(mockEmptySites).not.toHaveBeenCalled()
     expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('ai-generate is locked'),
     )

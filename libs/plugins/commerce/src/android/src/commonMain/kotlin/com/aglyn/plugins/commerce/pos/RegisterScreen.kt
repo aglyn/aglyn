@@ -3,7 +3,7 @@ package com.aglyn.plugins.commerce.pos
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.layout.ContentScale
 import com.aglyn.hardware.CameraScanFilter
-import com.aglyn.site.media.mediaPreviewUrl
+import com.aglyn.core.mediaPreviewUrl
 import com.aglyn.ui.BarcodeScanSheet
 import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.LocalCameraScanner
@@ -170,7 +170,9 @@ private fun RegisterScreenBody(context: NativePluginContext) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterContent(model: RegisterModel, onOpenReaders: () -> Unit, ordersZone: @Composable () -> Unit = {}) {
-  val wide = currentWidthClass() != WidthClass.COMPACT
+  // The basket beside the products from expanded windows up (840dp); a 7-inch tablet held upright keeps the phone's
+  // basket bar, so the product grid is not squeezed to one column beside the panel.
+  val wide = currentWidthClass().let { it == WidthClass.EXPANDED || it == WidthClass.LARGE }
   var query by remember { mutableStateOf("") }
   val searchFocus = remember { FocusRequester() }
   var basketOpen by remember { mutableStateOf(false) }
