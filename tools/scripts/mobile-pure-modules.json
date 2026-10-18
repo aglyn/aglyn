@@ -2,6 +2,10 @@
   "$comment": "Workspace TypeScript modules the native generators may read (AGL-3620, AGL-3651): the contracts, theme and catalog generators refuse any other. check-mobile-isolation admits each one only while its own imports are pure: listed modules, platform-neutral packages, no DOM, no Node built-in, nothing web- or server-only. The list grows only with that proof; a module that mixes pure and web code is split, never listed.",
   "modules": [
     {
+      "path": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "why": "The preferences a person keeps on users/{uid} (pins capped at five, recent workspaces, starred and recent items, workspace colors, the synced theme) and the pure rules over them, so the apps write the shape the console and the rules hold (AGL-3943); no imports at all."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
       "why": "The site traffic card's figures: the window comparison, device split and top lists the Analytics page and the native screens show (AGL-3670)."
     },
@@ -150,12 +154,24 @@
       "why": "The push device registry shape, Expo token check, tap data and the account-scope push switch (AGL-3620); no imports at all."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/name-match.ts",
+      "why": "Reached by one-box-search: the console search's matcher and ranking; no imports at all."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/name-search.ts",
       "why": "Name-search token normalizers, so an app list search matches the console's search index (AGL-3621)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "why": "The native apps' navigation as data: the workspace and site sidebars and both settings modes, each row with the console's word, its icons, its screen and its plugin (AGL-3943); no imports at all."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/notification-sounds.ts",
       "why": "The notification sounds a person picks from, with each platform's file name, so the apps' pickers and the push payload name the console's sounds; no imports at all."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/one-box-search.ts",
+      "why": "The one-box search payload the apps read from /api/search and the screens-and-settings group from the nav manifest (AGL-3943); imports only name-match and native-nav."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/organizations.ts",

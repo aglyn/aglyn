@@ -42,6 +42,26 @@ public enum ContractJSON: Codable, Hashable, Sendable {
   }
 }
 
+public struct AccountItemRef: Codable, Hashable, Sendable {
+  public var hostId: String?
+  public var id: String
+  public var kind: String
+  public var label: String
+  public var orgId: String
+  public var params: [String: String]?
+  public var screen: String
+
+  public init(hostId: String? = nil, id: String, kind: String, label: String, orgId: String, params: [String: String]? = nil, screen: String) {
+    self.hostId = hostId
+    self.id = id
+    self.kind = kind
+    self.label = label
+    self.orgId = orgId
+    self.params = params
+    self.screen = screen
+  }
+}
+
 public struct AccountPushSettings: Codable, Hashable, Sendable {
   public var account: [String: AccountPushSettingsAccountValue]?
   public var accountTypes: [String: AccountPushSettingsAccountTypesValue]?
@@ -81,6 +101,96 @@ public enum ApnsEnvironment: String, Codable, CaseIterable, Hashable, Sendable {
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum AppAppearance: String, Codable, CaseIterable, Hashable, Sendable {
+  case dark = "dark"
+  case light = "light"
+  case system = "system"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum AppDensity: String, Codable, CaseIterable, Hashable, Sendable {
+  case comfortable = "comfortable"
+  case compact = "compact"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum AppSidebarStyle: String, Codable, CaseIterable, Hashable, Sendable {
+  case plain = "plain"
+  case tinted = "tinted"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum AppTextSize: String, Codable, CaseIterable, Hashable, Sendable {
+  case extraLarge = "extraLarge"
+  case large = "large"
+  case medium = "medium"
+  case small = "small"
+  case system = "system"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum AppThemeName: String, Codable, CaseIterable, Hashable, Sendable {
+  case aglyn = "aglyn"
+  case highContrast = "highContrast"
+  case night = "night"
+  case ocean = "ocean"
+  case quiet = "quiet"
+  case warm = "warm"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct AppThemePrefs: Codable, Hashable, Sendable {
+  public var accent: String
+  public var appearance: AppAppearance
+  public var appIcon: String
+  public var density: AppDensity
+  public var sidebarStyle: AppSidebarStyle
+  public var textSize: AppTextSize
+  public var theme: AppThemeName
+  public var useWorkspaceBrand: Bool
+
+  public init(accent: String, appearance: AppAppearance, appIcon: String, density: AppDensity, sidebarStyle: AppSidebarStyle, textSize: AppTextSize, theme: AppThemeName, useWorkspaceBrand: Bool) {
+    self.accent = accent
+    self.appearance = appearance
+    self.appIcon = appIcon
+    self.density = density
+    self.sidebarStyle = sidebarStyle
+    self.textSize = textSize
+    self.theme = theme
+    self.useWorkspaceBrand = useWorkspaceBrand
   }
 }
 
@@ -1795,6 +1905,180 @@ public struct NativeCrmPicklist: Codable, Hashable, Sendable {
   }
 }
 
+public struct NativeNavAction: Codable, Hashable, Sendable {
+  public var icon: NativeNavIcon
+  public var id: String
+  public var label: String
+  public var params: [String: String]?
+  public var screen: String
+
+  public init(icon: NativeNavIcon, id: String, label: String, params: [String: String]? = nil, screen: String) {
+    self.icon = icon
+    self.id = id
+    self.label = label
+    self.params = params
+    self.screen = screen
+  }
+}
+
+public struct NativeNavConsoleRef: Codable, Hashable, Sendable {
+  public var id: String
+  public var surface: NativeNavConsoleSurface
+
+  public init(id: String, surface: NativeNavConsoleSurface) {
+    self.id = id
+    self.surface = surface
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum NativeNavConsoleSurface: String, Codable, CaseIterable, Hashable, Sendable {
+  case billingSection = "billingSection"
+  case consoleWidget = "consoleWidget"
+  case hostAdminSection = "hostAdminSection"
+  case hostPluginSection = "hostPluginSection"
+  case hostPluginTab = "hostPluginTab"
+  case hostTab = "hostTab"
+  case nativeOnly = "nativeOnly"
+  case orgPluginSection = "orgPluginSection"
+  case orgPluginTab = "orgPluginTab"
+  case orgSettingsSection = "orgSettingsSection"
+  case orgTab = "orgTab"
+  case setupSection = "setupSection"
+  case shell = "shell"
+  case teamSection = "teamSection"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct NativeNavElsewhere: Codable, Hashable, Sendable {
+  public var console: NativeNavConsoleRef
+  public var `where`: String
+
+  public init(console: NativeNavConsoleRef, `where`: String) {
+    self.console = console
+    self.where = `where`
+  }
+}
+
+public struct NativeNavGroup: Codable, Hashable, Sendable {
+  public var dynamic: String?
+  public var foldable: Bool
+  public var id: String
+  public var label: String?
+  public var rows: [NativeNavRow]
+
+  public init(dynamic: String? = nil, foldable: Bool, id: String, label: String? = nil, rows: [NativeNavRow]) {
+    self.dynamic = dynamic
+    self.foldable = foldable
+    self.id = id
+    self.label = label
+    self.rows = rows
+  }
+}
+
+public struct NativeNavIcon: Codable, Hashable, Sendable {
+  public var android: String
+  public var apple: String
+
+  public init(android: String, apple: String) {
+    self.android = android
+    self.apple = apple
+  }
+}
+
+public struct NativeNavList: Codable, Hashable, Sendable {
+  public var groups: [NativeNavGroup]
+  public var id: NativeNavListId
+  public var title: String?
+
+  public init(groups: [NativeNavGroup], id: NativeNavListId, title: String? = nil) {
+    self.groups = groups
+    self.id = id
+    self.title = title
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum NativeNavListId: String, Codable, CaseIterable, Hashable, Sendable {
+  case site = "site"
+  case siteSettings = "siteSettings"
+  case workspace = "workspace"
+  case workspaceSettings = "workspaceSettings"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct NativeNavManifest: Codable, Hashable, Sendable {
+  public var elsewhere: [NativeNavElsewhere]
+  public var lists: [NativeNavList]
+  public var shellScreens: [String]
+
+  public init(elsewhere: [NativeNavElsewhere], lists: [NativeNavList], shellScreens: [String]) {
+    self.elsewhere = elsewhere
+    self.lists = lists
+    self.shellScreens = shellScreens
+  }
+}
+
+public struct NativeNavRow: Codable, Hashable, Sendable {
+  public var actions: [NativeNavAction]?
+  public var console: NativeNavConsoleRef
+  public var consoleLabel: String?
+  public var description: String?
+  public var icon: NativeNavIcon
+  public var id: String
+  public var keywords: [String]?
+  public var label: String
+  public var params: [String: String]?
+  public var pluginId: String?
+  public var requiresHostAdmin: Bool?
+  public var screen: String
+  public var sections: [NativeNavSection]?
+
+  public init(actions: [NativeNavAction]? = nil, console: NativeNavConsoleRef, consoleLabel: String? = nil, description: String? = nil, icon: NativeNavIcon, id: String, keywords: [String]? = nil, label: String, params: [String: String]? = nil, pluginId: String? = nil, requiresHostAdmin: Bool? = nil, screen: String, sections: [NativeNavSection]? = nil) {
+    self.actions = actions
+    self.console = console
+    self.consoleLabel = consoleLabel
+    self.description = description
+    self.icon = icon
+    self.id = id
+    self.keywords = keywords
+    self.label = label
+    self.params = params
+    self.pluginId = pluginId
+    self.requiresHostAdmin = requiresHostAdmin
+    self.screen = screen
+    self.sections = sections
+  }
+}
+
+public struct NativeNavSection: Codable, Hashable, Sendable {
+  public var console: NativeNavConsoleRef
+  public var id: String
+  public var label: String
+  public var params: [String: String]?
+  public var pluginId: String?
+  public var screen: String
+
+  public init(console: NativeNavConsoleRef, id: String, label: String, params: [String: String]? = nil, pluginId: String? = nil, screen: String) {
+    self.console = console
+    self.id = id
+    self.label = label
+    self.params = params
+    self.pluginId = pluginId
+    self.screen = screen
+  }
+}
+
 public struct NotificationSound: Codable, Hashable, Sendable {
   public var android: String
   public var apple: String
@@ -1808,6 +2092,68 @@ public struct NotificationSound: Codable, Hashable, Sendable {
     self.id = id
     self.label = label
     self.web = web
+  }
+}
+
+public struct OneBoxGroup: Codable, Hashable, Sendable {
+  public var failed: Bool
+  public var group: String
+  public var heading: String
+  public var matched: Int
+  public var nextCursor: Int?
+  public var noun: String
+  public var rows: [OneBoxRow]
+  public var searched: Int
+  public var truncated: Bool
+
+  public init(failed: Bool, group: String, heading: String, matched: Int, nextCursor: Int? = nil, noun: String, rows: [OneBoxRow], searched: Int, truncated: Bool) {
+    self.failed = failed
+    self.group = group
+    self.heading = heading
+    self.matched = matched
+    self.nextCursor = nextCursor
+    self.noun = noun
+    self.rows = rows
+    self.searched = searched
+    self.truncated = truncated
+  }
+}
+
+public struct OneBoxResponse: Codable, Hashable, Sendable {
+  public var groups: [OneBoxGroup]
+  public var hostId: String?
+  public var orgId: String?
+  public var query: String
+
+  public init(groups: [OneBoxGroup], hostId: String? = nil, orgId: String? = nil, query: String) {
+    self.groups = groups
+    self.hostId = hostId
+    self.orgId = orgId
+    self.query = query
+  }
+}
+
+public struct OneBoxRow: Codable, Hashable, Sendable {
+  public var detail: String?
+  public var group: String
+  public var hostId: String?
+  public var id: String
+  public var label: String
+  public var link: String?
+  public var orgId: String?
+  public var params: [String: String]?
+  public var screen: String?
+
+  public init(detail: String? = nil, group: String, hostId: String? = nil, id: String, label: String, link: String? = nil, orgId: String? = nil, params: [String: String]? = nil, screen: String? = nil) {
+    self.detail = detail
+    self.group = group
+    self.hostId = hostId
+    self.id = id
+    self.label = label
+    self.link = link
+    self.orgId = orgId
+    self.params = params
+    self.screen = screen
   }
 }
 
@@ -2556,6 +2902,29 @@ public struct PickupLocationSettings: Codable, Hashable, Sendable {
     self.hours = hours
     self.instructions = instructions
     self.readyWithinMinutes = readyWithinMinutes
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PinOrgOutcome: String, Codable, CaseIterable, Hashable, Sendable {
+  case alreadyPinned = "alreadyPinned"
+  case full = "full"
+  case pinned = "pinned"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct PinOrgResult: Codable, Hashable, Sendable {
+  public var outcome: PinOrgOutcome
+  public var pinned: [String]
+
+  public init(outcome: PinOrgOutcome, pinned: [String]) {
+    self.outcome = outcome
+    self.pinned = pinned
   }
 }
 
@@ -3537,6 +3906,22 @@ public struct ProductVariant: Codable, Hashable, Sendable {
   }
 }
 
+public struct RailWorkspaces: Codable, Hashable, Sendable {
+  public var allTile: Bool
+  public var pinned: [String]
+  public var recent: [String]
+  public var rest: [String]
+  public var total: Int
+
+  public init(allTile: Bool, pinned: [String], recent: [String], rest: [String], total: Int) {
+    self.allTile = allTile
+    self.pinned = pinned
+    self.recent = recent
+    self.rest = rest
+    self.total = total
+  }
+}
+
 public struct ReceiptData: Codable, Hashable, Sendable {
   public var banner: String?
   public var barcode: String?
@@ -3610,6 +3995,40 @@ public struct ReceiptTender: Codable, Hashable, Sendable {
   public init(amountCents: Double, label: String) {
     self.amountCents = amountCents
     self.label = label
+  }
+}
+
+public struct RecentItem: Codable, Hashable, Sendable {
+  public var hostId: String?
+  public var id: String
+  public var kind: String
+  public var label: String
+  public var openedAtMs: Int
+  public var orgId: String
+  public var params: [String: String]?
+  public var screen: String
+
+  public init(hostId: String? = nil, id: String, kind: String, label: String, openedAtMs: Int, orgId: String, params: [String: String]? = nil, screen: String) {
+    self.hostId = hostId
+    self.id = id
+    self.kind = kind
+    self.label = label
+    self.openedAtMs = openedAtMs
+    self.orgId = orgId
+    self.params = params
+    self.screen = screen
+  }
+}
+
+public struct ResolvedNavList: Codable, Hashable, Sendable {
+  public var groups: [NativeNavGroup]
+  public var id: NativeNavListId
+  public var title: String?
+
+  public init(groups: [NativeNavGroup], id: NativeNavListId, title: String? = nil) {
+    self.groups = groups
+    self.id = id
+    self.title = title
   }
 }
 
@@ -3800,6 +4219,71 @@ public enum SiteJourneyStepType: String, Codable, CaseIterable, Hashable, Sendab
 }
 
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum StarColor: String, Codable, CaseIterable, Hashable, Sendable {
+  case blue = "blue"
+  case green = "green"
+  case grey = "grey"
+  case orange = "orange"
+  case pink = "pink"
+  case purple = "purple"
+  case red = "red"
+  case yellow = "yellow"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum StarOutcome: String, Codable, CaseIterable, Hashable, Sendable {
+  case full = "full"
+  case starred = "starred"
+  case unstarred = "unstarred"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct StarredItem: Codable, Hashable, Sendable {
+  public var color: StarColor?
+  public var hostId: String?
+  public var id: String
+  public var kind: String
+  public var label: String
+  public var orgId: String
+  public var params: [String: String]?
+  public var screen: String
+  public var starredAtMs: Int
+
+  public init(color: StarColor? = nil, hostId: String? = nil, id: String, kind: String, label: String, orgId: String, params: [String: String]? = nil, screen: String, starredAtMs: Int) {
+    self.color = color
+    self.hostId = hostId
+    self.id = id
+    self.kind = kind
+    self.label = label
+    self.orgId = orgId
+    self.params = params
+    self.screen = screen
+    self.starredAtMs = starredAtMs
+  }
+}
+
+public struct StarResult: Codable, Hashable, Sendable {
+  public var outcome: StarOutcome
+  public var starred: [StarredItem]
+
+  public init(outcome: StarOutcome, starred: [StarredItem]) {
+    self.outcome = outcome
+    self.starred = starred
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum StorefrontTaxMode: String, Codable, CaseIterable, Hashable, Sendable {
   case manual = "manual"
   case none = "none"
@@ -3879,8 +4363,43 @@ public struct WhereUsedResult: Codable, Hashable, Sendable {
   }
 }
 
+public struct WorkspaceColor: Codable, Hashable, Sendable {
+  public var color: String?
+  public var source: WorkspaceColorSource
+  public var tintsApp: Bool
+
+  public init(color: String? = nil, source: WorkspaceColorSource, tintsApp: Bool) {
+    self.color = color
+    self.source = source
+    self.tintsApp = tintsApp
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum WorkspaceColorSource: String, Codable, CaseIterable, Hashable, Sendable {
+  case brand = "brand"
+  case logo = "logo"
+  case none = "none"
+  case picked = "picked"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 /// The values in contracts.generated.json, keyed as the TypeScript exports are.
 public struct ContractValues: Codable, Hashable, Sendable {
+  public let accountColorPattern: String
+  public let accountItemLabelMax: Int
+  public let appAppearances: [AppAppearance]
+  public let appDensities: [AppDensity]
+  public let appIconIdMax: Int
+  public let appSidebarStyles: [AppSidebarStyle]
+  public let appTextSizes: [AppTextSize]
+  public let appThemeField: String
+  public let appThemeNames: [AppThemeName]
   public let areaServedMax: Int
   public let areaServedNameMaxLength: Int
   public let artifactTypeLabels: [String: String]
@@ -3931,6 +4450,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let datasetFieldTypes: [DatasetFieldType]
   public let datasetFilterPrefixMax: Int
   public let dealListDeclaration: ListQueryDeclaration
+  public let defaultAppTheme: AppThemePrefs
   public let defaultDealStages: [CrmDealStage]
   public let defaultNotificationSound: String
   public let defaultTitlePattern: String
@@ -4024,11 +4544,19 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let nativeCrmPicklists: [NativeCrmPicklist]
   public let nativeCrmReportPeriods: [String]
   public let nativeCrmTaskKinds: [String]
+  public let nativeNavManifest: NativeNavManifest
+  public let nativeNavShellScreens: [String]
   public let nativeSiteCampaignsQuery: ListQueryDeclaration
   public let nativeSiteEmailsQuery: ListQueryDeclaration
   public let nothingMoved: String
   public let notificationSoundField: String
   public let notificationSounds: [NotificationSound]
+  public let oneBoxQueryMax: Int
+  public let oneBoxRowsDefault: Int
+  public let oneBoxRowsMax: Int
+  public let oneBoxScreensGroup: String
+  public let oneBoxSearchPath: String
+  public let oneBoxWorkspacesGroup: String
   public let openDisputeClause: ListFilterClause
   public let orderChannelLabels: [String: String]
   public let orderChannelOptions: [ListFilterOption]
@@ -4058,6 +4586,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let outreachSequenceNameMax: Int
   public let outreachTaskTitleMax: Int
   public let paymentAcceptedMaxLength: Int
+  public let pinnedOrgsField: String
+  public let pinnedOrgsMax: Int
   public let posCashEventLabels: [String: String]
   public let posDisplayMaxLines: Int
   public let posDisplayPairingTtlMs: Double
@@ -4093,6 +4623,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let productListOptions: [String: [ListFilterOption]]
   public let productListQuery: ListQueryDeclaration
   public let productListSelectFields: [String]
+  public let railAllWorkspacesAtMost: Int
+  public let railRecentOrgs: Int
+  public let recentOrgsField: String
+  public let recentOrgsMax: Int
+  public let recentsField: String
+  public let recentsMax: Int
   public let refundBlockedByDispute: String
   public let reminderWindowEndHours: Int
   public let reminderWindowStartHours: Int
@@ -4116,6 +4652,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let siteJourneyKeyMax: Int
   public let siteListDeclaration: ListQueryDeclaration
   public let siteMemberListQuery: ListQueryDeclaration
+  public let starColors: [StarColor]
+  public let starredField: String
+  public let starredMax: Int
   public let submissionFilterHeaders: [String: String]
   public let submissionListQuery: ListQueryDeclaration
   public let submissionReadOptions: [ListFilterOption]
@@ -4129,8 +4668,19 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let timeZoneChoices: [String]
   public let timeZoneDefaultLabel: String
   public let workflowMaxSteps: Int
+  public let workspaceColorsField: String
+  public let workspaceColorsMax: Int
 
   enum CodingKeys: String, CodingKey {
+    case accountColorPattern = "ACCOUNT_COLOR_PATTERN"
+    case accountItemLabelMax = "ACCOUNT_ITEM_LABEL_MAX"
+    case appAppearances = "APP_APPEARANCES"
+    case appDensities = "APP_DENSITIES"
+    case appIconIdMax = "APP_ICON_ID_MAX"
+    case appSidebarStyles = "APP_SIDEBAR_STYLES"
+    case appTextSizes = "APP_TEXT_SIZES"
+    case appThemeField = "APP_THEME_FIELD"
+    case appThemeNames = "APP_THEME_NAMES"
     case areaServedMax = "AREA_SERVED_MAX"
     case areaServedNameMaxLength = "AREA_SERVED_NAME_MAX_LENGTH"
     case artifactTypeLabels = "ARTIFACT_TYPE_LABELS"
@@ -4181,6 +4731,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case datasetFieldTypes = "DATASET_FIELD_TYPES"
     case datasetFilterPrefixMax = "DATASET_FILTER_PREFIX_MAX"
     case dealListDeclaration = "DEAL_LIST_DECLARATION"
+    case defaultAppTheme = "DEFAULT_APP_THEME"
     case defaultDealStages = "DEFAULT_DEAL_STAGES"
     case defaultNotificationSound = "DEFAULT_NOTIFICATION_SOUND"
     case defaultTitlePattern = "DEFAULT_TITLE_PATTERN"
@@ -4274,11 +4825,19 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case nativeCrmPicklists = "NATIVE_CRM_PICKLISTS"
     case nativeCrmReportPeriods = "NATIVE_CRM_REPORT_PERIODS"
     case nativeCrmTaskKinds = "NATIVE_CRM_TASK_KINDS"
+    case nativeNavManifest = "NATIVE_NAV_MANIFEST"
+    case nativeNavShellScreens = "NATIVE_NAV_SHELL_SCREENS"
     case nativeSiteCampaignsQuery = "NATIVE_SITE_CAMPAIGNS_QUERY"
     case nativeSiteEmailsQuery = "NATIVE_SITE_EMAILS_QUERY"
     case nothingMoved = "NOTHING_MOVED"
     case notificationSoundField = "NOTIFICATION_SOUND_FIELD"
     case notificationSounds = "NOTIFICATION_SOUNDS"
+    case oneBoxQueryMax = "ONE_BOX_QUERY_MAX"
+    case oneBoxRowsDefault = "ONE_BOX_ROWS_DEFAULT"
+    case oneBoxRowsMax = "ONE_BOX_ROWS_MAX"
+    case oneBoxScreensGroup = "ONE_BOX_SCREENS_GROUP"
+    case oneBoxSearchPath = "ONE_BOX_SEARCH_PATH"
+    case oneBoxWorkspacesGroup = "ONE_BOX_WORKSPACES_GROUP"
     case openDisputeClause = "OPEN_DISPUTE_CLAUSE"
     case orderChannelLabels = "ORDER_CHANNEL_LABELS"
     case orderChannelOptions = "ORDER_CHANNEL_OPTIONS"
@@ -4308,6 +4867,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case outreachSequenceNameMax = "OUTREACH_SEQUENCE_NAME_MAX"
     case outreachTaskTitleMax = "OUTREACH_TASK_TITLE_MAX"
     case paymentAcceptedMaxLength = "PAYMENT_ACCEPTED_MAX_LENGTH"
+    case pinnedOrgsField = "PINNED_ORGS_FIELD"
+    case pinnedOrgsMax = "PINNED_ORGS_MAX"
     case posCashEventLabels = "POS_CASH_EVENT_LABELS"
     case posDisplayMaxLines = "POS_DISPLAY_MAX_LINES"
     case posDisplayPairingTtlMs = "POS_DISPLAY_PAIRING_TTL_MS"
@@ -4343,6 +4904,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case productListOptions = "PRODUCT_LIST_OPTIONS"
     case productListQuery = "PRODUCT_LIST_QUERY"
     case productListSelectFields = "PRODUCT_LIST_SELECT_FIELDS"
+    case railAllWorkspacesAtMost = "RAIL_ALL_WORKSPACES_AT_MOST"
+    case railRecentOrgs = "RAIL_RECENT_ORGS"
+    case recentOrgsField = "RECENT_ORGS_FIELD"
+    case recentOrgsMax = "RECENT_ORGS_MAX"
+    case recentsField = "RECENTS_FIELD"
+    case recentsMax = "RECENTS_MAX"
     case refundBlockedByDispute = "REFUND_BLOCKED_BY_DISPUTE"
     case reminderWindowEndHours = "REMINDER_WINDOW_END_HOURS"
     case reminderWindowStartHours = "REMINDER_WINDOW_START_HOURS"
@@ -4366,6 +4933,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case siteJourneyKeyMax = "SITE_JOURNEY_KEY_MAX"
     case siteListDeclaration = "SITE_LIST_DECLARATION"
     case siteMemberListQuery = "SITE_MEMBER_LIST_QUERY"
+    case starColors = "STAR_COLORS"
+    case starredField = "STARRED_FIELD"
+    case starredMax = "STARRED_MAX"
     case submissionFilterHeaders = "SUBMISSION_FILTER_HEADERS"
     case submissionListQuery = "SUBMISSION_LIST_QUERY"
     case submissionReadOptions = "SUBMISSION_READ_OPTIONS"
@@ -4379,5 +4949,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case timeZoneChoices = "TIME_ZONE_CHOICES"
     case timeZoneDefaultLabel = "TIME_ZONE_DEFAULT_LABEL"
     case workflowMaxSteps = "WORKFLOW_MAX_STEPS"
+    case workspaceColorsField = "WORKSPACE_COLORS_FIELD"
+    case workspaceColorsMax = "WORKSPACE_COLORS_MAX"
   }
 }
