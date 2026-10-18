@@ -5,6 +5,39 @@
   ],
   "timeZone": "UTC",
   "functions": {
+    "accountItemKey": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "kind": "page",
+              "id": "p1",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Home",
+              "screen": "site.pages",
+              "params": {
+                "page": "p1"
+              }
+            }
+          ],
+          "result": "page:o1:h1:p1"
+        },
+        {
+          "args": [
+            {
+              "kind": "workspace",
+              "id": "o1",
+              "orgId": "o1",
+              "label": "Acme",
+              "screen": "shell.home"
+            }
+          ],
+          "result": "workspace:o1::o1"
+        }
+      ]
+    },
     "accountPushSwitch": {
       "module": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
       "cases": [
@@ -7192,6 +7225,62 @@
             "fields": {},
             "order": []
           }
+        }
+      ]
+    },
+    "effectivePinnedOrgs": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g"
+            ]
+          ],
+          "result": [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b"
+            ]
+          ],
+          "result": [
+            "a",
+            "b"
+          ]
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            [
+              "a",
+              "a",
+              "b"
+            ]
+          ],
+          "result": [
+            "a",
+            "b"
+          ]
         }
       ]
     },
@@ -14514,6 +14603,41 @@
         }
       ]
     },
+    "isAccountColor": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            "#00B0FF"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "#00b0ff"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "#0B0FF"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "00B0FF"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": false
+        }
+      ]
+    },
     "isBookingReminderDue": {
       "module": "libs/plugins/bookings/src/lib/model/bookings.ts",
       "cases": [
@@ -14988,6 +15112,75 @@
             "Ünï"
           ],
           "result": false
+        }
+      ]
+    },
+    "keepPinnedOrgs": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g"
+            ],
+            [
+              "g",
+              "b",
+              "e"
+            ]
+          ],
+          "result": [
+            "b",
+            "e",
+            "g"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g"
+            ],
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g"
+            ]
+          ],
+          "result": [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b"
+            ],
+            [
+              "z"
+            ]
+          ],
+          "result": []
         }
       ]
     },
@@ -17936,6 +18129,91 @@
         }
       ]
     },
+    "movePinnedOrg": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            "b",
+            -1
+          ],
+          "result": [
+            "b",
+            "a",
+            "c"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            "b",
+            1
+          ],
+          "result": [
+            "a",
+            "c",
+            "b"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            "a",
+            -1
+          ],
+          "result": [
+            "a",
+            "b",
+            "c"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            "c",
+            1
+          ],
+          "result": [
+            "a",
+            "b",
+            "c"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            "z",
+            1
+          ],
+          "result": [
+            "a",
+            "b",
+            "c"
+          ]
+        }
+      ]
+    },
     "narrowsScope": {
       "module": "libs/aglyn/src/lib/app-utils/scope-tokens.ts",
       "cases": [
@@ -18630,6 +18908,99 @@
             null
           ],
           "result": null
+        }
+      ]
+    },
+    "oneBoxCursor": {
+      "module": "libs/aglyn/src/lib/app-utils/one-box-search.ts",
+      "cases": [
+        {
+          "args": [
+            "5"
+          ],
+          "result": 5
+        },
+        {
+          "args": [
+            -1
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            2.5
+          ],
+          "result": 2
+        }
+      ]
+    },
+    "oneBoxLimit": {
+      "module": "libs/aglyn/src/lib/app-utils/one-box-search.ts",
+      "cases": [
+        {
+          "args": [
+            "10"
+          ],
+          "result": 10
+        },
+        {
+          "args": [
+            100
+          ],
+          "result": 25
+        },
+        {
+          "args": [
+            0
+          ],
+          "result": 5
+        },
+        {
+          "args": [
+            "x"
+          ],
+          "result": 5
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": 5
+        }
+      ]
+    },
+    "oneBoxQuery": {
+      "module": "libs/aglyn/src/lib/app-utils/one-box-search.ts",
+      "cases": [
+        {
+          "args": [
+            "  acme  "
+          ],
+          "result": "acme"
+        },
+        {
+          "args": [
+            "a"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          "result": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         }
       ]
     },
@@ -24572,6 +24943,160 @@
         }
       ]
     },
+    "pinOrg": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              "a",
+              "b"
+            ],
+            "c"
+          ],
+          "result": {
+            "outcome": "pinned",
+            "pinned": [
+              "a",
+              "b",
+              "c"
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b"
+            ],
+            "a"
+          ],
+          "result": {
+            "outcome": "alreadyPinned",
+            "pinned": [
+              "a",
+              "b"
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e"
+            ],
+            "f"
+          ],
+          "result": {
+            "outcome": "full",
+            "pinned": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e"
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g"
+            ],
+            "h"
+          ],
+          "result": {
+            "outcome": "full",
+            "pinned": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e"
+            ]
+          }
+        },
+        {
+          "args": [
+            [],
+            ""
+          ],
+          "result": {
+            "outcome": "alreadyPinned",
+            "pinned": []
+          }
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g"
+            ],
+            "b"
+          ],
+          "result": {
+            "outcome": "alreadyPinned",
+            "pinned": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e"
+            ]
+          }
+        }
+      ]
+    },
+    "pinnedOrgsOverCap": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f"
+            ]
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e"
+            ]
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            []
+          ],
+          "result": false
+        }
+      ]
+    },
     "pipelineTotals": {
       "module": "libs/plugins/crm/src/lib/model/crm-reports.ts",
       "cases": [
@@ -30017,6 +30542,269 @@
         }
       ]
     },
+    "railWorkspaces": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            [
+              "b"
+            ],
+            [
+              "c"
+            ]
+          ],
+          "result": {
+            "allTile": false,
+            "pinned": [
+              "b"
+            ],
+            "recent": [],
+            "rest": [
+              "a",
+              "c"
+            ],
+            "total": 3
+          }
+        },
+        {
+          "args": [
+            [
+              "o1",
+              "o2",
+              "o3",
+              "o4",
+              "o5",
+              "o6",
+              "o7",
+              "o8",
+              "o9",
+              "o10",
+              "o11",
+              "o12"
+            ],
+            [
+              "o3",
+              "o1"
+            ],
+            [
+              "o5",
+              "o1",
+              "o9",
+              "o7",
+              "o2"
+            ]
+          ],
+          "result": {
+            "allTile": true,
+            "pinned": [
+              "o3",
+              "o1"
+            ],
+            "recent": [
+              "o5",
+              "o9",
+              "o7"
+            ],
+            "rest": [],
+            "total": 12
+          }
+        },
+        {
+          "args": [
+            [
+              "o1",
+              "o2",
+              "o3",
+              "o4",
+              "o5",
+              "o6",
+              "o7",
+              "o8",
+              "o9",
+              "o10",
+              "o11",
+              "o12"
+            ],
+            [
+              "gone",
+              "o4",
+              "o5",
+              "o6",
+              "o7",
+              "o8",
+              "o9"
+            ],
+            [
+              "o10",
+              "gone2",
+              "o11",
+              "o12"
+            ]
+          ],
+          "result": {
+            "allTile": true,
+            "pinned": [
+              "o4",
+              "o5",
+              "o6",
+              "o7"
+            ],
+            "recent": [
+              "o10",
+              "o11",
+              "o12"
+            ],
+            "rest": [],
+            "total": 12
+          }
+        },
+        {
+          "args": [
+            [],
+            [
+              "a"
+            ],
+            [
+              "b"
+            ]
+          ],
+          "result": {
+            "allTile": false,
+            "pinned": [],
+            "recent": [],
+            "rest": [],
+            "total": 0
+          }
+        },
+        {
+          "args": [
+            [
+              "o1",
+              "o2",
+              "o3",
+              "o4",
+              "o5",
+              "o6",
+              "o7",
+              "o8"
+            ],
+            [],
+            []
+          ],
+          "result": {
+            "allTile": false,
+            "pinned": [],
+            "recent": [],
+            "rest": [
+              "o1",
+              "o2",
+              "o3",
+              "o4",
+              "o5",
+              "o6",
+              "o7",
+              "o8"
+            ],
+            "total": 8
+          }
+        }
+      ]
+    },
+    "readAppTheme": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "accent": "theme",
+            "appIcon": "aglyn",
+            "appearance": "system",
+            "density": "comfortable",
+            "sidebarStyle": "tinted",
+            "textSize": "system",
+            "theme": "aglyn",
+            "useWorkspaceBrand": true
+          }
+        },
+        {
+          "args": [
+            {
+              "appTheme": {
+                "appearance": "dark",
+                "theme": "ocean",
+                "accent": "#7A5CF0",
+                "density": "compact",
+                "textSize": "large",
+                "sidebarStyle": "plain",
+                "appIcon": "night",
+                "useWorkspaceBrand": false
+              }
+            }
+          ],
+          "result": {
+            "accent": "#7A5CF0",
+            "appIcon": "night",
+            "appearance": "dark",
+            "density": "compact",
+            "sidebarStyle": "plain",
+            "textSize": "large",
+            "theme": "ocean",
+            "useWorkspaceBrand": false
+          }
+        },
+        {
+          "args": [
+            {
+              "appTheme": {
+                "appearance": "sepia",
+                "theme": "x",
+                "accent": "purple",
+                "density": 1,
+                "textSize": "huge",
+                "sidebarStyle": "",
+                "appIcon": "",
+                "useWorkspaceBrand": "no"
+              }
+            }
+          ],
+          "result": {
+            "accent": "theme",
+            "appIcon": "aglyn",
+            "appearance": "system",
+            "density": "comfortable",
+            "sidebarStyle": "tinted",
+            "textSize": "system",
+            "theme": "aglyn",
+            "useWorkspaceBrand": true
+          }
+        },
+        {
+          "args": [
+            {
+              "appTheme": "dark"
+            }
+          ],
+          "result": {
+            "accent": "theme",
+            "appIcon": "aglyn",
+            "appearance": "system",
+            "density": "comfortable",
+            "sidebarStyle": "tinted",
+            "textSize": "system",
+            "theme": "aglyn",
+            "useWorkspaceBrand": true
+          }
+        }
+      ]
+    },
     "readMobilePushData": {
       "module": "libs/aglyn/src/lib/app-utils/mobile-push.ts",
       "cases": [
@@ -30098,6 +30886,207 @@
             "text"
           ],
           "result": null
+        }
+      ]
+    },
+    "readPinnedOrgs": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "pinnedOrgs": [
+                "a",
+                "b",
+                "a"
+              ]
+            }
+          ],
+          "result": [
+            "a",
+            "b"
+          ]
+        },
+        {
+          "args": [
+            {
+              "pinnedOrgs": [
+                "a",
+                7,
+                "",
+                null
+              ]
+            }
+          ],
+          "result": [
+            "a"
+          ]
+        },
+        {
+          "args": [
+            {
+              "pinnedOrgs": "a"
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "pinnedOrgs": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e",
+                "f",
+                "g"
+              ]
+            }
+          ],
+          "result": [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g"
+          ]
+        }
+      ]
+    },
+    "readRecentOrgs": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "recentOrgs": [
+                "a",
+                "b",
+                "a",
+                "c"
+              ]
+            }
+          ],
+          "result": [
+            "a",
+            "b",
+            "c"
+          ]
+        },
+        {
+          "args": [
+            {
+              "recentOrgs": [
+                "a",
+                "b",
+                "c",
+                "d",
+                "e",
+                "f",
+                "g",
+                "h",
+                "i",
+                "j"
+              ]
+            }
+          ],
+          "result": [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h"
+          ]
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": []
+        }
+      ]
+    },
+    "readRecents": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "recents": [
+                {
+                  "kind": "screen",
+                  "id": "site.orders",
+                  "orgId": "o1",
+                  "hostId": "h1",
+                  "label": "Orders",
+                  "screen": "commerce.orders",
+                  "openedAtMs": 9
+                },
+                {
+                  "kind": "page",
+                  "id": "p1",
+                  "orgId": "o1",
+                  "hostId": "h1",
+                  "label": "Home",
+                  "screen": "site.pages",
+                  "params": {
+                    "page": "p1"
+                  },
+                  "openedAtMs": 8
+                },
+                {
+                  "kind": "screen",
+                  "id": "site.orders",
+                  "orgId": "o1",
+                  "hostId": "h1",
+                  "label": "Orders",
+                  "screen": "commerce.orders",
+                  "openedAtMs": 7
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "id": "site.orders",
+              "kind": "screen",
+              "label": "Orders",
+              "openedAtMs": 9,
+              "orgId": "o1",
+              "screen": "commerce.orders"
+            },
+            {
+              "hostId": "h1",
+              "id": "p1",
+              "kind": "page",
+              "label": "Home",
+              "openedAtMs": 8,
+              "orgId": "o1",
+              "params": {
+                "page": "p1"
+              },
+              "screen": "site.pages"
+            }
+          ]
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": []
         }
       ]
     },
@@ -30232,6 +31221,797 @@
             },
             "unchecked": {}
           }
+        }
+      ]
+    },
+    "readStarred": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "starred": [
+                {
+                  "kind": "page",
+                  "id": "p1",
+                  "orgId": "o1",
+                  "hostId": "h1",
+                  "label": "Home",
+                  "screen": "site.pages",
+                  "params": {
+                    "page": "p1"
+                  },
+                  "starredAtMs": 5,
+                  "color": "blue"
+                },
+                {
+                  "kind": "page",
+                  "id": "p1",
+                  "orgId": "o1",
+                  "hostId": "h1",
+                  "label": "Home",
+                  "screen": "site.pages",
+                  "params": {
+                    "page": "p1"
+                  },
+                  "starredAtMs": 6
+                },
+                {
+                  "kind": "page"
+                },
+                {
+                  "kind": "screen",
+                  "id": "site.orders",
+                  "orgId": "o1",
+                  "hostId": "h1",
+                  "label": "Orders",
+                  "screen": "commerce.orders",
+                  "starredAtMs": 7,
+                  "color": "mauve"
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "color": "blue",
+              "hostId": "h1",
+              "id": "p1",
+              "kind": "page",
+              "label": "Home",
+              "orgId": "o1",
+              "params": {
+                "page": "p1"
+              },
+              "screen": "site.pages",
+              "starredAtMs": 5
+            },
+            {
+              "hostId": "h1",
+              "id": "site.orders",
+              "kind": "screen",
+              "label": "Orders",
+              "orgId": "o1",
+              "screen": "commerce.orders",
+              "starredAtMs": 7
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "starred": "x"
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            {
+              "starred": [
+                {
+                  "kind": "screen",
+                  "id": "site.orders",
+                  "orgId": "o1",
+                  "hostId": "h1",
+                  "label": "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+                  "screen": "commerce.orders",
+                  "starredAtMs": 1
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "id": "site.orders",
+              "kind": "screen",
+              "label": "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+              "orgId": "o1",
+              "screen": "commerce.orders",
+              "starredAtMs": 1
+            }
+          ]
+        }
+      ]
+    },
+    "readWorkspaceColors": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "workspaceColors": {
+                "o1": "#00B0FF",
+                "o2": "blue",
+                "o3": "#e040fb",
+                "": "#000000"
+              }
+            }
+          ],
+          "result": {
+            "o1": "#00B0FF",
+            "o3": "#e040fb"
+          }
+        },
+        {
+          "args": [
+            {
+              "workspaceColors": [
+                "#00B0FF"
+              ]
+            }
+          ],
+          "result": {}
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": {}
+        }
+      ]
+    },
+    "recordRecent": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "kind": "page",
+                "id": "p1",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Home",
+                "screen": "site.pages",
+                "params": {
+                  "page": "p1"
+                },
+                "openedAtMs": 1
+              },
+              {
+                "kind": "screen",
+                "id": "site.orders",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Orders",
+                "screen": "commerce.orders",
+                "openedAtMs": 2
+              }
+            ],
+            {
+              "kind": "screen",
+              "id": "site.orders",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Orders",
+              "screen": "commerce.orders"
+            },
+            10
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "id": "site.orders",
+              "kind": "screen",
+              "label": "Orders",
+              "openedAtMs": 10,
+              "orgId": "o1",
+              "screen": "commerce.orders"
+            },
+            {
+              "hostId": "h1",
+              "id": "p1",
+              "kind": "page",
+              "label": "Home",
+              "openedAtMs": 1,
+              "orgId": "o1",
+              "params": {
+                "page": "p1"
+              },
+              "screen": "site.pages"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "kind": "page",
+                "id": "p0",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 0
+              },
+              {
+                "kind": "page",
+                "id": "p1",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 1
+              },
+              {
+                "kind": "page",
+                "id": "p2",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 2
+              },
+              {
+                "kind": "page",
+                "id": "p3",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 3
+              },
+              {
+                "kind": "page",
+                "id": "p4",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 4
+              },
+              {
+                "kind": "page",
+                "id": "p5",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 5
+              },
+              {
+                "kind": "page",
+                "id": "p6",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 6
+              },
+              {
+                "kind": "page",
+                "id": "p7",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 7
+              },
+              {
+                "kind": "page",
+                "id": "p8",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 8
+              },
+              {
+                "kind": "page",
+                "id": "p9",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 9
+              },
+              {
+                "kind": "page",
+                "id": "p10",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 10
+              },
+              {
+                "kind": "page",
+                "id": "p11",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 11
+              },
+              {
+                "kind": "page",
+                "id": "p12",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 12
+              },
+              {
+                "kind": "page",
+                "id": "p13",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 13
+              },
+              {
+                "kind": "page",
+                "id": "p14",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 14
+              },
+              {
+                "kind": "page",
+                "id": "p15",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 15
+              },
+              {
+                "kind": "page",
+                "id": "p16",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 16
+              },
+              {
+                "kind": "page",
+                "id": "p17",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 17
+              },
+              {
+                "kind": "page",
+                "id": "p18",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 18
+              },
+              {
+                "kind": "page",
+                "id": "p19",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 19
+              },
+              {
+                "kind": "page",
+                "id": "p20",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 20
+              },
+              {
+                "kind": "page",
+                "id": "p21",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 21
+              },
+              {
+                "kind": "page",
+                "id": "p22",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 22
+              },
+              {
+                "kind": "page",
+                "id": "p23",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 23
+              },
+              {
+                "kind": "page",
+                "id": "p24",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 24
+              },
+              {
+                "kind": "page",
+                "id": "p25",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 25
+              },
+              {
+                "kind": "page",
+                "id": "p26",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 26
+              },
+              {
+                "kind": "page",
+                "id": "p27",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 27
+              },
+              {
+                "kind": "page",
+                "id": "p28",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 28
+              },
+              {
+                "kind": "page",
+                "id": "p29",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "openedAtMs": 29
+              }
+            ],
+            {
+              "kind": "page",
+              "id": "p1",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Home",
+              "screen": "site.pages",
+              "params": {
+                "page": "p1"
+              }
+            },
+            99
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "id": "p1",
+              "kind": "page",
+              "label": "Home",
+              "openedAtMs": 99,
+              "orgId": "o1",
+              "params": {
+                "page": "p1"
+              },
+              "screen": "site.pages"
+            },
+            {
+              "id": "p0",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 0,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p1",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 1,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p2",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 2,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p3",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 3,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p4",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 4,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p5",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 5,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p6",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 6,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p7",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 7,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p8",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 8,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p9",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 9,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p10",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 10,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p11",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 11,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p12",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 12,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p13",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 13,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p14",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 14,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p15",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 15,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p16",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 16,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p17",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 17,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p18",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 18,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p19",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 19,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p20",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 20,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p21",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 21,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p22",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 22,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p23",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 23,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p24",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 24,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p25",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 25,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p26",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 26,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p27",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 27,
+              "orgId": "o1",
+              "screen": "site.pages"
+            },
+            {
+              "id": "p28",
+              "kind": "page",
+              "label": "Item",
+              "openedAtMs": 28,
+              "orgId": "o1",
+              "screen": "site.pages"
+            }
+          ]
+        },
+        {
+          "args": [
+            [],
+            {
+              "kind": "page"
+            },
+            1
+          ],
+          "result": []
+        }
+      ]
+    },
+    "recordRecentOrg": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            "c"
+          ],
+          "result": [
+            "c",
+            "a",
+            "b"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g",
+              "h"
+            ],
+            "z"
+          ],
+          "result": [
+            "z",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g"
+          ]
+        },
+        {
+          "args": [
+            [],
+            "a"
+          ],
+          "result": [
+            "a"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a"
+            ],
+            ""
+          ],
+          "result": [
+            "a"
+          ]
         }
       ]
     },
@@ -31139,6 +32919,91 @@
               }
             ]
           }
+        }
+      ]
+    },
+    "replacePinnedOrg": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e"
+            ],
+            "c",
+            "f"
+          ],
+          "result": [
+            "a",
+            "b",
+            "f",
+            "d",
+            "e"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e"
+            ],
+            "z",
+            "f"
+          ],
+          "result": [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e"
+            ],
+            "c",
+            "a"
+          ],
+          "result": [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e"
+            ],
+            "c",
+            ""
+          ],
+          "result": [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e"
+          ]
         }
       ]
     },
@@ -46536,6 +48401,2225 @@
         }
       ]
     },
+    "resolveNavList": {
+      "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "cases": [
+        {
+          "args": [
+            "site",
+            [
+              "forms",
+              "logic",
+              "commerce",
+              "bookings",
+              "events-calendar",
+              "inbox",
+              "crm",
+              "email",
+              "workflows",
+              "redirects",
+              "funnels",
+              "sms",
+              "ai",
+              "data"
+            ],
+            true
+          ],
+          "result": {
+            "groups": [
+              {
+                "foldable": false,
+                "id": "top",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "home",
+                      "surface": "shell"
+                    },
+                    "icon": {
+                      "android": "home",
+                      "apple": "house"
+                    },
+                    "id": "home",
+                    "label": "Home",
+                    "screen": "shell.home"
+                  },
+                  {
+                    "console": {
+                      "id": "nav-tab-analytics",
+                      "surface": "hostTab"
+                    },
+                    "consoleLabel": "Analytics",
+                    "icon": {
+                      "android": "bar_chart",
+                      "apple": "chart.bar"
+                    },
+                    "id": "overview",
+                    "keywords": [
+                      "analytics",
+                      "traffic",
+                      "visitors"
+                    ],
+                    "label": "Overview",
+                    "screen": "shell.analytics"
+                  }
+                ]
+              },
+              {
+                "dynamic": "starred",
+                "foldable": true,
+                "id": "starred",
+                "label": "Starred",
+                "rows": []
+              },
+              {
+                "foldable": true,
+                "id": "website",
+                "label": "Website",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "nav-tab-screens",
+                      "surface": "hostTab"
+                    },
+                    "icon": {
+                      "android": "description",
+                      "apple": "doc.text"
+                    },
+                    "id": "pages",
+                    "label": "Pages",
+                    "screen": "site.pages",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "nav-tab-screens",
+                          "surface": "hostTab"
+                        },
+                        "id": "pages",
+                        "label": "Pages",
+                        "screen": "site.pages"
+                      },
+                      {
+                        "console": {
+                          "id": "nav-tab-components",
+                          "surface": "hostTab"
+                        },
+                        "id": "components",
+                        "label": "Components",
+                        "screen": "site.components"
+                      },
+                      {
+                        "console": {
+                          "id": "nav-tab-layouts",
+                          "surface": "hostTab"
+                        },
+                        "id": "layouts",
+                        "label": "Layouts",
+                        "screen": "site.layouts"
+                      },
+                      {
+                        "console": {
+                          "id": "nav-tab-templates",
+                          "surface": "hostTab"
+                        },
+                        "id": "templates",
+                        "label": "Templates",
+                        "screen": "site.templates"
+                      },
+                      {
+                        "console": {
+                          "id": "nav-tab-content",
+                          "surface": "hostTab"
+                        },
+                        "id": "content",
+                        "label": "Content",
+                        "screen": "site.content"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "nav-tab-media",
+                      "surface": "hostTab"
+                    },
+                    "icon": {
+                      "android": "photo_library",
+                      "apple": "photo.on.rectangle"
+                    },
+                    "id": "media",
+                    "label": "Media",
+                    "screen": "site.media"
+                  },
+                  {
+                    "console": {
+                      "id": "/forms",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "dynamic_form",
+                      "apple": "list.bullet.rectangle"
+                    },
+                    "id": "forms",
+                    "label": "Forms",
+                    "pluginId": "forms",
+                    "screen": "forms.list"
+                  },
+                  {
+                    "console": {
+                      "id": "/logic",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "functions",
+                      "apple": "function"
+                    },
+                    "id": "logic",
+                    "keywords": [
+                      "functions",
+                      "variables"
+                    ],
+                    "label": "Logic",
+                    "pluginId": "logic",
+                    "screen": "logic.page"
+                  }
+                ]
+              },
+              {
+                "foldable": true,
+                "id": "sell",
+                "label": "Sell",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "/products/orders",
+                      "surface": "hostPluginSection"
+                    },
+                    "icon": {
+                      "android": "shopping_basket",
+                      "apple": "bag"
+                    },
+                    "id": "orders",
+                    "label": "Orders",
+                    "pluginId": "commerce",
+                    "screen": "commerce.orders",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/products/orders",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "orders",
+                        "label": "Orders",
+                        "screen": "commerce.orders"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/returns",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "returns",
+                        "label": "Returns",
+                        "screen": "commerce.returns"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/reservations",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "reservations",
+                        "label": "Reservations",
+                        "screen": "commerce.reservations"
+                      }
+                    ]
+                  },
+                  {
+                    "actions": [
+                      {
+                        "icon": {
+                          "android": "qr_code_scanner",
+                          "apple": "barcode.viewfinder"
+                        },
+                        "id": "scan",
+                        "label": "Scan stock",
+                        "screen": "commerce.scan"
+                      },
+                      {
+                        "icon": {
+                          "android": "add",
+                          "apple": "plus"
+                        },
+                        "id": "newProduct",
+                        "label": "New product",
+                        "params": {
+                          "new": "1"
+                        },
+                        "screen": "commerce.product"
+                      }
+                    ],
+                    "console": {
+                      "id": "/products",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "sell",
+                      "apple": "tag"
+                    },
+                    "id": "products",
+                    "keywords": [
+                      "catalog",
+                      "stock",
+                      "inventory"
+                    ],
+                    "label": "Products",
+                    "pluginId": "commerce",
+                    "screen": "commerce.products",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/products/catalog",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "catalog",
+                        "label": "Catalog",
+                        "screen": "commerce.products"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/promotions",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "promotions",
+                        "label": "Promotions",
+                        "screen": "commerce.promotions"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/analytics",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "analytics",
+                        "label": "Analytics",
+                        "screen": "commerce.sales"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "/bookings",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "event_available",
+                      "apple": "calendar.badge.clock"
+                    },
+                    "id": "bookings",
+                    "label": "Bookings",
+                    "pluginId": "bookings",
+                    "screen": "bookings.calendar"
+                  },
+                  {
+                    "console": {
+                      "id": "/events",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "event",
+                      "apple": "calendar"
+                    },
+                    "id": "events",
+                    "label": "Events",
+                    "pluginId": "events-calendar",
+                    "screen": "events-calendar.events"
+                  }
+                ]
+              },
+              {
+                "foldable": true,
+                "id": "customers",
+                "label": "Customers",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "/inbox",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "inbox",
+                      "apple": "tray"
+                    },
+                    "id": "inbox",
+                    "label": "Inbox",
+                    "pluginId": "inbox",
+                    "screen": "inbox.submissions",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/inbox/submissions",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "submissions",
+                        "label": "Submissions",
+                        "screen": "inbox.submissions"
+                      },
+                      {
+                        "console": {
+                          "id": "/inbox/contacts",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "contacts",
+                        "label": "Members & leads",
+                        "screen": "inbox.people"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "/crm",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "contact_mail",
+                      "apple": "person.text.rectangle"
+                    },
+                    "id": "crm",
+                    "keywords": [
+                      "contacts",
+                      "people",
+                      "deals",
+                      "tasks"
+                    ],
+                    "label": "CRM",
+                    "pluginId": "crm",
+                    "screen": "crm.contacts",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/crm/contacts",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "contacts",
+                        "label": "Contacts",
+                        "screen": "crm.contacts"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/leads",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "leads",
+                        "label": "Leads",
+                        "screen": "crm.leads"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/companies",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "companies",
+                        "label": "Companies",
+                        "screen": "crm.companies"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/deals",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "deals",
+                        "label": "Deals",
+                        "screen": "crm.deals"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/tasks",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "tasks",
+                        "label": "Tasks",
+                        "screen": "crm.tasks"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/reports",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "reports",
+                        "label": "Reports",
+                        "screen": "crm.reports"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/fields",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "fields",
+                        "label": "Fields",
+                        "screen": "crm.fields"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/settings",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "settings",
+                        "label": "Settings",
+                        "screen": "crm.settings"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "/emails",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "mail",
+                      "apple": "envelope"
+                    },
+                    "id": "emails",
+                    "label": "Emails",
+                    "pluginId": "email",
+                    "screen": "email.messages",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/emails/messages",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "messages",
+                        "label": "Messages",
+                        "screen": "email.messages"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/templates",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "templates",
+                        "label": "Templates",
+                        "screen": "email.templates"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/audiences",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "audiences",
+                        "label": "Audiences",
+                        "screen": "email.audiences"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/topics",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "topics",
+                        "label": "Topics",
+                        "screen": "email.topics"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/sending",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "sending",
+                        "label": "Sending",
+                        "screen": "email.sending"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/suppressions",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "suppressions",
+                        "label": "Suppressions",
+                        "screen": "email.suppressions"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "foldable": true,
+                "id": "more",
+                "label": "More",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "/automation",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "bolt",
+                      "apple": "bolt"
+                    },
+                    "id": "automation",
+                    "label": "Automation",
+                    "pluginId": "workflows",
+                    "screen": "workflows.automation"
+                  },
+                  {
+                    "console": {
+                      "id": "/redirects",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "alt_route",
+                      "apple": "arrow.triangle.branch"
+                    },
+                    "id": "redirects",
+                    "label": "Redirects",
+                    "pluginId": "redirects",
+                    "screen": "redirects.list"
+                  },
+                  {
+                    "console": {
+                      "id": "hostAnalytics/funnels",
+                      "surface": "consoleWidget"
+                    },
+                    "icon": {
+                      "android": "filter_alt",
+                      "apple": "line.3.horizontal.decrease"
+                    },
+                    "id": "funnels",
+                    "label": "Funnels",
+                    "pluginId": "funnels",
+                    "screen": "funnels.list"
+                  },
+                  {
+                    "console": {
+                      "id": "sms.texts",
+                      "surface": "nativeOnly"
+                    },
+                    "icon": {
+                      "android": "sms",
+                      "apple": "message"
+                    },
+                    "id": "texts",
+                    "keywords": [
+                      "sms"
+                    ],
+                    "label": "Customer texts",
+                    "pluginId": "sms",
+                    "screen": "sms.texts"
+                  },
+                  {
+                    "console": {
+                      "id": "/ai-jobs",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "auto_awesome",
+                      "apple": "sparkles"
+                    },
+                    "id": "aiJobs",
+                    "label": "AI jobs",
+                    "pluginId": "ai",
+                    "screen": "ai.jobs"
+                  },
+                  {
+                    "console": {
+                      "id": "/data",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "dataset",
+                      "apple": "tablecells"
+                    },
+                    "id": "data",
+                    "label": "Data",
+                    "pluginId": "data",
+                    "screen": "data.datasets"
+                  }
+                ]
+              },
+              {
+                "foldable": false,
+                "id": "settings",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "siteSettings",
+                      "surface": "shell"
+                    },
+                    "icon": {
+                      "android": "settings",
+                      "apple": "gearshape"
+                    },
+                    "id": "siteSettings",
+                    "label": "Site settings",
+                    "screen": "shell.siteSettings"
+                  }
+                ]
+              }
+            ],
+            "id": "site"
+          }
+        },
+        {
+          "args": [
+            "site",
+            [
+              "forms",
+              "commerce",
+              "inbox"
+            ],
+            false
+          ],
+          "result": {
+            "groups": [
+              {
+                "foldable": false,
+                "id": "top",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "home",
+                      "surface": "shell"
+                    },
+                    "icon": {
+                      "android": "home",
+                      "apple": "house"
+                    },
+                    "id": "home",
+                    "label": "Home",
+                    "screen": "shell.home"
+                  },
+                  {
+                    "console": {
+                      "id": "nav-tab-analytics",
+                      "surface": "hostTab"
+                    },
+                    "consoleLabel": "Analytics",
+                    "icon": {
+                      "android": "bar_chart",
+                      "apple": "chart.bar"
+                    },
+                    "id": "overview",
+                    "keywords": [
+                      "analytics",
+                      "traffic",
+                      "visitors"
+                    ],
+                    "label": "Overview",
+                    "screen": "shell.analytics"
+                  }
+                ]
+              },
+              {
+                "dynamic": "starred",
+                "foldable": true,
+                "id": "starred",
+                "label": "Starred",
+                "rows": []
+              },
+              {
+                "foldable": true,
+                "id": "website",
+                "label": "Website",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "nav-tab-screens",
+                      "surface": "hostTab"
+                    },
+                    "icon": {
+                      "android": "description",
+                      "apple": "doc.text"
+                    },
+                    "id": "pages",
+                    "label": "Pages",
+                    "screen": "site.pages",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "nav-tab-screens",
+                          "surface": "hostTab"
+                        },
+                        "id": "pages",
+                        "label": "Pages",
+                        "screen": "site.pages"
+                      },
+                      {
+                        "console": {
+                          "id": "nav-tab-components",
+                          "surface": "hostTab"
+                        },
+                        "id": "components",
+                        "label": "Components",
+                        "screen": "site.components"
+                      },
+                      {
+                        "console": {
+                          "id": "nav-tab-layouts",
+                          "surface": "hostTab"
+                        },
+                        "id": "layouts",
+                        "label": "Layouts",
+                        "screen": "site.layouts"
+                      },
+                      {
+                        "console": {
+                          "id": "nav-tab-templates",
+                          "surface": "hostTab"
+                        },
+                        "id": "templates",
+                        "label": "Templates",
+                        "screen": "site.templates"
+                      },
+                      {
+                        "console": {
+                          "id": "nav-tab-content",
+                          "surface": "hostTab"
+                        },
+                        "id": "content",
+                        "label": "Content",
+                        "screen": "site.content"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "nav-tab-media",
+                      "surface": "hostTab"
+                    },
+                    "icon": {
+                      "android": "photo_library",
+                      "apple": "photo.on.rectangle"
+                    },
+                    "id": "media",
+                    "label": "Media",
+                    "screen": "site.media"
+                  },
+                  {
+                    "console": {
+                      "id": "/forms",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "dynamic_form",
+                      "apple": "list.bullet.rectangle"
+                    },
+                    "id": "forms",
+                    "label": "Forms",
+                    "pluginId": "forms",
+                    "screen": "forms.list"
+                  }
+                ]
+              },
+              {
+                "foldable": true,
+                "id": "sell",
+                "label": "Sell",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "/products/orders",
+                      "surface": "hostPluginSection"
+                    },
+                    "icon": {
+                      "android": "shopping_basket",
+                      "apple": "bag"
+                    },
+                    "id": "orders",
+                    "label": "Orders",
+                    "pluginId": "commerce",
+                    "screen": "commerce.orders",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/products/orders",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "orders",
+                        "label": "Orders",
+                        "screen": "commerce.orders"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/returns",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "returns",
+                        "label": "Returns",
+                        "screen": "commerce.returns"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/reservations",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "reservations",
+                        "label": "Reservations",
+                        "screen": "commerce.reservations"
+                      }
+                    ]
+                  },
+                  {
+                    "actions": [
+                      {
+                        "icon": {
+                          "android": "qr_code_scanner",
+                          "apple": "barcode.viewfinder"
+                        },
+                        "id": "scan",
+                        "label": "Scan stock",
+                        "screen": "commerce.scan"
+                      },
+                      {
+                        "icon": {
+                          "android": "add",
+                          "apple": "plus"
+                        },
+                        "id": "newProduct",
+                        "label": "New product",
+                        "params": {
+                          "new": "1"
+                        },
+                        "screen": "commerce.product"
+                      }
+                    ],
+                    "console": {
+                      "id": "/products",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "sell",
+                      "apple": "tag"
+                    },
+                    "id": "products",
+                    "keywords": [
+                      "catalog",
+                      "stock",
+                      "inventory"
+                    ],
+                    "label": "Products",
+                    "pluginId": "commerce",
+                    "screen": "commerce.products",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/products/catalog",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "catalog",
+                        "label": "Catalog",
+                        "screen": "commerce.products"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/promotions",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "promotions",
+                        "label": "Promotions",
+                        "screen": "commerce.promotions"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/analytics",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "analytics",
+                        "label": "Analytics",
+                        "screen": "commerce.sales"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "foldable": true,
+                "id": "customers",
+                "label": "Customers",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "/inbox",
+                      "surface": "hostPluginTab"
+                    },
+                    "icon": {
+                      "android": "inbox",
+                      "apple": "tray"
+                    },
+                    "id": "inbox",
+                    "label": "Inbox",
+                    "pluginId": "inbox",
+                    "screen": "inbox.submissions",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/inbox/submissions",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "submissions",
+                        "label": "Submissions",
+                        "screen": "inbox.submissions"
+                      },
+                      {
+                        "console": {
+                          "id": "/inbox/contacts",
+                          "surface": "hostPluginSection"
+                        },
+                        "id": "contacts",
+                        "label": "Members & leads",
+                        "screen": "inbox.people"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "foldable": false,
+                "id": "settings",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "siteSettings",
+                      "surface": "shell"
+                    },
+                    "icon": {
+                      "android": "settings",
+                      "apple": "gearshape"
+                    },
+                    "id": "siteSettings",
+                    "label": "Site settings",
+                    "screen": "shell.siteSettings"
+                  }
+                ]
+              }
+            ],
+            "id": "site"
+          }
+        },
+        {
+          "args": [
+            "siteSettings",
+            [],
+            false
+          ],
+          "result": {
+            "groups": [
+              {
+                "foldable": false,
+                "id": "people",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "nav-tab-users",
+                      "surface": "hostTab"
+                    },
+                    "icon": {
+                      "android": "group",
+                      "apple": "person.2"
+                    },
+                    "id": "users",
+                    "keywords": [
+                      "team",
+                      "collaborators"
+                    ],
+                    "label": "Users",
+                    "screen": "core.site.users"
+                  }
+                ]
+              },
+              {
+                "foldable": false,
+                "id": "setup",
+                "label": "Setup",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "details",
+                      "surface": "setupSection"
+                    },
+                    "description": "Logo, business details, layout and languages",
+                    "icon": {
+                      "android": "info",
+                      "apple": "info.circle"
+                    },
+                    "id": "details",
+                    "label": "Basic details",
+                    "params": {
+                      "section": "details"
+                    },
+                    "screen": "site.setup"
+                  },
+                  {
+                    "console": {
+                      "id": "business",
+                      "surface": "setupSection"
+                    },
+                    "description": "What the business is, for everything that writes about it",
+                    "icon": {
+                      "android": "business",
+                      "apple": "briefcase"
+                    },
+                    "id": "business",
+                    "label": "Business profile",
+                    "params": {
+                      "section": "business"
+                    },
+                    "screen": "site.setup"
+                  },
+                  {
+                    "console": {
+                      "id": "seo",
+                      "surface": "setupSection"
+                    },
+                    "description": "Search title, social image, business profile and verification",
+                    "icon": {
+                      "android": "travel_explore",
+                      "apple": "magnifyingglass"
+                    },
+                    "id": "seo",
+                    "keywords": [
+                      "search"
+                    ],
+                    "label": "SEO",
+                    "params": {
+                      "section": "seo"
+                    },
+                    "screen": "site.setup"
+                  },
+                  {
+                    "console": {
+                      "id": "tracking",
+                      "surface": "setupSection"
+                    },
+                    "description": "Analytics, ad tags and the consent banner",
+                    "icon": {
+                      "android": "query_stats",
+                      "apple": "chart.line.uptrend.xyaxis"
+                    },
+                    "id": "tracking",
+                    "keywords": [
+                      "cookies",
+                      "pixels"
+                    ],
+                    "label": "Tracking",
+                    "params": {
+                      "section": "tracking"
+                    },
+                    "screen": "site.setup"
+                  },
+                  {
+                    "console": {
+                      "id": "theme",
+                      "surface": "setupSection"
+                    },
+                    "description": "Colors, font, shape and your saved themes",
+                    "icon": {
+                      "android": "palette",
+                      "apple": "paintpalette"
+                    },
+                    "id": "theme",
+                    "keywords": [
+                      "colors",
+                      "fonts"
+                    ],
+                    "label": "Theme",
+                    "screen": "site.theme"
+                  },
+                  {
+                    "console": {
+                      "id": "emails",
+                      "surface": "setupSection"
+                    },
+                    "description": "The emails your site sends to customers",
+                    "icon": {
+                      "android": "mail",
+                      "apple": "envelope"
+                    },
+                    "id": "emails",
+                    "label": "Emails",
+                    "params": {
+                      "section": "emails"
+                    },
+                    "screen": "site.setup"
+                  },
+                  {
+                    "console": {
+                      "id": "integrations",
+                      "surface": "setupSection"
+                    },
+                    "description": "Email platforms, Zapier, live chat and the other tools your site connects to",
+                    "icon": {
+                      "android": "hub",
+                      "apple": "point.3.connected.trianglepath.dotted"
+                    },
+                    "id": "integrations",
+                    "label": "Integrations",
+                    "params": {
+                      "section": "integrations"
+                    },
+                    "screen": "site.setup"
+                  }
+                ]
+              }
+            ],
+            "id": "siteSettings",
+            "title": "settings"
+          }
+        },
+        {
+          "args": [
+            "siteSettings",
+            [],
+            true
+          ],
+          "result": {
+            "groups": [
+              {
+                "foldable": false,
+                "id": "people",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "nav-tab-users",
+                      "surface": "hostTab"
+                    },
+                    "icon": {
+                      "android": "group",
+                      "apple": "person.2"
+                    },
+                    "id": "users",
+                    "keywords": [
+                      "team",
+                      "collaborators"
+                    ],
+                    "label": "Users",
+                    "screen": "core.site.users"
+                  }
+                ]
+              },
+              {
+                "foldable": false,
+                "id": "setup",
+                "label": "Setup",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "details",
+                      "surface": "setupSection"
+                    },
+                    "description": "Logo, business details, layout and languages",
+                    "icon": {
+                      "android": "info",
+                      "apple": "info.circle"
+                    },
+                    "id": "details",
+                    "label": "Basic details",
+                    "params": {
+                      "section": "details"
+                    },
+                    "screen": "site.setup"
+                  },
+                  {
+                    "console": {
+                      "id": "business",
+                      "surface": "setupSection"
+                    },
+                    "description": "What the business is, for everything that writes about it",
+                    "icon": {
+                      "android": "business",
+                      "apple": "briefcase"
+                    },
+                    "id": "business",
+                    "label": "Business profile",
+                    "params": {
+                      "section": "business"
+                    },
+                    "screen": "site.setup"
+                  },
+                  {
+                    "console": {
+                      "id": "seo",
+                      "surface": "setupSection"
+                    },
+                    "description": "Search title, social image, business profile and verification",
+                    "icon": {
+                      "android": "travel_explore",
+                      "apple": "magnifyingglass"
+                    },
+                    "id": "seo",
+                    "keywords": [
+                      "search"
+                    ],
+                    "label": "SEO",
+                    "params": {
+                      "section": "seo"
+                    },
+                    "screen": "site.setup"
+                  },
+                  {
+                    "console": {
+                      "id": "tracking",
+                      "surface": "setupSection"
+                    },
+                    "description": "Analytics, ad tags and the consent banner",
+                    "icon": {
+                      "android": "query_stats",
+                      "apple": "chart.line.uptrend.xyaxis"
+                    },
+                    "id": "tracking",
+                    "keywords": [
+                      "cookies",
+                      "pixels"
+                    ],
+                    "label": "Tracking",
+                    "params": {
+                      "section": "tracking"
+                    },
+                    "screen": "site.setup"
+                  },
+                  {
+                    "console": {
+                      "id": "theme",
+                      "surface": "setupSection"
+                    },
+                    "description": "Colors, font, shape and your saved themes",
+                    "icon": {
+                      "android": "palette",
+                      "apple": "paintpalette"
+                    },
+                    "id": "theme",
+                    "keywords": [
+                      "colors",
+                      "fonts"
+                    ],
+                    "label": "Theme",
+                    "screen": "site.theme"
+                  },
+                  {
+                    "console": {
+                      "id": "emails",
+                      "surface": "setupSection"
+                    },
+                    "description": "The emails your site sends to customers",
+                    "icon": {
+                      "android": "mail",
+                      "apple": "envelope"
+                    },
+                    "id": "emails",
+                    "label": "Emails",
+                    "params": {
+                      "section": "emails"
+                    },
+                    "screen": "site.setup"
+                  },
+                  {
+                    "console": {
+                      "id": "integrations",
+                      "surface": "setupSection"
+                    },
+                    "description": "Email platforms, Zapier, live chat and the other tools your site connects to",
+                    "icon": {
+                      "android": "hub",
+                      "apple": "point.3.connected.trianglepath.dotted"
+                    },
+                    "id": "integrations",
+                    "label": "Integrations",
+                    "params": {
+                      "section": "integrations"
+                    },
+                    "screen": "site.setup"
+                  }
+                ]
+              },
+              {
+                "foldable": false,
+                "id": "admin",
+                "label": "Admin",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "HOST_ADMIN_GENERAL",
+                      "surface": "hostAdminSection"
+                    },
+                    "icon": {
+                      "android": "settings",
+                      "apple": "gearshape"
+                    },
+                    "id": "general",
+                    "label": "General",
+                    "requiresHostAdmin": true,
+                    "screen": "core.site.general"
+                  },
+                  {
+                    "console": {
+                      "id": "HOST_ADMIN_PLUGINS",
+                      "surface": "hostAdminSection"
+                    },
+                    "icon": {
+                      "android": "extension",
+                      "apple": "puzzlepiece.extension"
+                    },
+                    "id": "plugins",
+                    "label": "Plugins",
+                    "requiresHostAdmin": true,
+                    "screen": "core.site.plugins"
+                  },
+                  {
+                    "console": {
+                      "id": "HOST_ADMIN_DOMAIN",
+                      "surface": "hostAdminSection"
+                    },
+                    "icon": {
+                      "android": "domain",
+                      "apple": "link"
+                    },
+                    "id": "domain",
+                    "label": "Custom Domain",
+                    "requiresHostAdmin": true,
+                    "screen": "core.site.domain"
+                  },
+                  {
+                    "console": {
+                      "id": "HOST_ADMIN_SECURITY",
+                      "surface": "hostAdminSection"
+                    },
+                    "icon": {
+                      "android": "security",
+                      "apple": "lock"
+                    },
+                    "id": "security",
+                    "label": "Security",
+                    "requiresHostAdmin": true,
+                    "screen": "core.site.security"
+                  },
+                  {
+                    "console": {
+                      "id": "HOST_ADMIN_ERROR_PAGES",
+                      "surface": "hostAdminSection"
+                    },
+                    "icon": {
+                      "android": "error_outline",
+                      "apple": "exclamationmark.circle"
+                    },
+                    "id": "errorPages",
+                    "label": "Error pages",
+                    "requiresHostAdmin": true,
+                    "screen": "core.site.errorPages"
+                  },
+                  {
+                    "console": {
+                      "id": "HOST_ADMIN_ACTIVITY",
+                      "surface": "hostAdminSection"
+                    },
+                    "icon": {
+                      "android": "history",
+                      "apple": "clock.arrow.circlepath"
+                    },
+                    "id": "activity",
+                    "label": "Activity",
+                    "requiresHostAdmin": true,
+                    "screen": "core.site.activity"
+                  },
+                  {
+                    "console": {
+                      "id": "HOST_ADMIN_BACKUP",
+                      "surface": "hostAdminSection"
+                    },
+                    "icon": {
+                      "android": "backup",
+                      "apple": "square.and.arrow.down"
+                    },
+                    "id": "backup",
+                    "label": "Backup & template",
+                    "requiresHostAdmin": true,
+                    "screen": "core.site.backup"
+                  },
+                  {
+                    "console": {
+                      "id": "HOST_ADMIN_DANGER",
+                      "surface": "hostAdminSection"
+                    },
+                    "icon": {
+                      "android": "delete_forever",
+                      "apple": "trash"
+                    },
+                    "id": "danger",
+                    "label": "Danger zone",
+                    "requiresHostAdmin": true,
+                    "screen": "core.site.delete"
+                  }
+                ]
+              }
+            ],
+            "id": "siteSettings",
+            "title": "settings"
+          }
+        },
+        {
+          "args": [
+            "workspace",
+            [
+              "crm",
+              "inbox",
+              "email",
+              "data",
+              "marketplace"
+            ],
+            false
+          ],
+          "result": {
+            "groups": [
+              {
+                "foldable": false,
+                "id": "top",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "home",
+                      "surface": "shell"
+                    },
+                    "icon": {
+                      "android": "home",
+                      "apple": "house"
+                    },
+                    "id": "home",
+                    "label": "Home",
+                    "screen": "shell.home"
+                  }
+                ]
+              },
+              {
+                "dynamic": "starred",
+                "foldable": true,
+                "id": "starred",
+                "label": "Starred",
+                "rows": []
+              },
+              {
+                "foldable": false,
+                "id": "workspace",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "nav-tab-org-sites",
+                      "surface": "orgTab"
+                    },
+                    "icon": {
+                      "android": "public",
+                      "apple": "globe"
+                    },
+                    "id": "sites",
+                    "label": "Sites",
+                    "screen": "site.sites"
+                  },
+                  {
+                    "console": {
+                      "id": "/inbox",
+                      "surface": "orgPluginTab"
+                    },
+                    "icon": {
+                      "android": "inbox",
+                      "apple": "tray"
+                    },
+                    "id": "inbox",
+                    "label": "Inbox",
+                    "pluginId": "inbox",
+                    "screen": "inbox.submissions",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/inbox/submissions",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "submissions",
+                        "label": "Submissions",
+                        "screen": "inbox.submissions"
+                      },
+                      {
+                        "console": {
+                          "id": "/inbox/contacts",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "contacts",
+                        "label": "Members & leads",
+                        "screen": "inbox.people"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "/crm",
+                      "surface": "orgPluginTab"
+                    },
+                    "icon": {
+                      "android": "contact_mail",
+                      "apple": "person.text.rectangle"
+                    },
+                    "id": "crm",
+                    "keywords": [
+                      "contacts",
+                      "people",
+                      "deals",
+                      "tasks"
+                    ],
+                    "label": "CRM",
+                    "pluginId": "crm",
+                    "screen": "crm.contacts",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/crm/contacts",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "contacts",
+                        "label": "Contacts",
+                        "screen": "crm.contacts"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/leads",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "leads",
+                        "label": "Leads",
+                        "screen": "crm.leads"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/companies",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "companies",
+                        "label": "Companies",
+                        "screen": "crm.companies"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/deals",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "deals",
+                        "label": "Deals",
+                        "screen": "crm.deals"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/tasks",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "tasks",
+                        "label": "Tasks",
+                        "screen": "crm.tasks"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/reports",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "reports",
+                        "label": "Reports",
+                        "screen": "crm.reports"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/fields",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "fields",
+                        "label": "Fields",
+                        "screen": "crm.fields"
+                      },
+                      {
+                        "console": {
+                          "id": "/crm/settings",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "settings",
+                        "label": "Settings",
+                        "screen": "crm.settings"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "/emails",
+                      "surface": "orgPluginTab"
+                    },
+                    "icon": {
+                      "android": "mail",
+                      "apple": "envelope"
+                    },
+                    "id": "emails",
+                    "label": "Emails",
+                    "pluginId": "email",
+                    "screen": "email.messages",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/emails/messages",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "messages",
+                        "label": "Messages",
+                        "screen": "email.messages"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/templates",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "templates",
+                        "label": "Templates",
+                        "screen": "email.templates"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/audiences",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "audiences",
+                        "label": "Audiences",
+                        "screen": "email.audiences"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/topics",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "topics",
+                        "label": "Topics",
+                        "screen": "email.topics"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/sending",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "sending",
+                        "label": "Sending",
+                        "screen": "email.sending"
+                      },
+                      {
+                        "console": {
+                          "id": "/emails/suppressions",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "suppressions",
+                        "label": "Suppressions",
+                        "screen": "email.suppressions"
+                      }
+                    ]
+                  },
+                  {
+                    "console": {
+                      "id": "nav-tab-org-media",
+                      "surface": "orgTab"
+                    },
+                    "icon": {
+                      "android": "photo_library",
+                      "apple": "photo.on.rectangle"
+                    },
+                    "id": "media",
+                    "label": "Media",
+                    "screen": "site.media"
+                  },
+                  {
+                    "console": {
+                      "id": "nav-tab-data",
+                      "surface": "orgTab"
+                    },
+                    "icon": {
+                      "android": "dataset",
+                      "apple": "tablecells"
+                    },
+                    "id": "data",
+                    "label": "Data",
+                    "pluginId": "data",
+                    "screen": "data.datasets"
+                  },
+                  {
+                    "console": {
+                      "id": "/marketplace",
+                      "surface": "orgPluginTab"
+                    },
+                    "icon": {
+                      "android": "storefront",
+                      "apple": "storefront"
+                    },
+                    "id": "marketplace",
+                    "label": "Marketplace",
+                    "pluginId": "marketplace",
+                    "screen": "marketplace.browse",
+                    "sections": [
+                      {
+                        "console": {
+                          "id": "/marketplace/browse",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "browse",
+                        "label": "Browse All",
+                        "screen": "marketplace.browse"
+                      },
+                      {
+                        "console": {
+                          "id": "/marketplace/installed",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "installed",
+                        "label": "Installed",
+                        "screen": "marketplace.installed"
+                      },
+                      {
+                        "console": {
+                          "id": "/marketplace/licences",
+                          "surface": "orgPluginSection"
+                        },
+                        "id": "licences",
+                        "label": "Licenses",
+                        "screen": "marketplace.licenses"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "id": "workspace"
+          }
+        },
+        {
+          "args": [
+            "workspaceSettings",
+            [
+              "ai"
+            ],
+            false
+          ],
+          "result": {
+            "groups": [
+              {
+                "foldable": false,
+                "id": "team",
+                "label": "Team",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "MANAGE_TEAM_MEMBERS",
+                      "surface": "teamSection"
+                    },
+                    "icon": {
+                      "android": "group",
+                      "apple": "person.2"
+                    },
+                    "id": "members",
+                    "keywords": [
+                      "team",
+                      "invite",
+                      "people"
+                    ],
+                    "label": "Members",
+                    "screen": "core.team"
+                  },
+                  {
+                    "console": {
+                      "id": "MANAGE_TEAM_ROLES",
+                      "surface": "teamSection"
+                    },
+                    "icon": {
+                      "android": "admin_panel_settings",
+                      "apple": "person.badge.key"
+                    },
+                    "id": "roles",
+                    "keywords": [
+                      "permissions"
+                    ],
+                    "label": "Custom roles",
+                    "screen": "core.team.roles"
+                  },
+                  {
+                    "console": {
+                      "id": "MANAGE_TEAM_ACTIVITY",
+                      "surface": "teamSection"
+                    },
+                    "icon": {
+                      "android": "history",
+                      "apple": "clock.arrow.circlepath"
+                    },
+                    "id": "activity",
+                    "keywords": [
+                      "audit log"
+                    ],
+                    "label": "Recent activity",
+                    "screen": "core.team.activity"
+                  }
+                ]
+              },
+              {
+                "foldable": false,
+                "id": "billing",
+                "label": "Billing",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "MANAGE_BILLING",
+                      "surface": "billingSection"
+                    },
+                    "icon": {
+                      "android": "credit_card",
+                      "apple": "creditcard"
+                    },
+                    "id": "plan",
+                    "keywords": [
+                      "billing",
+                      "upgrade",
+                      "subscription"
+                    ],
+                    "label": "Plan",
+                    "screen": "core.billing"
+                  },
+                  {
+                    "console": {
+                      "id": "MANAGE_BILLING_USAGE",
+                      "surface": "billingSection"
+                    },
+                    "icon": {
+                      "android": "data_usage",
+                      "apple": "gauge.with.dots.needle.33percent"
+                    },
+                    "id": "usage",
+                    "keywords": [
+                      "billing",
+                      "limits"
+                    ],
+                    "label": "Usage",
+                    "screen": "core.billing.usage"
+                  },
+                  {
+                    "console": {
+                      "id": "orgBillingUsage/ai-credits-meter",
+                      "surface": "consoleWidget"
+                    },
+                    "icon": {
+                      "android": "auto_awesome",
+                      "apple": "sparkles"
+                    },
+                    "id": "aiCredits",
+                    "keywords": [
+                      "billing"
+                    ],
+                    "label": "AI credits",
+                    "pluginId": "ai",
+                    "screen": "ai.credits"
+                  },
+                  {
+                    "console": {
+                      "id": "MANAGE_BILLING_INVOICES",
+                      "surface": "billingSection"
+                    },
+                    "icon": {
+                      "android": "receipt_long",
+                      "apple": "doc.plaintext"
+                    },
+                    "id": "invoices",
+                    "keywords": [
+                      "billing",
+                      "receipts"
+                    ],
+                    "label": "Invoices",
+                    "screen": "core.billing.invoices"
+                  },
+                  {
+                    "console": {
+                      "id": "MANAGE_BILLING_SETTINGS",
+                      "surface": "billingSection"
+                    },
+                    "icon": {
+                      "android": "tune",
+                      "apple": "slider.horizontal.3"
+                    },
+                    "id": "billingSettings",
+                    "keywords": [
+                      "billing",
+                      "payment method",
+                      "tax"
+                    ],
+                    "label": "Settings",
+                    "screen": "core.billing.settings"
+                  }
+                ]
+              },
+              {
+                "foldable": false,
+                "id": "workspace",
+                "label": "Workspace",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "nav-tab-org-plugins",
+                      "surface": "orgTab"
+                    },
+                    "icon": {
+                      "android": "extension",
+                      "apple": "puzzlepiece.extension"
+                    },
+                    "id": "plugins",
+                    "label": "Plugins",
+                    "screen": "core.plugins"
+                  },
+                  {
+                    "console": {
+                      "id": "ORG_SETTINGS_BRANDING",
+                      "surface": "orgSettingsSection"
+                    },
+                    "icon": {
+                      "android": "brush",
+                      "apple": "paintbrush"
+                    },
+                    "id": "branding",
+                    "keywords": [
+                      "white label",
+                      "logo",
+                      "colors"
+                    ],
+                    "label": "Branding",
+                    "screen": "core.settings.branding"
+                  },
+                  {
+                    "console": {
+                      "id": "ORG_SETTINGS_SSO",
+                      "surface": "orgSettingsSection"
+                    },
+                    "icon": {
+                      "android": "vpn_key",
+                      "apple": "key.viewfinder"
+                    },
+                    "id": "sso",
+                    "keywords": [
+                      "sso",
+                      "saml"
+                    ],
+                    "label": "Single sign-on",
+                    "screen": "core.settings.sso"
+                  },
+                  {
+                    "console": {
+                      "id": "ORG_SETTINGS_PROFILE",
+                      "surface": "orgSettingsSection"
+                    },
+                    "icon": {
+                      "android": "apartment",
+                      "apple": "building.2"
+                    },
+                    "id": "profile",
+                    "label": "Profile",
+                    "screen": "core.settings.profile"
+                  },
+                  {
+                    "console": {
+                      "id": "ORG_SETTINGS_API_KEYS",
+                      "surface": "orgSettingsSection"
+                    },
+                    "icon": {
+                      "android": "key",
+                      "apple": "key"
+                    },
+                    "id": "apiKeys",
+                    "label": "API keys",
+                    "screen": "core.settings.apiKeys"
+                  },
+                  {
+                    "console": {
+                      "id": "ORG_SETTINGS_INTEGRATIONS",
+                      "surface": "orgSettingsSection"
+                    },
+                    "icon": {
+                      "android": "hub",
+                      "apple": "point.3.connected.trianglepath.dotted"
+                    },
+                    "id": "integrations",
+                    "label": "Integrations",
+                    "screen": "core.settings.integrations"
+                  },
+                  {
+                    "console": {
+                      "id": "ORG_SETTINGS_GENERAL",
+                      "surface": "orgSettingsSection"
+                    },
+                    "icon": {
+                      "android": "settings",
+                      "apple": "gearshape"
+                    },
+                    "id": "general",
+                    "keywords": [
+                      "name",
+                      "address"
+                    ],
+                    "label": "General",
+                    "screen": "core.settings.general"
+                  }
+                ]
+              },
+              {
+                "foldable": false,
+                "id": "data",
+                "label": "Data & compliance",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "ORG_SETTINGS_PRIVACY",
+                      "surface": "orgSettingsSection"
+                    },
+                    "icon": {
+                      "android": "privacy_tip",
+                      "apple": "hand.raised"
+                    },
+                    "id": "privacy",
+                    "keywords": [
+                      "gdpr",
+                      "erase"
+                    ],
+                    "label": "Privacy",
+                    "screen": "core.settings.privacy"
+                  },
+                  {
+                    "console": {
+                      "id": "ORG_SETTINGS_HOLDS",
+                      "surface": "orgSettingsSection"
+                    },
+                    "icon": {
+                      "android": "warning",
+                      "apple": "exclamationmark.triangle"
+                    },
+                    "id": "holds",
+                    "label": "Holds & reviews",
+                    "screen": "core.settings.holds"
+                  },
+                  {
+                    "console": {
+                      "id": "ORG_SETTINGS_DATA",
+                      "surface": "orgSettingsSection"
+                    },
+                    "icon": {
+                      "android": "sync",
+                      "apple": "arrow.up.arrow.down"
+                    },
+                    "id": "importExport",
+                    "keywords": [
+                      "csv",
+                      "export"
+                    ],
+                    "label": "Import & export",
+                    "screen": "core.settings.data"
+                  }
+                ]
+              },
+              {
+                "foldable": false,
+                "id": "danger",
+                "label": "Danger zone",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "ORG_SETTINGS_OWNERSHIP",
+                      "surface": "orgSettingsSection"
+                    },
+                    "icon": {
+                      "android": "manage_accounts",
+                      "apple": "person.crop.circle.badge.checkmark"
+                    },
+                    "id": "ownership",
+                    "keywords": [
+                      "transfer"
+                    ],
+                    "label": "Ownership",
+                    "screen": "core.settings.ownership"
+                  },
+                  {
+                    "console": {
+                      "id": "ORG_SETTINGS_DELETE",
+                      "surface": "orgSettingsSection"
+                    },
+                    "icon": {
+                      "android": "delete_forever",
+                      "apple": "trash"
+                    },
+                    "id": "delete",
+                    "label": "Delete",
+                    "screen": "core.settings.delete"
+                  }
+                ]
+              }
+            ],
+            "id": "workspaceSettings",
+            "title": "settings"
+          }
+        },
+        {
+          "args": [
+            "workspace",
+            [],
+            false
+          ],
+          "result": {
+            "groups": [
+              {
+                "foldable": false,
+                "id": "top",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "home",
+                      "surface": "shell"
+                    },
+                    "icon": {
+                      "android": "home",
+                      "apple": "house"
+                    },
+                    "id": "home",
+                    "label": "Home",
+                    "screen": "shell.home"
+                  }
+                ]
+              },
+              {
+                "dynamic": "starred",
+                "foldable": true,
+                "id": "starred",
+                "label": "Starred",
+                "rows": []
+              },
+              {
+                "foldable": false,
+                "id": "workspace",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "nav-tab-org-sites",
+                      "surface": "orgTab"
+                    },
+                    "icon": {
+                      "android": "public",
+                      "apple": "globe"
+                    },
+                    "id": "sites",
+                    "label": "Sites",
+                    "screen": "site.sites"
+                  },
+                  {
+                    "console": {
+                      "id": "nav-tab-org-media",
+                      "surface": "orgTab"
+                    },
+                    "icon": {
+                      "android": "photo_library",
+                      "apple": "photo.on.rectangle"
+                    },
+                    "id": "media",
+                    "label": "Media",
+                    "screen": "site.media"
+                  }
+                ]
+              }
+            ],
+            "id": "workspace"
+          }
+        }
+      ]
+    },
     "resolveOrgInstallSummary": {
       "module": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
       "cases": [
@@ -48092,6 +52176,102 @@
         }
       ]
     },
+    "resolveWorkspaceColor": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            "#112233",
+            "#00B0FF",
+            "#445566",
+            true
+          ],
+          "result": {
+            "color": "#112233",
+            "source": "picked",
+            "tintsApp": true
+          }
+        },
+        {
+          "args": [
+            null,
+            "#00B0FF",
+            "#445566",
+            true
+          ],
+          "result": {
+            "color": "#00B0FF",
+            "source": "brand",
+            "tintsApp": true
+          }
+        },
+        {
+          "args": [
+            null,
+            "#00B0FF",
+            "#445566",
+            false
+          ],
+          "result": {
+            "color": "#00B0FF",
+            "source": "brand",
+            "tintsApp": false
+          }
+        },
+        {
+          "args": [
+            null,
+            null,
+            "#445566",
+            true
+          ],
+          "result": {
+            "color": "#445566",
+            "source": "logo",
+            "tintsApp": true
+          }
+        },
+        {
+          "args": [
+            "red",
+            null,
+            null,
+            true
+          ],
+          "result": {
+            "color": null,
+            "source": "none",
+            "tintsApp": false
+          }
+        },
+        {
+          "args": [
+            null,
+            null,
+            null,
+            false
+          ],
+          "result": {
+            "color": null,
+            "source": "none",
+            "tintsApp": false
+          }
+        },
+        {
+          "args": [
+            "#112233",
+            null,
+            null,
+            false
+          ],
+          "result": {
+            "color": "#112233",
+            "source": "picked",
+            "tintsApp": true
+          }
+        }
+      ]
+    },
     "rollUp": {
       "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
       "cases": [
@@ -49497,6 +53677,269 @@
         }
       ]
     },
+    "searchNavScreens": {
+      "module": "libs/aglyn/src/lib/app-utils/one-box-search.ts",
+      "cases": [
+        {
+          "args": [
+            "billing",
+            "workspace",
+            [
+              "ai"
+            ],
+            false
+          ],
+          "result": [
+            {
+              "row": {
+                "detail": "Workspace settings · Billing",
+                "group": "appScreens",
+                "id": "workspaceSettings.plan",
+                "label": "Plan",
+                "screen": "core.billing"
+              },
+              "score": 100
+            },
+            {
+              "row": {
+                "detail": "Workspace settings · Billing",
+                "group": "appScreens",
+                "id": "workspaceSettings.usage",
+                "label": "Usage",
+                "screen": "core.billing.usage"
+              },
+              "score": 100
+            },
+            {
+              "row": {
+                "detail": "Workspace settings · Billing",
+                "group": "appScreens",
+                "id": "workspaceSettings.aiCredits",
+                "label": "AI credits",
+                "screen": "ai.credits"
+              },
+              "score": 100
+            },
+            {
+              "row": {
+                "detail": "Workspace settings · Billing",
+                "group": "appScreens",
+                "id": "workspaceSettings.invoices",
+                "label": "Invoices",
+                "screen": "core.billing.invoices"
+              },
+              "score": 100
+            },
+            {
+              "row": {
+                "detail": "Workspace settings · Billing",
+                "group": "appScreens",
+                "id": "workspaceSettings.billingSettings",
+                "label": "Settings",
+                "screen": "core.billing.settings"
+              },
+              "score": 100
+            }
+          ]
+        },
+        {
+          "args": [
+            "seo",
+            "site",
+            [
+              "commerce"
+            ],
+            true
+          ],
+          "result": [
+            {
+              "row": {
+                "detail": "Site settings · Setup",
+                "group": "appScreens",
+                "id": "siteSettings.seo",
+                "label": "SEO",
+                "params": {
+                  "section": "seo"
+                },
+                "screen": "site.setup"
+              },
+              "score": 1000
+            }
+          ]
+        },
+        {
+          "args": [
+            "orders",
+            "site",
+            [
+              "commerce"
+            ],
+            false
+          ],
+          "result": [
+            {
+              "row": {
+                "detail": "Site · Sell",
+                "group": "appScreens",
+                "id": "site.orders",
+                "label": "Orders",
+                "screen": "commerce.orders"
+              },
+              "score": 1000
+            },
+            {
+              "row": {
+                "detail": "Site · Sell · Orders",
+                "group": "appScreens",
+                "id": "site.orders.returns",
+                "label": "Returns",
+                "screen": "commerce.returns"
+              },
+              "score": 100
+            },
+            {
+              "row": {
+                "detail": "Site · Sell · Orders",
+                "group": "appScreens",
+                "id": "site.orders.reservations",
+                "label": "Reservations",
+                "screen": "commerce.reservations"
+              },
+              "score": 100
+            }
+          ]
+        },
+        {
+          "args": [
+            "orders",
+            "site",
+            [],
+            false
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            "deal",
+            "site",
+            [
+              "crm"
+            ],
+            false
+          ],
+          "result": [
+            {
+              "row": {
+                "detail": "Site · Customers",
+                "group": "appScreens",
+                "id": "site.crm",
+                "label": "CRM",
+                "screen": "crm.contacts"
+              },
+              "score": 100
+            },
+            {
+              "row": {
+                "detail": "Site · Customers · CRM",
+                "group": "appScreens",
+                "id": "site.crm.deals",
+                "label": "Deals",
+                "screen": "crm.deals"
+              },
+              "score": 800
+            }
+          ]
+        },
+        {
+          "args": [
+            "danger",
+            "site",
+            [],
+            false
+          ],
+          "result": [
+            {
+              "row": {
+                "detail": "Workspace settings · Danger zone",
+                "group": "appScreens",
+                "id": "workspaceSettings.ownership",
+                "label": "Ownership",
+                "screen": "core.settings.ownership"
+              },
+              "score": 100
+            },
+            {
+              "row": {
+                "detail": "Workspace settings · Danger zone",
+                "group": "appScreens",
+                "id": "workspaceSettings.delete",
+                "label": "Delete",
+                "screen": "core.settings.delete"
+              },
+              "score": 100
+            }
+          ]
+        },
+        {
+          "args": [
+            "danger",
+            "site",
+            [],
+            true
+          ],
+          "result": [
+            {
+              "row": {
+                "detail": "Site settings · Admin",
+                "group": "appScreens",
+                "id": "siteSettings.danger",
+                "label": "Danger zone",
+                "screen": "core.site.delete"
+              },
+              "score": 800
+            },
+            {
+              "row": {
+                "detail": "Workspace settings · Danger zone",
+                "group": "appScreens",
+                "id": "workspaceSettings.ownership",
+                "label": "Ownership",
+                "screen": "core.settings.ownership"
+              },
+              "score": 100
+            },
+            {
+              "row": {
+                "detail": "Workspace settings · Danger zone",
+                "group": "appScreens",
+                "id": "workspaceSettings.delete",
+                "label": "Delete",
+                "screen": "core.settings.delete"
+              },
+              "score": 100
+            }
+          ]
+        },
+        {
+          "args": [
+            "plan",
+            "account",
+            [],
+            false
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            "b",
+            "workspace",
+            [],
+            false
+          ],
+          "result": []
+        }
+      ]
+    },
     "sendLinkReport": {
       "module": "libs/shared/ui/email-campaigns/src/lib/model/send-report.ts",
       "cases": [
@@ -49878,6 +54321,134 @@
             "collection"
           ],
           "result": "[\"one\",2,true,[1]]"
+        }
+      ]
+    },
+    "setStarColor": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "kind": "page",
+                "id": "p1",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Home",
+                "screen": "site.pages",
+                "params": {
+                  "page": "p1"
+                },
+                "starredAtMs": 1,
+                "color": "blue"
+              },
+              {
+                "kind": "screen",
+                "id": "site.orders",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Orders",
+                "screen": "commerce.orders",
+                "starredAtMs": 2
+              }
+            ],
+            "page:o1:h1:p1",
+            "green"
+          ],
+          "result": [
+            {
+              "color": "green",
+              "hostId": "h1",
+              "id": "p1",
+              "kind": "page",
+              "label": "Home",
+              "orgId": "o1",
+              "params": {
+                "page": "p1"
+              },
+              "screen": "site.pages",
+              "starredAtMs": 1
+            },
+            {
+              "hostId": "h1",
+              "id": "site.orders",
+              "kind": "screen",
+              "label": "Orders",
+              "orgId": "o1",
+              "screen": "commerce.orders",
+              "starredAtMs": 2
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "kind": "page",
+                "id": "p1",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Home",
+                "screen": "site.pages",
+                "params": {
+                  "page": "p1"
+                },
+                "starredAtMs": 1,
+                "color": "blue"
+              }
+            ],
+            "page:o1:h1:p1",
+            null
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "id": "p1",
+              "kind": "page",
+              "label": "Home",
+              "orgId": "o1",
+              "params": {
+                "page": "p1"
+              },
+              "screen": "site.pages",
+              "starredAtMs": 1
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "kind": "page",
+                "id": "p1",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Home",
+                "screen": "site.pages",
+                "params": {
+                  "page": "p1"
+                },
+                "starredAtMs": 1
+              }
+            ],
+            "page:o1:h1:p1",
+            "mauve"
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "id": "p1",
+              "kind": "page",
+              "label": "Home",
+              "orgId": "o1",
+              "params": {
+                "page": "p1"
+              },
+              "screen": "site.pages",
+              "starredAtMs": 1
+            }
+          ]
         }
       ]
     },
@@ -54425,6 +58996,939 @@
         }
       ]
     },
+    "toggleStarred": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [],
+            {
+              "kind": "page",
+              "id": "p1",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Home",
+              "screen": "site.pages",
+              "params": {
+                "page": "p1"
+              }
+            },
+            10
+          ],
+          "result": {
+            "outcome": "starred",
+            "starred": [
+              {
+                "hostId": "h1",
+                "id": "p1",
+                "kind": "page",
+                "label": "Home",
+                "orgId": "o1",
+                "params": {
+                  "page": "p1"
+                },
+                "screen": "site.pages",
+                "starredAtMs": 10
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "kind": "page",
+                "id": "p1",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Home",
+                "screen": "site.pages",
+                "params": {
+                  "page": "p1"
+                },
+                "starredAtMs": 1,
+                "color": "pink"
+              }
+            ],
+            {
+              "kind": "page",
+              "id": "p1",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Home",
+              "screen": "site.pages",
+              "params": {
+                "page": "p1"
+              }
+            },
+            10
+          ],
+          "result": {
+            "outcome": "unstarred",
+            "starred": []
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "kind": "page",
+                "id": "p0",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 0
+              },
+              {
+                "kind": "page",
+                "id": "p1",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 1
+              },
+              {
+                "kind": "page",
+                "id": "p2",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 2
+              },
+              {
+                "kind": "page",
+                "id": "p3",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 3
+              },
+              {
+                "kind": "page",
+                "id": "p4",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 4
+              },
+              {
+                "kind": "page",
+                "id": "p5",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 5
+              },
+              {
+                "kind": "page",
+                "id": "p6",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 6
+              },
+              {
+                "kind": "page",
+                "id": "p7",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 7
+              },
+              {
+                "kind": "page",
+                "id": "p8",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 8
+              },
+              {
+                "kind": "page",
+                "id": "p9",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 9
+              },
+              {
+                "kind": "page",
+                "id": "p10",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 10
+              },
+              {
+                "kind": "page",
+                "id": "p11",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 11
+              },
+              {
+                "kind": "page",
+                "id": "p12",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 12
+              },
+              {
+                "kind": "page",
+                "id": "p13",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 13
+              },
+              {
+                "kind": "page",
+                "id": "p14",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 14
+              },
+              {
+                "kind": "page",
+                "id": "p15",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 15
+              },
+              {
+                "kind": "page",
+                "id": "p16",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 16
+              },
+              {
+                "kind": "page",
+                "id": "p17",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 17
+              },
+              {
+                "kind": "page",
+                "id": "p18",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 18
+              },
+              {
+                "kind": "page",
+                "id": "p19",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 19
+              },
+              {
+                "kind": "page",
+                "id": "p20",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 20
+              },
+              {
+                "kind": "page",
+                "id": "p21",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 21
+              },
+              {
+                "kind": "page",
+                "id": "p22",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 22
+              },
+              {
+                "kind": "page",
+                "id": "p23",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 23
+              },
+              {
+                "kind": "page",
+                "id": "p24",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 24
+              },
+              {
+                "kind": "page",
+                "id": "p25",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 25
+              },
+              {
+                "kind": "page",
+                "id": "p26",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 26
+              },
+              {
+                "kind": "page",
+                "id": "p27",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 27
+              },
+              {
+                "kind": "page",
+                "id": "p28",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 28
+              },
+              {
+                "kind": "page",
+                "id": "p29",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 29
+              },
+              {
+                "kind": "page",
+                "id": "p30",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 30
+              },
+              {
+                "kind": "page",
+                "id": "p31",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 31
+              },
+              {
+                "kind": "page",
+                "id": "p32",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 32
+              },
+              {
+                "kind": "page",
+                "id": "p33",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 33
+              },
+              {
+                "kind": "page",
+                "id": "p34",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 34
+              },
+              {
+                "kind": "page",
+                "id": "p35",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 35
+              },
+              {
+                "kind": "page",
+                "id": "p36",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 36
+              },
+              {
+                "kind": "page",
+                "id": "p37",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 37
+              },
+              {
+                "kind": "page",
+                "id": "p38",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 38
+              },
+              {
+                "kind": "page",
+                "id": "p39",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 39
+              },
+              {
+                "kind": "page",
+                "id": "p40",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 40
+              },
+              {
+                "kind": "page",
+                "id": "p41",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 41
+              },
+              {
+                "kind": "page",
+                "id": "p42",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 42
+              },
+              {
+                "kind": "page",
+                "id": "p43",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 43
+              },
+              {
+                "kind": "page",
+                "id": "p44",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 44
+              },
+              {
+                "kind": "page",
+                "id": "p45",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 45
+              },
+              {
+                "kind": "page",
+                "id": "p46",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 46
+              },
+              {
+                "kind": "page",
+                "id": "p47",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 47
+              },
+              {
+                "kind": "page",
+                "id": "p48",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 48
+              },
+              {
+                "kind": "page",
+                "id": "p49",
+                "orgId": "o1",
+                "label": "Item",
+                "screen": "site.pages",
+                "starredAtMs": 49
+              }
+            ],
+            {
+              "kind": "screen",
+              "id": "site.orders",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Orders",
+              "screen": "commerce.orders"
+            },
+            10
+          ],
+          "result": {
+            "outcome": "full",
+            "starred": [
+              {
+                "id": "p0",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 0
+              },
+              {
+                "id": "p1",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 1
+              },
+              {
+                "id": "p2",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 2
+              },
+              {
+                "id": "p3",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 3
+              },
+              {
+                "id": "p4",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 4
+              },
+              {
+                "id": "p5",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 5
+              },
+              {
+                "id": "p6",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 6
+              },
+              {
+                "id": "p7",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 7
+              },
+              {
+                "id": "p8",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 8
+              },
+              {
+                "id": "p9",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 9
+              },
+              {
+                "id": "p10",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 10
+              },
+              {
+                "id": "p11",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 11
+              },
+              {
+                "id": "p12",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 12
+              },
+              {
+                "id": "p13",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 13
+              },
+              {
+                "id": "p14",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 14
+              },
+              {
+                "id": "p15",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 15
+              },
+              {
+                "id": "p16",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 16
+              },
+              {
+                "id": "p17",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 17
+              },
+              {
+                "id": "p18",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 18
+              },
+              {
+                "id": "p19",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 19
+              },
+              {
+                "id": "p20",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 20
+              },
+              {
+                "id": "p21",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 21
+              },
+              {
+                "id": "p22",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 22
+              },
+              {
+                "id": "p23",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 23
+              },
+              {
+                "id": "p24",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 24
+              },
+              {
+                "id": "p25",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 25
+              },
+              {
+                "id": "p26",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 26
+              },
+              {
+                "id": "p27",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 27
+              },
+              {
+                "id": "p28",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 28
+              },
+              {
+                "id": "p29",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 29
+              },
+              {
+                "id": "p30",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 30
+              },
+              {
+                "id": "p31",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 31
+              },
+              {
+                "id": "p32",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 32
+              },
+              {
+                "id": "p33",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 33
+              },
+              {
+                "id": "p34",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 34
+              },
+              {
+                "id": "p35",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 35
+              },
+              {
+                "id": "p36",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 36
+              },
+              {
+                "id": "p37",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 37
+              },
+              {
+                "id": "p38",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 38
+              },
+              {
+                "id": "p39",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 39
+              },
+              {
+                "id": "p40",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 40
+              },
+              {
+                "id": "p41",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 41
+              },
+              {
+                "id": "p42",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 42
+              },
+              {
+                "id": "p43",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 43
+              },
+              {
+                "id": "p44",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 44
+              },
+              {
+                "id": "p45",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 45
+              },
+              {
+                "id": "p46",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 46
+              },
+              {
+                "id": "p47",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 47
+              },
+              {
+                "id": "p48",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 48
+              },
+              {
+                "id": "p49",
+                "kind": "page",
+                "label": "Item",
+                "orgId": "o1",
+                "screen": "site.pages",
+                "starredAtMs": 49
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "kind": "page",
+                "id": "p1",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Home",
+                "screen": "site.pages",
+                "params": {
+                  "page": "p1"
+                },
+                "starredAtMs": 1
+              }
+            ],
+            {
+              "kind": "page"
+            },
+            10
+          ],
+          "result": {
+            "outcome": "full",
+            "starred": [
+              {
+                "hostId": "h1",
+                "id": "p1",
+                "kind": "page",
+                "label": "Home",
+                "orgId": "o1",
+                "params": {
+                  "page": "p1"
+                },
+                "screen": "site.pages",
+                "starredAtMs": 1
+              }
+            ]
+          }
+        }
+      ]
+    },
     "topDevice": {
       "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
       "cases": [
@@ -55318,6 +60822,58 @@
             "sites": [],
             "title": "Uninstall this plugin across the organization?"
           }
+        }
+      ]
+    },
+    "unpinOrg": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c"
+            ],
+            "b"
+          ],
+          "result": [
+            "a",
+            "c"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a"
+            ],
+            "z"
+          ],
+          "result": [
+            "a"
+          ]
+        },
+        {
+          "args": [
+            [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g"
+            ],
+            "a"
+          ],
+          "result": [
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g"
+          ]
         }
       ]
     },

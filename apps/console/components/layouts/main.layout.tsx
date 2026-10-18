@@ -57,6 +57,7 @@ import NotificationsMenu from '../notifications-menu.component'
 import OfflineIndicator from '../offline-indicator.component'
 import ConsoleTopBarSlot from '../console-top-bar-slot.component'
 import OrgSwitcherNav from '../org-switcher-nav.component'
+import { PinnedOrgsKeepPrompt } from '../pinned-orgs-dialogs.component'
 import UserMenu from '../user-menu.component'
 
 // Icon-only quick actions. The center nav used to come through here too, as a
@@ -596,6 +597,10 @@ export function MainLayout(props: MainLayoutProps) {
                 native prompt per origin, so we offer in-app first where a
                 decline is reversible. Renders nothing unless it applies. */}
             <NotificationPrompt />
+            {/* "Keep which 5?" (AGL-3943): asked once of a reader who pinned
+                more than five workspaces before pins were capped. Renders
+                nothing for everyone else; not over the Besigner. */}
+            {besigner || inNativeApp ? null : <PinnedOrgsKeepPrompt />}
           </>
         }
         appBarSuffix={appBarSuffix}

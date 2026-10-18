@@ -27,6 +27,8 @@ import {
   type PluginResourceDraftWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerPluginSearchSources } from '@aglyn/aglyn/plugin-manager/plugin-search-sources'
+import { REDIRECTS_SEARCH_SOURCES } from './model/redirects-search-sources'
 import { REDIRECT_DRAFT_RESOURCE, checkRedirectDraftContent } from './model/redirect-draft-content'
 import { registerRedirectAiCapability } from './server/redirect-ai-capability'
 import {
@@ -110,4 +112,7 @@ export function registerRedirectsConsoleServerDeclarations(): void {
   registerPluginResourceDraftWriter(REDIRECT_DRAFT_RESOURCE, lazyRedirectAiWriter, { pluginId: BUNDLE_ID })
   // …and the operation an AI build plans for it, which that writer executes.
   registerRedirectAiCapability()
+  // What the native apps' one box finds among a site's redirects (AGL-3943):
+  // the palette's own group, under the extension's plan flag.
+  registerPluginSearchSources(REDIRECTS_SEARCH_SOURCES, { pluginId: BUNDLE_ID, featureFlag: 'redirects' })
 }
