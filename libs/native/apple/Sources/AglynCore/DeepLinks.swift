@@ -112,6 +112,18 @@ public enum DeepLinks {
     return path + query
   }
 
+  /// A link to a workspace's or site's own root (`/{orgSlug}`, `/{orgSlug}/hosts/{hostSlug}`, or a notification's
+  /// stored `/{hostId}` and `/org`) with a query: the query, read the way `URLSearchParams` reads it. A notice about an
+  /// AI job that built nothing of its own to open is stored as `/{hostId}?aiJob={jobId}` (`aiJobNoticeLink`).
+  public static func rootQuery(_ link: String) -> NativeParams? {
+    guard let full = consolePath(of: link), let at = full.firstIndex(of: "?") else { return nil }
+    let path = String(full[..<at])
+    let scope = splitConsoleScope(path)
+    guard scope.orgSlug != nil, scope.rest == "/" else { return nil }
+    let query = queryParams(String(full[full.index(after: at)...]).split(separator: "#").first.map(String.init) ?? "")
+    return query.isEmpty ? nil : query
+  }
+
   /// `application/x-www-form-urlencoded` decoding, as `URLSearchParams` reads a query.
   static func queryParams(_ query: String) -> NativeParams {
     var params: NativeParams = [:]
