@@ -301,6 +301,17 @@ describe('the window is ordered and capped, server-side', () => {
     expect(payload.entries[0].createdAt).toEqual({ seconds: 10 })
     expect(payload.entries[1].createdAt).toBeNull()
   })
+
+  it('says what each entry did in words, for readers with no label catalog (the native apps)', async () => {
+    activity = [
+      { $id: 'a', action: 'component.duplicated', target: { type: 'component', name: 'Hero' }, createdAt: { seconds: 10 } },
+      { $id: 'b', action: 'Published the screen', createdAt: { seconds: 5 } },
+    ]
+    const payload = await (await get()).json()
+    expect(payload.entries.map((entry: any) => entry.actionLabel)).toEqual(['Duplicated a component', 'Published the screen'])
+    expect(payload.entries[0].action).toBe('component.duplicated')
+    expect(payload.entries[0].targetLabel).toBe('Hero')
+  })
 })
 
 /**
