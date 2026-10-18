@@ -254,10 +254,12 @@ private fun PrinterFormSheet(model: PosPrintersModel, editing: PosPrinterRow?, o
   LaunchedEffect(editing?.id) {
     if (editing != null) credentials = model.credentials(editing)
   }
-  // The sheet's own refusal shows in the sheet, not behind it.
+  // The sheet's own refusal shows in the sheet, not behind it. Read here, in composition, so a refusal recomposes the sheet.
+  val busyNow = model.busy
+  val errorNow = model.error
   SideEffect {
-    busy.busy = model.busy
-    busy.error = model.error
+    busy.busy = busyNow
+    busy.error = errorNow
   }
   val connecting = adding && credentials != null
 
