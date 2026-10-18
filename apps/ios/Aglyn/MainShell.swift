@@ -14,69 +14,119 @@ import SwiftUI
 struct MainShell: View {
   @Environment(AppModel.self) private var model
   @Bindable var navigation: ShellNavigation
-  @State private var columns: NavigationSplitViewVisibility = .all
-  @State private var unreadFeed = NotificationFeed()
-  @State private var askedKeepPins = false
+  /// What this window opens on: a tab opened from another (⌘T, a ⌘-clicked link), or a reopened one.
+  var seed: ShellSeed? = nil
   #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
-    private var compact: Bool { sizeClass == .compact }
-  #else
-    private let compact = false
   #endif
-
-  /// Unread notifications, by workspace: the rail's badges.
-  private var unreadByOrg: [String: Int] {
-    var counts: [String: Int] = [:]
-    for row in unreadFeed.rows ?? [] where !row.read {
-      let orgID = row.orgID ?? row.hostID.flatMap { id in model.workspace?.sites.first { $0.id == id }?.orgID }
-      if let orgID { counts[orgID, default: 0] += 1 }
-    }
-    return counts
-  }
+  @State private var seeded = false
 
   var body: some View {
     Group {
-      if compact { PhoneShell(navigation: navigation) } else { sidebarLayout }
+      #if os(iOS)
+        if sizeClass == .compact {
+          ShellFrame(navigation: navigation, compact: true) { PhoneShell(navigation: navigation) }
+        } else {
+          IPadTabs(first: navigation)
+        }
+      #else
+        ShellFrame(navigation: navigation, compact: false) { WideShell(navigation: navigation) }
+          .modifier(MacWindowTab(navigation: navigation, closedTabs: model.closedTabs))
+      #endif
     }
-    .sheet(item: $navigation.picker) { picker in
-      ScopePickerSheet(start: picker, twoStep: compact).environment(model).environment(navigation)
+    .task(id: model.workspace?.ready == true) {
+      guard !seeded, let seed, model.workspace?.ready == true else { return }
+      seeded = true
+      navigation.apply(seed, model: model)
     }
-    .sheet(item: $navigation.pinFull) { PinnedFullSheet(pending: $0).environment(model) }
-    .sheet(item: $navigation.colorFor) { WorkspaceColorSheet(target: $0).environment(model) }
-    .sheet(isPresented: $navigation.showAddAccount) { AddAccountView().environment(model) }
-    .sheet(isPresented: $navigation.showAccount) { AccountSheet().environment(model).environment(navigation) }
-    .sheet(isPresented: keepPinsShown) { KeepPinsSheet().environment(model) }
-    .sheet(isPresented: $navigation.showOneBox) { OneBoxView().environment(model).environment(navigation) }
-    .sheet(isPresented: $navigation.showAddWorkspace) {
-      AddWorkspaceSheet { navigation.showAddWorkspace = false }.environment(model)
+  }
+}
+
+/// iPad's tabs: the strip across the top, and the shell of the tab in front.
+struct IPadTabs: View {
+  @Environment(AppModel.self) private var model
+  @State private var strip: TabStrip
+
+  init(first: ShellNavigation) {
+    _strip = State(initialValue: TabStrip(first: first))
+  }
+
+  var body: some View {
+    let current = strip.current
+    VStack(spacing: 0) {
+      TabStripBar(strip: strip, closedTabs: model.closedTabs)
+      ShellFrame(navigation: current, compact: false) { WideShell(navigation: current) }
+        .id(ObjectIdentifier(current))
+        .environment(current)
+        .focusedSceneValue(\.shellNavigation, current)
     }
-    .environment(\.aglynScreenSession, model.screenSession)
-    .preferredColorScheme(model.preferences?.appTheme.appearance.colorScheme)
-    .onAppear { DebugLaunch.route(navigation) }
-    // Every screen that offers "Choose a site" asks for the site picker.
-    .onChange(of: navigation.showSwitcher) { _, asked in
-      guard asked else { return }
-      navigation.showSwitcher = false
-      navigation.picker = compact ? .workspace : .site
+    .onAppear {
+      for tab in strip.tabs { tab.openTab = { [weak strip, model] seed in strip?.open(seed, model: model) } }
     }
-    .onChange(of: model.workspace?.org?.id, initial: true) { _, orgID in
-      if let orgID { model.preferences?.opened(orgID: orgID) }
+    .onChange(of: strip.tabs.count) {
+      for tab in strip.tabs where tab.openTab == nil {
+        tab.openTab = { [weak strip, model] seed in strip?.open(seed, model: model) }
+      }
     }
-    .onChange(of: model.workspace?.orgs.map(\.id) ?? []) { _, ids in model.auth?.recordWorkspaces(ids) }
-    .onChange(of: navigation.section) { _, section in
-      navigation.record(section)
-      recordRecent(section)
-    }
-    // Another account in use, or a support session: nothing open belonged to it.
-    .onChange(of: model.auth?.user?.uid) {
-      navigation.paths = [:]
-      navigation.mode = .main
-      navigation.section = .home
-    }
-    .task(id: "\(model.auth?.user?.uid ?? ""):\(model.refreshToken)") {
-      unreadFeed.start(
-        reader: model.reader, uid: model.auth?.user?.uid, count: 100, filter: NotificationFilter(status: .new))
-    }
+  }
+}
+
+/// What every layout of the shell carries: its sheets and popovers, the account's look, and the bookkeeping that
+/// follows the person (recent workspaces, recents, history, another account in use).
+struct ShellFrame<Content: View>: View {
+  @Environment(AppModel.self) private var model
+  #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+  #endif
+  @Bindable var navigation: ShellNavigation
+  let compact: Bool
+  @ViewBuilder let content: () -> Content
+  @State private var askedKeepPins = false
+
+  var body: some View {
+    content()
+      .sheet(item: $navigation.picker) { picker in
+        ScopePickerSheet(start: picker, twoStep: compact).environment(model).environment(navigation)
+      }
+      .sheet(item: $navigation.pinFull) { PinnedFullSheet(pending: $0).environment(model) }
+      .sheet(item: $navigation.colorFor) { WorkspaceColorSheet(target: $0).environment(model) }
+      .sheet(isPresented: $navigation.showAddAccount) { AddAccountView().environment(model) }
+      .sheet(isPresented: $navigation.showAccount) { AccountSheet().environment(model).environment(navigation) }
+      .sheet(isPresented: keepPinsShown) { KeepPinsSheet().environment(model) }
+      .sheet(isPresented: $navigation.showOneBox) { OneBoxView().environment(model).environment(navigation) }
+      .sheet(isPresented: $navigation.showAddWorkspace) {
+        AddWorkspaceSheet { navigation.showAddWorkspace = false }.environment(model)
+      }
+      .sheet(isPresented: $navigation.showShortcuts) { KeyboardShortcutsSheet() }
+      .environment(\.aglynScreenSession, model.screenSession)
+      .preferredColorScheme(model.preferences?.appTheme.appearance.colorScheme)
+      .onAppear {
+        DebugLaunch.route(navigation)
+        #if os(macOS)
+          navigation.openTab = { [openWindow] seed in openWindow(id: "main", value: seed) }
+        #endif
+      }
+      // Every screen that offers "Choose a site" asks for the site picker.
+      .onChange(of: navigation.showSwitcher) { _, asked in
+        guard asked else { return }
+        navigation.showSwitcher = false
+        navigation.picker = compact ? .workspace : .site
+      }
+      .onChange(of: model.workspace?.org?.id, initial: true) { _, orgID in
+        if let orgID { model.preferences?.opened(orgID: orgID) }
+      }
+      .onChange(of: model.workspace?.orgs.map(\.id) ?? []) { _, ids in model.auth?.recordWorkspaces(ids) }
+      .onChange(of: navigation.section) { _, section in
+        navigation.record(section)
+        recordRecent(section)
+      }
+      // Another account in use, or a support session: nothing open belonged to it.
+      .onChange(of: model.auth?.user?.uid) {
+        navigation.paths = [:]
+        navigation.mode = .main
+        navigation.section = .home
+        navigation.assist.clear()
+      }
   }
 
   /// Asked once of an account with more than five pins (which five to keep).
@@ -93,10 +143,27 @@ struct MainShell: View {
     else { return }
     model.preferences?.opened(item)
   }
+}
 
-  // MARK: iPad and Mac
+/// The Mac and iPad layout: the rail and the scope's sidebar, the detail, the title bar's items, and the AI panel
+/// docked on the right.
+struct WideShell: View {
+  @Environment(AppModel.self) private var model
+  @Bindable var navigation: ShellNavigation
+  @State private var columns: NavigationSplitViewVisibility = .all
+  @State private var unreadFeed = NotificationFeed()
 
-  private var sidebarLayout: some View {
+  /// Unread notifications, by workspace: the rail's badges.
+  private var unreadByOrg: [String: Int] {
+    var counts: [String: Int] = [:]
+    for row in unreadFeed.rows ?? [] where !row.read {
+      let orgID = row.orgID ?? row.hostID.flatMap { id in model.workspace?.sites.first { $0.id == id }?.orgID }
+      if let orgID { counts[orgID, default: 0] += 1 }
+    }
+    return counts
+  }
+
+  var body: some View {
     NavigationSplitView(columnVisibility: $columns) {
       HStack(spacing: 0) {
         WorkspaceRail(unread: unreadByOrg)
@@ -116,8 +183,16 @@ struct MainShell: View {
       ShellStack(navigation: navigation, section: navigation.section)
         .id(navigation.section)
         .toolbar { TitleBarItems(unread: unreadFeed.rows?.filter { !$0.read }.count ?? 0) }
+        .inspector(isPresented: $navigation.showAssist) {
+          AssistPanel()
+            .inspectorColumnWidth(min: 300, ideal: 360, max: 480)
+        }
     }
     .navigationSplitViewStyle(.balanced)
+    .task(id: "\(model.auth?.user?.uid ?? ""):\(model.refreshToken)") {
+      unreadFeed.start(
+        reader: model.reader, uid: model.auth?.user?.uid, count: 100, filter: NotificationFilter(status: .new))
+    }
   }
 
   /// The light tint a workspace's color lays over the sidebar while you are in it.
@@ -275,6 +350,17 @@ struct TitleBarItems: ToolbarContent {
       .accessibilityLabel("Search or jump to")
       .accessibilityIdentifier("titlebar-search")
     }
+    ToolbarItem(placement: .primaryAction) { HelpMenuButton() }
+    ToolbarItem(placement: .primaryAction) {
+      Button {
+        navigation.showAssist.toggle()
+      } label: {
+        Label("\(model.brandName) AI", systemImage: "sparkles")
+      }
+      .keyboardShortcut("i", modifiers: [.command, .option])
+      .help("\(model.brandName) AI")
+      .accessibilityIdentifier("titlebar-ai")
+    }
     ToolbarItem(placement: .primaryAction) {
       Button {
         navigation.showNotifications.toggle()
@@ -371,6 +457,9 @@ struct PhoneShell: View {
       NotificationsPopover().environment(model).environment(navigation)
     }
     .sheet(isPresented: $navigation.showCreate) { CreateNewSheet().environment(model).environment(navigation) }
+    .sheet(isPresented: $navigation.showAssist) {
+      AssistPanel(docked: false).environment(model).environment(navigation).presentationDetents([.large])
+    }
     .onChange(of: navigation.section, initial: true) { previous, section in
       // The centre tab is Create new: it opens the sheet and stays on the tab you were on.
       if section == PhoneShell.createTab {
@@ -481,6 +570,26 @@ struct MenuScreen: View {
   var body: some View {
     let scope = ShellScope(model: model, navigation: navigation)
     VStack(spacing: 0) {
+      if navigation.mode == .main {
+        // Your AI and help sit in Menu on a phone, never floating over content.
+        HStack(spacing: AglynSpace.one) {
+          Button {
+            navigation.showAssist = true
+          } label: {
+            Label("\(model.brandName) AI", systemImage: "sparkles").frame(maxWidth: .infinity)
+          }
+          .accessibilityIdentifier("menu-ai")
+          Menu {
+            HelpMenuItems()
+          } label: {
+            Label("Help and docs", systemImage: "questionmark.circle").frame(maxWidth: .infinity)
+          }
+          .accessibilityIdentifier("menu-help")
+        }
+        .buttonStyle(.bordered)
+        .padding(.horizontal, AglynSpace.two)
+        .padding(.top, AglynSpace.one)
+      }
       if navigation.mode != .main || scope.site != nil {
         ScopeHeader(scope: scope)
       }

@@ -40,6 +40,8 @@ final class AppModel {
   private(set) var deviceModeID: String?
   /// The signed-out screens and what a sign-up carries across them.
   let authFlow = AuthFlow()
+  /// The tabs closed in this run, for ⌘⇧T and Recently Closed.
+  let closedTabs = ClosedTabs()
   /// The first verified session's workspace settling (the held sign-up name, AGL-2590).
   var firstRun: FirstRunState = .idle
   /// Whose first run has been settled, so it runs once per person per launch.

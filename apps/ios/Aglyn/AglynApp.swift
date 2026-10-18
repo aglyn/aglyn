@@ -16,19 +16,27 @@ struct AglynApp: App {
 
   init() {
     AglynFonts.register()
+    #if os(macOS)
+      // The main windows are tabs of one group: ⌘T opens one, the system's tab overview lists them.
+      PushAppDelegate.windowTabs = true
+    #endif
     #if DEBUG && os(macOS)
       DebugSnapshot.scheduleIfAsked()
     #endif
   }
 
   var body: some Scene {
-    WindowGroup {
-      RootView { navigation in MainShell(navigation: navigation) }
+    // Each window (a tab on the Mac) opens on its own seed: its workspace, site and place.
+    WindowGroup(id: "main", for: ShellSeed.self) { $seed in
+      RootView { navigation in MainShell(navigation: navigation, seed: seed) }
         .environment(model)
     }
     .defaultSize(width: 1180, height: 780)
     .commands {
       AglynCommands(model: model)
+      #if os(macOS)
+        TabCommands(model: model)
+      #endif
       HelpCommands(model: model)
     }
 

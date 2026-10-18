@@ -105,6 +105,17 @@ final class ShellNavigation {
   var showNotifications = false
   /// Create new as a sheet (the phone's centre tab).
   var showCreate = false
+  /// The AI panel, docked on the right (a sheet on a phone).
+  var showAssist = false
+  /// The keyboard shortcuts sheet.
+  var showShortcuts = false
+  /// This window's conversation with the AI panel.
+  @ObservationIgnored let assist = AssistConversation()
+  /// The workspace and site this tab stands in, so it comes back to them in front (a tab of its own on the Mac and iPad).
+  var pickedOrgID: String?
+  var pickedHostID: String?
+  /// Opens a seed as a new tab beside this one; nil where the shell has no tabs (a phone).
+  @ObservationIgnored var openTab: ((ShellSeed) -> Void)?
   /// Where the window has been, for Back and Forward beside the search field: each section opened, in order.
   private(set) var history: [ShellSection] = [.home]
   private(set) var historyIndex = 0
@@ -140,8 +151,17 @@ final class ShellNavigation {
   /// on iPad and the Mac in the main area beside the sidebar.
   func openWeb(_ page: AglynWebPage, _ disposition: AglynBrowserDisposition = .push) {
     switch disposition {
-    // A ⌘-click asks for a tab of its own; until the shell has tabs it opens like any other click.
-    case .push, .newTab: push(.web(page))
+    case .push: push(.web(page))
+    // A ⌘-click asks for a tab of its own, where the shell has tabs.
+    case .newTab:
+      if let openTab {
+        var seed = ShellSeed(orgID: pickedOrgID, hostID: pickedHostID, inSite: inSite)
+        seed.webURL = page.url
+        seed.title = page.url.host ?? "Page"
+        openTab(seed)
+      } else {
+        push(.web(page))
+      }
     }
   }
 
