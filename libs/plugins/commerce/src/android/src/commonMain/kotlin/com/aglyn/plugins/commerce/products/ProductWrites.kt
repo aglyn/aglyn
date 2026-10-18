@@ -225,6 +225,8 @@ class ProductEditorModel(private val api: ProductWriteApi, private val scope: Co
   var error by mutableStateOf<String?>(null)
     private set
   var done by mutableStateOf<String?>(null)
+  /** The product a create just added: the list picks it, so its detail opens beside the list. */
+  var created by mutableStateOf<String?>(null)
   private var stored: Map<String, Any?>? = null
   private var attemptKey = mintKey()
 
@@ -266,6 +268,7 @@ class ProductEditorModel(private val api: ProductWriteApi, private val scope: Co
     launchWrite {
       api.save(asked.productId, asked.create, productSaveJson(asked, stored), key)
       draft = null
+      if (asked.create) created = asked.productId
       done = if (asked.create) "${asked.name.trim()} is added." else "${asked.name.trim()} is saved."
     }
   }

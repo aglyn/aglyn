@@ -496,12 +496,34 @@ struct ReceiptPreviewText: View {
     let last = lines.lastIndex { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty } ?? (lines.count - 1)
     VStack(alignment: .leading, spacing: 0) {
       ForEach(Array(lines.enumerated()).filter { $0.offset >= first && $0.offset <= last }, id: \.offset) { _, line in
-        Text(line.text.isEmpty ? " " : line.text)
-          .font(.system(size: line.double ? base * 2 : base, weight: line.bold ? .bold : .regular, design: .monospaced))
+        let font = Font.system(size: line.double ? base * 2 : base, weight: line.bold ? .bold : .regular, design: .monospaced)
+        if line.double, let (label, amount) = receiptColumns(line.text) {
+          // The system face tracks a large size tighter than a small one, so twice the size over half the columns
+          // falls short of the paper's edge: the amount is pinned to the right edge instead of padded to it.
+          HStack(spacing: 0) {
+            Text(label)
+            Spacer(minLength: base)
+            Text(amount)
+          }
+          .font(font)
           .lineLimit(1)
+          .frame(maxWidth: .infinity)
+        } else {
+          Text(line.text.isEmpty ? " " : line.text).font(font).lineLimit(1)
+        }
       }
     }
     .fixedSize(horizontal: true, vertical: false)
     .accessibilityElement(children: .combine)
   }
+}
+
+/// A two-column receipt line split where its padding is (`TOTAL      $12.00` is `TOTAL` and `$12.00`); nil for a line
+/// with no gap of two or more spaces between words.
+func receiptColumns(_ line: String) -> (String, String)? {
+  let trimmed = line.trimmingCharacters(in: .whitespaces)
+  guard let gap = trimmed.range(of: " {2,}", options: [.regularExpression, .backwards]) else { return nil }
+  let label = String(trimmed[..<gap.lowerBound])
+  let amount = String(trimmed[gap.upperBound...])
+  return label.isEmpty || amount.isEmpty ? nil : (label, amount)
 }

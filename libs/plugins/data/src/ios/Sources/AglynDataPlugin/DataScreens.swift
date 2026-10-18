@@ -326,7 +326,7 @@ struct DatasetsScreen: View {
                 .accessibilityHidden(true)
             }
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
         }
       }
       .aglynListRow()
@@ -607,7 +607,7 @@ struct DatasetDetailView: View {
                 other.name, subtitle: "Its \(other.model.fields?[fieldID]?.label(fieldID) ?? fieldID) field points here",
                 systemImage: DataSymbols.link)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
           }
         }
       }

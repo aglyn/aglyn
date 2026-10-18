@@ -253,7 +253,7 @@ struct ArtifactsScreen: View {
             } label: {
               ArtifactListRow(kind: kind, row: row)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
             .aglynListRow()
             .accessibilityIdentifier("\(kind.singular)-\(row.id)")
           }

@@ -64,7 +64,7 @@ struct TemplateGallerySheet: View {
                   StatusChip(row.isStarterBundle ? "Starter site" : templateSourceLabel(row.sourceType))
                 }
               }
-              .buttonStyle(.plain)
+              .buttonStyle(.aglynRow)
               .accessibilityIdentifier("template-\(row.id)")
             }
             if model.hasMore { AglynLoadMoreRow("Show more templates") { model.loadMore() } }

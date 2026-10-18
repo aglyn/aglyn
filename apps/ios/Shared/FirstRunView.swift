@@ -123,9 +123,7 @@ struct FirstRunView: View {
         }
       }
     }
-    #if os(macOS)
-      .frame(minWidth: 420, minHeight: 240)
-    #endif
+    .aglynSheetMinimumSize(width: 420, height: 240)
   }
 
   private var domain: String { model.config?.workspaceDomain ?? "aglyn.com" }

@@ -173,6 +173,9 @@ struct BesignerScreen: View {
   private func leave() {
     guard !session.left else { return }
     session.left = true
+    // What the Besigner published (a page's Published and Updated times) shows on the screen it returns to now,
+    // not at the next poll of a REST-read build.
+    RestFirestoreReader.rereadNow()
     if case .besigner? = navigation.paths[navigation.section]?.last {
       _ = navigation.paths[navigation.section]?.popLast()
     }

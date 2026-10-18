@@ -28,7 +28,7 @@ struct SwitcherView: View {
                     if org.id == workspace.org?.id { checkmark }
                   }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.aglynRow)
                 .accessibilityAddTraits(org.id == workspace.org?.id ? .isSelected : [])
               }
               // A full window is not the whole list (the console's switcher, AGL-2336).
@@ -52,7 +52,7 @@ struct SwitcherView: View {
                       if site.id == workspace.site?.id { checkmark }
                     }
                   }
-                  .buttonStyle(.plain)
+                  .buttonStyle(.aglynRow)
                   .accessibilityIdentifier("switcher-site-\(site.id)")
                   .accessibilityAddTraits(site.id == workspace.site?.id ? .isSelected : [])
                 }
