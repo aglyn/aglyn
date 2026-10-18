@@ -230,8 +230,13 @@ export function aiSiteStartBrief(answers: AiSiteStartAnswers): string {
   }
   // The kind they picked, or the one their answer suggests (AGL-3660).
   sentences.push(`Make it a ${aiSiteStartKind(answers).label.toLowerCase()} site.`)
+  // The form on the page a visitor opens to get in touch, never every page's
+  // last band (AGL-3899): "on the page that asks to be contacted" read as
+  // the home's closing band on 16 of the 22 newest production starts.
   sentences.push(
-    'Plan a page for each thing a visitor comes to do, and a contact form on the page that asks to be contacted.',
+    answers.pages === 1
+      ? 'Plan the page around what a visitor comes to do, with a contact form on it.'
+      : 'Plan a page for each thing a visitor comes to do, with the contact form on the page a visitor opens to get in touch.',
   )
   if (audience) {
     // Said of the FORM as well as of the copy: who fills a form in is what

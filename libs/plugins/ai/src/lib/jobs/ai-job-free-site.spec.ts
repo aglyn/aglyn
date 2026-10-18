@@ -513,11 +513,14 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
     expect(codes(YOGA_FULL, NEW_SITE, free)).not.toContain('plan-over-free-wall')
   })
 
-  it('tells a new site’s plan its home is at least five sections — a hero first and a closing call to action — and says nothing where the owner’s home stays', () => {
+  it('tells a new site’s plan its home is at least five sections — a hero first, then its own arc, in no fixed outline — and says nothing where the owner’s home stays', () => {
     const free = aiSitePlanCapabilities(yogaJob(), FREE) as AiPlanCapabilities
     const lines = aiPlanSiteLines(yogaJob(), NEW_SITE, free).join('\n')
     expect(lines).toContain('The home page at / reads as a full website: at least 5 sections — a hero first')
-    expect(lines).toContain('a closing call to action or contact band last')
+    // A menu, never one outline for every home (AGL-3899).
+    expect(lines).toContain('in no fixed order')
+    expect(lines).not.toContain('a closing call to action or contact band last')
+    expect(lines).toContain("This site's home tells its story in its own order: the hero first, then ")
     const paid = aiPlanSiteLines(siteJob({ pages: 5 }), NEW_SITE, aiSitePlanCapabilities(siteJob({ pages: 5 }), PAID)).join('\n')
     expect(paid).toContain('at least 5 sections')
     expect(aiPlanSiteLines(yogaJob(), EDITED_SITE, free).join('\n')).not.toContain('reads as a full website')

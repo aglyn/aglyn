@@ -160,6 +160,10 @@ const MENTIONS_ONLY = new Map<string, string>([
     "The spec of the environment builder above (AGL-3596): a placeholder key, asserting it is blanked by default and passed through only on request. It sends nothing anywhere.",
   ],
   [
+    'tools/e2e/ai-guided-start-local.e2e.mjs',
+    "The local guided-start run's `--stub-model` mode (AGL-3910). It names the key only to hold it EMPTY for the emulated console it starts, so the console's one provider is a loopback stub that answers every call with a 503. It reads no key, sends nothing to Anthropic, and is never part of a deployment.",
+  ],
+  [
     'libs/plugins/ai/src/lib/server/assist-chat-build-rung.spec.ts',
     "A spec of Assist's build offer (AGL-3616) that sets a placeholder key so the chat route believes a provider is configured. Every provider call in it is mocked; it sends nothing anywhere.",
   ],

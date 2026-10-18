@@ -74,6 +74,7 @@ import { aiDoctrinePlanCheck } from '../runtime/ai-doctrine'
 import { validateAiBuildPlan } from '../runtime/ai-doctrine-validators'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
+import { aiLayoutFormPageOfPlan } from './ai-job-page-language'
 import {
   AI_JOB_PLAN_SCOPES,
   aiSitePlanCapabilities,
@@ -248,5 +249,30 @@ describe('the live dental plan (2026-10-15)', () => {
     expect(outcome.plan?.screens[1].sections[1].uses).toEqual([
       'new:bookingForm',
     ])
+  })
+
+  it('keeps the booking form on the Book a Visit page alone: the home closes on a call to action to it (AGL-3899)', async () => {
+    mockRunAiRequest.mockReset()
+    mockRunAiRequest.mockResolvedValue(toolAnswer(ANSWER))
+    const outcome = await createAiJobPlanStep({
+      readInventory: async () => PROVISIONED,
+      findPlansByKey: null,
+      readCapabilities: async () => FREE,
+      admissionRefusal: async () => null,
+      readSiteContext: null,
+    })({
+      job: dentalJob(),
+      stepIndex: 0,
+      now: NOW,
+      firestore: aiEvalMemoryFirestore({}).firestore,
+      org: FREE_ORG,
+    })
+    const [home, book] = outcome.plan?.screens ?? []
+    expect(outcome.review).toMatchObject({ reason: 'plan', findings: [] })
+    expect(home.sections.at(-1)).toEqual({ name: 'Closing call to action to book a visit', uses: [], items: 0 })
+    expect(home.sections.flatMap((section) => section.uses)).toEqual([])
+    expect(book.sections.map((section) => section.uses)).toEqual([[], ['new:bookingForm'], []])
+    // The plan's one page that places the form is where every call to action goes.
+    expect(aiLayoutFormPageOfPlan({ create: outcome.plan?.create ?? [], screens: (outcome.plan?.screens ?? []).map((screen, index) => ({ ...screen, id: `page-${index}` })) })).toBe('page-1')
   })
 })
