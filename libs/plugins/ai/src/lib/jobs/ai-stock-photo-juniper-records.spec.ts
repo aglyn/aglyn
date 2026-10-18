@@ -50,6 +50,8 @@ import { MOUNTAIN_WEDDING_DAY_WIDE, WEDDING_SESSION_WIDE, WEDDING_WIDE_CARD } fr
 const PHOTOGRAPHER = 'A wedding and portrait photographer in Asheville, North Carolina shooting film and digital'
 const ROSES = '3799286'
 const SNOWY_MOUNTAIN_COUPLE = '7003291'
+/** A bride and groom, tagged so first (AGL-3856, beta.265): a record's cover leads with its people. */
+const BRIDE_AND_GROOM = '8028185'
 const ARCADE_BRIDE = '3909540'
 const BRIDE_AND_DAD = '7983099'
 
@@ -200,7 +202,10 @@ describe('a record’s cover described by what it shows (AGL-3856)', () => {
     expect(asked.slice(0, 1)).toEqual(['couple mountains'])
     const ids = photos.map((photo) => photo.placed?.split('/').pop())
     expect(ids).not.toContain(ROSES)
-    expect(ids[1]).toBe(SNOWY_MOUNTAIN_COUPLE)
+    // A record's cover is led by its people (AGL-3856, beta.265): the snowy
+    // couple's first tags are "wedding, snow, prenup shoot", the bride and
+    // groom's "bride, groom, wedding".
+    expect(ids[1]).toBe(BRIDE_AND_GROOM)
     expect(ids[2]).toBe(AUTUMN_FAMILY.id)
     for (const [index, photo] of photos.entries()) {
       expect(photo.alt).toBeTruthy()

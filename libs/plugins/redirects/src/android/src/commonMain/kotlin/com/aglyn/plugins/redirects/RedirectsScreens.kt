@@ -148,7 +148,7 @@ private fun RedirectDetail(row: RedirectRow, editor: RedirectsEditor) {
         StatusChip(if (row.enabled) "On" else "Off", if (row.enabled) StatusTone.SUCCESS else StatusTone.NEUTRAL)
       }
       SwitchRow(
-        "Redirect is on",
+        "Redirect visitors",
         row.enabled,
         { on -> editor.toggle(row, on) },
         supporting = "Switch it off to stop redirecting without deleting the rule.",

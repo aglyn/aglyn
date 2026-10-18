@@ -43,7 +43,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
 jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   resolveOrgPermissions: jest.fn(async () => ({ permissions: { managePos: gate.managePos } })),
 }))
-jest.mock('./download', () => ({ tokenSigningSecret: () => 'test-signing-secret' }))
+const signing = { configured: true }
+jest.mock('./download', () => ({
+  tokenSigningSecret: () => {
+    if (!signing.configured) throw new Error('TOKEN_SIGNING_SECRET is not configured')
+    return 'test-signing-secret'
+  },
+}))
 
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 import { printersHandler, queueRegisterPrint } from './printers'
@@ -80,6 +86,7 @@ const jobs = () =>
 
 beforeEach(() => {
   store.current = new MemoryFirestore()
+  signing.configured = true
   gate.managePos = true
   gate.entitled = true
   store.current.write(`hosts/${HOST}`, {
@@ -157,6 +164,19 @@ describe('POST /api/commerce/printers — managing printers', () => {
     const regenerated = (await call({ action: 'regenerate', printerId: created.printerId })).body
     expect(regenerated.pollUrl).not.toBe(created.pollUrl)
     expect(store.current.read(`hosts/${HOST}/printers/${created.printerId}`)?.['secretVersion']).toBe(2)
+  })
+
+  it('signs before it writes: no signing secret adds no printer and bumps no version', async () => {
+    const created = (await call(STAR)).body
+    signing.configured = false
+    const refused = await call({ ...STAR, deviceId: '00:11:62:00:00:42' })
+    expect(refused.status).toBe(503)
+    expect(refused.body.error).toMatch(/not available on this deployment/)
+    const printers = [...store.current.docs.keys()].filter((path) => path.startsWith(`hosts/${HOST}/printers/`))
+    expect(printers).toEqual([`hosts/${HOST}/printers/${created.printerId}`])
+    expect((await call({ action: 'regenerate', printerId: created.printerId })).status).toBe(503)
+    expect(store.current.read(`hosts/${HOST}/printers/${created.printerId}`)?.['secretVersion']).toBe(1)
+    expect((await call({ action: 'credentials', printerId: created.printerId })).status).toBe(503)
   })
 
   it('updates settings, validating them for the printer’s brand', async () => {

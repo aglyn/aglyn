@@ -64,6 +64,7 @@ import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
+import com.aglyn.ui.StatRow
 import com.aglyn.ui.StatTile
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -262,7 +263,7 @@ private fun DatasetDetail(
         }
       }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+    StatRow {
       StatTile("Records", records?.toString() ?: "—", Modifier.weight(1f), "In the whole dataset")
       StatTile("Fields", dataset.model.order.orEmpty().size.toString(), Modifier.weight(1f), dataset.updatedAt?.let { "Changed " + relativeTime(it.epochMillis, now) })
     }

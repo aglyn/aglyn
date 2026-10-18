@@ -9,8 +9,20 @@
   /// 8), then quits. It draws the app's own window, so it needs no
   /// screen-recording permission; used for the README screenshots.
   enum DebugSnapshot {
+    /// `-AglynAppearance light|dark` draws the app in that appearance whatever the system's is, for screenshots
+    /// of both modes from one Mac (a UI test sets it per launch).
+    @MainActor
+    static func applyAppearanceIfAsked() {
+      switch UserDefaults.standard.string(forKey: "AglynAppearance")?.lowercased() {
+      case "light": NSApplication.shared.appearance = NSAppearance(named: .aqua)
+      case "dark": NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+      default: break
+      }
+    }
+
     @MainActor
     static func scheduleIfAsked() {
+      applyAppearanceIfAsked()
       let defaults = UserDefaults.standard
       guard let path = defaults.string(forKey: "AglynSnapshot"), !path.isEmpty else { return }
       let delay = defaults.double(forKey: "AglynSnapshotDelay")

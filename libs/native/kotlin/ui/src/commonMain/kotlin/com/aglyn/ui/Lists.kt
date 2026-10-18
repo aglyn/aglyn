@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
@@ -174,11 +176,17 @@ fun <T> LoadContent(
   }
 }
 
-/** A figure in a detail pane: what it counts, the number, and a line under it. Not a link. */
+/** A row of [StatTile]s, every tile as tall as the tallest one so a wrapped caption never leaves its neighbors short. */
+@Composable
+fun StatRow(modifier: Modifier = Modifier, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+  Row(modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(space(1f)), content = content)
+}
+
+/** A figure in a detail pane: what it counts, the number, and a line under it. Not a link. Sits in a [StatRow]. */
 @Composable
 fun StatTile(label: String, value: String, modifier: Modifier = Modifier, caption: String? = null) {
   androidx.compose.material3.Surface(
-    modifier.semantics(mergeDescendants = true) {},
+    modifier.fillMaxHeight().semantics(mergeDescendants = true) {},
     shape = MaterialTheme.shapes.large,
     color = MaterialTheme.colorScheme.surfaceContainerLow,
   ) {

@@ -5,6 +5,7 @@ import AglynContracts
 import AglynCore
 import AglynHardware
 import AglynPluginHost
+import AglynSite
 import AglynUI
 import SwiftUI
 
@@ -42,7 +43,7 @@ struct PosKioskScreen: View {
           mode: .kiosk, busy: model.pairing, error: model.pairError,
           onPair: { code in Task { await model.pair(code: code) } }, onLeave: { context.back() })
       } else {
-        KioskBody(model: model, onExit: { model.unpaired() })
+        KioskBody(model: model, origin: context.api.origin, onExit: { model.unpaired() })
           .id(model.turn)
       }
     }
@@ -81,6 +82,8 @@ private struct CatalogKey: Equatable {
 
 private struct KioskBody: View {
   let model: PosKioskModel
+  /// The console the kiosk was paired with, whose media CDN serves the products' photos.
+  let origin: String
   let onExit: () -> Void
   @State private var itemSheet: PosKioskProduct?
   @State private var cartOpen = false
@@ -134,7 +137,7 @@ private struct KioskBody: View {
           .accessibilityIdentifier("kiosk-start")
       }
     case .menu:
-      KioskMenuView(model: model, onProduct: tap, onCart: { cartOpen = true })
+      KioskMenuView(model: model, origin: origin, onProduct: tap, onCart: { cartOpen = true })
     case .review:
       if let sale = model.sale { KioskReviewView(model: model, sale: sale) }
     case .tip(let method):
@@ -201,6 +204,7 @@ extension PosDeviceBranding {
 /// The menu: category chips, the product tiles, and the cart bar.
 private struct KioskMenuView: View {
   let model: PosKioskModel
+  let origin: String
   let onProduct: (PosKioskProduct) -> Void
   let onCart: () -> Void
 
@@ -214,6 +218,8 @@ private struct KioskMenuView: View {
           }
         }
         .padding(AglynSpace.two)
+        // The faint Staff control sits over the top-leading corner; the chips start after it, never under it.
+        .padding(.leading, kioskStaffInset)
       }
       Divider()
       if let notice = model.notice { AglynNotice(notice, tone: .warning) { model.notice = nil }.padding(AglynSpace.two) }
@@ -223,17 +229,25 @@ private struct KioskMenuView: View {
         } else if (model.catalog?.products ?? []).isEmpty {
           Text("Nothing here yet. Try another category.").font(AglynFont.title2).foregroundStyle(.secondary).padding(AglynSpace.four)
         } else {
-          LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: AglynSpace.two)], spacing: AglynSpace.two) {
+          // Tiles top-aligned in their row, each name keeping two lines: a one-line name beside a two-line one, or a
+          // tile with a photo beside one without, no longer sat the row's tiles at staggered heights.
+          LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 170), spacing: AglynSpace.two, alignment: .top)], spacing: AglynSpace.two
+          ) {
             ForEach(model.catalog?.products ?? [], id: \.id) { product in
               let soldOut = kioskProductSoldOut(product)
               Button {
                 onProduct(product)
               } label: {
                 VStack(alignment: .leading, spacing: AglynSpace.half) {
-                  if let url = product.imageUrl.flatMap({ URL(string: $0) }) {
-                    AglynRemoteImage(url, systemImage: "photo", contentMode: .fill).frame(height: 110).clipped()
+                  // The server sends a `/api/media/cdn/…` path (or a media reference); the register's tiles resolve it
+                  // the same way (AGL-3906).
+                  if let url = product.imageUrl.flatMap({ mediaPreviewURL($0, origin: origin, hostID: nil) }) {
+                    Color.clear.frame(maxWidth: .infinity).frame(height: 110)
+                      .overlay { AglynRemoteImage(url, systemImage: "photo", contentMode: .fill) }
+                      .clipped()
                   }
-                  Text(product.name).font(AglynFont.headline).multilineTextAlignment(.leading)
+                  Text(product.name).font(AglynFont.headline).multilineTextAlignment(.leading).lineLimit(2, reservesSpace: true)
                   Text(
                     soldOut ? "Sold out" : "\(product.variants.count > 1 ? "From " : "")\(model.money(kioskFromCents(product)))"
                   )
@@ -536,6 +550,9 @@ private struct KioskDoneView: View {
 /// Staff unlock: a corner button, then the staff PIN the register uses, checked on the server. No names are listed, the
 /// screen faces the public, and a right PIN opens the kiosk's settings for a few minutes: which card reader it sends
 /// payments to, and leaving kiosk mode.
+/// How far the menu's chips start from the leading edge, clear of the Staff control over that corner.
+private let kioskStaffInset: CGFloat = 48
+
 private struct KioskStaffControl: View {
   let model: PosKioskModel
   let onExit: () -> Void
@@ -613,7 +630,7 @@ private struct KioskStaffSheet: View {
       try? await Task.sleep(for: .milliseconds(wait))
       if !Task.isCancelled { staff.close() }
     }
-    .frame(minWidth: 380, minHeight: 360)
+    .aglynSheetMinimumSize(width: 380, height: 360)
   }
 }
 

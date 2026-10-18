@@ -26,9 +26,14 @@ struct FieldsBlock: View {
           if row["chip"] == .bool(true) {
             StatusChip(shown, tone: toneFor(row, value: value, in: scope))
           } else {
+            // One token (an email, an id, a link) keeps one line, shortened in the middle: wrapped, it broke at a dot
+            // and read as two values. Copy still copies the whole value.
+            let oneToken = !shown.contains(where: \.isWhitespace)
             Text(shown)
               .foregroundStyle(row["tone"] != nil ? toneFor(row, value: value, in: scope).color : .secondary)
               .multilineTextAlignment(.trailing)
+              .lineLimit(oneToken ? 1 : nil)
+              .truncationMode(.middle)
               .textSelection(.enabled)
           }
         }
@@ -352,7 +357,7 @@ struct ListRow: View {
         } label: {
           row
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.aglynRow)
       } else {
         row
       }
@@ -738,7 +743,7 @@ struct ActionInputSheet: View {
         }
       }
     }
-    .frame(minWidth: 360, minHeight: 280)
+    .aglynSheetMinimumSize(width: 360, height: 280)
     .presentationDetents([.medium, .large])
   }
 }
@@ -827,7 +832,7 @@ struct LookupSheet: View {
         await load()
       }
     }
-    .frame(minWidth: 360, minHeight: 360)
+    .aglynSheetMinimumSize(width: 360, height: 360)
   }
 
   private func load() async {
@@ -885,7 +890,7 @@ struct ReauthSheet: View {
         }
       }
     }
-    .frame(minWidth: 360, minHeight: 260)
+    .aglynSheetMinimumSize(width: 360, height: 260)
   }
 }
 

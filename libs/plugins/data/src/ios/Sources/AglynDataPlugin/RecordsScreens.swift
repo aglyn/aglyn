@@ -318,7 +318,7 @@ private struct RecordsBody: View {
                 .accessibilityHidden(true)
             }
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
         }
       }
       .aglynListRow()
@@ -571,7 +571,7 @@ private struct RecordEditorSheet: View {
         }
       }
     }
-    .frame(minWidth: 420, minHeight: 480)
+    .aglynSheetMinimumSize(width: 420, height: 480)
     .accessibilityIdentifier("record-editor")
   }
 }

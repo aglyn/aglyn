@@ -112,6 +112,9 @@ class ShellNavigator(initialTop: String = HOME) {
   var top by mutableStateOf(initialTop)
   val stack = mutableStateListOf<Route>()
 
+  /** A link waiting for the workspace and site it belongs to to come on screen (`openLink`), with where that is. */
+  internal var deferredLink by mutableStateOf<Pair<String, LinkScope>?>(null)
+
   val current: Route? get() = stack.lastOrNull()
 
   /**
@@ -237,14 +240,52 @@ internal class ShellPluginContext(
   fun openNotification(row: FeedNotification) {
     val link = row.link
     val orgId = row.orgId ?: workspace.sites.firstOrNull { it.id == row.hostId }?.orgId
-    if (orgId != null && (orgId != workspace.org?.id || (row.hostId != null && row.hostId != workspace.site?.id))) {
-      services.workspace.select(orgId, row.hostId ?: workspace.site?.id?.takeIf { orgId == workspace.org?.id })
+    if (orgId == null) {
+      if (link != null) openLink(link)
+      return
     }
-    if (link != null) openLink(link)
+    val scope = LinkScope(orgId, row.hostId ?: workspace.site?.id?.takeIf { orgId == workspace.org?.id })
+    if (link == null) {
+      if (!linkScopeSettled(scope, workspace)) services.workspace.select(scope.orgId, scope.hostId)
+      return
+    }
+    openIn(scope, link)
   }
 
+  /**
+   * Opens a link where it belongs: a link naming another workspace or site the person holds switches there first and
+   * opens once that workspace is on screen (`settleDeferredLink`), so its screen reads that site, not the one before.
+   */
   override fun openLink(link: String): Boolean {
-    when (val target = DeepLinks.resolve(link, services.registry.deepLinks())) {
+    val scope = linkScopeOf(link, workspace) ?: return openHere(link)
+    openIn(scope, link)
+    return true
+  }
+
+  private fun openIn(scope: LinkScope, link: String) {
+    // A workspace the person no longer holds cannot come on screen; the link opens where they are.
+    if (linkScopeSettled(scope, workspace) || workspace.orgs.none { it.id == scope.orgId }) {
+      openHere(link)
+      return
+    }
+    navigator.deferredLink = link to scope
+    linkScopePick(scope, workspace)?.let { (orgId, hostId) -> services.workspace.select(orgId, hostId) }
+  }
+
+  /** Called as the workspace changes: picks the next step toward a deferred link's site, and opens the link once there. */
+  fun settleDeferredLink() {
+    val (link, scope) = navigator.deferredLink ?: return
+    if (!workspace.ready) return
+    if (linkScopeSettled(scope, workspace)) {
+      navigator.deferredLink = null
+      openHere(link)
+      return
+    }
+    linkScopePick(scope, workspace)?.let { (orgId, hostId) -> services.workspace.select(orgId, hostId) }
+  }
+
+  private fun openHere(link: String): Boolean {
+    when (val target = DeepLinks.resolve(withAiJobPath(link), services.registry.deepLinks())) {
       is NativeLinkTarget.Screen -> navigator.push(Route.Screen(target.screen, target.params))
       is NativeLinkTarget.Besigner -> navigator.push(Route.Besigner(target.path))
       is NativeLinkTarget.Unmatched -> nativeFor(target.path)

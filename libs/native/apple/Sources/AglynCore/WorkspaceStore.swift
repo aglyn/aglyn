@@ -143,6 +143,17 @@ public final class WorkspaceStore {
     start()
   }
 
+  /// Reads the workspaces (and the shown workspace's sites) again now, as after this person created a workspace:
+  /// a listener that polls would otherwise show none until its next read. What is shown stays until the answer lands.
+  public func reload() {
+    orgListener?.remove()
+    siteListener?.remove()
+    orgListener = nil
+    siteListener = nil
+    sitesFor = nil
+    start()
+  }
+
   public func stop() {
     orgListener?.remove()
     siteListener?.remove()

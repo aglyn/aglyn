@@ -51,6 +51,7 @@ import useCurrentOrg from '../../hooks/use-current-org'
 import { recentDayIds } from '../../utils/analytics-day-cache'
 import {
   aggregateScreenDays,
+  referrerLabel,
   topReferrer,
   topDevice,
   type ScreenTrafficRow,
@@ -303,7 +304,7 @@ export function ScreensAnalyticsTable(props: { hostId: string }) {
                      */}
                     <TableCell sx={{ maxWidth: 200 }}>
                       <Typography variant="body2" noWrap>
-                        {topReferrer(row) || '--'}
+                        {referrerLabel(topReferrer(row)) || '--'}
                       </Typography>
                     </TableCell>
                   </TableRow>

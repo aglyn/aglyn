@@ -707,16 +707,27 @@ private fun OrderActionButtons(offer: OrderActions, actions: OrderActionsModel) 
     if (offer.cancel) Triple("Cancel order", "cancel", OrderDialog.CANCEL) else null,
   )
   if (buttons.isEmpty()) return
-  FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-    buttons.forEachIndexed { index, (label, icon, dialog) ->
-      val content: @Composable () -> Unit = {
-        Icon(AglynIcons.named(icon), contentDescription = null)
-        Text(label, Modifier.padding(start = space(1f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+  // Three acts in view; Cancel order (and whatever else does not fit) in the ⋮ menu, in the error color.
+  val shown = buttons.filter { it.third != OrderDialog.CANCEL }.take(3)
+  val more = buttons.filter { it !in shown }
+  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+    FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+      shown.forEachIndexed { index, (label, icon, dialog) ->
+        val content: @Composable () -> Unit = {
+          Icon(AglynIcons.named(icon), contentDescription = null)
+          Text(label, Modifier.padding(start = space(1f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        val tag = Modifier.testTag("order-action-${dialog.name.lowercase()}")
+        if (index == 0) Button(onClick = { actions.open(dialog) }, modifier = tag) { content() }
+        else OutlinedButton(onClick = { actions.open(dialog) }, modifier = tag) { content() }
       }
-      val tag = Modifier.testTag("order-action-${dialog.name.lowercase()}")
-      if (index == 0) Button(onClick = { actions.open(dialog) }, modifier = tag) { content() }
-      else OutlinedButton(onClick = { actions.open(dialog) }, modifier = tag) { content() }
     }
+    com.aglyn.ui.OverflowMenu(
+      more.map { (label, icon, dialog) ->
+        com.aglyn.ui.MenuAction("order-action-${dialog.name.lowercase()}", label, icon, destructive = dialog == OrderDialog.CANCEL) { actions.open(dialog) }
+      },
+      contentDescription = "More order actions",
+    )
   }
 }
 

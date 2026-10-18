@@ -131,9 +131,11 @@ fun IconBadge(icon: ImageVector, tint: Color, modifier: Modifier = Modifier, siz
 }
 
 /**
- * A summary card: a label, one large number and a caption. The whole card
- * opens [onClick] and says so with a chevron and [actionLabel] for
- * accessibility; it never carries a bare "View" link.
+ * A summary card: a label, one large number and a caption. With [onClick] the
+ * whole card opens it and says so with a chevron and [actionLabel] for
+ * accessibility; it never carries a bare "View" link. Without one it is a
+ * plain figure with no chevron, so it never promises a tap that does nothing.
+ * A long value (a host, a split) steps down a size so it never breaks mid-word.
  */
 @Composable
 fun MetricCard(
@@ -146,12 +148,12 @@ fun MetricCard(
   tint: Color = MaterialTheme.colorScheme.primary,
   loading: Boolean = false,
   error: String? = null,
-  onClick: () -> Unit,
+  onClick: (() -> Unit)?,
 ) {
   Surface(
     modifier
       .clip(MaterialTheme.shapes.large)
-      .clickable(role = Role.Button, onClickLabel = actionLabel, onClick = onClick),
+      .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClickLabel = actionLabel, onClick = onClick) else Modifier),
     shape = MaterialTheme.shapes.large,
     color = MaterialTheme.colorScheme.surfaceContainerLowest,
     shadowElevation = 1.dp,
@@ -167,7 +169,7 @@ fun MetricCard(
           maxLines = 2,
           overflow = TextOverflow.Ellipsis,
         )
-        Icon(AglynIcons.named("chevron_right"), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (onClick != null) Icon(AglynIcons.named("chevron_right"), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
       }
       when {
         loading -> {
@@ -176,7 +178,17 @@ fun MetricCard(
         }
         error != null -> Text(error, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         else -> {
-          if (value != null) Text(value, style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.onSurface)
+          if (value != null) Text(
+            value,
+            style = when {
+              value.length <= 6 -> MaterialTheme.typography.displaySmall
+              value.length <= 9 -> MaterialTheme.typography.headlineMedium
+              else -> MaterialTheme.typography.titleLarge
+            },
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+          )
           if (caption != null) {
             Text(caption, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
           }

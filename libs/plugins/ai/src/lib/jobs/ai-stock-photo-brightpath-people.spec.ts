@@ -210,8 +210,10 @@ describe('a team’s covers show adults in their role (AGL-3856, beta.264)', () 
       expect(tags).not.toMatch(CHILD)
       expect(tags).toMatch(/\b(?:teacher|instructor|coach|coaching|trainer|woman|man)\b/)
     }
-    // The teacher's portrait goes to the first instructor, the coach at a laptop to the online coach.
-    expect(ids[0]).toBe(TEACHER_PORTRAIT)
+    // A teacher is shown teaching (AGL-3856, beta.265): the teacher's portrait,
+    // tagged "woman, teacher, portrait" and nothing of a class, is no
+    // instructor's; the coach at a laptop still goes to the online coach.
+    expect(ids).not.toContain(TEACHER_PORTRAIT)
     expect(ids[4]).toBe(COACHING_AT_A_LAPTOP)
     expect(ids).not.toContain(TEACHER_TAGGED_MONK)
     // A record no recorded photo shows in its role takes a starter of people at
@@ -223,7 +225,6 @@ describe('a team’s covers show adults in their role (AGL-3856, beta.264)', () 
     const { stockPhotos: source } = stockPhotos()
     const photos = await aiSiteDatasetRecordPhotos({ job, name: 'Instructors', names: INSTRUCTORS, pictures: 'people', stockPhotos: source })
     const alts = new Map(photos.map((photo) => [photo.placed?.split('/').pop(), photo.alt]))
-    expect(alts.get(TEACHER_PORTRAIT)).toBe('A portrait of a teacher')
     expect(alts.get(COACHING_AT_A_LAPTOP)).toBe('An entrepreneur')
   })
 })

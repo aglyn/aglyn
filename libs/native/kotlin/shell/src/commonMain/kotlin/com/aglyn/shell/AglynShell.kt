@@ -159,6 +159,8 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     }
   }
 
+  // A link that switched workspace or site opens once that workspace is on screen.
+  LaunchedEffect(navigator.deferredLink, workspace) { context.settleDeferredLink() }
   LaunchedEffect(pendingLink, workspace.ready) {
     if (pendingLink != null && workspace.ready && !AuthFlow.isAuthLink(pendingLink)) {
       context.openLink(pendingLink)
@@ -242,8 +244,10 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     drawerFooter = { WorkspaceFooter(workspace) { navigator.push(Route.Switcher) } },
   ) {
     val route = navigator.current
+    // A pushed screen may name itself once its data is in (an AI job by its brief); a fresh state per screen.
+    val screenTitle = remember(navigator.currentKey) { mutableStateOf<String?>(null) }
     val title = when (route) {
-      is Route.Screen -> services.registry.screen(route.screenId)?.title ?: "Not found"
+      is Route.Screen -> screenTitle.value ?: services.registry.screen(route.screenId)?.title ?: "Not found"
       is Route.Besigner -> "Besigner"
       Route.Analytics -> "Analytics"
       Route.Switcher -> "Switch workspace or site"
@@ -260,7 +264,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
             if (route == null && navigator.top == ShellNavigator.HOME) {
               if (!inDrawer) AglynLogo(Modifier.height(28.dp), contentDescription = services.config.brandName)
             } else {
-              Text(title)
+              Text(title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
           },
           navigationIcon = {
@@ -280,6 +284,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
         }
       },
     ) { padding ->
+      androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalScreenTitle provides screenTitle) {
       Box(Modifier.padding(padding).fillMaxSize()) {
         // Each destination and each pushed screen keeps its own saved state (selection, scroll, filters), so Back returns to
         // the screen below as it was left, and a destination never inherits the one before it.
@@ -303,6 +308,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
           }
         }
         }
+      }
       }
     }
   }

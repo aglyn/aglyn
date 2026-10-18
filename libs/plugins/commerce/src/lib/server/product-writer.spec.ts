@@ -125,6 +125,17 @@ describe('upsertSourcedProduct', () => {
     expect(products()).toHaveLength(1)
   })
 
+  it('counts live products: a deleted one frees its slot, an archived one keeps it (AGL-3918)', async () => {
+    org = { plan: 'pro', productLimit: 1 }
+    db.write(`hosts/${HOST}/products/gone`, { slug: 'mug', name: 'Mug', deletedAt: 5 })
+    expect((await upsertSourcedProduct({ hostId: HOST, product: tee() }, db as never)).outcome).toBe('created')
+
+    org = { plan: 'pro', productLimit: 2 }
+    db.write(`hosts/${HOST}/products/shelved`, { slug: 'cap', name: 'Cap', status: 'archived', deletedAt: null })
+    const refused = await upsertSourcedProduct({ hostId: HOST, product: tee({ sourceKey: 'printful:777', name: 'Hoodie' }) }, db as never)
+    expect(refused).toEqual({ outcome: 'plan_limit', limit: 2 })
+  })
+
   it('answers no_store for a site that does not sell', async () => {
     org = { plan: 'free' }
     expect(await upsertSourcedProduct({ hostId: HOST, product: tee() }, db as never)).toEqual({ outcome: 'no_store' })

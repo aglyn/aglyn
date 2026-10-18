@@ -288,7 +288,7 @@ struct OrderDetailView: View {
             Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
           }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.aglynRow)
         .accessibilityIdentifier("order-more")
       }
 

@@ -52,11 +52,13 @@ import com.aglyn.contracts.ProductType
 import com.aglyn.contracts.isLowStock
 import com.aglyn.contracts.productInventory
 import com.aglyn.contracts.productPriceRange
+import com.aglyn.core.liveCount
 import com.aglyn.core.Live
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.plugins.commerce.pos.Load
 import com.aglyn.site.media.mediaPreviewUrl
 import com.aglyn.ui.ActionDialog
+import com.aglyn.ui.FormSheet
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
 import com.aglyn.ui.CloseWhenGone
@@ -133,6 +135,12 @@ fun ProductsScreen(context: NativePluginContext, initialProductId: String? = nul
 
 @Composable
 private fun ProductsList(context: NativePluginContext, model: ProductsListModel, editor: ProductEditorModel, selected: String?, onSelect: (String) -> Unit) {
+  LaunchedEffect(editor.created) {
+    editor.created?.let { id ->
+      onSelect(id)
+      editor.created = null
+    }
+  }
   val listState = rememberLazyListState()
   // A new chip, filter or sort is a new list: it starts at its first row, not at the row that was on top before.
   // Coming back to the list (from a product, or Back) keeps where it was.
@@ -146,13 +154,14 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
   }
   LaunchedEffect(nearEnd, model.hasMore) { if (nearEnd && model.hasMore) model.loadMore() }
   // The cap, standing rather than only on refusal (AGL-2113): the site's products against the plan's productsPerHost.
+  // LIVE products, as the create door counts them (AGL-3918): a deleted product frees its slot, an archived one keeps it.
   var used by remember { mutableStateOf(0L) }
   var limit by remember { mutableStateOf<Double?>(null) }
   var planReady by remember { mutableStateOf(false) }
   LaunchedEffect(context.hostId, editor.done) {
     val hostId = context.hostId ?: return@LaunchedEffect
     try {
-      used = context.firestore.count(com.aglyn.core.FirestoreQuery(productsPath(hostId))) ?: used
+      used = context.firestore.liveCount(productsPath(hostId)) ?: used
       limit = productsPerHostLimit(context.api, hostId)
       planReady = true
     } catch (error: Throwable) {
@@ -512,17 +521,18 @@ fun ScanScreen(context: NativePluginContext) {
 @Composable
 private fun ProductDialogs(editor: ProductEditorModel) {
   editor.draft?.let { draft ->
-    ActionDialog(
+    // A product is a long form (options, variants, prices, codes, stock): a sheet with one Save in its header, not an alert.
+    FormSheet(
       title = if (draft.create) "New product" else "Edit ${draft.name.ifBlank { "product" }}",
-      icon = "inventory",
-      confirmLabel = if (draft.create) "Add product" else "Save",
-      confirmEnabled = draft.name.isNotBlank(),
       busy = editor.busy,
       error = editor.error,
       onDismiss = editor::close,
       onConfirm = editor::save,
+      confirmLabel = if (draft.create) "Add product" else "Save",
+      confirmEnabled = draft.name.isNotBlank(),
+      modifier = Modifier.testTag("product-form"),
     ) {
-      Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+      Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
         OutlinedTextField(draft.name, { editor.change(draft.copy(name = it)) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("product-name"))
         OutlinedTextField(draft.description, { editor.change(draft.copy(description = it)) }, label = { Text("Description") }, minLines = 2, modifier = Modifier.fillMaxWidth())
         ChoiceChipRow(

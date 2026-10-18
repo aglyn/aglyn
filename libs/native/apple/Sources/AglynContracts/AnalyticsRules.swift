@@ -114,6 +114,9 @@ public func topDevice(_ row: ScreenTrafficRow) -> String { top(row.devices) }
 /// The site that sent a page the most visitors, or empty.
 public func topReferrer(_ row: ScreenTrafficRow) -> String { top(row.referrers) }
 
+/// A referrer key as a person reads it: the collector writes each `.` of the host as `_` (`google_com` → `google.com`).
+public func referrerLabel(_ key: String) -> String { key.replacingOccurrences(of: "_", with: ".") }
+
 /// A UTC day id, `YYYY-MM-DD`: how `hosts/{id}/analytics/{day}` is keyed.
 public func analyticsDayID(_ date: Date) -> String {
   var calendar = Calendar(identifier: .gregorian)

@@ -60,10 +60,10 @@ import {
 import {
   collection,
   doc,
-  getCountFromServer,
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
+import { getLiveCountFromServer } from '@aglyn/aglyn/app-utils/live-document-count.client'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useDuplicateResource,
@@ -361,11 +361,10 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
    * the collection and did. The card offered headroom that did not exist and
    * then failed the create.
    *
-   * UNFILTERED, matching that route's plain `collection('workflows').count()`
-   * — its `softDeletes` branch governs only the flat per-host webhook cap, so
-   * soft-deleted workflows have always counted server-side while this card
-   * excluded them. Only a create moves the number, so that is where it is
-   * re-read.
+   * LIVE workflows, as that route counts them (AGL-3918): a deleted
+   * workflow frees its slot, a disabled one keeps it. Every document less
+   * the tombstones (`getLiveCountFromServer`). A create or a delete moves the
+   * number, so both re-read it.
    */
   const [workflowCountEpoch, setWorkflowCountEpoch] = useState(0)
   const [serverWorkflowCount, setServerWorkflowCount] = useState<number | null>(
@@ -373,9 +372,9 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   )
   useEffect(() => {
     let active = true
-    void getCountFromServer(collection(firestore, 'hosts', hostId, 'workflows'))
-      .then((snapshot) => {
-        if (active) setServerWorkflowCount(snapshot.data().count)
+    void getLiveCountFromServer(collection(firestore, 'hosts', hostId, 'workflows'))
+      .then((count) => {
+        if (active) setServerWorkflowCount(count)
       })
       .catch(() => {
         // Falls back to the loaded rows — a LOWER bound and the prior
@@ -663,6 +662,8 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         doc(firestore, 'hosts', hostId, 'workflows', workflow.$id),
         { deletedAt: Timestamp.now() },
       )
+      // Deleting frees the slot (AGL-3918), so the head-count is re-read.
+      setWorkflowCountEpoch((epoch) => epoch + 1)
       enqueueSnackbar('Workflow deleted', {
         variant: 'success',
         persist: false,

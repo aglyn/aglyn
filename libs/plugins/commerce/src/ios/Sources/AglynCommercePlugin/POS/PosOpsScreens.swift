@@ -62,7 +62,14 @@ struct RegisterOpsSheet: View {
       #endif
       .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
     }
-    .frame(minWidth: 420, minHeight: 420)
+    .aglynSheetMinimumSize(width: 420, height: 420)
+    // The pairing code is presented from here, not from its row: a sheet anchored inside the Form went away
+    // within a second, taking this sheet with it, as soon as the row redrew.
+    .sheet(isPresented: Binding(get: { model.display.pairing != nil }, set: { if !$0 { model.display.closePairing() } })) {
+      if let pairing = model.display.pairing {
+        PairingCodeSheet(model: model, pairing: pairing, mode: model.display.pairingMode)
+      }
+    }
     .sheet(isPresented: $returning) { PosReturnSheet(model: model) }
     .sheet(isPresented: $switching) {
       PinPadSheet(model: model, purpose: "cashier", title: "Switch cashier", prompt: nil, dismissible: true) {
@@ -250,7 +257,7 @@ private struct ShiftDialogSheet: View {
           ToolbarItem(placement: .confirmationAction) { Button("Done") { shift.dismiss() } }
         }
       }
-      .frame(minWidth: 420, minHeight: 480)
+      .aglynSheetMinimumSize(width: 420, height: 480)
     case .close:
       if let frozen = shift.closed {
         NavigationStack {
@@ -271,7 +278,7 @@ private struct ShiftDialogSheet: View {
             ToolbarItem(placement: .confirmationAction) { Button("Done") { shift.dismiss() } }
           }
         }
-        .frame(minWidth: 420, minHeight: 480)
+        .aglynSheetMinimumSize(width: 420, height: 480)
       } else {
         AglynActionSheet(
           "Close the shift", message: "Count the drawer, then enter what is in it.", confirmLabel: "Close shift",
@@ -328,7 +335,9 @@ struct ShiftReportView: View {
       ForEach(report.salesByTender.sorted(by: { $0.key < $1.key }), id: \.key) { method, cents in
         AglynAmountRow(ContractValues.shared.posTenderLabels[method] ?? method, amount: m(cents))
       }
-      AglynAmountRow("Refunds (\(Int(report.refundCount)))", amount: "−" + m(report.refundsCents))
+      // A minus sign only on an amount that takes something away: no refunds reads "$0.00", not "−$0.00".
+      AglynAmountRow(
+        "Refunds (\(Int(report.refundCount)))", amount: report.refundsCents > 0 ? "−" + m(report.refundsCents) : m(0))
       AglynAmountRow("Net sales", amount: m(report.netSalesCents), emphasized: true)
       Divider()
       AglynAmountRow("Opening float", amount: m(report.openingFloatCents))
@@ -396,7 +405,7 @@ struct PinPadSheet: View {
         }
       }
     }
-    .frame(minWidth: 360, minHeight: 520)
+    .aglynSheetMinimumSize(width: 360, height: 520)
     .interactiveDismissDisabled(!(dismissible || pad?.nobodyHasAPin == true))
     .task {
       let made = PosPinPadModel(api: model.opsAPI, registerID: model.register?.id ?? "", purpose: purpose) { assertion in
@@ -546,11 +555,6 @@ private struct DisplayDevicesSection: View {
       }
     }
     .task(id: model.register?.id) { await display.loadDevices() }
-    .sheet(isPresented: Binding(get: { display.pairing != nil }, set: { if !$0 { display.closePairing() } })) {
-      if let pairing = display.pairing {
-        PairingCodeSheet(model: model, pairing: pairing, mode: display.pairingMode)
-      }
-    }
   }
 
   private func seen(_ device: PosPairedDevice) -> String {
@@ -602,6 +606,6 @@ private struct PairingCodeSheet: View {
         }
       }
     }
-    .frame(minWidth: 420, minHeight: 440)
+    .aglynSheetMinimumSize(width: 420, height: 440)
   }
 }

@@ -92,6 +92,9 @@ fun topDevice(row: ScreenTrafficRow): String = topOf(row.devices)
 /** The site that sent a page the most visitors, or empty. */
 fun topReferrer(row: ScreenTrafficRow): String = topOf(row.referrers)
 
+/** A referrer key as a person reads it: the collector writes each `.` of the host as `_` (`google_com` → `google.com`). */
+fun referrerLabel(key: String): String = key.replace('_', '.')
+
 /** A UTC day id, `YYYY-MM-DD`: how `hosts/{id}/analytics/{day}` is keyed. */
 fun analyticsDayId(atMs: Long): String = localParts(atMs, "UTC").dayKey
 

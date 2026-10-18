@@ -72,6 +72,8 @@ internal const val POS_DEVICE_MODE_KEY = "aglyn.pos.deviceMode"
 fun PosShell(services: ShellServices, autoSignIn: Boolean = false, dark: Boolean? = null) {
   AglynTheme(dark = dark ?: androidx.compose.foundation.isSystemInDarkTheme()) {
     com.aglyn.webview.ProvideInAppBrowser(secureTab = services.openHostedPage) {
+    // Remote pictures (product photos on the register and the kiosk) load through the app's image loader, as in the Aglyn app.
+    androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalImageLoader provides services.imageLoader) {
     val version by services.registry.version.collectAsState()
     var deviceMode by remember { mutableStateOf(services.prefs.get(POS_DEVICE_MODE_KEY)) }
     val deviceScreens = remember(version) { services.registry.screens(NativeApp.POS).filter { it.placement == PosPlacement.DEVICE } }
@@ -100,6 +102,7 @@ fun PosShell(services: ShellServices, autoSignIn: Boolean = false, dark: Boolean
         is AuthState.SignedIn -> PosSignedIn(services, state.user.uid)
       }
     }
+  }
   }
   }
 }
@@ -232,8 +235,17 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
     topBar = {
       TopAppBar(
         title = {
+          // One line each, whatever the store's name: a phone's bar also holds the menu's icons, so the name ellipsizes and
+          // steps down to TitleMedium there (M3's small top app bar never wraps its title).
+          val compact = com.aglyn.ui.currentWidthClass() == com.aglyn.ui.WidthClass.COMPACT
           Column {
-            Text(workspace.site?.name ?: "", style = MaterialTheme.typography.titleLarge)
+            Text(
+              workspace.site?.name ?: "",
+              style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
+              maxLines = 1,
+              overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+              modifier = Modifier.testTag("pos-store-name"),
+            )
             Text(
               when (route) {
                 is Route.Besigner -> "Besigner"
@@ -242,6 +254,8 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
               },
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
+              maxLines = 1,
+              overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
           }
         },

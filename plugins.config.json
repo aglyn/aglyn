@@ -358,6 +358,7 @@
             "label": "services",
             "activityNoun": "service",
             "quotaKey": "servicesPerHost",
+            "softDeletes": true,
             "entitlement": "bookings",
             "$comment": "`crmFollowUpTask` and `crmMeetingActivity` are the two CRM switches a service carries (AGL-2660): whether a booking files a meeting on the record, and whether it owes a follow-up task. `askPhone` and `askAddress` are what the booking widget asks the booker for beyond a name and an email (AGL-3493): off, optional or required. `priceDisplay` is how the price is stated (AGL-3475): fixed (absent), or a label (varies, estimate, contact) that books with no charge.",
             "fields": [
@@ -539,6 +540,7 @@
             "label": "products",
             "activityNoun": "product",
             "quotaKey": "productsPerHost",
+            "softDeletes": true,
             "entitlement": "commerce",
             "$comment": "The whole product model: the editor, the duplicate action and the CSV importer each send a full product. `nameLower`, `nameTokens`, `nameReversed`, `skus`, `barcodes`, `priceFromCents`, `soldOut` and `collectionIds` are the search, price, stock and smart-collection keys this plugin derives on the payload (`productSearchFields`, `productStockFields`, `productCollectionIds`; AGL-2501, AGL-3321), so they are allow-listed rather than stamped. `priceUsd`, `inventory` and `imageUrl` are the legacy Commerce Starter fields every caller still writes. Born live — `deletedAt: null` — because the products table queries `deletedAt == null` and Firestore cannot match an absent field; a duplicate never carries its source's soft delete.",
             "fields": [
@@ -2170,6 +2172,7 @@
             "activityNoun": "function",
             "activityType": "function",
             "quotaKey": "functionsPerHost",
+            "softDeletes": true,
             "fields": ["name", "parameters", "variables", "operations", "returnValue"]
           },
           "siteExport": {
@@ -2187,6 +2190,7 @@
             "activityNoun": "variable",
             "activityType": "variable",
             "quotaKey": "variablesPerHost",
+            "softDeletes": true,
             "fields": ["name", "type", "value", "workflowId", "workflowName"]
           },
           "siteExport": {
@@ -2462,6 +2466,7 @@
             "label": "redirects",
             "activityNoun": "redirect",
             "quotaKey": "redirectsPerHost",
+            "softDeletes": true,
             "entitlement": "redirects",
             "requiresPublishRole": true,
             "$comment": "A routing statement over the whole live site the moment it exists, not a draft (AGL-1881, AGL-2573): it needs the publishing role, an off-platform destination carries the uid of the publisher who chose it (the serve path refuses one without), and its source is announced to the site cache on create.",
@@ -2612,6 +2617,7 @@
             "activityNoun": "workflow",
             "activityType": "workflow",
             "quotaKey": "workflowsPerHost",
+            "softDeletes": true,
             "entitlement": "workflows",
             "fields": ["name", "steps", "returnValue", "trigger"],
             "duplicate": {

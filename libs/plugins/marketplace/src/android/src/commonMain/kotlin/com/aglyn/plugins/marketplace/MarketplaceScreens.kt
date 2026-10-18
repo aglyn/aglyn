@@ -67,6 +67,7 @@ import com.aglyn.ui.SelectOption
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectionPlaceholder
 import com.aglyn.ui.SkeletonList
+import com.aglyn.ui.StatRow
 import com.aglyn.ui.StatTile
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -135,7 +136,7 @@ fun BrowseScreen(context: NativePluginContext, initialListingId: String? = null)
           SectionTabs(context, MARKETPLACE_BROWSE_SCREEN)
           SearchField(model.search, model::type, placeholder = "Search the marketplace")
           ChoiceChipRow(
-            listOf(ChipOption("", "All")) + Contracts.listingCategories.map { ChipOption(it, it.replaceFirstChar { c -> c.uppercase() }) },
+            listOf(ChipOption("", "All")) + Contracts.listingCategories.map { ChipOption(it, listingCategoryLabel(it)) },
             model.category ?: "",
             { model.pick(it.ifEmpty { null }) },
           )
@@ -274,7 +275,7 @@ private fun ListingBody(
         if (listing.verified) StatusChip("Verified publisher", StatusTone.SUCCESS)
         if (listing.reviewed) StatusChip("Reviewed", StatusTone.SUCCESS)
         if (listing.visibility == "private") StatusChip("Private")
-        (listing.categories.ifEmpty { listOfNotNull(listing.category) }).forEach { StatusChip(it) }
+        (listing.categories.ifEmpty { listOfNotNull(listing.category) }).forEach { StatusChip(listingCategoryLabel(it)) }
         if (state.installedVersion != null) {
           StatusChip("Installed (v${state.installedVersion})" + if (state.scope == InstallTarget.ORG) " · Org-wide" else "", StatusTone.SUCCESS)
           if (state.shadowed) StatusChip("Org-wide (shadowed)", StatusTone.WARNING)
@@ -315,7 +316,7 @@ private fun ListingBody(
       if (plugin && offered == null) NoticeBanner("No reviewed version yet: it can be installed once one passes review.", StatusTone.WARNING)
       if (!installable) NoticeBanner("Installing needs the editor role in the workspace and on the picked site.", StatusTone.NEUTRAL)
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+    StatRow {
       StatTile("Rating", if (listing.ratingCount > 0 && listing.ratingAverage != null) com.aglyn.pluginhost.jsNumber(listing.ratingAverage) + " ★" else "—", Modifier.weight(1f), if (listing.ratingCount > 0) "${listing.ratingCount} ratings" else "Not yet rated")
       StatTile("Installs", (listing.activeInstalls ?: listing.installCount).toString(), Modifier.weight(1f), "${listing.installCount} all time")
     }

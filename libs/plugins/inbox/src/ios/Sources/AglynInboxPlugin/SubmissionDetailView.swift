@@ -261,6 +261,6 @@ struct ReplySheet: View {
       }
       .onAppear { messageFocused = true }
     }
-    .frame(minWidth: 460, minHeight: 420)
+    .aglynSheetMinimumSize(width: 460, height: 420)
   }
 }

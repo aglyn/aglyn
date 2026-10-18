@@ -261,6 +261,13 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
     }
   }
   val back: Boolean = json.isTrue("back")
+
+  /**
+   * True when this action only narrows or re-reads [screenId] (it reopens that same screen with new params) or
+   * edits one stored setting (PUT or PATCH). Neither is the screen's main act, so a toolbar draws it as a quiet
+   * outlined button like the kit's other filters, never as the filled primary.
+   */
+  fun quietOn(screenId: String): Boolean = navigate?.screen == screenId || method == ApiMethod.PUT || method == ApiMethod.PATCH
   val reload: Boolean =
     json.isTrue("reload") ||
       (!json.isFalse("reload") && (url != null || json.obj("write") != null || json.str("account") != null || json.obj("passkey") != null))

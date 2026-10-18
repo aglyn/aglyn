@@ -278,7 +278,7 @@ struct MoreView: View {
                 Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
               }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
             .accessibilityIdentifier("more-analytics")
           }
           ForEach(screens) { item in
@@ -289,7 +289,7 @@ struct MoreView: View {
                 Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
               }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
             .accessibilityIdentifier("more-\(item.id)")
           }
         }
@@ -300,13 +300,13 @@ struct MoreView: View {
         } label: {
           AglynRow("Notifications", systemImage: "bell")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.aglynRow)
         Button {
           navigation.push(.settings)
         } label: {
           AglynRow("Settings", systemImage: "gearshape")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.aglynRow)
       }
     }
     .aglynListBackground()

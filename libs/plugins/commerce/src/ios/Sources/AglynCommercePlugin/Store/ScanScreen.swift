@@ -57,7 +57,7 @@ struct ScanScreen: View {
           } label: {
             ProductListRow(row: found)
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
           .accessibilityIdentifier("scan-found")
         }
       }

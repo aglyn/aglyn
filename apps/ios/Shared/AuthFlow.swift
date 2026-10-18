@@ -237,6 +237,7 @@ extension AppModel {
       return
     }
     let outcome = await service.createWorkspace(name: name)
+    if outcome.slug != nil { workspace?.reload() }
     if let slug = outcome.slug, let plan = authFlow.plan {
       (push.pendingOrgID, push.pendingHostID) = (nil, nil)
       push.pendingLink = plan.destination(orgSlug: slug)
@@ -259,6 +260,8 @@ extension AppModel {
     }
     let outcome = await service.createWorkspace(name: pending.name)
     if let slug = outcome.slug {
+      // The new workspace is shown at once, not at the switcher's next read (AGL-3920).
+      workspace.reload()
       if let plan = await service.consumePlanIntent(uid: user.uid, reader: reader) {
         (push.pendingOrgID, push.pendingHostID) = (nil, nil)
         push.pendingLink = plan.destination(orgSlug: slug)
@@ -274,6 +277,7 @@ extension AppModel {
     guard let service = signUpService else { return "This build is not configured." }
     let outcome = await service.createWorkspace(name: name)
     if outcome.slug != nil {
+      workspace?.reload()
       firstRun = .idle
       return nil
     }

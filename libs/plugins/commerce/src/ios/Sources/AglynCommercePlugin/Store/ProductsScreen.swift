@@ -77,6 +77,7 @@ struct ProductsScreen: View {
       model.start(context.firestore, hostID: context.hostID)
       await quota.load(context)
     }
+    .onChange(of: model.rows.count) { Task { await quota.recount(context) } }
     .onAppear { if startNew, creating == nil, created == nil { creating = .creating() } }
     .onDisappear { model.stop() }
     .sheet(item: $creating) { editor in

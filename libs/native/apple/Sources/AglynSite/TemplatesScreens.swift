@@ -64,7 +64,7 @@ struct TemplateGallerySheet: View {
                   StatusChip(row.isStarterBundle ? "Starter site" : templateSourceLabel(row.sourceType))
                 }
               }
-              .buttonStyle(.plain)
+              .buttonStyle(.aglynRow)
               .accessibilityIdentifier("template-\(row.id)")
             }
             if model.hasMore { AglynLoadMoreRow("Show more templates") { model.loadMore() } }
@@ -79,7 +79,7 @@ struct TemplateGallerySheet: View {
       .searchable(text: $searchText, prompt: "Search templates")
       .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: close) } }
     }
-    .frame(minWidth: 420, minHeight: 480)
+    .aglynSheetMinimumSize(width: 420, height: 480)
     .task {
       model.start(context.firestore, kind: .template, hostID: hostID)
       model.kindFilter = kind

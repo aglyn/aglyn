@@ -72,6 +72,6 @@ public struct AglynFormSheet<Content: View>: View {
       }
     }
     .aglynWebSheetHost()
-    .frame(minWidth: 380, minHeight: 420)
+    .aglynSheetMinimumSize(width: 380, height: 420)
   }
 }

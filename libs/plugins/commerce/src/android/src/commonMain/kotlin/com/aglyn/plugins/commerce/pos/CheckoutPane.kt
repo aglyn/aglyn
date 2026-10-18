@@ -229,6 +229,7 @@ private fun TenderStep(model: RegisterModel, checkout: Checkout, state: Checkout
       }
       Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
         FilledTonalButton(
+          colors = com.aglyn.ui.aglynTonalButtonColors(),
           onClick = { checkout.goTo(CheckoutStep.Cash) },
           enabled = state.canTender,
           modifier = Modifier.weight(1f).heightIn(min = 56.dp).testTag("tender-cash"),
@@ -238,6 +239,7 @@ private fun TenderStep(model: RegisterModel, checkout: Checkout, state: Checkout
           Text("Cash")
         }
         FilledTonalButton(
+          colors = com.aglyn.ui.aglynTonalButtonColors(),
           onClick = { checkout.goTo(CheckoutStep.GiftCard) },
           enabled = state.canTender,
           modifier = Modifier.weight(1f).heightIn(min = 56.dp).testTag("tender-gift"),
@@ -253,6 +255,7 @@ private fun TenderStep(model: RegisterModel, checkout: Checkout, state: Checkout
         verticalArrangement = Arrangement.spacedBy(space(1f)),
       ) {
         FilledTonalButton(
+          colors = com.aglyn.ui.aglynTonalButtonColors(),
           onClick = { model.act { checkout.payLink() } },
           enabled = state.canTender,
           modifier = Modifier.heightIn(min = 56.dp).testTag("tender-qr"),
@@ -263,6 +266,7 @@ private fun TenderStep(model: RegisterModel, checkout: Checkout, state: Checkout
         }
         for (provider in credits) {
           FilledTonalButton(
+            colors = com.aglyn.ui.aglynTonalButtonColors(),
             onClick = {
               checkout.clearCreditLookup()
               checkout.goTo(CheckoutStep.Credit(provider.providerId))
@@ -277,6 +281,7 @@ private fun TenderStep(model: RegisterModel, checkout: Checkout, state: Checkout
         }
         if (model.stays.isNotEmpty()) {
           FilledTonalButton(
+            colors = com.aglyn.ui.aglynTonalButtonColors(),
             onClick = { checkout.goTo(CheckoutStep.Room) },
             enabled = state.canTender,
             modifier = Modifier.heightIn(min = 56.dp).testTag("tender-room"),
@@ -550,6 +555,12 @@ private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutSt
         textAlign = TextAlign.Center,
         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("pos-reader-prompt"),
       )
+    }
+    val waiting = step.paymentId
+    if (waiting != null && reader?.kind == CardReaderKind.SMART && model.context?.testMode == true) {
+      OutlinedButton(onClick = { model.act { checkout.simulateTapOnReader(waiting) } }, modifier = Modifier.testTag("simulate-tap")) {
+        Text("Simulate a card tap (test mode)")
+      }
     }
     OutlinedButton(onClick = { reader?.let { model.act { checkout.cancelCard(it) } } }, enabled = step.paymentId != null) { Text("Cancel payment") }
   }

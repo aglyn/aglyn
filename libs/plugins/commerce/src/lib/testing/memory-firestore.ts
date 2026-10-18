@@ -25,8 +25,8 @@
  * interleave, which is what a race spec needs.
  *
  * Supports: `collection().doc()`, `get`, `set` (with `merge`), `create`,
- * `update`, `delete`; queries with `==`, `in` and `array-contains`, `orderBy`, `limit`,
- * and a collection's `count()`;
+ * `update`, `delete`; queries with `==`, `!=`, `in` and `array-contains`, `orderBy`,
+ * `limit`, and a collection's or a query's `count()`;
  * `runTransaction` with `get` (document or query), `set`, `update`;
  * `batch()`. Field paths are top-level only.
  */
@@ -241,7 +241,7 @@ export class MemoryDoc {
   }
 }
 
-export type MemoryFilterOp = '==' | 'in' | 'array-contains'
+export type MemoryFilterOp = '==' | '!=' | 'in' | 'array-contains'
 
 export class MemoryQuery {
   private filters: Array<{ field: string; op: MemoryFilterOp; value: unknown }> = []
@@ -279,6 +279,11 @@ export class MemoryQuery {
     return next
   }
 
+  /** The aggregate over this query: its result's `data().count`. */
+  count(): MemoryQuery {
+    return this.clone()
+  }
+
   run() {
     const prefix = `${this.path}/`
     let rows = [...this.store.docs.entries()]
@@ -289,7 +294,10 @@ export class MemoryQuery {
             ? (value as unknown[]).includes(stored.data[field])
             : op === 'array-contains'
               ? Array.isArray(stored.data[field]) && stored.data[field].includes(value)
-              : stored.data[field] === value,
+              : op === '!='
+                ? // Firestore's `!=` matches a document that HAS the field with another value.
+                  stored.data[field] !== undefined && stored.data[field] !== value
+                : stored.data[field] === value,
         ),
       )
     if (this.order) {

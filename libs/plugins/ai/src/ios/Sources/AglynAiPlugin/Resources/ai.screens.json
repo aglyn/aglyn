@@ -113,12 +113,19 @@
       "blocks": [
         {
           "type": "notice",
+          "tone": "info",
+          "when": "!data.jobs.jobs[id=params.jobId]",
+          "text": "This job isn't here. It may belong to another site or workspace, or be older than the jobs listed here."
+        },
+        {
+          "type": "notice",
           "tone": "error",
           "when": "data.jobs.jobs[id=params.jobId].error",
           "text": "{data.jobs.jobs[id=params.jobId].error}"
         },
         {
           "type": "fields",
+          "when": "data.jobs.jobs[id=params.jobId]",
           "object": "data.jobs.jobs[id=params.jobId]",
           "rows": [
             {
@@ -166,6 +173,7 @@
         },
         {
           "type": "list",
+          "when": "data.jobs.jobs[id=params.jobId]",
           "title": "Steps",
           "items": "data.jobs.jobs[id=params.jobId].steps",
           "primary": "{item.name:title}",
@@ -187,6 +195,7 @@
         },
         {
           "type": "list",
+          "when": "data.jobs.jobs[id=params.jobId]",
           "title": "Made",
           "items": "data.jobs.jobs[id=params.jobId].outputs",
           "primary": "{item.label|item.title|item.name|item.resource:title}",
@@ -196,6 +205,7 @@
         },
         {
           "type": "actions",
+          "when": "data.jobs.jobs[id=params.jobId]",
           "items": [
             {
               "id": "cancel",

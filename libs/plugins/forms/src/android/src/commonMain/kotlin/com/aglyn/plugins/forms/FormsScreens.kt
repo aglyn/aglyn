@@ -64,6 +64,7 @@ import com.aglyn.ui.LoadContent
 import com.aglyn.ui.LoadMoreEffect
 import com.aglyn.ui.MenuAction
 import com.aglyn.ui.SelectionPlaceholder
+import com.aglyn.ui.StatRow
 import com.aglyn.ui.StatTile
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OverflowMenu
@@ -252,7 +253,7 @@ private fun FormDetail(
             }
           }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+        StatRow {
           StatTile("Submissions", (form.submissions ?: 0).toString(), Modifier.weight(1f), form.lastSubmissionAtMs?.let { "Last " + relativeTime(it, now) } ?: "None yet")
           StatTile("Leads", form.leads?.toString() ?: "—", Modifier.weight(1f), if (form.routesLeads) "Sent to the CRM" else "Not sent to the CRM")
           StatTile("Views", (form.views ?: 0).toString(), Modifier.weight(1f), "Times it was shown")

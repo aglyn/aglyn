@@ -254,7 +254,7 @@ struct OrdersScreen: View {
               OrderListRow(row: row)
             }
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
           .aglynListRow()
           .accessibilityIdentifier("order-select-\(row.id)")
         }

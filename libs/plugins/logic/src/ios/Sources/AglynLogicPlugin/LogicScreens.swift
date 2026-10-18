@@ -325,7 +325,7 @@ private struct UsageSheet: View {
       #endif
       .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done", action: onClose) } }
     }
-    .frame(minWidth: 420, minHeight: 360)
+    .aglynSheetMinimumSize(width: 420, height: 360)
   }
 }
 
@@ -426,7 +426,7 @@ private struct VariableEditorSheet: View {
         if let hostID = context.hostID { await workflows.bind(context.firestore, ceilingQuery(["hosts", hostID, "workflows"])) }
       }
     }
-    .frame(minWidth: 420, minHeight: 480)
+    .aglynSheetMinimumSize(width: 420, height: 480)
     .accessibilityIdentifier("variable-editor")
   }
 

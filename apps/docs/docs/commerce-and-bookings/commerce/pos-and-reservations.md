@@ -126,7 +126,7 @@ zero, and only then is the stock taken and the order completed.
 | --- | --- |
 | **Cash** | Enter what the customer handed you, or tap **Exact** or a round-up amount. The register shows the change to give. Less than the amount due is taken toward the sale and the rest stays open. |
 | **Card reader** | Sends the amount to a [card reader](#card-readers); the customer taps, inserts or swipes there. Shown only when card readers are available for your store and one is registered. With more than one reader, pick which one under the buttons. |
-| **Type card** | Staff type the card into Stripe's own card form (card not present, such as an order taken over the phone). The card never touches the register, and the payment goes through Stripe's normal online checks, 3-D Secure included. |
+| **Type card** | Staff type the card into Stripe's own card form (card not present, such as an order taken over the phone). The card never touches the register, and the payment goes through Stripe's normal online checks, 3-D Secure included. In the Aglyn POS app this is **Enter card manually**: on iPhone, iPad and Mac the card goes into the app's own card fields and straight to Stripe; if a bank asks the cardholder to approve the payment, use **Card (QR)** instead so they can approve it on their phone. |
 | **Card (QR)** | Shows a QR code; the customer scans it and pays on their phone, and the payment appears on the register as soon as it goes through. |
 | **Gift card** | Type or scan the code. **Check balance** shows what the card can spend; **Apply card** takes the smaller of that balance and what is due, so a card worth less than the sale leaves the rest open. |
 | **Room** | Charges a checked-in stay's folio. Shown only when a guest is checked in. |
