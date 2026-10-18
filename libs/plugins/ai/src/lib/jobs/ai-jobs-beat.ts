@@ -18,6 +18,7 @@
 import { randomUUID } from 'crypto'
 import { featureLockdownRefusal, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { AI_JOB_SWEEP_BUDGET_MS, sweepAiJobs, type SweepAiJobsResult } from './ai-jobs'
+import { sweepAiEmptySites, type AiEmptySiteSweepResult } from './ai-empty-site-sweep'
 
 /**
  * Resume AI generation jobs on the AI jobs beat (AGL-2904, AGL-3026).
@@ -74,12 +75,18 @@ export const AI_JOBS_BEAT_PATH = 'admin/ai-jobs-beat'
 /** What one beat did: nothing while `ai-generate` is locked, else the sweep's account. */
 export type AiJobsBeatResult =
   | { held: true }
-  | ({ held: false } & SweepAiJobsResult)
+  | ({ held: false; emptySites: AiEmptySiteSweepResult | null } & SweepAiJobsResult)
 
 /**
- * One beat: the switch, then one sweep under its own lease owner. The owner
- * is fresh per beat and fixed for the whole sweep, so two beats overlapping
- * inside a lease never read each other's lease as their own.
+ * One beat: the switch, then the empty sites a guided start left that are
+ * due for removal (AGL-3936), then one sweep under its own lease owner. The
+ * owner is fresh per beat and fixed for the whole sweep, so two beats
+ * overlapping inside a lease never read each other's lease as their own.
+ *
+ * The removals come first, a few a beat inside
+ * `AI_EMPTY_SITE_SWEEP_BUDGET_MS`, and whatever they took comes off the
+ * sweep's budget, so the route's arithmetic inside `maxDuration` holds. A
+ * removal that fails never holds up a job's step.
  */
 export async function runAiJobsBeat(): Promise<AiJobsBeatResult> {
   const locked = await featureLockdownRefusal({ feature: 'ai-generate' })
@@ -87,10 +94,17 @@ export async function runAiJobsBeat(): Promise<AiJobsBeatResult> {
     console.warn('ai jobs beat held: ai-generate is locked')
     return { held: true }
   }
+  const firestore = firebaseAdmin.app().firestore()
+  const startedAt = Date.now()
+  const emptySites = await sweepAiEmptySites({ firestore }).catch((error: unknown) => {
+    console.error('ai jobs beat: the empty site sweep failed', error)
+    return null
+  })
+  if (emptySites?.removed) console.info(`ai jobs: ${emptySites.removed} empty site(s) removed`)
   const result = await sweepAiJobs({
-    firestore: firebaseAdmin.app().firestore(),
+    firestore,
     owner: `beat:${randomUUID()}`,
-    budgetMs: AI_JOB_SWEEP_BUDGET_MS,
+    budgetMs: Math.max(0, AI_JOB_SWEEP_BUDGET_MS - (Date.now() - startedAt)),
   })
   if (result.due) {
     console.info(
@@ -100,5 +114,5 @@ export async function runAiJobsBeat(): Promise<AiJobsBeatResult> {
         (result.budgetExhausted ? ' (budget exhausted)' : ''),
     )
   }
-  return { held: false, ...result }
+  return { held: false, emptySites, ...result }
 }

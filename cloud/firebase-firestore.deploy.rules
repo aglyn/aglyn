@@ -5179,6 +5179,17 @@ allow read, write: if false;
 
 
 
+match /aiEmptySiteSweeps/{hostId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+
 
 
 

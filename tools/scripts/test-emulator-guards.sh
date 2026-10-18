@@ -146,6 +146,9 @@ PROJECTS=(
   # The CRM files a BCC from a member's send-as alias on the prospect, and its
   # spec moved here with the capture path (AGL-3080).
   libs/plugins/crm
+  # The AI beat removes the empty site a stopped guided start left, through
+  # the real queries and `eraseHost` (AGL-3936).
+  libs/plugins/ai
 )
 
 # Projects whose specs exercise a cross-workspace job run their suites one at
