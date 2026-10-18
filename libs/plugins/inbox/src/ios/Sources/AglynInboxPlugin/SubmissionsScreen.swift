@@ -226,7 +226,7 @@ struct SubmissionsScreen: View {
           } label: {
             SubmissionListRow(row: row, showForm: formID == nil, now: now)
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
         }
       }
       .swipeActions(edge: .trailing) {

@@ -576,6 +576,11 @@ struct PageDetail: View {
     }
     .formStyle(.grouped)
     .aglynListBackground()
+    // Back from the Besigner: the tree reads a page once, so what its publish changed (Published, Updated, the
+    // live version) is read again now rather than shown stale until the list is reopened.
+    .onReceive(NotificationCenter.default.publisher(for: RestFirestoreReader.rereadNotification)) { _ in
+      Task { await model.reread([pageID]) }
+    }
     .accessibilityIdentifier("page-detail")
   }
 }
@@ -843,7 +848,7 @@ struct PageSheetView: View {
         if parent == id { Image(systemName: "checkmark").foregroundStyle(AglynColor.tint) }
       }
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.aglynRow)
     .accessibilityAddTraits(parent == id ? .isSelected : [])
   }
 }

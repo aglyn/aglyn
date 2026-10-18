@@ -38,7 +38,7 @@ struct SettingsView: View {
                   Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
                 }
               }
-              .buttonStyle(.plain)
+              .buttonStyle(.aglynRow)
               .accessibilityIdentifier("settings-\(screen.id)")
             }
           }

@@ -234,7 +234,7 @@ struct FormsScreen: View {
                 .accessibilityHidden(true)
             }
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
         }
       }
       .contextMenu { rowActions(row) }

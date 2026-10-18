@@ -343,7 +343,7 @@ private struct DeviceReaderSection: View {
               subtitle: DeviceCardCollector.detail(kind),
               systemImage: kind == .tapToPay ? "wave.3.right" : "antenna.radiowaves.left.and.right")
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
           .disabled(busy || isSearching || !ready)
           .accessibilityIdentifier(kind == .tapToPay ? "device-reader-tap-to-pay" : "device-reader-bluetooth")
         }

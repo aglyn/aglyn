@@ -13,6 +13,7 @@
  * rules.
  *
  *   node tools/scripts/seed-native-emulator.mjs [--auth 127.0.0.1:9099] [--firestore 127.0.0.1:8082] [--project demo-aglyn]
+ *     [--storage 127.0.0.1:9199 [--bucket <the console's bucket>]]
  *
  * Emulator only: it refuses a project id without the `demo-` prefix, which the
  * Firebase CLI never connects to a live project, and an emulator host that is
@@ -36,6 +37,13 @@ const arg = (name, fallback) => {
 const AUTH = arg('auth', '127.0.0.1:9099')
 const FIRESTORE = arg('firestore', '127.0.0.1:8082')
 const PROJECT = arg('project', 'demo-aglyn')
+/**
+ * The Storage emulator, optional. Named, the seeded JPEG media get real files
+ * in it, so the console's media CDN can serve them and make their delivery
+ * copies, and the register's products show photos (AGL-3906). Unnamed, the
+ * media documents name files nobody uploaded, as before.
+ */
+const STORAGE = arg('storage', null)
 const EMAIL = 'mobile-owner@example.test'
 const PASSWORD = `seed-${PROJECT}-mobile`
 const LOCAL = /^(localhost|127\.0\.0\.1|10\.0\.2\.2):\d+$/
@@ -44,9 +52,26 @@ if (!PROJECT.startsWith('demo-')) {
   console.error('seed-native-emulator: the project id must start with demo- (emulator only).')
   process.exit(1)
 }
-if (!LOCAL.test(AUTH) || !LOCAL.test(FIRESTORE)) {
-  console.error('seed-native-emulator: the Auth and Firestore hosts must be local emulators.')
+if (!LOCAL.test(AUTH) || !LOCAL.test(FIRESTORE) || (STORAGE && !LOCAL.test(STORAGE))) {
+  console.error('seed-native-emulator: the Auth, Firestore and Storage hosts must be local emulators.')
   process.exit(1)
+}
+
+/** The bucket the local console reads: its env files name it, else the project's default. */
+async function consoleBucket() {
+  const { readEnvFiles, serveEnvFiles } = await import('./lib/emulated-env.mjs')
+  const named = readEnvFiles(serveEnvFiles(ROOT, 'console'))
+    .map((file) => file.parsed.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
+    .find(Boolean)
+  return arg('bucket', named || `${PROJECT}.appspot.com`)
+}
+
+/** Uploads `bytes` to the Storage emulator at `path` (emulator owner credentials; never a real bucket). */
+async function putObject(path, bytes, contentType) {
+  const bucket = await consoleBucket()
+  const url = `http://${STORAGE}/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?uploadType=media&name=${encodeURIComponent(path)}`
+  const response = await fetch(url, { method: 'POST', headers: { Authorization: 'Bearer owner', 'Content-Type': contentType }, body: bytes })
+  if (!response.ok) throw new Error(`upload ${path}: ${response.status} ${await response.text()}`)
 }
 
 async function call(url, init) {
@@ -145,7 +170,18 @@ const areas = [
 let staff = null
 for (const [file, name] of areas) {
   const area = await import(`./seed-native/${file}.mjs`)
-  const seeded = await area[name]({ put, uid, orgId, hostId, now, nameSearchFields, auth: AUTH, project: PROJECT })
+  const seeded = await area[name]({
+    put,
+    uid,
+    orgId,
+    hostId,
+    now,
+    nameSearchFields,
+    auth: AUTH,
+    project: PROJECT,
+    putObject: STORAGE ? putObject : null,
+    root: ROOT,
+  })
   if (file === 'account') staff = seeded
 }
 

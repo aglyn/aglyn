@@ -439,3 +439,7 @@ fun licencesQuery(orgId: String) = planListQuery(
     clauses = emptyList(),
   ),
 ).toFirestoreQuery("marketplacePurchases", 100)
+
+/** A listing category as a person reads it: `seo` is "SEO", the rest start with a capital. */
+fun listingCategoryLabel(category: String): String =
+  if (category.equals("seo", ignoreCase = true)) "SEO" else category.replace('-', ' ').replaceFirstChar { it.uppercase() }

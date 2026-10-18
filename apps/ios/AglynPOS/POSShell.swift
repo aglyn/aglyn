@@ -73,7 +73,7 @@ struct StorePicker: View {
                 Button { workspace.selectSite(site.id) } label: {
                   AglynRow(site.name, subtitle: site.subdomain, systemImage: "storefront")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.aglynRow)
               }
             } header: {
               Text("Choose the store this register sells for")

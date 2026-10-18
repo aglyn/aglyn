@@ -634,7 +634,7 @@ fun SuppressionsSection(context: NativePluginContext, actions: EmailActions) {
     ) { row ->
       AglynListItem(
         title = row.email,
-        supporting = listOfNotNull(row.reason?.replaceFirstChar { it.uppercase() }, row.sinceMs?.let { relativeTime(it, now) }).joinToString(" · "),
+        supporting = listOfNotNull(row.reason?.let(::suppressionReasonLabel), row.sinceMs?.let { relativeTime(it, now) }).joinToString(" · "),
         icon = AglynIcons.named("block"),
         trailing = { OverflowMenu(listOf(MenuAction("put-back-on-your-list", "Put back on your list") { removing = row })) },
       )
@@ -785,4 +785,16 @@ fun SendingSection(actions: EmailActions) {
       FieldEditor(FieldSpec("replyTo", "Reply to", FieldKind.EMAIL), replyTo, { replyTo = it })
     }
   }
+}
+
+/** Why an address is suppressed, in the console's words (`SUPPRESSION_REASON_LABELS`), never the stored key. */
+internal fun suppressionReasonLabel(reason: String): String = when (reason) {
+  "bounce" -> "Bounced"
+  "soft_bounce" -> "Bounced (temporary)"
+  "complaint" -> "Marked as spam"
+  "unsubscribe" -> "Unsubscribed"
+  "staff" -> "Recorded by staff"
+  "no_mail_server" -> "No mail server"
+  "account_ban" -> "Banned account"
+  else -> reason.replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
 }

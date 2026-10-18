@@ -305,7 +305,7 @@ internal fun EditListingDialog(context: NativePluginContext, listing: SellerList
     val stored = values.getValue("category")
     // A category the list no longer offers stays chosen rather than silently changing.
     val categories = Contracts.listingCategories + listOfNotNull(stored.takeIf { it.isNotEmpty() && it !in Contracts.listingCategories })
-    SelectField("Category", categories.map { SelectOption(it, it) }, stored.ifEmpty { null }, { values = values + ("category" to it.orEmpty()) }, Modifier.testTag("listing-category"), noneLabel = "None")
+    SelectField("Category", categories.map { SelectOption(it, listingCategoryLabel(it)) }, stored.ifEmpty { null }, { values = values + ("category" to it.orEmpty()) }, Modifier.testTag("listing-category"), noneLabel = "None")
   }
   if (choosingScreenshot) {
     MediaChooserDialog(

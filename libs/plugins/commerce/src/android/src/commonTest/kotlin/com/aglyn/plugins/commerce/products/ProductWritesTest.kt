@@ -106,4 +106,22 @@ class ProductWritesTest {
     advanceUntilIdle()
     assertEquals("k3 p1 small 3 damage", api.keys.last())
   }
+
+  @Test
+  fun aNewProductIsPickedOnceItIsAddedAndAnEditPicksNothing() = runTest {
+    val api = Recorder()
+    val editor = ProductEditorModel(api, this)
+    editor.create()
+    val id = editor.draft!!.productId
+    editor.change(editor.draft!!.copy(name = "Scone", variants = editor.draft!!.variants.map { it.copy(price = "3") }))
+    editor.save()
+    advanceUntilIdle()
+    assertEquals(id, editor.created)
+    assertEquals(id, api.saves.single().first)
+    editor.created = null
+    editor.edit("p1", STORED)
+    editor.save()
+    advanceUntilIdle()
+    assertNull(editor.created)
+  }
 }

@@ -293,7 +293,7 @@ struct CampaignDetail: View {
                   subtitle: "\((send.string("status") ?? "draft").capitalized) · \(grouped((stats?["sent"] as? NSNumber)?.intValue ?? 0)) sent · \(grouped((stats?["opens"] as? NSNumber)?.intValue ?? 0)) opens",
                   systemImage: "envelope")
               }
-              .buttonStyle(.plain)
+              .buttonStyle(.aglynRow)
             }
             if emails.hasMore { Button("Show more") { emails.loadMore() } }
             Button("Write an email in this campaign", systemImage: "square.and.pencil") {

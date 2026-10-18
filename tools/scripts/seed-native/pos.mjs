@@ -40,7 +40,9 @@ const extras = {
 
 const IMAGES = { mug: 'mug-cream', beans: 'beans-pos' }
 
-export async function seedPos({ put, hostId, now: date, nameSearchFields }) {
+export async function seedPos({ put, hostId, now: date, nameSearchFields, putObject = null }) {
+  // With a Storage emulator the workspace seed uploads real photos; two register tiles show them (AGL-3906).
+  const photo = (mediaId) => (putObject ? { mediaUrls: [`media:${hostId}/${mediaId}`] } : {})
   const now = date.getTime()
   const product = (id, name, fields) => {
     const variants = fields.variants
@@ -84,12 +86,18 @@ export async function seedPos({ put, hostId, now: date, nameSearchFields }) {
     product('drip', 'Drip coffee', { categoryIds: ['coffee'], posQuickKey: true, variants: [variant('default', 2.75)] }),
     product('cold-brew', 'Cold brew', { categoryIds: ['coffee'], variants: [variant('default', 4.75)] }),
     product('croissant', 'Butter croissant', {
+      ...photo('seed-media-croissants'),
       categoryIds: ['bakery'],
       posQuickKey: true,
       variants: [variant('default', 3.95, { barcode: '0012345678905', inventory: 14 })],
     }),
     product('muffin', 'Blueberry muffin', { categoryIds: ['bakery'], variants: [variant('default', 3.5, { inventory: 0 })] }),
-    product('sourdough', 'Sourdough loaf', { categoryIds: ['bakery'], posQuickKey: true, variants: [variant('default', 9)] }),
+    product('sourdough', 'Sourdough loaf', {
+      ...photo('seed-media-storefront'),
+      categoryIds: ['bakery'],
+      posQuickKey: true,
+      variants: [variant('default', 9)],
+    }),
     product('mug', 'Bakery mug', {
       categoryIds: ['retail'],
       options: [{ name: 'Color', values: ['Cream', 'Sage'] }],

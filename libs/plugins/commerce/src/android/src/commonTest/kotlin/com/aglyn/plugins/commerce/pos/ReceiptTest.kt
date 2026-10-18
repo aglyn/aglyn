@@ -55,7 +55,7 @@ class ReceiptTest {
       |Subtotal                                  $16.25
       |Discount                                  -$1.00
       |Tax                                        $1.26
-      |TOTAL             $16.51
+      |TOTAL                                     $16.51
       |
       |Cash                                      $20.00
       |Change                                     $3.49
@@ -75,7 +75,7 @@ class ReceiptTest {
   fun fits58mmPaperToo() {
     val text = renderText(layoutReceipt(RECEIPT, ReceiptLayoutOptions(columns = 32)))
     assertTrue(text.split('\n').all { it.length <= 32 })
-    assertTrue(text.contains("TOTAL     $16.51"))
+    assertTrue(text.split('\n').any { it.startsWith("TOTAL") && it.endsWith("$16.51") && it.length == 32 }, "the total ends at the right edge")
   }
 
   @Test

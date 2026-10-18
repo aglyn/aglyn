@@ -46,6 +46,7 @@ import com.aglyn.ui.AmountRow
 import com.aglyn.ui.ChipOption
 import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.PanelSheet
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
@@ -66,39 +67,37 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
   var switching by remember { mutableStateOf(false) }
   var returning by remember { mutableStateOf(false) }
   var printersOpen by remember { mutableStateOf(false) }
-  AlertDialog(
-    onDismissRequest = onDismiss,
+  // The register's controls are a task with room, not an alert: a full-screen panel on a phone, a large one on a tablet.
+  PanelSheet(
+    title = "Register",
+    onDismiss = onDismiss,
     modifier = Modifier.testTag("pos-ops"),
-    title = { Text("Register") },
-    text = {
-      Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
-        shift.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { shift.notice = null }) { Text("Dismiss") } }) }
-        SectionCard("Cashier") {
-          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-            Text(
-              cashier.cashier?.name ?: "You",
-              Modifier.weight(1f).testTag("pos-cashier-name"),
-              style = MaterialTheme.typography.titleMedium,
-            )
-            if (cashier.cashier != null) TextButton(onClick = cashier::signOut) { Text("Sign out") }
-          }
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-            OutlinedButton(onClick = { switching = true }, enabled = model.register != null, modifier = Modifier.testTag("pos-switch-cashier")) { Text("Switch cashier") }
-            OutlinedButton(onClick = { cashier.lock(); onDismiss() }, enabled = model.register != null, modifier = Modifier.testTag("pos-lock")) { Text("Lock") }
-          }
-        }
-        SectionCard("Shift") { ShiftControls(model) }
-        DisplayDevicesSection(model)
-        SectionCard("Last receipt") { LastReceiptControls(model) { printersOpen = true } }
-        ReceiptPrintersSection(model) { printersOpen = true }
-        SectionCard("Returns") {
-          OutlinedButton(onClick = { returning = true }, enabled = model.register != null, modifier = Modifier.testTag("pos-return")) { Text("Return items") }
-        }
-        StaffPinsSection(model)
+    subtitle = model.register?.name,
+  ) {
+    shift.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { shift.notice = null }) { Text("Dismiss") } }) }
+    SectionCard("Cashier", Modifier.fillMaxWidth()) {
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+        Text(
+          cashier.cashier?.name ?: "You",
+          Modifier.weight(1f).testTag("pos-cashier-name"),
+          style = MaterialTheme.typography.titleMedium,
+        )
+        if (cashier.cashier != null) TextButton(onClick = cashier::signOut) { Text("Sign out") }
       }
-    },
-    confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
-  )
+      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+        OutlinedButton(onClick = { switching = true }, enabled = model.register != null, modifier = Modifier.testTag("pos-switch-cashier")) { Text("Switch cashier") }
+        OutlinedButton(onClick = { cashier.lock(); onDismiss() }, enabled = model.register != null, modifier = Modifier.testTag("pos-lock")) { Text("Lock") }
+      }
+    }
+    SectionCard("Shift", Modifier.fillMaxWidth()) { ShiftControls(model) }
+    DisplayDevicesSection(model)
+    SectionCard("Last receipt", Modifier.fillMaxWidth()) { LastReceiptControls(model) { printersOpen = true } }
+    ReceiptPrintersSection(model) { printersOpen = true }
+    SectionCard("Returns", Modifier.fillMaxWidth()) {
+      OutlinedButton(onClick = { returning = true }, enabled = model.register != null, modifier = Modifier.testTag("pos-return")) { Text("Return items") }
+    }
+    StaffPinsSection(model)
+  }
   if (switching) {
     PinPadDialog(model, purpose = "cashier", title = "Switch cashier", prompt = null, dismissible = true, onDismiss = { switching = false }) {
       cashier.switchTo(it)
@@ -114,7 +113,7 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
 @Composable
 private fun ReceiptPrintersSection(model: RegisterModel, onOpen: () -> Unit) {
   val printers = model.printers
-  SectionCard("Receipt printers") {
+  SectionCard("Receipt printers", Modifier.fillMaxWidth()) {
     val rows = printers.rows
     Text(
       when {
@@ -180,7 +179,7 @@ private fun StaffPinsSection(model: RegisterModel) {
   val scope = rememberCoroutineScope()
   val pins = remember(model) { PosStaffPinsModel(model.opsApi, scope) }
   LaunchedEffect(pins) { pins.load() }
-  SectionCard("Staff PINs") {
+  SectionCard("Staff PINs", Modifier.fillMaxWidth()) {
     pins.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { pins.notice = null }) { Text("Dismiss") } }) }
     val status = pins.status
     when {
@@ -509,7 +508,7 @@ fun LockedRegister(model: RegisterModel) {
 private fun DisplayDevicesSection(model: RegisterModel) {
   val display = model.display
   LaunchedEffect(model.register?.id) { display.loadDevices() }
-  SectionCard("Customer display and kiosk") {
+  SectionCard("Customer display and kiosk", Modifier.fillMaxWidth()) {
     StatusChip(
       if (display.connected) "Display connected" else "No display connected",
       if (display.connected) StatusTone.SUCCESS else StatusTone.NEUTRAL,

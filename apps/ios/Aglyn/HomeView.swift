@@ -161,7 +161,7 @@ struct HomeView: View {
             Button { openNotification(row, model: model, navigation: navigation) } label: {
               NotificationRow(row: row)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
           }
         }
       } else {

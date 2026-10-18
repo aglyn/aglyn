@@ -161,7 +161,7 @@ struct OrgPluginInstallsCard: View {
                 }
               }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
             .accessibilityIdentifier("installed-\(row.id)")
           }
         }
@@ -436,7 +436,7 @@ struct PluginInstallationCard: View {
             Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
           }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.aglynRow)
         .accessibilityIdentifier("plugin-settings")
       }
     }

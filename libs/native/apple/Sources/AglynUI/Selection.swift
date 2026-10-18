@@ -171,6 +171,55 @@ public struct AglynSelectableRowStyle: ButtonStyle {
   }
 }
 
+/// A list row that is a button (it opens a screen or picks a value) and selects nothing: a faint rounded fill under
+/// the pointer and a firmer one while pressed, the same fills a selectable row uses, so every row answers a touch or
+/// a click the same way. The label keeps its own colors (never the accent tint or a dimmed label), and the whole row,
+/// not only its words, is the target.
+public struct AglynRowButtonStyle: ButtonStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    RowBody(configuration: configuration)
+  }
+
+  /// How far the fill reaches past the label into the row's own padding.
+  static var bleed: EdgeInsets {
+    #if os(macOS)
+      EdgeInsets(top: -3, leading: -6, bottom: -3, trailing: -6)
+    #else
+      EdgeInsets(top: -6, leading: -10, bottom: -6, trailing: -10)
+    #endif
+  }
+
+  struct RowBody: View {
+    let configuration: Configuration
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovered = false
+
+    var body: some View {
+      configuration.label
+        .contentShape(Rectangle())
+        .background {
+          RoundedRectangle(cornerRadius: AglynRadius.row, style: .continuous)
+            .fill(
+              AglynRowState.of(
+                selected: false, windowActive: true, pressed: enabled && configuration.isPressed, hovered: enabled && hovered
+              ).fill
+            )
+            .padding(AglynRowButtonStyle.bleed)
+        }
+        .onHover { hovered = $0 }
+        .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+        .animation(.easeOut(duration: 0.08), value: hovered)
+    }
+  }
+}
+
+extension ButtonStyle where Self == AglynRowButtonStyle {
+  /// A list row that is a button: `AglynRowButtonStyle`.
+  public static var aglynRow: AglynRowButtonStyle { AglynRowButtonStyle() }
+}
+
 extension View {
   /// This view as one selectable row of a `List`: tapping it selects `id`, and
   /// it draws the shared selected, hover and pressed states (never the

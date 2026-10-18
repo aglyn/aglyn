@@ -118,4 +118,13 @@ final class ReceiptTests: XCTestCase {
     let order: [String: Any] = ["channel": "pos", "totals": ["totalCents": 1500], "checkoutSessionId": NSNull(), "paymentIntentId": NSNull()]
     XCTAssertEqual(receiptTendersFromOrder(order).tenders.map(\.label), ["Cash"], "a null field is an absent one")
   }
+
+  func testTheDoubleSizeTotalSplitsIntoItsLabelAndAmount() {
+    let total = renderPreviewLines(layoutReceipt(receipt, ReceiptLayoutOptions(columns: PaperColumns.mm58 + 8))).first { $0.double && $0.text.contains("TOTAL") }
+    let columns = total.flatMap { receiptColumns($0.text) }
+    XCTAssertEqual(columns?.0, "TOTAL")
+    XCTAssertEqual(columns?.1.hasPrefix("$"), true, "the amount is the right column")
+    XCTAssertNil(receiptColumns("Thank you for shopping"), "a line with single spaces is one column")
+    XCTAssertNil(receiptColumns("   "))
+  }
 }
