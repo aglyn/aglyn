@@ -19,10 +19,13 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { contrastRatio, validateThemeForPublish } from '@aglyn/aglyn/app-utils/site-theme'
 import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
+import { AI_SITE_MOTION_STYLES, aiSiteMotionStylesFor } from '../layout-language/ai-layout-motion'
 import { AI_SITE_FONT_PAIRINGS, AI_SITE_KINDS, aiSiteKind, aiSiteKindFor } from './ai-site-kinds'
 import {
   AI_SITE_DISPLAY_BOOST,
   AI_SITE_LOOK_DIMENSIONS,
+  AI_SITE_LOOK_TOOL,
+  AI_SITE_MOTION_KEEP,
   aiReadSiteLook,
   aiSiteLookSignature,
   aiSiteBrandHex,
@@ -273,5 +276,43 @@ describe('site looks (AGL-3660)', () => {
     expect(aiSiteKindFor('a 24-hour towing and roadside assistance company').id).toBe('trades')
     expect(aiSiteKindFor('an online store for hand-poured soy candles').id).toBe('store')
     expect(aiSiteKindFor('an illustrator portfolio for picture books and editorial work').id).toBe('portfolio')
+  })
+})
+
+describe('how a site moves, chosen with its look (AGL-3941)', () => {
+  const SEEDS = Array.from({ length: 200 }, (_, index) => Math.imul(index + 1, 0x9e3779b1) >>> 0)
+
+  it('asks the look for one of the motion styles, and reads only those', () => {
+    const schema = AI_SITE_LOOK_TOOL.inputSchema as { required: string[]; properties: Record<string, { enum?: string[] }> }
+    expect(schema.required).toContain('motion')
+    expect(schema.properties['motion']?.enum).toEqual([...AI_SITE_MOTION_STYLES])
+    expect(aiReadSiteLook({ motion: 'sides' })).toEqual({ motion: 'sides' })
+    expect(aiReadSiteLook({ motion: 'bounce' })).toEqual({})
+    expect(aiReadSiteLook({ motion: null })).toEqual({})
+  })
+
+  it('keeps the style the model chose for most sites, and draws the rest among those that suit the kind', () => {
+    for (const site of AI_SITE_KINDS) {
+      for (const motion of AI_SITE_MOTION_STYLES) {
+        const drawn = SEEDS.map((seed) => aiSiteStyleFor({ kind: site, answer: { motion }, seed }).motion)
+        const kept = drawn.filter((style) => style === motion).length / SEEDS.length
+        expect([site.id, motion, kept >= AI_SITE_MOTION_KEEP - 0.1]).toEqual([site.id, motion, true])
+        for (const style of drawn) expect([...aiSiteMotionStylesFor(site.id), motion]).toContain(style)
+      }
+      // With no choice, the seed draws every style that suits the kind, and nothing else.
+      const unanswered = new Set(SEEDS.map((seed) => aiSiteStyleFor({ kind: site, answer: {}, seed }).motion))
+      expect(unanswered).toEqual(new Set(aiSiteMotionStylesFor(site.id)))
+    }
+  })
+
+  it('draws the motion last, so a look’s other choices are the ones the seed always drew', () => {
+    for (const site of AI_SITE_KINDS) {
+      for (const seed of SEEDS.slice(0, 20)) {
+        const answer: AiSiteLookAnswer = { base: 'carbon', hue: 210, fonts: 'oswald', buttons: 'caps' }
+        const unchosen = aiSiteStyleFor({ kind: site, answer, seed })
+        const chosen = aiSiteStyleFor({ kind: site, answer: { ...answer, motion: 'still' }, seed })
+        expect({ ...chosen, motion: unchosen.motion }).toEqual(unchosen)
+      }
+    }
   })
 })

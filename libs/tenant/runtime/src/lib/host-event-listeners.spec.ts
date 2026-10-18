@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type * as EmitHostEvent from './emit-host-event'
+import type * as HostEventListeners from './host-event-listeners'
 import { emitHostEvent } from './emit-host-event'
 import {
   dispatchHostAutomation,
@@ -205,3 +207,43 @@ describe('who caused the event (AGL-3376)', () => {
   })
 })
 
+
+/**
+ * The listeners register at boot, from `instrumentation.ts`, which Next
+ * compiles apart from the routes (AGL-3947). Each copy is stood up with
+ * `jest.isolateModules`: registered through the boot's, emitted through the
+ * route's. A module-scoped list fails this, and production's page-view
+ * collector logged "nothing is listening" on every process.
+ */
+describe('the listener registry across module copies', () => {
+  function freshCopy<T>(path: string): T {
+    let copy: T | undefined
+    jest.isolateModules(() => {
+      copy = jest.requireActual(path) as T
+    })
+    if (!copy) throw new Error('the module did not load')
+    return copy
+  }
+
+  it('reaches a listener the boot registered through a route’s copy', async () => {
+    const boot = freshCopy<typeof HostEventListeners>('./host-event-listeners')
+    const route = freshCopy<typeof EmitHostEvent>('./emit-host-event')
+    const heard: string[] = []
+    boot.registerHostEventListener('engine', {
+      onEvent: async (_hostId, event) => {
+        heard.push(event)
+      },
+    })
+    await route.emitHostEvent('site-1', 'pageView', { path: '/' })
+    expect(heard).toEqual(['pageView'])
+  })
+
+  it('holds one listener when the boot and a route both register it', () => {
+    const route = freshCopy<typeof HostEventListeners>('./host-event-listeners')
+    const listener = { onEvent: async () => undefined }
+    freshCopy<typeof HostEventListeners>('./host-event-listeners')
+      .registerHostEventListener('engine', listener)
+    route.registerHostEventListener('engine', listener)
+    expect(route.listHostEventListeners()).toEqual(['engine'])
+  })
+})
