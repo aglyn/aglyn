@@ -2774,6 +2774,32 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   provider caches each search 24 hours (`stockPhotoSearches`) and keeps the
   library's rate limit. No AI model is called, and the guided start's credit
   estimate is unchanged.
+- **A world of its own words alone widens (AGL-3923).** A business type that names
+  no craft this module lists and no kind of site named its world is searched by its
+  own words read back (`aiStockWorldIsUnlisted`: "Freelencing site offer services"
+  is the world "freelencing"). Where a picture's own searches find nothing it may
+  take, it widens, in order (`aiStockWiderTerms`): the kind of site the person
+  picked (`KIND_SUBJECTS`), the kind its starter is the shape of (business, store,
+  portfolio, landing), the picture's own words searched alone and held to no
+  world, and last the starter's plain common photos (`STARTER_GENERIC`: an office,
+  a meeting, a desk; a shop's interior; a studio). Each widened search is judged by
+  the world it was asked for; a rung that repeats an earlier one is left out, and a
+  hero then takes a photo the job already shows before none. A listed craft, a
+  world read from the kind (an "LMS" school) or from the name keeps its slots to
+  its world, and one nothing fits is still taken out rather than given an office
+  (AGL-3831). A product, a portrait of the business's people and a record's cover
+  keep their own fallbacks. A slot whose fitting photo could not be copied (the
+  download refused, or the library's door threw) was failed by the library, as one
+  that never answered is, and takes a starter rather than lose its picture; a
+  refused download is logged. The beta.265 Kasvora Marketing Solutions start (job
+  BK3r4I8bF1) searched only "freelencing", which Pixabay answered with nothing, and
+  its cover hero shipped as a flat dark band; ACCA FA2 (job j4EHPke1PN) held its
+  heroes to "related exam practice" and took none of the 80 photos answered. Both
+  replay from their recorded answers in `ai-stock-photo-agl3923.spec.ts`
+  (`fixtures/ai-stock-photo-agl3923-recordings.ts`). A section that calls itself a
+  gallery, a portfolio or a lookbook is drawn as pictures on any kind of site
+  (`aiLayoutGroupVariant`): Kasvora's "Selected work gallery" was four cards of
+  icons, with no picture to fill. Nothing the model sees changed.
 - **Alt text that says what the photo shows (AGL-3805).** The slot's alt text is the model's,
   written before any photo was found, so a stock photo placed in it answers for its own
   words (`aiStockPhotoAlt`): the slot's words are kept on an English site when a word of
