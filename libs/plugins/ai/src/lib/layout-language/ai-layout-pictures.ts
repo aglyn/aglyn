@@ -98,6 +98,13 @@ export interface AiLayoutPictureSlot {
    * its words or its list name where one is listed, never a child or a thing.
    */
   people?: boolean
+  /**
+   * A dataset record's cover (AGL-3856): what the record is filed under — the
+   * value of its list's category-like field ("Weddings and elopements") —
+   * read after its own name for what its photo is OF. A photographer's record
+   * is the photographed moment, never the photographer or the camera.
+   */
+  record?: { category?: string }
 }
 
 /** A photo a slot is filled with. */
