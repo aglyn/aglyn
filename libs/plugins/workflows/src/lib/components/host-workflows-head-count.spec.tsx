@@ -27,10 +27,9 @@
  * collection for real and did. The card offered headroom that did not exist
  * and then failed the create.
  *
- * The aggregate is UNFILTERED, matching that route's plain
- * `collection('workflows').count()`; its `softDeletes` branch governs only
- * the flat per-host webhook cap, so soft-deleted workflows have always
- * counted server-side while this card excluded them.
+ * The count is LIVE workflows, as that route counts them (AGL-3918): every
+ * document less the tombstones (`deletedAt != null`), so a deleted workflow
+ * frees its slot and a disabled one keeps it.
  *
  * Contracts: the gate refuses over the band the window hid (red before the
  * fix), the list keeps its cap, the count is read once per mount from the
@@ -66,8 +65,11 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
   actions: [],
 }
 
-/** Mutable so a spec can choose how the aggregate resolves. */
-const aggregate: { count: number | null } = { count: SERVER_WORKFLOWS }
+/** Mutable so a spec can choose how the aggregates resolve. */
+const aggregate: { count: number | null; tombstones: number } = {
+  count: SERVER_WORKFLOWS,
+  tombstones: 0,
+}
 
 /** Stable, like the real hook — `firestore` keys the head-count effect. */
 const FIRESTORE = {}
@@ -94,6 +96,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 
 const limitSpy = jest.fn((value: number) => value)
+/** The suffix the mocked `query` gives the tombstone aggregate's target. */
+const TOMBSTONES = ':tombstones'
 const countSpy = jest.fn(async (name: string) => {
   // A server aggregate is a NETWORK round-trip: its answer cannot land in
   // the same drain as the mount that asked for it. Resolving it there was
@@ -112,14 +116,21 @@ const countSpy = jest.fn(async (name: string) => {
   if (aggregate.count == null) {
     throw Object.assign(new Error('denied'), { code: 'permission-denied' })
   }
-  return { data: () => ({ count: aggregate.count }), name } as any
+  const count = name.endsWith(TOMBSTONES) ? aggregate.tombstones : aggregate.count
+  return { data: () => ({ count }), name } as any
 })
 
 jest.mock('firebase/firestore', () => ({
   ...jest.requireActual('firebase/firestore'),
   collection: (_db: unknown, ...segments: string[]) =>
     segments[segments.length - 1],
-  query: (name: string) => name,
+  // The tombstone aggregate (`deletedAt != null`) is told apart by its
+  // filter; every other query keeps the collection's name.
+  query: (name: string, ...constraints: Array<{ where?: string }>) =>
+    constraints.some((constraint) => constraint?.where === 'deletedAt')
+      ? `${name}${TOMBSTONES}`
+      : name,
+  where: (field: string) => ({ where: field }),
   limit: (value: number) => limitSpy(value),
   doc: () => ({}),
   getCountFromServer: (name: string) => countSpy(name),
@@ -157,6 +168,7 @@ const ORG = { $id: 'org-1', plan: 'scale' } as never
 beforeEach(() => {
   jest.clearAllMocks()
   aggregate.count = SERVER_WORKFLOWS
+  aggregate.tombstones = 0
 })
 
 /**
@@ -198,9 +210,11 @@ beforeEach(() => {
  * fallback of 100 is also the value the FIRST render used.
  */
 const countAnswered = async () => {
-  await waitFor(() => expect(countSpy).toHaveBeenCalledWith('workflows'))
+  await waitFor(() => expect(countSpy).toHaveBeenCalledTimes(2))
   await act(async () => {
-    await countSpy.mock.results[0].value.catch(() => undefined)
+    await Promise.all(
+      countSpy.mock.results.map((result) => result.value.catch(() => undefined)),
+    )
   })
 }
 
@@ -250,8 +264,42 @@ describe('the workflows cap is a server aggregate (AGL-1716)', () => {
     expect(
       [...new Set(limitSpy.mock.calls.map(([value]) => value))].sort(),
     ).toEqual([101])
-    expect(countSpy).toHaveBeenCalledTimes(1)
+    // Two aggregates, once: every workflow, and the deleted ones (AGL-3918).
+    expect(countSpy).toHaveBeenCalledTimes(2)
     expect(countSpy).toHaveBeenCalledWith('workflows')
+    expect(countSpy).toHaveBeenCalledWith(`workflows${TOMBSTONES}`)
+  })
+
+  it('frees the slot a deleted workflow held, and keeps refusing at the band (AGL-3918)', async () => {
+    // 252 stored against Scale's 250, three of them deleted: 249 live, so a
+    // site that deleted to make room may add one. Before AGL-3918 the card
+    // and the route both counted 252 and refused.
+    aggregate.count = 252
+    aggregate.tombstones = 3
+    render(<HostWorkflowsCard hostId="host-1" org={ORG} />)
+    await countAnswered()
+
+    fireEvent.click(screen.getByText('Add workflow'))
+    expect(screen.queryByText('Cancel')).not.toBeNull()
+    expect(
+      enqueueSnackbar.mock.calls.some((call) =>
+        String(call[0]).includes('Workflow limit reached'),
+      ),
+    ).toBe(false)
+  })
+
+  it('still counts what was not deleted: one tombstone short of room is refused', async () => {
+    aggregate.count = 252
+    aggregate.tombstones = 2
+    render(<HostWorkflowsCard hostId="host-1" org={ORG} />)
+    await countAnswered()
+
+    fireEvent.click(screen.getByText('Add workflow'))
+    expect(
+      enqueueSnackbar.mock.calls.some((call) =>
+        String(call[0]).includes('Workflow limit reached (250)'),
+      ),
+    ).toBe(true)
   })
 
   it('falls back to the loaded rows, never to zero, when the read fails', async () => {

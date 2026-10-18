@@ -17,6 +17,7 @@
 
 import { hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement, checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import {
   registerPluginResourceDraftWriter,
   type PluginDraftCheck,
@@ -358,7 +359,7 @@ export function createBookingServiceDraftWriter(
       if (!host.exists) return { status: 404, error: 'Unknown site' }
       const early = roleRefusal(host, context.uid) ?? planRefusal(context.org)
       if (early) return early
-      const used = (await hostRef.collection('services').count().get()).data().count
+      const used = await countLiveDocuments(hostRef.collection('services'))
       return roomRefusal(context.org, Number(used) || 0)
     },
 
@@ -391,7 +392,7 @@ export function createBookingServiceDraftWriter(
         if (existing.exists) return { ok: true, replayed: true, ...recordOf(existing) }
         const early = roleRefusal(host, request.uid) ?? planRefusal(request.org)
         if (early) return { ok: false, ...early }
-        const used = (await tx.get(servicesRef.count())).data().count
+        const used = await countLiveDocuments(servicesRef, (aggregate) => tx.get(aggregate))
         const room = roomRefusal(request.org, Number(used) || 0)
         if (room) return { ok: false, ...room }
         tx.create(serviceRef, {

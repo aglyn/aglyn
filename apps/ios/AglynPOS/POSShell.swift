@@ -24,7 +24,21 @@ struct POSShell: View {
       .toolbar {
         ToolbarItem(placement: .primaryAction) {
           Menu {
+            // Screens a plugin puts in the register's menu (card readers…), once a store is open.
+            if model.workspace?.site != nil {
+              ForEach(model.registry.screens(for: .pos, placement: .menu), id: \.id) { screen in
+                Button(screen.title, systemImage: screen.icon ?? "square.grid.2x2") {
+                  navigation.push(.screen(screen.id, [:]))
+                }
+                .accessibilityIdentifier("pos-menu-\(screen.id)")
+              }
+              Divider()
+            }
             Button("Switch store", systemImage: "storefront") { navigation.showSwitcher = true }
+            #if os(iOS)
+              Button("Settings", systemImage: "gearshape") { navigation.push(.settings) }
+                .accessibilityIdentifier("pos-menu-settings")
+            #endif
             Divider()
             Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
               Task { await model.signOut() }

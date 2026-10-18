@@ -113,7 +113,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 })
 
 import { posPaymentHandler } from './pos-payment'
-import { handlePosStripeEvent } from './pos-terminal'
+import { handlePosStripeEvent, KEYED_CARD_NEEDS_AUTHENTICATION } from './pos-terminal'
 import { onPosSaleCompleted } from './pos-sale'
 
 /*==========================================
@@ -166,6 +166,25 @@ function stripeAnswer(method: string, path: string, params: URLSearchParams): an
     intent.status = 'canceled'
     return intent
   }
+  const confirm = /^payment_intents\/(pi_test_\d+)\/confirm$/.exec(path)
+  if (method === 'POST' && confirm) {
+    // Test PaymentMethods by what they stand for: approved, declined, or asking for 3-D Secure.
+    const intent = intents.get(confirm[1])
+    const paymentMethod = String(params.get('payment_method'))
+    if (paymentMethod === 'pm_cardDeclined') {
+      intent.status = 'requires_payment_method'
+      intent.last_payment_error = { message: 'Your card was declined.', code: 'card_declined' }
+      return { ok: false, body: { error: { message: 'Your card was declined.', code: 'card_declined', payment_intent: intent } } }
+    }
+    if (paymentMethod === 'pm_card3dsRequired') {
+      intent.status = 'requires_action'
+      return intent
+    }
+    intent.status = 'succeeded'
+    intent.payment_method = paymentMethod
+    intent.latest_charge = { payment_method_details: { card: { brand: 'visa', last4: '4242' } } }
+    return intent
+  }
   const get = /^payment_intents\/(pi_test_\d+)$/.exec(path)
   if (method === 'GET' && get) return intents.get(get[1])
   if (method === 'POST' && /^terminal\/readers\/tmr_\w+\/process_payment_intent$/.test(path)) {
@@ -188,9 +207,12 @@ const fetchMock = jest.fn(async (url: any, init: any) => {
   if (key && replays.has(key)) {
     return { ok: true, status: 200, json: async () => replays.get(key) }
   }
-  const body = stripeAnswer(method, path, params)
+  const answer = stripeAnswer(method, path, params)
+  // An answer shaped `{ ok: false, body }` is Stripe refusing the request (a decline is a 402).
+  const refused = answer && answer.ok === false
+  const body = refused ? answer.body : answer
   if (key) replays.set(key, body)
-  return { ok: true, status: 200, json: async () => body }
+  return { ok: !refused, status: refused ? 402 : 200, json: async () => body }
 })
 
 /*==========================================
@@ -498,6 +520,49 @@ describe('typed card and the QR link', () => {
     expect(create.params.getAll('payment_method_types[]')).toEqual(['card'])
     expect(create.params.get('capture_method')).toBeNull()
     expect(Number(create.params.get('application_fee_amount'))).toBe(100 + posCardProcessingCostCents(6000))
+  })
+
+  it("confirms a card typed into the register's own fields by its PaymentMethod, never seeing the card", async () => {
+    const keyed = await act({ action: 'card-keyed', amountCents: 5000, tipCents: 500, paymentMethodId: 'pm_cardVisa1234' }, 'kn')
+    expect(keyed.status).toBe(200)
+    expect(keyed.body.clientSecret).toBeUndefined()
+    const confirm = stripeCalls.find((call) => call.path.endsWith('/confirm'))!
+    expect(confirm.params.get('payment_method')).toBe('pm_cardVisa1234')
+    expect([...confirm.params.keys()]).toEqual(['payment_method'])
+    expect(sale().payments[0]).toMatchObject({ method: 'card_keyed', status: 'succeeded', amountCents: 5000, tipCents: 500 })
+    expect(keyed.body.sale.dueCents).toBe(5000)
+  })
+
+  it('records a decline from the typed card with the bank’s words', async () => {
+    const keyed = await act({ action: 'card-keyed', amountCents: 2000, paymentMethodId: 'pm_cardDeclined' }, 'kx')
+    expect(keyed.status).toBe(200)
+    expect(sale().payments[0]).toMatchObject({ status: 'failed', failureMessage: 'Your card was declined.' })
+  })
+
+  it('releases a typed card whose bank asks for 3-D Secure and points at Card (QR)', async () => {
+    await act({ action: 'card-keyed', amountCents: 2000, paymentMethodId: 'pm_card3dsRequired' }, 'k3')
+    expect(sale().payments[0]).toMatchObject({ status: 'failed', failureMessage: KEYED_CARD_NEEDS_AUTHENTICATION })
+    expect(stripeCalls.some((call) => /payment_intents\/pi_test_\d+\/cancel$/.test(call.path))).toBe(true)
+  })
+
+  it('refuses anything that is not a PaymentMethod id before it reaches Stripe', async () => {
+    const bad = await act({ action: 'card-keyed', amountCents: 2000, paymentMethodId: '4242424242424242' }, 'kb')
+    expect(bad.status).toBe(400)
+    expect(stripeCalls).toHaveLength(0)
+  })
+
+  it('hands back the publishable key the card form loads, so a register needs no context read to take it', async () => {
+    const previous = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_fake'
+    try {
+      const keyed = await act({ action: 'card-keyed', amountCents: 2000 }, 'kp')
+      expect(keyed.body.publishableKey).toBe('pk_test_fake')
+      const cash = await act({ action: 'cash', tenderedCents: 500, amountCents: 500 }, 'kc')
+      expect(cash.body.publishableKey).toBeUndefined()
+    } finally {
+      if (previous === undefined) delete process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+      else process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = previous
+    }
   })
 })
 

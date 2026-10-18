@@ -30235,6 +30235,35 @@
         }
       ]
     },
+    "referrerLabel": {
+      "module": "libs/aglyn/src/lib/app-utils/screen-analytics-aggregate.ts",
+      "cases": [
+        {
+          "args": [
+            "google_com"
+          ],
+          "result": "google.com"
+        },
+        {
+          "args": [
+            "news_ycombinator_com"
+          ],
+          "result": "news.ycombinator.com"
+        },
+        {
+          "args": [
+            "shop.example"
+          ],
+          "result": "shop.example"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": ""
+        }
+      ]
+    },
     "renameProductOptions": {
       "module": "libs/plugins/commerce/src/lib/model/commerce.ts",
       "cases": [

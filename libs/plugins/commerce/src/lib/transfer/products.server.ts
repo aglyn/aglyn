@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import {
   buildMatchLookup,
   type BuildTransferPlanInput,
@@ -355,7 +356,7 @@ export async function planProducts(
   }
   const owner = await getOrgForHost(ctx.hostId as string)
   const org = owner?.org ?? null
-  const used = Number((await products.count().get()).data().count) || 0
+  const used = await countLiveDocuments(products)
   const maxCreates = Aglyn.checkEntitlement(org as never, 'commerce')
     ? Aglyn.checkQuota(org as never, 'productsPerHost', used).remaining
     : 0
@@ -439,7 +440,7 @@ export async function applyProducts(
           const existing = await tx.get(ref)
           // A retry after the write landed and before its row was recorded.
           if (existing.exists) return false
-          const used = (await tx.get(products.count())).data().count
+          const used = await countLiveDocuments(products, (aggregate) => tx.get(aggregate))
           const quota = Aglyn.checkQuota(org as never, 'productsPerHost', Number(used) || 0)
           if (!quota.allowed) {
             throw new RowRefusal('planLimit', `Your plan includes ${quota.limit} products — upgrade in Billing for more.`)

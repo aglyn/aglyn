@@ -78,12 +78,26 @@ function docRef(path: string): Record<string, unknown> {
   }
 }
 
+/** One aggregate over the children `keep` admits. */
+const countOf = (path: string, keep: (data: Record<string, unknown>) => boolean) => ({
+  kind: 'count',
+  get: async () => ({
+    data: () => ({ count: childrenOf(path).filter((child) => keep(store.get(child) ?? {})).length }),
+  }),
+})
+
 function collectionRef(path: string): Record<string, unknown> {
-  const counted = {
-    kind: 'count',
-    get: async () => ({ data: () => ({ count: childrenOf(path).length }) }),
+  return {
+    path,
+    doc: (id: string) => docRef(`${path}/${id}`),
+    count: () => countOf(path, () => true),
+    // The live count's second aggregate (AGL-3918): Firestore's `!=` matches
+    // a document that HAS the field with another value.
+    where: (field: string, op: string, value: unknown) => {
+      if (op !== '!=') throw new Error(`the double does not evaluate ${op}`)
+      return { count: () => countOf(path, (data) => data[field] !== undefined && data[field] !== value) }
+    },
   }
-  return { path, doc: (id: string) => docRef(`${path}/${id}`), count: () => counted }
 }
 
 const firestore = {
@@ -264,6 +278,18 @@ describe('the refusal', () => {
     expect(await writer.refusal(request({ org: STARTER }))).toEqual(refusal)
     expect(await writer.write(request({ org: STARTER }))).toEqual({ ok: false, ...refusal })
     expect(store.has('hosts/host-1/services/draft-1')).toBe(false)
+  })
+
+  it('counts live services: a deleted one frees its slot, an inactive one keeps it (AGL-3918)', async () => {
+    store.set('hosts/host-1/services/gone', { name: 'Old', durationMinutes: 30, deletedAt: { seconds: 1 } })
+    expect(await writer.refusal(request({ org: STARTER }))).toBeNull()
+    expect((await writer.write(request({ org: STARTER }))).ok).toBe(true)
+
+    store.delete('hosts/host-1/services/draft-1')
+    store.set('hosts/host-1/services/paused', { name: 'Paused', durationMinutes: 30, active: false, deletedAt: null })
+    const refusal = { status: 403, error: bookingServiceLimitRefusal(1) }
+    expect(await writer.refusal(request({ org: STARTER }))).toEqual(refusal)
+    expect(await writer.write(request({ org: STARTER }))).toEqual({ ok: false, ...refusal })
   })
 
   it('answers an unknown site', async () => {

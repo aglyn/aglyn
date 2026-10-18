@@ -11,6 +11,16 @@ func problemText(_ error: Error) -> String {
   (error as? LocalizedError)?.errorDescription ?? "Something went wrong. Try again."
 }
 
+/// A list row's one word for an email: the detail's own word where it has one. A stopped send names why it stopped, so a
+/// canceled email reads "Canceled" in the list as on its page, never a third word of the row's own.
+func sendChipWord(_ send: EmailSend) -> String {
+  switch send.display.state {
+  case "draft", "held": send.display.label
+  case "stopped": send.status == "canceled" ? "Canceled" : send.status == "failed" ? "Failed" : "Stopped"
+  default: send.display.state.capitalized
+  }
+}
+
 func sendTone(_ state: String) -> AglynTone {
   switch state {
   case "sent": .success
@@ -155,7 +165,7 @@ struct EmailRow: View {
       subtitle: [send.audienceLabel, (send.sendAt ?? send.createdAt).map { relativeTime($0) }].compactMap { $0 }.joined(separator: " · "),
       systemImage: "envelope"
     ) {
-      StatusChip(["draft", "held"].contains(send.display.state) ? send.display.label : send.display.state.capitalized, tone: sendTone(send.display.state))
+      StatusChip(sendChipWord(send), tone: sendTone(send.display.state))
     }
   }
 }
@@ -236,7 +246,7 @@ struct EmailDetail: View {
           }
         }
       }
-      Section("Sent as") {
+      Section("Email") {
         // What the send recorded, never today's identity; where it recorded none, why. A recorded sender names what an
         // absent display name or reply address meant, as the console does.
         PropertyRow("Sent as", sentAs?.from ?? sentAsMissing(document.data)).accessibilityIdentifier("email-sent-as")

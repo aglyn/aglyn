@@ -501,6 +501,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
       "label": "services",
       "activityNoun": "service",
       "quotaKey": "servicesPerHost",
+      "softDeletes": true,
       "entitlement": "bookings",
       "fields": [
         "name",
@@ -553,6 +554,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
       "label": "products",
       "activityNoun": "product",
       "quotaKey": "productsPerHost",
+      "softDeletes": true,
       "entitlement": "commerce",
       "fields": [
         "name",
@@ -876,6 +878,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
       "activityNoun": "function",
       "activityType": "function",
       "quotaKey": "functionsPerHost",
+      "softDeletes": true,
       "fields": [
         "name",
         "parameters",
@@ -911,6 +914,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
       "activityNoun": "variable",
       "activityType": "variable",
       "quotaKey": "variablesPerHost",
+      "softDeletes": true,
       "fields": [
         "name",
         "type",
@@ -1025,6 +1029,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
       "label": "redirects",
       "activityNoun": "redirect",
       "quotaKey": "redirectsPerHost",
+      "softDeletes": true,
       "entitlement": "redirects",
       "requiresPublishRole": true,
       "fields": [
@@ -1068,6 +1073,7 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
       "activityNoun": "workflow",
       "activityType": "workflow",
       "quotaKey": "workflowsPerHost",
+      "softDeletes": true,
       "entitlement": "workflows",
       "fields": [
         "name",

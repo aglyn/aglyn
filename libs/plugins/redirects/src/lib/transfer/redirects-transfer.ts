@@ -19,6 +19,7 @@ import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/tenant-apex'
 import { hostRoleCanPublish, hostRoleCanWrite } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement, checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { countLiveDocuments } from '@aglyn/aglyn/app-utils/live-document-count'
 import {
   ACKNOWLEDGED_WARNING_CLASSES,
   TRANSFER_ID_FIELD,
@@ -644,11 +645,7 @@ export function createRedirectsTransferResource(deps: RedirectsTransferDeps): Pl
     async count(ctx: TransferResourceContext, options: TransferReadOptions): Promise<number> {
       const hostId = requireHost(ctx)
       if (options.ids) return (await readByIds(hostId, options.ids)).size
-      const [all, deleted] = await Promise.all([
-        rulesOf(hostId).count().get(),
-        rulesOf(hostId).where('deletedAt', '!=', null).count().get(),
-      ])
-      return Math.max(0, all.data().count - deleted.data().count)
+      return countLiveDocuments(rulesOf(hostId))
     },
 
     async readPage(
@@ -876,9 +873,9 @@ export function createRedirectsTransferResource(deps: RedirectsTransferDeps): Pl
         }
       }
 
-      // The plan's counter counts every rule document, soft-deleted ones
-      // included, as the create route counts them.
-      const remaining = Math.max(0, site.limit - documents.length)
+      // The plan's counter counts the LIVE rules, as the create route counts
+      // them: a deleted rule frees its slot, a disabled one keeps it (AGL-3918).
+      const remaining = Math.max(0, site.limit - live.length)
       return withCreateLimit(withTransferResourceFindings(plan, findings), remaining, site.limit)
     },
 
@@ -919,7 +916,8 @@ export function createRedirectsTransferResource(deps: RedirectsTransferDeps): Pl
         const outcome = await firestore.runTransaction(async (tx): Promise<{ refusal?: string; existed?: boolean }> => {
           if ((await tx.get(ref)).exists) return { existed: true }
           if (site.declared.quotaKey && Number.isFinite(site.limit)) {
-            const used = (await tx.get(rulesOf(site.hostId).count())).data().count
+            // Live rules only, as the create route counts (AGL-3918).
+            const used = await countLiveDocuments(rulesOf(site.hostId), (aggregate) => tx.get(aggregate))
             const quota = checkQuota(site.org, site.declared.quotaKey as Parameters<typeof checkQuota>[1], used)
             if (!quota.allowed) {
               return { refusal: `Your plan includes ${quota.limit} ${site.declared.label} — upgrade in Billing for more` }

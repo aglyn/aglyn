@@ -44,6 +44,23 @@ struct SettingsView: View {
           }
         }
       }
+      // Aglyn POS: the register's own screens (card readers…), once a store is open.
+      if model.app == .pos, model.workspace?.site != nil {
+        let screens = model.registry.screens(for: .pos, placement: .menu)
+        if !screens.isEmpty {
+          Section("Register") {
+            ForEach(screens, id: \.id) { screen in
+              NavigationLink {
+                // The Mac's Settings window has no shell navigation of its own.
+                PluginScreenView(screenID: screen.id).environment(navigation ?? ShellNavigation())
+              } label: {
+                Label(screen.title, systemImage: screen.icon ?? "square.grid.2x2")
+              }
+              .accessibilityIdentifier("settings-\(screen.id)")
+            }
+          }
+        }
+      }
       Section {
         NavigationLink {
           NotificationSettingsView()

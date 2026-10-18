@@ -33,18 +33,37 @@ public func artifactQuotaLimit(_ body: JSONValue?, kind: ArtifactKind) -> Double
 }
 
 /// The two aggregates that count what the create route counts. Components and layouts: every document less the
-/// tombstones (a delete stamps `deletedAt` and leaves the document). Templates: everything that is not a starter's page.
+/// tombstones (a delete stamps `deletedAt` and leaves the document). Templates: everything that is not a starter's page,
+/// less the deleted ones, which `templateTombstoneQuery` reads (a second inequality beside the starter one needs a
+/// composite index).
 public func artifactCountQueries(_ kind: ArtifactKind, hostID: String) -> (total: FirestoreQuery, subtract: FirestoreQuery?) {
   let path = ["hosts", hostID, kind.collection]
   switch kind {
   case .component, .layout:
-    return (
-      FirestoreQuery(path),
-      FirestoreQuery(path, filters: [ListQueryConstraint(path: "deletedAt", op: .greaterThan, value: Date(timeIntervalSince1970: 0))])
-    )
+    let queries = liveCountQueries(path)
+    return (queries.total, queries.tombstones)
   case .template:
     return (FirestoreQuery(path, filters: [ListQueryConstraint(path: "source.type", op: .notEqual, value: "starter")]), nil)
   }
+}
+
+/// How many deleted templates the readout reads to subtract; a site with more counts the rest as live, which only
+/// overstates.
+public let templateTombstoneWindow = 500
+
+/// A site's deleted templates, for the template count to subtract (AGL-3918).
+public func templateTombstoneQuery(hostID: String) -> FirestoreQuery {
+  FirestoreQuery(["hosts", hostID, ArtifactKind.template.collection], filters: [tombstoneConstraint()], limit: templateTombstoneWindow)
+}
+
+/// Of a site's deleted templates, how many the `source.type != 'starter'` count included: a template whose
+/// `source.type` is set and is not a starter's (the filter skips a template without the field). The console's
+/// `deletedTemplatesCounted`.
+public func deletedTemplatesCounted(_ tombstones: [FirestoreDocument]) -> Int {
+  tombstones.filter { document in
+    guard let type = (document.data["source"] as? [String: Any])?["type"], !(type is NSNull) else { return false }
+    return (type as? String) != "starter"
+  }.count
 }
 
 /// The count never goes below zero: the two aggregates are separate round trips and a delete between them can make the
@@ -92,6 +111,9 @@ public final class ArtifactQuotaModel {
       // A refused second aggregate leaves the total, which can only overstate; the list's window stands in instead.
       guard let removed = try? await reader.count(tombstones) else { return }
       subtract = removed
+    } else if kind == .template {
+      guard let deleted = try? await reader.readOnce(templateTombstoneQuery(hostID: hostID)) else { return }
+      subtract = deletedTemplatesCounted(deleted)
     }
     if Task.isCancelled { return }
     count = artifactLiveCount(total: total, subtract: subtract)

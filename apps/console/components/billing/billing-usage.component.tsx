@@ -48,6 +48,7 @@ import {
   getCountFromServer,
   getDoc,
 } from 'firebase/firestore'
+import { getLiveCountFromServer } from '@aglyn/aglyn/app-utils/live-document-count.client'
 import { useEffect, useState } from 'react'
 import {
   useFirestore,
@@ -197,13 +198,16 @@ function HostUsageMeters(props: {
       // all, and Firestore cannot query for an absent field. Asking the API
       // keeps this meter and the quota gate on one implementation.
       fetchBillableScreens(host.$id, user).catch(() => null),
-      getCountFromServer(
+      // Layouts, variables and functions soft-delete, and their allowances
+      // count LIVE documents (AGL-3918): every one less the tombstones, as
+      // `/api/hosts/resources` refuses a create at.
+      getLiveCountFromServer(
         collection(firestore, 'hosts', host.$id, 'layouts'),
       ).catch(() => null),
-      getCountFromServer(
+      getLiveCountFromServer(
         collection(firestore, 'hosts', host.$id, 'variables'),
       ).catch(() => null),
-      getCountFromServer(
+      getLiveCountFromServer(
         collection(firestore, 'hosts', host.$id, 'functions'),
       ).catch(() => null),
       // Per-site collaborator seats (AGL-107/119, renamed AGL-888).
@@ -236,9 +240,9 @@ function HostUsageMeters(props: {
       const monthKey = new Date().toISOString().slice(0, 7)
       setCounts({
         screens,
-        layouts: layouts?.data().count ?? null,
-        variables: variables?.data().count ?? null,
-        functions: functions?.data().count ?? null,
+        layouts,
+        variables,
+        functions,
         members: members?.data().count ?? null,
         forms: forms?.data().count ?? null,
         // A read that failed is not an empty library: it stays unmetered.

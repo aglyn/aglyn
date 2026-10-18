@@ -71,6 +71,8 @@ class RegisterModel(
   displayApi: PosDisplayApi = OfflinePosDisplay,
   /** The kiosks' "pay at counter" queue. */
   kioskQueueApi: PosKioskQueueApi = OfflinePosKioskQueue,
+  /** The receipt printers route. */
+  printersApi: PosPrintersApi = OfflinePosPrinters,
 ) {
   private val store = RegisterStore(deviceStore, hostId)
 
@@ -84,6 +86,11 @@ class RegisterModel(
   val customers = PosCustomerModel(customersApi, scope)
   /** The last sale this register finished, and its receipt. */
   val lastReceipt = PosLastReceiptModel(firestore, api, store, hostId, scope, { receiptContext() })
+
+  /** This register's receipt printers (AGL-3909); the last receipt offers its printer button from them. */
+  val printers = PosPrintersModel(firestore, printersApi, hostId, scope).also { model ->
+    model.onRows = { rows -> lastReceipt.noteCloudPrinter(rows.isNotEmpty()) }
+  }
 
   /** The cash sales rung while offline, and their sync. */
   val offline = PosOfflineModel(
@@ -158,15 +165,16 @@ class RegisterModel(
   val readers = mutableStateListOf<CardReaderService>()
 
   /**
-   * "Type card", as the console offers it with the site's publishable key,
-   * where this app has Stripe's card form. Not offered while offline: a card
-   * needs the server's intent.
+   * A card typed in (the console's "Type card"), wherever this app has
+   * Stripe's card form. Offered even before the register's context has
+   * loaded: the server hands the publishable key back with the intent, so a
+   * context read that failed never hides the tender. Not offered while
+   * offline: a card needs the server's intent.
    */
   val keyedCard: KeyedCardService?
     get() {
       val entry = peripherals.keyedCardEntry ?: return null
-      val key = context?.publishableKey?.takeIf { it.isNotEmpty() } ?: return null
-      return if (online) KeyedCardService(entry, key, storeName) else null
+      return if (online) KeyedCardService(entry, context?.publishableKey.orEmpty(), storeName) else null
     }
 
   /** The card tender a payment step names by label, to cancel or to read what it asks for. */
@@ -254,6 +262,7 @@ class RegisterModel(
     cart = store.cart(next.id)
     holds = store.holds(next.id)
     lastReceipt.watch(next.id)
+    printers.watch(next.id)
     display.reset()
     displayShowsBasket = false
     displayShowsProcessing = false

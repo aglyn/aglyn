@@ -93,6 +93,16 @@ class CollectionRef {
   count() {
     return { get: async () => ({ data: () => ({ count: this.children().length }) }) }
   }
+  /** The live count's second aggregate (AGL-3918): Firestore's `!=` matches a document that HAS the field. */
+  where(field: string, op: string, value: unknown) {
+    if (op !== '!=') throw new Error(`the double does not evaluate ${op}`)
+    const matching = () =>
+      this.children().filter((path) => {
+        const stored = docs.get(path)?.[field]
+        return stored !== undefined && stored !== value
+      })
+    return { count: () => ({ get: async () => ({ data: () => ({ count: matching().length }) }) }) }
+  }
 }
 
 const firestore = {
@@ -261,10 +271,12 @@ describe('creating a redirect', () => {
     expect(asked.ok).toBe(true)
   })
 
-  it('meets the plan’s allowance inside the write', async () => {
-    // Starter includes 25; every document counts, deleted ones too, as the create route counts.
+  it('meets the plan’s allowance inside the write, counting live rules as the create route does (AGL-3918)', async () => {
+    // Starter includes 25. `r1` and 23 more are 24 live; the deleted `r2` frees its slot, so one more fits.
     for (let index = 0; index < 23; index += 1) docs.set(`${RULES}/f${index}`, { source: `/f${index}`, destination: '/', statusCode: 302 })
-    expect(refused(await writer.write(request({ action: 'create', source: '/one-more', destination: '/menu' })))).toBe(
+    expect(refused(await writer.write(request({ action: 'create', source: '/one-more', destination: '/menu' })))).toBeNull()
+    // 25 live now: the next is refused.
+    expect(refused(await writer.write(request({ action: 'create', source: '/past-cap', destination: '/menu' }, { id: 'build-1-i1' })))).toBe(
       redirectAiLimitRefusal(25),
     )
   })

@@ -64,10 +64,17 @@ import {
   doc,
   getCountFromServer,
   getDoc,
+  getDocs,
   query,
   updateDoc,
   where,
 } from 'firebase/firestore'
+import {
+  deletedTemplatesCounted,
+  liveDocumentCount,
+  STARTER_TEMPLATE_SOURCE,
+  TOMBSTONE_FIELD,
+} from '@aglyn/aglyn/app-utils/live-document-count'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import { useRouter } from 'next/navigation'
 import ListTable, {
@@ -760,24 +767,30 @@ export function HostTemplatesCard({
    * merchant on Starter learned their 50-template cap by being refused a save.
    *
    * The count is a server aggregate over exactly what the route counts —
-   * every template that is not a starter's page — because the list is a page
-   * now (AGL-3321) and its length is not the library's size (AGL-1716). It is
-   * re-asked whenever the page's rows change, which is when a create or a
-   * delete could have moved it.
+   * every template that is not a starter's page, less the deleted ones
+   * (AGL-3918) — because the list is a page now (AGL-3321) and its length is
+   * not the library's size (AGL-1716). The deleted templates are read and
+   * the ones the first count included subtracted (`deletedTemplatesCounted`),
+   * which a second inequality beside the starter one could only do with a
+   * composite index. It is re-asked whenever the page's rows change, which
+   * is when a create or a delete could have moved it.
    */
   const rowsSignature = templateList.rows.map((entry: any) => entry.$id).join(',')
   const [templateCount, setTemplateCount] = useState<number | null>(null)
   useEffect(() => {
     if (!hostId) return
     let active = true
-    void getCountFromServer(
-      query(
-        collection(firestore, 'hosts', hostId, 'templates'),
-        where('source.type', '!=', 'starter'),
-      ),
-    )
-      .then((snapshot) => {
-        if (active) setTemplateCount(snapshot.data().count)
+    const templates = collection(firestore, 'hosts', hostId, 'templates')
+    void Promise.all([
+      getCountFromServer(query(templates, where('source.type', '!=', STARTER_TEMPLATE_SOURCE))),
+      getDocs(query(templates, where(TOMBSTONE_FIELD, '!=', null))),
+    ])
+      .then(([counted, tombstones]) => {
+        if (active) {
+          setTemplateCount(
+            liveDocumentCount(counted.data().count, deletedTemplatesCounted(tombstones.docs)),
+          )
+        }
       })
       .catch(() => {
         // Pending or refused, the page stands in: a LOWER bound.

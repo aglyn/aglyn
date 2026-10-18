@@ -185,3 +185,50 @@ describe('a plugin’s un-namespaced target types (AGL-3080)', () => {
     expect(pluginActivityTargetLabel('batchJob')).toBe('Batch job')
   })
 })
+
+describe('describeAction (AGL-3892)', () => {
+  const RUNS = {
+    pluginId: 'runs',
+    group: { id: 'runs', label: 'Runs' },
+    actions: [] as const,
+    describeAction: (action: string) =>
+      action.startsWith('Thing ran on ') ? `Thing ran: ${action.slice(13)}` : undefined,
+  }
+
+  it('words a prose action a plugin claims, after the declared codes, and skips a describer that throws', () => {
+    registerPluginActivityActions(AI)
+    registerPluginActivityActions({
+      pluginId: 'broken',
+      group: { id: 'broken', label: 'Broken' },
+      actions: [],
+      describeAction: () => {
+        throw new Error('boom')
+      },
+    })
+    registerPluginActivityActions(RUNS)
+    expect(pluginActivityActionLabel('Thing ran on lead')).toBe('Thing ran: lead')
+    expect(pluginActivityActionLabel('ai.job.output')).toBe('AI generated')
+    expect(pluginActivityActionLabel('Saved the screen')).toBeUndefined()
+  })
+
+  it('gives a group with no codes no filter chip', () => {
+    registerPluginActivityActions(AI)
+    registerPluginActivityActions(RUNS)
+    expect(listPluginActivityFilters().map((filter) => filter.group.id)).toEqual(['ai'])
+  })
+
+  it('is read from one registry by every module copy, as boot and a route load it apart (AGL-3412)', () => {
+    let registered: typeof import('./plugin-activity-actions') | undefined
+    let read: typeof import('./plugin-activity-actions') | undefined
+    jest.isolateModules(() => {
+      registered = require('./plugin-activity-actions')
+    })
+    jest.isolateModules(() => {
+      read = require('./plugin-activity-actions')
+    })
+    expect(registered).not.toBe(read)
+    registered!.registerPluginActivityActions(RUNS)
+    expect(read!.pluginActivityActionLabel('Thing ran on lead')).toBe('Thing ran: lead')
+    expect(read!.listPluginActivityRegistrations().map((entry) => entry.pluginId)).toContain('runs')
+  })
+})
