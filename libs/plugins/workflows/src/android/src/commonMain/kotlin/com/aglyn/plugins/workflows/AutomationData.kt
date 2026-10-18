@@ -442,9 +442,15 @@ fun runQuotaLine(counter: RunCounter, used: Long, limit: Long?): String =
   "${formatEnUs(used.toDouble(), 0)} ${counter.label} this month · " +
     if (limit == null) "no monthly limit" else "${formatEnUs(limit.toDouble(), 0)} included"
 
-/** The standing cap readout: `3/25 workflows on your plan`, or the count alone while the plan loads. */
-fun quotaReadout(used: Int, limit: Long?, ready: Boolean, noun: String): String =
-  if (ready) "$used/${limit?.toString() ?: "∞"} ${noun}s on your plan" else "$used ${if (used == 1) noun else "${noun}s"} · checking your plan…"
+/**
+ * The standing cap readout: `3/25 workflows on your plan`, or the count alone while the plan loads. The plan counts
+ * deleted ones too (the server's `count()` of the collection), so when [deleted] of them are not in the list the readout
+ * says so: `4/25 workflows on your plan · 1 deleted still counts`, never a figure the list beside it cannot explain.
+ */
+fun quotaReadout(used: Int, limit: Long?, ready: Boolean, noun: String, deleted: Int = 0): String {
+  val base = if (ready) "$used/${limit?.toString() ?: "∞"} ${noun}s on your plan" else "$used ${if (used == 1) noun else "${noun}s"} · checking your plan…"
+  return if (deleted > 0) "$base · $deleted deleted ${if (deleted == 1) "still counts" else "still count"}" else base
+}
 
 // ── Run history ───────────────────────────────────────────────────────────
 

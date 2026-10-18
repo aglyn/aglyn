@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -107,7 +108,8 @@ fun FormSheet(
 ) {
   Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
     Surface(
-      modifier.widthIn(max = 640.dp).fillMaxWidth(0.96f).heightIn(max = 860.dp).testTag("form-sheet"),
+      // Clear of the keyboard: the field being typed in scrolls into the room left above it.
+      modifier.imePadding().widthIn(max = 640.dp).fillMaxWidth(0.96f).heightIn(max = 860.dp).testTag("form-sheet"),
       shape = MaterialTheme.shapes.extraLarge,
       color = MaterialTheme.colorScheme.surface,
     ) {
@@ -158,7 +160,7 @@ fun PanelSheet(
   val compact = currentWidthClass() == WidthClass.COMPACT
   Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
     Surface(
-      modifier.then(
+      modifier.imePadding().then(
         if (compact) Modifier.fillMaxSize() else Modifier.widthIn(max = 760.dp).fillMaxWidth(0.94f).heightIn(max = 920.dp).fillMaxHeight(0.92f),
       ).testTag("panel-sheet"),
       shape = if (compact) MaterialTheme.shapes.extraSmall else MaterialTheme.shapes.extraLarge,

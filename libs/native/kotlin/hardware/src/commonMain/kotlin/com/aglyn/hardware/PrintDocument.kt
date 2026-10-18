@@ -144,7 +144,9 @@ fun drawerKickDocument(columns: Int = PaperColumns.MM80) = PrintDocument(columns
 /**
  * A document as plain text: what the register shows as the receipt preview
  * and what a spec reads a layout by. Size and emphasis do not exist in plain
- * text; alignment is padding; a barcode prints its data between brackets; a
+ * text; alignment is padding (a double-size two-column line, laid out for half
+ * the columns, is spread back to the full width so its amount still ends at the
+ * right edge); a barcode prints its data between brackets; a
  * drawer kick and a cut print nothing.
  */
 fun renderText(document: PrintDocument): String {
@@ -153,7 +155,7 @@ fun renderText(document: PrintDocument): String {
   for (op in document.ops) {
     when (op) {
       is PrintOp.Text -> {
-        val text = toPrintable(op.text).take(columns)
+        val text = (if (op.align == PrintAlign.LEFT) spreadLargeLine(toPrintable(op.text), op.size, columns) else toPrintable(op.text)).take(columns)
         val gap = columns - text.length
         lines += when (op.align) {
           PrintAlign.CENTER -> (" ".repeat(gap / 2) + text).trimEnd()
@@ -170,4 +172,15 @@ fun renderText(document: PrintDocument): String {
     }
   }
   return lines.joinToString("\n") + "\n"
+}
+
+/**
+ * A double-size left-aligned two-column line laid out for `columns / size` (TOTAL and its amount) as plain text spans: the gap between its
+ * label and its amount widens so the amount ends at the right edge, as it does on paper.
+ */
+private fun spreadLargeLine(text: String, size: Int, columns: Int): String {
+  if (size <= 1) return text
+  val match = Regex("""^(.*\S)\s{2,}(\S+)$""").find(text) ?: return text
+  val (left, right) = match.destructured
+  return left + " ".repeat(maxOf(1, columns - left.length - right.length)) + right
 }

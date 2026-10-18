@@ -155,6 +155,8 @@ class AutomationDataTest {
     assertEquals("3/25 workflows on your plan", quotaReadout(3, 25, ready = true, noun = "workflow"))
     assertEquals("3/∞ workflows on your plan", quotaReadout(3, null, ready = true, noun = "workflow"))
     assertEquals("1 workflow · checking your plan…", quotaReadout(1, null, ready = false, noun = "workflow"))
+    assertEquals("4/25 workflows on your plan · 1 deleted still counts", quotaReadout(4, 25, ready = true, noun = "workflow", deleted = 1))
+    assertEquals("5/25 workflows on your plan · 2 deleted still count", quotaReadout(5, 25, ready = true, noun = "workflow", deleted = 2))
     val plan = entitlementsOf(Json.parseToJsonElement("""{"features":{"actions":true,"webhooks":false},"quotas":{"workflowsPerHost":25,"actionRunsPerMonth":null}}"""))
     assertTrue(plan.has("actions"))
     assertFalse(plan.has("webhooks"))

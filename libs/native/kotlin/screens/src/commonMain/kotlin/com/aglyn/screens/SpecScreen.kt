@@ -167,6 +167,13 @@ fun SpecScreen(
   model.createPasskey = if (session.passkeyRelyingParty != null) passkeys else null
   LaunchedEffect(key) { if (seed != null) model.seed(seed) else model.load() }
   LaunchedEffect(session.claims) { model.rebase(base) }
+  // A title drawn from the data (`{data.jobs.jobs[id=params.jobId].brief|'AI job'}`) replaces the registered one in the top
+  // bar once the data is in.
+  val screenTitle = com.aglyn.ui.LocalScreenTitle.current
+  if (!embedded && screenTitle != null && '{' in spec.title) {
+    val rendered = if (model.phase == ScreenModel.Phase.Ready) ScreenValues.render(spec.title, model.context).trim().ifEmpty { null } else null
+    LaunchedEffect(rendered) { screenTitle.value = rendered }
+  }
   var selection by remember(key) { mutableStateOf<Selection?>(null) }
   val split = !embedded && spec.blocks.any { it.type == "list" && it.flag("split") && it["open"] != null }
   val wide = currentWidthClass() != WidthClass.COMPACT

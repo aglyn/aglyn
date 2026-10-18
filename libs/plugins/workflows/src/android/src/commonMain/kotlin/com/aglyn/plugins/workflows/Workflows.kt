@@ -110,7 +110,7 @@ fun WorkflowsSection(context: NativePluginContext, hostId: String, entitlements:
           else -> open(AutomationTarget.Workflow(null))
         }
       }
-      Caption(quotaReadout(count, entitlements?.limit("workflowsPerHost"), entitlements != null, "workflow"), Modifier.testTag("workflow-quota"))
+      Caption(quotaReadout(count, entitlements?.limit("workflowsPerHost"), entitlements != null, "workflow", deleted = count - rows.size), Modifier.testTag("workflow-quota"))
     },
   ) { row ->
     AutomationRow(
