@@ -183,8 +183,12 @@ The upload re-signs for the App Store (cloud-managed distribution signing), so
 testers' devices never need registering.
 
 The build number (`CURRENT_PROJECT_VERSION`) is the UTC time as
-`yyyyMMddHHmm`, so every archive outnumbers the last; `MARKETING_VERSION`
-stays `0.1.0` until a store release. The upload goes to App Store Connect
+`yyyyMMddHHmm`, so every archive outnumbers the last. The version is the
+repo's, the root `package.json`'s (`npm run release:prepare` bumps it), so an
+app build and the web name one release: Apple takes only numbers as
+`MARKETING_VERSION`, so it gets the core (`1.0.0` for `1.0.0-beta.266`), and the
+whole string goes in Info.plist as `AGLYN_VERSION`, which Settings › About shows
+and the push device row and Besigner marker carry. The upload goes to App Store Connect
 (records "Aglyn" and "Aglyn POS") and shows in TestFlight once processed.
 
 ## What Zach owes

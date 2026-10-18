@@ -11,6 +11,14 @@ fun setting(name: String, fallback: String): String =
     ?: System.getenv("AGLYN_" + name.replace(Regex("([A-Z])"), "_$1").uppercase())
     ?: fallback
 
+/**
+ * The repo's release version, the root package.json's (`npm run release:prepare` bumps it), so the app and the web
+ * name one release. Read through a provider so the configuration cache sees the file as an input.
+ */
+val repoVersion: String = providers.fileContents(rootProject.layout.projectDirectory.file("../../package.json")).asText.get()
+  .let { Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(it)?.groupValues?.get(1) }
+  ?: error("no version in the root package.json")
+
 fun quoted(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 kotlin { jvmToolchain(21) }
@@ -26,7 +34,7 @@ android {
     // Every store upload needs a higher code: tools/scripts/native-release.mjs passes
     // -Paglyn.versionCode=<minutes since 1970, UTC>, which stays under Play's 2,100,000,000 for millennia.
     versionCode = setting("versionCode", "1").toInt()
-    versionName = "0.1.0"
+    versionName = setting("versionName", repoVersion)
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     // The console host whose sign-up, verification and reset links open the app (App Links, verified by the console's
     // assetlinks.json).
