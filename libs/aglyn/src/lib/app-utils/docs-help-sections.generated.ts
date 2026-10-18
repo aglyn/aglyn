@@ -252,6 +252,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#choose-a-workspace': 'If you belong to more than one organization, signing in opens Workspaces: one card per workspace, with its name, its workspace address underneath, and Open, which takes you to its sites.',
     '#daily-digests': 'Weekly summary is on by default. Each Monday morning it emails you how the week before went, Monday to Sunday, for up to five of a workspace\'s busiest sites.',
     '#notification-settings': 'Everything about what reaches you lives on the second section, Settings.',
+    '#notification-sound': 'Pick the sound your notifications make under Notification sound in the Settings section.',
     '#organization-general': 'The General card renames the organization, changes its workspace URL and sets the time zone its sites inherit — "workspace" is the console\'s word for your organization\'s home.',
     '#organization-settings': 'Organization → Settings is where you run the workspace itself: its name and workspace URL under General, then — for owners and admins — Profile, Plugins, API keys, Branding, Single sign-on, Privacy, Holds & reviews…',
     '#recent-activity': 'The Recent Activity card on a site\'s dashboard lists the latest changes made to the site, newest first — who made each one and what it touched, linked straight to it.',
