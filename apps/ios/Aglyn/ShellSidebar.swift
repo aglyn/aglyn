@@ -24,6 +24,9 @@ struct ShellSidebar: View {
         SettingsFilterField(text: $filter)
       }
       SidebarList(scope: scope, filter: filter)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+          if navigation.mode == .main { PlanCard() }
+        }
     }
     .background(AglynColor.sidebar)
     .onChange(of: navigation.mode) { filter = "" }

@@ -105,18 +105,21 @@ public enum AglynRowDensity: Sendable {
   case list
 
   var minHeight: CGFloat {
+    // Compact density (Theming) takes four points off a row, never below the Mac's own 24-point row.
+    let compact: CGFloat = AglynThemeRuntime.shared.isCompact ? 4 : 0
     #if os(macOS)
-      self == .sidebar ? 28 : 36
+      return (self == .sidebar ? 28 : 36) - compact
     #else
-      44
+      return 44 - (self == .sidebar ? compact : 0)
     #endif
   }
 
   var vertical: CGFloat {
+    let compact: CGFloat = AglynThemeRuntime.shared.isCompact ? 2 : 0
     #if os(macOS)
-      self == .sidebar ? 4 : 6
+      return (self == .sidebar ? 4 : 6) - compact
     #else
-      self == .sidebar ? 6 : 8
+      return (self == .sidebar ? 6 : 8) - compact
     #endif
   }
 

@@ -96,6 +96,7 @@ struct AccountSwitchItems: View {
 /// Theme ▸: light, dark or the system's, saved on the account so it follows the person (Theming, Phase 4 adds the rest).
 struct ThemeMenu: View {
   @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
 
   var body: some View {
     if let preferences = model.preferences {
@@ -113,6 +114,9 @@ struct ThemeMenu: View {
           Label("Match system", systemImage: "circle.lefthalf.filled").tag(AppAppearance.system)
         }
         .pickerStyle(.inline)
+        Divider()
+        Button("Theme settings…", systemImage: "paintpalette") { navigation.push(.themeSettings) }
+          .accessibilityIdentifier("account-theme-settings")
       } label: {
         Label("Theme", systemImage: "circle.lefthalf.filled")
       }

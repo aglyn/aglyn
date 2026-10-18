@@ -10,17 +10,30 @@ import SwiftUI
 extension AglynColor {
   /// The workspace rail's ground: the slate of the palette, faint over the page, so the rail reads as the frame and
   /// never as content.
-  public static let rail = adaptive(
-    light: AglynTokens.light.tertiary.main.opacity(0.09), dark: AglynTokens.dark.background.default.opacity(0.6))
-  /// The sidebar's ground beside the rail.
-  public static let sidebar = adaptive(light: AglynTokens.light.background.paper, dark: AglynTokens.dark.background.paper)
+  public static let rail = themed { AglynThemeRuntime.shared.surfaces(dark: $0).rail }
+  /// Words and symbols on the rail.
+  public static let railText = themed { AglynThemeRuntime.shared.surfaces(dark: $0).railText }
+  /// The sidebar's ground beside the rail: the surface, tinted with the accent when the sidebar style is Tinted and a
+  /// theme other than the console's is in force.
+  public static let sidebar = themed { dark in
+    let runtime = AglynThemeRuntime.shared
+    let surface = runtime.surfaces(dark: dark).surface
+    guard runtime.sidebarTinted, runtime.theme.id != "aglyn", let accent = runtime.accentIntent(dark: dark) else { return surface }
+    return blend(surface, accent.main, 0.05)
+  }
   /// A tile with no color of its own: the palette's slate.
   public static let neutralTile = adaptive(light: AglynTokens.light.tertiary.main, dark: AglynTokens.dark.grey[700] ?? .gray)
   /// A count that asks for action (unread, waiting): the secondary intent's fill.
   public static let badge = intent({ $0.secondary }, \.main)
   public static let badgeText = intent({ $0.secondary }, \.contrastText)
-  /// Secondary text, the palette's own.
-  public static let secondaryText = adaptive(light: AglynTokens.light.text.secondary, dark: AglynTokens.dark.text.secondary)
+  /// Secondary text, the theme's own.
+  public static let secondaryText = themed { AglynThemeRuntime.shared.surfaces(dark: $0).textSecondary }
+
+  /// `a` with `t` of `b` mixed in, both opaque.
+  static func blend(_ a: Color, _ b: Color, _ t: Double) -> Color {
+    let (x, y) = (AglynAccent.rgb(a), AglynAccent.rgb(b))
+    return AglynAccent.color(AglynAccent.mix(x, y, t))
+  }
 }
 
 extension Color {
@@ -148,14 +161,14 @@ public struct AglynRailButton: View {
     VStack(spacing: 3) {
       Image(systemName: systemImage)
         .font(.system(size: size * 0.42, weight: .semibold))
-        .foregroundStyle(filled ? AglynColor.primaryContrast : AglynColor.secondaryText)
+        .foregroundStyle(filled ? AglynColor.primaryContrast : AglynColor.railText)
         .frame(width: size, height: size)
         .background(
           RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
             .fill(filled ? AglynColor.tint : AglynColor.paper.opacity(0.7)))
       if let caption {
         Text(caption).font(.system(size: 11, weight: .medium)).monospacedDigit()
-          .foregroundStyle(AglynColor.secondaryText).lineLimit(1)
+          .foregroundStyle(AglynColor.railText).lineLimit(1)
       }
     }
   }

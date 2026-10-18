@@ -99,7 +99,7 @@ struct ShellFrame<Content: View>: View {
       }
       .sheet(isPresented: $navigation.showShortcuts) { KeyboardShortcutsSheet() }
       .environment(\.aglynScreenSession, model.screenSession)
-      .preferredColorScheme(model.preferences?.appTheme.appearance.colorScheme)
+      .aglynAppTheme(nonce: navigation.themeNonce)
       .onAppear {
         DebugLaunch.route(navigation)
         #if os(macOS)
@@ -254,6 +254,8 @@ struct AreaView: View {
     let sections = (row?.sections ?? []).filter { model.registry.screen($0.screen) != nil }
     PluginScreenView(screenID: screen, params: params)
       .safeAreaInset(edge: .top, spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
+          Breadcrumbs(row: row)
         if let row, sections.count > 1, !Self.selfSectioned.contains(row.id) {
           ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: AglynSpace.one) {
@@ -270,6 +272,7 @@ struct AreaView: View {
           }
           .background(.bar)
           .accessibilityIdentifier("area-sections-\(row.id)")
+        }
         }
       }
       .toolbar {
@@ -296,6 +299,46 @@ struct AreaView: View {
           }
         }
       }
+  }
+}
+
+/// Where an area sits: its site or workspace, its group, and itself ("Juniper Street Bakery › Sell › Orders"), on the
+/// Mac and iPad, where the title bar shows the area's own name.
+struct Breadcrumbs: View {
+  @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
+  #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+  #endif
+  let row: NativeNavRow?
+
+  var body: some View {
+    #if os(iOS)
+      if sizeClass == .regular { crumbs }
+    #else
+      crumbs
+    #endif
+  }
+
+  @ViewBuilder
+  private var crumbs: some View {
+    let scope = ShellScope(model: model, navigation: navigation)
+    if let row {
+      let group = scope.currentList.groups.first { $0.rows.contains { $0.id == row.id } }?.label
+      let owner = navigation.mode == .main ? (scope.site?.name ?? scope.org?.name) : scope.modeTitle
+      let parts = [owner, group, row.label].compactMap { $0 }
+      HStack(spacing: 6) {
+        ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
+          if index > 0 { Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary) }
+          Text(part).font(AglynFont.caption).foregroundStyle(index == parts.count - 1 ? .primary : .secondary)
+            .lineLimit(1)
+        }
+      }
+      .padding(.horizontal, AglynSpace.two)
+      .padding(.top, AglynSpace.one)
+      .accessibilityElement(children: .combine)
+      .accessibilityIdentifier("breadcrumbs")
+    }
   }
 }
 
@@ -624,6 +667,7 @@ struct AccountSheet: View {
         }
         Section {
           ThemeRow()
+          row("Theme settings", "paintpalette") { navigation.push(.themeSettings) }
           row("Settings", "gearshape") { navigation.push(.settings) }
           if model.registry.screen(AccountPlaces.marketplaceScreen) != nil {
             row("Marketplace", "storefront") { navigation.push(.screen(AccountPlaces.marketplaceScreen, [:])) }

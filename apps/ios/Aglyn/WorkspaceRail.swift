@@ -87,7 +87,7 @@ struct WorkspaceRail: View {
     Text(text.uppercased())
       .font(.system(size: 9, weight: .semibold))
       .kerning(0.6)
-      .foregroundStyle(AglynColor.secondaryText)
+      .foregroundStyle(AglynColor.railText)
       .accessibilityHidden(true)
   }
 

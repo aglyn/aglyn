@@ -15,15 +15,34 @@ public enum AglynColor {
     adaptive(light: pick(AglynTokens.light)[keyPath: part], dark: pick(AglynTokens.dark)[keyPath: part])
   }
 
-  /// The brand tint: the primary intent's readable text color, so a control
-  /// on the page background meets contrast in both modes.
-  public static let tint = intent({ $0.primary }, \.text)
-  public static let primary = intent({ $0.primary }, \.main)
+  /// The brand tint: the accent's readable text color, so a control on the page background meets contrast in both
+  /// modes. The theme's accent when one is chosen (Theming), else the console's primary.
+  public static let tint = accent(\.text)
+  public static let primary = accent(\.main)
   public static let success = intent({ $0.success }, \.text)
   public static let warning = intent({ $0.warning }, \.text)
   public static let error = intent({ $0.error }, \.text)
   public static let info = intent({ $0.info }, \.text)
   public static let secondary = intent({ $0.secondary }, \.text)
+
+  /// The accent in force, part by part: the runtime theme's, else the console's primary intent.
+  public static func accent(_ part: KeyPath<AglynIntent, Color>) -> Color {
+    themed { dark in
+      AglynThemeRuntime.shared.accentIntent(dark: dark)?[keyPath: part]
+        ?? (dark ? AglynTokens.dark.primary : AglynTokens.light.primary)[keyPath: part]
+    }
+  }
+
+  /// A color resolved when it is drawn, from the runtime theme and the appearance.
+  public static func themed(_ resolve: @escaping @Sendable (_ dark: Bool) -> Color) -> Color {
+    #if canImport(UIKit)
+      Color(uiColor: UIColor { traits in UIColor(resolve(traits.userInterfaceStyle == .dark)) })
+    #elseif canImport(AppKit)
+      Color(nsColor: NSColor(name: nil) { appearance in
+        NSColor(resolve(appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua))
+      })
+    #endif
+  }
 
   public static func adaptive(light: Color, dark: Color) -> Color {
     #if canImport(UIKit)
@@ -75,10 +94,10 @@ public enum AglynCSSColor {
 
 extension AglynColor {
   /// The page behind cards: the console's `background.default`.
-  public static let page = adaptive(light: AglynTokens.light.background.default, dark: AglynTokens.dark.background.default)
+  public static let page = themed { AglynThemeRuntime.shared.surfaces(dark: $0).canvas }
   /// A card or sheet surface: the console's `background.paper`.
-  public static let paper = adaptive(light: AglynTokens.light.background.paper, dark: AglynTokens.dark.background.paper)
+  public static let paper = themed { AglynThemeRuntime.shared.surfaces(dark: $0).surface }
   /// Text on a primary fill (a prominent button), the console's `primary.contrastText`.
-  public static let primaryContrast = intent({ $0.primary }, \.contrastText)
-  public static let divider = adaptive(light: AglynTokens.light.divider, dark: AglynTokens.dark.divider)
+  public static let primaryContrast = accent(\.contrastText)
+  public static let divider = themed { AglynThemeRuntime.shared.surfaces(dark: $0).border }
 }

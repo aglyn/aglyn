@@ -63,6 +63,8 @@ struct POSShell: View {
       navigation.picker = .workspace
     }
     .signOutConfirmation(isPresented: $confirmSignOut)
+    // Aglyn POS draws the same theme as the account's Aglyn.
+    .aglynAppTheme(nonce: navigation.themeNonce)
     .onAppear { DebugLaunch.route(navigation) }
   }
 }
