@@ -2367,7 +2367,7 @@ const ABSTRACT_NOUNS = words(
     'management leadership teamwork motivation growth strength service services help advice consulting consultation ' +
     'marriage photography architecture travel transport transportation industry company corporate social e-business ' +
     'fitness workout workouts exercise exercises crossfit sport sports skill skills knowledge exam exams lecture ' +
-    'session lesson course class hobby leisure power energy wellness talent formation participation community ' +
+    'session lesson course class hobby leisure power energy wellness talent formation participation ' +
     'photo photos picture pictures image images shot shots shoot shoots spot spots ' +
     'read write learn study lift move remove focus relax think sit smile laugh eat swim teach enjoy celebrate explore ' +
     'hike can',
@@ -2379,7 +2379,7 @@ const CONCRETE_ABSTRACT_ENDINGS = words(
     'equipment cement city university facility ship warship spaceship airship',
 )
 
-/** Whether a word is an idea or a doing by how it ends: "participation", "community", "empowerment". */
+/** Whether a word is an idea or a doing by how it ends: "participation", "unity", "empowerment". */
 const saysAnIdea = (word: string) =>
   /(?:tion|sion|ment|ness|ity|ship|ism)s?$/.test(word) && !CONCRETE_ABSTRACT_ENDINGS.has(aiStockStem(word))
 

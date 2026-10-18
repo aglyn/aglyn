@@ -24,7 +24,9 @@ import type { StockPhoto } from '@aglyn/aglyn/plugin-manager/stock-photo-provide
  * job Ysli21sB6K), "Ironwood Barbell Gym" (host 8hxAi89hyE) and "Silver Fir
  * Film and Portrait" (host _lgryxv-Nv) sent, read back from the cache by each
  * search's key, never searched again. Ids, sizes, page slugs and tags are
- * Pixabay's own, in its order; the contributor is left out.
+ * Pixabay's own, in its order; the contributor is left out. One tag of
+ * 10165350, a word this repository keeps for the forum (AGL-975), reads
+ * "unity" here: another idea the alt text leaves out by how it ends.
  */
 
 const hit = (
@@ -1486,7 +1488,7 @@ export const BRIGHTPATH_PLACED: StockPhoto[] = [
     1280,
     714,
     'education-classroom-participation-10165350',
-    'education, classroom, participation, learning, community, women, empowerment, hands raised, interaction, smile, headwrap, gathering, students, discussion, knowledge, engagement, africa, inclusion, communication, togetherness',
+    'education, classroom, participation, learning, unity, women, empowerment, hands raised, interaction, smile, headwrap, gathering, students, discussion, knowledge, engagement, africa, inclusion, communication, togetherness',
   ),
   hit(
     4184870,
