@@ -223,7 +223,7 @@ final class AppModel {
   /// The context a plugin's screen or widget is handed in one window.
   func context(for navigation: ShellNavigation) -> NativePluginContext? {
     guard let user = auth?.user, let reader, let api else { return nil }
-    return NativePluginContext(
+    var context = NativePluginContext(
       uid: user.uid,
       orgID: workspace?.org?.id,
       hostID: scopedSite(navigation)?.id,
@@ -249,6 +249,10 @@ final class AppModel {
         guard let self, let navigation else { return }
         self.open(link, in: navigation)
       })
+    context.sites = (workspace?.sites ?? []).map {
+      NativeSiteRef(id: $0.id, name: $0.name, subdomain: $0.subdomain, role: $0.role)
+    }
+    return context
   }
 
   /// Opens a console link (universal link, `aglyn://`, a notification's

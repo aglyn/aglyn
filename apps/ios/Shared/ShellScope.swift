@@ -49,7 +49,7 @@ struct ShellScope {
         guard let screen = model.registry.screen(row.screen) else { return false }
         // A whole-workspace row whose screen reads one site at a time waits for that screen's workspace view (navcore
         // 2026-10-18): it is left out rather than asking for a site.
-        return !(wholeWorkspace && screen.requiresSite)
+        return !(wholeWorkspace && screen.needsSite)
       }
       return next.rows.isEmpty && next.dynamic == nil ? nil : next
     }

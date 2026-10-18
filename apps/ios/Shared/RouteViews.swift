@@ -40,7 +40,7 @@ struct PluginScreenView: View {
           "Not available", systemImage: "lock",
           message: "This page is for Aglyn staff whose role includes it.")
         .navigationTitle(screen.title)
-      } else if screen.requiresSite && context.hostID == nil {
+      } else if screen.needsSite && context.hostID == nil {
         AglynEmptyState(
           "Pick a site", systemImage: "globe",
           message: "\(screen.title) shows one site at a time."
