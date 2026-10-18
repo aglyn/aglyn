@@ -22,19 +22,15 @@ import {
 } from '@aglyn/aglyn/app-utils/consent-groups'
 import {
   emailUnverifiedResponse,
-  eraseHost,
   firebaseAdmin,
   getOrgForHost,
   isImpersonationSession,
   lockdownRefusal,
-  logOrgActivity,
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
-import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
-import { dropDeletedSiteCache } from '../../../../utils/server/tenant-revalidate'
+import { eraseSiteAndRecord } from '../../../../utils/server/erase-site'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * What the site's admin is told when its consent group still needs it
@@ -174,96 +170,21 @@ async function handler(request: Request): Promise<Response> {
     )
     if (hold) return consentGroupHoldResponse(hold)
 
-    /*==========================================
-     * READ BEFORE THE ERASE, LOG AFTER IT (AGL-118).
-     *
-     * Both halves of that are forced, and by different things.
-     *
-     * READ FIRST because `eraseHost` drops the site's entry from the owning
-     * org's `hosts` map, so `getOrgForHost` answers null the moment it
-     * returns — an entry composed afterwards has no workspace to be filed
-     * under and no name to call the site. Taken off the snapshot this handler
-     * already holds, so it costs no read.
-     *
-     * LOG AFTER because an entry written first would be a claim about a
-     * deletion that had not happened yet, and `eraseHost` can throw — this
-     * handler's catch answers 500 and the site is still there. The audit
-     * trail must not be the one place that says otherwise.
-     *=========================================*/
-    const owningOrgId = hostSnapshot.get('orgId') as string | undefined
-    const deletedName =
-      (hostSnapshot.get('displayName') as string | undefined) ?? hostId
-
-    /*==========================================
-     * THE SENDING DOMAIN GOES WITH THE SITE, AND `eraseHost` OWNS THAT NOW.
-     *
-     * The read-before / release-after dance used to live here, which made
-     * this route the ONLY way a site could stop existing and have its Resend
-     * domain and its zone records released. Every other path — a workspace
-     * erasure, and the per-host erasures inside one — left a plan-capped
-     * provider slot spent forever and a live DKIM key in the zone under a
-     * label a future site could claim and inherit a stranger's signature
-     * from.
-     *
-     * So the ordering moved into `eraseHost`, which is what both paths share,
-     * and this route's part is the one thing it has that a library cannot:
-     * the credentials. `teardownSendingDomain` reads a full-access mail key
-     * and a DNS token, neither of which the tenant runtime may hold, so it is
-     * passed IN rather than imported by the library.
-     *
-     * A vendor that refuses does not fail the delete. The customer asked for
-     * the site to go and it has gone; what is owed is recorded on the label
-     * claim and `/api/admin/reap-sending-domains` collects it.
-     *=========================================*/
-    await eraseHost(hostId, { tearDownSendingDomain: teardownSendingDomain })
-
-    /*==========================================
-     * THE LIVE SITE STOPS SERVING NOW, NOT IN AN HOUR (AGL-3386).
-     *
-     * Its pages are ISR-cached for an hour and its names are cached to its
-     * id for as long, so without this a deleted site went on answering from
-     * cache for the rest of the window. Dropped from the snapshot read above
-     * — the routing map, the subdomain, the custom domain — because the
-     * document it came from is gone, and AFTER the erase, because a visitor
-     * arriving between a drop and the erase would re-cache the page from
-     * documents that still existed. Best effort: the site is deleted either
-     * way, and the hour is the backstop.
-     *=========================================*/
-    await dropDeletedSiteCache(hostSnapshot)
-
-    /*==========================================
-     * TO THE ORG'S FEED, NOT THE SITE'S.
-     *
-     * The site's own log is `hosts/{hostId}/activity`, which is inside the
-     * tree `eraseHost` just recursive-deleted. An entry there would be
-     * written into a document path that no longer exists, resurrecting a
-     * fragment of a site the customer asked us to destroy — and no reader
-     * would ever see it, because the surface that reads that collection is
-     * the site's own page.
-     *
-     * A destroyed site's last event therefore belongs to the workspace that
-     * owned it, which is also where somebody asking "where did our site go"
-     * is looking. An orphaned host names no workspace, and there is no
-     * honest feed to file it under; the `adminAudit` row below still records
-     * it for staff.
-     *=========================================*/
-    if (owningOrgId) {
-      await logOrgActivity(
-        owningOrgId,
-        { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
-        'Deleted a site',
-        { type: 'host', id: hostId, name: deletedName },
-      )
-    }
-
-    await addAdminAudit(firebaseAdmin.app().firestore(), {
-      actorUid: decoded.uid,
-      action: 'host.deleted',
-      target: `hosts/${hostId}`,
-      before: { displayName: hostSnapshot.get('displayName') ?? null },
-      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-    })
-      .catch(() => undefined)
+    /*
+     * The erase and its record, in the order every server deletion shares
+     * (`utils/server/erase-site.ts`, AGL-3936): the site's name and workspace
+     * read from this snapshot first, `eraseHost` with this app's sending-domain
+     * teardown, the tenant's cached pages and names dropped, then the
+     * workspace's feed and the staff audit.
+     */
+    await eraseSiteAndRecord(
+      { id: hostId, get: (field) => hostSnapshot.get(field) },
+      {
+        actor: { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
+        activity: 'Deleted a site',
+        auditActorUid: decoded.uid,
+      },
+    )
 
     return Response.json({ ok: true }, { status: 200 })
   } catch (error) {

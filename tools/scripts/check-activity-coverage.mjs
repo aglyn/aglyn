@@ -104,7 +104,11 @@ const MUTATION_PATHS = [
   'apps/console/app/api/orgs/roles/route.ts',
   'apps/console/app/api/orgs/settings/route.ts',
   'apps/console/app/api/hosts/create/route.ts',
-  'apps/console/app/api/hosts/delete/route.ts',
+  // Deleting a site: the delete route and `core.site-erase` (the AI beat's
+  // removal of an empty site, AGL-3936) both run this module's
+  // `eraseSiteAndRecord`, which is where the feed entry is written. The
+  // route's own entry is held by `app/api/hosts/delete/route.spec.ts`.
+  'apps/console/utils/server/erase-site.ts',
   'apps/console/app/api/hosts/rename/route.ts',
   'apps/console/app/api/hosts/members/route.ts',
   'apps/console/app/api/hosts/resources/route.ts',

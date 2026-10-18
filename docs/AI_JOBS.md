@@ -2400,6 +2400,62 @@ running it.
   ladder lets staff through; the beat has no caller. A reader that cannot answer
   is not a pause, as the lockdown reads fail open.
 
+### The empty site a stopped start left (AGL-3936)
+
+Since AGL-3859 a site is created only when its start is admitted (the starter,
+Skip, or Plan my site). A site start cancelled or failed before it built
+anything left that site empty and public ("This site is coming soon") once the
+person left the build page without choosing Start again, Try again or Use the
+starter. Zach's decision (2026-10-18): after about an hour the empty site is
+REMOVED, and Create site is offered again; the starter is still written only
+when a person chooses it (`jobs/ai-empty-site-sweep.ts`).
+
+- **The marker.** Every write that ends a job `canceled` or `failed` (the
+  cancel door, a step's record, a finish or failure a pending cancel turned
+  into the cancel, a claim after an abandoned lease) calls
+  `scheduleAiEmptySiteSweep`. For a `site` job whose outputs hold nothing but
+  the `seo` listing proposal (`aiJobLeavesEmptySite`, the rule
+  `aiSiteStarterFallbackOffered` offers the starter by) it writes
+  `aiEmptySiteSweeps/{hostId}`: `hostId`, `orgId`, `jobId`, `status`,
+  `settledAt`, `dueAt` = settle + `AI_EMPTY_SITE_GRACE_MS` (1 h), `attempts`.
+  Server-only: the rules deny every client, staff included. A new job on the
+  site (`createAiJob`), a resume and a retry drop it.
+- **The beat decides it.** Before its sweep, each beat reads the markers due
+  (`dueAt <= now`, oldest first, `AI_EMPTY_SITE_SWEEP_MAX` = 3, inside
+  `AI_EMPTY_SITE_SWEEP_BUDGET_MS`), and the time they took comes off the
+  sweep's budget. `aiEmptySiteVerdict` reads everything again: the site exists
+  in the marker's workspace with no custom domain, no sending domain, no
+  routed page and no staff hold; the job is still the one that ended, still
+  ended and still built nothing (one that settled again waits a full hour from
+  then); no other job names the site; nothing in `screens` (pages and emails),
+  `layouts`, `forms`, `media`, `components`, `templates`, `collections`,
+  `redirects` or `pluginSettings`; and the site's feed holds only "Created the
+  site" and `ai.job.*` entries. Anything else keeps the site and drops the
+  marker. The visitors' `analytics` beacon is not a reason to keep it.
+- **The delete is the console's.** An empty site is deleted through
+  `core.site-erase` (`@aglyn/aglyn/plugin-manager/plugin-site-erase`), which the
+  console registers at boot (`utils/server/erase-site.ts`): the same
+  `eraseSiteAndRecord` the delete route runs — `eraseHost` with the console's
+  sending-domain teardown (Storage, `hostIndex`, the org's `hosts` map and
+  pooled seats, every member's projection, the Firestore tree), the tenant's
+  cached pages and names, "Removed an empty site" in the workspace feed with
+  no actor, and a `host.deleted` audit row by `system:cron` with the reason
+  `ai-start-empty`. A site in a consent group is kept. Once the site is gone
+  the job gets `siteRemoved: { at, name }` (`siteRemoved: true` on the wire).
+  An eraser that cannot answer is tried again 15 minutes later, five times.
+- **Coming back.** The site's own address is gone, so the console shows "This
+  site doesn't exist anymore". The job stays in the AI jobs drawer, which says
+  "Nothing was built, so the empty site was removed." with Start again: it
+  opens Create site (`/{org}/hosts?create=site`) with the start's answers,
+  handed over in the tab's session storage (`model/ai-site-start-handoff.ts`),
+  and the site's name and address asked again. The build page, if it is ever
+  drawn for such a job, says the same.
+- **Proved by** `jobs/ai-empty-site-sweep.spec.ts` (the production shapes:
+  kc-x-carder cancelled 13 s in with its plan pending and 0 credits, a failed
+  start, one started again, one with a layout written), `ai-jobs.spec.ts` (the
+  marker from each write that ends a job), and
+  `ai-empty-site-sweep.emulator.spec.ts` (the real queries and `eraseHost`).
+
 ## Running a guided start locally
 
 The live plan eval (`ai-job-site-plan-live.spec.ts`) covers the plan step only.

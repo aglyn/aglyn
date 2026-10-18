@@ -22,6 +22,7 @@
 // firebase-admin, so the edge bundle is unaffected.
 import { registerPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { registerPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
+import { registerPluginSiteEraser } from '@aglyn/aglyn/plugin-manager/plugin-site-erase'
 import { registerPluginTrustSigner } from '@aglyn/aglyn/plugin-manager/plugin-trust-signing'
 import { registerPluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
 
@@ -109,6 +110,23 @@ export async function register(): Promise<void> {
          */
         const { consoleSiteCache } = await import('./utils/server/site-cache-drop')
         return await consoleSiteCache.drop(request)
+      },
+    },
+    { pluginId: 'console' },
+  )
+
+  /*
+   * And deleting a site the way its admin does (AGL-3936): the AI jobs beat
+   * removes the empty site a cancelled or failed guided start left, and the
+   * erase, the sending-domain teardown, the cache drop and the record are
+   * the delete route's own path, which only this app holds the credentials
+   * for. Deferred by RELATIVE path, as the cache above is.
+   */
+  registerPluginSiteEraser(
+    {
+      erase: async (request) => {
+        const { consoleSiteEraser } = await import('./utils/server/erase-site')
+        return await consoleSiteEraser.erase(request)
       },
     },
     { pluginId: 'console' },

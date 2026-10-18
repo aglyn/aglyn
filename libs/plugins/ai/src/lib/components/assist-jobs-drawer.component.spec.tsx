@@ -44,8 +44,10 @@ jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   __esModule: true,
   HelpTip: () => null,
-  AppLink: ({ href, children }: { href: string; children: unknown }) => (
-    <a href={href}>{children as string}</a>
+  AppLink: ({ href, children, onClick }: { href: string; children: unknown; onClick?: () => void }) => (
+    <a href={href} onClick={onClick}>
+      {children as string}
+    </a>
   ),
   MdiIcon: () => <span />,
 }))
@@ -386,6 +388,44 @@ describe('a guided start that failed on our side (AGL-3596)', () => {
     expect(aiJobRestartHref({ ...FAILED_SITE, status: 'running' } as never, at)).toBeNull()
     expect(aiJobRestartHref(FAILED_SITE as never, { ...at, hostId: 'host-2' })).toBeNull()
     expect(aiJobRestartHref({ ...FAILED_SITE, siteInputs: null } as never, at)).toBeNull()
+  })
+})
+
+describe('a guided start whose empty site was removed (AGL-3936)', () => {
+  const REMOVED = job({
+    kind: 'site',
+    status: 'canceled',
+    running: false,
+    brief: 'A site for a trading card shop.',
+    steps: [
+      { name: 'plan', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+      { name: 'generate', status: 'pending', startedAt: null, endedAt: null, creditsSpent: 0, error: null },
+    ],
+    siteInputs: { businessType: 'trading card shop', pages: 3 },
+    siteRemoved: true,
+  })
+
+  beforeEach(() => window.sessionStorage.clear())
+
+  it('says the empty site was removed, and Start again opens Create site with its answers', async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.startsWith('/api/ai/jobs?orgId=org-1')) return jsonResponse({ jobs: [REMOVED] })
+      throw new Error(`unarmed request to ${url}`)
+    })
+    renderDrawer()
+    fireEvent.click(screen.getByLabelText('Show AI jobs'))
+    expect(await screen.findByText('Nothing was built, so the empty site was removed.')).toBeTruthy()
+    const again = screen.getByRole('link', { name: 'Start again' })
+    expect(again.getAttribute('href')).toBe('/acme/hosts?create=site')
+    // jsdom does not navigate; the click's own handler is what is under test.
+    again.addEventListener('click', (event) => event.preventDefault())
+    fireEvent.click(again)
+    expect(JSON.parse(window.sessionStorage.getItem('aglyn:ai-site-start:answers') ?? '{}').inputs).toEqual({
+      businessType: 'trading card shop',
+      pages: 3,
+    })
+    // The site's build page is gone, so its Try again is not offered.
+    expect(screen.queryByText('Try again')).toBeNull()
   })
 })
 
