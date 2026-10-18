@@ -256,14 +256,6 @@ describe('the one box answers only what the caller may open', () => {
     expect(offSite.body.groups.map((group) => group.group)).not.toContain('contacts')
   })
 
-  it('finds screens and settings from the nav manifest, by plugin and role', async () => {
-    const result = await runOneBoxSearch(input({ text: 'billing', orgId: 'org-a' }))
-    if (result.status !== 200) throw new Error(result.error)
-    const screens = result.body.groups.find((group) => group.group === 'appScreens')
-    expect(screens?.rows.map((row) => row.label)).toEqual(expect.arrayContaining(['Plan', 'Invoices']))
-    expect(screens?.rows.find((row) => row.label === 'Plan')?.screen).toBe('core.billing')
-  })
-
   it('pages one group with a cursor', async () => {
     const docs = world()
     for (let i = 0; i < 12; i += 1) docs[`hosts/site-a/screens/p${String(i).padStart(2, '0')}`] = { displayName: `Acme page ${i}`, versionId: 'v' }

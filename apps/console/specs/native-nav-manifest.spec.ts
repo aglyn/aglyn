@@ -43,11 +43,11 @@ import {
   listConsoleWidgets,
   resetPluginServicesForTests,
 } from '@aglyn/aglyn'
-import {
-  NATIVE_NAV_MANIFEST,
-  type NativeNavConsoleRef,
-  type NativeNavList,
-  type NativeNavRow,
+import type {
+  NativeNavConsoleRef,
+  NativeNavList,
+  NativeNavManifest,
+  NativeNavRow,
 } from '@aglyn/aglyn/app-utils/native-nav'
 import hostNavTabItems from '../constants/host-nav-tabs'
 import orgNavTabItems from '../constants/org-nav-tabs'
@@ -56,6 +56,17 @@ import { setupSections } from '../app/(app)/[orgSlug]/hosts/[host]/setup/setup-s
 
 const ROOT = resolve(__dirname, '../../..')
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8')
+
+/**
+ * The manifest the apps read: the core's lists with every plugin's rows
+ * placed, as `generate:native-contracts` assembles it (its `--check` keeps
+ * the file current). Read from disk, so this app spec imports no plugin.
+ */
+const NATIVE_NAV_MANIFEST = (
+  JSON.parse(read('libs/native/contracts/contracts.generated.json')) as {
+    NATIVE_NAV_MANIFEST: NativeNavManifest
+  }
+).NATIVE_NAV_MANIFEST
 
 const plugins = (
   JSON.parse(read('plugins.config.json')) as {
@@ -251,6 +262,37 @@ describe('every console place is placed', () => {
       expect([row.id, consoleLabel(row.console)]).toEqual([row.id, row.label])
       for (const section of row.sections ?? []) {
         expect([row.id, section.console.surface]).toEqual([row.id, 'orgPluginSection'])
+      }
+    }
+  })
+})
+
+describe('every plugin’s rows are assembled', () => {
+  it('every plugin with a native-nav module is a part of the assembled manifest', () => {
+    const config = JSON.parse(read('tools/scripts/native-contracts.json')) as {
+      assembled: { NATIVE_NAV_MANIFEST: { parts: string[] } }
+    }
+    const modules = readdirSync(join(ROOT, 'libs/plugins'))
+      .map((dir) => `libs/plugins/${dir}/src/lib/native-nav.ts`)
+      .filter((path) => {
+        try {
+          read(path)
+          return true
+        } catch {
+          return false
+        }
+      })
+    expect([...config.assembled.NATIVE_NAV_MANIFEST.parts].sort()).toEqual(modules.sort())
+  })
+
+  it('a plugin’s rows name that plugin', () => {
+    const config = JSON.parse(read('tools/scripts/native-contracts.json')) as {
+      assembled: { NATIVE_NAV_MANIFEST: { parts: string[] } }
+    }
+    for (const part of config.assembled.NATIVE_NAV_MANIFEST.parts) {
+      const plugin = part.split('/')[2]
+      for (const match of read(part).matchAll(/pluginId: '([^']+)',\n\s+order/g)) {
+        expect([part, match[1]]).toEqual([part, plugin])
       }
     }
   })

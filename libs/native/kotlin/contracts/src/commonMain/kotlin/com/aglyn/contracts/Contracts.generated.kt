@@ -1329,6 +1329,13 @@ internal object NativeNavConsoleSurfaceSerializer :
     RawEnumSerializer<NativeNavConsoleSurface>("com.aglyn.contracts.NativeNavConsoleSurface", NativeNavConsoleSurface.entries, NativeNavConsoleSurface.UNKNOWN, { it.raw })
 
 @Serializable
+data class NativeNavContribution(
+    val group: String,
+    val list: NativeNavListId,
+    val row: NativeNavRow,
+)
+
+@Serializable
 data class NativeNavElsewhere(
     val console: NativeNavConsoleRef,
     val where: String,
@@ -1386,6 +1393,7 @@ data class NativeNavRow(
     val id: String,
     val keywords: List<String>? = null,
     val label: String,
+    val order: Double? = null,
     val params: Map<String, String>? = null,
     val pluginId: String? = null,
     val requiresHostAdmin: Boolean? = null,

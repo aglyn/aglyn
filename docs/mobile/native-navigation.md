@@ -20,7 +20,7 @@ Never hand-edit the generated files.
 
 | contract | source | what the apps get |
 | -- | -- | -- |
-| nav manifest | `libs/aglyn/src/lib/app-utils/native-nav.ts` | `ContractValues.nativeNavManifest` (`NativeNavManifest`), `nativeNavShellScreens`; `resolveNavList` cases |
+| nav manifest | the core's lists and rows in `libs/aglyn/src/lib/app-utils/native-nav.ts`; each plugin's rows in `libs/plugins/<plugin>/src/lib/native-nav.ts` (`NATIVE_NAV_ROWS`, `NATIVE_NAV_ELSEWHERE`) | `ContractValues.nativeNavManifest` (`NativeNavManifest`, assembled by the generator), `nativeNavShellScreens`; `resolveNavList` cases |
 | account preferences | `libs/aglyn/src/lib/app-utils/account-preferences.ts` | the `users/{uid}` field names, caps and defaults; `AccountItemRef`, `StarredItem`, `RecentItem`, `AppThemePrefs`, `RailWorkspaces`, `WorkspaceColor` and their enums; cases for every rule |
 | one-box search | `libs/aglyn/src/lib/app-utils/one-box-search.ts` | `ONE_BOX_SEARCH_PATH`, `OneBoxResponse`, `OneBoxGroup`, `OneBoxRow`; `searchNavScreens` cases |
 
@@ -34,7 +34,16 @@ from the console's answers.
 
 ### The nav manifest
 
-`NATIVE_NAV_MANIFEST.lists` holds four lists. Each list has groups, and each
+The core never names a plugin (`docs/PACKAGES.md` rule 3,
+`check:plugin-domain-in-core`). So the core module holds the lists, the
+groups and the core's own rows, and each plugin declares its own rows and the
+list and group each one goes in (`NativeNavContribution`), placed by `order`.
+The generator's `assembled` step in `tools/scripts/native-contracts.json`
+runs `assembleNativeNav(core, rows, elsewhere)` over every listed plugin
+module. That is the manifest in `contracts.generated.json`. The drift spec
+requires every plugin with a `native-nav.ts` to be listed there.
+
+The manifest holds four lists. Each list has groups, and each
 group has rows:
 
 - `workspace`: the sidebar for the whole workspace.
@@ -80,7 +89,11 @@ and says where each went: the site Dashboard is the site's Home, Setup and
 Admin are Site settings, POS is the Aglyn POS app, Team, Billing and Settings
 are Workspace settings, and Support is the help menu.
 
-To draw a list, call `resolveNavList(listId, enabledPluginIds, hostAdmin)`.
+To draw a list, call `resolveNavList(manifest, listId, enabledPluginIds,
+hostAdmin)`, with `ContractValues.nativeNavManifest` as `manifest`. In the
+cases file, `resolveNavList` and `searchNavScreens` name
+`leadingValue: NATIVE_NAV_MANIFEST`: each case's `args` leave the manifest
+out, and a replay passes it first.
 It drops the rows and sections of plugins that are off and the admin rows a
 non-admin may not open. Pass the site's effective plugins in site scope
 (`resolveHostEnabledPlugins` from the ported switchboard, already in both
@@ -176,7 +189,7 @@ now:
 
 | piece | Apple | Kotlin | reads / writes | reuses | new |
 | -- | -- | -- | -- | -- | -- |
-| The one box (⌘K): search and switching in one place | the title bar field and ⌘K palette | the top bar field and Ctrl+K on desktop | `GET /api/search` (§5) with the ID token; `OneBoxResponse` | `ConsoleAPIClient` / Ktor API client; deep-link resolution of `row.link` (`context.openLink`, `model.open`); the switcher's selection for workspace and site rows | the box, grouped results, "Show more" per group (`group`, `cursor`), back, forward and history |
+| The one box (⌘K): search and switching in one place | the title bar field and ⌘K palette | the top bar field and Ctrl+K on desktop | `GET /api/search` (§5) with the ID token; `OneBoxResponse`; plus the local `searchNavScreens` group | `ConsoleAPIClient` / Ktor API client; deep-link resolution of `row.link` (`context.openLink`, `model.open`); the switcher's selection for workspace and site rows | the box, grouped results, "Show more" per group (`group`, `cursor`), back, forward and history |
 | Starred and Recents | ☆ in each screen's title bar; the Starred group; Home's recents | the same | `starred`, `recents` (`toggleStarred`, `setStarColor`, `recordRecent`) | — | all of it |
 | Home: what needs you | rework of `HomeView` | rework of `HomeScreen` | orders by status, unanswered inbox, today's bookings, failed payments, finished AI jobs (the data the apps already list) | existing list screens, opened with their filters | the "Needs you" lines; recents as cards; the one-line AI prompt that opens the existing Create with AI flow |
 | Create new | "+" on the rail; the center tab on phones | the same | role and plan | each area's own create form, shown as a sheet | the menu, with a blocked item shown disabled and its reason (`PrerequisiteNotice` rules) |
@@ -201,8 +214,6 @@ now:
   - `workspaces`, from the caller's `users/{uid}/orgs`, in every workspace;
   - `sites`, from `users/{uid}/hostMemberships`, narrowed to `orgId` when one
     is sent, otherwise every site;
-  - `appScreens`, the screens and settings from the nav manifest
-    (`searchNavScreens`), which costs no read;
   - under a site, the console palette's own groups: pages, emails,
     components, layouts, templates, content and authors;
   - every plugin's search sources: CRM contacts, leads, companies, deals,
@@ -210,8 +221,11 @@ now:
     workflows.
   - Each row carries a console `link`. The apps open it through their
     deep-link grammar, so a record opens on its native screen and a Besigner
-    page opens in the in-app Besigner. Screens-and-settings rows carry
-    `screen` and `params` instead.
+    page opens in the in-app Besigner.
+  - The screens-and-settings group (`appScreens`) is the apps' own:
+    `searchNavScreens(ContractValues.nativeNavManifest, q, scope,
+    enabledPluginIds, hostAdmin)` answers it with no read, and the box shows
+    it beside the route's groups. Its rows carry `screen` and `params`.
 - **Who sees what:** the Admin SDK bypasses the rules, so the engine applies
   every gate itself:
   - reads are keyed to the token's uid;

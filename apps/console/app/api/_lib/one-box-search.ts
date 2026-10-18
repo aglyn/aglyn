@@ -16,10 +16,8 @@
  */
 
 import {
-  ONE_BOX_SCREENS_GROUP,
   ONE_BOX_WORKSPACES_GROUP,
   pageOneBoxGroup,
-  searchNavScreens,
   type OneBoxGroup,
   type OneBoxResponse,
   type OneBoxRow,
@@ -67,8 +65,9 @@ import { buildRoute, Route } from '../../../constants/route-links'
  * instead, on the index its list already uses, so no index is new.
  *
  * On top it answers what only a server can: the person's workspaces and
- * sites ACROSS every workspace (the switcher half of the one box) and the
- * app's own screens and settings, from the nav manifest.
+ * sites ACROSS every workspace (the switcher half of the one box). The app's
+ * own screens and settings are the apps' to answer, from the nav manifest
+ * they hold (`searchNavScreens`), with no read.
  *
  * ## Who sees what
  *
@@ -282,18 +281,6 @@ export async function runOneBoxSearch(input: OneBoxSearchInput): Promise<OneBoxS
       }
     },
   })
-
-  if (orgId) {
-    plans.push({
-      meta: { group: ONE_BOX_SCREENS_GROUP, heading: 'Screens and settings', noun: 'screens' },
-      order: 15,
-      run: async () => ({
-        scored: searchNavScreens(query, hostId ? 'site' : 'workspace', enabled, hostRole === 'admin'),
-        searched: 0,
-        truncated: false,
-      }),
-    })
-  }
 
   const linkContext = { orgSlug, hostSubdomain: hostSubdomain || null }
   const tokens = hostId && org

@@ -36,8 +36,7 @@ import { runOneBoxSearch, type OneBoxDoc, type OneBoxStore } from '../_lib/one-b
 
 /**
  * `GET /api/search` — the native apps' one box (AGL-3943): the person's
- * workspaces and sites across every workspace, the app's screens and
- * settings, and the records of the workspace or site they stand in, grouped
+ * workspaces and sites across every workspace, and the records of the workspace or site they stand in, grouped
  * and paged. See `_lib/one-box-search.ts` for what is read and who sees it,
  * and `@aglyn/aglyn/app-utils/one-box-search` for the request and payload.
  *
