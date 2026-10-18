@@ -217,14 +217,6 @@ public enum ScreenValues {
   public static func activityActionLabel(_ stored: String) -> String {
     let action = stored.trimmingCharacters(in: .whitespacesAndNewlines)
     if let label = ContractValues.shared.duplicateActivityActionLabels[action] { return label }
-    // A workflow run's legacy prose names its trigger by its event key (`Action ran on formSubmission`): the key
-    // reads as the event's declared label, as the console's run history names it.
-    if let match = action.range(of: #"^Action ran on [A-Za-z][\w-]*"#, options: .regularExpression) {
-      let event = String(action[match].dropFirst("Action ran on ".count))
-      let label = hostEventLabel(event)
-      let words = label == event ? label : label.prefix(1).lowercased() + label.dropFirst()
-      return "Action ran on \(words)\(action[match.upperBound...])"
-    }
     guard action.range(of: #"^[a-z][\w-]*(\.[\w-]+)+$"#, options: [.regularExpression, .caseInsensitive]) != nil else {
       return action.prefix(1).uppercased() + action.dropFirst()
     }
