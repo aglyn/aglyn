@@ -115,6 +115,21 @@ final class WorkspaceStoreTests: XCTestCase {
     _ = restored
   }
 
+  /// After this person creates a workspace the lists are read again at once (AGL-3920), and what is shown stays meanwhile.
+  func testReloadReadsTheListsAgainAndKeepsWhatIsShown() {
+    let reader = FakeReader()
+    let store = WorkspaceStore(uid: "u1", reader: reader, defaults: UserDefaults(suiteName: "workspace-\(UUID().uuidString)")!)
+    store.start()
+    reader.emit("users/u1/orgs", [])
+    XCTAssertTrue(store.ready)
+    XCTAssertTrue(store.orgs.isEmpty)
+    store.reload()
+    XCTAssertTrue(reader.queries[0].2.removed)
+    XCTAssertTrue(store.ready)
+    reader.emit("users/u1/orgs", [.init(id: "new", data: ["orgName": "Lane Test Co"])])
+    XCTAssertEqual(store.org?.id, "new")
+  }
+
   /// A console link (`/{orgSlug}/hosts/{hostSlug}/…`) moves the switcher onto the workspace and site it names before
   /// its screen reads them (AGL-3911); a site in another workspace is picked once that workspace's sites arrive.
   func testALinkPicksTheWorkspaceAndSiteItNames() {
