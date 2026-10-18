@@ -123,7 +123,16 @@ export interface AiLayoutPicturePhoto {
 
 /** Words that say a picture shows people, or a section is about them. */
 const PEOPLE =
-  /\b(about|team|story|owner|owners|founder|founders|staff|crew|people|person|portrait|meet|family|families|who we are|our (?:team|crew|people|story)|therapist|counsel(?:l)?or|coach|doctor|dentist|stylist|trainer|smil(?:e|es|ing)|headshot)\b/i
+  /\b(team|story|owner|owners|founder|founders|staff|crew|people|person|portrait|meet|family|families|who we are|our (?:team|crew|people|story)|therapist|counsel(?:l)?or|coach|doctor|dentist|stylist|trainer|smil(?:e|es|ing)|headshot)\b/i
+
+/**
+ * "About" as what a section or a picture is (AGL-3923): leading its words
+ * ("About us", "About the studio"), never the preposition inside them. The
+ * beta.267 Brightvale closing band, "Ready to talk about your marketing?",
+ * was read as a picture of people and searched "ready talk marketing" among
+ * portraits, which answered a tin-can telephone.
+ */
+const ABOUT = /^\W*about\b/i
 
 /**
  * An `aspectRatio` (`'16 / 9'`) as a number, or `null` where none is named.
@@ -170,7 +179,7 @@ export function aiLayoutPictureRole(input: {
   alt: string
 }): AiLayoutPictureRole {
   if (input.sectionIndex === 0) return 'hero'
-  if (PEOPLE.test(input.sectionName) || PEOPLE.test(input.alt)) return 'about'
+  if (PEOPLE.test(input.sectionName) || PEOPLE.test(input.alt) || ABOUT.test(input.sectionName) || ABOUT.test(input.alt)) return 'about'
   return 'gallery'
 }
 

@@ -3954,13 +3954,18 @@ export function aiLayoutStockPhotoSource(
       }
       const orientation = aiStockOrientation(slot.aspect)
       const size = slot.role === 'hero' ? { minWidth: 1600 } : orientation === 'vertical' ? { minHeight: 900 } : { minWidth: 900 }
-      // The slot's own words held to no world: only where the site's world is its own words alone.
-      if (subject && unlisted) {
+      // The slot's own words, only where the site's world is its own words
+      // alone, held to the kind's common world (AGL-3923), never to no world:
+      // the beta.267 Brightvale closing band's "ready talk marketing" was
+      // answered with a tin-can telephone, and its pets-and-owners answers
+      // name no office either.
+      const common = wider.find((rung) => rung.rung === 'generic')?.terms
+      if (subject && unlisted && common) {
         const object = aiStockObjectWord(subject)
         const own = [...new Set([subject, object].map(clip).filter(Boolean))]
         ask(
-          terms,
-          own.map((query) => ({ query, orientation, ...size, subject, strict: true, worldless: true })),
+          common,
+          own.map((query) => ({ query, orientation, ...size, subject, strict: true })),
         )
       }
       // The kind's common photos: OF its world among their first tags, never
