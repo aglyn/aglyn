@@ -535,13 +535,16 @@ export const AI_SITE_THIN_HOME_CODE = 'plan-thin-home'
 
 /**
  * What a site plan's home is composed of, in the words the plan's turn and its
- * re-ask both use. Its trust band is what working together is like, never
- * testimonials (AGL-3887): a new site has no customer words to show, and a
- * home asked for them planned a "Client feedback placeholder" the build could
- * fill only with a promise of words to come.
+ * re-ask both use: a MENU, never an outline (AGL-3899). The hero comes first;
+ * the rest is what this business's story needs, in the order the job's arc
+ * gives (`model/ai-site-home-arcs.ts`). Told one outline ending "a closing
+ * call to action or contact band last", 16 of the 22 newest production homes
+ * were the same five bands in the same order, and 19 ended on the same call.
+ * Its trust band is what working together is like, never testimonials
+ * (AGL-3887): a new site has no customer words to show.
  */
 export const AI_SITE_HOME_BANDS =
-  'a hero first, then bands such as services or the offer, about or why us, and what working together is like, and a closing call to action or contact band last'
+  "a hero first, then the sections this business's story needs, chosen from what it offers, its work, its story, how it works, what working together is like, the questions people ask, where to find it and a call to action, in no fixed order"
 
 /**
  * The fewest sections this site start's home is held to (AGL-3660): five, or
