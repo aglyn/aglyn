@@ -436,7 +436,7 @@ private fun SpecBodyContent(
                     Icon(AglynIcons.named(action.icon ?: "add"), null, Modifier.size(18.dp))
                     Text(ScreenValues.render(action.label, context), Modifier.padding(start = space(1f)))
                   }
-                  if (index == 0) {
+                  if (index == 0 && !action.quietOn(model.spec.id)) {
                     Button(onClick = { trigger(action, context) }, enabled = running == null, modifier = Modifier.testTag("toolbar-${action.id}")) { content() }
                   } else {
                     OutlinedButton(onClick = { trigger(action, context) }, enabled = running == null, modifier = Modifier.testTag("toolbar-${action.id}")) { content() }
@@ -754,17 +754,25 @@ private fun FieldsBlock(block: BlockSpec, context: JsonElement, copy: (String) -
         if (row.isTrue("chip")) {
           StatusChip(shown, toneFor(row, value, scope))
         } else {
+          // One word (an email, an id, a link) stays on one line and gives up its middle, never breaking at a dot;
+          // a tap still copies all of it. A sentence wraps as before.
+          val oneLine = singleToken(shown)
           Text(
             shown,
             style = MaterialTheme.typography.bodyMedium,
             color = if (row.obj("tone") != null) toneColor(toneFor(row, value, scope)) else MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.End,
+            maxLines = if (oneLine) 1 else Int.MAX_VALUE,
+            overflow = if (oneLine) TextOverflow.MiddleEllipsis else TextOverflow.Clip,
           )
         }
       }
     }
   }
 }
+
+/** A value with no space in it: an email, an id or a link, which reads wrong broken across lines. */
+internal fun singleToken(value: String): Boolean = value.isNotEmpty() && value.none { it.isWhitespace() }
 
 @Composable
 private fun toneColor(tone: StatusTone) = when (tone) {

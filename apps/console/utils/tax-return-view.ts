@@ -52,7 +52,11 @@ import {
 export const TAX_RETURN_COPY = {
   cleanTitle: 'Every row read cleanly',
   cleanMessage: (invoices: number) =>
-    `All ${invoices} invoices in this period were fully readable — no row was dropped, and no figure below is a lower bound.`,
+    invoices === 0
+      ? 'There are no invoices in this period, so no invoice row was read or dropped.'
+      : invoices === 1
+        ? 'The one invoice in this period was fully readable — no row was dropped, and no figure below is a lower bound.'
+        : `All ${invoices} invoices in this period were fully readable — no row was dropped, and no figure below is a lower bound.`,
   blockingTitle: (total: number) => `Do not file — ${total} ${total === 1 ? 'row needs' : 'rows need'} attention`,
   reviewTitle: (total: number) => `${total} ${total === 1 ? 'row needs' : 'rows need'} attention before filing`,
   breakdownTitle: (code: string) => `A breakdown for manual filing — not a ${code} return`,
