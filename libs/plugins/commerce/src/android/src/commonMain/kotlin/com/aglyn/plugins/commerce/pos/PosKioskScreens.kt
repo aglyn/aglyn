@@ -1,5 +1,7 @@
 package com.aglyn.plugins.commerce.pos
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -288,7 +290,19 @@ private fun KioskMenu(model: PosKioskModel, onProduct: (PosKioskProduct) -> Unit
             val soldOut = kioskProductSoldOut(product)
             Card(Modifier.fillMaxWidth().clickable(enabled = !soldOut) { onProduct(product) }.alpha(if (soldOut) 0.5f else 1f).testTag("kiosk-tile-${product.id}")) {
               Column(Modifier.padding(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
-                LocalPosPictures.current(product.imageUrl)?.let { RemoteImage(it, product.name, Modifier.fillMaxWidth().height(110.dp).testTag("kiosk-photo-${product.id}"), contentScale = ContentScale.Crop, icon = "image") }
+                // Every tile keeps the same picture band, so a row with one photo stays even: the photo, or the product's
+                // initial on primaryContainer, as the register's tiles draw it.
+                val picture = LocalPosPictures.current(product.imageUrl)
+                if (picture != null) {
+                  RemoteImage(picture, product.name, Modifier.fillMaxWidth().height(110.dp).clip(MaterialTheme.shapes.medium).testTag("kiosk-photo-${product.id}"), contentScale = ContentScale.Crop, icon = "image")
+                } else {
+                  Box(
+                    Modifier.fillMaxWidth().height(110.dp).clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                  ) {
+                    Text(product.name.take(1).uppercase(), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                  }
+                }
                 Text(product.name, style = MaterialTheme.typography.titleMedium)
                 Text(
                   if (soldOut) "Sold out" else "${if (product.variants.size > 1) "From " else ""}${model.money(kioskFromCents(product))}",
