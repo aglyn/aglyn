@@ -160,16 +160,19 @@ export function aiLayoutFamily(kind: string): Family {
 }
 
 /**
- * A site's choices, the same for every page of it. The first option of each
- * list is the kind's best, so it is favored; the seed still turns it, so two
- * sites of one kind are drawn apart.
+ * A site's choices, the same for every page of it, each drawn at even odds
+ * among the options that suit the kind (AGL-3899), so two sites of one kind
+ * are drawn apart. Favoring each list's first option made the newest
+ * production sites one design: the kind's first hero won 55% before the
+ * pick, a business site opened split, groups were ruled two times in three
+ * and every text section took a photo.
  */
 export function aiLayoutDesignChoices(design: AiLayoutDesign): AiLayoutDesignChoices {
   const next = random(design.seed ^ 0x2f6b9d1)
   const family = aiLayoutFamily(design.kind)
   const heroes = HEROES[design.kind] ?? DEFAULT_HEROES
-  const hero = next() < 0.55 ? (heroes[0] as AiLayoutHeroVariant) : pick(next, heroes)
-  const group = family === 'calm' ? pick(next, ['cards', 'cards', 'ruled'] as const) : pick(next, ['ruled', 'cards', 'ruled'] as const)
+  const hero = pick(next, heroes)
+  const group = pick(next, ['cards', 'ruled', 'icons'] as const)
   return {
     hero,
     // A store's reasons to buy — the making, the shipping, the care — read
@@ -178,8 +181,11 @@ export function aiLayoutDesignChoices(design: AiLayoutDesign): AiLayoutDesignCho
     // of a title and a sentence the beta.237 Willow Wick home showed four
     // bands of (AGL-3676).
     group: family === 'retail' ? 'icons' : group,
-    steps: pick(next, ['timeline', 'numbers', 'timeline'] as const),
-    features: true,
+    steps: pick(next, ['timeline', 'numbers'] as const),
+    // Whether a section of words takes a photo beside it: some sites are
+    // photo-led, some let their type carry the page. A storefront never
+    // shows a band of text alone (AGL-3676), so its story always takes one.
+    features: next() < 0.6 || family === 'retail',
     featureLeft: next() < 0.5,
     coverClose: heroes.includes('cover') && next() < 0.7,
     splitHeads: family === 'editorial' || family === 'standard' ? next() < 0.6 : next() < 0.35,

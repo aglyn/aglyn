@@ -52,6 +52,7 @@ jest.mock('firebase/firestore', () => ({
   startAfter: () => 'startAfter',
   serverTimestamp: () => 'now',
   updateDoc: async () => undefined,
+  onSnapshot: () => () => undefined,
   writeBatch: () => ({ update: () => undefined, commit: async () => undefined }),
   getDocs: async () => ({ docs: [], forEach: () => undefined }),
   getDoc: async () => ({
@@ -339,11 +340,26 @@ describe('the notification settings page (AGL-3226)', () => {
     ).toBe(false)
   })
 
+  it('saves the picked notification sound to the account and lists Xylophone as the default', async () => {
+    render(<Page />)
+    await screen.findByText('Notification sound')
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Sound' }))
+    expect(screen.getByRole('option', { name: 'Xylophone (default)' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('option', { name: 'Cowbell' }))
+    await waitFor(() =>
+      expect(mockSetDoc).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'users/uid-1' }),
+        { notificationSound: 'cowbell' },
+        { merge: true },
+      ),
+    )
+  })
+
   it('keeps the digests and the per-device alerts, and says which is which', async () => {
     render(<Page />)
     expect(await screen.findByText('Daily CRM digest')).toBeTruthy()
     expect(screen.getByText('Alerts on this device')).toBeTruthy()
-    expect(screen.getByText('Sound')).toBeTruthy()
+    expect(screen.getByText('Play sound')).toBeTruthy()
     expect(screen.getByText('Unread count in tab title')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Send test alert' })).toBeTruthy()
     // jsdom has no Notification API, so the card takes its unsupported arm —
