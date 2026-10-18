@@ -201,6 +201,8 @@ const DISHES = /\b(menu|menus|dish|dishes|breakfast|brunch|lunch|dinner|pastry|p
 // A store's own products are listed by its Product grid (AGL-3676), never drawn
 // from words: what a store shows as pictures is how its range is grouped — its
 // collections, gift sets, occasions and scents. "Candle care and burn notes" is no band of pictures.
+/** Words a section uses for itself when it is a showing of pictures, on any kind of site (AGL-3923). */
+const GALLERY = /\b(gallery|galleries|portfolio|portfolios|lookbook|lookbooks)\b/i
 const CATEGORIES = /\b(collection|collections|range|ranges|categor(?:y|ies)|gift|gifts|gift sets?|sets|occasion|occasions|scent|scents|edit|edits)\b/i
 
 /**
@@ -219,5 +221,9 @@ export function aiLayoutGroupVariant(
   if (family === 'editorial' && WRITING.test(words)) return 'articles'
   if (family === 'hospitality' && DISHES.test(words)) return 'menu'
   if (family === 'retail' && CATEGORIES.test(words)) return 'pictures'
+  // A section that calls itself a gallery or a portfolio shows pictures on any
+  // kind of site (AGL-3923): the beta.265 Kasvora Marketing Solutions home drew
+  // its "Selected work gallery" as four cards of icons.
+  if (GALLERY.test(words)) return 'pictures'
   return choices.group
 }

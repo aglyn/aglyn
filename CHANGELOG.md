@@ -9,6 +9,21 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.267 — 2026-10-18
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.266...v1.0.0-beta.267)
+
+### Fixed
+
+- **ai:** widen a picture's search past an unknown world so pages keep photos ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923), [AGL-3856](https://linear.app/aglyn/issue/AGL-3856), [AGL-3831](https://linear.app/aglyn/issue/AGL-3831))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **guards:** record the AGL-3923 fixture's recorded Pixabay tag text in the spelling baseline ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923))
+
+</details>
+
 ## v1.0.0-beta.266 — 2026-10-18
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.265...v1.0.0-beta.266)
@@ -26,6 +41,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **ai:** gallery and record covers show the moment, not a photographer or camera; teachers are shown teaching ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856), [AGL-3921](https://linear.app/aglyn/issue/AGL-3921))
+- **ai:** each category section lists only its own category's records, and photo alts drop leftover abstract words ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856), [AGL-3921](https://linear.app/aglyn/issue/AGL-3921))
 - **apple:** no minus on zero refunds, no empty actions card, one-line token values ([AGL-3891](https://linear.app/aglyn/issue/AGL-3891))
 - **native:** quiet filter toolbar actions, empty tax period sentence, one-line id values ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
 - **native:** phone walk fixes for stat rows, metric cards, settings and shift reports ([AGL-3892](https://linear.app/aglyn/issue/AGL-3892))
