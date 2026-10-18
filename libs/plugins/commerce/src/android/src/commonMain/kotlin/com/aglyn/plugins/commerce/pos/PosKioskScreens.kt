@@ -303,7 +303,14 @@ private fun KioskMenu(model: PosKioskModel, onProduct: (PosKioskProduct) -> Unit
                     Text(product.name.take(1).uppercase(), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
                   }
                 }
-                Text(product.name, style = MaterialTheme.typography.titleMedium)
+                // Two lines reserved, two at most: a long name never makes its tile taller than its row.
+                Text(
+                  product.name,
+                  style = MaterialTheme.typography.titleMedium,
+                  minLines = 2,
+                  maxLines = 2,
+                  overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
                 Text(
                   if (soldOut) "Sold out" else "${if (product.variants.size > 1) "From " else ""}${model.money(kioskFromCents(product))}",
                   style = MaterialTheme.typography.bodyMedium,
