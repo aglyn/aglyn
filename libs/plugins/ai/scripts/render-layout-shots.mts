@@ -72,6 +72,8 @@
  * and logs any width at which the document is wider than its window. With
  * `--page-only`, an input with a `page` is shot whole and nothing else (the
  * two `page-` shots and its words), for judging pages by the dozen.
+ * `--viewport <w>x<h>` sets the desktop window a page is shot in (1440x900
+ * unless given): a shorter one shortens a hero sized by the window.
  *
  * THE OPEN MENU is the one emulated part. A static render has no click to
  * open the Drawer, so for that shot the Drawer element is swapped for MUI's
@@ -93,12 +95,16 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
 const require = createRequire(join(ROOT, 'package.json'))
 type Dict = Record<string, any>
 
-function parseArgs(argv: string[]): { out: string; inputs: string[]; pageOnly: boolean } {
+function parseArgs(argv: string[]): { out: string; inputs: string[]; pageOnly: boolean; desktop: { width: number; height: number } } {
   const out = argv.indexOf('--out')
-  if (out === -1 || !argv[out + 1]) throw new Error('Usage: render-layout-shots.mts --out <dir> [--page-only] <layout.json>…')
-  const inputs = argv.filter((arg, index) => index !== out && index !== out + 1 && arg !== '--page-only')
+  if (out === -1 || !argv[out + 1]) throw new Error('Usage: render-layout-shots.mts --out <dir> [--page-only] [--viewport <w>x<h>] <layout.json>…')
+  const viewport = argv.indexOf('--viewport')
+  const [width = 0, height = 0] = viewport === -1 ? [1440, 900] : String(argv[viewport + 1] ?? '').split('x').map(Number)
+  if (!(width > 0 && height > 0)) throw new Error('--viewport is <width>x<height>, such as 1240x720.')
+  const valued = new Set([out, out + 1, ...(viewport === -1 ? [] : [viewport, viewport + 1])])
+  const inputs = argv.filter((arg, index) => !valued.has(index) && arg !== '--page-only')
   if (!inputs.length) throw new Error('Name at least one layout JSON file.')
-  return { out: resolve(argv[out + 1]), inputs: inputs.map((input) => resolve(input)), pageOnly: argv.includes('--page-only') }
+  return { out: resolve(argv[out + 1]), inputs: inputs.map((input) => resolve(input)), pageOnly: argv.includes('--page-only'), desktop: { width, height } }
 }
 
 /**
@@ -177,7 +183,7 @@ const CLOSE_ICON =
   'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z'
 
 async function main(): Promise<void> {
-  const { out, inputs, pageOnly } = parseArgs(process.argv.slice(2))
+  const { out, inputs, pageOnly, desktop } = parseArgs(process.argv.slice(2))
   loadEmotionForServerRendering()
   installWindow()
   const { pluginBundleEntries } = await import(join(ROOT, 'tools/scripts/lib/plugin-bundle-entries.mjs'))
@@ -454,7 +460,7 @@ async function main(): Promise<void> {
       const home = data.page ? expandInstances(data.page) : defaults.buildDefaultHomeScreen(data.name).nodes
       const light = render(home, 'light', false)
       if (data.page) {
-        await shoot(light, 1440, 900, 'page-desktop-light', ['full'])
+        await shoot(light, desktop.width, desktop.height, 'page-desktop-light', ['full'])
         // The words the page shows, for a grep that proves what a visitor reads.
         writeFileSync(join(out, `${key}-page.txt`), await tab.evaluate(() => document.body.innerText))
         await shoot(light, 375, 812, 'page-phone-light', ['full'])
