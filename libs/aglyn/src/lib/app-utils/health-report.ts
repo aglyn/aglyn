@@ -982,6 +982,25 @@ export function signupDroughtHealth(
  * 10/17's). The streak of two was red only on 10/11, AGL-3724, and nowhere
  * else. A streak of three missed AGL-3724 entirely.
  *
+ * ## A canary walk that landed clears the people before it (2026-10-18)
+ *
+ * On 2026-10-18 two people in a row signed up with Google and left without
+ * making a site, at 13:29Z and 14:59Z, and the streak went red while
+ * sign-ups worked. The signup canary walked the whole sign-up at 15:28Z,
+ * after both of them, and reached the site list. Since AGL-3725 the canary
+ * grades that landing: a 404 after the workspace fails the walk. So a
+ * passing walk newer than a stranded person proves the landing worked for
+ * them too, and they left on their own. The streak now counts only the
+ * stranded people who signed up after the canary's last passing walk
+ * (`landingProvenAtMs`). A broken landing fails the canary as well, which
+ * leaves no proof, and the streak reads as before.
+ *
+ * Backtest, 2026-09-07 → 2026-10-18 16:30Z, 114 orgs and the 206 canary
+ * walks that graded the landing (from 2026-10-11 15:01Z, #1392), five-minute
+ * steps: the streak alone was red for 520 minutes, AGL-3724's 455 and 65
+ * false minutes on 10/18. With the proof it is red for AGL-3724's 455
+ * minutes, every one of them, and nowhere else.
+ *
  * Pure, like its siblings: the route reads, this decides. The body carries
  * counts only, never an org id, slug or visitor key, because the endpoint is
  * public.
@@ -1004,6 +1023,12 @@ export interface SignupLandingCheck extends HealthCheck {
   graceMinutes: number
   /** The stranded streak at which this goes red. */
   maxStranded: number
+  /**
+   * When the signup canary last walked a sign-up to the site list and
+   * passed. Stranded people older than this do not count. Null when no
+   * passing walk is known.
+   */
+  landingProvenAtMs: number | null
 }
 
 /** See {@link SignupLandingCheck}: twelve hours of orgs. */
@@ -1040,8 +1065,18 @@ export function signupLandingHealth(
   maxStranded: number = MAX_STRANDED_SIGNUPS,
   windowHours: number = SIGNUP_LANDING_WINDOW_HOURS,
   graceMinutes: number = SIGNUP_LANDING_GRACE_MINUTES,
+  landingProvenAtMs: number | null = null,
 ): SignupLandingCheck {
-  const shape = { windowHours, graceMinutes, maxStranded }
+  const provenAtMs =
+    typeof landingProvenAtMs === 'number' && Number.isFinite(landingProvenAtMs)
+      ? landingProvenAtMs
+      : null
+  const shape = {
+    windowHours,
+    graceMinutes,
+    maxStranded,
+    landingProvenAtMs: provenAtMs,
+  }
   // An unreadable window is degraded, never calm, the rule every sibling
   // follows: a check that cannot see the thing it watches has no opinion.
   if (orgs === null) {
@@ -1077,9 +1112,12 @@ export function signupLandingHealth(
   )
   const strandedPeople = newestFirst.filter((person) => !person.landed).length
   let strandedStreak = 0
+  // A person who signed up before the canary's last passing walk is not
+  // evidence of a broken landing: the walk proved it worked after them.
   while (
     strandedStreak < newestFirst.length &&
-    !newestFirst[strandedStreak].landed
+    !newestFirst[strandedStreak].landed &&
+    (provenAtMs === null || newestFirst[strandedStreak].latestMs > provenAtMs)
   ) {
     strandedStreak += 1
   }

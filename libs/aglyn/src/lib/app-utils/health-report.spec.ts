@@ -2420,6 +2420,61 @@ describe('signupLandingHealth (AGL-3725)', () => {
     })
   })
 
+  describe('a passing canary walk clears the people before it (2026-10-18)', () => {
+    // 10/18, recorded from production: the two newest people signed up with
+    // Google at 13:29Z and 14:59Z and left; the canary walked a sign-up to
+    // the site list at 15:28Z; the one before them made a site at 12:02Z.
+    const at = (iso: string) => Date.parse(iso)
+    const oct18 = [
+      { hostCount: 0, createdAtMs: at('2026-10-18T14:59:05Z'), visitor: 'first-touch:1792335497329' },
+      { hostCount: 0, createdAtMs: at('2026-10-18T13:29:24Z'), visitor: 'first-touch:1792330023044' },
+      { hostCount: 1, createdAtMs: at('2026-10-18T12:02:48Z'), visitor: 'first-touch:3' },
+    ]
+    const args = [MAX_STRANDED_SIGNUPS, 12, 30] as const
+
+    it('reds on the streak alone, as before', () => {
+      expect(signupLandingHealth(oct18, 5)).toMatchObject({
+        ok: false,
+        code: 'signups-stranded',
+        strandedStreak: 2,
+        landingProvenAtMs: null,
+      })
+    })
+
+    it('is green once a passing walk is newer than both of them', () => {
+      const provenAt = at('2026-10-18T15:28:00Z')
+      const check = signupLandingHealth(oct18, 5, ...args, provenAt)
+      expect(check).toMatchObject({
+        ok: true,
+        strandedOrgs: 2,
+        strandedPeople: 2,
+        strandedStreak: 0,
+        landingProvenAtMs: provenAt,
+      })
+      expect(check.code).toBeUndefined()
+    })
+
+    it('still reds when the walk is older than the stranded people: a broken landing fails the canary', () => {
+      // AGL-3724's shape: every sign-up after the last good walk is stranded.
+      const check = signupLandingHealth(oct18, 5, ...args, at('2026-10-18T13:00:00Z'))
+      expect(check).toMatchObject({ ok: false, code: 'signups-stranded', strandedStreak: 2 })
+    })
+
+    it('counts only the people after the walk', () => {
+      // One stranded before the walk, one after: a streak of one is green.
+      const check = signupLandingHealth(oct18, 5, ...args, at('2026-10-18T14:00:00Z'))
+      expect(check).toMatchObject({ ok: true, strandedStreak: 1 })
+    })
+
+    it('treats an unusable proof as no proof', () => {
+      expect(signupLandingHealth(oct18, 5, ...args, Number.NaN)).toMatchObject({
+        ok: false,
+        strandedStreak: 2,
+        landingProvenAtMs: null,
+      })
+    })
+  })
+
   it('is green on a window with no sign-ups at all', () => {
     expect(signupLandingHealth([], 5)).toMatchObject({
       ok: true,

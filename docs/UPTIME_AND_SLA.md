@@ -2878,9 +2878,29 @@ Backtest, 2026-09-07 → 2026-10-17 (105 orgs, five-minute steps): the count
 rule was red for 1,125 minutes, 435 of them false. The streak rule was red
 only on 10/11 (AGL-3724). A streak of three missed AGL-3724 altogether.
 
+**Since 2026-10-18 a passing canary walk clears the people before it.** On
+2026-10-18, two people in a row signed up with Google and left without a
+site, at 13:29Z and 14:59Z. The streak went red while sign-ups worked: the
+signup canary had walked a sign-up to the site list at 15:28Z, after both of
+them. Since AGL-3725 the canary grades that landing, so a 404 after the
+workspace fails its walk. The streak now counts only the stranded people who
+signed up after the canary's last passing walk (`landingProvenAtMs`, read from
+the same marker `/api/health/journeys` grades). A broken landing fails the
+canary too, which leaves no proof, so the streak reads as it did before. An
+unreadable or failed walk is never proof.
+
+Backtest, 2026-09-07 → 2026-10-18 16:30Z: 114 orgs, the 206 canary walks
+that graded the landing (from 2026-10-11 15:01Z), five-minute steps. The
+streak alone was red for 520 minutes: AGL-3724's 455, and 65 false minutes on
+10/18. With the proof it was red for AGL-3724's 455 minutes, every one of
+them, and nowhere else. Canary walks before 2026-10-11 15:01Z did not grade
+the landing, so they count as no proof, and that is why AGL-3724 stays red
+in the backtest.
+
 The body carries counts only (`strandedOrgs`, `strandedPeople`,
-`strandedStreak`, `orgsInWindow`) and the rule (`windowHours`,
-`graceMinutes`, `maxStranded`), never an org id, slug or visitor key.
+`strandedStreak`, `orgsInWindow`), the rule (`windowHours`, `graceMinutes`,
+`maxStranded`) and the canary's proof time (`landingProvenAtMs`), never an
+org id, slug or visitor key.
 
 ### The blocking function's decisions are DATA now
 

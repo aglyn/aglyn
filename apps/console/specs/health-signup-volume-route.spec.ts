@@ -56,6 +56,8 @@ const mockServedGet = jest.fn()
 const mockAttemptGet = jest.fn()
 /** AGL-3725 orgs in the landing window. */
 const mockLandingGet = jest.fn()
+/** The signup canary's last walk (2026-10-18): null means none is known. */
+const mockCanaryWalk = jest.fn()
 const landingQueries: {
   collection: string
   bounds: { field: string; op: string; ms: number }[]
@@ -170,6 +172,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   SIGNUP_REFUSAL_DOC_PREFIX: 'signupRefused_',
   SIGNUP_SERVED_DOC_PREFIX: 'signupServed_',
   SIGNUP_ATTEMPT_DOC_PREFIX: 'signupAttempted_',
+  readSignupCanaryWalk: () => mockCanaryWalk(),
 }))
 
 /** A refusal marker as Firestore hands it back. */
@@ -253,6 +256,9 @@ beforeEach(() => {
   // green and cannot turn an unrelated test red.
   mockLandingGet.mockReset()
   mockLandingGet.mockImplementation(orgsWithSites(1, 1))
+  // No canary walk known by default: the streak reads exactly as before.
+  mockCanaryWalk.mockReset()
+  mockCanaryWalk.mockResolvedValue(null)
   landingQueries.length = 0
   queries.length = 0
   refusalQueries.length = 0
@@ -888,6 +894,73 @@ describe('AGL-3725 · signupLanding: a workspace that never reached a site', () 
     const text = JSON.stringify(body)
     expect(text).not.toContain('1792233980958')
     expect(text).not.toContain('second-google')
+  })
+
+  describe('a passing canary walk clears the people before it (2026-10-18)', () => {
+    /*
+     * Two people in a row signed up with Google and left, and the canary
+     * walked a sign-up to the site list after both of them. The orgs here are
+     * an hour old, so a walk ten minutes ago is newer than every one.
+     */
+    it('stays green when the last walk passed after the stranded people', async () => {
+      mockCountGet.mockImplementation(countOf(1))
+      mockLandingGet.mockImplementation(orgsWithSites(0, 0, 1, 2))
+      const walkedAtMs = Date.now() - 10 * 60_000
+      mockCanaryWalk.mockResolvedValue({ walkedAtMs, ok: true, failedStep: null })
+      const response = await (await freshRoute()).GET()
+      const body = await response.json()
+      expect(response.status).toBe(200)
+      expect(body.checks.signupLanding).toMatchObject({
+        ok: true,
+        strandedOrgs: 2,
+        strandedPeople: 2,
+        strandedStreak: 0,
+        landingProvenAtMs: walkedAtMs,
+      })
+    })
+
+    it('stays red when the last walk failed: a failed walk proves nothing', async () => {
+      mockCountGet.mockImplementation(countOf(1))
+      mockLandingGet.mockImplementation(orgsWithSites(0, 0, 1, 2))
+      mockCanaryWalk.mockResolvedValue({
+        walkedAtMs: Date.now() - 10 * 60_000,
+        ok: false,
+        failedStep: 'landing',
+      })
+      const response = await (await freshRoute()).GET()
+      expect(response.status).toBe(503)
+      expect((await response.json()).checks.signupLanding).toMatchObject({
+        ok: false,
+        code: 'signups-stranded',
+        strandedStreak: 2,
+        landingProvenAtMs: null,
+      })
+    })
+
+    it('stays red when the last good walk is older than the stranded people', async () => {
+      mockCountGet.mockImplementation(countOf(1))
+      mockLandingGet.mockImplementation(orgsWithSites(0, 0, 1, 2))
+      mockCanaryWalk.mockResolvedValue({ walkedAtMs: Date.now() - 3 * 3_600_000, ok: true })
+      const response = await (await freshRoute()).GET()
+      expect(response.status).toBe(503)
+      expect((await response.json()).checks.signupLanding).toMatchObject({
+        ok: false,
+        strandedStreak: 2,
+      })
+    })
+
+    it('reads the streak as before when the canary marker cannot be read', async () => {
+      mockCountGet.mockImplementation(countOf(1))
+      mockLandingGet.mockImplementation(orgsWithSites(0, 0, 1, 2))
+      mockCanaryWalk.mockRejectedValue(new Error('deadline exceeded'))
+      const response = await (await freshRoute()).GET()
+      expect(response.status).toBe(503)
+      expect((await response.json()).checks.signupLanding).toMatchObject({
+        ok: false,
+        code: 'signups-stranded',
+        landingProvenAtMs: null,
+      })
+    })
   })
 
   it('stays green for one person who signed up and left', async () => {

@@ -79,6 +79,7 @@ import {
   SIGNUP_REFUSAL_DOC_PREFIX,
   SIGNUP_ATTEMPT_DOC_PREFIX,
   SIGNUP_SERVED_DOC_PREFIX,
+  readSignupCanaryWalk,
 } from '@aglyn/tenant-data-admin'
 import {
   deploymentCommitRef,
@@ -94,6 +95,7 @@ import {
   platformVersion,
   SIGNUP_DROUGHT_WINDOW_MINUTES,
   SIGNUP_LANDING_GRACE_MINUTES,
+  MAX_STRANDED_SIGNUPS,
   SIGNUP_LANDING_WINDOW_HOURS,
   SIGNUP_REFUSAL_WINDOW_MINUTES,
   signupDroughtHealth,
@@ -382,9 +384,14 @@ const LANDING_ORG_READ_LIMIT = 200
 
 const landingProbe = memoizeWithTtl<{
   orgs: SignupLandingOrg[] | null
+  provenAtMs: number | null
   ms: number
 }>(PROBE_TTL_MS, async () => {
   const startedAt = Date.now()
+  // The canary's last walk, read beside the orgs: a passing one proves the
+  // landing worked for everyone who signed up before it (see
+  // `signupLandingHealth`). Unreadable or failed means no proof, never calm.
+  const canaryWalk = readSignupCanaryWalk().catch(() => null)
   try {
     void firebaseAdmin
     const db = getFirestore(getApp())
@@ -427,10 +434,15 @@ const landingProbe = memoizeWithTtl<{
         }
       },
     )
-    return { orgs, ms: Date.now() - startedAt }
+    const walk = await canaryWalk
+    const provenAtMs =
+      walk?.ok === true && typeof walk.walkedAtMs === 'number'
+        ? walk.walkedAtMs
+        : null
+    return { orgs, provenAtMs, ms: Date.now() - startedAt }
   } catch {
     // Null is degraded by contract (`orgs-unavailable`), like every sibling.
-    return { orgs: null, ms: Date.now() - startedAt }
+    return { orgs: null, provenAtMs: null, ms: Date.now() - startedAt }
   }
 })
 
@@ -464,6 +476,10 @@ export async function GET(): Promise<Response> {
   const signupLanding: SignupLandingCheck = signupLandingHealth(
     landing.orgs,
     landing.ms,
+    MAX_STRANDED_SIGNUPS,
+    SIGNUP_LANDING_WINDOW_HOURS,
+    SIGNUP_LANDING_GRACE_MINUTES,
+    landing.provenAtMs,
   )
   const checks = { signupVolume, signupRefusals, signupDrought, signupLanding }
   const status = healthStatus(checks)
