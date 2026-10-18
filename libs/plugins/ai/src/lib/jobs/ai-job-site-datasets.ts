@@ -378,6 +378,8 @@ export async function aiSiteDatasetRecordPhotos(input: {
     role: people ? ('about' as const) : ('gallery' as const),
     // A record's name is a search's words, never what its photo shows (AGL-3856).
     standIn: true,
+    // A team's record shows an adult in their role, never a child (AGL-3856).
+    ...(people ? { people: true } : {}),
   }))
   const seed = `${job.$id}:records`
   let found: ReadonlyArray<AiLayoutPicturePhoto | null> = []

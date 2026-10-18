@@ -20,6 +20,7 @@ import type { StockPhoto, StockPhotoProvider } from '@aglyn/aglyn/plugin-manager
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { aiResolveLayoutPictures, type AiLayoutPictureSlot } from '../layout-language/ai-layout-pictures'
 import { aiLayoutStockPhotoSource, aiStockForgetJobPhotos, aiStockPhotoAlt, aiStockTagsAlt } from './ai-layout-stock-photos'
+import { BRIGHTPATH_PLACED, IRONWOOD_PLACED, SILVER_FIR_PLACED } from './fixtures/ai-stock-photo-agl3856-people-recordings'
 
 /*
  * The beta.253 Panadería La Concha Dorada start (2026-10-15, job eg4maZMGtN,
@@ -213,8 +214,8 @@ describe('a stock photo described by a phrase, never a tag list wearing articles
     expect(aiStockTagsAlt(BUSINESSMAN.tags)).toBe('A portrait of a businessman')
   })
 
-  it('says a mass noun without an article, and no feedback at all', () => {
-    expect(aiStockTagsAlt(CHALKBOARD.tags)).toBe('A board and chalk')
+  it('says where a thing is, and no feedback, study or school as a thing', () => {
+    expect(aiStockTagsAlt(CHALKBOARD.tags)).toBe('A board at a school')
   })
 
   it('says where a thing is, not three nouns in a row', () => {
@@ -225,7 +226,7 @@ describe('a stock photo described by a phrase, never a tag list wearing articles
     for (const [photo, said] of [
       [LAWYER, 'A confident lawyer in court'],
       [BUSINESSMAN, 'A portrait of a businessman'],
-      [CHALKBOARD, 'A board and chalk'],
+      [CHALKBOARD, 'A board at a school'],
       [SUBWAY, 'A train at a station'],
     ] as const) {
       const alt = aiStockPhotoAlt(photo, stand)
@@ -239,5 +240,62 @@ describe('a stock photo described by a phrase, never a tag list wearing articles
     expect(aiStockTagsAlt(ideas.tags)).toBeNull()
     expect(aiStockPhotoAlt(ideas, stand)).toBe('Family law consultation in Columbus')
     expect(aiStockPhotoAlt(ideas, { ...stand, alt: '' }, { sectionName: 'consultation call to action' })).toBe('Consultation call to action')
+  })
+})
+
+describe('a stock photo described by concrete things, each said once (AGL-3856, beta.264)', () => {
+  // Every photo the Brightpath Adult Learning Center, Ironwood Barbell Gym and
+  // Silver Fir Film and Portrait pages placed, by Pixabay id, with the words
+  // production gave it and the words its own tags say now.
+  const PLACED = new Map([...BRIGHTPATH_PLACED, ...IRONWOOD_PLACED, ...SILVER_FIR_PLACED].map((photo) => [photo.id, photo]))
+  const SAID: ReadonlyArray<[id: string, before: string, after: string]> = [
+    ['3293452', 'A kettlebell and fitness', 'A kettlebell in a gym'],
+    ['841171', 'A bookwork and a read', 'A woman with a book in a library'],
+    ['4126483', 'A book and a read', 'A college student with a book'],
+    ['10165350', 'A participation in a classroom', 'Women in a classroom'],
+    ['4184870', 'A board and training', 'A board at a school'],
+    ['5630022', 'A camera and an analog', 'An analog camera'],
+    ['351528', 'A camera and a digital', 'A digital camera'],
+    ['4123304', 'A photo-camera and a sony', 'A mirrorless camera'],
+    ['6653517', 'An elderly couple and an elderly', 'An elderly couple on a trail'],
+    ['950382', 'A spot and headlights', 'Headlights in a studio'],
+    ['7942150', 'A human in a forest', 'A photographer in a forest'],
+    ['6900381', 'A school at a desk', 'A desk at a school'],
+    ['2093744', 'A school in a classroom', 'A classroom'],
+    ['1699745', 'A lecture hall in a classroom', 'A classroom'],
+    ['3516208', 'A lift in a gym', 'A weight in a gym'],
+    ['5730110', 'Weightlifting and a workout', 'An athlete in a gym'],
+    ['5584375', 'A camera and a photographer', 'A photographer with a camera'],
+    ['8111723', 'A bridge and a camera', 'A photographer with a camera on a bridge'],
+    ['3669915', 'An indian wedding and a couple', 'A couple at a wedding'],
+    ['1846114', 'A wedding and an aisle', 'An aisle at a wedding'],
+    ['7527978', 'A portrait of photo model', 'A portrait of a model'],
+    ['7638972', 'A family and a mom', 'A family'],
+    ['6553467', 'A graduate and a girl', 'A graduate'],
+    ['351977', 'A schoolgirl and a student', 'A schoolgirl'],
+    ['951818', 'Studying and exams', 'A room'],
+  ]
+
+  it.each(SAID)('describes %s, once "%s", as "%s"', (id, before, after) => {
+    const photo = PLACED.get(id) as StockPhoto
+    expect(photo).toBeDefined()
+    const alt = aiStockTagsAlt(photo.tags ?? [])
+    expect(alt).toBe(after)
+    expect(alt).not.toBe(before)
+  })
+
+  it("never says a word twice, a maker's name, or a doing or an idea as a thing", () => {
+    for (const photo of PLACED.values()) {
+      const alt = aiStockTagsAlt(photo.tags ?? []) ?? ''
+      const content = alt
+        .toLowerCase()
+        .split(/[^a-z-]+/)
+        .filter((word) => word.length > 2 && !['and', 'with', 'the'].includes(word))
+      expect(new Set(content).size).toBe(content.length)
+      expect(alt).not.toMatch(/\b(?:sony|canon|crossfit|fitness|training|reading|read|participation|analog|digital|elderly|human|spot|photo)$/i)
+      // An adjective is said only before its thing: "an analog camera", never "an analog".
+      expect(alt).not.toMatch(/\b(?:an?|and) (?:analog|digital|elderly)(?: and| in| on| at|$)/i)
+      expect(alt).not.toMatch(/\b(?:an?|and) (?:read|training|fitness|participation|sony|spot|lift|workout)\b/i)
+    }
   })
 })
