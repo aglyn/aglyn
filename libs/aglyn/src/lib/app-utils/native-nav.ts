@@ -584,7 +584,9 @@ const SITE: NativeNavList = {
           icon: ICONS.aiJobs,
           screen: 'ai.jobs',
           pluginId: 'ai',
-          console: ref('hostPluginTab', '/ai-jobs'),
+          // The console lists a site's AI jobs at `/ai-jobs` with no tab: its
+          // top bar's AI jobs indicator is the way in.
+          console: ref('consoleWidget', 'consoleTopBar/ai-jobs-indicator'),
         },
         {
           id: 'data',

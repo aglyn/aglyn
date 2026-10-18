@@ -5470,8 +5470,8 @@
               },
               {
                 "console": {
-                  "id": "/ai-jobs",
-                  "surface": "hostPluginTab"
+                  "id": "consoleTopBar/ai-jobs-indicator",
+                  "surface": "consoleWidget"
                 },
                 "icon": {
                   "android": "auto_awesome",
