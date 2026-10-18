@@ -55,20 +55,30 @@ const snapshotOf = (data: Record<string, unknown> | null) => ({
   get: (field: string) => (data ?? {})[field],
 })
 
+/** One aggregate, counted over the rows `keep` admits. */
+const countOf = (keep: (row: Record<string, unknown>) => boolean) => ({
+  get: async () => {
+    mockCountReads()
+    return { data: () => ({ count: state.components.filter(keep).length }) }
+  },
+})
+
 const componentsCollection = () => ({
-  // The live count reads a `deletedAt` projection, as the flat-cap branch does.
   select: () => ({
     get: async () => {
       mockCountReads()
       return { docs: state.components.map((row) => snapshotOf(row)) }
     },
   }),
-  count: () => ({
-    get: async () => {
-      mockCountReads()
-      return { data: () => ({ count: state.components.length }) }
-    },
-  }),
+  // The live count is every document less the tombstones (AGL-3918):
+  // `where('deletedAt', '!=', null)` matches a set, non-null `deletedAt`.
+  count: () => countOf(() => true),
+  where: (field: string, op: string, value: unknown) => {
+    if (field !== 'deletedAt' || op !== '!=' || value !== null) {
+      throw new Error(`unexpected filter ${field} ${op} ${String(value)}`)
+    }
+    return { count: () => countOf((row) => row['deletedAt'] != null) }
+  },
   doc: () => ({ create: (...args: unknown[]) => mockCreate(...args) }),
 })
 

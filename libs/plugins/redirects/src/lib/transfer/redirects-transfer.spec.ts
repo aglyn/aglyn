@@ -554,9 +554,9 @@ describe('the dry run', () => {
   })
 
   it('holds the creates past what the plan’s counter leaves, counting only the rows that would write', async () => {
-    // Four documents (the soft-deleted one included, as the create route
-    // counts it) of six: room for two.
-    org = { plan: 'starter', entitlements: { redirectsPerHost: 6 } }
+    // Three live rules of five: room for two. The soft-deleted fourth frees
+    // its slot, as the create route counts it (AGL-3918).
+    org = { plan: 'starter', entitlements: { redirectsPerHost: 5 } }
     const plan = await dryRun([
       { source: '/bad', destination: 'http://nope.example' },
       { source: '/one', destination: '/1' },
@@ -688,7 +688,8 @@ describe('apply', () => {
   })
 
   it('counts the plan’s slots again as it creates, and stops at a row boundary when time runs short', async () => {
-    org = { plan: 'starter', entitlements: { redirectsPerHost: 5 } }
+    // Three live rules and one deleted: the deleted `r3` frees its slot (AGL-3918), so a cap of 4 leaves one.
+    org = { plan: 'starter', entitlements: { redirectsPerHost: 4 } }
     const plan = await dryRun([
       { source: '/one', destination: '/1' },
       { source: '/two', destination: '/2' },
@@ -698,7 +699,7 @@ describe('apply', () => {
     docs.set(`${RULES}/late`, { source: '/late', destination: '/l', statusCode: 302 })
     const { results } = await applyPlan(plan)
     expect(results).toEqual([
-      expect.objectContaining({ row: 0, outcome: 'failed', message: 'Your plan includes 5 redirects — upgrade in Billing for more' }),
+      expect.objectContaining({ row: 0, outcome: 'failed', message: 'Your plan includes 4 redirects — upgrade in Billing for more' }),
     ])
 
     const short = await applyPlan(plan, memoryWriter(500).writer)

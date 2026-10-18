@@ -29,13 +29,10 @@
  * and did. The card offered headroom that did not exist and then failed the
  * action.
  *
- * The aggregate is UNFILTERED, which also closes a second, quieter
- * disagreement: the enforcing route runs a plain
- * `collection('products').count()` for this quota (its `softDeletes` branch
- * governs only the flat per-host webhook cap), so the server has always
- * counted soft-deleted products toward `productsPerHost` while this card
- * excluded them. The card now asks the enforcing route's question in the
- * enforcing route's terms.
+ * The count is LIVE products, as the enforcing route counts them
+ * (AGL-3918): every document less the tombstones (`deletedAt != null`), so a
+ * deleted product frees its slot and an archived one keeps it. The card asks
+ * the enforcing route's question in the enforcing route's terms.
  *
  * Contracts:
  *
@@ -96,7 +93,12 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 }
 
 /** Mutable so a spec can choose how the aggregate resolves. */
-const aggregate: { count: number | null } = { count: SERVER_PRODUCTS }
+const aggregate: { count: number | null; tombstones: number } = {
+  count: SERVER_PRODUCTS,
+  tombstones: 0,
+}
+/** The suffix the mocked `query` gives the tombstone aggregate's target. */
+const TOMBSTONES = ':tombstones'
 
 /**
  * STABLE instances, like the real hooks. `firestore` is a dependency of the
@@ -166,7 +168,8 @@ const countSpy = jest.fn(async (name: string) => {
   if (aggregate.count == null) {
     throw Object.assign(new Error('denied'), { code: 'permission-denied' })
   }
-  return { data: () => ({ count: aggregate.count }), name } as any
+  const count = name.endsWith(TOMBSTONES) ? aggregate.tombstones : aggregate.count
+  return { data: () => ({ count }), name } as any
 })
 
 /**
@@ -195,7 +198,13 @@ jest.mock('@aglyn/aglyn', () => {
 jest.mock('firebase/firestore', () => ({
   ...jest.requireActual('firebase/firestore'),
   collection: (_db: unknown, _a: string, _b: string, name: string) => name,
-  query: (name: string) => name,
+  // The tombstone aggregate (`deletedAt != null`) is told apart by its
+  // filter; the table's own `deletedAt == null` query keeps the name.
+  query: (name: string, ...constraints: Array<{ field?: string; op?: string }>) =>
+    constraints.some((constraint) => constraint?.field === 'deletedAt' && constraint.op === '!=')
+      ? `${name}${TOMBSTONES}`
+      : name,
+  where: (field: string, op: string) => ({ field, op }),
   limit: (value: number) => limitSpy(value),
   doc: () => ({}),
   getCountFromServer: (name: string) => countSpy(name),
@@ -243,6 +252,7 @@ jest.setTimeout(30_000)
 beforeEach(() => {
   jest.clearAllMocks()
   aggregate.count = SERVER_PRODUCTS
+  aggregate.tombstones = 0
 })
 
 const mount = () => render(<ProductsHubCard hostId="host-1" />)
@@ -284,7 +294,9 @@ const gatingOn = async (count: number) => {
 const readRejected = async () => {
   await waitFor(() => expect(countSpy).toHaveBeenCalled())
   await act(async () => {
-    await countSpy.mock.results[0].value.catch(() => undefined)
+    await Promise.all(
+      countSpy.mock.results.map((result) => result.value.catch(() => undefined)),
+    )
   })
 }
 
@@ -342,8 +354,27 @@ describe('the products hub head-count is a server aggregate (AGL-1716)', () => {
     mount()
     await gatingOn(SERVER_PRODUCTS)
 
-    expect(countSpy).toHaveBeenCalledTimes(1)
+    // Two aggregates, once: every product, and the deleted ones (AGL-3918).
+    expect(countSpy).toHaveBeenCalledTimes(2)
     expect(countSpy).toHaveBeenCalledWith('products')
+    expect(countSpy).toHaveBeenCalledWith(`products${TOMBSTONES}`)
+  })
+
+  it('counts live products: a deleted one frees its slot (AGL-3918)', async () => {
+    // 2,503 stored against Pro's 2,500, four deleted: 2,499 live, so Add
+    // opens. Before AGL-3918 the card and the route both counted 2,503.
+    aggregate.count = 2_503
+    aggregate.tombstones = 4
+    mount()
+    await gatingOn(2_499)
+
+    fireEvent.click(screen.getByText('Add product'))
+    expect(screen.queryByText('Cancel')).not.toBeNull()
+    expect(
+      enqueueSnackbar.mock.calls.some((call) =>
+        String(call[0]).includes('Your plan includes'),
+      ),
+    ).toBe(false)
   })
 
   it('re-reads the count after the editor closes on a create', async () => {

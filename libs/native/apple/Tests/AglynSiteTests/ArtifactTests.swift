@@ -140,6 +140,22 @@ final class ArtifactTests: XCTestCase {
     XCTAssertEqual(artifactLiveCount(total: 4, subtract: nil), 4)
   }
 
+  /// AGL-3918: a deleted template frees its slot. The tombstones are read and the ones the starter-excluding count
+  /// included are subtracted: set, and not a starter's.
+  func testSubtractsTheDeletedTemplatesTheCountIncluded() {
+    let query = templateTombstoneQuery(hostID: "h")
+    XCTAssertEqual(query.path, "hosts/h/templates")
+    XCTAssertEqual(query.allFilters.first?.path, "deletedAt")
+    XCTAssertEqual(query.allFilters.first?.op, .greaterThan)
+    let tombstones = [
+      FirestoreDocument(id: "a", data: ["source": ["type": "authored"]]),
+      FirestoreDocument(id: "b", data: ["source": ["type": "marketplace"]]),
+      FirestoreDocument(id: "c", data: ["source": ["type": "starter"]]),
+      FirestoreDocument(id: "d", data: [:]),
+    ]
+    XCTAssertEqual(deletedTemplatesCounted(tombstones), 2)
+  }
+
   func testOpensTheArtifactListsNatively() {
     let registry = NativePluginRegistry()
     _ = NativePluginLoader.load(NativePlatformEntries.entries, into: registry)
