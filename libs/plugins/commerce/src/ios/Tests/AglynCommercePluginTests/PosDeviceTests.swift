@@ -296,6 +296,15 @@ final class ConsolePosDeviceAPITests: XCTestCase {
     XCTAssertNil(paired.branding?.logoDarkURL)
   }
 
+  func testALogoFromTheSitesLibraryIsServedFromTheConsoleTheScreenIsPairedWith() async throws {
+    // The route resolves a library logo to a path on the console's media CDN; a path is not an address on its own.
+    let transport = Recording(
+      #"{"token":"abc","mode":"kiosk","branding":{"name":"Corner Cafe","logoUrl":"/api/media/cdn/h1/logo","logoDarkUrl":"media:h1/dark","message":"Hi"}}"#)
+    let paired = try await ConsolePosDeviceAPI(api: client(transport)).pair(code: "123456", mode: .kiosk)
+    XCTAssertEqual(paired.branding?.logoURL?.absoluteString, "https://console.test/api/media/cdn/h1/logo?w=640")
+    XCTAssertEqual(paired.branding?.logoDarkURL?.absoluteString, "https://console.test/api/media/cdn/h1/dark?w=640")
+  }
+
   func testAPollCarriesTheTokenInItsHeaderAndReadsTheScreen() async throws {
     let transport = Recording(
       #"{"state":{"mode":"cart","updatedAtMs":5,"currency":"usd","answered":false,"cart":{"lines":[{"name":"Latte","quantity":2,"amountCents":900}],"itemsCents":900,"discountCents":0,"taxCents":0,"totalCents":900}},"branding":{"name":"Cafe","logoUrl":null,"logoDarkUrl":null,"message":"Hi"}}"#)

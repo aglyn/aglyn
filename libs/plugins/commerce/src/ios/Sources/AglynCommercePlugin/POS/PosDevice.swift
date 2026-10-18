@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynSite
 import Foundation
 import Observation
 
@@ -32,6 +33,13 @@ let posDisplayIdlePoll: Duration = .seconds(3)
 /// The store's name and logo are re-read this often, so an edit reaches the screen.
 let posDeviceBrandingRefreshMs: Int64 = 10 * 60 * 1000
 
+/// Where a store logo is shown from: the routes send the site's logo as a path on the console's media CDN (or a
+/// reference, or an https address), never an address to open as it is.
+func posBrandingLogoURL(_ value: String?, origin: String) -> URL? {
+  guard let value, !value.isEmpty else { return nil }
+  return mediaPreviewURL(value, origin: origin, hostID: nil, width: 640)
+}
+
 /// The store's look for the idle and thank-you screens.
 struct PosDeviceBranding: Equatable {
   let name: String
@@ -39,9 +47,10 @@ struct PosDeviceBranding: Equatable {
   let logoDarkURL: URL?
   let message: String
 
-  static func read(_ element: JSONValue?) -> PosDeviceBranding? {
+  /// The branding the display route sends; its logos are served from `origin`, the console the screen is paired with.
+  static func read(_ element: JSONValue?, origin: String) -> PosDeviceBranding? {
     guard let record = element?.objectValue, !record.isEmpty else { return nil }
-    func url(_ key: String) -> URL? { record[key]?.stringValue.flatMap { $0.isEmpty ? nil : URL(string: $0) } }
+    func url(_ key: String) -> URL? { posBrandingLogoURL(record[key]?.stringValue, origin: origin) }
     return PosDeviceBranding(
       name: record["name"]?.stringValue ?? "Welcome", logoURL: url("logoUrl"), logoDarkURL: url("logoDarkUrl"),
       message: record["message"]?.stringValue ?? "Welcome")
@@ -109,7 +118,7 @@ struct ConsolePosDeviceAPI: PosDeviceAPI {
     }
     return PosPaired(
       token: token, mode: answer?["mode"]?.stringValue == "kiosk" ? .kiosk : .display,
-      branding: PosDeviceBranding.read(answer?["branding"]))
+      branding: PosDeviceBranding.read(answer?["branding"], origin: api.origin))
   }
 
   func poll(token: String, withBranding: Bool) async throws -> (read: PosDisplayRead, branding: PosDeviceBranding?) {
@@ -119,7 +128,10 @@ struct ConsolePosDeviceAPI: PosDeviceAPI {
     guard let raw = answer?["state"], let data = try? raw.encoded(),
       let state = try? JSONDecoder().decode(PosDisplayState.self, from: data)
     else { throw ConsoleAPIError(status: 502, message: "The register did not answer with a screen.") }
-    return (PosDisplayRead(state: state, answered: raw["answered"]?.flag ?? false), PosDeviceBranding.read(answer?["branding"]))
+    return (
+      PosDisplayRead(state: state, answered: raw["answered"]?.flag ?? false),
+      PosDeviceBranding.read(answer?["branding"], origin: api.origin)
+    )
   }
 
   func respond(token: String, answer: PosDisplayAnswer) async throws {

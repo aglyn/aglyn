@@ -4,6 +4,7 @@
 import AglynContracts
 import AglynCore
 import AglynPluginHost
+import AglynSite
 import AglynUI
 import SwiftUI
 
@@ -359,8 +360,12 @@ struct ProductDetailView: View {
     Form {
       if let notice { AglynNotice(notice.text, tone: notice.tone) { self.notice = nil } }
       Section {
+        // The product's main picture is a media reference (or a console path): served from the console's media CDN for
+        // this site, as the register's tiles and the console's product editor show it.
         AglynDetailHeader(
-          row.name, subtitle: row.price, imageURL: row.item.imageURL.flatMap(URL.init(string:)), systemImage: "shippingbox",
+          row.name, subtitle: row.price,
+          imageURL: row.item.imageURL.flatMap { mediaPreviewURL($0, origin: context.api.origin, hostID: context.hostID) },
+          systemImage: "shippingbox",
           status: (row.statusLabel, row.status == "active" ? .success : .neutral))
       }
       Section("Pricing and stock") {
