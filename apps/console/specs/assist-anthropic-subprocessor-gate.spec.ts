@@ -269,6 +269,10 @@ const MENTIONS_ONLY = new Map<string, string>([
     'apps/console/specs/provider-key-exposure.spec.ts',
     'The spec driving that checker. Names the key in its expected-reader assertions and in the list of env names the pattern must match. A guard, not a flow.',
   ],
+  [
+    'tools/e2e/ai-guided-start-local.e2e.mjs',
+    "The guided start run end to end on the local emulator stack (AGL-3596). It never reads the key and never calls a provider itself: it drives the console a developer started, so a live run goes through the adapter above with that developer's own key, and what it sends is the brief the developer typed or the fixed sample in the script, never a customer's content. Its model-stub mode is the only mention: it sets the key to an EMPTY string so the console it starts cannot fall back on a real one. CI never runs it.",
+  ],
 ])
 
 /** Tracked files naming the env var at all, build output excluded. */
