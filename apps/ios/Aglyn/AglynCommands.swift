@@ -3,8 +3,8 @@
 
 import SwiftUI
 
-/// The menu bar on the Mac and the keyboard shortcuts on iPad: sections on
-/// ⌘1…, Refresh on ⌘R, and the workspace and site switcher on ⌘K.
+/// The menu bar on the Mac and the keyboard shortcuts on iPad: the pinned workspaces on ⌘1–⌘5, Home, the workspace
+/// and site pickers, the settings modes, and Refresh on ⌘R.
 struct AglynCommands: Commands {
   let model: AppModel
   @FocusedValue(\.shellNavigation) private var navigation
@@ -16,23 +16,47 @@ struct AglynCommands: Commands {
     }
     CommandMenu("Go") {
       Button("Home") { navigation?.select(.home) }
-        .keyboardShortcut("1", modifiers: .command)
+        .keyboardShortcut("h", modifiers: [.command, .shift])
+        .disabled(navigation == nil)
       Button("Notifications") { navigation?.select(.notifications) }
-        .keyboardShortcut("2", modifiers: .command)
-      ForEach(Array(sidebarScreens.enumerated()), id: \.element.id) { index, screen in
-        if index < 6 {
-          Button(screen.title) { navigation?.select(.plugin(screen.screen)) }
-            .keyboardShortcut(KeyEquivalent(Character("\(index + 3)")), modifiers: .command)
-        } else {
-          Button(screen.title) { navigation?.select(.plugin(screen.screen)) }
-        }
-      }
+        .keyboardShortcut("n", modifiers: [.command, .shift])
+        .disabled(navigation == nil)
       Divider()
-      Button("Switch Workspace or Site…") { navigation?.showSwitcher = true }
+      // ⌘1–⌘5 jump to the pins, in the person's order.
+      ForEach(Array(pins.enumerated()), id: \.element) { index, orgID in
+        Button(name(orgID)) { open(orgID) }
+          .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+          .disabled(navigation == nil)
+      }
+      if !pins.isEmpty { Divider() }
+      Button("Switch Workspace…") { navigation?.picker = .workspace }
         .keyboardShortcut("k", modifiers: .command)
         .disabled(navigation == nil)
+      Button("Switch Site…") { navigation?.picker = .site }
+        .keyboardShortcut("k", modifiers: [.command, .shift])
+        .disabled(navigation == nil || model.workspace?.org == nil)
+      Button("Whole Workspace") { navigation?.enterWorkspace() }
+        .disabled(navigation == nil || navigation?.inSite == false)
+      Divider()
+      Button("Workspace Settings") {
+        guard let navigation else { return }
+        navigation.enter(.workspaceSettings, first: ShellScope(model: model, navigation: navigation).firstSection(of: .workspaceSettings))
+      }
+      .disabled(navigation == nil)
+      Button("Site Settings") {
+        guard let navigation else { return }
+        navigation.enter(.siteSettings, first: ShellScope(model: model, navigation: navigation).firstSection(of: .siteSettings))
+      }
+      .disabled(navigation == nil || model.workspace?.site == nil || navigation?.inSite == false)
     }
   }
 
-  private var sidebarScreens: [SidebarScreen] { SidebarScreen.all(model) }
+  private var pins: [String] { Array((model.preferences?.pinned ?? []).prefix(5)) }
+
+  private func name(_ orgID: String) -> String { model.workspace?.orgs.first { $0.id == orgID }?.name ?? "Pinned workspace" }
+
+  private func open(_ orgID: String) {
+    model.workspace?.open(orgID: orgID)
+    navigation?.enterWorkspace()
+  }
 }

@@ -19,6 +19,7 @@ struct RouteView: View {
     case .settings: SettingsView()
     case .notificationSettings: NotificationSettingsView()
     case .analytics: AnalyticsView()
+    case .notifications: NotificationsView()
     case .web(let page): AglynBrowserScreen(page)
     }
   }

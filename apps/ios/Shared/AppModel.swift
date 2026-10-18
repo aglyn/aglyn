@@ -27,6 +27,8 @@ final class AppModel {
   let push: PushCenter
   private(set) var pluginFailures: [NativePluginLoadFailure] = []
   private(set) var workspace: WorkspaceStore?
+  /// The signed-in person's pins, recents, stars, workspace colors and theme (`users/{uid}`), synced with the console.
+  private(set) var preferences: AccountPreferencesStore?
   /// The workspace and site (by address) of a link opened before anyone was signed in on this launch.
   @ObservationIgnored private var pendingLinkScope: (orgSlug: String, hostSlug: String?)?
   /// The signed-in token's claims: the staff section shows only when they say staff.
@@ -114,6 +116,8 @@ final class AppModel {
     guard user?.uid != workspace?.uid else { return }
     workspace?.stop()
     workspace = nil
+    preferences?.stop()
+    preferences = nil
     // A support session reads the customer's workspaces but never registers this device's notifications under their account.
     if auth?.impersonation == nil { push.signedIn(uid: user?.uid, reader: reader) }
     claims = TokenClaims()
@@ -121,6 +125,9 @@ final class AppModel {
     guard let user, let reader else { return }
     let store = WorkspaceStore(uid: user.uid, reader: reader)
     store.start()
+    let preferences = AccountPreferencesStore(uid: user.uid, reader: reader)
+    preferences.start()
+    self.preferences = preferences
     if let (orgSlug, hostSlug) = pendingLinkScope {
       pendingLinkScope = nil
       store.select(orgSlug: orgSlug, hostSlug: hostSlug)
@@ -207,23 +214,32 @@ final class AppModel {
       back: { [weak self] in self?.setDeviceMode(nil) })
   }
 
+  /// The site a window stands in: the picked one while it is inside a site, none while it looks at the whole workspace
+  /// (Aglyn POS always sells for its store).
+  func scopedSite(_ navigation: ShellNavigation) -> WorkspaceSite? {
+    app == .pos || navigation.inSite ? workspace?.site : nil
+  }
+
   /// The context a plugin's screen or widget is handed in one window.
   func context(for navigation: ShellNavigation) -> NativePluginContext? {
     guard let user = auth?.user, let reader, let api else { return nil }
     return NativePluginContext(
       uid: user.uid,
       orgID: workspace?.org?.id,
-      hostID: workspace?.site?.id,
+      hostID: scopedSite(navigation)?.id,
       orgSlug: workspace?.org?.slug,
-      hostSlug: workspace?.site?.subdomain.isEmpty == false ? workspace?.site?.subdomain : workspace?.site?.id,
+      hostSlug: scopedSite(navigation).map { $0.subdomain.isEmpty ? $0.id : $0.subdomain },
       firestore: reader,
       api: api,
       writer: ReaderMergeWriter(reader),
       staff: auth?.staff,
       navigate: { [weak navigation] screen, params in navigation?.push(.screen(screen, params)) },
       openBesigner: { [weak navigation] path in navigation?.push(.besigner(path)) },
-      siteRole: workspace?.site?.role, orgRole: workspace?.org?.role,
-      selectSite: { [weak workspace = self.workspace] hostID in workspace?.selectSite(hostID) },
+      siteRole: scopedSite(navigation)?.role, orgRole: workspace?.org?.role,
+      selectSite: { [weak workspace = self.workspace, weak navigation] hostID in
+        workspace?.selectSite(hostID)
+        if hostID != nil { navigation?.inSite = true }
+      },
       back: { [weak navigation] in
         guard let navigation else { return }
         _ = navigation.paths[navigation.section]?.popLast()
@@ -242,7 +258,11 @@ final class AppModel {
     switch registry.resolve(link) {
     case .screen(let screen, let params)?:
       // A link that names a workspace and site by address reads them, not whichever is picked (AGL-3911).
-      if let org = params["orgSlug"] { select(orgSlug: org, hostSlug: params["hostSlug"]) }
+      if let org = params["orgSlug"] {
+        select(orgSlug: org, hostSlug: params["hostSlug"])
+        // A link into one site opens inside it; a workspace's own page opens on the whole workspace.
+        if app == .aglyn { navigation.inSite = params["hostSlug"] != nil }
+      }
       navigation.push(.screen(screen, params))
     case .besigner(let path)?: navigation.push(.besigner(path))
     case .unavailable(let path)?:
@@ -250,7 +270,10 @@ final class AppModel {
       let scope = DeepLinks.splitConsoleScope(path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? path)
       if let jobID = DeepLinks.rootQuery(path)?["aiJob"], !jobID.isEmpty, registry.screen("ai.job") != nil {
         // An AI job's notice that built nothing of its own to open (`/{hostId}?aiJob=…`) opens that job (AGL-3911).
-        if let org = scope.orgSlug { select(orgSlug: org, hostSlug: scope.hostSlug) }
+        if let org = scope.orgSlug {
+          select(orgSlug: org, hostSlug: scope.hostSlug)
+          if scope.hostSlug != nil { navigation.inSite = true }
+        }
         navigation.push(.screen("ai.job", ["jobId": jobID]))
       } else if path.hasPrefix("/manage/notifications/settings") {
         navigation.select(.notifications)
@@ -286,8 +309,9 @@ final class AppModel {
     if let workspace {
       let orgID = orgID ?? workspace.sites.first { $0.id == hostID }?.orgID
       if let orgID, orgID != workspace.org?.id || (hostID != nil && hostID != workspace.site?.id) {
-        workspace.select(orgID: orgID, hostID: hostID ?? (orgID == workspace.org?.id ? workspace.site?.id : nil))
+        workspace.open(orgID: orgID, hostID: hostID ?? (orgID == workspace.org?.id ? workspace.site?.id : nil))
       }
+      if hostID != nil { navigation.inSite = true }
       // Host notifications store `/{hostDocId}/…`; the console follows them at `/{orgSlug}/hosts/{subdomain}/…`.
       let site = workspace.sites.first { $0.id == hostID }
       let org = workspace.orgs.first { $0.id == (orgID ?? site?.orgID) }

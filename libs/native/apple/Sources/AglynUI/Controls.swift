@@ -246,3 +246,29 @@ public struct AglynItemTile: View {
     .accessibilityAddTraits(.isButton)
   }
 }
+
+/// A checkbox on every platform (iOS has no checkbox toggle): a ticked square in the tint, the label beside it, the whole
+/// row the target.
+public struct AglynCheckboxToggleStyle: ToggleStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    Button {
+      configuration.isOn.toggle()
+    } label: {
+      HStack(spacing: 10) {
+        Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
+          .font(.system(size: 18))
+          .foregroundStyle(configuration.isOn ? AglynColor.tint : AglynColor.secondaryText)
+        configuration.label.frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(configuration.isOn ? .isSelected : [])
+  }
+}
+
+extension ToggleStyle where Self == AglynCheckboxToggleStyle {
+  public static var aglynCheckbox: AglynCheckboxToggleStyle { AglynCheckboxToggleStyle() }
+}
