@@ -18,7 +18,14 @@
 import type { PluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
 import type { StockPhoto, StockPhotoProvider } from '@aglyn/aglyn/plugin-manager/stock-photo-provider'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
-import { AI_LAYOUT_NO_PHOTO, aiResolveLayoutPictures, type AiLayoutPictureSlot } from '../layout-language/ai-layout-pictures'
+import {
+  AI_LAYOUT_NO_PHOTO,
+  AI_LAYOUT_STARTER_PHOTOS,
+  aiLayoutDropEmptyPictures,
+  aiLayoutPictureSlots,
+  aiResolveLayoutPictures,
+  type AiLayoutPictureSlot,
+} from '../layout-language/ai-layout-pictures'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
 import {
   aiLayoutStockPhotoSource,
@@ -156,7 +163,7 @@ describe('a business type the libraries do not know, searched by the kind of sit
     expect(photo?.alt).toBeTruthy()
   })
 
-  it('takes the empty card out when nothing comes back, and gives the words the row', async () => {
+  it('takes an empty card out and gives the words the row, and keeps a neutral starter where it is the page’s only picture', async () => {
     const { source } = fakes([])
     expect(await source?.([HERO])).toEqual([AI_LAYOUT_NO_PHOTO])
     const page = (): NodesMap =>
@@ -175,17 +182,26 @@ describe('a business type the libraries do not know, searched by the kind of sit
         },
         ZjpV3W2m5V: { componentId: 'image', props: { alt: HERO_ALT, objectFit: 'cover', width: '100%', height: '100%' } },
       }) as unknown as NodesMap
-    const nodes = (await aiResolveLayoutPictures(page(), {
+    // A card nothing fits is taken out, frame and column (AGL-3856).
+    const slots = aiLayoutPictureSlots(page(), 'root', { ids: ['sec-0'], names: SECTIONS })
+    const nodes = aiLayoutDropEmptyPictures(page(), slots, [AI_LAYOUT_NO_PHOTO], ['sec-0']) as unknown as Record<
+      string,
+      { nodes?: string[]; props?: Record<string, unknown> }
+    >
+    for (const id of ['Xe6vOrnAZy', 'xvJkqZ8P05', 'ZjpV3W2m5V']) expect(nodes[id]).toBeUndefined()
+    expect(nodes['row']?.nodes).toEqual(['words'])
+    expect(nodes['words']?.props?.['size']).toBe('xs:12')
+    expect(nodes['sec-0']?.nodes).toEqual(['container'])
+    // Where it is the page's only picture, the page floor keeps it with a neutral starter (AGL-3923).
+    const floored = (await aiResolveLayoutPictures(page(), {
       rootId: 'root',
       sectionIds: ['sec-0'],
       sectionNames: SECTIONS,
       seed: 'ttzbLqppuu:home',
       source: async () => [AI_LAYOUT_NO_PHOTO],
     })) as unknown as Record<string, { nodes?: string[]; props?: Record<string, unknown> }>
-    for (const id of ['Xe6vOrnAZy', 'xvJkqZ8P05', 'ZjpV3W2m5V']) expect(nodes[id]).toBeUndefined()
-    expect(nodes['row']?.nodes).toEqual(['words'])
-    expect(nodes['words']?.props?.['size']).toBe('xs:12')
-    expect(nodes['sec-0']?.nodes).toEqual(['container'])
+    expect([AI_LAYOUT_STARTER_PHOTOS.hero.src, AI_LAYOUT_STARTER_PHOTOS.desk.src]).toContain(floored['ZjpV3W2m5V']?.props?.['src'])
+    expect(floored['row']?.nodes).toEqual(['words', 'Xe6vOrnAZy'])
     // A starter fills the card where the library could not be asked, and the split stays.
     const started = (await aiResolveLayoutPictures(page(), {
       rootId: 'root',

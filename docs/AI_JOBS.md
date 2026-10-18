@@ -2856,6 +2856,52 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   gallery, a portfolio or a lookbook is drawn as pictures on any kind of site
   (`aiLayoutGroupVariant`): Kasvora's "Selected work gallery" was four cards of
   icons, with no picture to fill. Nothing the model sees changed.
+- **Every kind's own common photos, last (AGL-3923).** Each kind of site the guided
+  start offers has its own set of plain, common photos of where its work happens
+  (`KIND_GENERIC`, `aiStockKindGenericTerms`): a restaurant's tables and plates, a
+  trade's tools, a school's library, a portfolio's art supplies, never the
+  business starter's office. An unlisted world's last rung is its kind's set,
+  else its starter's. A listed world (a craft, or a world read from the kind)
+  widens too, to its kind's set alone and only where its world agrees with that
+  kind (read from it, or naming one of its words): a gym whose owner picked
+  Business & services, or a ceramicist who picked Portfolio, keeps a slot nothing
+  fits without a photo (AGL-3831). Those searches take a hit whose first tags name
+  the set's words (the hero's first tag), never one led by a face or a portrait and
+  never one naming a child. A product, a portrait of the business's people and a
+  record's cover are unchanged. A picture's subject leaves out words that say only
+  that it is one of a set (`PLACEHOLDER_SUBJECTS`: "project", "piece", "sample",
+  "work", "selected", "four" and the ordinals), and the Portfolio kind's world never
+  leads with a bee, a tattoo or makeup. The beta.266 Mexicano portfolio (job
+  C75nFALn3H) titled its works "Project one" to "Project four", searched "project",
+  "project four" and "four" (students at a whiteboard, lavender, a running track),
+  and opened on "artist bee". Its seven recorded answers replay in
+  `ai-stock-photo-mexicano.spec.ts`. In those replays every slot but the tall
+  works chose a photo, while production's library got none and logged nothing: a
+  chosen photo that never reached the library is now logged and takes a starter
+  (above).
+- **One refused photo is that photo's (AGL-3923, #1770).** The provider names a
+  download by its bytes (`sniffPhotoContentType`, the upload check's own
+  signatures), never by its label. A media-library refusal of one photo's own bytes
+  (`AI_STOCK_PHOTO_OWN_REFUSALS`: 413, 415, 451) sends the slot to its next hit,
+  and neither the page nor the job tries that photo again. Any other refusal (403
+  for the storage band, the site's scope, a lockdown) still stops the page. The
+  beta.267 Brightvale start's first pick, Pixabay 10157445, came labeled image/png
+  and was not PNG, and that one 415 had stopped every copy on all four pages.
+- **With a library, only neutral starters, and a page floor (AGL-3923).** Where the
+  site has a stock library, a slot the library failed takes only a neutral starter
+  (`aiLayoutNeutralStarterPhotos`: the team at a table in a bright office, the tidy
+  desk), each at most once on a page, the hero first. It never takes the
+  workbench, the coffee shop's owner or the houseplants, which read as another
+  business's own photos (AGL-3831); a slot past them keeps the no-photo treatment.
+  A page the library answered that would still show no picture keeps one neutral
+  starter in its hero, else in its first slot (Zach, 2026-10-12: a starter photo
+  before no photo at all). A deployment with no library keeps every starter as
+  before. "About" makes a picture of people only where it leads a section's or a
+  picture's words ("About us"), never as the preposition: Brightvale's "Ready to
+  talk about your marketing?" was searched among portraits and answered a tin-can
+  telephone. A typed-world slot's own words are searched last and held to the
+  kind's common world, never to none. `ai-stock-photo-brightvale-floor.spec.ts`
+  replays the home page whole.
 - **Alt text that says what the photo shows (AGL-3805).** The slot's alt text is the model's,
   written before any photo was found, so a stock photo placed in it answers for its own
   words (`aiStockPhotoAlt`): the slot's words are kept on an English site when a word of
