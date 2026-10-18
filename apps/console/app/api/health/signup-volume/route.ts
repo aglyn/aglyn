@@ -98,6 +98,7 @@ import {
   SIGNUP_REFUSAL_WINDOW_MINUTES,
   signupDroughtHealth,
   signupLandingHealth,
+  ORG_LANDED_AT_PATH,
   signupRefusalsHealth,
   signupsHealth,
   type SignupDroughtCheck,
@@ -366,8 +367,9 @@ const attemptsProbe = memoizeWithTtl<{
  *
  * Both edges are on `createdAt`, so the automatic single-field index the
  * volume count above already uses serves it and no composite index is
- * needed. Only the size of each org's `hosts` map, its creation time and an
- * opaque key for who made it leave this function, and the route's body
+ * needed. Only the size of each org's `hosts` map, whether its owner reached
+ * the console, its creation time and an opaque key for who made it leave
+ * this function, and the route's body
  * carries none of them, only counts.
  *
  * Who made it: the acquisition record's first-touch stamp is set once per
@@ -411,9 +413,15 @@ const landingProbe = memoizeWithTtl<{
           doc.get('acquisition') as { capturedAt?: unknown } | null
         )?.capturedAt
         const owner = doc.get('ownerUid')
+        // `undefined` when the org predates the marker, so the check abstains.
+        const landedAt = doc.get(ORG_LANDED_AT_PATH)
         return {
           hostCount:
             hosts && typeof hosts === 'object' ? Object.keys(hosts).length : 0,
+          landed:
+            landedAt === undefined
+              ? undefined
+              : typeof landedAt === 'number' && Number.isFinite(landedAt),
           createdAtMs:
             createdAt && typeof createdAt.toMillis === 'function'
               ? createdAt.toMillis()

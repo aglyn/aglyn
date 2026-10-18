@@ -2878,8 +2878,24 @@ Backtest, 2026-09-07 → 2026-10-17 (105 orgs, five-minute steps): the count
 rule was red for 1,125 minutes, 435 of them false. The streak rule was red
 only on 10/11 (AGL-3724). A streak of three missed AGL-3724 altogether.
 
+**Since 2026-10-18 it reads whether the owner reached the console, not
+whether they made a site.** The streak rule went red at 15:37Z because the two
+newest people had no site, and both had simply left. One left nine seconds
+after the workspace appeared. The other reached the site list, walked four
+steps of the guided start, and stopped. Sign-ups on either side of them made
+sites on the same build. No rule over sites alone can tell leaving from a
+broken landing, so the landing itself is recorded now:
+
+- `createOrganization` writes `landedAtMs: null`.
+- The org shell's activity beat (`/api/orgs/last-activity`), which fires the
+  moment the workspace opens, sets it on its first call whatever the 15-minute
+  interval says.
+- An org is stranded only when it has no site AND `landedAtMs` is still
+  `null`, which is exactly what AGL-3724 did. An org without the field predates
+  the marker; the check abstains on it and reports it as `unmarkedOrgs`.
+
 The body carries counts only (`strandedOrgs`, `strandedPeople`,
-`strandedStreak`, `orgsInWindow`) and the rule (`windowHours`,
+`strandedStreak`, `unmarkedOrgs`, `orgsInWindow`) and the rule (`windowHours`,
 `graceMinutes`, `maxStranded`), never an org id, slug or visitor key.
 
 ### The blocking function's decisions are DATA now

@@ -1253,6 +1253,11 @@ jobs:
       # alone is red before the morning run ever fetches anything.
       - run: npm run test:uptime-monitors
 
+      # The uptime probe tries a request once more when the RUNNER's network
+      # failed it (a DNS miss, a refused connection) and never when the site
+      # answered or timed out. The test pins both halves.
+      - run: npm run test:transport-retry
+
       # AGL-2500. The third member of that family, and the only one whose
       # CHECK can run here rather than just its self-test — which is the whole
       # design. Both guards above are gated on LINEAR_API_KEY and so run

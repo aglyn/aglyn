@@ -138,6 +138,51 @@ describe('stampOrgLastActivity', () => {
     expect(update).not.toHaveBeenCalled()
   })
 
+  const fields = (values: Record<string, unknown>) => {
+    const update = jest.fn(async () => undefined)
+    const db: OrgActivityStore = {
+      collection: () => ({
+        doc: () => ({
+          get: async () => ({ exists: true, get: (field: string) => values[field] }),
+          update,
+        }),
+      }),
+    }
+    return { db, update }
+  }
+
+  it("records the owner's first arrival even inside the interval creation just started", async () => {
+    const { db, update } = fields({
+      lastActivityAt: { toMillis: () => NOW - 1 * MIN },
+      landedAtMs: null,
+    })
+    await expect(stampOrgLastActivity(db, 'org-1', NOW)).resolves.toBe('stamped')
+    expect(update).toHaveBeenCalledWith({ landedAtMs: NOW })
+  })
+
+  it('records the arrival and the activity together when both are owed', async () => {
+    const { db, update } = fields({
+      lastActivityAt: { toMillis: () => NOW - 60 * MIN },
+      landedAtMs: null,
+    })
+    await stampOrgLastActivity(db, 'org-1', NOW)
+    expect(update).toHaveBeenCalledWith({
+      lastActivityAt: 'SERVER_TIMESTAMP',
+      landedAtMs: NOW,
+    })
+  })
+
+  it('never re-records an arrival, and never adds one to an org made before the marker', async () => {
+    for (const landedAtMs of [NOW - 5 * MIN, undefined]) {
+      const { db, update } = fields({
+        lastActivityAt: { toMillis: () => NOW - 3 * MIN },
+        landedAtMs,
+      })
+      await expect(stampOrgLastActivity(db, 'org-1', NOW)).resolves.toBe('fresh')
+      expect(update).not.toHaveBeenCalled()
+    }
+  })
+
   it('never creates an organization that does not exist', async () => {
     const { db, update } = store(false, undefined)
     await expect(stampOrgLastActivity(db, 'org-1', NOW)).resolves.toBe('missing')

@@ -80,6 +80,7 @@ import {
   buildPlan,
   markPendingDeployments,
 } from './lib/uptime-targets.mjs'
+import { fetchOnceMore } from './lib/transport-retry.mjs'
 
 const TIMEOUT_MS = 15_000
 
@@ -148,7 +149,7 @@ async function probe(name, base, path = '/api/health') {
   const url = `${base.replace(/\/$/, '')}${path}`
   const startedAt = Date.now()
   try {
-    const response = await fetch(url, {
+    const response = await fetchOnceMore(url, {
       redirect: 'manual',
       // Our own bot protection challenges automated clients, so without this
       // header the probe gets a 429 Vercel Security Checkpoint and reports the
@@ -158,8 +159,7 @@ async function probe(name, base, path = '/api/health') {
       // docs projects. Absent (local runs, forks), the header is simply not
       // sent and the probe behaves as before.
       headers: withProbeHeaders({ 'user-agent': 'aglyn-uptime-probe' }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    })
+    }, TIMEOUT_MS)
     const ms = Date.now() - startedAt
 
     if (response.status >= 300 && response.status < 400) {
@@ -225,14 +225,13 @@ async function probePage(name, base, path) {
   const url = `${base.replace(/\/$/, '')}${path}`
   const startedAt = Date.now()
   try {
-    const response = await fetch(url, {
+    const response = await fetchOnceMore(url, {
       redirect: 'manual',
       headers: withProbeHeaders({
         'user-agent': 'aglyn-uptime-probe',
         accept: 'text/html,application/xhtml+xml',
       }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    })
+    }, TIMEOUT_MS)
     const body = await response.text()
     const verdict = gradeFrontDoor({
       status: response.status,
@@ -296,14 +295,13 @@ async function probeRender(name, base, path, expectStatus) {
   const url = `${base.replace(/\/$/, '')}${path}`
   const startedAt = Date.now()
   try {
-    const response = await fetch(url, {
+    const response = await fetchOnceMore(url, {
       redirect: 'manual',
       headers: withProbeHeaders({
         'user-agent': 'aglyn-uptime-probe',
         accept: 'text/html,application/xhtml+xml',
       }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    })
+    }, TIMEOUT_MS)
     const body = await response.text()
     const verdict = gradeUncachedRender(
       {
