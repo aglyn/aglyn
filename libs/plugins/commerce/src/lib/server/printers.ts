@@ -148,6 +148,27 @@ export function printerSettingsFromBody(
   return { ok: true, patch }
 }
 
+/**
+ * A printer's URL is signed with the deployment's token secret. Where that is
+ * not configured nothing could ever poll, so a create or a regenerate is
+ * refused BEFORE it writes: a signing failure leaves no printer the
+ * manager cannot connect, and no version bump that strands a working one.
+ */
+const NO_SIGNING = 'Receipt printers are not available on this deployment.'
+
+function signedCredentials(
+  hostId: string,
+  printerId: string,
+  printer: PosPrinter,
+): ReturnType<typeof printerCredentials> | null {
+  try {
+    return printerCredentials(hostId, printerId, printer)
+  } catch (error) {
+    console.error('[printers] the printer URL could not be signed', error)
+    return null
+  }
+}
+
 /** What the card shows a manager to paste into the printer's web configuration. */
 export function printerCredentials(hostId: string, printerId: string, printer: PosPrinter) {
   return {
@@ -395,8 +416,11 @@ export const printersHandler: PluginApiHandler = async (req, res) => {
           createdAtMs: Date.now(),
           createdBy: uid,
         }
+        // Signed first: a deployment that cannot sign the URL adds no printer.
+        const credentials = signedCredentials(hostId, ref.id, printer)
+        if (!credentials) return res.status(503).json({ error: NO_SIGNING })
         await ref.set(printer)
-        return res.status(200).json(printerCredentials(hostId, ref.id, printer))
+        return res.status(200).json(credentials)
       }
       case 'update': {
         const loaded = await loadPrinter()
@@ -432,16 +456,19 @@ export const printersHandler: PluginApiHandler = async (req, res) => {
       case 'credentials': {
         const loaded = await loadPrinter()
         if (!loaded) return res.status(404).json({ error: 'Unknown printer' })
-        return res.status(200).json(printerCredentials(hostId, printerId, loaded.printer))
+        const credentials = signedCredentials(hostId, printerId, loaded.printer)
+        if (!credentials) return res.status(503).json({ error: NO_SIGNING })
+        return res.status(200).json(credentials)
       }
       case 'regenerate': {
         const loaded = await loadPrinter()
         if (!loaded) return res.status(404).json({ error: 'Unknown printer' })
         const secretVersion = Math.max(1, Number(loaded.printer.secretVersion) || 1) + 1
+        // Signed first: a failed signing must not bump the version and strand the printer's working URL.
+        const credentials = signedCredentials(hostId, printerId, { ...loaded.printer, secretVersion })
+        if (!credentials) return res.status(503).json({ error: NO_SIGNING })
         await loaded.ref.set({ secretVersion, updatedAtMs: Date.now() }, { merge: true })
-        return res
-          .status(200)
-          .json(printerCredentials(hostId, printerId, { ...loaded.printer, secretVersion }))
+        return res.status(200).json(credentials)
       }
       case 'test':
       case 'drawer': {
