@@ -238,10 +238,28 @@ export const DEFAULTS = {
   consecutive: 3,
   maxRounds: 5,
   roundIntervalMs: 20_000,
+  /**
+   * A scheduled run's share of the public plan (AGL-3928): three real pages
+   * and two not-found renders a turn, from different hosts where the list
+   * allows, so a red still spans `minFailingHosts`.
+   */
+  pagesPerTurn: 3,
+  missesPerTurn: 2,
   /** Distinct hosts that must fail in the SAME round for it to be red. */
   minFailingHosts: 2,
   /** How long a READY deployment may take to become the production target. */
   serveWaitMs: 300_000,
+}
+
+/**
+ * `count` items of `list` starting at `turn`, wrapping round: how a scheduled
+ * run takes its share of the plan, so every item comes up within
+ * `ceil(list.length / count)` turns. The whole list when `count` covers it.
+ */
+export function takeTurn(list, turn, count) {
+  if (!list.length || count >= list.length) return [...list]
+  const start = ((turn % list.length) + list.length) % list.length
+  return Array.from({ length: count }, (_item, offset) => list[(start + offset) % list.length])
 }
 
 /** The commit-status context the canary records its verdict under. */
@@ -302,12 +320,29 @@ export function parseHostList(text) {
  *            and not-found page, as before.
  *  - `health` the deployment's `/api/health`.
  *
- * Without it, the public domains as before — what production serves.
+ * Without it, the public domains as before — what production serves. A
+ * scheduled run passes its `turn` (the quarter-hour number) and renders
+ * `pagesPerTurn` pages and `missesPerTurn` misses of that plan, in rotation
+ * (see {@link takeTurn}), because every fresh render of a client page reads
+ * the site's whole screen list and the scheduled canary was a third of the
+ * project's Firestore reads (AGL-3928); the five-minute render monitor draws
+ * the image-heavy pages between turns. A candidate run (`deploymentHost`)
+ * and a run without a `turn` render everything.
  *
  * @param {{project: object, tenantHosts: Array<{host: string, paths: string[]}>,
- *   consoleHost: string, nonce: string, deploymentHost?: string|null}} input
+ *   consoleHost: string, nonce: string, deploymentHost?: string|null,
+ *   turn?: number|null, pagesPerTurn?: number, missesPerTurn?: number}} input
  */
-export function canaryPlan({ project, tenantHosts, consoleHost, nonce, deploymentHost = null }) {
+export function canaryPlan({
+  project,
+  tenantHosts,
+  consoleHost,
+  nonce,
+  deploymentHost = null,
+  turn = null,
+  pagesPerTurn = DEFAULTS.pagesPerTurn,
+  missesPerTurn = DEFAULTS.missesPerTurn,
+}) {
   const bust = (path) => `${path}${path.includes('?') ? '&' : '?'}__canary=${nonce}`
   const miss = `/__aglyn-canary-${nonce}`
   const rows = []
@@ -348,10 +383,13 @@ export function canaryPlan({ project, tenantHosts, consoleHost, nonce, deploymen
     return rows
   }
   if (project.key === 'tenant') {
-    for (const { host, paths } of tenantHosts) {
-      for (const path of paths) {
-        rows.push({ kind: 'page', host, url: `https://${host}${bust(path)}`, counts: true })
-      }
+    const pages = tenantHosts.flatMap(({ host, paths }) => paths.map((path) => ({ host, path })))
+    const hosts = tenantHosts.map(({ host }) => host)
+    const rotating = typeof turn === 'number' && Number.isFinite(turn)
+    for (const { host, path } of rotating ? takeTurn(pages, turn, pagesPerTurn) : pages) {
+      rows.push({ kind: 'page', host, url: `https://${host}${bust(path)}`, counts: true })
+    }
+    for (const host of rotating ? takeTurn(hosts, turn, missesPerTurn) : hosts) {
       rows.push({ kind: 'miss', host, url: `https://${host}${miss}`, counts: true })
     }
     if (tenantHosts[0]) {

@@ -49,6 +49,7 @@ import {
   siteSpelling,
   slackPayload,
   spellingCapacity,
+  takeTurn,
 } from './prod-canary.mjs'
 
 const PAGE = '<!DOCTYPE html><html><head><script src="/_next/static/chunks/a.js"></script></head><body>x</body></html>'
@@ -136,6 +137,30 @@ test('the tenant plan renders a fresh path per host and only grades tenant rows'
   const consoleHealth = rows.find((row) => row.host === 'app.aglyn.com')
   assert.equal(consoleHealth.counts, false, 'a console failure must never roll the tenant back')
   assert.ok(rows.filter((row) => row.host !== 'app.aglyn.com').every((row) => row.counts))
+})
+
+test('a scheduled turn renders its share of the public plan, in rotation (AGL-3928)', () => {
+  const tenantHosts = parseHostList('a.aglyn.app b.aglyn.app/x b.aglyn.app/y c.aglyn.app d.aglyn.app')
+  const plan = (turn) =>
+    canaryPlan({ project: PROJECTS.tenant, tenantHosts, consoleHost: 'app.aglyn.com', nonce: 'n', turn })
+  const pages = (rows) => rows.filter((row) => row.kind === 'page').map((row) => new URL(row.url).host + new URL(row.url).pathname)
+  const misses = (rows) => rows.filter((row) => row.kind === 'miss').map((row) => new URL(row.url).host)
+  // Six pages (each host's root, plus b's two): three a turn, wrapping.
+  assert.deepEqual(pages(plan(0)), ['a.aglyn.app/', 'b.aglyn.app/', 'b.aglyn.app/x'])
+  assert.deepEqual(pages(plan(1)), ['b.aglyn.app/', 'b.aglyn.app/x', 'b.aglyn.app/y'])
+  assert.deepEqual(pages(plan(5)), ['d.aglyn.app/', 'a.aglyn.app/', 'b.aglyn.app/'])
+  // Two misses a turn, always on two hosts, so a layout break still reads red.
+  assert.deepEqual(misses(plan(0)), ['a.aglyn.app', 'b.aglyn.app'])
+  assert.deepEqual(misses(plan(3)), ['d.aglyn.app', 'a.aglyn.app'])
+  // Health rows are untouched, and every turn still grades at least two hosts.
+  assert.ok(plan(2).some((row) => row.kind === 'health' && row.host === 'a.aglyn.app'))
+  assert.ok(new Set(plan(2).filter((row) => row.counts && row.kind !== 'health').map((row) => row.host)).size >= 2)
+  // No turn: the whole plan, as the candidate run and the older callers expect.
+  assert.equal(pages(plan(null)).length, 6)
+  assert.equal(misses(plan(null)).length, 4)
+  // A share that covers the list is the list.
+  assert.deepEqual(takeTurn(['p', 'q'], 9, 3), ['p', 'q'])
+  assert.deepEqual(takeTurn([], 1, 2), [])
 })
 
 test('the console plan grades the console', () => {
