@@ -58,6 +58,7 @@ import {
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useHostIndexEntries from '../hooks/use-host-index-entries'
 import useNotificationAlertPrefs from '../hooks/use-notification-prefs'
+import useNotificationSound from '../hooks/use-notification-sound'
 import {
   markAllNotificationsReadFor,
   markNotificationRead,
@@ -192,6 +193,7 @@ export function NotificationsMenu() {
 
   // ---- Alerts (AGL-650): sound, desktop notification, tab badge ----------
   const [alertPrefs] = useNotificationAlertPrefs()
+  const [sound] = useNotificationSound()
   // The Besigner inside the native apps: the app keeps its own unread count,
   // and the web view's title is what the app names the page by (AGL-3894).
   const inNativeApp = useIsNativeAppWebView()
@@ -272,7 +274,7 @@ export function NotificationsMenu() {
     // A new invitation belongs in the banner now, not on the next reload.
     if (arrived.some((item) => item.inviteId)) void refreshInvites()
 
-    if (alertPrefs.sound) playNotificationChime()
+    if (alertPrefs.sound) playNotificationChime(sound)
     if (alertPrefs.desktop) {
       // One notification for a burst — a batch write (an org-wide broadcast,
       // say) should not stack N toasts.
@@ -291,6 +293,7 @@ export function NotificationsMenu() {
   }, [
     recent,
     alertPrefs.sound,
+    sound,
     alertPrefs.desktop,
     followNotification,
     refreshInvites,

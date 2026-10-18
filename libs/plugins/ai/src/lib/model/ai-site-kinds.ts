@@ -197,7 +197,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['business', 'company', 'service', 'local', 'pet', 'dog', 'cleaning', 'customers'],
     starter: 'business',
     look: { bases: ['starter', 'material3', 'fluent', 'minimal', 'ant-design'], chroma: 'balanced', hues: ALL_HUES, grounds: ['white', 'cool', 'warm', 'tinted'], fonts: ['jakarta', 'manrope', 'outfit', 'inter', 'bricolage', 'fraunces'], corners: ['soft', 'round'], buttons: 'rounded', headingScale: 1, density: 'regular' },
-    design: 'Lead with what the business does and for whom, then services as cards, the reasons to choose it, how it works as steps, and a clear call to get in touch. Mix plain and soft bands with one brand band.',
+    design: 'Clear and confident: say plainly what the business does and for whom, draw what it offers as cards or a ruled list, and let a photo carry a section that describes the place or the work. Mix plain and soft bands with one brand band where the page most needs it.',
     pages: 'Home, Services, About and Contact are typical; a pricing or booking page where the brief asks for one.',
   },
   {
@@ -209,7 +209,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['repair', 'auto', 'garage', 'painting', 'painter', 'pool', 'moving', 'trade', 'trades', 'homeowner', 'pest', 'installation', 'emergency'],
     starter: 'business',
     look: { bases: ['bootstrap', 'carbon', 'material-ui', 'fluent', 'starter'], chroma: 'vivid', hues: [[4, 18], [20, 38], [42, 56], [128, 158], [195, 212], [214, 240]], grounds: ['white', 'cool'], fonts: ['oswald', 'archivo', 'barlow', 'manrope'], corners: ['sharp', 'soft'], buttons: 'square', headingScale: 1.05, density: 'compact' },
-    design: 'Direct and high-contrast: a big promise and a call-to-action button in the first section, the services as a tight grid of cards, why customers can trust the business (licensed, insured, years, guarantees, but only what the brief gives), the area served, and a call or quote request repeated near the end. Use a dark band and a brand band.',
+    design: 'Direct and high-contrast: a big promise and a call-to-action button in the first section, services as a tight grid, trust only as the brief gives it (licensed, insured, years, guarantees), and short, practical copy. Use a dark band and a brand band.',
     pages: 'Home, Services, About or Why us, and a Quote or Contact page with the form.',
   },
   {
@@ -221,7 +221,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['firm', 'practice', 'clients', 'compliance'],
     starter: 'business',
     look: { bases: ['carbon', 'fluent', 'minimal', 'starter'], chroma: 'muted', hues: [[210, 250], [340, 360], [0, 15], [150, 175]], grounds: ['white', 'warm', 'cool'], fonts: ['baskerville', 'merriweather', 'editorial', 'plex', 'lora'], corners: ['sharp', 'soft'], buttons: 'rounded', headingScale: 0.95, density: 'airy' },
-    design: 'Measured and credible: generous space, a calm opening statement, practice areas as cards with short plain explanations, the approach as steps, and an unhurried invitation to a consultation. Prefer plain and soft bands, at most one dark band.',
+    design: 'Measured and credible: generous space, calm statements, practice areas with short plain explanations, and an unhurried tone with no hard sell. Prefer plain and soft bands, at most one dark band.',
     pages: 'Home, Practice areas or Services, About or Our team, and Contact with a consultation form.',
   },
   {
@@ -233,7 +233,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['health', 'healing', 'coach', 'coaching', 'patient', 'care', 'practice', 'mental', 'anxiety'],
     starter: 'business',
     look: { bases: ['material3', 'cupertino', 'starter', 'fluent'], chroma: 'muted', hues: [[150, 200], [250, 290], [20, 40], [90, 130]], grounds: ['warm', 'tinted', 'white'], fonts: ['lora', 'fraunces', 'quicksand', 'dmserif', 'nunito'], corners: ['round', 'pill'], buttons: 'pill', headingScale: 1, density: 'airy' },
-    design: 'Reassuring and gentle: a warm opening that names who it helps, what a first visit or session is like as steps, services as soft cards, answers to common worries as an FAQ, and a low-pressure way to book or ask. Prefer soft bands, avoid dark ones.',
+    design: 'Reassuring and gentle: warm words that name who it helps, soft cards, answers in plain language, and a low-pressure tone in every call to action. Prefer soft bands, avoid dark ones.',
     pages: 'Home, Services or Approach, About, and Book or Contact with the form.',
   },
   {
@@ -245,7 +245,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['food', 'kitchen', 'bar', 'tea', 'truck', 'breakfast', 'lunch', 'dinner', 'dining', 'menu', 'drinks', 'meal', 'wine', 'beer'],
     starter: 'business',
     look: { bases: ['material3', 'starter', 'cupertino'], chroma: 'balanced', hues: [[0, 45], [80, 150], [330, 360]], grounds: ['warm', 'tinted'], fonts: ['fraunces', 'editorial', 'dmserif', 'garamond', 'bricolage'], corners: ['soft', 'round'], buttons: 'rounded', headingScale: 1.1, density: 'regular' },
-    design: 'Photo-led and inviting: a large image beside the opening line, the menu highlights as cards with pictures, the story of the place, and a clear visit or reserve section. Use images generously and a warm brand band.',
+    design: 'Photo-led and inviting: large images of the food and the room, the menu as lines rather than cards where it fits, and warm, sensory copy. Use images generously and a warm brand band.',
     pages: 'Home, Menu, About or Our story, and Visit or Reserve with the form.',
   },
   {
@@ -257,8 +257,8 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['store', 'shop', 'market', 'product', 'sell', 'selling', 'buy', 'order', 'brand', 'handmade', 'goods', 'gifts', 'collection', 'shipping'],
     starter: 'physical-shop',
     look: { bases: ['minimal', 'cupertino', 'material3'], chroma: 'balanced', hues: ALL_HUES, grounds: ['white', 'warm'], fonts: ['inter', 'outfit', 'manrope', 'dmserif', 'syne'], corners: ['soft', 'sharp', 'round'], buttons: 'pill', headingScale: 1, density: 'regular' },
-    design: 'A storefront, like a designer shop theme: a hero that sells, its picture the product itself and its first button Shop all; the bestsellers, which the platform lists with their photos, prices and add to cart; the range by collection as picture tiles; the brand story beside a photo; why buy here as three or four short items each with an icon (shipping, small batch, returns, only as the brief gives them); the store\'s customer reviews, which the platform shows once shoppers leave them; and a newsletter sign-up to close. Keep copy short and let images lead; never draw the products themselves as cards of your own, and never a band of text alone.',
-    pages: 'Home as a storefront: a hero, then sections named "Bestsellers", "Shop by collection" (3 or 4 items), the story, why buy here (3 or 4 items), "Customer reviews" and "Newsletter sign-up" last. Shop at /shop: a short title section, then "Product grid" second (the platform lists the real products there, with sort, filters, photos, prices and the cart). About, and Contact. Plan no checkout or cart page.',
+    design: 'A storefront, like a designer shop theme: a hero that sells, its picture the product itself and its first button Shop all; the bestsellers, which the platform lists with their photos, prices and add to cart; the range by collection as picture tiles; the brand story beside a photo; why buy here as three or four short items each with an icon (shipping, small batch, returns, only as the brief gives them); the store\'s customer reviews, which the platform shows once shoppers leave them; and a newsletter sign-up. Keep copy short and let images lead; never draw the products themselves as cards of your own, and never a band of text alone.',
+    pages: 'Home as a storefront: a hero, then sections named "Bestsellers", "Shop by collection" (3 or 4 items), the story, why buy here (3 or 4 items) and "Customer reviews", in the order given above, with "Newsletter sign-up" last. Shop at /shop: a short title section, then "Product grid" second (the platform lists the real products there, with sort, filters, photos, prices and the cart). About, and Contact. Plan no checkout or cart page.',
   },
   {
     id: 'portfolio',
@@ -269,7 +269,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['art', 'maker', 'work', 'gallery', 'painter', 'paintings', 'commissions', 'writer', 'engineer', 'projects'],
     starter: 'portfolio',
     look: { bases: ['minimal', 'cupertino', 'carbon'], chroma: 'neutral', hues: ALL_HUES, grounds: ['white', 'warm'], fonts: ['inter', 'grotesk', 'syne', 'instrument'], corners: ['sharp', 'soft'], buttons: 'square', headingScale: 1.3, density: 'airy' },
-    design: 'Minimal and image-led: a large, short statement as the title, then the work as a grid of image cards with one-line captions, a brief about, and a quiet way to get in touch. Mostly plain bands, lots of space, big type, one accent color.',
+    design: 'Minimal and image-led: a large, short statement as the title, the work as image cards with one-line captions, and very few words elsewhere. Mostly plain bands, lots of space, big type, one accent color.',
     pages: 'Home with selected work, Work or Projects, About, and Contact.',
   },
   {
@@ -281,7 +281,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['agency', 'design', 'designer', 'creative', 'studio', 'digital', 'web', 'video', 'production', 'brand', 'campaign', 'case studies'],
     starter: 'portfolio',
     look: { bases: ['minimal', 'carbon', 'cupertino'], chroma: 'neutral', hues: ALL_HUES, grounds: ['white', 'cool'], fonts: ['syne', 'grotesk', 'bricolage', 'inter'], corners: ['sharp', 'soft'], buttons: 'pill', headingScale: 1.3, density: 'airy' },
-    design: 'Confident and editorial: an oversized statement, selected case studies as large image cards with the outcome in a line, services as a short list, how the studio works as steps, and a bold dark band to start a project.',
+    design: 'Confident and editorial: oversized statements, case studies as large image cards with the outcome in a line, services as a short list, and a bold dark band where the page needs weight.',
     pages: 'Home, Work or Case studies, Services, About, and Contact or Start a project.',
   },
   {
@@ -293,7 +293,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['photo', 'gallery', 'shoot', 'sessions', 'prints', 'camera'],
     starter: 'portfolio',
     look: { bases: ['minimal', 'cupertino', 'carbon'], chroma: 'neutral', hues: ALL_HUES, grounds: ['white', 'warm'], fonts: ['instrument', 'garamond', 'inter', 'grotesk'], corners: ['sharp'], buttons: 'square', headingScale: 1.2, density: 'airy' },
-    design: 'Gallery-first: one full image to open, then galleries as image cards by subject, a short personal about, packages only as the brief gives them, and a booking inquiry. Few words, many images, mostly plain bands and one dark band.',
+    design: 'Gallery-first: full images, galleries as image cards by subject, few words, packages only as the brief gives them. Many images, mostly plain bands and one dark band.',
     pages: 'Home, Galleries or Portfolio, About, and Book or Contact with the form.',
   },
   {
@@ -305,7 +305,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['writing', 'stories', 'reading', 'readers', 'articles', 'posts', 'recipes', 'reviews', 'guides', 'tips', 'writer', 'episodes', 'listeners'],
     starter: 'business',
     look: { bases: ['minimal', 'starter', 'cupertino'], chroma: 'muted', hues: ALL_HUES, grounds: ['white', 'warm'], fonts: ['reading', 'editorial', 'instrument', 'lora'], corners: ['sharp', 'soft'], buttons: 'rounded', headingScale: 1.05, density: 'airy' },
-    design: 'Reading-first: a short introduction to the writer and the subject, featured writing as cards with a title and a one-line summary, the topics covered as a list, and a sign-up or contact section. Narrow, calm, mostly plain bands.',
+    design: 'Reading-first: a narrow, calm measure, writing as cards with a title and a one-line summary, topics as a list, and a quiet, personal voice. Mostly plain bands.',
     pages: 'Home, Articles presenting the writing as cards, About, and Subscribe or Contact. Posts themselves are added in Data as a collection, so plan the articles page as an introduction and a few featured cards.',
   },
   {
@@ -317,7 +317,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['event', 'party', 'meetup', 'retreat', 'workshop', 'planner', 'rsvp', 'tickets', 'celebration', 'guests', 'schedule', 'concert', 'fundraiser'],
     starter: 'landing',
     look: { bases: ['material3', 'cupertino', 'starter'], chroma: 'balanced', hues: [[320, 360], [0, 30], [250, 290], [140, 170], [40, 55]], grounds: ['warm', 'tinted', 'white'], fonts: ['garamond', 'editorial', 'dmserif', 'anton', 'syne'], corners: ['soft', 'round'], buttons: 'pill', headingScale: 1.2, density: 'regular' },
-    design: 'Celebratory and clear: the name and what it is in a big opening, when and where only as the brief gives them, the schedule as steps, details guests ask about as an FAQ, and an RSVP or registration section. One brand band.',
+    design: 'Celebratory and clear: the name and what it is in big type, when and where only as the brief gives them, the schedule as steps, and the details guests ask about as an FAQ. One brand band.',
     pages: 'Home, Schedule or Details, Travel or Venue where the brief names one, and RSVP or Register with the form.',
   },
   {
@@ -329,7 +329,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['training', 'team', 'workout', 'coach', 'coaching', 'studio', 'members', 'race', 'game', 'tournament'],
     starter: 'business',
     look: { bases: ['bootstrap', 'material-ui', 'carbon', 'material3'], chroma: 'vivid', hues: [[0, 30], [90, 140], [180, 210], [270, 300]], grounds: ['white', 'cool'], fonts: ['barlow', 'anton', 'archivo', 'outfit'], corners: ['sharp', 'soft'], buttons: 'caps', headingScale: 1.15, density: 'compact' },
-    design: 'High-energy: a punchy opening with a strong call to action, classes or programs as cards, how to start as steps, and a repeated join or book section. Use a dark band and a brand band.',
+    design: 'High-energy: punchy headlines, strong buttons, classes or programs as cards and short, motivating copy. Use a dark band and a brand band.',
     pages: 'Home, Classes or Programs, About or Coaches, and Join or Contact with the form.',
   },
   {
@@ -341,7 +341,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['retreat', 'spa', 'calm', 'studio', 'healing', 'stillness'],
     starter: 'business',
     look: { bases: ['material3', 'cupertino', 'starter', 'fluent'], chroma: 'muted', hues: [[20, 50], [80, 150], [260, 300], [170, 200]], grounds: ['warm', 'tinted'], fonts: ['garamond', 'lora', 'quicksand', 'instrument', 'fraunces'], corners: ['round', 'pill'], buttons: 'pill', headingScale: 1.05, density: 'airy' },
-    design: 'Calm and spacious: a quiet opening, classes as soft cards, what a first class is like as steps, a gentle about, and an easy way to book. Soft bands, no dark band, lots of space.',
+    design: 'Calm and spacious: quiet headlines, classes as soft cards, gentle copy and lots of space. Soft bands, no dark band.',
     pages: 'Home, Classes or Schedule, About, and Book or Contact with the form.',
   },
   {
@@ -353,7 +353,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['studio', 'glam', 'appointments', 'cosmetics'],
     starter: 'business',
     look: { bases: ['material3', 'cupertino', 'minimal'], chroma: 'balanced', hues: [[320, 360], [0, 25], [270, 300], [20, 45]], grounds: ['warm', 'tinted', 'white'], fonts: ['garamond', 'dmserif', 'instrument', 'outfit', 'syne'], corners: ['round', 'pill', 'sharp'], buttons: 'pill', headingScale: 1.1, density: 'regular' },
-    design: 'Stylish and image-led: a striking opening image, services as cards, the look and feel of the place in images, and booking made obvious. One brand band.',
+    design: 'Stylish and image-led: striking images, services as a menu or cards, the look and feel of the place in pictures, and booking made obvious. One brand band.',
     pages: 'Home, Services, About or The team, and Book or Contact with the form.',
   },
   {
@@ -365,7 +365,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['homes', 'house', 'buyers', 'sellers', 'vacation', 'cabin', 'neighborhoods', 'investors'],
     starter: 'business',
     look: { bases: ['fluent', 'minimal', 'carbon'], chroma: 'muted', hues: [[200, 240], [150, 180], [20, 45], [0, 360]], grounds: ['white', 'warm', 'cool'], fonts: ['dmserif', 'manrope', 'editorial', 'outfit'], corners: ['soft', 'sharp'], buttons: 'rounded', headingScale: 1.05, density: 'regular' },
-    design: 'Polished and local: an image-led opening, the areas served, how buying or selling works as steps, featured listings only as image cards the owner fills in, and a valuation or contact request. One dark band.',
+    design: 'Polished and local: image-led sections, the areas served by name only as the brief gives them, listings only as image cards the owner fills in, and confident, local copy. One dark band.',
     pages: 'Home, Buy or Listings, Sell, About, and Contact with the form.',
   },
   {
@@ -377,7 +377,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['classes', 'students', 'learn', 'kids', 'training', 'camp', 'workshop', 'beginners'],
     starter: 'business',
     look: { bases: ['material3', 'ant-design', 'material-ui'], chroma: 'balanced', hues: [[200, 240], [140, 170], [30, 50], [260, 290]], grounds: ['white', 'tinted', 'cool'], fonts: ['nunito', 'outfit', 'jakarta', 'lora', 'manrope'], corners: ['round', 'soft'], buttons: 'rounded', headingScale: 1, density: 'regular' },
-    design: 'Clear and encouraging: who it is for and the result they get, courses or subjects as cards, how it works as steps, common questions as an FAQ, and a sign-up or inquiry section.',
+    design: 'Clear and encouraging: who it is for and the result they get in plain words, courses or subjects as cards, steps where something happens in order, and an FAQ where people have questions.',
     pages: 'Home, Courses or Lessons, About or Teachers, and Enroll or Contact with the form.',
   },
   {
@@ -389,7 +389,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['community', 'club', 'group', 'troupe', 'circle', 'society', 'collective', 'members', 'neighbors', 'neighborhood', 'join', 'meetup', 'gathering', 'mission', 'cause', 'together', 'fellowship', 'faith', 'fundraiser', 'residents', 'families'],
     starter: 'business',
     look: { bases: ['material3', 'fluent', 'starter'], chroma: 'balanced', hues: [[130, 200], [20, 45], [200, 230], [340, 360]], grounds: ['white', 'warm'], fonts: ['merriweather', 'lora', 'jakarta', 'fraunces', 'nunito'], corners: ['soft', 'round'], buttons: 'rounded', headingScale: 1.05, density: 'regular' },
-    design: 'Mission-led: the cause in one line, what the organization does as cards, how to help as steps (volunteer, give, spread the word), and a clear way to get involved. A brand band for the call to help.',
+    design: 'Mission-led: the cause in one strong line, what the organization does as cards, how to help as steps (volunteer, give, spread the word), and hopeful, concrete copy. A brand band for the call to help.',
     pages: 'Home, Our work or Programs, About, and Get involved or Contact with the form.',
   },
   {
@@ -401,7 +401,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['folk', 'indie', 'bluegrass', 'punk', 'metal', 'record', 'concert', 'tour', 'song', 'shows', 'tracks', 'producer', 'fans', 'listen'],
     starter: 'landing',
     look: { bases: ['carbon', 'minimal', 'material-ui'], chroma: 'vivid', hues: ALL_HUES, grounds: ['white', 'cool', 'tinted'], fonts: ['anton', 'syne', 'grotesk', 'archivo'], corners: ['sharp'], buttons: 'caps', headingScale: 1.3, density: 'regular' },
-    design: 'Loud and visual: the name huge in the opening, an image band, a listen section where the platform places a music player for the artist’s own tracks, releases or shows as image cards only as the brief gives them, a short bio, and a booking or contact section. Dark bands are welcome. Never name or link songs by other artists.',
+    design: 'Loud and visual: the name huge, image bands, a listen section where the platform places a music player for the artist’s own tracks, releases or shows as image cards only as the brief gives them, and a short bio. Dark bands are welcome. Never name or link songs by other artists.',
     pages: 'Home, Music or Shows, About, and Booking or Contact with the form.',
   },
   {
@@ -413,7 +413,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['me', 'myself', 'profile', 'job', 'career', 'hire', 'recruiters'],
     starter: 'portfolio',
     look: { bases: ['minimal', 'cupertino', 'starter', 'fluent'], chroma: 'muted', hues: ALL_HUES, grounds: ['white', 'warm', 'cool'], fonts: ['inter', 'instrument', 'manrope', 'lora', 'grotesk'], corners: ['soft', 'round'], buttons: 'rounded', headingScale: 1.1, density: 'airy' },
-    design: 'Simple and personal: who the person is in one line, what they do, experience or highlights as a list or steps, selected work as cards where the brief names some, and a way to get in touch. Mostly plain bands.',
+    design: 'Simple and personal: who the person is in one line, what they do in plain words, experience or highlights as a list or steps, selected work as cards where the brief names some. Mostly plain bands.',
     pages: 'Home, About or Experience, Work where the brief names some, and Contact.',
   },
   {
@@ -425,7 +425,7 @@ export const AI_SITE_KINDS: readonly AiSiteKind[] = [
     hints: ['product', 'launch', 'campaign', 'offer', 'users', 'download', 'platform', 'tool', 'beta'],
     starter: 'landing',
     look: { bases: ['material3', 'minimal', 'ant-design'], chroma: 'vivid', hues: ALL_HUES, grounds: ['white', 'cool', 'tinted'], fonts: ['outfit', 'jakarta', 'manrope', 'bricolage', 'inter'], corners: ['round', 'soft'], buttons: 'pill', headingScale: 1.15, density: 'regular' },
-    design: 'One action: a strong promise and the call to action first, the benefits as cards, how it works as steps, answers to objections as an FAQ, and the call to action again. A brand band to close.',
+    design: 'One action: a strong promise and the call to action in the first section, benefits as cards, how it works as steps, objections answered as an FAQ, and the call to action repeated. A brand band where the page asks.',
     pages: 'One long home page carries the story; a second page only for the form or details the brief asks for.',
   },
   {
@@ -655,9 +655,9 @@ export function aiSiteKindOfInputs(inputs: Readonly<Record<string, unknown>> | n
 
 /** What each band rhythm asks of a page's sections. */
 const RHYTHM_WORDS: Record<AiSiteRhythm, string> = {
-  calm: 'mostly plain bands with one soft band, and a brand or dark band only for the closing call to action',
-  alternating: 'plain and soft bands by turns, with one brand band',
-  bold: 'a dark or brand band to open or close, and strong contrast between neighboring sections',
+  calm: 'mostly plain bands with one soft band, and at most one brand or dark band, on whichever section most needs the weight',
+  alternating: 'plain and soft bands by turns, with one brand band wherever the page needs emphasis',
+  bold: 'a dark or brand band for one or two key moments anywhere on the page, and strong contrast between neighboring sections',
 }
 
 /** The site's own look tokens a unit is handed (AGL-3660), read defensively. */
