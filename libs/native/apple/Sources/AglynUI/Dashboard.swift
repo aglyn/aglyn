@@ -116,20 +116,25 @@ public struct SiteHeaderCard: View {
         }
         VStack(alignment: .leading, spacing: AglynSpace.half) {
           if typeSize.isAccessibilitySize, let status { StatusChip(status.text, tone: status.tone) }
-          if let workspace {
-            Text(workspace).font(AglynFont.subheadline).foregroundStyle(.secondary)
+          // The status chip shares the workspace's line, so the name and the address below it have the card's whole
+          // width: beside them, a wide chip ("Maintenance") squeezed the address into a broken second line.
+          HStack(alignment: .firstTextBaseline, spacing: AglynSpace.one) {
+            if let workspace {
+              Text(workspace).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if !typeSize.isAccessibilitySize, let status { StatusChip(status.text, tone: status.tone) }
           }
           Text(name).font(AglynFont.title).lineLimit(2)
           if let address, let url = URL(string: "https://\(address)/") {
-            Link(address, destination: url).font(AglynFont.body)
+            // One line: an address broken at its hyphen or dot reads as two addresses.
+            Link(address, destination: url).font(AglynFont.body).lineLimit(1).truncationMode(.middle)
           }
           if let detail {
             Text(detail).font(AglynFont.subheadline).foregroundStyle(.secondary)
           }
         }
         .redacted(reason: loading ? .placeholder : [])
-        Spacer(minLength: 0)
-        if !typeSize.isAccessibilitySize, let status { StatusChip(status.text, tone: status.tone) }
       }
       ViewThatFits(in: .horizontal) {
         HStack(spacing: AglynSpace.oneAndHalf) { buttons }

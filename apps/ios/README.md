@@ -62,6 +62,7 @@ Debug launch arguments, for screenshots and UI tests:
 | `-AglynShowSwitcher YES` | opens the workspace and site switcher |
 | `-AglynNoPushPrompt YES` | skips the notification permission prompt |
 | `-AglynAuthTransport rest\|sdk` | forces how the app signs in (see below) |
+| `-AglynAppearance light\|dark` | Mac debug builds: draws the app in that appearance, whatever the system's |
 
 ### Sign-in on an unsigned Mac build
 

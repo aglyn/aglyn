@@ -458,7 +458,7 @@ struct TimeRangeSheet: View {
         }
       }
     }
-    .frame(minWidth: 320, minHeight: 260)
+    .aglynSheetMinimumSize(width: 320, height: 260)
     .presentationDetents([.medium])
   }
 }

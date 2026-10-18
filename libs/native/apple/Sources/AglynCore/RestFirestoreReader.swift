@@ -36,6 +36,28 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
     self.refreshInterval = refreshInterval
   }
 
+  /// Every live read re-reads now rather than at its next interval, and screens that read once hear it: the app
+  /// calls it when it comes back from an editor that wrote outside it (the Besigner's publish), so a page's
+  /// Published and Updated times are current. The SDK's listeners need no nudge; they hear the write.
+  public static func rereadNow() {
+    NotificationCenter.default.post(name: rereadNotification, object: nil)
+  }
+
+  /// Posted by `rereadNow()`: a screen that read something once (the pages tree) reads it again on it.
+  public static let rereadNotification = Notification.Name("AglynRestFirestoreRereadNow")
+
+  /// The wait between two reads of a live query: the interval, or less when `rereadNow()` asks.
+  static func pause(_ interval: Duration) async {
+    await withTaskGroup(of: Void.self) { group in
+      group.addTask { try? await Task.sleep(for: interval) }
+      group.addTask {
+        for await _ in NotificationCenter.default.notifications(named: rereadNotification) { return }
+      }
+      await group.next()
+      group.cancelAll()
+    }
+  }
+
   private final class Poll: FirestoreListening {
     let task: Task<Void, Never>
     init(_ task: Task<Void, Never>) { self.task = task }
@@ -73,7 +95,7 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
           do { result = .success(try await read()) } catch { result = .failure(error) }
           if Task.isCancelled { return }
           onChange(result)
-          try? await Task.sleep(for: interval)
+          await Self.pause(interval)
         }
       })
   }

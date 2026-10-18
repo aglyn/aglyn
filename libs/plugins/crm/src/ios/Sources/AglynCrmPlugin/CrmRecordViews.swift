@@ -413,7 +413,7 @@ struct RecordDetail: View {
           } label: {
             AglynRow(reference.companies.first { $0.value == companyID }?.label ?? (row.data["companyName"] as? String) ?? "Company", subtitle: "Company", systemImage: CrmKind.company.symbol)
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
         }
         if let contactID {
           Button {
@@ -421,7 +421,7 @@ struct RecordDetail: View {
           } label: {
             AglynRow(reference.contacts.first { $0.value == contactID }?.label ?? "Contact", subtitle: "Primary contact", systemImage: CrmKind.contact.symbol)
           }
-          .buttonStyle(.plain)
+          .buttonStyle(.aglynRow)
         }
         if kind == .lead, let converted = row.data["convertedContactId"] as? String {
           Button("Open the converted contact") { context.navigate(CrmKind.contact.detailScreen, ["contact": converted]) }

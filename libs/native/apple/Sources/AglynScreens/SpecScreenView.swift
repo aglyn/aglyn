@@ -395,7 +395,7 @@ struct SpecScreenBody: View {
                 Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
               }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.aglynRow)
             .accessibilityIdentifier("link-\(screen)")
           }
         }
@@ -733,7 +733,7 @@ struct ZoneRow: View {
             Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
           }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.aglynRow)
         .accessibilityIdentifier("zone-\(spec.id)")
       }
     }

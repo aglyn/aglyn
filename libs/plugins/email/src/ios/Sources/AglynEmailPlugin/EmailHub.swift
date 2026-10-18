@@ -309,7 +309,7 @@ struct TemplatesSection: View {
             Image(systemName: "paintbrush.pointed").foregroundStyle(.secondary)
           }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.aglynRow)
         .accessibilityIdentifier("template-\(row.id)")
         .contextMenu {
           Button("Open in the Besigner", systemImage: "paintbrush") { open(row) }
