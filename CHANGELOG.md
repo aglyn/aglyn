@@ -34,6 +34,11 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **ai:** a new site never reuses another site's dataset records ([AGL-3912](https://linear.app/aglyn/issue/AGL-3912))
+- **data:** a record photo of a deleted site is left out, never drawn broken ([AGL-3912](https://linear.app/aglyn/issue/AGL-3912))
+- **ai:** people photos show adults in the role, and alt text reads as a phrase ([AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+- **mui:** the search box honors its style settings, so starter headers fit on phones ([AGL-3917](https://linear.app/aglyn/issue/AGL-3917))
+- **apple:** an AI job link opens on its own workspace and site ([AGL-3911](https://linear.app/aglyn/issue/AGL-3911))
 - **ai:** each guided-start style previews its own kind of page ([AGL-3898](https://linear.app/aglyn/issue/AGL-3898))
 - **console:** the subprocessor gate knows the guided-start run's stub mode ([AGL-3910](https://linear.app/aglyn/issue/AGL-3910))
 - **e2e:** emulated servers also get a placeholder Firebase app id ([AGL-3910](https://linear.app/aglyn/issue/AGL-3910))
