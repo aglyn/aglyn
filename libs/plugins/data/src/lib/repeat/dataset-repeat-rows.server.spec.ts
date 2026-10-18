@@ -149,12 +149,37 @@ const mockDatasetsRef = {
   }),
 }
 
+/** The sites that still exist, by host id, and every batch of them asked about (AGL-3912). */
+let mockLiveHosts = new Set<string>()
+let mockHostReads: string[][] = []
+let mockHostsFail = false
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   orgDataQueryForHost: async () => ({
     ref: mockDatasetsRef,
     query: mockDatasetsQuery(),
   }),
+  firebaseAdmin: {
+    app: () => ({
+      firestore: () => ({
+        collection: (name: string) => ({
+          doc: (id: string) => ({
+            id,
+            path: `${name}/${id}`,
+            collection: () => {
+              throw new Error('not modeled')
+            },
+          }),
+        }),
+        getAll: async (...refs: Array<{ id: string }>) => {
+          if (mockHostsFail) throw new Error('unavailable')
+          mockHostReads.push(refs.map((ref) => ref.id))
+          return refs.map((ref) => ({ id: ref.id, exists: mockLiveHosts.has(ref.id) }))
+        },
+      }),
+    }),
+  },
 }))
 
 jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
@@ -195,7 +220,14 @@ const titlesOf = async (key: string) =>
 beforeEach(() => {
   mockDatasets = []
   mockRecordReads = []
+  mockLiveHosts = new Set()
+  mockHostReads = []
+  mockHostsFail = false
+  // The site's record templates are not modeled here; their read fails soft.
+  jest.spyOn(console, 'error').mockImplementation(() => undefined)
 })
+
+afterEach(() => jest.restoreAllMocks())
 
 describe('a repeat over more records than it renders (AGL-2773)', () => {
   it('reads the FIRST records in editor order, not a sample by document id', async () => {
@@ -343,5 +375,56 @@ describe('a site with more datasets than one page of them (AGL-2773)', () => {
     })
 
     expect(datasets).toEqual({})
+  })
+})
+
+/*
+ * ironwood-barbell-gym (AGL-3912): its coaches were written by a start on a
+ * strength studio's site since deleted, and every coach's photo was in that
+ * site's library, so each card drew a broken image. Recorded photo addresses.
+ */
+describe('a record’s photo of a site that no longer exists (AGL-3912)', () => {
+  const coach = (id: string, order: number, name: string, image: string): MockRow => ({
+    id,
+    data: { order, values: { name, image } },
+  })
+  const coaches = () =>
+    dataset('BvgMhWY9Nz', [
+      coach('JQiYgdRgOu', 0, 'Open gym coach', '/api/media/cdn/MEo5ZeWQB2/fdgCu-U42k'),
+      coach('P9vy8p2NM8', 1, 'Head coach', '/api/media/cdn/MEo5ZeWQB2/wSWoP1kjUG'),
+      // The site's own photo and the organization library's are never asked about.
+      coach('own', 2, 'Front desk', `/api/media/cdn/${HOST_ID}/m-own`),
+      coach('org', 3, 'Owner', 'media:org:jWmGooWE3L/m-org'),
+      // Another site of the workspace's that still exists.
+      coach('live', 4, 'Visiting coach', '/api/media/cdn/live-site/m-live'),
+    ])
+
+  it('is left out of its record, so the card that binds it draws no broken picture', async () => {
+    mockDatasets = [coaches()]
+    mockLiveHosts = new Set(['live-site'])
+    const rows = (await readPublishedDatasetRows({ hostId: HOST_ID, keys: ['BvgMhWY9Nz'] }))['BvgMhWY9Nz']?.records ?? []
+    expect(rows.map((row) => [row['name'], row['image']])).toEqual([
+      ['Open gym coach', undefined],
+      ['Head coach', undefined],
+      ['Front desk', `/api/media/cdn/${HOST_ID}/m-own`],
+      ['Owner', 'media:org:jWmGooWE3L/m-org'],
+      ['Visiting coach', '/api/media/cdn/live-site/m-live'],
+    ])
+    // One batched read, of the other sites only.
+    expect(mockHostReads).toEqual([['MEo5ZeWQB2', 'live-site']])
+  })
+
+  it('asks about no site when no record holds another site’s photo', async () => {
+    mockDatasets = [dataset('team', [record('a', 0, 'Ada')])]
+    await readPublishedDatasetRows({ hostId: HOST_ID, keys: ['team'] })
+    expect(mockHostReads).toEqual([])
+  })
+
+  it('keeps every photo when the sites cannot be read', async () => {
+    mockDatasets = [coaches()]
+    mockLiveHosts = new Set(['live-site'])
+    mockHostsFail = true
+    const rows = (await readPublishedDatasetRows({ hostId: HOST_ID, keys: ['BvgMhWY9Nz'] }))['BvgMhWY9Nz']?.records ?? []
+    expect(rows.filter((row) => row['image']).length).toBe(5)
   })
 })

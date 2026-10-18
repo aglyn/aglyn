@@ -144,9 +144,7 @@ export function buildSearchResultsNodes(
   // carried into it: a new query is a new question, and silently keeping the
   // old collection filter is how a reader ends up staring at "no results" for
   // a term the site does match.
-  // The width lives on a wrapper, not on the box itself: `searchBox` spreads
-  // its remaining props onto a plain `<form>`, so an `sx` handed to it would
-  // reach the DOM as an unknown attribute rather than as a style.
+  // The width cap lives on a wrapper Box around the search box.
   push(id('form'), id('stack'), {
     componentId: 'muiBox',
     pluginId: 'mui',

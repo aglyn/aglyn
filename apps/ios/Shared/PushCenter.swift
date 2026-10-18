@@ -25,6 +25,9 @@ import UserNotifications
 final class PushCenter: NSObject {
   /// A tapped push's link, waiting for the window to open it.
   var pendingLink: String?
+  /// The workspace and site the tapped push is about, followed before its link (AGL-3911).
+  var pendingOrgID: String?
+  var pendingHostID: String?
   /// What the person answered when asked; nil until known.
   private(set) var authorization: UNAuthorizationStatus?
 
@@ -105,7 +108,10 @@ extension PushCenter: UNUserNotificationCenterDelegate {
   ) async {
     let data = MobilePushData(userInfo: response.notification.request.content.userInfo)
     await MainActor.run {
-      if let link = data?.link { self.pendingLink = link }
+      guard let data, let link = data.link else { return }
+      self.pendingOrgID = data.orgID
+      self.pendingHostID = data.hostID
+      self.pendingLink = link
     }
   }
 }

@@ -161,6 +161,34 @@ describe('expandRepeatables', () => {
     expect(result['rep__list__2__kicker'].parentId).toBe('rep__list__2__row')
   })
 
+  /**
+   * AGL-3912: ironwood-barbell-gym's coaches' photos were in the library of
+   * a site since deleted. The data plugin leaves such a photo out of its
+   * record, and the card leaves out the picture rather than draw an empty
+   * frame where it was.
+   */
+  it('leaves out an image whose whole src is a binding the record leaves empty', () => {
+    const nodes = baseNodes()
+    nodes.row.nodes = ['photo', 'label']
+    nodes.photo = {
+      $id: 'photo',
+      componentId: 'image',
+      parentId: 'row',
+      props: { src: '{{item.image}}', alt: '{{item.name}}' },
+    }
+    nodes.label.props.children = '{{item.name}}'
+    const coaches = {
+      records: [
+        { name: 'Head coach' },
+        { name: 'Barbell coach', image: '/api/media/cdn/site-1/m-1' },
+      ],
+    }
+    const result = expandRepeatables(nodes, { Team: coaches }) as any
+    expect(result['rep__list__0__photo']).toBeUndefined()
+    expect(result['rep__list__0__row'].nodes).toEqual(['rep__list__0__label'])
+    expect(result['rep__list__1__photo'].props.src).toBe('/api/media/cdn/site-1/m-1')
+  })
+
   it('leaves out a self-scoped copy whose whole text is an empty binding', () => {
     const nodes = {
       root: { $id: 'root', componentId: 'div', nodes: ['tag'] },

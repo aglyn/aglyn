@@ -31,6 +31,19 @@ import type { AiJob } from '../model/ai-jobs.types'
 type Watched = Pick<AiJob, 'status' | 'cancelRequested'>
 const asked = { at: new Date() as never, by: 'uid-2' }
 
+/**
+ * Waits for something the watch should do, up to a deadline. A fixed sleep
+ * raced a 1 ms poll timer on a loaded CI runner and lost (beta.265 gate).
+ * The waits that prove something does NOT happen stay fixed sleeps: a slow
+ * runner can only make those pass, never fail.
+ */
+async function eventually(done: () => boolean, deadlineMs = 2_000): Promise<void> {
+  const until = Date.now() + deadlineMs
+  while (!done() && Date.now() < until) {
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+}
+
 describe('canceling mid-step (AGL-3616)', () => {
   it('a cancel is pending only on a job that has not ended', () => {
     expect(aiJobCancelPending({ status: 'running', cancelRequested: asked })).toBe(true)
@@ -68,7 +81,7 @@ describe('canceling mid-step (AGL-3616)', () => {
     await new Promise((resolve) => setTimeout(resolve, 10))
     expect(controller.signal.aborted).toBe(false)
     stored = { status: 'running', cancelRequested: asked }
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await eventually(() => controller.signal.aborted)
     expect(controller.signal.aborted).toBe(true)
     expect(isAiJobCanceledError(controller.signal.reason)).toBe(true)
     const reads = read.mock.calls.length
@@ -84,7 +97,7 @@ describe('canceling mid-step (AGL-3616)', () => {
       .mockResolvedValue({ status: 'canceled', cancelRequested: asked })
     const controller = new AbortController()
     const stop = watchAiJobCancel(read, controller, 1)
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await eventually(() => controller.signal.aborted)
     expect(controller.signal.aborted).toBe(true)
     stop()
 

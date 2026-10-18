@@ -14,7 +14,7 @@ site, so two sites with the same style and the same answers still look different
 ## Choose a style {#choose-a-style}
 
 The **Style** step of **Start your site** offers these styles, each as a card with a
-picture of the starter home page drawn in it. **Pick for me**, first and chosen unless you
+picture of an example home page of that kind, drawn in its style. **Pick for me**, first and chosen unless you
 choose another, uses the style that what you said the site is suggests, and names it.
 
 | Style | For |

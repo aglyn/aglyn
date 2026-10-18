@@ -1860,8 +1860,11 @@ the `theme` kind's proposal, and no site plan may propose one.
   finance, health and wellness, restaurant, store, portfolio, studio,
   photography, blog, events, fitness, yoga, beauty, real estate, education,
   nonprofit, music, personal, landing page, coming soon), each card a picture
-  of the starter home page in that kind's look (AGL-3898,
-  `scripts/render-site-style-previews.mts`, no model call), after "Pick for
+  of an example home page of that kind in its own shape and look — a
+  gallery, a menu, a product grid, a reading list, listings — written by hand
+  in the layout language (`scripts/site-style-previews.json`), compiled by
+  the real compiler with the starter photos and rendered by
+  `scripts/render-site-style-previews.mts` (AGL-3898, no model call), after "Pick for
   me", which leaves the kind unset so the one the first answer suggests is
   used; the job carries it as `inputs.siteKind`. The steps (kind of site,
   audience, style, details, review) hold the same answers object the single
@@ -1908,6 +1911,59 @@ the `theme` kind's proposal, and no site plan may propose one.
   (Auto by default, bounded by the plan's tiers); the job carries the pick and
   every step — the look, the plan, the layout, each page — runs on it, and the
   estimate is priced by the pick's multiplier. A Free start offers none.
+
+### A site start never reuses another site's records (AGL-3912)
+
+Datasets, and their records, belong to the workspace: neither names the site it
+was written for (the data plugin keeps `visibleTo`, usually `['org']`, and
+nothing else of a site), and a dataset outlives the site that filled it. A site
+start's plan sees every dataset the site may, and reused them by name. On
+2026-10-17 a gym's start published a deleted photographer's wedding packages as
+its "Session packages" and a deleted strength studio's coaches, one bio naming
+that studio, with four broken photos; a photographer's start listed another
+photographer's gallery with six broken covers.
+
+- **The rule** (`aiSiteDatasetIsThisSites`, `src/lib/jobs/ai-job-site-datasets.ts`).
+  A site start reuses a dataset only when its records are this site's to show:
+  it holds **no records** (an empty list, such as the one a form writes its
+  submissions to, is the same list on any site); or its scope names **this site
+  alone** (`siteOnly`, read off `visibleTo` by the inventory reader); or this site
+  already serves its records **pages of their own** (`recordBase`). Anything
+  else — records in a dataset shared with the workspace or other sites, and a
+  dataset whose records could not be counted — is another site's.
+- **Counted once, before the plan.** The plan step of a `site` job counts each
+  dataset's records through the data plugin's `dataset` index, whose `get` now
+  answers `facts.records` (one aggregation; `list` never counts), and marks each
+  foreign row `foreign` (`aiSiteInventoryWithRecordCounts`). The counts never
+  reach the prompt, so the plan key and the model's prompt are unchanged.
+- **Settled in code, before the rules** (`aiSettleSiteForeignDatasets`, the
+  plan door's `settle`, and again on a reused plan). Each foreign reuse becomes a
+  `dataset` creation of the same name and fields (less its photo, its photo
+  description and its page address, which the dataset unit adds back with this
+  site's own stock photos), and every section, record template and form
+  `writesTo` that named its id names `new:<name>` instead. A plan that already
+  creates a dataset of that name is pointed at that one. Rule 7 does not hold
+  the creation against the foreign dataset as a duplicate. The cap on a start's
+  datasets then settles as it always did (`aiSettlePlanDatasets`). Where the job
+  may create no dataset (Free, Starter's two used), the reuse comes off instead:
+  each section that listed it writes its items out, a record template becomes a
+  page of its own, and a form sends its submissions to the Inbox only. Never a
+  refusal, a re-ask or a failed job.
+- **Assist keeps reusing.** A `page`, `build` or `edit` job changes a site that
+  exists, whose pages may well list the workspace's datasets on purpose; their
+  plans are not counted or settled.
+- **No broken photo of a deleted site.** A site's media library is deleted with
+  the site, so a record photo at `/api/media/cdn/{hostId}/…` (or
+  `media:{hostId}/…`) of a site that no longer exists answers 404 everywhere.
+  The data plugin's published reads — a repeat's rows
+  (`repeat/dataset-repeat-rows.server.ts`) and a record page's record
+  (`record-pages/record-page-read.server.ts`) — leave such a field out of the
+  record (`datasetRecordWithoutGonePhotos`), one batched read of the other sites'
+  host documents inside the render cache, none when no record names another
+  site's photo. The repeat then leaves out a copy's Image whose whole `src` is a
+  binding the record left empty (`expand-repeatables.ts`), as it already did for
+  text, so a card draws no empty frame. An organization-library photo
+  (`org:…`) outlives every site and is never asked about.
 
 ## The `build` kind: Assist builds from one request
 

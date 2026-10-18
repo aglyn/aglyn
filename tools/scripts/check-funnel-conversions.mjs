@@ -460,7 +460,7 @@ async function main() {
       FUNNEL_DOORS.map((door) => ({
         ...door,
         ...(views.get(door.pagePath) ?? { views: 0, users: 0 }),
-        conversions: truth.door[door.truthField],
+        conversions: truth.door[door.doorTruthField ?? door.truthField],
       })),
       FUNNEL_DOORS.map((door) => ({
         ...door,

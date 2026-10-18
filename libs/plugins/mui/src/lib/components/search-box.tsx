@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiMagnify } from '@aglyn/shared-data-mdi'
+import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment'
 import TextField from '@mui/material/TextField'
@@ -50,13 +51,18 @@ export interface SearchBoxProps {
  * form post the editor never triggers). Once hydrated the submit goes
  * through the client router, so the site's chrome stays mounted rather than
  * the whole document reloading for a results page.
+ *
+ * The form is an MUI Box so the element's style settings (`sx`, including a
+ * per-breakpoint display or width) style it, as they do every other element
+ * (AGL-3917).
  */
 const SearchBox = forwardRef<HTMLFormElement, SearchBoxProps>(
   (props, ref) => {
     const { placeholder, defaultValue, ...rest } = props
     const onSubmit = useSoftGetSubmit()
     return (
-      <form
+      <Box
+        component="form"
         ref={ref}
         action="/search"
         method="get"
@@ -85,7 +91,7 @@ const SearchBox = forwardRef<HTMLFormElement, SearchBoxProps>(
             },
           }}
         />
-      </form>
+      </Box>
     )
   },
 )
