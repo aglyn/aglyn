@@ -193,7 +193,8 @@ public func deviceReaderLabel(
     case "CHIPPER_2X", "CHIPPER2X": "BBPOS Chipper 2X BT"
     default: "Card reader"
     }
-  let name = nonBlank(label) ?? ([model] + [nonBlank(serial)].compactMap { $0 }).joined(separator: " ")
+  // A simulated reader's serial is a long made-up id (CHB31SIMULATOR:<uuid>); its model alone names it.
+  let name = nonBlank(label) ?? ([model] + [simulated ? nil : nonBlank(serial)].compactMap { $0 }).joined(separator: " ")
   return simulated ? "\(name) (simulated)" : name
 }
 

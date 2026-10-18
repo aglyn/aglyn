@@ -179,8 +179,11 @@ class StripeTerminalCollector(
     }
     discovering = null
     val list = found.values.map(::asDeviceReader)
+    val code = error?.errorCode?.name
     mutableDiscovery.value = when {
-      error != null && error.errorCode.name != "CANCELED" -> ReaderDiscovery.Failed(friendlyDiscoveryError(error.errorCode.name, error.errorMessage))
+      // A search that found readers and then timed out keeps them listed to connect (as on Apple).
+      error != null && code != "CANCELED" && !(code == "BLUETOOTH_SCAN_TIMED_OUT" && list.isNotEmpty()) ->
+        ReaderDiscovery.Failed(friendlyDiscoveryError(code ?: "", error.errorMessage))
       else -> ReaderDiscovery.Found(kind, list)
     }
   }

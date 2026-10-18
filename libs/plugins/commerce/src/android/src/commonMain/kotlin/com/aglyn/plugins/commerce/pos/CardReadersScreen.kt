@@ -3,6 +3,7 @@ package com.aglyn.plugins.commerce.pos
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -200,7 +201,12 @@ private fun DeviceReaderSection(context: NativePluginContext, hostId: String, co
       }
       // A store that was not ready (no reader address yet) can try again once it is.
       if (device !is CardCollectorState.Connected && controls.kinds.isNotEmpty()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), modifier = Modifier.fillMaxWidth()) {
+        // Wraps on a phone, so a button keeps its label on one line.
+        FlowRow(
+          horizontalArrangement = Arrangement.spacedBy(space(1f)),
+          verticalArrangement = Arrangement.spacedBy(space(1f)),
+          modifier = Modifier.fillMaxWidth(),
+        ) {
           if (CardCollectorKind.TAP_TO_PAY in controls.kinds) {
             Button(
               onClick = { scope.launch { controls.discover(CardCollectorKind.TAP_TO_PAY, hostId, sessions) } },
@@ -376,11 +382,12 @@ private fun SmartReadersSection(
         Text("Where the reader is used", style = MaterialTheme.typography.labelLarge)
         OutlinedTextField(line1, { line1 = it }, label = { Text("Street") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(city, { city = it }, label = { Text("City") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        // Two fields a row at most: three squeezed the labels onto two lines on a phone.
         Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
           OutlinedTextField(state, { state = it }, label = { Text("State") }, singleLine = true, modifier = Modifier.weight(1f))
           OutlinedTextField(postal, { postal = it }, label = { Text("Postal code") }, singleLine = true, modifier = Modifier.weight(1f))
-          OutlinedTextField(country, { country = it.take(2) }, label = { Text("Country") }, singleLine = true, modifier = Modifier.weight(0.7f))
         }
+        OutlinedTextField(country, { country = it.take(2).uppercase() }, label = { Text("Country") }, supportingText = { Text("Two letters, like US") }, singleLine = true, modifier = Modifier.fillMaxWidth())
       }
     }
   }

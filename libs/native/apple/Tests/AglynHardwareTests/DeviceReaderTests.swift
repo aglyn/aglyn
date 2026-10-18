@@ -133,8 +133,11 @@ final class DeviceReaderTests: XCTestCase {
     XCTAssertEqual(readerPrompt("insert_card"), "Insert the card.")
     XCTAssertEqual(readerPrompt("NEW_THING"), "Follow the prompt on the reader.")
     XCTAssertEqual(
-      deviceReaderLabel(kind: .bluetooth, deviceType: "STRIPE_M2", label: nil, serial: "STRM2-1", simulated: true),
-      "Stripe Reader M2 STRM2-1 (simulated)")
+      deviceReaderLabel(kind: .bluetooth, deviceType: "STRIPE_M2", label: nil, serial: "CHB31SIMULATOR:3075dac0", simulated: true),
+      "Stripe Reader M2 (simulated)")
+    XCTAssertEqual(
+      deviceReaderLabel(kind: .bluetooth, deviceType: "STRIPE_M2", label: nil, serial: "STRM2-1", simulated: false),
+      "Stripe Reader M2 STRM2-1")
     XCTAssertEqual(
       deviceReaderLabel(kind: .tapToPay, deviceType: "", label: nil, serial: nil, simulated: false),
       "Tap to Pay on iPhone")
