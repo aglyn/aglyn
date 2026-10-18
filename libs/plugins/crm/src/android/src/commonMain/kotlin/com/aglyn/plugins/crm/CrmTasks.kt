@@ -232,7 +232,7 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
           com.aglyn.ui.SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search tasks", modifier = Modifier.weight(1f), onSearch = { asked = search })
           if (scope.canWrite) {
-            FilledTonalButton(onClick = { creating = true }, modifier = Modifier.testTag("crm-new-task")) {
+            FilledTonalButton(colors = com.aglyn.ui.aglynTonalButtonColors(), onClick = { creating = true }, modifier = Modifier.testTag("crm-new-task")) {
               Icon(AglynIcons.named("add"), contentDescription = null)
               Text("New", Modifier.padding(start = space(0.5f)))
             }

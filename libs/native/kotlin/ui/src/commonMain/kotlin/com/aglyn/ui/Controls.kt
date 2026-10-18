@@ -179,3 +179,15 @@ fun SkeletonGrid(tiles: Int = 12, minTileWidth: Dp = 140.dp, tileHeight: Dp = 11
     }
   }
 }
+
+/**
+ * A tonal button's colors: primaryContainer, the app's one selection and emphasis tone. Material's default tonal button
+ * takes the secondary container, which in our palette is the brand pink, kept for AI and for nothing that only means
+ * "less than primary" (New, Save, a tender).
+ */
+@Composable
+fun aglynTonalButtonColors(): androidx.compose.material3.ButtonColors =
+  androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+    containerColor = MaterialTheme.colorScheme.primaryContainer,
+    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+  )

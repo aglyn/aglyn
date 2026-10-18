@@ -112,7 +112,7 @@ fun EmailsScreen(context: NativePluginContext, initial: String? = null, composeC
           Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
             SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search subjects", modifier = Modifier.weight(1f), onSearch = { asked = search })
             if (canSend) {
-              FilledTonalButton(onClick = { composing = true }, modifier = Modifier.testTag("email-compose")) {
+              FilledTonalButton(colors = com.aglyn.ui.aglynTonalButtonColors(), onClick = { composing = true }, modifier = Modifier.testTag("email-compose")) {
                 Icon(AglynIcons.named("edit"), contentDescription = null)
                 Text("Write", Modifier.padding(start = space(0.5f)))
               }
