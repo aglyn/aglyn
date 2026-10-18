@@ -128,6 +128,9 @@ export const OUTREACH_SYNC_WATCH_MS = 45 * 24 * 60 * 60_000
 const SEARCH_PAGES = 5
 /** Handled message ids a mailbox keeps, and an enrollment keeps. */
 const MAILBOX_HANDLED_MAX = 500
+
+/** How far a quiet mailbox's window may lag before its document is moved anyway. */
+const MAILBOX_SYNC_WINDOW_REFRESH_MS = 60 * 60_000
 const ENROLLMENT_HANDLED_MAX = 100
 /** Addresses in one `from:` search. */
 const FROM_CHUNK = 15
@@ -372,12 +375,19 @@ async function syncMailbox(
 
   const paused = await applyOutreachMailboxHealth(deps, { orgId, mailboxId: mailbox.id, delta: context.delta })
   if (paused) report.paused += 1
-  await mailboxRef(firestore, orgId, mailbox.id).update({
-    sync: {
-      throughMs: nowMs,
-      handledMessageIds: [...(mailbox.sync?.handledMessageIds ?? []), ...newlyHandled].slice(-MAILBOX_HANDLED_MAX),
-    },
-  })
+  // The window is moved only when something was handled or an hour has
+  // passed: a quiet mailbox re-reading an hour's window is a few list calls,
+  // where rewriting every mailbox every run was a write per mailbox every
+  // fifteen minutes with nothing in it (AGL-3932). The handled ids keep a
+  // re-read from acting twice.
+  if (newlyHandled.length || nowMs - (mailbox.sync?.throughMs ?? 0) >= MAILBOX_SYNC_WINDOW_REFRESH_MS) {
+    await mailboxRef(firestore, orgId, mailbox.id).update({
+      sync: {
+        throughMs: nowMs,
+        handledMessageIds: [...(mailbox.sync?.handledMessageIds ?? []), ...newlyHandled].slice(-MAILBOX_HANDLED_MAX),
+      },
+    })
+  }
 }
 
 /** The sequence an enrollment runs through, read once per run. */

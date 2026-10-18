@@ -95,6 +95,27 @@ describe('the beat a scheduled run leaves (AGL-1955)', () => {
     })
   })
 
+  it('marks several jobs stamped in one tick with ONE summary write (AGL-3932)', async () => {
+    const { batchedCronBeat } = await import('../utils/cron-beat')
+    const beat = batchedCronBeat()
+    await Promise.all([beat('acme-mail-send'), beat('acme-mail-sync'), beat('acme-mail-send')])
+    const summaries = mockSets.filter((set) => set.doc === CRON_BEAT_SUMMARY_DOC)
+    expect(summaries).toHaveLength(1)
+    expect(summaries[0].data).toEqual({
+      beats: { 'acme-mail-send': expect.any(Number), 'acme-mail-sync': expect.any(Number) },
+    })
+    // This mock holds no summary to read, so each job also keeps its own
+    // mark, as the single mark would have; a readable, fresh summary skips
+    // those (health-report-crons.spec.ts).
+    expect(mockSets.filter((set) => set.doc !== CRON_BEAT_SUMMARY_DOC).map((set) => set.doc).sort()).toEqual([
+      'acme-mail-send',
+      'acme-mail-sync',
+    ])
+    // A later tick is its own batch.
+    await beat('acme-mail-send')
+    expect(mockSets.filter((set) => set.doc === CRON_BEAT_SUMMARY_DOC)).toHaveLength(2)
+  })
+
   it('cannot take down the job it is describing', async () => {
     jest.resetModules()
     jest.doMock('@aglyn/tenant-data-admin', () => ({
