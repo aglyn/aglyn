@@ -232,6 +232,7 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
     navigator.command = null
     when (command) {
       ShellCommand.FIND -> chrome.picker = PickerStep.WORKSPACE
+      ShellCommand.SWITCH_SITE -> chrome.picker = PickerStep.SITE
       ShellCommand.SETTINGS -> actions.enterSettings(if (inSite) NativeNavListId.SITE_SETTINGS else NativeNavListId.WORKSPACE_SETTINGS)
       ShellCommand.TOGGLE_SIDEBAR -> chrome.toggleSidebar()
       ShellCommand.TOGGLE_RAIL -> chrome.toggleRail()

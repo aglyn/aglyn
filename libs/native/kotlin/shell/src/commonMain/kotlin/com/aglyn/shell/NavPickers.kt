@@ -100,7 +100,7 @@ internal fun ScopePicker(
           TextButton(onClick = close, modifier = Modifier.testTag("picker-done")) { Text("Done") }
         }
         when (step) {
-          PickerStep.WORKSPACE -> WorkspaceStep(services, workspace, onPinFull) { org ->
+          PickerStep.WORKSPACE -> WorkspaceStep(services, workspace, onPinFull, { screen -> close(); onOpenScreen(screen) }) { org ->
             services.workspace.selectOrg(org.id)
             if (twoStep) chrome.picker = PickerStep.SITE else close()
           }
@@ -133,7 +133,7 @@ private fun PickerHeading(text: String) {
 }
 
 @Composable
-private fun WorkspaceStep(services: ShellServices, workspace: WorkspaceState, onPinFull: (String) -> Unit, onPick: (WorkspaceOrg) -> Unit) {
+private fun WorkspaceStep(services: ShellServices, workspace: WorkspaceState, onPinFull: (String) -> Unit, onOpenScreen: (String) -> Unit, onPick: (WorkspaceOrg) -> Unit) {
   val prefs by services.accountPrefs.state.collectAsState()
   var query by remember { mutableStateOf("") }
   var shown by remember { mutableIntStateOf(PICKER_PAGE) }
@@ -177,6 +177,10 @@ private fun WorkspaceStep(services: ShellServices, workspace: WorkspaceState, on
     item {
       HorizontalDivider(Modifier.padding(vertical = 6.dp))
       AddWorkspaceRow(services)
+      // A workspace someone invited the person to is joined from their invitations (the console's pending-invites list).
+      PickerRow("Invitations", "Join a workspace you were invited to", false, "picker-invitations", leading = { Icon(AglynIcons.named("mail"), null, Modifier.size(24.dp)) }) {
+        onOpenScreen("core.invites.mine")
+      }
     }
   }
 }

@@ -199,8 +199,8 @@ class ShellUiTest {
     onNodeWithTag("sign-in-submit").performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-switcher") > 0 }
     onNodeWithTag("home-switcher").performClick()
-    onNodeWithTag("switcher-site-h1").assertIsDisplayed()
-    assertEquals(1, onAllNodesWithTagCount("switcher-org-o1"))
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("picker-site-h1") > 0 }
+    onNodeWithTag("picker-whole-workspace").assertIsDisplayed()
   }
   @Test
   fun aWideWindowHasTheRailTheScopesSidebarAndItsSitePicker() = runComposeUiTest {

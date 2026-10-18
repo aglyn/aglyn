@@ -38,7 +38,6 @@ import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynLogo
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.unit.dp
-import com.aglyn.ui.AglynNavigationSuite
 import com.aglyn.ui.AglynTheme
 import com.aglyn.ui.NavDestination
 import com.aglyn.ui.WidthClass
