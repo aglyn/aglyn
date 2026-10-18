@@ -1,8 +1,12 @@
 package com.aglyn.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -84,8 +88,24 @@ fun FormSheet(
   destructive: Boolean = false,
   secondary: (@Composable () -> Unit)? = null,
   content: @Composable () -> Unit,
+) = FormSheet(title, busy.busy, busy.error, onDismiss, onConfirm, modifier, confirmLabel, confirmEnabled, destructive, secondary, content)
+
+/** [FormSheet] for a model that keeps its own [busy] flag and [error] (a screen model's write). */
+@Composable
+fun FormSheet(
+  title: String,
+  busy: Boolean,
+  error: String?,
+  onDismiss: () -> Unit,
+  onConfirm: () -> Unit,
+  modifier: Modifier = Modifier,
+  confirmLabel: String = "Save",
+  confirmEnabled: Boolean = true,
+  destructive: Boolean = false,
+  secondary: (@Composable () -> Unit)? = null,
+  content: @Composable () -> Unit,
 ) {
-  Dialog(onDismissRequest = { if (!busy.busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+  Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
     Surface(
       modifier.widthIn(max = 640.dp).fillMaxWidth(0.96f).heightIn(max = 860.dp).testTag("form-sheet"),
       shape = MaterialTheme.shapes.extraLarge,
@@ -98,18 +118,18 @@ fun FormSheet(
           horizontalArrangement = Arrangement.spacedBy(space(1f)),
         ) {
           Text(title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
-          TextButton(onClick = onDismiss, enabled = !busy.busy) { Text("Cancel") }
+          TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancel") }
           secondary?.invoke()
           Button(
             onClick = onConfirm,
-            enabled = confirmEnabled && !busy.busy,
+            enabled = confirmEnabled && !busy,
             colors = if (destructive) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) else ButtonDefaults.buttonColors(),
             modifier = Modifier.testTag("form-sheet-confirm"),
-          ) { Text(if (busy.busy) "Saving…" else confirmLabel) }
+          ) { Text(if (busy) "Saving…" else confirmLabel) }
         }
         HorizontalDivider()
         Column(Modifier.verticalScroll(rememberScrollState()).padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
-          busy.error?.let { NoticeBanner(it, StatusTone.ERROR) }
+          error?.let { NoticeBanner(it, StatusTone.ERROR) }
           content()
         }
       }
@@ -117,3 +137,55 @@ fun FormSheet(
   }
 }
 
+/**
+ * A task with room to work in, above the screen it was opened from: full screen on a phone, a large rounded panel on a
+ * tablet or desktop (Material's full-screen dialog). A close button with its tooltip starts the header, then the [title]
+ * (and a quiet [subtitle]), then the panel's one primary [action]. The [content] scrolls beneath in a column at most
+ * 720 dp wide. For a one-sentence confirm use [ActionDialog]; for a form with one Save, [FormSheet].
+ */
+@Composable
+fun PanelSheet(
+  title: String,
+  onDismiss: () -> Unit,
+  modifier: Modifier = Modifier,
+  subtitle: String? = null,
+  closeLabel: String = "Close",
+  action: (@Composable RowScope.() -> Unit)? = null,
+  /** False when the content scrolls on its own (a lazy list) or centers itself (an empty state). */
+  scroll: Boolean = true,
+  content: @Composable () -> Unit,
+) {
+  val compact = currentWidthClass() == WidthClass.COMPACT
+  Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Surface(
+      modifier.then(
+        if (compact) Modifier.fillMaxSize() else Modifier.widthIn(max = 760.dp).fillMaxWidth(0.94f).heightIn(max = 920.dp).fillMaxHeight(0.92f),
+      ).testTag("panel-sheet"),
+      shape = if (compact) MaterialTheme.shapes.extraSmall else MaterialTheme.shapes.extraLarge,
+      color = MaterialTheme.colorScheme.surface,
+    ) {
+      Column {
+        Row(
+          Modifier.fillMaxWidth().padding(start = space(1f), end = space(2f), top = space(1f), bottom = space(1f)),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(space(1f)),
+        ) {
+          AglynIconButton(AglynIcons.named("close"), closeLabel, onDismiss, Modifier.testTag("panel-sheet-close"))
+          Column(Modifier.weight(1f)) {
+            Text(title, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge, maxLines = 1)
+            subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
+          }
+          action?.invoke(this)
+        }
+        HorizontalDivider()
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+          Column(
+            Modifier.widthIn(max = 720.dp).fillMaxWidth().then(if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier.fillMaxHeight())
+              .padding(space(2f)),
+            verticalArrangement = Arrangement.spacedBy(space(1.5f)),
+          ) { content() }
+        }
+      }
+    }
+  }
+}
