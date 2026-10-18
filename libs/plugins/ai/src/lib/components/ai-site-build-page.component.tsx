@@ -76,6 +76,13 @@ import { useAiJobSite } from './ai-job-site'
 import { AiSiteStarterFallback } from './ai-site-starter-fallback.component'
 import { AiJobCancelButton } from './ai-job-cancel.component'
 import { AI_JOB_CANCELING_COPY } from '../model/ai-job-cancel-copy'
+import {
+  AI_SITE_REMOVED_COPY,
+  AI_SITE_REMOVED_HEADING,
+  AI_SITE_START_AGAIN_LABEL,
+  aiCreateSiteHref,
+  stashAiSiteStartAnswers,
+} from '../model/ai-site-start-handoff'
 
 /**
  * "Building your site" (AGL-3594): one job's page, at `/ai-jobs/{jobId}`
@@ -290,6 +297,21 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
   // walks back to the site's AI jobs.
   const record = <PageHeaderRecord title={copy?.heading} />
 
+  const createSiteHref = aiCreateSiteHref(orgSlug)
+  if (site.status === 'error' && site.removed) {
+    // The site is gone (AGL-3936), so its job cannot be read from here.
+    return (
+      <Frame heading={AI_SITE_REMOVED_HEADING} lede="The site this job belonged to no longer exists.">
+        {createSiteHref ? (
+          <Box>
+            <Button variant="contained" component={AppLink} href={createSiteHref}>
+              {'Create site'}
+            </Button>
+          </Box>
+        ) : null}
+      </Frame>
+    )
+  }
   if (site.status === 'error') {
     return (
       <Frame heading="This site could not be read">
@@ -335,6 +357,27 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
         <Stack sx={{ alignItems: 'center', py: 4 }}>
           <CircularProgress aria-label="Loading the job" />
         </Stack>
+      </Frame>
+    )
+  }
+
+  if (ready.siteRemoved) {
+    // Its empty site was removed (AGL-3936): Start again is Create site, with these answers.
+    return (
+      <Frame siteName={siteName} heading={AI_SITE_REMOVED_HEADING} lede={AI_SITE_REMOVED_COPY}>
+        {record}
+        {createSiteHref ? (
+          <Box>
+            <Button
+              variant="contained"
+              component={AppLink}
+              href={createSiteHref}
+              onClick={() => stashAiSiteStartAnswers(ready.siteInputs)}
+            >
+              {AI_SITE_START_AGAIN_LABEL}
+            </Button>
+          </Box>
+        ) : null}
       </Frame>
     )
   }

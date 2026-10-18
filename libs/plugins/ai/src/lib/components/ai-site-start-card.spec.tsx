@@ -1142,6 +1142,20 @@ describe('before the site exists (AGL-3761)', () => {
     mockPush.mockReset()
   })
 
+  it('opens on a removed start’s answers, its name and address still to type (AGL-3936)', async () => {
+    window.sessionStorage.setItem(
+      'aglyn:ai-site-start:answers',
+      JSON.stringify({ inputs: { businessType: 'trading card shop', audience: 'collectors', pages: 3 }, at: Date.now() }),
+    )
+    await openChoice(pendingProps(pendingSite()))
+    // The first question is still where the site's name and address are asked.
+    expect(screen.getByText('The site’s name and address')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Start with AI' }))
+    await onStep('kind')
+    expect((screen.getByLabelText(/What kind of site are you creating\?/) as HTMLInputElement).value).toBe('trading card shop')
+    window.sessionStorage.clear()
+  })
+
   it('draws the shell’s name and address on step 1, and tells the shell it is here', async () => {
     const site = pendingSite()
     await openChoice(pendingProps(site))

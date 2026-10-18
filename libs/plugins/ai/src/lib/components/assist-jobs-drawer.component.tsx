@@ -59,6 +59,12 @@ import { AiInsightDialog } from './ai-insight-dialog.component'
 import { AiJobPlan } from './ai-job-plan.component'
 import { aiCreditsBillingHref, aiJobOutputHref, aiJobPrimaryLink, aiSiteBuildHref } from './ai-job-links'
 import { aiJobRefundCopy } from '../model/ai-job-failure-copy'
+import {
+  AI_SITE_REMOVED_ROW_COPY,
+  AI_SITE_START_AGAIN_LABEL,
+  aiCreateSiteHref,
+  stashAiSiteStartAnswers,
+} from '../model/ai-site-start-handoff'
 import { readEventFrames } from './ai-job-events'
 
 /** Try again, with what it is likely to cost (AGL-3722). */
@@ -610,7 +616,26 @@ export function AssistJobsDrawer({
                     </Button>
                   </Stack>
                 ) : null}
-                {restartHref(job) ? (
+                {job.siteRemoved ? (
+                  // Its empty site was removed (AGL-3936): Create site, with the same answers.
+                  <>
+                    <Typography variant="caption" color="text.secondary" component="div">
+                      {AI_SITE_REMOVED_ROW_COPY}
+                    </Typography>
+                    {aiCreateSiteHref(orgSlug) && job.siteInputs ? (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        component={AppLink}
+                        href={aiCreateSiteHref(orgSlug) as string}
+                        onClick={() => stashAiSiteStartAnswers(job.siteInputs)}
+                        sx={{ mt: 0.5 }}
+                      >
+                        {AI_SITE_START_AGAIN_LABEL}
+                      </Button>
+                    ) : null}
+                  </>
+                ) : restartHref(job) ? (
                   <Button size="small" variant="contained" component={AppLink} href={restartHref(job) as string} sx={{ mt: 0.5 }}>
                     {'Try again'}
                   </Button>

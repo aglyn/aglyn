@@ -113,6 +113,7 @@ import { AiModelSelector } from './ai-model-selector.component'
 import { useAiModelChoice } from './use-ai-model-choice'
 import { aiCreditsBillingHref, aiSiteBuildHref } from './ai-job-links'
 import { publishAiJob } from './ai-jobs-store'
+import { clearAiSiteStartAnswers, readAiSiteStartAnswers } from '../model/ai-site-start-handoff'
 
 /**
  * The guided start (AGL-2918), on the `hostFirstRun` zone of the page a newly
@@ -371,11 +372,16 @@ export function AiSiteStartCard({
   userRef.current = user
   const uid = user?.uid ?? null
   const [verdict, setVerdict] = useState<Verdict>('checking')
+  // "Start again" on a start whose empty site was removed (AGL-3936) opens
+  // Create site with that start's answers: read once, and only here, where
+  // the site does not exist yet. It opens on the first question, where the
+  // site's name and address are asked, with every answer after it filled in.
+  const [handedOff] = useState(() => (pendingSite && !initialAnswers ? readAiSiteStartAnswers() : null))
   // Read once: a start reopened on its answers stays one while it is open.
-  const reopened = useRef(initialAnswers !== null)
+  const reopened = useRef(initialAnswers !== null || handedOff !== null)
   // A start reopened on its answers opens on the review, every answer there to change.
   const [step, setStep] = useState<AiSiteStartStep>(initialAnswers ? 'review' : 'choose')
-  const [answers, setAnswers] = useState<AiSiteStartAnswers>(initialAnswers ?? AI_SITE_START_ANSWERS)
+  const [answers, setAnswers] = useState<AiSiteStartAnswers>(initialAnswers ?? handedOff ?? AI_SITE_START_ANSWERS)
   // The steps whose reasons not to go forward are shown: the ones Next was refused on.
   const [checked, setChecked] = useState<ReadonlySet<AiSiteStartStep>>(() => new Set())
   // A step opened from the review's Edit goes back to the review on Next.
@@ -553,6 +559,8 @@ export function AiSiteStartCard({
       }
       // The indicator and the launcher count it from the moment it exists.
       publishAiJob(created)
+      // A removed start's answers have been used (AGL-3936).
+      clearAiSiteStartAnswers()
       // The funnel's last step: the site is started, and nothing after is leaving it.
       tracker.complete()
       tracker.finish()
