@@ -135,6 +135,8 @@ data class PosPaymentAnswer(
   val completed: Boolean,
   val clientSecret: String?,
   val paymentIntentId: String?,
+  /** The publishable key a typed card's form loads Stripe with (`card-keyed` answers carry it). */
+  val publishableKey: String? = null,
 ) {
   /** The payment this answer started or re-read. */
   val payment: PosSalePayment? get() = sale.payments.firstOrNull { it.id == paymentId }
@@ -227,6 +229,7 @@ fun readPaymentAnswer(body: JsonElement?): PosPaymentAnswer {
     completed = record["completed"].bool(),
     clientSecret = record["clientSecret"].str(),
     paymentIntentId = record["paymentIntentId"].str(),
+    publishableKey = record["publishableKey"].str(),
   )
 }
 

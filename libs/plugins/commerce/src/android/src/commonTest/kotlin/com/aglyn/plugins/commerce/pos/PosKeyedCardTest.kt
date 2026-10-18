@@ -223,11 +223,53 @@ class KeyedCardTenderTest {
   }
 
   @Test
+  fun theKeyTheServerAnsweredWithLoadsTheForm() = runTest {
+    assertEquals(
+      "pk_test_fromServer",
+      readPaymentAnswer(Json.parseToJsonElement("""{"sale":{},"publishableKey":"pk_test_fromServer"}""")).publishableKey,
+    )
+    val api = ScriptedSaleApi(
+      mapOf(
+        "card-keyed" to listOf(sale(listOf(keyed("pending")), clientSecret = SECRET).copy(publishableKey = "pk_test_fromServer")),
+        "status" to listOf(sale(listOf(keyed("succeeded")), dueCents = 0, completed = true)),
+      ),
+    )
+    val form = FakeCardForm(KeyedCardOutcome.Confirmed(INTENT))
+    val checkout = checkout(api)
+    // A register whose context never loaded has no key of its own.
+    checkout.payCard(KeyedCardService(form, "", "Corner Shop"))
+    assertEquals("pk_test_fromServer", form.requests.single().publishableKey)
+    assertIs<CheckoutStep.Receipt>(checkout.state.value.step)
+  }
+
+  @Test
+  fun noKeyAnywhereNeverOpensTheForm() = runTest {
+    val api = ScriptedSaleApi(
+      mapOf(
+        "card-keyed" to listOf(sale(listOf(keyed("pending")), clientSecret = SECRET)),
+        "cancel" to listOf(sale(listOf(keyed("canceled")))),
+      ),
+    )
+    val form = FakeCardForm(KeyedCardOutcome.Confirmed(INTENT))
+    val checkout = checkout(api)
+    checkout.payCard(KeyedCardService(form, "", "Corner Shop"))
+    assertTrue(form.requests.isEmpty(), "the form never opens without a key")
+    assertEquals("Card entry is not set up for this site.", checkout.state.value.notice?.message)
+  }
+
+  @Test
+  fun aTestModeSmartReaderCanBeTappedWhileTheCustomerStepIsOpen() = runTest {
+    val api = ScriptedSaleApi(mapOf("simulate" to listOf(sale(listOf(keyed("pending"))))))
+    checkout(api).simulateTapOnReader("pay1")
+    assertEquals(listOf("simulate"), api.actions)
+  }
+
+  @Test
   fun theCardStepReadsAsTypingNotTapping() {
     val keyed = service(FakeCardForm(KeyedCardOutcome.Canceled(INTENT)))
-    assertEquals("Type card", keyed.label)
+    assertEquals("Enter card manually", keyed.label)
     assertEquals(CardReaderKind.KEYED, keyed.kind)
-    assertEquals("Type the card into the card form.", keyed.prompt)
+    assertEquals("Enter the card in the card form.", keyed.prompt)
   }
 }
 
@@ -250,33 +292,35 @@ class KeyedCardOfferTest {
   private val form = FakeCardForm(KeyedCardOutcome.Canceled(INTENT))
 
   @Test
-  fun typeCardIsOfferedWithTheSitesKeyAndThisAppsCardForm() = runTest {
+  fun enterCardManuallyIsOfferedWithTheSitesKeyAndThisAppsCardForm() = runTest {
     val api = ScriptedSaleApi().also { it.publishableKey = "pk_test_51Habc" }
     val model = register(api, form, backgroundScope)
     model.loadContext()
-    assertEquals("Type card", model.keyedCard?.label)
+    assertEquals("Enter card manually", model.keyedCard?.label)
     assertEquals("pk_test_51Habc", model.keyedCard?.publishableKey)
-    assertEquals(CardReaderKind.KEYED, model.cardService("Type card")?.kind)
+    assertEquals(CardReaderKind.KEYED, model.cardService("Enter card manually")?.kind)
   }
 
   @Test
-  fun typeCardIsNotOfferedWithoutTheKeyAsTheConsoleDoesNot() = runTest {
+  fun enterCardManuallyIsOfferedEvenWhenTheContextHasNoKey() = runTest {
+    // The server hands the key back with the intent, so a missing (or unread) context never hides the tender.
     val model = register(ScriptedSaleApi(), form, backgroundScope)
     model.loadContext()
-    assertNull(model.keyedCard)
+    assertEquals("Enter card manually", model.keyedCard?.label)
+    assertEquals("", model.keyedCard?.publishableKey)
   }
 
   @Test
-  fun typeCardIsNotOfferedWhereTheAppHasNoCardForm() = runTest {
+  fun enterCardManuallyIsNotOfferedWhereTheAppHasNoCardForm() = runTest {
     val api = ScriptedSaleApi().also { it.publishableKey = "pk_test_51Habc" }
     val model = register(api, null, backgroundScope)
     model.loadContext()
     assertNull(model.keyedCard, "the desktop register and the Aglyn app carry no Stripe card SDK")
-    assertNull(model.cardService("Type card"))
+    assertNull(model.cardService("Enter card manually"))
   }
 
   @Test
-  fun typeCardIsNotOfferedWhileTheRegisterIsOffline() = runTest {
+  fun enterCardManuallyIsNotOfferedWhileTheRegisterIsOffline() = runTest {
     val api = ScriptedSaleApi().also { it.publishableKey = "pk_test_51Habc" }
     val model = register(api, form, backgroundScope)
     model.loadContext()

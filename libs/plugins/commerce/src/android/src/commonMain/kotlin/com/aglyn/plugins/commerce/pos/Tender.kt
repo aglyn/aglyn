@@ -261,17 +261,20 @@ class DeviceReaderService(private val collector: CardCollector) : CardReaderServ
  * name an intent, and the amount must be the amount plus the tip the register
  * asked for.
  */
+/** What the register calls a card typed in at the register. */
+const val KEYED_CARD_LABEL = "Enter card manually"
+
 class KeyedCardService(
   private val entry: KeyedCardEntry,
   val publishableKey: String,
   private val merchantName: String,
 ) : CardReaderService {
   override val id = "keyed"
-  override val label = "Type card"
+  override val label = KEYED_CARD_LABEL
   override val kind = CardReaderKind.KEYED
 
   /** What the card step says while the form is open. */
-  val prompt = "Type the card into the card form."
+  val prompt = "Enter the card in the card form."
 
   override suspend fun charge(
     deps: TenderDeps,
@@ -295,7 +298,9 @@ class KeyedCardService(
     }
     // The secret names its own intent (`pi_…_secret_…`).
     val intent = started.paymentIntentId ?: secret.substringBefore("_secret_")
-    val request = KeyedCardRequest(intent, secret, publishableKey, payment.amountCents + payment.tipCents, merchantName)
+    // The key the server answered with, else the one the register's context read.
+    val key = started.publishableKey?.takeIf { it.isNotEmpty() } ?: publishableKey
+    val request = KeyedCardRequest(intent, secret, key, payment.amountCents + payment.tipCents, merchantName)
     val problem = request.problem
       ?: if (payment.amountCents + payment.tipCents != amountCents + tipCents) {
         "The amount to charge does not match the register. Start the payment again."

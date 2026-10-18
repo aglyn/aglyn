@@ -6,81 +6,73 @@ import Foundation
 /*
  * A CARD TYPED IN AT THE REGISTER.
  *
- * The console's "Type card" puts the card into Stripe's own Payment Element:
- * the number never touches the register, the server made the PaymentIntent and
- * records the payment from Stripe, never from the form's say-so. This is the
- * same split on the device. The server has already made a `card_keyed`
- * PaymentIntent (`card-keyed`); an entry's only job is to show Stripe's own
- * card form for that intent and report how it ended. The Stripe card SDK that
- * draws the form lives in the Aglyn POS app alone and implements
- * `KeyedCardEntry`; this kit, the commerce plugin and the Aglyn app never
- * link it, which keeps the card number out of every other part of the code
- * and out of this project's PCI scope.
+ * The console's "Type card" puts the card into Stripe's Payment Element; the
+ * Apple register (iPhone, iPad and Mac) puts it into its own native card
+ * fields (`CardFields`), which send it to Stripe alone and get back a
+ * PaymentMethod id. The entry's job is to show those fields for one charge
+ * and hand each PaymentMethod to the register, which asks its server to
+ * confirm the payment with it; the server records the payment from its own
+ * read of Stripe, never from the form's say-so. A decline keeps the fields
+ * open with the bank's words, so the cashier can fix the card or try
+ * another, as a card terminal does.
  *
- * So an entry never creates, prices or captures money, and what it reports is
- * a hint the server re-reads. Every outcome is one of three: confirmed (Stripe
- * took the card; the server decides what that means), canceled (nobody was
- * charged; the amount is released) or failed (with words to read out). The
- * Android kit's `KeyedCardEntry` is the same contract.
+ * So an entry never creates, prices or captures money. Every form ends in one
+ * of three ways: paid (the server said so), canceled (closed without paying)
+ * or lost (the answer did not arrive: check the sale before charging again).
+ * Android keeps Stripe's own card form behind its Kotlin `KeyedCardEntry`.
  */
 
+/// One charge's card form.
 public struct KeyedCardRequest: Equatable, Sendable {
-  public let paymentIntentID: String
-  public let clientSecret: String
-  /// The site's Stripe publishable key, which the register's context supplies (the console loads Stripe with the same one).
+  /// The site's Stripe publishable key, which the card is sent to Stripe with.
   public let publishableKey: String
-  /// What the register shows the customer, tip included.
+  /// What the register charges, tip included.
   public let amountCents: Int
-  /// The business name the card form carries.
+  /// The amount as the form shows it (`$12.50`).
+  public let amountText: String
+  /// The business the charge is for.
   public let merchantName: String
 
-  public init(
-    paymentIntentID: String, clientSecret: String, publishableKey: String, amountCents: Int, merchantName: String
-  ) {
-    self.paymentIntentID = paymentIntentID
-    self.clientSecret = clientSecret
+  public init(publishableKey: String, amountCents: Int, amountText: String, merchantName: String) {
     self.publishableKey = publishableKey
     self.amountCents = amountCents
+    self.amountText = amountText
     self.merchantName = merchantName
   }
 
-  /// Nil when the request is well formed. The client secret names its own
-  /// intent, and one for a different intent is refused, so nothing can ask to
-  /// take A while the register records B.
+  /// Nil when the form can open.
   public var problem: String? {
     if !publishableKey.hasPrefix("pk_") { return "Card entry is not set up for this site." }
     if amountCents <= 0 { return "There is nothing to charge." }
-    return CardCollectRequest(paymentIntentID: paymentIntentID, clientSecret: clientSecret, amountCents: amountCents)
-      .problem
+    return nil
   }
+}
+
+/// What the register's server said about one card.
+public enum KeyedCardVerdict: Equatable, Sendable {
+  /// The payment went through: the form closes.
+  case paid
+  /// Declined or refused, with words for the cashier: the form stays open.
+  case declined(String)
+  /// The answer was lost: the form closes and the cashier checks the sale.
+  case lost(String)
 }
 
 public enum KeyedCardOutcome: Equatable, Sendable {
-  case confirmed(paymentIntentID: String)
-  case canceled(paymentIntentID: String)
-  case failed(paymentIntentID: String, message: String)
-
-  public var paymentIntentID: String {
-    switch self {
-    case .confirmed(let id), .canceled(let id), .failed(let id, _): id
-    }
-  }
+  case paid
+  case canceled
+  case lost(String)
 }
 
-/// Stripe's own card form, on this device. Implementations are bound by the
-/// Aglyn POS app.
+/// The card fields, on this device. The commerce register binds them.
 @MainActor
 public protocol KeyedCardEntry: AnyObject {
-  /// Shows the form for one server-made intent and returns when it closes.
-  /// Validates `request` first.
-  func collect(_ request: KeyedCardRequest) async -> KeyedCardOutcome
-}
-
-/// This device's card form, as the Aglyn POS app publishes it (the app that
-/// carries Stripe's card SDK), so the commerce plugin can offer "Type card"
-/// without naming the SDK. Nil where the device has none: the Mac register
-/// and the Aglyn app.
-@MainActor
-public enum DeviceKeyedCardEntry {
-  public static var shared: KeyedCardEntry?
+  /// Shows the fields for one charge and returns when the form closes. Each
+  /// Pay sends the card to Stripe, which answers with a PaymentMethod id, and
+  /// passes that id to `submit`, whose verdict closes the form or keeps it open.
+  func collect(
+    _ request: KeyedCardRequest, submit: @escaping @MainActor (_ paymentMethodID: String) async -> KeyedCardVerdict
+  ) async -> KeyedCardOutcome
+  /// Closes an open form as canceled.
+  func dismiss()
 }

@@ -94,11 +94,11 @@ xcodebuild build -project Aglyn.xcodeproj -scheme Aglyn -destination 'platform=m
 
 After you change a plugin's `mobile` block, run `npm run generate:plugin-manifests`.
 
-Aglyn POS (and only Aglyn POS) links Stripe's card form for a card typed in at the
-register: the `StripePaymentSheet` product of `stripe-ios-spm`, pinned exact in
-`Aglyn.xcodeproj`, filtered to iOS (the Mac build never sees it). The first build
-resolves it from GitHub. The Aglyn app target does not link it, and
-`check-mobile-isolation` keeps it that way.
+A card typed in at the register goes into Aglyn POS's own native card fields
+(iPhone, iPad and Mac), which send it to Stripe's PaymentMethods API with the
+site's publishable key and hand only the PaymentMethod id to the server. No
+Stripe card SDK is linked on Apple; see "Typed card" in
+`docs/mobile/native-architecture.md` for the rules and the PCI note.
 
 The Stripe Terminal SDK (Tap to Pay on iPhone, Bluetooth readers) is placed the
 same way: the `StripeTerminal` product of `stripe-terminal-ios`, pinned exact in
