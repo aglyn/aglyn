@@ -15,6 +15,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **health:** the sign-up landing check grades whether a new owner reached the console, not whether they made a site ([AGL-3927](https://linear.app/aglyn/issue/AGL-3927))
+- **uptime:** the probe tries a request once more when the runner's own network failed it ([AGL-3927](https://linear.app/aglyn/issue/AGL-3927))
 - **ai:** widen a picture's search past an unknown world so pages keep photos ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923), [AGL-3856](https://linear.app/aglyn/issue/AGL-3856), [AGL-3831](https://linear.app/aglyn/issue/AGL-3831))
 
 <details>
