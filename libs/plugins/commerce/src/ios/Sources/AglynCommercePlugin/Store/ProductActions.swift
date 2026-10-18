@@ -175,7 +175,7 @@ struct ProductKeysSheet: View {
         }
       }
     }
-    .frame(minWidth: 420, minHeight: 420)
+    .aglynSheetMinimumSize(width: 420, height: 420)
     .task(id: productID) {
       listener?.remove()
       guard let hostID = context.hostID else { return }
