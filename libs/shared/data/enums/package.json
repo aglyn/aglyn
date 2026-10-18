@@ -30,7 +30,7 @@
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
-    "firebase": "^12.18.0"
+    "firebase": "^13.0.0"
   },
   "peerDependenciesMeta": {
     "firebase": {
