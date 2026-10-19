@@ -126,6 +126,8 @@ fun BrowseScreen(context: NativePluginContext, initialListingId: String? = null)
   val scope = rememberCoroutineScope()
   val model = remember(context.orgId, context.firestore) { BrowseModel(context.orgId, context.firestore, scope) }
   LaunchedEffect(model) { model.reload() }
+  // A card's Install opens its listing with the listing's own Install asked straight away.
+  var installFor by remember { mutableStateOf<String?>(null) }
   AglynListDetail(
     initialSelected = initialListingId,
     list = { selected, onSelect ->
@@ -149,6 +151,11 @@ fun BrowseScreen(context: NativePluginContext, initialListingId: String? = null)
               EmptyState("Nothing matches", body = "Try another search or category.", icon = AglynIcons.named("storefront"))
             } else {
               LazyColumn(Modifier.fillMaxSize().testTag("listings"), state = listState) {
+                if (model.search.isBlank() && model.category == null) {
+                  item(key = "home") {
+                    MarketplaceHome(context.firestore, context.orgId, context.api.origin, onOpen = onSelect, onInstall = { id -> installFor = id; onSelect(id) })
+                  }
+                }
                 items(rows, key = { it.id }) { row ->
                   AglynListItem(
                     title = row.name,
@@ -171,7 +178,7 @@ fun BrowseScreen(context: NativePluginContext, initialListingId: String? = null)
       if (selected == null) {
         SelectionPlaceholder("Pick a listing to see it here", icon = AglynIcons.named("storefront"))
       } else {
-        ListingDetail(context, selected)
+        ListingDetail(context, selected, startInstall = installFor == selected) { installFor = null }
       }
     },
   )
@@ -182,7 +189,7 @@ fun BrowseScreen(context: NativePluginContext, initialListingId: String? = null)
 fun ListingScreen(context: NativePluginContext, listingId: String) = ListingDetail(context, listingId)
 
 @Composable
-private fun ListingDetail(context: NativePluginContext, listingId: String) {
+private fun ListingDetail(context: NativePluginContext, listingId: String, startInstall: Boolean = false, onInstallAsked: () -> Unit = {}) {
   val scope = rememberCoroutineScope()
   val api = remember(context.api) { MarketplaceApi(context.api) }
   val runner = remember(listingId) { ActionRunner(scope, roleHint = "an owner, admin or editor") }
@@ -215,6 +222,14 @@ private fun ListingDetail(context: NativePluginContext, listingId: String) {
       )
       val plugin = listing.artifactType == "plugin"
       val mine = listing.profileId != null && listing.profileId == orgId
+      LaunchedEffect(startInstall, listing.id) {
+        if (!startInstall) return@LaunchedEffect
+        onInstallAsked()
+        val targets = installTargets(listing.artifactType)
+        if (state.installedVersion == null && canInstall(context) && context.hostId != null && (!plugin || listing.offeredVersion != null)) {
+          dialog = ListingDialog.Install(if (InstallTarget.HOST in targets) InstallTarget.HOST else targets.firstOrNull())
+        }
+      }
       ListingBody(context, listing, plugin, state, mine, runner, api) { dialog = it }
       ListingDialogs(context, listing, dialog, state, api, runner) { dialog = null }
     }

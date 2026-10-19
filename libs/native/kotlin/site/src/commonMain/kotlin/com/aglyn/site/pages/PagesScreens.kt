@@ -320,11 +320,9 @@ private fun PageDetail(
         if (primary != publish) add(publish)
         liveUrl?.let { url -> add(com.aglyn.ui.RecordAction("page-open-live", "Open live page", "open_in_new") { uri.openUri(url) }) }
       }
-      add(com.aglyn.ui.RecordAction("rename", if (page.isGroup) "Rename group" else "Rename", "edit", enabled = canEdit) { open(PageDialog.Rename(page)) })
       if (!page.isGroup) {
         add(com.aglyn.ui.RecordAction("duplicate", "Duplicate", "content_copy", enabled = canEdit) { open(PageDialog.Duplicate(page)) })
         add(com.aglyn.ui.RecordAction("save-template", "Save as template", "bookmark", enabled = canEdit) { open(PageDialog.SaveTemplate(page)) })
-        add(com.aglyn.ui.RecordAction("move", "Move", "drive_file_move", enabled = canPublish) { open(PageDialog.Move(page)) })
         if (row.livePath != null) add(com.aglyn.ui.RecordAction("unpublish", "Unpublish", "visibility_off", enabled = canPublish) { open(PageDialog.Unpublish(page, row.childCount > 0)) })
       }
       add(com.aglyn.ui.RecordAction("delete", if (page.isGroup) "Delete group" else "Delete", "delete", destructive = true, enabled = canPublish) { open(PageDialog.Delete(page, row.livePath, row.childCount > 0)) })
@@ -340,6 +338,11 @@ private fun PageDetail(
       },
       primary = primary,
       more = more,
+      // The page's own settings, from its title ▾: its name and where it sits.
+      settings = buildList {
+        add(com.aglyn.ui.RecordAction("rename", if (page.isGroup) "Rename group" else "Rename", "edit", enabled = canEdit) { open(PageDialog.Rename(page)) })
+        if (!page.isGroup) add(com.aglyn.ui.RecordAction("move", "Move", "drive_file_move", enabled = canPublish) { open(PageDialog.Move(page)) })
+      },
     )
     page.description?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     if (!page.isGroup) {

@@ -73,6 +73,8 @@ internal fun NavSidebar(
   onRow: (NavItem) -> Unit,
   onStar: (StarredItem) -> Unit,
   modifier: Modifier = Modifier,
+  /** What sits at the sidebar's foot, below the lists (the plan card while a limit is close). */
+  foot: @Composable () -> Unit = {},
 ) {
   val shell = shellColors
   Column(modifier.width(SidebarWidth).fillMaxHeight().background(tint ?: shell.sidebar).testTag("nav-sidebar")) {
@@ -98,6 +100,7 @@ internal fun NavSidebar(
         dense = true,
       )
     }
+    foot()
   }
 }
 

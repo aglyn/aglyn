@@ -3,6 +3,7 @@ package com.aglyn.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +25,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -42,7 +47,8 @@ data class RecordAction(val id: String, val label: String, val icon: String, val
 
 /**
  * A record's header: its title and the line under it (a status, a date), then on the right the ⋯ menu with every other
- * action and the one filled button, the next step for the record's state. No other button sits in the header.
+ * action and the one filled button, the next step for the record's state. No other button sits in the header. With
+ * [settings], the title wears a ▾ that opens the record's own compact settings (Rename, Move…).
  */
 @Composable
 fun RecordHeader(
@@ -51,10 +57,36 @@ fun RecordHeader(
   status: (@Composable () -> Unit)? = null,
   primary: RecordAction? = null,
   more: List<RecordAction> = emptyList(),
+  settings: List<RecordAction> = emptyList(),
 ) {
+  var settingsOpen by remember { mutableStateOf(false) }
   Row(modifier.fillMaxWidth().testTag("record-header"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-      Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
+      if (settings.isEmpty()) {
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
+      } else {
+        Box {
+          Row(
+            Modifier.clip(MaterialTheme.shapes.small).clickable { settingsOpen = true }.padding(end = 4.dp).testTag("record-title-menu")
+              .semantics(mergeDescendants = true) { role = Role.Button; heading() },
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Icon(AglynIcons.named("expand_more"), contentDescription = "Settings for $title", Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+          }
+          DropdownMenu(settingsOpen, onDismissRequest = { settingsOpen = false }, modifier = Modifier.testTag("record-settings")) {
+            for (action in settings) {
+              DropdownMenuItem(
+                text = { Text(action.label) },
+                leadingIcon = { Icon(AglynIcons.named(action.icon), null) },
+                enabled = action.enabled,
+                onClick = { settingsOpen = false; action.run() },
+                modifier = Modifier.testTag(action.id),
+              )
+            }
+          }
+        }
+      }
       status?.invoke()
     }
     if (more.isNotEmpty()) {

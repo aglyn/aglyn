@@ -1,6 +1,7 @@
 package com.aglyn.shell
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -52,7 +54,9 @@ import androidx.compose.ui.input.pointer.isMetaPressed as isMetaHeld
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -380,6 +384,19 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
         ) { widget.content(context) }
       }
     }
+    // The plan card: the console's own usage notice for this workspace, until it is dismissed here.
+    var planDismissals by remember(uid) { mutableStateOf(0) }
+    val feed = (notificationFeed(services, uid, 50) as? com.aglyn.core.Live.Ready)?.value.orEmpty()
+    val planNotice = remember(feed, workspace.org?.id, planDismissals) { planNoticeFor(feed, workspace.org?.id, uid, services.prefs, com.aglyn.core.nowMillis()) }
+    val planFoot: @Composable () -> Unit = {
+      planNotice?.let { notice ->
+        PlanCard(
+          notice,
+          onOpen = { notice.link?.let { context.openLink(it) } ?: navigator.select(NavKeys.of("core.billing")) },
+          onDismiss = { services.prefs.set(planCardDismissedKey(uid, notice.id), "1"); planDismissals++ },
+        )
+      }
+    }
     val starred = prefs.starred.filter { it.orgId == workspace.org?.id && (it.hostId == null || it.hostId == workspace.site?.id) }
     val onStar: (com.aglyn.contracts.StarredItem) -> Unit = { item -> openRef(item.toRef()) }
     if (wide) {
@@ -415,13 +432,16 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
         }
         if (!chrome.sidebarHidden) {
           Box(Modifier.padding(top = LocalTitleBarInset.current).background(tint ?: shellColors.sidebar)) {
-            NavSidebar(services, workspace, chrome, sidebar, selectedKey, starred, tint, onRow = { openRow(it) }, onStar = onStar)
+            NavSidebar(services, workspace, chrome, sidebar, selectedKey, starred, tint, onRow = { openRow(it) }, onStar = onStar, foot = planFoot)
           }
           VerticalDivider(color = shellColors.divider)
         }
         Column(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
           if (route !is Route.Web) {
-            WideTitleBar(services, navigator, chrome, title, route != null, uid, here, prefs) {
+            // Breadcrumbs on a pushed screen: the destination it was opened from, then the screen itself.
+            val crumb = row?.let { r -> r.sections.firstOrNull { it.key == navigator.top }?.label?.takeIf { r.sections.size > 1 } ?: r.label }
+              ?.takeIf { route != null && it != title }
+            WideTitleBar(services, navigator, chrome, title, route != null, uid, here, prefs, crumb = crumb) {
               // The desktop opens tabs from its menu bar (Tab ▸ New tab); a tablet has no menu bar, so the title bar offers it.
               if (tabs.tabs.size == 1 && !hasMenuBar) TitleBarButton("New tab  ${shortcutText("T")}", "tab", "tab-new-title") { newTab() }
               HelpButton(help)
@@ -654,6 +674,8 @@ private fun WideTitleBar(
   uid: String,
   here: com.aglyn.contracts.AccountItemRef?,
   prefs: com.aglyn.core.AccountPreferences,
+  /** The destination a pushed screen was opened from, shown before its title and leading back to it. */
+  crumb: String? = null,
   trailing: @Composable () -> Unit = {},
 ) {
   Row(
@@ -673,6 +695,19 @@ private fun WideTitleBar(
     }
     // The title and the search box share the room the buttons leave (search up to its width); the title ellipsizes.
     Row(Modifier.weight(1.5f), verticalAlignment = Alignment.CenterVertically) {
+      crumb?.let {
+        Text(
+          it,
+          style = MaterialTheme.typography.titleMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.padding(start = 8.dp).widthIn(max = 200.dp).clip(RoundedCornerShape(6.dp))
+            .clickable { navigator.select(navigator.top) }.padding(horizontal = 4.dp).testTag("title-crumb")
+            .semantics { role = Role.Button },
+        )
+        Icon(AglynIcons.named("chevron_right"), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
       Text(
         title,
         style = MaterialTheme.typography.titleMedium,
