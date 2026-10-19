@@ -17,6 +17,11 @@
 
 import { subscribePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import { registerPluginTaxEngine } from '@aglyn/aglyn/plugin-manager/plugin-tax-profile'
+import {
+  ORDER_CANCELLED_EVENT,
+  ORDER_PAID_EVENT,
+  ORDER_REFUNDED_EVENT,
+} from '@aglyn/plugins-commerce/contracts'
 import { TAX_ENGINES_PLUGIN_ID } from './constants/bundle-common'
 
 /**
@@ -43,18 +48,18 @@ export function registerTaxEnginesServerDeclarations(): void {
     { pluginId: TAX_ENGINES_PLUGIN_ID },
   )
   const handlers = () => import('./server/transactions')
-  subscribePluginDomainEvent<any>(
-    'order.paid',
+  subscribePluginDomainEvent(
+    ORDER_PAID_EVENT,
     async (envelope) => (await handlers()).onOrderPaid(envelope),
     { pluginId: TAX_ENGINES_PLUGIN_ID },
   )
-  subscribePluginDomainEvent<any>(
-    'order.refunded',
+  subscribePluginDomainEvent(
+    ORDER_REFUNDED_EVENT,
     async (envelope) => (await handlers()).onOrderRefunded(envelope),
     { pluginId: TAX_ENGINES_PLUGIN_ID },
   )
-  subscribePluginDomainEvent<any>(
-    'order.cancelled',
+  subscribePluginDomainEvent(
+    ORDER_CANCELLED_EVENT,
     async (envelope) => (await handlers()).onOrderCancelled(envelope),
     { pluginId: TAX_ENGINES_PLUGIN_ID },
   )

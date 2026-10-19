@@ -19,6 +19,10 @@ import type {
   PluginPersonChangesPage,
   PluginPersonChangesRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
+import type {
+  OrderHistoryEntry as CommerceOrderHistoryEntry,
+  OrderHistoryPageRequest,
+} from '@aglyn/plugins-commerce/contracts'
 import {
   ORDER_BACKFILL_DAYS,
   ORDER_PAGE_SIZE,
@@ -70,12 +74,8 @@ import type { ConnectionStore, StoredConnection, StoredCustomer } from './store'
  * backoff, then logged and dropped, while the rest go on.
  */
 
-/** One stored order of commerce's history: the fields this plugin reads, restated. */
-export interface OrderHistoryEntry {
-  createdAtMs: number
-  paidAtMs: number | null
-  order: unknown
-}
+/** One stored order of commerce's history: the fields this plugin reads, in commerce's contract (AGL-3980). */
+export type OrderHistoryEntry = Pick<CommerceOrderHistoryEntry, 'createdAtMs' | 'paidAtMs' | 'order'>
 
 export interface SyncRunDeps {
   now(): number
@@ -93,7 +93,7 @@ export interface SyncRunDeps {
   ): Promise<{ orgId: string; entitled: boolean; enabled: boolean; orderUrl(orderId: string): string | null } | null>
   peopleChangedSince(request: PluginPersonChangesRequest): Promise<PluginPersonChangesPage | null>
   /** Commerce's order history, oldest first; `null` when no plugin reads it in this process. */
-  orderHistory(request: { hostId: string; fromMs: number; untilMs: number; limit: number }): Promise<OrderHistoryEntry[] | null>
+  orderHistory(request: OrderHistoryPageRequest): Promise<OrderHistoryEntry[] | null>
   /** The platform's name, for the help desks that label where data came from. */
   source: string
 }

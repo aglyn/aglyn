@@ -16,18 +16,19 @@
  */
 
 import { subscribePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import { ORDER_CANCELLED_EVENT, ORDER_PAID_EVENT, ORDER_REFUNDED_EVENT } from '@aglyn/plugins-commerce/contracts'
 import { INVENTORY_SYNC_PLUGIN_ID } from './constants'
 
 /**
  * The plugin's SERVER declarations (AGL-3642), loaded by both apps' servers:
- * commerce's order events (AGL-3611), by the names commerce raises them
- * under. The outbox drains in the tenant, so the subscribers live here, and
+ * commerce's order events (AGL-3611), by the tokens in commerce's contracts
+ * (AGL-3980). The outbox drains in the tenant, so the subscribers live here, and
  * they only QUEUE (`server/intake.ts`): no credential, no system call.
  *
  * Light at boot: the intake is imported when an event first arrives.
  */
 
-export const INVENTORY_SYNC_SUBSCRIBED_EVENTS = ['order.paid', 'order.cancelled', 'order.refunded'] as const
+export const INVENTORY_SYNC_SUBSCRIBED_EVENTS = [ORDER_PAID_EVENT.id, ORDER_CANCELLED_EVENT.id, ORDER_REFUNDED_EVENT.id] as const
 
 async function intake() {
   const [module, { defaultIntakeDeps }] = await Promise.all([import('./server/intake'), import('./server/intake-deps')])
@@ -37,26 +38,26 @@ async function intake() {
 export function registerInventorySyncServerDeclarations(): void {
   const owner = { pluginId: INVENTORY_SYNC_PLUGIN_ID }
   subscribePluginDomainEvent(
-    'order.paid',
+    ORDER_PAID_EVENT,
     async (envelope) => {
       const { module, deps } = await intake()
-      await module.onOrderPaid(deps, envelope as never)
+      await module.onOrderPaid(deps, envelope)
     },
     owner,
   )
   subscribePluginDomainEvent(
-    'order.cancelled',
+    ORDER_CANCELLED_EVENT,
     async (envelope) => {
       const { module, deps } = await intake()
-      await module.onOrderCancelled(deps, envelope as never)
+      await module.onOrderCancelled(deps, envelope)
     },
     owner,
   )
   subscribePluginDomainEvent(
-    'order.refunded',
+    ORDER_REFUNDED_EVENT,
     async (envelope) => {
       const { module, deps } = await intake()
-      await module.onOrderRefunded(deps, envelope as never)
+      await module.onOrderRefunded(deps, envelope)
     },
     owner,
   )

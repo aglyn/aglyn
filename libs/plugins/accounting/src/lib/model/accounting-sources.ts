@@ -19,9 +19,9 @@
  * WHAT THE SYNC POSTS FROM (AGL-3614): an order, a refund and a payout, in
  * the plugin's own words.
  *
- * The accounting plugin never imports commerce. A sale reaches it as a
- * platform event — `order.paid`, `order.refunded`, `order.cancelled` — whose
- * payload the event declaration types, and a payout reaches it from the
+ * A sale reaches the plugin as a platform event — `order.paid`,
+ * `order.refunded`, `order.cancelled` — whose shape comes from commerce's
+ * contracts (AGL-3980), and a payout reaches it from the
  * merchant's own Stripe account. Each arrives here as one of these
  * snapshots, and everything downstream (the transforms, the sync log, the
  * daily summary) reads only these. A snapshot is stored on its sync item, so

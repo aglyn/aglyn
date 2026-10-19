@@ -473,10 +473,12 @@ now describes it as the shared library it is.
    `apps/console` or `apps/tenant` is something a package consumer would want
    — a hook, a data helper, a server routine — it moves to a lib. The app
    keeps routes, layout and wiring.
-2. **A plugin never imports another plugin.** Not its entry, not its model,
-   not a component. It goes through a plugin-manager seam in the core
-   (registries for widgets, providers, site runtimes, page hooks, API
-   dispatch). Moving the shared piece down into `libs/shared` is not the
+2. **A plugin never imports another plugin, except its contracts.** Not its
+   entry, not its model, not a component. It goes through a plugin-manager
+   seam in the core (registries for widgets, providers, site runtimes, page
+   hooks, API dispatch, service contracts, domain events). The one exception
+   is the other plugin's contracts module, under the terms in
+   [Plugin contracts](#plugin-contracts) below. Moving the shared piece down into `libs/shared` is not the
    alternative: that only relocates the domain onto the generic floor, where
    nothing refuses it and every plugin inherits it. Only code that carries no
    plugin's domain goes down a layer, and then it goes because it is generic,
@@ -513,6 +515,52 @@ now describes it as the shared library it is.
    import is `@aglyn/<name>` or `@aglyn/<name>/<subpath>`; the subpath is a
    published entry point.
 
+## Plugin contracts
+
+A plugin that publishes something for other plugins (an event it raises, a
+service it registers) publishes the shape once, in its **contracts module**,
+`libs/plugins/<id>/src/lib/contracts.ts`. Another plugin imports it as
+`@aglyn/plugins-<id>/contracts` (it rides the existing `./*` export) instead
+of restating the shape by hand. Commerce's is the first one (AGL-3980): its
+order and return events, `checkout.started` and the `commerce.orderHistory`
+service, used by fifteen plugins.
+
+- **What a contracts module holds.** Types, service-contract tokens
+  (`definePluginServiceContract`), event tokens (`definePluginDomainEvent`),
+  event names and payload shapes. Its only runtime imports are `@aglyn/aglyn`
+  and its subpaths, the contract helpers. Anything else, its own model files
+  included, is `import type`, which the compiler erases. Importing it never
+  loads the plugin. The plugin's own code imports from it too, so there is
+  one definition.
+- **The consumer declares it.** It names the provider in `uses` in
+  `plugins.config.json`, which is an optional code dependency: the consumer
+  still runs with the provider absent. An event it subscribes to is never
+  raised, and a service it resolves answers `null`. `catalog.requires`, the
+  hard kind (it cannot be switched on without the provider), allows the same
+  import. The generator refuses a `uses` that names no plugin, a capability
+  or the plugin itself.
+- **The consumer's package carries it as an optional peer.** In
+  `peerDependencies` at the repo version, with `peerDependenciesMeta` set to
+  `{ "optional": true }`, and never in `dependencies`, so installing the
+  consumer never installs the provider. `sync:lib-dependencies` writes both,
+  and `release:prepare` moves the peer with the bump.
+- **Its lint config spreads the overrides.** The consumer's
+  `eslint.config.mjs` spreads `...boundaryOverridesFor(import.meta.url)`,
+  which allows exactly `@aglyn/plugins-<provider>/contracts` for each
+  declared provider. Its entry and every other module stay refused.
+- **`check:lib-boundaries` holds all of it.** It allows a plugin → plugin
+  edge only when every import across it is the provider's `/contracts`, the
+  provider has a contracts module, and the consumer declares it. It also
+  refuses a contracts module that loads anything at runtime beyond
+  `@aglyn/aglyn`, and a consumer without the optional peer or the lint
+  override. One other import across the same edge, and the edge is an
+  ordinary plugin → plugin edge, refused as before.
+- **Core never imports a contract.** Rule 3 is unchanged: `libs/aglyn`,
+  `libs/tenant/**`, the apps and the rest of core import no plugin, contracts
+  included. When core needs something from a plugin, core defines the seam
+  (`core.purchase-gate-preclearance`, `core.domain-search`) and the plugin
+  provides it.
+
 ## `package.json` per lib
 
 Every lib carries, today:
@@ -527,6 +575,9 @@ Every lib carries, today:
 - `peerDependencies`: `react`, `react-dom`, `next`, `firebase`,
   `firebase-admin` and each `@mui/*` package the lib's shipped source imports,
   at the root's range. A consumer has one of each; a lib never carries its own.
+  A plugin also lists each plugin whose contracts it imports, at the repo
+  version and marked optional in `peerDependenciesMeta`
+  ([Plugin contracts](#plugin-contracts)).
 - `license`: `Apache-2.0`, for every package (the owner's call, 2026-09-20);
   the root `LICENSE` is copied into each built package when it is packed.
 - `publishConfig.access`: `public` — a scoped package publishes restricted
