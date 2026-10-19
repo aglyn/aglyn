@@ -2258,6 +2258,10 @@ whose passes each do one unit (`aiSiteImportNextWork`):
    (`readAiScreenRoom`). The wave's pages are read again with `only` (robots.txt,
    then exactly those addresses); a page that is now a sign-in page, gone, off
    limits to AglynBot, empty or past the room is left out and its row skipped.
+   A read the clock cuts short leaves the pages it did not reach unread, and
+   the next pass (`read`) reads them before anything is built. A page's name
+   is its own part of its browser title ("About | Rosie's Bakery" is
+   "About"), the home page "Home".
 3. **The header and footer**, in the first wave: the layout step's own pass on
    a derived `layout` job in the layout language, linking the wave's pages.
 4. **Each page**: its photos first (no model), through `pluginMediaIngest()
