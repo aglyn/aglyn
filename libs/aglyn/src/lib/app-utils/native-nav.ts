@@ -34,6 +34,14 @@
  * - the plugin it belongs to, so it hides when that plugin is off for the
  *   workspace or the site.
  *
+ * The core's own rows (Home, Overview, Sites, Pages, Media, the settings
+ * modes) are here; a plugin's rows are its own, in
+ * `libs/plugins/<plugin>/src/lib/native-nav.ts` (`NATIVE_NAV_ROWS`), placed
+ * into a list's group by `order` (docs/PACKAGES.md rule 3: the core never
+ * names a plugin). `generate:native-contracts` assembles the two
+ * (`assembleNativeNav`) into the manifest the apps read,
+ * `ContractValues.nativeNavManifest`.
+ *
  * NO IMPORTS, on purpose: the native apps read this through the generated
  * contracts, so it must stay a plain module.
  */
@@ -94,6 +102,8 @@ export interface NativeNavSection {
   params?: Record<string, string>
   /** Set only when the section belongs to another plugin than its row's. */
   pluginId?: string
+  /** The help docs page for it; its row's, unless the console names its own. */
+  docs?: string
   console: NativeNavConsoleRef
 }
 
@@ -128,6 +138,15 @@ export interface NativeNavRow {
   description?: string
   /** Search words besides the label, so typing "billing" finds Plan. */
   keywords?: string[]
+  /** Where the row sits in its group, ascending; a plugin's row is placed by it. */
+  order?: number
+  /**
+   * The help docs page for the place, as the console's own help names it
+   * (its `docsTopic` and `docsAnchor`, or the page's `help` prop): a docs-site
+   * path with its anchor, e.g. `/content-and-data/crm/overview#at-the-organization-level`.
+   * The apps open it in the in-app browser, on the docs origin.
+   */
+  docs?: string
   sections?: NativeNavSection[]
   actions?: NativeNavAction[]
   console: NativeNavConsoleRef
@@ -157,8 +176,64 @@ export interface NativeNavElsewhere {
   where: string
 }
 
+/** A plugin's row, and the list and group it goes in. */
+export interface NativeNavContribution {
+  list: NativeNavListId
+  /** A group of that list, by id. */
+  group: string
+  row: NativeNavRow
+}
+
+/** Where the Create new menu is offered: the whole workspace, or one site. */
+export type NativeNavCreateScope = 'workspace' | 'site'
+
+/**
+ * One item of the Create new menu ("+" on the rail, the center tab on
+ * phones): what the console offers to create from that scope, opening the
+ * area's own create form.
+ */
+export interface NativeNavCreateItem {
+  id: string
+  /** The thing made, in the console's words ("Draft order", "Service"). */
+  label: string
+  icon: NativeNavIcon
+  /** The native screen the item opens, with `params` that open its create form. */
+  screen: string
+  params?: Record<string, string>
+  /** The plugin it belongs to: off for the workspace or site, the item is not offered. */
+  pluginId?: string
+  /** Only a site admin is offered it. */
+  requiresHostAdmin?: boolean
+  /** The workspace permission the console's create action asks for (`hosts.create`, `data.manage`). */
+  permission?: string
+  /** The site roles that may make it, as the rules hold them (`canWriteHostContent`). */
+  hostRoles?: string[]
+  /** The plan feature it needs; without it the item is shown blocked, with `blockedReason`. */
+  planFeature?: string
+  /** Why it is blocked when the plan lacks `planFeature`; the default reason otherwise. */
+  blockedReason?: string
+  /** Where it sits in the menu, ascending. */
+  order?: number
+  /** Where the console offers the same create action. */
+  console: NativeNavConsoleRef
+}
+
+/** One scope's Create new menu. */
+export interface NativeNavCreateList {
+  scope: NativeNavCreateScope
+  items: NativeNavCreateItem[]
+}
+
+/** A plugin's Create new item, and the scope that offers it. */
+export interface NativeNavCreateContribution {
+  scope: NativeNavCreateScope
+  item: NativeNavCreateItem
+}
+
 export interface NativeNavManifest {
   lists: NativeNavList[]
+  /** The Create new menu per scope (AGL-3943). */
+  create?: NativeNavCreateList[]
   /** Destinations the shells own, which no plugin registers. */
   shellScreens: string[]
   elsewhere: NativeNavElsewhere[]
@@ -172,7 +247,35 @@ export const NATIVE_NAV_SHELL_SCREENS: readonly string[] = [
   'shell.siteSettings',
 ]
 
-const icon = (apple: string, android: string): NativeNavIcon => ({ apple, android })
+/** An icon pair, for the rows here and in the plugins. */
+export const nativeNavIcon = (apple: string, android: string): NativeNavIcon => ({ apple, android })
+
+/** A console reference, for the rows here and in the plugins. */
+export const nativeNavRef = (surface: NativeNavConsoleSurface, id: string): NativeNavConsoleRef => ({
+  surface,
+  id,
+})
+
+/** A section of a plugin hub, at the scope its row stands in. */
+export function nativeNavHubSection(
+  scope: 'org' | 'host',
+  href: string,
+  id: string,
+  label: string,
+  screen: string,
+  extra: Partial<Pick<NativeNavSection, 'params' | 'pluginId'>> = {},
+): NativeNavSection {
+  return {
+    id,
+    label,
+    screen,
+    ...extra,
+    console: nativeNavRef(scope === 'org' ? 'orgPluginSection' : 'hostPluginSection', `${href}/${id}`),
+  }
+}
+
+const icon = nativeNavIcon
+const ref = nativeNavRef
 
 const ICONS = {
   home: icon('house', 'home'),
@@ -180,28 +283,8 @@ const ICONS = {
   sites: icon('globe', 'public'),
   pages: icon('doc.text', 'description'),
   media: icon('photo.on.rectangle', 'photo_library'),
-  forms: icon('list.bullet.rectangle', 'dynamic_form'),
-  logic: icon('function', 'functions'),
-  orders: icon('bag', 'shopping_basket'),
-  products: icon('tag', 'sell'),
-  bookings: icon('calendar.badge.clock', 'event_available'),
-  events: icon('calendar', 'event'),
-  inbox: icon('tray', 'inbox'),
-  crm: icon('person.text.rectangle', 'contact_mail'),
-  emails: icon('envelope', 'mail'),
-  marketing: icon('megaphone', 'campaign'),
-  automation: icon('bolt', 'bolt'),
-  accounting: icon('banknote', 'account_balance'),
-  sequences: icon('paperplane', 'send'),
-  redirects: icon('arrow.triangle.branch', 'alt_route'),
-  funnels: icon('line.3.horizontal.decrease', 'filter_alt'),
-  texts: icon('message', 'sms'),
-  aiJobs: icon('sparkles', 'auto_awesome'),
-  data: icon('tablecells', 'dataset'),
-  marketplace: icon('storefront', 'storefront'),
   settings: icon('gearshape', 'settings'),
-  scan: icon('barcode.viewfinder', 'qr_code_scanner'),
-  add: icon('plus', 'add'),
+  emails: icon('envelope', 'mail'),
   members: icon('person.2', 'group'),
   roles: icon('person.badge.key', 'admin_panel_settings'),
   activity: icon('clock.arrow.circlepath', 'history'),
@@ -231,112 +314,12 @@ const ICONS = {
   backup: icon('square.and.arrow.down', 'backup'),
 } as const
 
-const ref = (surface: NativeNavConsoleSurface, id: string): NativeNavConsoleRef => ({
-  surface,
-  id,
-})
-
-/** A section of a plugin hub, at the scope its row stands in. */
-const hubSection = (
-  scope: 'org' | 'host',
-  href: string,
-  id: string,
-  label: string,
-  screen: string,
-  extra: Partial<Pick<NativeNavSection, 'params' | 'pluginId'>> = {},
-): NativeNavSection => ({
-  id,
-  label,
-  screen,
-  ...extra,
-  console: ref(scope === 'org' ? 'orgPluginSection' : 'hostPluginSection', `${href}/${id}`),
-})
-
-const crmSections = (scope: 'org' | 'host'): NativeNavSection[] => [
-  hubSection(scope, '/crm', 'contacts', 'Contacts', 'crm.contacts'),
-  hubSection(scope, '/crm', 'leads', 'Leads', 'crm.leads'),
-  hubSection(scope, '/crm', 'companies', 'Companies', 'crm.companies'),
-  hubSection(scope, '/crm', 'deals', 'Deals', 'crm.deals'),
-  hubSection(scope, '/crm', 'tasks', 'Tasks', 'crm.tasks'),
-  hubSection(scope, '/crm', 'reports', 'Reports', 'crm.reports'),
-  hubSection(scope, '/crm', 'fields', 'Fields', 'crm.fields'),
-  hubSection(scope, '/crm', 'settings', 'Settings', 'crm.settings'),
-]
-
-const inboxSections = (scope: 'org' | 'host'): NativeNavSection[] => [
-  hubSection(scope, '/inbox', 'submissions', 'Submissions', 'inbox.submissions'),
-  hubSection(scope, '/inbox', 'contacts', 'Members & leads', 'inbox.people'),
-  hubSection(scope, '/inbox', 'campaigns', 'Campaigns', 'marketing.campaigns', {
-    pluginId: 'marketing',
-  }),
-]
-
-const emailSections = (scope: 'org' | 'host'): NativeNavSection[] => [
-  hubSection(scope, '/emails', 'messages', 'Messages', 'email.messages'),
-  hubSection(scope, '/emails', 'templates', 'Templates', 'email.templates'),
-  hubSection(scope, '/emails', 'audiences', 'Audiences', 'email.audiences'),
-  hubSection(scope, '/emails', 'topics', 'Topics', 'email.topics'),
-  hubSection(scope, '/emails', 'sending', 'Sending', 'email.sending'),
-  hubSection(scope, '/emails', 'suppressions', 'Suppressions', 'email.suppressions'),
-]
-
-const marketingSections = (scope: 'org' | 'host'): NativeNavSection[] => [
-  hubSection(scope, '/marketing', 'overview', 'Overview', 'marketing.overview'),
-  hubSection(scope, '/marketing', 'campaigns', 'Campaigns', 'marketing.campaigns'),
-  hubSection(scope, '/marketing', 'conversions', 'Conversions', 'marketing.conversions'),
-  hubSection(scope, '/marketing', 'overlays', 'Overlays', 'marketing.overlays'),
-  hubSection(scope, '/marketing', 'experiments', 'A/B testing', 'marketing.experiments'),
-]
-
-/** The Customers areas, the same four at either scope. */
-const customerRows = (scope: 'org' | 'host'): NativeNavRow[] => {
-  const tab = scope === 'org' ? 'orgPluginTab' : 'hostPluginTab'
-  return [
-    {
-      id: 'inbox',
-      label: 'Inbox',
-      icon: ICONS.inbox,
-      screen: 'inbox.submissions',
-      pluginId: 'inbox',
-      sections: inboxSections(scope),
-      console: ref(tab, '/inbox'),
-    },
-    {
-      id: 'crm',
-      label: 'CRM',
-      icon: ICONS.crm,
-      screen: 'crm.contacts',
-      pluginId: 'crm',
-      keywords: ['contacts', 'people', 'deals', 'tasks'],
-      sections: crmSections(scope),
-      console: ref(tab, '/crm'),
-    },
-    {
-      id: 'emails',
-      label: 'Emails',
-      icon: ICONS.emails,
-      screen: 'email.messages',
-      pluginId: 'email',
-      sections: emailSections(scope),
-      console: ref(tab, '/emails'),
-    },
-    {
-      id: 'marketing',
-      label: 'Marketing',
-      icon: ICONS.marketing,
-      screen: 'marketing.overview',
-      pluginId: 'marketing',
-      sections: marketingSections(scope),
-      console: ref(tab, '/marketing'),
-    },
-  ]
-}
-
 const HOME_ROW: NativeNavRow = {
   id: 'home',
   label: 'Home',
   icon: ICONS.home,
   screen: 'shell.home',
+  order: 10,
   console: ref('shell', 'home'),
 }
 
@@ -354,60 +337,17 @@ const WORKSPACE: NativeNavList = {
           label: 'Sites',
           icon: ICONS.sites,
           screen: 'site.sites',
+          order: 10,
+          docs: '/getting-started/console-tour#the-sites-list',
           console: ref('orgTab', 'nav-tab-org-sites'),
-        },
-        ...customerRows('org'),
-        {
-          id: 'automation',
-          label: 'Automation',
-          icon: ICONS.automation,
-          screen: 'workflows.org-automation',
-          pluginId: 'workflows',
-          console: ref('orgPluginTab', '/automation'),
-        },
-        {
-          id: 'accounting',
-          label: 'Accounting',
-          icon: ICONS.accounting,
-          screen: 'accounting.books',
-          pluginId: 'accounting',
-          console: ref('orgPluginTab', '/accounting'),
-        },
-        {
-          id: 'sequences',
-          label: 'Sequences',
-          icon: ICONS.sequences,
-          screen: 'outreach.sequences',
-          pluginId: 'outreach',
-          console: ref('orgPluginTab', '/outreach'),
         },
         {
           id: 'media',
           label: 'Media',
           icon: ICONS.media,
           screen: 'site.media',
+          order: 90,
           console: ref('orgTab', 'nav-tab-org-media'),
-        },
-        {
-          id: 'data',
-          label: 'Data',
-          icon: ICONS.data,
-          screen: 'data.datasets',
-          pluginId: 'data',
-          console: ref('orgTab', 'nav-tab-data'),
-        },
-        {
-          id: 'marketplace',
-          label: 'Marketplace',
-          icon: ICONS.marketplace,
-          screen: 'marketplace.browse',
-          pluginId: 'marketplace',
-          sections: [
-            hubSection('org', '/marketplace', 'browse', 'Browse All', 'marketplace.browse'),
-            hubSection('org', '/marketplace', 'installed', 'Installed', 'marketplace.installed'),
-            hubSection('org', '/marketplace', 'licences', 'Licenses', 'marketplace.licenses'),
-          ],
-          console: ref('orgPluginTab', '/marketplace'),
         },
       ],
     },
@@ -428,6 +368,7 @@ const SITE: NativeNavList = {
           consoleLabel: 'Analytics',
           icon: ICONS.overview,
           screen: 'shell.analytics',
+          order: 20,
           keywords: ['analytics', 'traffic', 'visitors'],
           console: ref('hostTab', 'nav-tab-analytics'),
         },
@@ -444,6 +385,7 @@ const SITE: NativeNavList = {
           label: 'Pages',
           icon: ICONS.pages,
           screen: 'site.pages',
+          order: 10,
           sections: [
             { id: 'pages', label: 'Pages', screen: 'site.pages', console: ref('hostTab', 'nav-tab-screens') },
             { id: 'components', label: 'Components', screen: 'site.components', console: ref('hostTab', 'nav-tab-components') },
@@ -458,144 +400,14 @@ const SITE: NativeNavList = {
           label: 'Media',
           icon: ICONS.media,
           screen: 'site.media',
+          order: 20,
           console: ref('hostTab', 'nav-tab-media'),
         },
-        {
-          id: 'forms',
-          label: 'Forms',
-          icon: ICONS.forms,
-          screen: 'forms.list',
-          pluginId: 'forms',
-          console: ref('hostPluginTab', '/forms'),
-        },
-        {
-          id: 'logic',
-          label: 'Logic',
-          icon: ICONS.logic,
-          screen: 'logic.page',
-          pluginId: 'logic',
-          keywords: ['functions', 'variables'],
-          console: ref('hostPluginTab', '/logic'),
-        },
       ],
     },
-    {
-      id: 'sell',
-      label: 'Sell',
-      foldable: true,
-      rows: [
-        {
-          id: 'orders',
-          label: 'Orders',
-          icon: ICONS.orders,
-          screen: 'commerce.orders',
-          pluginId: 'commerce',
-          sections: [
-            hubSection('host', '/products', 'orders', 'Orders', 'commerce.orders'),
-            hubSection('host', '/products', 'returns', 'Returns', 'commerce.returns'),
-            hubSection('host', '/products', 'reservations', 'Reservations', 'commerce.reservations'),
-          ],
-          console: ref('hostPluginSection', '/products/orders'),
-        },
-        {
-          id: 'products',
-          label: 'Products',
-          icon: ICONS.products,
-          screen: 'commerce.products',
-          pluginId: 'commerce',
-          keywords: ['catalog', 'stock', 'inventory'],
-          sections: [
-            hubSection('host', '/products', 'catalog', 'Catalog', 'commerce.products'),
-            hubSection('host', '/products', 'promotions', 'Promotions', 'commerce.promotions'),
-            hubSection('host', '/products', 'analytics', 'Analytics', 'commerce.sales'),
-          ],
-          actions: [
-            { id: 'scan', label: 'Scan stock', icon: ICONS.scan, screen: 'commerce.scan' },
-            {
-              id: 'newProduct',
-              label: 'New product',
-              icon: ICONS.add,
-              screen: 'commerce.product',
-              params: { new: '1' },
-            },
-          ],
-          console: ref('hostPluginTab', '/products'),
-        },
-        {
-          id: 'bookings',
-          label: 'Bookings',
-          icon: ICONS.bookings,
-          screen: 'bookings.calendar',
-          pluginId: 'bookings',
-          console: ref('hostPluginTab', '/bookings'),
-        },
-        {
-          id: 'events',
-          label: 'Events',
-          icon: ICONS.events,
-          screen: 'events-calendar.events',
-          pluginId: 'events-calendar',
-          console: ref('hostPluginTab', '/events'),
-        },
-      ],
-    },
-    { id: 'customers', label: 'Customers', foldable: true, rows: customerRows('host') },
-    {
-      id: 'more',
-      label: 'More',
-      foldable: true,
-      rows: [
-        {
-          id: 'automation',
-          label: 'Automation',
-          icon: ICONS.automation,
-          screen: 'workflows.automation',
-          pluginId: 'workflows',
-          console: ref('hostPluginTab', '/automation'),
-        },
-        {
-          id: 'redirects',
-          label: 'Redirects',
-          icon: ICONS.redirects,
-          screen: 'redirects.list',
-          pluginId: 'redirects',
-          console: ref('hostPluginTab', '/redirects'),
-        },
-        {
-          id: 'funnels',
-          label: 'Funnels',
-          icon: ICONS.funnels,
-          screen: 'funnels.list',
-          pluginId: 'funnels',
-          console: ref('consoleWidget', 'hostAnalytics/funnels'),
-        },
-        {
-          id: 'texts',
-          label: 'Customer texts',
-          icon: ICONS.texts,
-          screen: 'sms.texts',
-          pluginId: 'sms',
-          keywords: ['sms'],
-          console: ref('nativeOnly', 'sms.texts'),
-        },
-        {
-          id: 'aiJobs',
-          label: 'AI jobs',
-          icon: ICONS.aiJobs,
-          screen: 'ai.jobs',
-          pluginId: 'ai',
-          console: ref('hostPluginTab', '/ai-jobs'),
-        },
-        {
-          id: 'data',
-          label: 'Data',
-          icon: ICONS.data,
-          screen: 'data.datasets',
-          pluginId: 'data',
-          console: ref('hostPluginTab', '/data'),
-        },
-      ],
-    },
+    { id: 'sell', label: 'Sell', foldable: true, rows: [] },
+    { id: 'customers', label: 'Customers', foldable: true, rows: [] },
+    { id: 'more', label: 'More', foldable: true, rows: [] },
     {
       id: 'settings',
       foldable: false,
@@ -605,11 +417,24 @@ const SITE: NativeNavList = {
           label: 'Site settings',
           icon: ICONS.settings,
           screen: 'shell.siteSettings',
+          order: 10,
           console: ref('shell', 'siteSettings'),
         },
       ],
     },
   ],
+}
+
+/** Each row's place, in the order written. */
+const ordered = (rows: NativeNavRow[]): NativeNavRow[] =>
+  rows.map((row, index) => ({ ...row, order: row.order ?? (index + 1) * 10 }))
+
+/** The help page each settings hub's `help` prop names, the rows' docs. */
+const HUB_DOCS: Partial<Record<NativeNavConsoleSurface, string>> = {
+  teamSection: '/workspace-and-billing/teams-and-roles/overview#team-page',
+  billingSection: '/workspace-and-billing/billing-and-plans/overview#billing-page',
+  orgSettingsSection: '/getting-started/console-tour#organization-settings',
+  hostAdminSection: '/getting-started/create-a-site#site-admin',
 }
 
 const setupRow = (
@@ -641,6 +466,7 @@ const adminRow = (
   icon: rowIcon,
   screen,
   requiresHostAdmin: true,
+  docs: HUB_DOCS.hostAdminSection,
   console: ref('hostAdminSection', route),
 })
 
@@ -651,8 +477,16 @@ const settingsRow = (
   rowIcon: NativeNavIcon,
   screen: string,
   route: string,
-  extra: Partial<Pick<NativeNavRow, 'keywords' | 'pluginId'>> = {},
-): NativeNavRow => ({ id, label, icon: rowIcon, screen, ...extra, console: ref(surface, route) })
+  extra: Partial<Pick<NativeNavRow, 'keywords' | 'order'>> = {},
+): NativeNavRow => ({
+  id,
+  label,
+  icon: rowIcon,
+  screen,
+  ...extra,
+  ...(HUB_DOCS[surface] ? { docs: HUB_DOCS[surface] } : {}),
+  console: ref(surface, route),
+})
 
 const WORKSPACE_SETTINGS: NativeNavList = {
   id: 'workspaceSettings',
@@ -662,29 +496,28 @@ const WORKSPACE_SETTINGS: NativeNavList = {
       id: 'team',
       label: 'Team',
       foldable: false,
-      rows: [
+      rows: ordered([
         settingsRow('teamSection', 'members', 'Members', ICONS.members, 'core.team', 'MANAGE_TEAM_MEMBERS', { keywords: ['team', 'invite', 'people'] }),
         settingsRow('teamSection', 'roles', 'Custom roles', ICONS.roles, 'core.team.roles', 'MANAGE_TEAM_ROLES', { keywords: ['permissions'] }),
         settingsRow('teamSection', 'activity', 'Recent activity', ICONS.activity, 'core.team.activity', 'MANAGE_TEAM_ACTIVITY', { keywords: ['audit log'] }),
-      ],
+      ]),
     },
     {
       id: 'billing',
       label: 'Billing',
       foldable: false,
       rows: [
-        settingsRow('billingSection', 'plan', 'Plan', ICONS.plan, 'core.billing', 'MANAGE_BILLING', { keywords: ['billing', 'upgrade', 'subscription'] }),
-        settingsRow('billingSection', 'usage', 'Usage', ICONS.usage, 'core.billing.usage', 'MANAGE_BILLING_USAGE', { keywords: ['billing', 'limits'] }),
-        settingsRow('consoleWidget', 'aiCredits', 'AI credits', ICONS.aiJobs, 'ai.credits', 'orgBillingUsage/ai-credits-meter', { pluginId: 'ai', keywords: ['billing'] }),
-        settingsRow('billingSection', 'invoices', 'Invoices', ICONS.invoices, 'core.billing.invoices', 'MANAGE_BILLING_INVOICES', { keywords: ['billing', 'receipts'] }),
-        settingsRow('billingSection', 'billingSettings', 'Settings', ICONS.billingSettings, 'core.billing.settings', 'MANAGE_BILLING_SETTINGS', { keywords: ['billing', 'payment method', 'tax'] }),
+        settingsRow('billingSection', 'plan', 'Plan', ICONS.plan, 'core.billing', 'MANAGE_BILLING', { order: 10, keywords: ['billing', 'upgrade', 'subscription'] }),
+        settingsRow('billingSection', 'usage', 'Usage', ICONS.usage, 'core.billing.usage', 'MANAGE_BILLING_USAGE', { order: 20, keywords: ['billing', 'limits'] }),
+        settingsRow('billingSection', 'invoices', 'Invoices', ICONS.invoices, 'core.billing.invoices', 'MANAGE_BILLING_INVOICES', { order: 40, keywords: ['billing', 'receipts'] }),
+        settingsRow('billingSection', 'billingSettings', 'Settings', ICONS.billingSettings, 'core.billing.settings', 'MANAGE_BILLING_SETTINGS', { order: 50, keywords: ['billing', 'payment method', 'tax'] }),
       ],
     },
     {
       id: 'workspace',
       label: 'Workspace',
       foldable: false,
-      rows: [
+      rows: ordered([
         settingsRow('orgTab', 'plugins', 'Plugins', ICONS.plugins, 'core.plugins', 'nav-tab-org-plugins'),
         settingsRow('orgSettingsSection', 'branding', 'Branding', ICONS.branding, 'core.settings.branding', 'ORG_SETTINGS_BRANDING', { keywords: ['white label', 'logo', 'colors'] }),
         settingsRow('orgSettingsSection', 'sso', 'Single sign-on', ICONS.sso, 'core.settings.sso', 'ORG_SETTINGS_SSO', { keywords: ['sso', 'saml'] }),
@@ -692,26 +525,26 @@ const WORKSPACE_SETTINGS: NativeNavList = {
         settingsRow('orgSettingsSection', 'apiKeys', 'API keys', ICONS.apiKeys, 'core.settings.apiKeys', 'ORG_SETTINGS_API_KEYS'),
         settingsRow('orgSettingsSection', 'integrations', 'Integrations', ICONS.integrations, 'core.settings.integrations', 'ORG_SETTINGS_INTEGRATIONS'),
         settingsRow('orgSettingsSection', 'general', 'General', ICONS.settings, 'core.settings.general', 'ORG_SETTINGS_GENERAL', { keywords: ['name', 'address'] }),
-      ],
+      ]),
     },
     {
       id: 'data',
       label: 'Data & compliance',
       foldable: false,
-      rows: [
+      rows: ordered([
         settingsRow('orgSettingsSection', 'privacy', 'Privacy', ICONS.privacy, 'core.settings.privacy', 'ORG_SETTINGS_PRIVACY', { keywords: ['gdpr', 'erase'] }),
         settingsRow('orgSettingsSection', 'holds', 'Holds & reviews', ICONS.holds, 'core.settings.holds', 'ORG_SETTINGS_HOLDS'),
         settingsRow('orgSettingsSection', 'importExport', 'Import & export', ICONS.importExport, 'core.settings.data', 'ORG_SETTINGS_DATA', { keywords: ['csv', 'export'] }),
-      ],
+      ]),
     },
     {
       id: 'danger',
       label: 'Danger zone',
       foldable: false,
-      rows: [
+      rows: ordered([
         settingsRow('orgSettingsSection', 'ownership', 'Ownership', ICONS.ownership, 'core.settings.ownership', 'ORG_SETTINGS_OWNERSHIP', { keywords: ['transfer'] }),
         settingsRow('orgSettingsSection', 'delete', 'Delete', ICONS.delete, 'core.settings.delete', 'ORG_SETTINGS_DELETE'),
-      ],
+      ]),
     },
   ],
 }
@@ -723,7 +556,7 @@ const SITE_SETTINGS: NativeNavList = {
     {
       id: 'people',
       foldable: false,
-      rows: [
+      rows: ordered([
         {
           id: 'users',
           label: 'Users',
@@ -732,13 +565,13 @@ const SITE_SETTINGS: NativeNavList = {
           keywords: ['team', 'collaborators'],
           console: ref('hostTab', 'nav-tab-users'),
         },
-      ],
+      ]),
     },
     {
       id: 'setup',
       label: 'Setup',
       foldable: false,
-      rows: [
+      rows: ordered([
         setupRow('details', 'Basic details', ICONS.details, 'Logo, business details, layout and languages'),
         setupRow('business', 'Business profile', ICONS.business, 'What the business is, for everything that writes about it'),
         setupRow('seo', 'SEO', ICONS.seo, 'Search title, social image, business profile and verification', ['search']),
@@ -746,13 +579,13 @@ const SITE_SETTINGS: NativeNavList = {
         setupRow('theme', 'Theme', ICONS.theme, 'Colors, font, shape and your saved themes', ['colors', 'fonts']),
         setupRow('emails', 'Emails', ICONS.emails, 'The emails your site sends to customers'),
         setupRow('integrations', 'Integrations', ICONS.integrations, 'Email platforms, Zapier, live chat and the other tools your site connects to'),
-      ],
+      ]),
     },
     {
       id: 'admin',
       label: 'Admin',
       foldable: false,
-      rows: [
+      rows: ordered([
         adminRow('general', 'General', ICONS.settings, 'core.site.general', 'HOST_ADMIN_GENERAL'),
         adminRow('plugins', 'Plugins', ICONS.plugins, 'core.site.plugins', 'HOST_ADMIN_PLUGINS'),
         adminRow('domain', 'Custom Domain', ICONS.domain, 'core.site.domain', 'HOST_ADMIN_DOMAIN'),
@@ -761,25 +594,168 @@ const SITE_SETTINGS: NativeNavList = {
         adminRow('activity', 'Activity', ICONS.activity, 'core.site.activity', 'HOST_ADMIN_ACTIVITY'),
         adminRow('backup', 'Backup & template', ICONS.backup, 'core.site.backup', 'HOST_ADMIN_BACKUP'),
         adminRow('danger', 'Danger zone', ICONS.delete, 'core.site.delete', 'HOST_ADMIN_DANGER'),
-      ],
+      ]),
     },
   ],
 }
 
-/** The manifest both shells draw. */
+const CREATE: NativeNavCreateList[] = [
+  {
+    scope: 'workspace',
+    items: [
+      {
+        id: 'site',
+        label: 'Site',
+        icon: ICONS.sites,
+        screen: 'site.sites',
+        params: { new: '1' },
+        permission: 'hosts.create',
+        order: 10,
+        console: ref('orgTab', 'nav-tab-org-sites'),
+      },
+    ],
+  },
+  {
+    scope: 'site',
+    items: [
+      {
+        id: 'page',
+        label: 'Page',
+        icon: ICONS.pages,
+        screen: 'site.pages',
+        params: { new: '1' },
+        hostRoles: ['admin', 'editor', 'author'],
+        order: 10,
+        console: ref('hostTab', 'nav-tab-screens'),
+      },
+    ],
+  },
+]
+
+/**
+ * The core's half of the manifest: every list and group, and the core's own
+ * rows. The manifest the apps read (`ContractValues.nativeNavManifest`) is
+ * this with each plugin's `NATIVE_NAV_ROWS` placed by `assembleNativeNav`.
+ */
 export const NATIVE_NAV_MANIFEST: NativeNavManifest = {
   lists: [WORKSPACE, SITE, WORKSPACE_SETTINGS, SITE_SETTINGS],
+  create: CREATE,
   shellScreens: [...NATIVE_NAV_SHELL_SCREENS],
   elsewhere: [
     { console: ref('hostTab', 'nav-tab-dashboard'), where: 'Home, inside the site (shell.home)' },
     { console: ref('hostTab', 'nav-tab-setup'), where: 'Site settings → Setup' },
     { console: ref('hostTab', 'nav-tab-admin'), where: 'Site settings → Admin' },
-    { console: ref('hostPluginTab', '/pos'), where: 'The Aglyn POS app' },
     { console: ref('orgTab', 'nav-tab-org-team'), where: 'Workspace settings → Team' },
     { console: ref('orgTab', 'nav-tab-org-billing'), where: 'Workspace settings → Billing' },
     { console: ref('orgTab', 'nav-tab-org-settings'), where: 'Workspace settings' },
     { console: ref('orgTab', 'nav-tab-org-support'), where: 'Help menu → Contact support (core.support)' },
   ],
+}
+
+/**
+ * The manifest with the plugins' rows placed: each into its list's group by
+ * `order` (a tie keeps the core's row first, then registration order). A row
+ * naming a list or group the core does not have is refused by name, so a
+ * plugin cannot quietly invent a group.
+ */
+export function assembleNativeNav(
+  core: NativeNavManifest,
+  contributions: readonly NativeNavContribution[],
+  elsewhere: readonly NativeNavElsewhere[] = [],
+  creates: readonly NativeNavCreateContribution[] = [],
+): NativeNavManifest {
+  const byOrder = <T extends { order?: number }>(entries: T[]): T[] =>
+    entries
+      .map((entry, index) => ({ entry, index }))
+      .sort((a, b) => (a.entry.order ?? 0) - (b.entry.order ?? 0) || a.index - b.index)
+      .map(({ entry }) => entry)
+  const lists = core.lists.map((list) => ({
+    ...list,
+    groups: list.groups.map((group) => ({ ...group, rows: [...group.rows] })),
+  }))
+  for (const { list: listId, group: groupId, row } of contributions) {
+    const group = lists.find((list) => list.id === listId)?.groups.find((entry) => entry.id === groupId)
+    if (!group || group.dynamic) {
+      throw new Error(`native nav: ${row.id} names ${listId}/${groupId}, which is not a group of rows`)
+    }
+    if (group.rows.some((entry) => entry.id === row.id)) {
+      throw new Error(`native nav: ${listId}/${groupId} holds ${row.id} twice`)
+    }
+    group.rows.push(row)
+  }
+  for (const list of lists) {
+    for (const group of list.groups) {
+      // A section is helped by its row's page unless the console names its own.
+      group.rows = byOrder(group.rows).map((row) =>
+        row.docs && row.sections
+          ? { ...row, sections: row.sections.map((section) => (section.docs ? section : { ...section, docs: row.docs })) }
+          : row,
+      )
+    }
+  }
+  const create = (core.create ?? []).map((entry) => ({ ...entry, items: [...entry.items] }))
+  for (const { scope, item } of creates) {
+    const target = create.find((entry) => entry.scope === scope)
+    if (!target) throw new Error(`native nav: create item ${item.id} names ${scope}, which has no menu`)
+    if (target.items.some((entry) => entry.id === item.id)) {
+      throw new Error(`native nav: the ${scope} create menu holds ${item.id} twice`)
+    }
+    target.items.push(item)
+  }
+  return {
+    ...core,
+    lists,
+    create: create.map((entry) => ({ ...entry, items: byOrder(entry.items) })),
+    elsewhere: [...core.elsewhere, ...elsewhere],
+  }
+}
+
+/** What a Create new item that cannot be used says, when its own reason does not apply. */
+export const NATIVE_CREATE_PERMISSION_REASON =
+  "Your role can't create this here. Ask an owner or admin of the workspace."
+export const NATIVE_CREATE_SITE_ROLE_REASON = "Your role on this site can't create this. Ask a site admin."
+export const NATIVE_CREATE_PLAN_REASON = "Your plan doesn't include this. See the plans in Billing."
+
+/** A Create new item as one scope offers it. */
+export interface ResolvedCreateItem extends NativeNavCreateItem {
+  /** Shown, but disabled with `reason`: a prerequisite stands between the person and it. */
+  blocked: boolean
+  reason?: string
+}
+
+/**
+ * The Create new menu for the workspace or site in hand. An item of a plugin
+ * that is off is not offered, nor an admin-only item to a non-admin. One the
+ * person may not use is SHOWN, disabled with its reason (prerequisites are
+ * shown, never hidden): a permission or site role they lack, then a plan
+ * feature the workspace lacks. `permissions` and `features` are the
+ * workspace's resolved answers (an absent key is not held); `hostRole` is
+ * the person's role on the site, null at the workspace.
+ */
+export function resolveCreateList(
+  manifest: NativeNavManifest,
+  scope: NativeNavCreateScope,
+  enabledPluginIds: readonly string[],
+  permissions: Readonly<Record<string, boolean>>,
+  features: Readonly<Record<string, boolean>>,
+  hostRole: string | null,
+): ResolvedCreateItem[] {
+  const on = new Set(enabledPluginIds)
+  const items = manifest.create?.find((entry) => entry.scope === scope)?.items ?? []
+  return items
+    .filter((item) => (!item.pluginId || on.has(item.pluginId)) && (!item.requiresHostAdmin || hostRole === 'admin'))
+    .map((item): ResolvedCreateItem => {
+      if (item.permission && permissions[item.permission] !== true) {
+        return { ...item, blocked: true, reason: NATIVE_CREATE_PERMISSION_REASON }
+      }
+      if (item.hostRoles && !item.hostRoles.includes(hostRole ?? '')) {
+        return { ...item, blocked: true, reason: NATIVE_CREATE_SITE_ROLE_REASON }
+      }
+      if (item.planFeature && features[item.planFeature] !== true) {
+        return { ...item, blocked: true, reason: item.blockedReason ?? NATIVE_CREATE_PLAN_REASON }
+      }
+      return { ...item, blocked: false }
+    })
 }
 
 /** A list as one scope shows it: rows for plugins that are off, or admin rows for a non-admin, left out. */
@@ -790,18 +766,20 @@ export interface ResolvedNavList {
 }
 
 /**
- * One list for the workspace or site in hand. `enabledPluginIds` is the
- * site's effective set (`resolveHostEnabledPlugins`) in site scope and the
+ * One list for the workspace or site in hand, from the assembled manifest
+ * (`ContractValues.nativeNavManifest`). `enabledPluginIds` is the site's
+ * effective set (`resolveHostEnabledPlugins`) in site scope and the
  * workspace's (`resolveEnabledPlugins`) otherwise. A section of another
  * plugin than its row's hides with that plugin. A group left with no rows is
  * dropped, except the starred group, which the shell fills.
  */
 export function resolveNavList(
+  manifest: NativeNavManifest,
   listId: NativeNavListId,
   enabledPluginIds: readonly string[],
   hostAdmin: boolean,
 ): ResolvedNavList {
-  const list = NATIVE_NAV_MANIFEST.lists.find((entry) => entry.id === listId)
+  const list = manifest.lists.find((entry) => entry.id === listId)
   if (!list) return { id: listId, groups: [] }
   const on = new Set(enabledPluginIds)
   const shows = (pluginId?: string) => !pluginId || on.has(pluginId)
