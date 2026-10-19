@@ -45,8 +45,12 @@ import comingSoonPreview from '../assets/site-styles/coming-soon.webp'
  * store's products, a photographer's gallery, a band's tour dates — drawn in
  * the kind's look by `libs/plugins/ai/scripts/render-site-style-previews.mts`
  * from the stand-in pages in `site-style-previews.json`, with the real
- * compiler and node renderer and the starter photos. Each is 800 × 800;
- * regenerate them all with that script when a kind's look changes.
+ * compiler and node renderer, the starter photos and the previews' own
+ * credited photos (`scripts/style-preview-photos/`). Each opens on its kind's
+ * signature hero (`aiLayoutKindSignature`, AGL-3985) with a photo of its own
+ * kind of business.
+ * Each is 800 × 800; regenerate them all with that script when a kind's look
+ * or layout changes.
  */
 const PREVIEWS: Readonly<Record<string, unknown>> = {
   business: businessPreview,
@@ -74,27 +78,27 @@ const PREVIEWS: Readonly<Record<string, unknown>> = {
 
 /** What each picture shows, as its alt text: the example page and what leads it. */
 export const AI_SITE_STYLE_PREVIEW_ALTS: Readonly<Record<string, string>> = {
-  business: "A cleaning company's home page: its heading beside a photo of a tidy desk, then its services",
-  trades: "A roofer's home page: a bold heading on a dark band, then roofing services as cards",
-  professional: "A consulting firm's home page: its heading beside a photo of a team at a planning board",
-  wellness: "A therapy practice's home page: its heading over a plant-filled room, then a list of sessions",
-  restaurant: "A café's home page: its heading over a photo of the owner at the counter, then menu highlights",
-  store: "A handmade goods shop's home page: its heading beside a photo of a workbench, then featured products",
+  business: "A cleaning company's home page: its heading beside a photo of gloved hands wiping a desk, then its services as cards",
+  trades: "A roofer's home page: a bold heading over a full-width photo of a roofer carrying shingles, then roofing services",
+  professional: "A consulting firm's home page: its heading on a white card over a full-width photo of a team at a planning board",
+  wellness: "A therapy practice's home page: half the page a photo of a calm, sunlit room, its heading in the other half, then its sessions",
+  restaurant: "A café's home page: its heading centered over a photo of the owner at the counter, then menu highlights",
+  store: "A handmade goods shop's home page: its heading beside two overlapping photos of wax seals, then featured products",
   portfolio: "A prop stylist's home page: a large heading over a grid of three styled sets",
-  studio: "A design studio's home page: a large heading on a dark band, then its selected work",
-  photography: "A photographer's home page: its heading on black over a gallery of three photos",
-  blog: "A food journal's home page: its heading on a dark band, then a list of the latest posts",
-  events: "A festival's home page: its heading beside the three days' program on a colored band",
-  fitness: "A gym's home page: a bold heading on a dark band, then this week's class times",
-  yoga: "A yoga studio's home page: its heading beside this week's class schedule",
-  beauty: "A hair salon's home page: its heading beside a photo of roses and jars at a styling station",
-  realestate: "A real estate agent's home page: its heading over three listings with photos",
-  education: "A tutoring center's home page: its heading over a photo of a tutor at the board, then its courses",
-  nonprofit: "A food bank's home page: its heading on a dark band, then the ways to help",
-  music: "A band's home page: its name on a dark band, then its tour dates",
-  personal: "A product manager's personal page: her introduction beside a photo of her with a teammate",
-  landing: "A budgeting app's landing page: its pitch and sign-up button on a dark band, then its benefits",
-  'coming-soon': "A café's coming soon page: its heading and notify button over a photo of the café shelves",
+  studio: "A design studio's home page: an oversized heading on black over a wide photo of the team at a brand board",
+  photography: "A photographer's home page: its heading on black over a gallery of a wedding, a portrait and a maker",
+  blog: "A food journal's home page: its heading centered in a narrow column over a wide photo of vegetables on a cutting board",
+  events: "A festival's home page: two overlapping photos of a lantern-lit night market beside its dates, then the program",
+  fitness: "A gym's home page: a bold heading on black beside a photo of rows of dumbbells, then this week's classes",
+  yoga: "A yoga studio's home page: a quiet centered heading over a wide photo of a class stretching on mats",
+  beauty: "A hair salon's home page: its heading beside two overlapping photos of a stylist at work and the salon's chairs",
+  realestate: "A real estate agent's home page: its heading on a white card over a photo of a white house, then new listings",
+  education: "A tutoring center's home page: a photo of a tutor at the whiteboard beside its heading, then its courses",
+  nonprofit: "A food bank's home page: its heading over a full-width photo of volunteers sorting donations, then the ways to help",
+  music: "A band's home page: its name in large type over a photo of a band under stage lights, then its tour dates",
+  personal: "A product manager's personal page: a round portrait over her centered introduction, then her experience",
+  landing: "A budgeting app's landing page: its pitch centered on a colored band over a photo of a couple planning on a phone",
+  'coming-soon': "A café's coming soon page: its heading and notify button centered over a photo of the café's coffee shelves",
 }
 
 /** The width and height every preview is drawn at. */

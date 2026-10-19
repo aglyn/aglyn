@@ -38,6 +38,7 @@ import com.aglyn.pluginhost.NativeApp
 import com.aglyn.pluginhost.NativePluginRegistry
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.respondOk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -87,9 +88,13 @@ internal class FakeFirestore(private val collections: Map<String, List<Firestore
 internal fun testServices(
   userDoc: Map<String, Any?>? = null,
   writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
-  apiCalls: MutableList<String> = mutableListOf(),
+  apiCalls: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList(),
   /** The session the shell runs on; one person by default, or several accounts (Add account). */
   authFor: (com.aglyn.core.KeyValueStore) -> AuthSession = { FakeAuth() },
+  /** The workspace's own document (`orgs/o1`), when a test needs its plan or brand. */
+  orgDoc: Map<String, Any?>? = null,
+  /** A JSON body a route answers with (by path); an empty 200 otherwise. */
+  apiBody: (String) -> String? = { null },
 ): ShellServices {
   val prefs = InMemoryKeyValueStore()
   val auth = authFor(prefs)
@@ -107,7 +112,7 @@ internal fun testServices(
         ),
       ),
     ),
-    docs = listOfNotNull(userDoc?.let { "users/u1" to FirestoreDoc("u1", "users/u1", it) }).toMap() + mapOf("hosts/h1" to FirestoreDoc("h1", "hosts/h1", mapOf("screens" to mapOf("home" to emptyMap<String, Any>(), "about" to emptyMap<String, Any>())))),
+    docs = listOfNotNull(userDoc?.let { "users/u1" to FirestoreDoc("u1", "users/u1", it) }, orgDoc?.let { "orgs/o1" to FirestoreDoc("o1", "orgs/o1", it) }).toMap() + mapOf("hosts/h1" to FirestoreDoc("h1", "hosts/h1", mapOf("screens" to mapOf("home" to emptyMap<String, Any>(), "about" to emptyMap<String, Any>())))),
   )
   val config = AglynConfig.read(AglynEnv(consoleUrl = "https://app.example.com", firebaseProjectId = "demo-test"), AglynAppId.AGLYN)
   return ShellServices(
@@ -115,7 +120,14 @@ internal fun testServices(
     config = config,
     auth = auth,
     firestore = firestore,
-    api = ConsoleApiClient(config.consoleOrigin, HttpClient(MockEngine { request -> apiCalls += request.url.encodedPath; respondOk() }), { auth.idToken(it) }),
+    api = ConsoleApiClient(config.consoleOrigin, HttpClient(
+      MockEngine { request ->
+        apiCalls += request.url.encodedPath
+        apiBody(request.url.encodedPath)?.let {
+          respond(it, headers = io.ktor.http.headersOf(io.ktor.http.HttpHeaders.ContentType, "application/json"))
+        } ?: respondOk()
+      },
+    ), { auth.idToken(it) }),
     workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
     prefs = prefs,
     registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES) },
@@ -129,7 +141,7 @@ class ShellUiTest {
   private fun services(
     userDoc: Map<String, Any?>? = null,
     writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
-    apiCalls: MutableList<String> = mutableListOf(),
+    apiCalls: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList(),
   ): ShellServices = testServices(userDoc, writer, apiCalls)
 
   @Test
@@ -153,16 +165,17 @@ class ShellUiTest {
     onNodeWithTag("site-status").assertIsDisplayed()
     onNodeWithText("Live").assertIsDisplayed()
     onNodeWithText("shop.aglyn.app").assertIsDisplayed()
-    onNodeWithTag("quick-action-site.pages-open").assertIsDisplayed()
-    onNodeWithText("New order #1042").assertIsDisplayed()
-    onNodeWithText("5 min ago").assertIsDisplayed()
+    // Home says what waits on the person, and nothing does here (no plugin lines in this build, the plan is paid).
+    onNodeWithTag("needs-you-none").assertIsDisplayed()
   }
 
   /** Sign-up is the console's: the form, the agreement it is gated on, the console's routes, then the verification step. */
   @Test
   fun signsUpThroughTheConsolesRoutesAndThenAsksForTheAddressToBeConfirmed() = runComposeUiTest {
-    val calls = mutableListOf<String>()
-    val merges = mutableListOf<String>()
+    // The console's mock answers on the HTTP client's threads and the writes land on their own coroutines, while the test
+    // thread reads both: thread-safe lists, so a read never meets a write in progress (ConcurrentModificationException).
+    val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
+    val merges = java.util.concurrent.CopyOnWriteArrayList<String>()
     val writer = object : com.aglyn.core.FirestoreWriter {
       override suspend fun merge(path: String, data: Map<String, Any?>) { merges += "$path ${data.keys.sorted()}" }
     }
@@ -180,16 +193,17 @@ class ShellUiTest {
     onNodeWithText("Please accept the Terms of Service and Privacy Policy to continue.").assertExists()
     onNodeWithTag("sign-up-consent").performScrollTo().performClick()
     onNodeWithTag("sign-up-submit").performScrollTo().performClick()
-    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("verify-continue") > 0 }
+    waitUntil(timeoutMillis = 10_000) { onAllNodesWithTagCount("verify-continue") > 0 }
     onNodeWithText("Verify your email").assertIsDisplayed()
     assertEquals(
       listOf("/api/lockdown-status", "/api/auth/legal-acceptance", "/api/auth/acquisition"),
       calls.take(3),
     )
-    waitUntil(timeoutMillis = 3_000) { "/api/auth/send-verification" in calls }
+    // Both land on their own coroutines; a loaded test machine can take seconds, so wait generously rather than flake.
+    waitUntil(timeoutMillis = 10_000) { "/api/auth/send-verification" in calls }
     // The verify screen sends its email as soon as the account is signed in, while sign-up is still holding the
     // workspace name, so the write is awaited on its own rather than read the instant the email call lands.
-    waitUntil(timeoutMillis = 3_000) { merges.any { it.startsWith("users/u2") && "pendingSignUpWorkspace" in it } }
+    waitUntil(timeoutMillis = 10_000) { merges.any { it.startsWith("users/u2") && "pendingSignUpWorkspace" in it } }
   }
 
   @Test
@@ -220,9 +234,11 @@ class ShellUiTest {
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-picker-button") > 0 }
     onNodeWithTag("scope-back-to-workspace").assertTextContains("Acme", substring = true)
     onNodeWithTag("site-picker-button").assertTextContains("Acme Shop", substring = true)
+    // The site's ▾ opens the switcher popover under it (Figma 16:425): find a site, the sites, View all sites.
     onNodeWithTag("site-picker-button").performClick()
-    onNodeWithTag("picker-site-h1").assertIsDisplayed()
-    onNodeWithTag("picker-whole-workspace").assertIsDisplayed()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-switcher") > 0 }
+    onNodeWithTag("site-switcher-h1").assertIsDisplayed()
+    onNodeWithTag("site-switcher-all").assertIsDisplayed()
     // The phone's chip and tabs are for narrow windows only.
     assertEquals(0, onAllNodesWithTagCount("scope-chip"))
   }

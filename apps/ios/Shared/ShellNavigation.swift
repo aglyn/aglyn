@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynPluginHost
 import AglynUI
 import Observation
 import SwiftUI
@@ -22,8 +23,14 @@ enum Route: Hashable {
   case analytics
   /// The notification feed, pushed from a phone's bell.
   case notifications
+  /// Theme settings.
+  case themeSettings
+  /// A detail screen a screen pushed (`AglynPushLink`), on the path so the next push never drops it.
+  case view(AglynPushedView)
   /// A plain web page (a live site, a preview, a docs or legal page) in the in-app browser screen.
   case web(AglynWebPage)
+  /// Every result for what was typed in the search ("See all results for 'x'").
+  case searchResults(String)
 }
 
 /// The shell's top-level sections: the sidebar on iPad and Mac, the tab bar on iPhone.
@@ -97,8 +104,21 @@ final class ShellNavigation {
   var showAccount = false
   /// The Add account screen.
   var showAddAccount = false
-  /// The one box (⌘K): switching and search in one place.
+  /// The search (⌘K) open: the title bar's field focused with its dropdown, or the phone's full-screen search.
   var showOneBox = false
+  /// What the search holds in this tab.
+  let search = OneBoxModel()
+  /// The starred shortcut the section was opened through, so the selection shows on that row rather than on its
+  /// group's row too (one selection in the sidebar).
+  var starKey: String?
+  /// Whether this tab is the one in front of its window (always, where the shell has no tabs).
+  var front = true
+  /// The workspace and site this tab's screens read while another tab is in front, and until its own are back on its
+  /// return (P9): the app keeps one workspace store, so without this a hidden tab's screens followed the tab in front
+  /// and reloaded, losing their place.
+  var frozenContext: NativePluginContext?
+  /// The tab's title while it is behind another.
+  var frozenTitle: String?
   /// Add workspace (create one, or accept an invitation).
   var showAddWorkspace = false
   /// The notifications popover from the bell.
@@ -107,10 +127,18 @@ final class ShellNavigation {
   var showCreate = false
   /// The AI panel, docked on the right (a sheet on a phone).
   var showAssist = false
+  /// This navigation's identity, for a tab strip that keeps every tab's view alive.
+  var tabID: ObjectIdentifier { ObjectIdentifier(self) }
+  /// The sidebar folded away (View ▸ Hide Sidebar, ⌥⌘S), so the place in use takes the width.
+  var sidebarHidden = false
+  /// The workspace rail hidden (the title bar's toggle, ⌃⌘S): remembered on this device.
+  var railHidden = UserDefaults.standard.bool(forKey: "aglyn.shell.railHidden") {
+    didSet { UserDefaults.standard.set(railHidden, forKey: "aglyn.shell.railHidden") }
+  }
   /// The keyboard shortcuts sheet.
   var showShortcuts = false
-  /// This window's conversation with the AI panel.
-  @ObservationIgnored let assist = AssistConversation()
+  /// Bumped when this device's own theme changes (it is not on the account, so nothing else would redraw it).
+  var themeNonce = 0
   /// The workspace and site this tab stands in, so it comes back to them in front (a tab of its own on the Mac and iPad).
   var pickedOrgID: String?
   var pickedHostID: String?
@@ -167,6 +195,7 @@ final class ShellNavigation {
 
   func select(_ next: ShellSection) {
     if section == next { paths[next] = [] }
+    starKey = nil
     section = next
     record(next)
   }
@@ -213,6 +242,9 @@ extension ShellNavigation {
   func enterWorkspace() {
     inSite = false
     mode = .main
+    // Every screen starts at its root in the scope just opened: a stack pushed in the other one (the workspace's search
+    // results under the site's Home) is not this scope's.
+    paths = [:]
     select(.home)
   }
 
@@ -220,6 +252,7 @@ extension ShellNavigation {
   func enterSite() {
     inSite = true
     mode = .main
+    paths = [:]
     select(.home)
   }
 
@@ -239,9 +272,19 @@ struct ShellNavigationKey: FocusedValueKey {
   typealias Value = ShellNavigation
 }
 
+struct ShellTabsKey: FocusedValueKey {
+  typealias Value = TabStrip
+}
+
 extension FocusedValues {
   var shellNavigation: ShellNavigation? {
     get { self[ShellNavigationKey.self] }
     set { self[ShellNavigationKey.self] = newValue }
+  }
+
+  /// The window's tabs (the tab strip on the Mac and iPad), for ⌘T, ⌘W and ⌘⇧T.
+  var shellTabs: TabStrip? {
+    get { self[ShellTabsKey.self] }
+    set { self[ShellTabsKey.self] = newValue }
   }
 }

@@ -45,17 +45,21 @@ func orderStatusLabel(_ status: OrderStatus) -> String {
   ContractValues.shared.orderStatusLabels[status.rawValue] ?? status.rawValue.capitalized
 }
 
+/// An order status's color, the console's own (`ORDER_STATUS_COLOR`, read by the Kotlin app too): paid is money in,
+/// partly fulfilled wants finishing, fulfilled and delivered are information, refunded is the alarm, and pending and
+/// canceled stay neutral.
 func orderStatusTone(_ status: OrderStatus) -> OrderTone {
-  switch status {
-  case .paid: .attention
-  case .partiallyFulfilled: .attention
-  case .fulfilled, .delivered: .done
-  case .pending: .waiting
-  case .cancelled, .refunded, .unknown: .closed
+  switch ContractValues.shared.orderStatusColor[status.rawValue] {
+  case .success: .success
+  case .info: .info
+  case .warning: .warning
+  case .error: .error
+  default: .neutral
   }
 }
 
-enum OrderTone { case attention, done, waiting, closed }
+/// The console's status colors (MUI's chip colors), named for the app's tones.
+enum OrderTone { case neutral, info, success, warning, error }
 
 /// One stored order as the contract, keeping what decodes.
 func decodeOrder(_ doc: FirestoreDocument) -> HostOrder {

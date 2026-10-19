@@ -56,12 +56,34 @@ export interface AiLayoutDesign {
 
 /**
  * How the first section of a page is drawn:
- *  - `cover`: a full-bleed photo with the words over it on a scrim;
+ *  - `cover`: a full-bleed photo with the words over it on a scrim, set at
+ *    the start of the page;
+ *  - `poster`: a full-bleed photo, taller, the words centered over it in
+ *    display type (AGL-3985);
  *  - `split`: the words beside a tall photo, inside the page's measure;
+ *  - `bleed`: the band in two halves, a photo filling one edge to edge and
+ *    the words in the other (AGL-3985);
  *  - `editorial`: display type across the page, the lede and the buttons in
- *    a row under it, and a wide photo below.
+ *    a row under it, and a wide photo below;
+ *  - `column`: a masthead — the words centered in a narrow column, a wide
+ *    photo under them (AGL-3985);
+ *  - `collage`: the words beside two photos, a tall one and a smaller one
+ *    laid over its corner (AGL-3985);
+ *  - `panel`: a full-bleed photo, undimmed, with the words on a card of the
+ *    page's surface over its lower corner (AGL-3985);
+ *  - `portrait`: a round photo over the words, all centered: a person's own
+ *    page (AGL-3985).
  */
-export type AiLayoutHeroVariant = 'cover' | 'split' | 'editorial'
+export type AiLayoutHeroVariant = 'cover' | 'poster' | 'split' | 'bleed' | 'editorial' | 'column' | 'collage' | 'panel' | 'portrait'
+
+/** Every hero arrangement, as {@link AiLayoutHeroVariant} lists them. */
+export const AI_LAYOUT_HERO_VARIANTS: readonly AiLayoutHeroVariant[] = ['cover', 'poster', 'split', 'bleed', 'editorial', 'column', 'collage', 'panel', 'portrait']
+
+/** The heroes whose words take half the page or less, so their title is the page's title size, never display. */
+export const AI_LAYOUT_HALF_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set(['split', 'bleed', 'collage', 'panel'])
+
+/** The heroes that lay their words over a photo, which pins the section to the site's dark scheme. */
+export const AI_LAYOUT_OVER_PHOTO_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set(['cover', 'poster'])
 
 /**
  * How a group of cards is drawn where no component draws it:
@@ -106,6 +128,7 @@ export interface AiLayoutDesignChoices {
 }
 
 type Family = 'gallery' | 'editorial' | 'hospitality' | 'calm' | 'retail' | 'standard'
+type GroupStyle = AiLayoutDesignChoices['group']
 
 const FAMILIES: Readonly<Record<string, Family>> = {
   portfolio: 'gallery',
@@ -120,25 +143,92 @@ const FAMILIES: Readonly<Record<string, Family>> = {
   store: 'retail',
 }
 
-/** The heroes each kind opens with, best suited first. */
-const HEROES: Readonly<Record<string, readonly AiLayoutHeroVariant[]>> = {
-  photography: ['cover', 'editorial'],
-  portfolio: ['editorial', 'split'],
-  studio: ['editorial', 'cover'],
-  blog: ['editorial', 'cover', 'split'],
-  restaurant: ['cover', 'split'],
-  events: ['cover', 'split'],
-  fitness: ['cover', 'split'],
-  music: ['cover', 'editorial'],
-  nonprofit: ['cover', 'split'],
-  realestate: ['cover', 'split'],
-  trades: ['cover', 'split'],
-  yoga: ['split', 'cover'],
-  wellness: ['split', 'cover'],
-  beauty: ['split', 'cover', 'editorial'],
-  store: ['split', 'editorial'],
+/**
+ * A kind's LAYOUT SIGNATURE (AGL-3985): the arrangements its pages are drawn
+ * in, so a café, a law firm and a band never read as one page in three
+ * colors. Before it, six kinds shared one list of heroes and every kind drew
+ * its groups, its photo-led sections and its headings beside their items at
+ * the same odds; the guided start's 21 style previews, which the real
+ * compiler draws, read as one page — a header bar, a split or banded hero,
+ * one section.
+ *
+ *  - `heroes`: the two first sections the kind opens with, each drawn at even
+ *    odds (AGL-3899). The first is the one its style card shows. No two kinds
+ *    share the same two.
+ *  - `groups`: the group styles a section of items takes where its subject
+ *    picks none.
+ *  - `steps`: how its numbered groups read.
+ *  - `features`: the chance a section of words takes a photo beside it — a
+ *    café's or a salon's pages are photo-led, a law firm's or a writer's let
+ *    the type carry them.
+ *  - `coverClose`: the chance a closing call to action is drawn over a photo.
+ *  - `splitHeads`: the chance a heading sits beside its items: an
+ *    editorial, considered page.
+ *  - `pictures`: how its work is laid out where it shows it as pictures.
+ */
+export interface AiLayoutKindSignature {
+  heroes: readonly [AiLayoutHeroVariant, AiLayoutHeroVariant]
+  groups: readonly GroupStyle[]
+  steps: readonly AiLayoutStepsVariant[]
+  features: number
+  coverClose: number
+  splitHeads: number
+  pictures: readonly AiLayoutDesignChoices['pictures'][]
 }
-const DEFAULT_HEROES: readonly AiLayoutHeroVariant[] = ['split', 'cover', 'editorial']
+
+const BOTH_STEPS: readonly AiLayoutStepsVariant[] = ['timeline', 'numbers']
+const MOSTLY_MOSAIC: readonly AiLayoutDesignChoices['pictures'][] = ['mosaic', 'mosaic', 'even']
+
+/** Each kind's signature, by its `AI_SITE_KINDS` id. */
+export const AI_LAYOUT_KIND_SIGNATURES: Readonly<Record<string, AiLayoutKindSignature>> = {
+  // Clear and confident: a contained split, or the words on a card over the place.
+  business: { heroes: ['split', 'panel'], groups: ['cards', 'icons'], steps: BOTH_STEPS, features: 0.6, coverClose: 0.3, splitHeads: 0.5, pictures: MOSTLY_MOSAIC },
+  // Direct: a full-bleed job photo with the promise at the start, services as tight cards.
+  trades: { heroes: ['cover', 'split'], groups: ['cards'], steps: ['numbers'], features: 0.5, coverClose: 0.7, splitHeads: 0.2, pictures: MOSTLY_MOSAIC },
+  // Measured: the words on a card over the office, practice areas ruled, headings beside them.
+  professional: { heroes: ['panel', 'editorial'], groups: ['ruled'], steps: ['timeline'], features: 0.5, coverClose: 0.2, splitHeads: 0.8, pictures: MOSTLY_MOSAIC },
+  // Reassuring: half the band a calm room, or a quiet centered masthead.
+  wellness: { heroes: ['bleed', 'column'], groups: ['icons', 'cards'], steps: BOTH_STEPS, features: 0.7, coverClose: 0.2, splitHeads: 0.3, pictures: MOSTLY_MOSAIC },
+  // Photo-led: the room full-bleed with the name centered over it, the menu as lines.
+  restaurant: { heroes: ['poster', 'bleed'], groups: ['ruled', 'cards'], steps: BOTH_STEPS, features: 0.8, coverClose: 0.7, splitHeads: 0.2, pictures: MOSTLY_MOSAIC },
+  // A storefront: the products themselves, two of them, beside the words.
+  store: { heroes: ['collage', 'split'], groups: ['icons'], steps: BOTH_STEPS, features: 1, coverClose: 0.2, splitHeads: 0.35, pictures: MOSTLY_MOSAIC },
+  // The work first: display type then a wide picture, or the words beside two pieces.
+  portfolio: { heroes: ['editorial', 'collage'], groups: ['ruled'], steps: ['timeline'], features: 0.5, coverClose: 0.2, splitHeads: 0.5, pictures: ['mosaic'] },
+  // Oversized statements over a wide picture, or full-bleed and dark.
+  studio: { heroes: ['editorial', 'cover'], groups: ['ruled', 'cards'], steps: ['timeline'], features: 0.4, coverClose: 0.5, splitHeads: 0.6, pictures: ['mosaic', 'even'] },
+  // Pictures first, few words.
+  photography: { heroes: ['editorial', 'poster'], groups: ['ruled'], steps: ['timeline'], features: 0.6, coverClose: 0.6, splitHeads: 0.35, pictures: ['even', 'mosaic'] },
+  // Reading-first: a centered masthead over the lead picture.
+  blog: { heroes: ['column', 'editorial'], groups: ['ruled'], steps: ['timeline'], features: 0.4, coverClose: 0.1, splitHeads: 0.7, pictures: MOSTLY_MOSAIC },
+  // Celebratory: two pictures of the day beside its name, or the name over one.
+  events: { heroes: ['collage', 'poster'], groups: ['cards', 'icons'], steps: ['timeline'], features: 0.7, coverClose: 0.6, splitHeads: 0.35, pictures: MOSTLY_MOSAIC },
+  // High energy: half the band a photo, half a loud headline; or full-bleed.
+  fitness: { heroes: ['bleed', 'cover'], groups: ['cards'], steps: ['numbers'], features: 0.5, coverClose: 0.7, splitHeads: 0.2, pictures: MOSTLY_MOSAIC },
+  // Calm and spacious: a centered masthead, or a soft split.
+  yoga: { heroes: ['column', 'split'], groups: ['icons', 'cards'], steps: BOTH_STEPS, features: 0.6, coverClose: 0.2, splitHeads: 0.2, pictures: MOSTLY_MOSAIC },
+  // Image-led: two pictures of the work and the place, or half the band one.
+  beauty: { heroes: ['collage', 'bleed'], groups: ['ruled', 'cards'], steps: BOTH_STEPS, features: 0.8, coverClose: 0.3, splitHeads: 0.35, pictures: MOSTLY_MOSAIC },
+  // Polished: the home full-bleed with the words on a card, or under a scrim.
+  realestate: { heroes: ['panel', 'cover'], groups: ['cards', 'ruled'], steps: BOTH_STEPS, features: 0.8, coverClose: 0.5, splitHeads: 0.35, pictures: MOSTLY_MOSAIC },
+  // Encouraging: a contained split, or the teacher's portrait over the words.
+  education: { heroes: ['split', 'portrait'], groups: ['icons', 'cards'], steps: ['numbers'], features: 0.6, coverClose: 0.2, splitHeads: 0.35, pictures: MOSTLY_MOSAIC },
+  // Mission-led: the people full-bleed with the cause over them, or two pictures beside it.
+  nonprofit: { heroes: ['cover', 'collage'], groups: ['icons', 'cards'], steps: ['numbers'], features: 0.6, coverClose: 0.7, splitHeads: 0.35, pictures: MOSTLY_MOSAIC },
+  // Loud: the name huge over a full-bleed photo, at the start or centered.
+  music: { heroes: ['cover', 'poster'], groups: ['ruled'], steps: ['timeline'], features: 0.5, coverClose: 0.8, splitHeads: 0.35, pictures: MOSTLY_MOSAIC },
+  // A person: their portrait over who they are, or a quiet masthead.
+  personal: { heroes: ['portrait', 'column'], groups: ['ruled'], steps: ['timeline'], features: 0.4, coverClose: 0.1, splitHeads: 0.6, pictures: MOSTLY_MOSAIC },
+  // One action: the promise centered over the picture of the thing, or over a photo.
+  landing: { heroes: ['column', 'poster'], groups: ['icons', 'cards'], steps: ['numbers'], features: 0.5, coverClose: 0.3, splitHeads: 0.2, pictures: MOSTLY_MOSAIC },
+  // Short and striking: one big line over a photo, or on a card over it.
+  'coming-soon': { heroes: ['poster', 'panel'], groups: ['icons', 'ruled'], steps: BOTH_STEPS, features: 0.3, coverClose: 0.2, splitHeads: 0.2, pictures: MOSTLY_MOSAIC },
+}
+
+/** The signature of a kind; an unknown kind draws as a business site. */
+export function aiLayoutKindSignature(kind: string): AiLayoutKindSignature {
+  return AI_LAYOUT_KIND_SIGNATURES[kind] ?? (AI_LAYOUT_KIND_SIGNATURES['business'] as AiLayoutKindSignature)
+}
 
 /** A small deterministic generator over a seed (mulberry32). */
 function random(seed: number): () => number {
@@ -161,18 +251,19 @@ export function aiLayoutFamily(kind: string): Family {
 
 /**
  * A site's choices, the same for every page of it, each drawn at even odds
- * among the options that suit the kind (AGL-3899), so two sites of one kind
- * are drawn apart. Favoring each list's first option made the newest
- * production sites one design: the kind's first hero won 55% before the
- * pick, a business site opened split, groups were ruled two times in three
- * and every text section took a photo.
+ * among the options its kind's signature lists (AGL-3899, AGL-3985), so two
+ * sites of one kind are drawn apart and two kinds never read as one page.
+ * Favoring each list's first option made the newest production sites one
+ * design: the kind's first hero won 55% before the pick, a business site
+ * opened split, groups were ruled two times in three and every text section
+ * took a photo.
  */
 export function aiLayoutDesignChoices(design: AiLayoutDesign): AiLayoutDesignChoices {
   const next = random(design.seed ^ 0x2f6b9d1)
   const family = aiLayoutFamily(design.kind)
-  const heroes = HEROES[design.kind] ?? DEFAULT_HEROES
-  const hero = pick(next, heroes)
-  const group = pick(next, ['cards', 'ruled', 'icons'] as const)
+  const signature = aiLayoutKindSignature(design.kind)
+  const hero = pick(next, signature.heroes)
+  const group = pick(next, signature.groups)
   return {
     hero,
     // A store's reasons to buy — the making, the shipping, the care — read
@@ -181,15 +272,15 @@ export function aiLayoutDesignChoices(design: AiLayoutDesign): AiLayoutDesignCho
     // of a title and a sentence the beta.237 Willow Wick home showed four
     // bands of (AGL-3676).
     group: family === 'retail' ? 'icons' : group,
-    steps: pick(next, ['timeline', 'numbers'] as const),
+    steps: pick(next, signature.steps),
     // Whether a section of words takes a photo beside it: some sites are
     // photo-led, some let their type carry the page. A storefront never
     // shows a band of text alone (AGL-3676), so its story always takes one.
-    features: next() < 0.6 || family === 'retail',
+    features: next() < signature.features || family === 'retail',
     featureLeft: next() < 0.5,
-    coverClose: heroes.includes('cover') && next() < 0.7,
-    splitHeads: family === 'editorial' || family === 'standard' ? next() < 0.6 : next() < 0.35,
-    pictures: design.kind === 'photography' ? pick(next, ['even', 'mosaic'] as const) : pick(next, ['mosaic', 'mosaic', 'even'] as const),
+    coverClose: next() < signature.coverClose,
+    splitHeads: next() < signature.splitHeads,
+    pictures: pick(next, signature.pictures),
     // Drawn last, so every choice above stays what it was for a seed.
     writing: pick(next, ['grid', 'ruled'] as const),
   }

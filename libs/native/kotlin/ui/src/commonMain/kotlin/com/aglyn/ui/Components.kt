@@ -82,10 +82,13 @@ fun AglynListItem(
   val interaction = remember { MutableInteractionSource() }
   val focused by interaction.collectIsFocusedAsState()
   val content = if (selected) colors.onPrimaryContainer else colors.onSurface
+  val compact = LocalUiDensity.current.compact
+  // In a full-bleed list the row's icon and trailing sit on the column's content inset E; in a padded pane, its own 8.
+  val outer = LocalContentInset.current?.let { (it - ListRowInset).coerceAtLeast(0.dp) } ?: ListRowInset
   Row(
     modifier
       .fillMaxWidth()
-      .padding(horizontal = ListRowInset, vertical = 1.dp)
+      .padding(horizontal = outer, vertical = 1.dp)
       .clip(shape)
       .background(if (selected) colors.primaryContainer else Color.Transparent)
       .then(if (focused) Modifier.border(2.dp, colors.primary, shape) else Modifier)
@@ -97,8 +100,8 @@ fun AglynListItem(
         },
       )
       .semantics(mergeDescendants = onClick != null) { if (selected) this.selected = true }
-      .heightIn(min = if (supporting != null) 72.dp else 56.dp)
-      .padding(horizontal = ListRowInset, vertical = 10.dp),
+      .heightIn(min = if (supporting != null) (if (compact) 60.dp else 72.dp) else (if (compact) 48.dp else 56.dp))
+      .padding(horizontal = ListRowInset, vertical = if (compact) 6.dp else 10.dp),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(16.dp),
   ) {
@@ -115,7 +118,8 @@ fun AglynListItem(
         title,
         style = MaterialTheme.typography.bodyLarge,
         color = content,
-        maxLines = 2,
+        // One line at every width, the tail truncated (Figma's list rows).
+        maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         fontWeight = if (emphasized || selected) FontWeight.SemiBold else null,
       )

@@ -89,9 +89,27 @@ extension ShellNavigation {
   }
 }
 
+/// A tab's title in two parts, for a tab that truncates the owner before the screen: the workspace or site it stands in,
+/// and the screen in use (Figma Titlebar/Tab: "Juniper Street Bakery — Orders").
+@MainActor
+func tabTitleParts(_ navigation: ShellNavigation, model: AppModel) -> (owner: String?, place: String) {
+  let title = tabTitle(navigation, model: model)
+  guard let split = title.range(of: " — ", options: .backwards) else { return (nil, title) }
+  return (String(title[..<split.lowerBound]), String(title[split.upperBound...]))
+}
+
+/// A tab's icon: the screen's own (the bag for Orders, the card for CRM), the house for Home.
+@MainActor
+func tabIcon(_ navigation: ShellNavigation, model: AppModel) -> String {
+  guard navigation.section != .home else { return "house" }
+  return ShellScope(model: model, navigation: navigation).row(for: navigation.section)?.appleIcon ?? "square.on.square"
+}
+
 /// Tab titles: the place, then the site or workspace ("Bakery — Orders").
 @MainActor
 func tabTitle(_ navigation: ShellNavigation, model: AppModel) -> String {
+  // A tab behind another keeps its own title (the app's workspace is the front tab's).
+  if !navigation.front, let title = navigation.frozenTitle { return title }
   let scope = ShellScope(model: model, navigation: navigation)
   let place = navigation.section == .home ? "Home" : scope.row(for: navigation.section)?.label ?? "Home"
   guard let owner = scope.site?.name ?? scope.org?.name else { return place }
@@ -181,10 +199,58 @@ final class TabStrip {
 
   func open(_ seed: ShellSeed, model: AppModel) {
     let navigation = ShellNavigation()
+    send(current, back: true, model: model)
     tabs.append(navigation)
     selected = tabs.count - 1
     navigation.apply(seed, model: model)
   }
+
+  /// A tab going behind keeps reading its own workspace and site; one coming in front reads the app's again once they
+  /// are its own (`settle`).
+  private func send(_ tab: ShellNavigation, back: Bool, model: AppModel) {
+    if back {
+      if tab.front {
+        tab.frozenContext = model.liveContext(for: tab)
+        tab.frozenTitle = tabTitle(tab, model: model)
+      }
+      tab.front = false
+    } else {
+      tab.front = true
+      settle(model: model)
+    }
+  }
+
+  /// Lets the tab in front read the app's workspace and site live once they are the ones it stands in.
+  func settle(model: AppModel) {
+    let tab = current
+    guard tab.front, let frozen = tab.frozenContext else { return }
+    let settled = model.workspace?.org?.id == frozen.orgID && model.scopedSite(tab)?.id == frozen.hostID
+    // The person went elsewhere in this tab before its own place came back: what they picked is live.
+    let effective = model.workspace?.effective
+    let movedOn = effective != nil && (effective?.orgID != tab.pickedOrgID || (tab.pickedHostID != nil && effective?.hostID != tab.pickedHostID))
+    if settled || movedOn { tab.frozenContext = nil }
+  }
+
+  /// Takes a tab out of the strip without filing it as closed (it moves to a window of its own), and returns where it
+  /// stood.
+  func detach(_ index: Int, model: AppModel) -> ShellSeed? {
+    guard index > 0, tabs.indices.contains(index) else { return nil }
+    let tab = tabs[index]
+    let seed = tab.seed(model: model, title: tabTitle(tab, model: model))
+    tabs.remove(at: index)
+    selected = min(selected, tabs.count - 1)
+    select(selected, model: model)
+    return seed
+  }
+
+  /// The window went behind another of the app's windows: its tab in front keeps its own place, as a hidden tab does.
+  func windowWentBehind(model: AppModel) {
+    if current.front, let pick = model.workspace?.effective { current.remember(orgID: pick.orgID, hostID: pick.hostID) }
+    send(current, back: true, model: model)
+  }
+
+  /// The window came in front: its tab in front reads its own workspace and site again.
+  func windowCameToFront(model: AppModel) { select(selected, model: model) }
 
   /// Closes a tab (never the pinned first one), filing it under Recently Closed.
   func close(_ index: Int, model: AppModel, closedTabs: ClosedTabs) {
@@ -198,9 +264,15 @@ final class TabStrip {
   /// Brings a tab to the front: the workspace and site it stands in become the app's.
   func select(_ index: Int, model: AppModel) {
     guard tabs.indices.contains(index) else { return }
-    if let pick = model.workspace?.effective { current.remember(orgID: pick.orgID, hostID: pick.hostID) }
+    if index != selected, tabs.indices.contains(selected) {
+      if current.frozenContext == nil, let pick = model.workspace?.effective {
+        current.remember(orgID: pick.orgID, hostID: pick.hostID)
+      }
+      send(current, back: true, model: model)
+    }
     selected = index
     let tab = tabs[index]
+    defer { send(tab, back: false, model: model) }
     if let orgID = tab.pickedOrgID, let workspace = model.workspace {
       let now = workspace.effective
       if now.orgID != orgID || (tab.pickedHostID != nil && now.hostID != tab.pickedHostID) {

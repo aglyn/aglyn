@@ -56,15 +56,24 @@ fun WorkspaceTile(
   size: Dp = 40.dp,
   selected: Boolean = false,
   badge: Int = 0,
+  /** The tile's corner radius (the Size variant's: 8 on the desktop, 10 on tablets); proportional when not given. */
+  cornerRadius: Dp? = null,
+  badgeSize: Dp = 18.dp,
+  /** The selected ring's box and radius (the Size variant's: 38/11 on the desktop, 48/14 on tablets). */
+  ringBox: Dp = size + 8.dp,
+  ringRadius: Dp? = null,
+  /** The initials' size; proportional to the tile when not given. */
+  initialSize: androidx.compose.ui.unit.TextUnit? = null,
 ) {
   val shell = shellColors
-  val radius = size * 0.28f
+  val radius = cornerRadius ?: (size * 0.28f)
   val shape = RoundedCornerShape(radius)
   val shown = (if (isSystemInDarkTheme()) darkLogoUrl else null) ?: logoUrl
   val image = rememberRemoteBitmap(shown)
   val fill = color ?: LocalAglynPalette.current.tertiary.main
-  Box(modifier.size(size + if (selected) 8.dp else 0.dp), contentAlignment = Alignment.Center) {
-    if (selected) Box(Modifier.size(size + 8.dp).border(2.dp, shell.ring, RoundedCornerShape(radius + 4.dp)))
+  Box(modifier.size(if (selected) ringBox else size), contentAlignment = Alignment.Center) {
+    // Selected: a 2 dp ring clear of the tile (the rail adds its 3 dp bar at the edge).
+    if (selected) Box(Modifier.size(ringBox).border(2.dp, shell.ring, RoundedCornerShape(ringRadius ?: (radius + 4.dp))))
     Box(
       Modifier.size(size).clip(shape).background(if (image != null) MaterialTheme.colorScheme.surfaceContainerLowest else fill),
       contentAlignment = Alignment.Center,
@@ -76,18 +85,18 @@ fun WorkspaceTile(
           workspaceInitials(name),
           color = readableOn(fill),
           fontWeight = FontWeight.SemiBold,
-          fontSize = (size.value * if (workspaceInitials(name).length > 1) 0.36f else 0.42f).sp,
+          fontSize = initialSize ?: (size.value * if (workspaceInitials(name).length > 1) 0.36f else 0.42f).sp,
           maxLines = 1,
         )
       }
     }
     if (badge > 0) {
       Box(
-        Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp).sizeIn(minWidth = 18.dp, minHeight = 18.dp)
+        Modifier.align(Alignment.TopEnd).sizeIn(minWidth = badgeSize, minHeight = badgeSize)
           .clip(CircleShape).background(shell.badge).padding(horizontal = 4.dp),
         contentAlignment = Alignment.Center,
       ) {
-        Text(if (badge > 99) "99+" else badge.toString(), color = shell.onBadge, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(if (badge > 99) "99+" else badge.toString(), color = shell.onBadge, fontSize = (badgeSize.value * 0.6f).sp, fontWeight = FontWeight.Bold, maxLines = 1)
       }
     }
   }

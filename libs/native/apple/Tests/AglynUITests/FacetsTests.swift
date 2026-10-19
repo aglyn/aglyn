@@ -79,6 +79,19 @@ final class FacetsTests: XCTestCase {
     let second = AglynLaunchIntro()
     XCTAssertTrue(second.finished)
     XCTAssertTrue(second.revealed)
+    XCTAssertTrue(second.wiped)
     XCTAssertEqual(second.settle, 1)
+  }
+
+  /// The wipe unmasks the logo kit's lockup from its mark: the lockup's artboard is its mark's square, then the wordmark.
+  func testTheLockupIsItsMarkThenTheWordmark() throws {
+    let kit = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent(
+      "../../Sources/AglynUI/Resources/Brand.xcassets")
+    for name in ["AglynLogo", "AglynLogo-dark"] {
+      let svg = try String(contentsOf: kit.appendingPathComponent("AglynLogo.imageset/\(name).svg"), encoding: .utf8)
+      XCTAssertTrue(svg.contains("viewBox=\"0 0 79 24\""), name)
+      XCTAssertTrue(svg.contains("<g id=\"aglyn-logo-mark-multi\"><rect x=\"-0\" y=\"0.03\" width=\"24\" height=\"24\""), name)
+    }
+    XCTAssertEqual(AglynLaunchMark.lockupAspect, 79.0 / 24.0, accuracy: 0.0001)
   }
 }

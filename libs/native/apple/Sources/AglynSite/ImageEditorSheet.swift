@@ -46,6 +46,7 @@ struct ImageEditorSheet: View {
         }
       }
       .navigationTitle("Edit image")
+      .aglynScreenTitle("Edit image")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

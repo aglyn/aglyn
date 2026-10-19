@@ -191,7 +191,7 @@ suspend fun deleteEvent(writer: FirestoreWriter, hostId: String, id: String) =
 private const val NEW = "new"
 
 @Composable
-fun EventsScreen(context: NativePluginContext) {
+fun EventsScreen(context: NativePluginContext, startNew: Boolean = false) {
   val hostId = context.hostId ?: return
   val flow = remember(hostId, context.firestore) { context.firestore.observe(eventsQuery(hostId)) }
   val live by flow.collectAsState(Live.Loading)
@@ -220,6 +220,8 @@ fun EventsScreen(context: NativePluginContext) {
 
   AglynListDetail(
     modifier = Modifier.testTag("events"),
+    // Opened from Create new: the new event's form comes up at once.
+    initialSelected = if (startNew) NEW else null,
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1f)), verticalAlignment = Alignment.CenterVertically) {
@@ -361,7 +363,7 @@ private fun EventEditor(context: NativePluginContext, initial: EventDraft, busy:
  * natively from a link.
  */
 fun registerEventsCalendarNative(r: NativePluginRegistrar) {
-  r.screen(EVENTS_SCREEN, title = "Events", requiresSite = true, icon = "event") { context, _ -> EventsScreen(context) }
+  r.screen(EVENTS_SCREEN, title = "Events", requiresSite = true, icon = "event") { context, params -> EventsScreen(context, startNew = params["new"] == "1") }
   r.quickAction("events-calendar.open", title = "Events", icon = "event", order = 320, requiresSite = true, screen = EVENTS_SCREEN)
   r.deepLink("events-calendar.page", path = "/events", screen = EVENTS_SCREEN)
 }

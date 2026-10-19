@@ -192,10 +192,16 @@ private struct RecordsBody: View {
       }
     }
     .navigationTitle(dataset.plural.trimmingCharacters(in: .whitespaces).isEmpty ? dataset.name : dataset.plural)
-    .searchable(text: $searchText, prompt: "Search \(dataset.name)")
+    .aglynScreenTitle(dataset.plural.trimmingCharacters(in: .whitespaces).isEmpty ? dataset.name : dataset.plural)
+    .aglynSearchable(text: $searchText, prompt: "Search \(dataset.name)")
     .onChange(of: searchText) { _, text in model.type(text) }
-    .toolbar {
-      ToolbarItemGroup(placement: .primaryAction) {
+    // Add is the one primary action; Import and Export are in the More menu on the Mac and iPad.
+    .aglynPrimaryAction(id: "add-record", "Add \(noun)", systemImage: "plus", enabled: canWrite, shortcut: KeyboardShortcut("n", modifiers: .command), help: AglynRoleReason.workspace("adding records")) {
+      runner.clear()
+      sheet = .edit(recordID: nil, values: newRecordInputs(dataset.model))
+    }
+    .aglynScreenToolbar(id: "records") {
+      AglynSecondaryActions {
         if canImportDatasetRecords(orgRole: context.orgRole) {
           Button {
             context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
@@ -210,18 +216,9 @@ private struct RecordsBody: View {
           Label("Export records", systemImage: "square.and.arrow.down")
         }
         .accessibilityIdentifier("export-records")
-        Button {
-          runner.clear()
-          sheet = .edit(recordID: nil, values: newRecordInputs(dataset.model))
-        } label: {
-          Label("Add \(noun)", systemImage: "plus")
-        }
-        .disabled(!canWrite)
-        .keyboardShortcut("n", modifiers: .command)
-        .accessibilityIdentifier("add-record")
       }
     }
-    .navigationDestination(item: $pushed) { id in detail(id, titled: true) }
+    .aglynPushDestination(item: $pushed) { id in detail(id, titled: true) }
     .safeAreaInset(edge: .bottom) {
       if sheet == nil, exporting == nil, let notice = runner.notice {
         AglynNotice(notice, tone: .success) { runner.clear() }
@@ -267,7 +264,7 @@ private struct RecordsBody: View {
           clauses: model.clauses, refused: model.plan.refused, notices: model.plan.notices
         ) { model.setFilters($0) }
       }
-      .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
+      .aglynContentEdges().padding(.vertical, AglynSpace.one)
       content(selectable: selectable)
     }
     .background(AglynColor.page)
@@ -434,6 +431,7 @@ struct RecordDetailView: View {
       }
     }
     .navigationTitle(titled ? "Record" : "Records")
+    .aglynScreenTitle(titled ? "Record" : "Records")
     .task(id: "\(dataset.id)-\(recordID)") { await live.bind(context.firestore, recordsPath(orgID, dataset.id) + [recordID]) }
   }
 
@@ -540,6 +538,7 @@ private struct RecordEditorSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(recordID == nil ? "New \(noun)" : "Edit \(noun)")
+      .aglynScreenTitle(recordID == nil ? "New \(noun)" : "Edit \(noun)")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

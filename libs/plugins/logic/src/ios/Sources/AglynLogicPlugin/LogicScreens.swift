@@ -92,11 +92,11 @@ struct LogicScreen: View {
           }
           .pickerStyle(.segmented)
           .labelsHidden()
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
           .padding(.vertical, AglynSpace.one)
           .accessibilityIdentifier("logic-tabs")
           if sheet == nil, let error = runner.error {
-            AglynNotice(error, tone: .error) { runner.clear() }.padding(.horizontal, AglynSpace.two)
+            AglynNotice(error, tone: .error) { runner.clear() }.aglynContentEdges()
           }
           content(hostID, api)
         }
@@ -114,20 +114,16 @@ struct LogicScreen: View {
       }
     }
     .navigationTitle("Functions & Variables")
-    .toolbar {
-      if tab != .health {
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-            runner.clear()
-            if tab == .variables { sheet = .editVariable(VariableDraft()) } else { context.navigate(logicFunctionScreen) }
-          } label: {
-            Label(tab == .variables ? "Add variable" : "Add function", systemImage: "plus")
-          }
-          .disabled(!canEdit)
-          .accessibilityIdentifier("logic-add")
-        }
-      }
-    }
+    .aglynScreenTitle("Functions & Variables")
+    .aglynPrimaryAction(
+      tab == .health
+        ? nil
+        : AglynPrimaryAction(
+          id: "logic-add", title: tab == .variables ? "Add variable" : "Add function", systemImage: "plus", enabled: canEdit
+        ) {
+          runner.clear()
+          if tab == .variables { sheet = .editVariable(VariableDraft()) } else { context.navigate(logicFunctionScreen) }
+        })
     .safeAreaInset(edge: .bottom) {
       if sheet == nil, let notice = runner.notice {
         AglynNotice(notice, tone: .success) { runner.clear() }.padding(AglynSpace.two)
@@ -172,7 +168,7 @@ struct LogicScreen: View {
 
   private var cutNotice: some View {
     AglynNotice("Showing the first \(logicCeiling). Delete ones you no longer use to see the rest.", tone: .info)
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
   }
 
   private func scan(_ api: LogicAPI, _ kind: String, _ id: String, _ name: String, open: @escaping (WhereUsedResult) -> LogicSheet) {
@@ -320,6 +316,7 @@ private struct UsageSheet: View {
         }
       }
       .navigationTitle("Where \"\(name)\" is used")
+      .aglynScreenTitle("Where \"\(name)\" is used")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
@@ -397,6 +394,7 @@ private struct VariableEditorSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(draft.id == nil ? "New variable" : "Edit variable")
+      .aglynScreenTitle(draft.id == nil ? "New variable" : "Edit variable")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

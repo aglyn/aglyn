@@ -5,6 +5,9 @@ import io.ktor.client.request.header
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.utils.io.readUTF8Line
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.client.request.preparePost
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
@@ -71,6 +74,34 @@ class ConsoleApiClient(
    * screen reads a claim the console reads the same way, such as `staff`.
    */
   suspend fun claims(): kotlinx.serialization.json.JsonObject = getIdToken(false)?.let(::jwtPayload) ?: kotlinx.serialization.json.JsonObject(emptyMap())
+
+  /**
+   * POSTs [body] to a route that answers with server-sent events (`data: {...}` lines, as `/api/assist/chat` streams
+   * its answer) and hands each event's JSON to [onEvent] as it arrives. A refusal (not 2xx) is a [ConsoleApiError] with
+   * the route's own words and its JSON body, before any event.
+   */
+  suspend fun stream(path: String, body: JsonElement, onEvent: suspend (kotlinx.serialization.json.JsonObject) -> Unit) {
+    val bearer = getIdToken(false) ?: throw ConsoleApiError("Sign in to continue.", 401, null)
+    http.preparePost(urlFor(path)) {
+      header("Accept", "text/event-stream")
+      header("Authorization", "Bearer $bearer")
+      contentType(ContentType.Application.Json)
+      setBody(body.toString())
+    }.execute { response ->
+      val status = response.status.value
+      if (status !in 200..299) {
+        val parsed = runCatching { Json.parseToJsonElement(response.bodyAsText()) }.getOrNull()
+        throw ConsoleApiError(consoleErrorMessage(status, parsed, brandName), status, parsed)
+      }
+      val channel = response.bodyAsChannel()
+      while (!channel.isClosedForRead) {
+        val line = channel.readUTF8Line() ?: break
+        if (!line.startsWith("data: ")) continue
+        val event = runCatching { Json.parseToJsonElement(line.removePrefix("data: ")) as? kotlinx.serialization.json.JsonObject }.getOrNull() ?: continue
+        onEvent(event)
+      }
+    }
+  }
 
   /** Calls a route and returns its JSON body (null for an empty body). */
   suspend fun request(

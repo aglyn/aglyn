@@ -40,6 +40,7 @@ struct FormDetailView: View {
       }
     }
     .navigationTitle(titled ? (model.form?.name ?? "Form") : "Forms")
+    .aglynScreenTitle(titled ? (model.form?.name ?? "Form") : "Forms")
     .task(id: formID) {
       refused = []
       if let hostID = context.hostID { model.start(context.firestore, hostID: hostID, formID: formID) }

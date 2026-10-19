@@ -50,6 +50,7 @@ struct SubmissionDetailView: View {
       }
     }
     .navigationTitle(titled ? (model.submission?.from ?? "Submission") : "Submissions")
+    .aglynScreenTitle(titled ? (model.submission?.from ?? "Submission") : "Submissions")
     .task(id: submissionID) {
       markedRead = false
       if let hostID = context.hostID {
@@ -237,6 +238,7 @@ struct ReplySheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Reply to \(submission.from)")
+      .aglynScreenTitle("Reply to \(submission.from)")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

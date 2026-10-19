@@ -56,6 +56,7 @@ struct OutreachHubScreen: View {
       }
     }
     .navigationTitle("Sequences")
+    .aglynScreenTitle("Sequences")
     .task(id: context.orgID) { gate.start(context) }
     .onChange(of: gate.member.document?.string("roleId")) { _, _ in gate.follow(context) }
     .onDisappear { gate.stop() }
@@ -70,7 +71,7 @@ struct OutreachGlanceWidget: View {
   @State private var active = LiveQueryList(pageSize: 50, map: sequenceRow)
 
   var body: some View {
-    Group {
+    VStack(spacing: 0) {
       if gate.ready, gate.open(orgID: context.orgID) {
         MetricCard(
           "Sequences", systemImage: "arrow.triangle.branch", tone: .info, value: active.ready ? "\(active.rows.count)\(active.hasMore ? "+" : "")" : nil,
@@ -124,12 +125,9 @@ struct SequencesSection: View {
         pane(selectable: false)
       }
     }
-    .searchable(text: $searchText, prompt: "Search sequences")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search sequences", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) { Button("New sequence", systemImage: "plus") { creating = true }.accessibilityIdentifier("sequence-new") }
-    }
+    .aglynPrimaryAction(id: "sequence-new", "New sequence", systemImage: "plus") { creating = true }
     .task(id: "\(status)|\(search)") {
       if selection == nil { selection = initial }
       let status = status, search = search, orgID = orgID
@@ -155,7 +153,7 @@ struct SequencesSection: View {
             AglynChoiceChip(sequenceStatusLabels[value] ?? value, selected: status == value) { status = value }
           }
         }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
       }
       if selectable && list.ready && list.failure == nil && !list.rows.isEmpty {
@@ -170,7 +168,7 @@ struct SequencesSection: View {
           emptyTitle: "No sequences yet", emptyMessage: "A sequence sends a few one-to-one emails and tasks, spaced out, until someone replies.",
           systemImage: "arrow.triangle.branch", onMore: { list.loadMore() }, onRetry: { list.retry() }
         ) { row in
-          NavigationLink {
+          AglynPushLink {
             SequenceDetail(context: context, api: api, orgID: orgID, sequenceID: row.id, mailboxes: mailboxes.rows)
           } label: {
             SequenceRowView(row: row, mailboxes: mailboxes.rows)
@@ -268,14 +266,13 @@ struct SequenceDetail: View {
         .formStyle(.grouped)
         .aglynListBackground()
         .navigationTitle(row.name)
-        .toolbar {
-          ToolbarItem(placement: .primaryAction) {
-            Menu {
-              Button("Edit", systemImage: "pencil") { editing = true }
-              if row.status == "draft" { Button("Delete", systemImage: "trash", role: .destructive) { confirm = ("Delete this sequence?", "delete") } }
-            } label: {
-              Label("Sequence", systemImage: "ellipsis.circle")
-            }
+        .aglynScreenTitle(row.name)
+        .aglynScreenToolbar(id: "sequence") {
+          Menu {
+            Button("Edit", systemImage: "pencil") { editing = true }
+            if row.status == "draft" { Button("Delete", systemImage: "trash", role: .destructive) { confirm = ("Delete this sequence?", "delete") } }
+          } label: {
+            Label("Sequence", systemImage: "ellipsis.circle")
           }
         }
         .sheet(isPresented: $editing) { SequenceEditor(context: context, api: api, sequence: row, mailboxes: mailboxes) { _ in } }
@@ -396,6 +393,7 @@ struct SequenceEditor: View {
       }
       .formStyle(.grouped)
       .navigationTitle(sequence == nil ? "New sequence" : "Edit sequence")
+      .aglynScreenTitle(sequence == nil ? "New sequence" : "Edit sequence")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
         ToolbarItem(placement: .confirmationAction) {
@@ -507,6 +505,7 @@ struct EnrollSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Enroll people")
+      .aglynScreenTitle("Enroll people")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
         ToolbarItem(placement: .confirmationAction) {
@@ -583,7 +582,7 @@ struct MailboxesSection: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.padding(.horizontal, AglynSpace.two) }
+      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.aglynContentEdges() }
       AglynLiveList(
         rows: list.rows, ready: list.ready, failure: list.failure, hasMore: false, failedTitle: "Could not load mailboxes",
         emptyTitle: "No mailboxes yet", emptyMessage: "A sequence sends from a connected Google or Microsoft mailbox.", systemImage: "tray.full",
@@ -613,16 +612,14 @@ struct MailboxesSection: View {
         }
       }
     }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Menu {
-          Button("Google") { Task { await connect("google") } }
-          Button("Microsoft") { Task { await connect("microsoft") } }
-        } label: {
-          Label(connecting ? "Connecting…" : "Connect a mailbox", systemImage: "plus")
-        }
-        .disabled(connecting)
+    .aglynScreenToolbar(id: "mailboxes") {
+      Menu {
+        Button("Google") { Task { await connect("google") } }
+        Button("Microsoft") { Task { await connect("microsoft") } }
+      } label: {
+        Label(connecting ? "Connecting…" : "Connect a mailbox", systemImage: "plus")
       }
+      .disabled(connecting)
     }
     .task {
       let orgID = orgID

@@ -7,14 +7,13 @@ import AglynPluginHost
 import AglynUI
 import SwiftUI
 
-/// Wraps an editor's Form: readable width on a wide window, the list look, the toast.
+/// Wraps an editor's Form: the column's full width, the list look, the toast.
 struct EditorFrame<Content: View>: View {
   @ViewBuilder let content: () -> Content
 
   var body: some View {
     content()
       .formStyle(.grouped)
-      .frame(maxWidth: 820)
       .frame(maxWidth: .infinity)
       .aglynListBackground()
   }
@@ -50,17 +49,13 @@ struct WorkflowEditorScreen: View {
       }
     }
     .navigationTitle(editingID == nil ? "Add Workflow" : "Edit Workflow")
+    .aglynScreenTitle(editingID == nil ? "Add Workflow" : "Edit Workflow")
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
     #endif
-    .toolbar {
-      ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-      ToolbarItem(placement: .confirmationAction) {
-        Button(saving ? "Saving…" : "Done") { save() }
-          .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || nameTaken || saving)
-          .accessibilityIdentifier("workflow-save")
-      }
-    }
+    .aglynEditorActions(
+      id: "workflow-save", save: saving ? "Saving…" : "Done", enabled: !(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || nameTaken || saving), cancel: { dismiss() }
+    ) { save() }
     .task(id: "\(hostID ?? "")|\(editingID ?? "new")") {
       guard let hostID else { return }
       list.start(context.firestore, AutomationQueries.workflows(hostID))

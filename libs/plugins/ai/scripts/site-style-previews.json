@@ -1,11 +1,14 @@
 {
- "_note": "Stand-in home pages for the guided start's style previews (AGL-3898), one per AI_SITE_KINDS id, each in its own kind's shape (a gallery for photography, a menu for a café, a product grid for a store, a reading list for a blog, dates for events, listings for real estate, a class schedule for yoga), in the layout language a site job's page step answers in (ai-layout-language.ts). Written by hand, never by a model: render-site-style-previews.mts compiles each through compile-recorded-sites.mts (the real page check and compiler, the kind's design variants, the look the kind's look unit builds) and shoots it. `hero` (and any `choices`) are the design variants the seed is chosen for; `photos` fills each picture slot in order with a starter photo's key (hero, about, desk, plants, craft), a `{ photo, crop: [left, top, width, height], alt }` part of one, or `none`, the no-photo treatment a slot gets when nothing fits, so a kind no starter photo suits opens on type alone; a section's `items` says how many records it lists where its blocks carry none (a blog's posts); `products` are a store's records, `posts` a blog's, and `facts` what the brief says beside the kind (a time or a date the page shows must be in it).",
+ "_note": "Stand-in home pages for the guided start's style previews (AGL-3898), one per AI_SITE_KINDS id, each in its own kind's shape (a gallery for photography, a menu for a café, a product grid for a store, a reading list for a blog, dates for events, listings for real estate, a class schedule for yoga), in the layout language a site job's page step answers in (ai-layout-language.ts). Written by hand, never by a model: render-site-style-previews.mts compiles each through compile-recorded-sites.mts (the real page check and compiler, the kind's design variants, the look the kind's look unit builds) and shoots it. `hero` is the kind's signature hero (aiLayoutKindSignature's first, AGL-3985), which the seed is chosen for with any `choices` (other design variants) and `look` (the header's arrangement); `opensOnGrid` marks a page whose first section is a grid of pictures, drawn as written. `photos` fills each picture slot in order with a starter photo's key (hero, about, desk, plants, craft), a `{ photo, crop: [left, top, width, height], alt }` part of one, or a `{ file, crop?, alt }` preview photo of the kind's own business from style-preview-photos/ (credited in its CREDITS.md, never a site's starter); every page opens on one, since a band of type with no photo reads as a picture that failed to load (AGL-3985). `nav` names the site's other pages, which the header links, and `cta` the header's button, which goes to the last of them or to `ctaTo`; a section's `items` says how many records it lists where its blocks carry none (a blog's posts); `products` are a store's records, `posts` a blog's, and `facts` what the brief says beside the kind (a time or a date the page shows must be in it).",
  "kinds": {
   "business": {
    "name": "Fairway Office Co.",
    "hero": "split",
    "photos": [
-    "desk"
+    {
+     "file": "business-cleaning.jpg",
+     "alt": "Gloved hands wiping down a desk"
+    }
    ],
    "cta": "Get a quote",
    "sections": [
@@ -91,15 +94,29 @@
      ],
      "align": "center"
     }
+   ],
+   "look": {
+    "headerAlign": "start"
+   },
+   "choices": {
+    "coverClose": false,
+    "group": "cards",
+    "featureLeft": false
+   },
+   "nav": [
+    "Services",
+    "About",
+    "Contact"
    ]
   },
   "trades": {
    "name": "Ridgeline Roofing",
    "hero": "cover",
    "photos": [
-    "none",
-    "none",
-    "none"
+    {
+     "file": "trades-roof.jpg",
+     "alt": "A roofer carrying shingles across a roof"
+    }
    ],
    "cta": "Free estimate",
    "sections": [
@@ -191,13 +208,33 @@
       }
      ]
     }
+   ],
+   "look": {
+    "headerAlign": "start"
+   },
+   "choices": {
+    "coverClose": false
+   },
+   "nav": [
+    "Services",
+    "Our work",
+    "Contact"
    ]
   },
   "professional": {
    "name": "Hale & Morrow",
-   "hero": "split",
+   "hero": "panel",
    "photos": [
-    "hero"
+    {
+     "photo": "hero",
+     "crop": [
+      0,
+      100,
+      1600,
+      900
+     ],
+     "alt": "Consultants mapping a plan with a client at the board"
+    }
    ],
    "cta": "Book a consultation",
    "sections": [
@@ -277,13 +314,28 @@
      ],
      "align": "center"
     }
+   ],
+   "look": {
+    "headerAlign": "start"
+   },
+   "choices": {
+    "coverClose": false,
+    "splitHeads": true
+   },
+   "nav": [
+    "Practice areas",
+    "About",
+    "Contact"
    ]
   },
   "wellness": {
    "name": "Stillwater Therapy",
-   "hero": "cover",
+   "hero": "bleed",
    "photos": [
-    "plants"
+    {
+     "file": "wellness-room.jpg",
+     "alt": "A calm, sunlit room with a sofa and plants"
+    }
    ],
    "cta": "Book a first session",
    "facts": "Individual sessions are 50 minutes, couples sessions 80 minutes, and the Thursday evening group 90 minutes.",
@@ -361,11 +413,24 @@
      ],
      "align": "center"
     }
+   ],
+   "look": {
+    "headerAlign": "center"
+   },
+   "choices": {
+    "coverClose": false,
+    "featureLeft": false
+   },
+   "nav": [
+    "Approach",
+    "Sessions",
+    "About",
+    "Book"
    ]
   },
   "restaurant": {
    "name": "Juniper & Rye",
-   "hero": "cover",
+   "hero": "poster",
    "photos": [
     "about"
    ],
@@ -454,15 +519,43 @@
      ],
      "align": "center"
     }
+   ],
+   "look": {
+    "headerAlign": "center"
+   },
+   "choices": {
+    "coverClose": false
+   },
+   "nav": [
+    "Menu",
+    "Our story",
+    "Visit"
    ]
   },
   "store": {
    "name": "Wren & Wax",
-   "hero": "split",
+   "hero": "collage",
    "photos": [
-    "craft",
-    "none",
-    "none"
+    {
+     "photo": "craft",
+     "crop": [
+      1180,
+      120,
+      420,
+      660
+     ],
+     "alt": "Blue wax seals drying on a plate"
+    },
+    {
+     "photo": "craft",
+     "crop": [
+      200,
+      200,
+      860,
+      860
+     ],
+     "alt": "Hands pressing a wax seal at the workbench"
+    }
    ],
    "cta": "Shop",
    "products": [
@@ -520,7 +613,7 @@
       },
       {
        "kind": "image",
-       "text": "Hands pressing a wax seal at the workbench"
+       "text": "Blue wax seals drying on a plate"
       }
      ]
     },
@@ -564,7 +657,19 @@
       }
      ]
     }
-   ]
+   ],
+   "look": {
+    "headerAlign": "start"
+   },
+   "choices": {
+    "featureLeft": false
+   },
+   "nav": [
+    "Shop",
+    "About",
+    "Contact"
+   ],
+   "ctaTo": "Shop"
   },
   "portfolio": {
    "name": "Ines Okafor",
@@ -682,32 +787,50 @@
      ],
      "align": "center"
     }
+   ],
+   "opensOnGrid": true,
+   "look": {
+    "headerAlign": "start"
+   },
+   "nav": [
+    "Work",
+    "About",
+    "Contact"
    ]
   },
   "studio": {
    "name": "Northlight Studio",
-   "hero": "cover",
+   "hero": "editorial",
    "photos": [
-    "none",
+    {
+     "photo": "hero",
+     "crop": [
+      600,
+      180,
+      1000,
+      430
+     ],
+     "alt": "Our team pinning up a brand board"
+    },
     {
      "photo": "craft",
      "crop": [
-      150,
-      150,
-      850,
-      850
+      1180,
+      120,
+      420,
+      660
      ],
-     "alt": "Hands pressing a wax seal at the workbench"
+     "alt": "Blue wax seals for a seal maker’s new identity"
     },
     {
      "photo": "about",
      "crop": [
       0,
       0,
-      760,
-      600
+      880,
+      495
      ],
-     "alt": "Bottles and warm lights on the café shelves"
+     "alt": "A café’s shelves under its new signs"
     }
    ],
    "cta": "Start a project",
@@ -793,12 +916,35 @@
       }
      ]
     }
+   ],
+   "look": {
+    "headerAlign": "start"
+   },
+   "choices": {
+    "coverClose": false,
+    "pictures": "mosaic"
+   },
+   "nav": [
+    "Work",
+    "Services",
+    "About",
+    "Contact"
    ]
   },
   "photography": {
    "name": "Mara Lind Photography",
-   "hero": "cover",
+   "hero": "editorial",
    "photos": [
+    {
+     "file": "photography-wedding.jpg",
+     "crop": [
+      300,
+      0,
+      640,
+      800
+     ],
+     "alt": "A bride and groom with her bouquet"
+    },
     {
      "photo": "about",
      "crop": [
@@ -808,16 +954,6 @@
       900
      ],
      "alt": "A smiling café owner in her apron"
-    },
-    {
-     "photo": "plants",
-     "crop": [
-      0,
-      150,
-      600,
-      750
-     ],
-     "alt": "A hanging plant in a bright bay window"
     },
     {
      "photo": "craft",
@@ -838,7 +974,7 @@
      "blocks": [
       {
        "kind": "eyebrow",
-       "text": "Portraits, interiors and brands"
+       "text": "Weddings, portraits and brands"
       },
       {
        "kind": "heading",
@@ -854,12 +990,12 @@
       },
       {
        "kind": "image",
-       "text": "A portrait of a café owner at her counter",
+       "text": "A bride and groom with her bouquet",
        "col": 0
       },
       {
        "kind": "image",
-       "text": "A sunlit window full of hanging plants",
+       "text": "A portrait of a café owner at her counter",
        "col": 1
       },
       {
@@ -908,13 +1044,31 @@
      ],
      "align": "center"
     }
+   ],
+   "opensOnGrid": true,
+   "look": {
+    "headerAlign": "center"
+   },
+   "nav": [
+    "Galleries",
+    "About",
+    "Book"
    ]
   },
   "blog": {
    "name": "The Slow Table",
-   "hero": "cover",
+   "hero": "column",
    "photos": [
-    "none"
+    {
+     "file": "blog-ingredients.jpg",
+     "crop": [
+      0,
+      260,
+      1200,
+      525
+     ],
+     "alt": "Fresh vegetables and eggs on a cutting board"
+    }
    ],
    "cta": "Subscribe",
    "posts": [
@@ -984,21 +1138,50 @@
     }
    ],
    "choices": {
-    "writing": "ruled"
-   }
+    "writing": "ruled",
+    "features": false,
+    "coverClose": false
+   },
+   "look": {
+    "headerAlign": "center"
+   },
+   "nav": [
+    "Recipes",
+    "About",
+    "Newsletter"
+   ]
   },
   "events": {
    "name": "Harvest Moon Festival",
-   "hero": "cover",
+   "hero": "collage",
    "photos": [
-    "none"
+    {
+     "file": "events-lanterns.jpg",
+     "crop": [
+      260,
+      0,
+      640,
+      800
+     ],
+     "alt": "Food stalls under red lanterns at the night market"
+    },
+    {
+     "file": "events-lanterns.jpg",
+     "crop": [
+      0,
+      0,
+      480,
+      480
+     ],
+     "alt": "Red lanterns strung over the market"
+    }
    ],
    "cta": "Get tickets",
    "facts": "The festival runs September 19 to 21 in Riverside Park: the opening concert and night market on Friday, September 19 from 6 pm; family day on Saturday, September 20; the lantern walk on Sunday, September 21 at dusk.",
    "sections": [
     {
      "name": "hero",
-     "band": "brand",
+     "band": "plain",
      "blocks": [
       {
        "kind": "eyebrow",
@@ -1029,61 +1212,31 @@
        "to": "#2",
        "style": "secondary",
        "col": 0
-      },
-      {
-       "kind": "heading",
-       "text": "What’s on",
-       "col": 1
-      },
-      {
-       "kind": "list",
-       "items": [
-        {
-         "title": "Friday, September 19 · Opening concert and night market from 6 pm",
-         "text": ""
-        },
-        {
-         "title": "Saturday, September 20 · Family day with food stalls and two stages",
-         "text": ""
-        },
-        {
-         "title": "Sunday, September 21 · The lantern walk at dusk",
-         "text": ""
-        }
-       ],
-       "col": 1
       }
-     ],
-     "cols": [
-      1,
-      1
      ]
     },
     {
      "name": "program",
-     "band": "plain",
+     "band": "soft",
      "blocks": [
       {
        "kind": "heading",
        "text": "Plan your days"
       },
       {
-       "kind": "cards",
+       "kind": "steps",
        "items": [
         {
-         "title": "Night market",
-         "text": "Food stalls and makers along the river.",
-         "icon": "food"
+         "title": "Friday, September 19",
+         "text": "The opening concert and night market from 6 pm."
         },
         {
-         "title": "Two stages",
-         "text": "Local bands from noon each day.",
-         "icon": "music"
+         "title": "Saturday, September 20",
+         "text": "Family day with food stalls and two stages."
         },
         {
-         "title": "Lantern walk",
-         "text": "Bring a lantern or make one with us.",
-         "icon": "sun"
+         "title": "Sunday, September 21",
+         "text": "The lantern walk at dusk."
         }
        ]
       }
@@ -1106,13 +1259,35 @@
      ],
      "align": "center"
     }
+   ],
+   "look": {
+    "headerAlign": "center"
+   },
+   "choices": {
+    "coverClose": false,
+    "featureLeft": true
+   },
+   "nav": [
+    "Program",
+    "Makers",
+    "Visit",
+    "Tickets"
    ]
   },
   "fitness": {
    "name": "Forge Strength Club",
-   "hero": "cover",
+   "hero": "bleed",
    "photos": [
-    "none"
+    {
+     "file": "fitness-gym.jpg",
+     "crop": [
+      420,
+      0,
+      720,
+      800
+     ],
+     "alt": "Rows of dumbbells in a bright gym"
+    }
    ],
    "cta": "Try a class",
    "facts": "Classes: barbell basics Monday and Wednesday at 6 am, conditioning Tuesday and Thursday at 6 pm, and open gym Saturday at 9 am.",
@@ -1192,13 +1367,34 @@
      ],
      "align": "center"
     }
+   ],
+   "look": {
+    "headerAlign": "start"
+   },
+   "choices": {
+    "coverClose": false,
+    "featureLeft": true
+   },
+   "nav": [
+    "Classes",
+    "Coaches",
+    "Join"
    ]
   },
   "yoga": {
    "name": "Quiet Hour Yoga",
-   "hero": "split",
+   "hero": "column",
    "photos": [
-    "none"
+    {
+     "file": "yoga-class.jpg",
+     "crop": [
+      0,
+      380,
+      800,
+      350
+     ],
+     "alt": "A class stretching on mats in the studio"
+    }
    ],
    "cta": "See the schedule",
    "facts": "Classes on Monday at 7 am, Wednesday at 6 pm, Friday at 7 am and Sunday at 10 am.",
@@ -1209,59 +1405,52 @@
      "blocks": [
       {
        "kind": "eyebrow",
-       "text": "Yoga and meditation",
-       "col": 0
+       "text": "Yoga and meditation"
       },
       {
        "kind": "heading",
        "text": "An hour to slow down and breathe",
-       "style": "large",
-       "col": 0
+       "style": "large"
       },
       {
        "kind": "lede",
-       "text": "Small classes in a sunny room above the bookshop.",
-       "col": 0
+       "text": "Small classes in a sunny room above the bookshop."
       },
       {
        "kind": "button",
        "text": "Book a class",
        "to": "#3",
-       "style": "primary",
-       "col": 0
-      },
+       "style": "primary"
+      }
+     ]
+    },
+    {
+     "name": "this week",
+     "band": "plain",
+     "blocks": [
       {
        "kind": "heading",
-       "text": "This week",
-       "col": 1
+       "text": "This week"
       },
       {
        "kind": "list",
        "items": [
         {
-         "title": "Monday 7 am · Gentle flow",
-         "text": ""
+         "title": "Monday 7 am · Gentle flow"
         },
         {
-         "title": "Wednesday 6 pm · Slow vinyasa",
-         "text": ""
+         "title": "Wednesday 6 pm · Slow vinyasa"
         },
         {
-         "title": "Friday 7 am · Breath and stillness",
-         "text": ""
+         "title": "Friday 7 am · Breath and stillness"
         },
         {
-         "title": "Sunday 10 am · Restorative",
-         "text": ""
+         "title": "Sunday 10 am · Restorative"
         }
-       ],
-       "col": 1
+       ]
       }
      ],
-     "cols": [
-      3,
-      2
-     ]
+     "items": 4
     },
     {
      "name": "new here",
@@ -1310,21 +1499,45 @@
      ],
      "align": "center"
     }
-   ]
+   ],
+   "look": {
+    "headerAlign": "center"
+   },
+   "choices": {
+    "coverClose": false,
+    "group": "icons"
+   },
+   "nav": [
+    "Schedule",
+    "Classes",
+    "About",
+    "Book"
+   ],
+   "ctaTo": "Schedule"
   },
   "beauty": {
    "name": "Velvet Hair Studio",
-   "hero": "split",
+   "hero": "collage",
    "photos": [
     {
-     "photo": "desk",
+     "file": "beauty-cut.jpg",
      "crop": [
-      650,
-      330,
-      850,
-      670
+      280,
+      0,
+      640,
+      800
      ],
-     "alt": "Pink roses and glass jars on a bright vanity"
+     "alt": "A stylist washing a client’s hair"
+    },
+    {
+     "file": "beauty-salon.jpg",
+     "crop": [
+      0,
+      320,
+      675,
+      675
+     ],
+     "alt": "The salon’s chairs and mirrors"
     }
    ],
    "cta": "Book now",
@@ -1402,24 +1615,58 @@
      ],
      "align": "center"
     }
+   ],
+   "look": {
+    "headerAlign": "center"
+   },
+   "choices": {
+    "coverClose": false,
+    "featureLeft": false
+   },
+   "nav": [
+    "Services",
+    "The team",
+    "Book"
    ]
   },
   "realestate": {
    "name": "Cedar & Key Homes",
-   "hero": "cover",
+   "hero": "panel",
    "photos": [
-    "plants",
+    {
+     "file": "realestate-house.jpg",
+     "alt": "A white two-story house with a front porch"
+    },
+    {
+     "photo": "desk",
+     "crop": [
+      160,
+      300,
+      960,
+      720
+     ],
+     "alt": "A bright study corner with a desk"
+    },
     {
      "photo": "about",
      "crop": [
       0,
       0,
       760,
-      600
+      570
      ],
-     "alt": "Bottles and warm lights on the café shelves"
+     "alt": "A corner shop space with shelves and warm lights"
     },
-    "desk"
+    {
+     "photo": "plants",
+     "crop": [
+      560,
+      330,
+      640,
+      480
+     ],
+     "alt": "A sunny window in a two-bed flat"
+    }
    ],
    "cta": "Book a valuation",
    "sections": [
@@ -1437,19 +1684,38 @@
        "style": "large"
       },
       {
+       "kind": "lede",
+       "text": "Local agents for buying, selling and valuations across Oak Park."
+      },
+      {
        "kind": "button",
        "text": "Book a valuation",
        "to": "#3",
        "style": "primary"
+      }
+     ]
+    },
+    {
+     "name": "new listings",
+     "band": "soft",
+     "cols": [
+      1,
+      1,
+      1
+     ],
+     "blocks": [
+      {
+       "kind": "heading",
+       "text": "New listings"
       },
       {
        "kind": "image",
-       "text": "A plant-filled living room with a bay window",
+       "text": "A bright study corner with a desk",
        "col": 0
       },
       {
        "kind": "text",
-       "text": "Two-bed flat with a bay window",
+       "text": "Garden apartment with a study",
        "col": 0
       },
       {
@@ -1464,43 +1730,13 @@
       },
       {
        "kind": "image",
-       "text": "A bright study corner with a desk",
+       "text": "A sunny window in a two-bed flat",
        "col": 2
       },
       {
        "kind": "text",
-       "text": "Garden apartment with a study",
+       "text": "Two-bed flat with tall windows",
        "col": 2
-      }
-     ],
-     "cols": [
-      1,
-      1,
-      1
-     ]
-    },
-    {
-     "name": "how we help",
-     "band": "soft",
-     "blocks": [
-      {
-       "kind": "heading",
-       "text": "Buying or selling"
-      },
-      {
-       "kind": "cards",
-       "items": [
-        {
-         "title": "Selling your home",
-         "text": "Pricing, staging and photos, then open houses.",
-         "icon": "home"
-        },
-        {
-         "title": "Buying a home",
-         "text": "Tours, offers and inspections, start to keys.",
-         "icon": "location"
-        }
-       ]
       }
      ]
     },
@@ -1521,21 +1757,33 @@
      ],
      "align": "center"
     }
+   ],
+   "look": {
+    "headerAlign": "start"
+   },
+   "choices": {
+    "coverClose": false
+   },
+   "nav": [
+    "Buy",
+    "Sell",
+    "About",
+    "Contact"
    ]
   },
   "education": {
    "name": "Brightpath Tutoring",
-   "hero": "cover",
+   "hero": "split",
    "photos": [
     {
-     "photo": "hero",
+     "file": "education-tutor.jpg",
      "crop": [
-      700,
-      150,
-      900,
-      917
+      600,
+      0,
+      600,
+      750
      ],
-     "alt": "A tutor talking a student through a plan at the board"
+     "alt": "A tutor smiling at the whiteboard"
     }
    ],
    "cta": "Book a trial lesson",
@@ -1571,7 +1819,7 @@
       },
       {
        "kind": "image",
-       "text": "A tutor talking a student through a plan at the board"
+       "text": "A tutor smiling at the whiteboard"
       }
      ]
     },
@@ -1632,15 +1880,29 @@
       }
      ]
     }
+   ],
+   "look": {
+    "headerAlign": "start"
+   },
+   "choices": {
+    "coverClose": false,
+    "group": "icons",
+    "featureLeft": true
+   },
+   "nav": [
+    "Courses",
+    "Tutors",
+    "Enroll"
    ]
   },
   "nonprofit": {
    "name": "Eastside Food Share",
    "hero": "cover",
    "photos": [
-    "none",
-    "none",
-    "none"
+    {
+     "file": "nonprofit-food-bank.jpg",
+     "alt": "Volunteers sorting canned food donations"
+    }
    ],
    "cta": "Donate",
    "sections": [
@@ -1722,15 +1984,29 @@
       }
      ]
     }
-   ]
+   ],
+   "look": {
+    "headerAlign": "start"
+   },
+   "choices": {
+    "coverClose": false,
+    "group": "icons"
+   },
+   "nav": [
+    "Our work",
+    "Get involved",
+    "About"
+   ],
+   "ctaTo": "Get involved"
   },
   "music": {
    "name": "The Paper Lanterns",
    "hero": "cover",
    "photos": [
-    "none",
-    "none",
-    "none"
+    {
+     "file": "music-stage.jpg",
+     "alt": "A band playing under stage lights"
+    }
    ],
    "cta": "Tour dates",
    "sections": [
@@ -1813,24 +2089,37 @@
       }
      ]
     }
-   ]
+   ],
+   "look": {
+    "headerAlign": "center"
+   },
+   "choices": {
+    "coverClose": false
+   },
+   "nav": [
+    "Music",
+    "Shows",
+    "About",
+    "Booking"
+   ],
+   "ctaTo": "Shows"
   },
   "personal": {
    "name": "Lena Ortiz",
-   "hero": "split",
+   "hero": "portrait",
    "photos": [
     {
-     "photo": "hero",
+     "file": "personal-portrait.jpg",
      "crop": [
-      100,
-      250,
-      700,
-      750
+      77,
+      110,
+      800,
+      800
      ],
-     "alt": "Two colleagues going over notes together"
+     "alt": "Lena Ortiz, smiling"
     }
    ],
-   "cta": "Contact",
+   "cta": "Get in touch",
    "sections": [
     {
      "name": "hero",
@@ -1863,7 +2152,7 @@
       },
       {
        "kind": "image",
-       "text": "Me going over notes with a teammate"
+       "text": "Lena Ortiz, smiling"
       }
      ]
     },
@@ -1911,15 +2200,27 @@
      ],
      "align": "center"
     }
+   ],
+   "look": {
+    "headerAlign": "center"
+   },
+   "choices": {
+    "coverClose": false
+   },
+   "nav": [
+    "Experience",
+    "Work",
+    "Contact"
    ]
   },
   "landing": {
    "name": "Tally Budget",
-   "hero": "cover",
+   "hero": "column",
    "photos": [
-    "none",
-    "none",
-    "none"
+    {
+     "file": "landing-couple.jpg",
+     "alt": "A couple planning together on a phone"
+    }
    ],
    "cta": "Join the beta",
    "sections": [
@@ -1996,24 +2297,32 @@
       }
      ]
     }
-   ]
+   ],
+   "look": {
+    "headerAlign": "start"
+   },
+   "choices": {
+    "coverClose": false,
+    "group": "icons"
+   },
+   "nav": []
   },
   "coming-soon": {
    "name": "Orchard Lane Café",
-   "hero": "cover",
+   "hero": "poster",
    "photos": [
     {
-     "photo": "about",
+     "file": "coming-soon-cafe.jpg",
      "crop": [
       0,
-      0,
-      760,
-      600
+      260,
+      900,
+      506
      ],
-     "alt": "Bottles and warm lights on the café shelves"
+     "alt": "Shelves of coffee and books in the café"
     }
    ],
-   "cta": "Get notified",
+   "cta": "",
    "sections": [
     {
      "name": "hero",
@@ -2040,7 +2349,7 @@
       },
       {
        "kind": "image",
-       "text": "Bottles and warm lights on the café shelves"
+       "text": "Shelves of coffee and books in the café"
       }
      ]
     },
@@ -2058,7 +2367,14 @@
       }
      ]
     }
-   ]
+   ],
+   "look": {
+    "headerAlign": "center"
+   },
+   "choices": {
+    "coverClose": false
+   },
+   "nav": []
   }
  }
 }

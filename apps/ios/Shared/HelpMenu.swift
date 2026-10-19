@@ -18,8 +18,11 @@ struct HelpMenuItems: View {
     let scope = ShellScope(model: model, navigation: navigation)
     Section {
       if let docs = links.first(where: { $0.id == "docs" }) {
-        Button("\(scope.row(for: navigation.section)?.label ?? "Aglyn") help", systemImage: "book") {
-          navigation.openWeb(AglynWebPage(HelpPages.docs(for: scope.row(for: navigation.section), base: docs.url)), .newTab)
+        let row = scope.row(for: navigation.section)
+        let page = HelpPages.docs(for: row, section: navigation.section, base: docs.url)
+        // The screen's own help when the console's page for it offers one; the docs' front page otherwise.
+        Button(page != docs.url ? "\(row?.label ?? model.brandName) help" : "Documentation", systemImage: "book") {
+          navigation.openWeb(AglynWebPage(page), .newTab)
         }
         .accessibilityIdentifier("help-docs")
       }
@@ -50,8 +53,13 @@ struct HelpMenuItems: View {
 }
 
 enum HelpPages {
-  /// The docs page for a screen: its area's page when the manifest names one, else the docs' front page.
-  static func docs(for row: NativeNavRow?, base: URL) -> URL { base }
+  /// The docs page for the screen in use, as the console's page for that place offers it: the section's own `docs`
+  /// (a section without one carries its row's), else the row's, else the docs' front page. Opened on the docs origin.
+  static func docs(for row: NativeNavRow?, section: ShellSection, base: URL) -> URL {
+    let own = row?.sections?.first { ShellSection.opening($0.screen, $0.params) == section }?.docs
+    guard let path = own ?? row?.docs, !path.isEmpty else { return base }
+    return URL(string: path, relativeTo: base)?.absoluteURL ?? base
+  }
 
   /// The abuse intake every Aglyn origin serves (`/api/report-abuse`).
   static func reportAbuse(_ config: AglynConfig?) -> URL? {
@@ -65,9 +73,13 @@ struct HelpMenuButton: View {
     Menu {
       HelpMenuItems()
     } label: {
-      Label("Help", systemImage: "questionmark.circle")
+      AglynBarSymbol(systemImage: "questionmark.circle")
     }
+    .menuStyle(.button)
+    .buttonStyle(.plain)
     .menuIndicator(.hidden)
+    .fixedSize()
+    .accessibilityLabel("Help")
     .help("Help")
     .accessibilityIdentifier("titlebar-help")
   }

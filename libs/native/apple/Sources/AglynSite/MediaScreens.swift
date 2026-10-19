@@ -48,7 +48,7 @@ struct MediaScreen: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .padding(.horizontal, AglynSpace.two)
+            .aglynContentEdges()
             .padding(.top, AglynSpace.one)
             .accessibilityIdentifier("media-tabs")
           }
@@ -63,6 +63,7 @@ struct MediaScreen: View {
       }
     }
     .navigationTitle("Media")
+    .aglynScreenTitle("Media")
   }
 }
 
@@ -123,6 +124,7 @@ struct MediaLibrary: View {
   @State private var undo: (id: String, name: String)?
   @State private var folderSheet: FolderSheet?
   @State private var filtersSheet = false
+  @Environment(\.aglynWideChrome) private var wide
   @State private var deletingFolder: MediaFolder?
   /// Files staff have disabled among those on screen (AGL-1612), asked of the console after each change of the page.
   @State private var disabled: [String: MediaQuarantineNotice] = [:]
@@ -159,12 +161,20 @@ struct MediaLibrary: View {
         library(selectable: false)
       }
     }
-    .searchable(text: $searchText, prompt: "Search files")
+    .aglynSearchable(text: $searchText, prompt: "Search files")
     .task(id: searchText) {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }
     }
-    .toolbar { toolbar }
+    // Upload is the library's one primary action in its head on the Mac and iPad, with its other sources and the sort and
+    // folder actions in More; a phone keeps both menus in its navigation bar.
+    .aglynWidePrimaryAction(
+      id: "media-upload", "Upload", systemImage: "square.and.arrow.up", enabled: canEdit && !runner.busy,
+      shortcut: KeyboardShortcut("u", modifiers: .command), help: "Upload photos, videos and documents"
+    ) {
+      pickSource = Self.defaultSource
+    }
+    .aglynScreenToolbar(id: "media") { toolbar }
     .aglynMediaPicker($pickSource, multiple: true) { files in
       // An audio file needs its uploader's rights confirmation first (AGL-3716).
       if files.contains(where: isAudioFile) { audioBatch = files } else { upload(files, rightsConfirmed: false) }
@@ -210,44 +220,66 @@ struct MediaLibrary: View {
     }
   }
 
-  @ToolbarContentBuilder
-  private var toolbar: some ToolbarContent {
-    ToolbarItemGroup(placement: .primaryAction) {
-      Menu {
-        Picker("Sort", selection: $model.sort) {
-          ForEach(ContractValues.shared.mediaSorts.filter { $0 != .unknown }, id: \.self) { sort in
-            Text(ContractValues.shared.mediaSortLabels[sort.rawValue] ?? sort.rawValue).tag(sort)
+  /// Where Upload picks from when pressed: files on the Mac, the photo library elsewhere.
+  private static var defaultSource: PickSource {
+    #if os(macOS)
+      .files
+    #else
+      .photos
+    #endif
+  }
+
+  @ViewBuilder
+  private var toolbar: some View {
+    Menu {
+      if wide {
+        Section("Upload from") {
+          ForEach(PickSource.available) { source in
+            Button {
+              pickSource = source
+            } label: {
+              Label(source.label, systemImage: source.systemImage)
+            }
+            .disabled(!canEdit || runner.busy)
+            .accessibilityIdentifier("media-upload-\(source.rawValue)")
           }
         }
-        .pickerStyle(.inline)
-        Section("Folder") {
+      }
+      Picker("Sort", selection: $model.sort) {
+        ForEach(ContractValues.shared.mediaSorts.filter { $0 != .unknown }, id: \.self) { sort in
+          Text(ContractValues.shared.mediaSortLabels[sort.rawValue] ?? sort.rawValue).tag(sort)
+        }
+      }
+      .pickerStyle(.inline)
+      Section("Folder") {
+        Button {
+          runner.error = nil
+          folderSheet = .create(parentID: model.folder.folderID)
+        } label: {
+          Label("New folder", systemImage: "folder.badge.plus")
+        }
+        .disabled(!canEdit)
+        if let id = model.folder.folderID, let folder = foldersByID[id] {
           Button {
             runner.error = nil
-            folderSheet = .create(parentID: model.folder.folderID)
+            folderSheet = .rename(folder)
           } label: {
-            Label("New folder", systemImage: "folder.badge.plus")
+            Label("Rename folder", systemImage: "pencil")
           }
           .disabled(!canEdit)
-          if let id = model.folder.folderID, let folder = foldersByID[id] {
-            Button {
-              runner.error = nil
-              folderSheet = .rename(folder)
-            } label: {
-              Label("Rename folder", systemImage: "pencil")
-            }
-            .disabled(!canEdit)
-            Button(role: .destructive) {
-              deletingFolder = folder
-            } label: {
-              Label("Delete folder", systemImage: "trash")
-            }
-            .disabled(!canEdit)
+          Button(role: .destructive) {
+            deletingFolder = folder
+          } label: {
+            Label("Delete folder", systemImage: "trash")
           }
+          .disabled(!canEdit)
         }
-      } label: {
-        Label("Sort and folders", systemImage: "ellipsis.circle")
       }
-      .accessibilityIdentifier("media-more")
+    } label: {
+      Label(wide ? "More" : "Sort and folders", systemImage: "ellipsis.circle")
+    }
+    .accessibilityIdentifier("media-more")
+    if !wide {
       Menu {
         ForEach(PickSource.available) { source in
           Button {
@@ -260,11 +292,7 @@ struct MediaLibrary: View {
       } label: {
         Label("Upload", systemImage: "square.and.arrow.up")
       } primaryAction: {
-        #if os(macOS)
-          pickSource = .files
-        #else
-          pickSource = .photos
-        #endif
+        pickSource = Self.defaultSource
       }
       .disabled(!canEdit || runner.busy)
       .keyboardShortcut("u", modifiers: .command)
@@ -297,7 +325,7 @@ struct MediaLibrary: View {
           }
       }
     }
-    .padding(.horizontal, AglynSpace.two)
+    .aglynContentEdges()
     .padding(.bottom, AglynSpace.one)
   }
 
@@ -361,7 +389,7 @@ struct MediaLibrary: View {
           .font(AglynFont.caption).foregroundStyle(.secondary)
           .accessibilityLabel("Sorted by \(ContractValues.shared.mediaSortLabels[model.sort.rawValue] ?? "")")
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.top, AglynSpace.one)
       AglynChipRow(
         mediaTypeChoices().map { AglynChipOption($0.value ?? "all", $0.label) }, selected: model.type ?? "all"
@@ -369,12 +397,12 @@ struct MediaLibrary: View {
       if scopeTokens != nil && !model.search.isEmpty {
         Text(ContractValues.shared.mediaScopedSearchNotice)
           .font(AglynFont.caption).foregroundStyle(.secondary)
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
       }
       ForEach(model.notices, id: \.self) { notice in
         Text(notice)
           .font(AglynFont.caption).foregroundStyle(AglynColor.error)
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
           .accessibilityIdentifier("media-filter-notice")
       }
     }
@@ -448,12 +476,13 @@ struct MediaLibrary: View {
           label
         }
       } else {
-        NavigationLink {
+        AglynPushLink {
           MediaDetail(
             context: context, scope: scope, mediaID: item.id, api: api, runner: runner, folders: folderList,
             canEdit: canEdit, onDeleted: deleted
           )
           .navigationTitle(item.fileName)
+          .aglynScreenTitle(item.fileName)
         } label: {
           label
         }

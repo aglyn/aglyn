@@ -52,6 +52,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -214,7 +216,16 @@ class FacetsLayout(size: Size, dark: Boolean, settle: Float = 1f) {
  * which every Android version and the desktop draw the same.
  */
 @Composable
-fun FacetsBackground(modifier: Modifier = Modifier, settle: Float = 1f, light: Float = 1f) {
+fun FacetsBackground(
+  modifier: Modifier = Modifier,
+  settle: Float = 1f,
+  light: Float = 1f,
+  /**
+   * Frame 1 is the plain ground (Android's splash screen draws no facets), and the light and planes fade in as they settle,
+   * so the hand-over from the platform's splash has no frame of another picture.
+   */
+  flatStart: Boolean = false,
+) {
   val dark = LocalAglynDark.current
   val stops = remember { AuthTokens.GRADIENT_STOPS.map { (argb, at) -> at to Color(argb) }.toTypedArray() }
   Canvas(modifier) {
@@ -226,7 +237,8 @@ fun FacetsBackground(modifier: Modifier = Modifier, settle: Float = 1f, light: F
     val grow = layout.softLightBlur / 2
     val outer = Rect(spot.left - grow, spot.top - grow, spot.right + grow, spot.bottom + grow)
     val edge = (min(spot.width, spot.height) / 2) / (min(outer.width, outer.height) / 2)
-    val alpha = layout.softLightOpacity * light
+    val fade = if (flatStart) settle.coerceIn(0f, 1f) else 1f
+    val alpha = layout.softLightOpacity * light * fade
     scaleOuter(outer) {
       drawCircle(
         Brush.radialGradient(
@@ -246,7 +258,7 @@ fun FacetsBackground(modifier: Modifier = Modifier, settle: Float = 1f, light: F
         close()
       }
       val (start, end) = FacetsLayout.gradientLine(path.getBounds())
-      drawPath(path, Brush.linearGradient(*stops, start = start, end = end), alpha = plane.opacity)
+      drawPath(path, Brush.linearGradient(*stops, start = start, end = end), alpha = plane.opacity * fade)
     }
   }
 }
@@ -295,7 +307,8 @@ fun AuthButton(
     AuthButtonKind.DESTRUCTIVE -> (if (pressed) C.destructivePressed else if (hovered) C.destructiveHover else C.destructive).current
   }
   val ink = if (kind == AuthButtonKind.PRIMARY || kind == AuthButtonKind.DESTRUCTIVE) C.onPrimary.current else C.textPrimary.current
-  val shape = RoundedCornerShape(size.radius.dp)
+  // The desktop takes the Compact density: every button size rounds to 6 (Figma Button, Density = Compact).
+  val shape = RoundedCornerShape(if (LocalShellMetrics.current.compact) LocalShellMetrics.current.controlRadius else size.radius.dp)
   Surface(
     onClick = onClick,
     enabled = enabled && !busy,
@@ -341,7 +354,7 @@ fun AuthButton(
  */
 @Composable
 fun GoogleButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-  val shape = RoundedCornerShape(M.BUTTON_RADIUS.dp)
+  val shape = RoundedCornerShape(if (LocalShellMetrics.current.compact) LocalShellMetrics.current.controlRadius else M.BUTTON_RADIUS.dp)
   Surface(
     onClick = onClick,
     enabled = enabled,
@@ -411,7 +424,7 @@ fun AuthInput(
 ) {
   val interaction = remember { MutableInteractionSource() }
   val focused by interaction.collectIsFocusedAsState()
-  val shape = RoundedCornerShape(M.FIELD_RADIUS.dp)
+  val shape = RoundedCornerShape(if (LocalShellMetrics.current.compact) LocalShellMetrics.current.controlRadius else M.FIELD_RADIUS.dp)
   val ink = C.textPrimary.current
   Column(modifier, verticalArrangement = Arrangement.spacedBy(M.FIELD_LABEL_GAP.dp)) {
     Text(label, style = AuthType.smallStrong, color = ink)
@@ -496,6 +509,12 @@ class LaunchIntro internal constructor(played: Boolean) {
     private set
   var lockupVisible by mutableStateOf(played)
     private set
+  /**
+   * The wordmark has wiped in. The destination is composed only from here on, so its first (heavy) composition never stalls
+   * the hand-over from the splash or the wipe itself.
+   */
+  var wiped by mutableStateOf(played)
+    private set
   var waiting by mutableStateOf(false)
     private set
   var revealed by mutableStateOf(played)
@@ -505,11 +524,17 @@ class LaunchIntro internal constructor(played: Boolean) {
   var crossFades by mutableStateOf(false)
     private set
 
-  suspend fun run(reduceMotion: Boolean, isReady: () -> Boolean) {
+  /**
+   * Plays the intro. [mayStart] holds it at frame 1 while the platform's splash screen is still over it (Android removes its
+   * splash once the icon has drawn in), so the motion starts where the eye can see it.
+   */
+  suspend fun run(reduceMotion: Boolean, mayStart: () -> Boolean = { true }, isReady: () -> Boolean) {
     if (finished) return
+    while (!mayStart()) delay(16)
     val t = AuthTokens.Intro
     if (reduceMotion) {
       crossFades = true
+      wiped = true
       while (!isReady()) delay(16)
       settled = true
       lockupVisible = true
@@ -519,11 +544,14 @@ class LaunchIntro internal constructor(played: Boolean) {
       return
     }
     settled = true
+    // The mark holds from the first frame; the wordmark wipes in beside it (P14: one motion, no cross-fade to flash).
     delay(t.LOCKUP_START_MS.toLong())
     markAtLockup = true
-    delay((t.LOCKUP_END_MS - t.CROSS_FADE_MS - t.LOCKUP_START_MS).toLong())
     lockupVisible = true
-    delay(t.CROSS_FADE_MS.toLong())
+    delay((t.LOCKUP_END_MS - t.LOCKUP_START_MS).toLong())
+    wiped = true
+    // The destination composes under the lockup now; a frame or two lets that land before anything moves again.
+    delay(32)
     if (!isReady()) {
       waiting = true
       while (!isReady()) delay(16)
@@ -540,8 +568,14 @@ class LaunchIntro internal constructor(played: Boolean) {
     /** A new intro; every one after the process's first starts finished (a warm start, a second window, a sign-out). */
     fun create(): LaunchIntro = LaunchIntro(played).also { played = true }
 
+    /** The process has played its intro already, so the next one starts finished. */
+    val hasPlayed: Boolean get() = played
+
     /** An intro already at its end: where the platform's own splash screen plays instead (Android). */
     fun skipped(): LaunchIntro = LaunchIntro(true)
+
+    /** An intro at its start whatever played before: for previews and frame-by-frame checks. */
+    fun unplayed(): LaunchIntro = LaunchIntro(false)
   }
 }
 
@@ -568,31 +602,63 @@ fun LaunchIntro.frame(): LaunchIntroFrame {
   return LaunchIntroFrame(settle, breath.value, if (crossFades) 0f else (1 - reveal) * t.DESTINATION_RISE, reveal)
 }
 
-/** The intro's travelling mark: centered at the launch size, then at the lockup's place, where the lockup cross-fades in. */
+/**
+ * The intro's lockup (P14, Zach 2026-10-19: "flashes a lot and doesn't flow"): one continuous motion. The mark holds at its
+ * place in the centered lockup from the first frame, the wordmark reveals beside it with a mask wipe, and the lockup fades
+ * out as the destination rises in ([LaunchIntroFrame.reveal]). Nothing cross-fades between two images, so no frame flashes.
+ * Reduce motion: the whole lockup is there at once and only fades.
+ */
 @Composable
-fun LaunchMark(intro: LaunchIntro, name: String, compact: Boolean, modifier: Modifier = Modifier) {
+fun LaunchMark(
+  intro: LaunchIntro,
+  name: String,
+  compact: Boolean,
+  modifier: Modifier = Modifier,
+  /**
+   * Android: the platform splash's mark (Figma "SplashScreen": 112 on its 288 canvas), centered on the whole window. Frame 1
+   * is that mark at that size and place; while the wordmark wipes in, the lockup settles to the launch mark's height (96
+   * compact, 120 regular) and recentres as it grows, so the mark never jumps.
+   */
+  launchMark: androidx.compose.ui.unit.Dp? = null,
+) {
   val t = AuthTokens.Intro
-  val spring = spring<Float>(dampingRatio = t.SPRING_DAMPING, stiffness = springStiffness(t.SPRING_RESPONSE))
-  val travel by animateFloatAsState(if (intro.markAtLockup) 1f else 0f, spring)
-  val lockup by animateFloatAsState(if (intro.lockupVisible) 1f else 0f, tween((if (intro.crossFades) t.REDUCE_MOTION_FADE_MS else t.CROSS_FADE_MS).toInt()))
+  val wipe by animateFloatAsState(
+    if (intro.lockupVisible || intro.crossFades) 1f else 0f,
+    if (intro.crossFades) tween(0) else tween((t.LOCKUP_END_MS - t.LOCKUP_START_MS).toInt(), easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)),
+  )
+  val handOver by animateFloatAsState(
+    if (intro.revealed) 0f else 1f,
+    tween((if (intro.crossFades) t.REDUCE_MOTION_FADE_MS else t.DESTINATION_MS).toInt()),
+  )
   BoxWithConstraints(modifier.semantics { contentDescription = name }) {
-    val launch = M.LAUNCH_MARK_COMPACT
-    val height = M.LOCKUP_HEIGHT
-    val leading = if (compact) M.LOCKUP_LEADING_COMPACT else M.LOCKUP_LEADING_REGULAR
-    val top = if (compact) M.LOCKUP_TOP_COMPACT else M.LOCKUP_CLEAR_SPACE
-    val size = launch + (height - launch) * travel
-    val x = ((maxWidth.value - launch) / 2) * (1 - travel) + leading * travel
-    val y = ((maxHeight.value - launch) / 2) * (1 - travel) + top * travel
-    AglynMark(
-      Modifier.graphicsLayer { translationX = x.dp.toPx(); translationY = y.dp.toPx(); alpha = 1 - lockup }.size(size.dp),
-      contentDescription = null,
-    )
+    // The lockup's art is 79 × 24 with the mark the first 24 of it (generate-native-brand-assets.mjs).
+    val rest = if (compact) 40f else 48f
+    val height = if (launchMark == null) rest else {
+      val target = if (compact) AuthTokens.Metrics.LAUNCH_MARK_COMPACT else AuthTokens.Metrics.LAUNCH_MARK_REGULAR
+      launchMark.value + (target - launchMark.value) * wipe
+    }
+    val width = height * LOCKUP_ART_WIDTH / LOCKUP_ART_HEIGHT
+    val markWidth = height * MARK_ART_WIDTH / LOCKUP_ART_HEIGHT
+    // The desktop's lockup is centered from frame 1; Android's recentres as it grows from the splash's centered mark.
+    val shownWidth = markWidth + (width - markWidth) * wipe
+    val x = (maxWidth.value - (if (launchMark == null) width else shownWidth)) / 2
+    val y = (maxHeight.value - height) / 2
     AglynLogo(
-      Modifier.graphicsLayer { translationX = leading.dp.toPx(); translationY = top.dp.toPx(); alpha = lockup }.height(height.dp),
+      Modifier
+        .graphicsLayer { translationX = x.dp.toPx(); translationY = y.dp.toPx(); alpha = handOver }
+        .size(width.dp, height.dp)
+        .drawWithContent {
+          val shown = markWidth.dp.toPx() + (size.width - markWidth.dp.toPx()) * wipe
+          clipRect(right = shown) { this@drawWithContent.drawContent() }
+        },
       contentDescription = null,
     )
   }
 }
+
+private const val LOCKUP_ART_WIDTH = 79f
+private const val LOCKUP_ART_HEIGHT = 24f
+private const val MARK_ART_WIDTH = 24f
 
 /** A spring's stiffness from SwiftUI's response (the period of one oscillation, in seconds). */
 private fun springStiffness(response: Float): Float = ((2 * PI / response) * (2 * PI / response)).toFloat()

@@ -70,9 +70,14 @@ class ShellServices(
   val signInThroughConsoleOnly: Boolean = false,
   /** The Windows build's console-minted App Check (AGL-3816): seeded by the hand-off, dropped on sign-out. */
   val consoleAppCheck: com.aglyn.core.ConsoleMintedAppCheck? = null,
+  /** The home-screen icon picker (Theme ▸ App icon): Android's launcher aliases in the Aglyn app; null where there is none. */
+  val appIcons: AppIconSwitcher? = null,
 ) {
   /** The signed-out screens and what a sign-up carries across them. */
   val authFlow = AuthFlow()
+
+  /** What each workspace's plan includes (`/api/orgs/entitlements`), read once per workspace and shared. */
+  val entitlements = com.aglyn.core.OrgEntitlementsCache(api)
 
   /** Every account signed in on this device (Add account), when the platform keeps more than one. */
   val accounts: com.aglyn.core.AccountSessions? get() = auth as? com.aglyn.core.AccountSessions
@@ -107,8 +112,12 @@ sealed interface Route {
   data object Analytics : Route
   data object Switcher : Route
   data object NotificationSettings : Route
+  /** Account ▸ Theme: appearance, theme, accent, density and the rest. */
+  data object ThemeSettings : Route
   /** A plain web page (a live site, a preview, a docs or legal page) in the in-app browser screen. */
   data class Web(val url: String) : Route
+  /** The one box's full results for a query ("See all results"), grouped, with filters. */
+  data class SearchResults(val query: String) : Route
 }
 
 /**
@@ -122,7 +131,11 @@ val PLATFORM_ENTRIES: List<com.aglyn.pluginhost.NativePluginManifestEntry> = lis
 const val SITE_PAGES_SCREEN_ID = "site.pages"
 
 /** What the desktop's menu bar can ask of the shell. */
-enum class ShellCommand { FIND, SWITCH_SITE, SETTINGS, TOGGLE_SIDEBAR, TOGGLE_RAIL, ADD_ACCOUNT, PIN_1, PIN_2, PIN_3, PIN_4, PIN_5 }
+enum class ShellCommand {
+  FIND, SWITCH_WORKSPACE, SWITCH_SITE, SETTINGS, TOGGLE_SIDEBAR, TOGGLE_RAIL, ADD_ACCOUNT, SHORTCUTS, AI_PANEL, HELP_DOCS,
+  HOME, NOTIFICATIONS, BACK, NEW_TAB, CLOSE_TAB, REOPEN_TAB, TAB_OVERVIEW,
+  PIN_1, PIN_2, PIN_3, PIN_4, PIN_5,
+}
 
 class ShellNavigator(initialTop: String = HOME) {
   var top by mutableStateOf(initialTop)
@@ -148,8 +161,35 @@ class ShellNavigator(initialTop: String = HOME) {
   /** The saved-state key of what is showing. */
   val currentKey: String get() = keys.last()
 
+  /** The destinations visited, for the title bar's back and forward (Mac, iPad, tablets and desktop). */
+  private val history = mutableStateListOf(initialTop)
+  private var historyAt by mutableStateOf(0)
+  val canGoBackInHistory: Boolean get() = historyAt > 0
+  val canGoForwardInHistory: Boolean get() = historyAt < history.lastIndex
+
   fun select(key: String) {
     top = key
+    stack.clear()
+    if (history.getOrNull(historyAt) != key) {
+      while (history.lastIndex > historyAt) history.removeAt(history.lastIndex)
+      history.add(key)
+      if (history.size > 50) history.removeAt(0)
+      historyAt = history.lastIndex
+    }
+  }
+
+  /** The destination before this one in the history, as the title bar's back arrow goes. */
+  fun historyBack() {
+    if (!canGoBackInHistory) return
+    historyAt -= 1
+    top = history[historyAt]
+    stack.clear()
+  }
+
+  fun historyForward() {
+    if (!canGoForwardInHistory) return
+    historyAt += 1
+    top = history[historyAt]
     stack.clear()
   }
 
@@ -236,7 +276,9 @@ internal class ShellPluginContext(
   }
 
   override fun navigate(screenId: String, params: NativeParams) {
-    if (screenId in topLevelScreens && params.isEmpty()) {
+    if (screenId == NavKeys.HOME_SCREEN) {
+      navigator.select(ShellNavigator.HOME)
+    } else if (screenId in topLevelScreens && params.isEmpty()) {
       navigator.select(ShellNavigator.screenKey(screenId))
     } else {
       navigator.push(Route.Screen(screenId, params))

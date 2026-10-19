@@ -105,18 +105,21 @@ public enum AglynRowDensity: Sendable {
   case list
 
   var minHeight: CGFloat {
+    // Compact density (Theming) takes four points off a row, never below the Mac's own 24-point row.
+    let compact: CGFloat = AglynThemeRuntime.shared.isCompact ? 4 : 0
     #if os(macOS)
-      self == .sidebar ? 28 : 36
+      return (self == .sidebar ? 28 : 36) - compact
     #else
-      44
+      return 44 - (self == .sidebar ? compact : 0)
     #endif
   }
 
   var vertical: CGFloat {
+    let compact: CGFloat = AglynThemeRuntime.shared.isCompact ? 2 : 0
     #if os(macOS)
-      self == .sidebar ? 4 : 6
+      return (self == .sidebar ? 4 : 6) - compact
     #else
-      self == .sidebar ? 6 : 8
+      return (self == .sidebar ? 6 : 8) - compact
     #endif
   }
 
@@ -128,12 +131,15 @@ public enum AglynRowDensity: Sendable {
     #endif
   }
 
-  /// The gap between the highlight and the column edge.
-  var inset: CGFloat {
+  /// The row's insets in its list. A sidebar row keeps its gap between the highlight and the column's edge; a content
+  /// list row's content sits on the column's content edges (`AglynContentInsets`), its highlight reaching `horizontal`
+  /// past them.
+  var insets: EdgeInsets {
+    if self == .list { return AglynContentInsets.listRow(padding: horizontal, vertical: 1) }
     #if os(macOS)
-      self == .sidebar ? 8 : 6
+      return EdgeInsets(top: 1, leading: 8, bottom: 1, trailing: 8)
     #else
-      self == .sidebar ? 10 : 8
+      return EdgeInsets(top: 1, leading: 10, bottom: 1, trailing: 10)
     #endif
   }
 }
@@ -160,6 +166,7 @@ public struct AglynSelectableRowStyle: ButtonStyle {
 
     var body: some View {
       configuration.label
+        .environment(\.aglynRowPadding, density.vertical)
         .fontWeight(selected && density == .sidebar ? .semibold : nil)
         .padding(.horizontal, density.horizontal)
         .padding(.vertical, density.vertical)
@@ -236,7 +243,7 @@ extension View {
   ) -> some View {
     Button(action: action) { self }
       .buttonStyle(AglynSelectableRowStyle(selected: selected, density: density))
-      .listRowInsets(EdgeInsets(top: 1, leading: density.inset, bottom: 1, trailing: density.inset))
+      .listRowInsets(density.insets)
       .listRowBackground(Color.clear)
       .listRowSeparator(.hidden)
       .accessibilityAddTraits(selected ? [.isSelected] : [])
@@ -275,5 +282,18 @@ extension View {
       .scrollContentBackground(.hidden)
       .background(AglynColor.paper)
       .environment(\.defaultMinListRowHeight, 1)
+  }
+}
+
+private struct AglynRowPaddingKey: EnvironmentKey {
+  static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+  /// The vertical padding the row a view sits in already gives it (a selectable row's), so a row drawn to a measured
+  /// height (`AglynRecordRow`) keeps that height inside it.
+  public var aglynRowPadding: CGFloat {
+    get { self[AglynRowPaddingKey.self] }
+    set { self[AglynRowPaddingKey.self] = newValue }
   }
 }

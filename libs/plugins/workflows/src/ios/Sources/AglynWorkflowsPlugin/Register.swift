@@ -19,7 +19,9 @@ public let orgAutomationScreen = "workflows.org-automation"
 @MainActor
 public func registerWorkflowsNative(_ r: NativePluginRegistrar) {
   r.screen(automationScreen, title: "Automation", icon: "bolt") { ctx, params in
-    AutomationHubScreen(context: ctx, params: params)
+    AglynFeatureGate(context: ctx, feature: "workflows", title: "Automation") {
+      AutomationHubScreen(context: ctx, params: params)
+    }
   }
   r.screen(workflowScreen, title: "Workflow", icon: "point.3.connected.trianglepath.dotted") { ctx, params in
     WorkflowEditorScreen(context: ctx, params: params)

@@ -45,6 +45,16 @@ data class WorkspaceOrgLogo(
   val enabledPlugins: List<String>? = null,
   /** The plan in force, as the console's plan chip names it. */
   val plan: String? = null,
+  /**
+   * The white-label mark (`brandingProfile.faviconUrl` / `faviconDarkUrl`), which the console's chrome wears in place of
+   * the platform's when the workspace is entitled to `whiteLabel` (`resolveBrandingProfile`).
+   */
+  val brandMark: String? = null,
+  val brandMarkDark: String? = null,
+  /** Custom-priced or flagged Enterprise, as the console's `isEnterpriseOrg` reads it: nothing to upgrade to. */
+  val enterprise: Boolean = false,
+  /** The workspace's own release-flag overrides (`releaseFlags`), which win over the published values. */
+  val releaseFlags: Map<String, Any?>? = null,
 ) {
   companion object {
     fun from(data: Map<String, Any?>?): WorkspaceOrgLogo = WorkspaceOrgLogo(
@@ -53,6 +63,11 @@ data class WorkspaceOrgLogo(
       brandColor = ((data?.get("brandingProfile") as? Map<*, *>)?.get("primaryColor") as? String)?.takeIf { com.aglyn.contracts.isAccountColor(it) },
       enabledPlugins = (data?.get("enabledPlugins") as? List<*>)?.filterIsInstance<String>(),
       plan = data?.let { effectivePlan(it) },
+      brandMark = ((data?.get("brandingProfile") as? Map<*, *>)?.get("faviconUrl") as? String)?.trim()?.ifEmpty { null },
+      brandMarkDark = ((data?.get("brandingProfile") as? Map<*, *>)?.get("faviconDarkUrl") as? String)?.trim()?.ifEmpty { null },
+      releaseFlags = (data?.get("releaseFlags") as? Map<*, *>)?.entries?.associate { it.key.toString() to it.value },
+      enterprise = data?.get("enterprise") == true || data?.get("plan") == "enterprise" ||
+        (((data?.get("subscription") as? Map<*, *>)?.get("customMonthlyUsd") as? Number)?.toDouble() ?: 0.0) > 0,
     )
   }
 }
@@ -254,6 +269,11 @@ class WorkspaceStore(
    */
   fun select(orgId: String, hostId: String?) {
     picked.value = WorkspacePick(orgId, hostId)
+  }
+
+  /** Puts exactly this scope on screen: [hostId]'s site, or the whole workspace when it is null (a window tab's own). */
+  fun selectScope(orgId: String, hostId: String?) {
+    picked.value = WorkspacePick(orgId, hostId, whole = hostId == null)
   }
 
   private fun restore(uid: String): WorkspacePick =

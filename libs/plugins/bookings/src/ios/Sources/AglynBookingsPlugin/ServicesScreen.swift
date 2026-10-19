@@ -12,6 +12,9 @@ import SwiftUI
 /// service dialog, offer a draft or withdraw a live one, and delete it.
 struct BookingServicesScreen: View {
   let context: NativePluginContext
+  /// Opened from Create new (`new=1`): its create form comes up on arrival.
+  var startNew = false
+  @State private var startedNew = false
   @State private var services = LiveList<ServiceRow>()
   @State private var selection: String?
   @State private var adding = false
@@ -34,16 +37,16 @@ struct BookingServicesScreen: View {
       }
     }
     .navigationTitle("Services")
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          adding = true
-          selection = Self.newID
-        } label: {
-          Label("Add service", systemImage: "plus")
-        }
-        .accessibilityIdentifier("add-service")
-      }
+    .aglynScreenTitle("Services")
+    .aglynPrimaryAction(id: "add-service", "Add service", systemImage: "plus") {
+      adding = true
+      selection = Self.newID
+    }
+    .onAppear {
+      guard startNew, !startedNew else { return }
+      startedNew = true
+      adding = true
+      selection = Self.newID
     }
     .sheet(isPresented: Binding(get: { adding && !isWide }, set: { if !$0 { adding = false } })) {
       NavigationStack { editor(for: nil) }
@@ -102,7 +105,7 @@ struct BookingServicesScreen: View {
           .accessibilityIdentifier("services-list")
         } else {
           List(rows) { service in
-            NavigationLink {
+            AglynPushLink {
               editor(for: service)
             } label: {
               ServiceListRow(service: service)
@@ -264,17 +267,16 @@ struct ServiceEditor: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(service == nil ? "New service" : form.name.isEmpty ? "Service" : form.name)
-    .toolbar {
-      ToolbarItem(placement: .confirmationAction) {
-        Button(service == nil ? "Add" : "Save") {
-          var draft = form
-          draft.windowText = hours.map { formatBookingWindows($0.map { BookingWindow(end: $0.end, start: $0.start) }) }
-          onSave(draft)
-          if service == nil { dismiss() }
-        }
-        .disabled(bookingServiceDraftProblem(name: form.name) != nil)
-        .accessibilityIdentifier("service-save")
-      }
+    .aglynScreenTitle(service == nil ? "New service" : form.name.isEmpty ? "Service" : form.name)
+    // Beside the list on the Mac and iPad, Save sits in the head as a bordered button; the list keeps Add service.
+    .aglynEditorActions(
+      id: "service-save", save: service == nil ? "Add" : "Save", enabled: bookingServiceDraftProblem(name: form.name) == nil,
+      primary: false
+    ) {
+      var draft = form
+      draft.windowText = hours.map { formatBookingWindows($0.map { BookingWindow(end: $0.end, start: $0.start) }) }
+      onSave(draft)
+      if service == nil { dismiss() }
     }
     .accessibilityIdentifier("service-editor")
   }

@@ -86,6 +86,7 @@ struct ContentScreen: View {
       }
     }
     .navigationTitle("Content")
+    .aglynScreenTitle("Content")
   }
 
   @ViewBuilder
@@ -171,30 +172,22 @@ private struct CollectionEntries: View {
         }
       } else {
         list(selectable: false)
-          .navigationDestination(item: $selection) { id in
+          .aglynPushDestination(item: $selection) { id in
             EntryEditor(env: env, collection: collection, entryID: id, model: model).id(id)
           }
       }
     }
     .task(id: collection.id) { model.start(env.context.firestore, hostID: env.hostID, collectionID: collection.id) }
     .onDisappear { model.stop() }
-    .searchable(text: $searchText, prompt: "Search titles")
+    .aglynSearchable(text: $searchText, prompt: "Search titles")
     .task(id: searchText) {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }
     }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          env.open(.newEntry(collection.id))
-        } label: {
-          Label("New entry", systemImage: "plus")
-        }
-        .disabled(!env.canWrite)
-        .keyboardShortcut("n", modifiers: .command)
-        .accessibilityIdentifier("add-entry")
-      }
-      ToolbarItem(placement: .secondaryAction) {
+    .aglynPrimaryAction(id: "add-entry", "New entry", systemImage: "plus", enabled: env.canWrite, shortcut: KeyboardShortcut("n", modifiers: .command), help: AglynRoleReason.site("adding entries")) {
+      env.open(.newEntry(collection.id))
+    }
+    .aglynScreenToolbar(id: "collection") {
         Menu {
           Button("New collection", systemImage: "plus") { env.open(.newCollection) }.disabled(!env.canWrite)
           Button("Collection settings", systemImage: "gearshape") { env.open(.settings(collection.id)) }.disabled(!env.canWrite)
@@ -205,7 +198,6 @@ private struct CollectionEntries: View {
           Label("Collection", systemImage: "ellipsis.circle")
         }
         .accessibilityIdentifier("collection-menu")
-      }
     }
   }
 
@@ -214,7 +206,7 @@ private struct CollectionEntries: View {
       Picker("Collection", selection: Binding(get: { collection.id }, set: { picked = $0 })) {
         ForEach(collections) { Text("\($0.name) (/\($0.slug))").tag($0.id) }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.top, AglynSpace.one)
       .accessibilityIdentifier("collection-picker")
       AglynChipRow(
@@ -222,7 +214,7 @@ private struct CollectionEntries: View {
         selected: model.status ?? "all"
       ) { model.status = $0 == "all" ? nil : $0 }
       if let notice = env.runner.notice {
-        AglynNotice(notice, tone: .success) { env.runner.clear() }.padding(.horizontal, AglynSpace.two)
+        AglynNotice(notice, tone: .success) { env.runner.clear() }.aglynContentEdges()
       }
       rows(selectable: selectable)
     }
@@ -313,6 +305,7 @@ private struct EntryEditor: View {
       }
     }
     .navigationTitle("Entry")
+    .aglynScreenTitle("Entry")
     .task(id: entryID) {
       await live.bind(env.context.firestore, ["hosts", env.hostID, "collections", collection.id, "entries", entryID])
     }

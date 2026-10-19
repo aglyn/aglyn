@@ -42,6 +42,8 @@ final class AppModel {
   let authFlow = AuthFlow()
   /// The tabs closed in this run, for ⌘⇧T and Recently Closed.
   let closedTabs = ClosedTabs()
+  /// What the person may do in the workspace in hand (Create new's prerequisites).
+  let orgAccess = OrgAccess()
   /// The first verified session's workspace settling (the held sign-up name, AGL-2590).
   var firstRun: FirstRunState = .idle
   /// Whose first run has been settled, so it runs once per person per launch.
@@ -224,6 +226,17 @@ final class AppModel {
 
   /// The context a plugin's screen or widget is handed in one window.
   func context(for navigation: ShellNavigation) -> NativePluginContext? {
+    // A tab behind another, or one whose workspace and site are still coming back, reads its own (P9).
+    if let frozen = navigation.frozenContext,
+      !navigation.front || workspace?.org?.id != frozen.orgID || scopedSite(navigation)?.id != frozen.hostID
+    {
+      return frozen
+    }
+    return liveContext(for: navigation)
+  }
+
+  /// The context for where the app's workspace store stands now.
+  func liveContext(for navigation: ShellNavigation) -> NativePluginContext? {
     guard let user = auth?.user, let reader, let api else { return nil }
     var context = NativePluginContext(
       uid: user.uid,
@@ -238,9 +251,15 @@ final class AppModel {
       navigate: { [weak navigation] screen, params in navigation?.push(.screen(screen, params)) },
       openBesigner: { [weak navigation] path in navigation?.push(.besigner(path)) },
       siteRole: scopedSite(navigation)?.role, orgRole: workspace?.org?.role,
-      selectSite: { [weak workspace = self.workspace, weak navigation] hostID in
+      selectSite: { [weak self, weak workspace = self.workspace, weak navigation] hostID in
         workspace?.selectSite(hostID)
-        if hostID != nil { navigation?.inSite = true }
+        guard hostID != nil, let navigation else { return }
+        navigation.inSite = true
+        // Opening a site from a workspace screen (a Sites row) drills into it, on its Home; a screen of the site that
+        // asked for one stays where it is.
+        if let self, navigation.section != .home, ShellScope(model: self, navigation: navigation).row(for: navigation.section) == nil {
+          navigation.enterSite()
+        }
       },
       back: { [weak navigation] in
         guard let navigation else { return }

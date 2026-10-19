@@ -13,6 +13,17 @@ struct AglynCommands: Commands {
     CommandGroup(after: .toolbar) {
       Button("Refresh") { model.refresh() }
         .keyboardShortcut("r", modifiers: .command)
+      Divider()
+      Button(navigation?.railHidden == true ? "Show Workspace Switcher" : "Hide Workspace Switcher") {
+        withAnimation(.easeOut(duration: 0.2)) { navigation?.railHidden.toggle() }
+      }
+      .keyboardShortcut("s", modifiers: [.control, .command])
+      .disabled(navigation == nil)
+      Button(navigation?.sidebarHidden == true ? "Show Sidebar" : "Hide Sidebar") {
+        withAnimation(.easeOut(duration: 0.2)) { navigation?.sidebarHidden.toggle() }
+      }
+      .keyboardShortcut("s", modifiers: [.option, .command])
+      .disabled(navigation == nil)
     }
     CommandMenu("Go") {
       Button("Home") { navigation?.select(.home) }
@@ -72,32 +83,41 @@ struct AglynCommands: Commands {
 #if os(macOS)
   /// The Mac's tab commands: New Tab (⌘T) beside the one in front, on its workspace and site; Reopen Closed Tab
   /// (⌘⇧T) and the Recently Closed list. Close Tab is the system's ⌘W, and Show All Tabs its own tab overview.
+  /// The tabs in the window's tab strip: ⌘T opens one on the place in front, ⌘W closes the one in front, ⌘⇧T reopens
+  /// the last closed; Recently Closed lists them.
   struct TabCommands: Commands {
     let model: AppModel
     @FocusedValue(\.shellNavigation) private var navigation
-    @Environment(\.openWindow) private var openWindow
+    @FocusedValue(\.shellTabs) private var tabs
 
     var body: some Commands {
       CommandGroup(after: .newItem) {
         Button("New Tab") {
-          var seed = navigation?.seed(model: model) ?? ShellSeed()
-          seed.id = UUID()
+          guard let tabs else { return }
+          var seed = tabs.current.seed(model: model)
           seed.screen = nil
           seed.params = [:]
           seed.title = "Home"
-          openWindow(id: "main", value: seed)
+          tabs.open(seed, model: model)
         }
         .keyboardShortcut("t", modifiers: .command)
+        .disabled(tabs == nil)
+        Button("Close Tab") {
+          guard let tabs else { return }
+          tabs.close(tabs.selected, model: model, closedTabs: model.closedTabs)
+        }
+        .keyboardShortcut("w", modifiers: .command)
+        .disabled(tabs == nil || tabs?.selected == 0)
         Button("Reopen Closed Tab") {
-          if let seed = model.closedTabs.reopen() { openWindow(id: "main", value: seed) }
+          if let seed = model.closedTabs.reopen() { tabs?.open(seed, model: model) }
         }
         .keyboardShortcut("t", modifiers: [.command, .shift])
-        .disabled(model.closedTabs.seeds.isEmpty)
+        .disabled(model.closedTabs.seeds.isEmpty || tabs == nil)
         Menu("Recently Closed") {
           ForEach(model.closedTabs.seeds) { seed in
             Button(seed.title) {
               model.closedTabs.take(seed)
-              openWindow(id: "main", value: seed)
+              tabs?.open(seed, model: model)
             }
           }
         }

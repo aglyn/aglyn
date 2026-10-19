@@ -73,10 +73,11 @@ struct TemplateGallerySheet: View {
         }
       }
       .navigationTitle("Start from a \(noun(kind)) template")
+      .aglynScreenTitle("Start from a \(noun(kind)) template")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
-      .searchable(text: $searchText, prompt: "Search templates")
+      .aglynSearchable(text: $searchText, prompt: "Search templates")
       .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: close) } }
     }
     .aglynSheetMinimumSize(width: 420, height: 480)

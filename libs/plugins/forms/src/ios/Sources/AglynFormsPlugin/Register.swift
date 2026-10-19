@@ -18,7 +18,7 @@ let inboxSubmissionsScreen = "inbox.submissions"
 @MainActor
 public func registerFormsNative(_ r: NativePluginRegistrar) {
   r.screen(formsListScreen, title: "Forms", requiresSite: true, icon: FormsSymbols.form) { context, params in
-    FormsScreen(context: context, initialFormID: params["form"])
+    FormsScreen(context: context, initialFormID: params["form"], startNew: params["new"] == "1")
   }
   r.screen(formsFormScreen, title: "Form", requiresSite: true, icon: FormsSymbols.form) { context, params in
     FormsScreen(context: context, initialFormID: params["form"] ?? params["formId"])
