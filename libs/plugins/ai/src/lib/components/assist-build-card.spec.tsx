@@ -167,3 +167,39 @@ it('a Free Try again past what is left asks first, and runs only on Build what f
     creditsConfirmed: true,
   })
 })
+
+it('a build waiting for a Meta pixel ID asks for it by name — no Resume, nothing failed — shows a wrong one’s error under the field, and sends a good one (AGL-3978)', async () => {
+  const message = 'What’s your Meta pixel ID? It’s the number (8–20 digits) shown for your pixel in Meta Events Manager.'
+  const input = {
+    message,
+    fields: [{ item: 'Meta pixel', arg: 'metaPixel', label: 'Meta pixel ID', shape: '8–20 digits', pattern: '^[0-9]{8,20}$' }],
+  }
+  const proposed = { ...PLAN, status: 'proposed' as const, confirmedAt: null, confirmedBy: null }
+  const waiting = job({ error: message, items: [], plan: proposed, input })
+  const onJob = jest.fn()
+  card(waiting, onJob)
+  expect(screen.getByText(/^Paused\./).textContent).toContain(message)
+  expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
+  expect(screen.queryByText(/failed/i)).toBeNull()
+  const field = screen.getByLabelText(/Meta pixel ID/)
+
+  const error = '“fb-123” is not a Meta pixel ID, which looks like 8–20 digits.'
+  mockFetch.mockResolvedValueOnce(json({ error, fieldErrors: { 'Meta pixel/metaPixel': error }, job: waiting }, 400))
+  fireEvent.change(field, { target: { value: 'fb-123' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await waitFor(() => expect(screen.getByText(error)).toBeTruthy())
+  expect(JSON.parse(mockFetch.mock.calls[0][2].body)).toMatchObject({ input: { 'Meta pixel/metaPixel': 'fb-123' } })
+
+  const back = job({
+    status: 'needs_review',
+    error: null,
+    items: [],
+    plan: proposed,
+    review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+  })
+  mockFetch.mockResolvedValueOnce(json({ job: back }))
+  fireEvent.change(field, { target: { value: '123456789012345' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await waitFor(() => expect(onJob).toHaveBeenLastCalledWith(back))
+  expect(JSON.parse(mockFetch.mock.calls[1][2].body)).toMatchObject({ input: { 'Meta pixel/metaPixel': '123456789012345' } })
+})

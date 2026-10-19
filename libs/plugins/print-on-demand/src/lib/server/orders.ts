@@ -16,6 +16,11 @@
  */
 
 import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type {
+  OrderEventOrder,
+  OrderEventPayload,
+  OrderRefundedEventPayload,
+} from '@aglyn/plugins-commerce/contracts'
 import {
   heldQuantitiesByLine,
   pluginFulfillmentHolds,
@@ -57,7 +62,8 @@ import {
  *
  * Commerce raises `order.paid`, `order.cancelled` and `order.refunded` from
  * every door that changes an order, through an outbox that retries a
- * subscriber that throws; this plugin never imports it. A paid order's lines
+ * subscriber that throws; the events' shapes come from commerce's contracts
+ * (AGL-3980). A paid order's lines
  * whose product was imported from a connected service become one part per
  * service, `podOrders/{hostId}__{orderId}__{provider}`, created with
  * `create()` so a redelivered event cannot make a second. The address is read
@@ -117,16 +123,7 @@ const POLL_HORIZON_MS = 60 * 24 * 3_600_000
 /** How long a locked site's part waits before the job looks again. */
 const LOCKED_WAIT_MS = 3_600_000
 
-/** The order as commerce's events carry it: the public API's shape, the fields read here. */
-export interface PodPaidOrderView {
-  id: string
-  number?: number | null
-  status?: string | null
-  currency?: string
-  testMode?: boolean
-  lineItems?: unknown
-}
-
+/** A line of the order as this plugin reads it: commerce does not type its lines yet (`lineItems: unknown`). */
 interface OrderLineView {
   productId?: string
   variantId?: string
@@ -141,7 +138,7 @@ export function podExternalId(hostId: string, orderId: string): string {
   return `ag${createHash('sha256').update(`${hostId}\n${orderId}`).digest('hex').slice(0, 30)}`
 }
 
-function orderRefOf(order: PodPaidOrderView): string {
+function orderRefOf(order: Pick<OrderEventOrder, 'id' | 'number'>): string {
   return typeof order.number === 'number' ? `#${order.number}` : `#${String(order.id).slice(-8)}`
 }
 
@@ -179,7 +176,7 @@ async function tell(hostId: string, title: string, body: string): Promise<void> 
  * `order.paid`: the order's lines made by a connected service become one
  * part per service, and each is sent at once.
  */
-export async function onOrderPaid(envelope: PluginDomainEventEnvelope<{ order?: PodPaidOrderView }>): Promise<void> {
+export async function onOrderPaid(envelope: PluginDomainEventEnvelope<OrderEventPayload>): Promise<void> {
   const order = envelope.payload?.order
   const hostId = envelope.hostId
   if (!order?.id || !isDocumentId(hostId) || !isDocumentId(order.id)) return
@@ -236,7 +233,8 @@ export async function onOrderPaid(envelope: PluginDomainEventEnvelope<{ order?: 
         provider,
         storeId: connection.storeId,
         status: 'queued',
-        testMode: order.testMode === true,
+        // Commerce says `livemode: false` for an order paid in Stripe's test mode.
+        testMode: order.livemode === false,
         externalId: podExternalId(hostId, order.id),
         sourceOrderId: null,
         sourceOrderKey: null,
@@ -689,16 +687,14 @@ async function cancelAll(hostId: string, orderId: string, reason: string): Promi
 }
 
 /** `order.cancelled`: the store canceled the order, so the service should not make it. */
-export async function onOrderCancelled(envelope: PluginDomainEventEnvelope<{ order?: PodPaidOrderView }>): Promise<void> {
+export async function onOrderCancelled(envelope: PluginDomainEventEnvelope<OrderEventPayload>): Promise<void> {
   const order = envelope.payload?.order
   if (!order?.id) return
   await cancelAll(envelope.hostId, order.id, `The order was canceled in the store.`)
 }
 
 /** `order.refunded`: a refund of everything means the buyer will not get it; a part refund changes nothing. */
-export async function onOrderRefunded(
-  envelope: PluginDomainEventEnvelope<{ order?: PodPaidOrderView; refund?: { full?: boolean } }>,
-): Promise<void> {
+export async function onOrderRefunded(envelope: PluginDomainEventEnvelope<OrderRefundedEventPayload>): Promise<void> {
   const order = envelope.payload?.order
   if (!order?.id || envelope.payload?.refund?.full !== true) return
   await cancelAll(envelope.hostId, order.id, `The order was refunded in full.`)

@@ -333,6 +333,22 @@ To pair one:
    tablet. A customer display code does not pair a kiosk, and a kiosk code
    does not pair a display.
 
+While you pair a kiosk, the code screen also says what the kiosk still needs
+to take payment, each with a link to where you fix it:
+
+- **Stripe** — until your store's Stripe account is connected and can take
+  charges, the kiosk can't take cards. **Open Payments** goes to
+  **Products → Payments**.
+- **A card reader on this register** — **Pay with card** uses a reader
+  assigned to the kiosk's register, not one set to **Any register**.
+  **Open POS devices** goes to the card readers on **Products → Point of
+  sale**. With several readers on the register, choose the kiosk's from its
+  staff menu once it is paired.
+- **A way to pay at all** — with **Kiosk: let customers pay at the counter**
+  off and no card reader ready, customers see "Payment is not set up on this
+  kiosk yet". **Open Commerce settings** goes to **Admin → Plugins →
+  Commerce**, where you can turn paying at the counter back on.
+
 The kiosk keeps working for as long as the person who paired it can use
 the register. If they are removed from the site or lose access to the
 register, or the plan no longer includes POS, the kiosk stops taking

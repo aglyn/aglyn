@@ -15,137 +15,62 @@
  * limitations under the License.
  */
 
-import {
-  definePluginDomainEvent,
-  type PluginDomainEvent,
-  type PluginDomainEventDeclaration,
+import type {
+  PluginDomainEvent,
+  PluginDomainEventDeclaration,
 } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import {
+  CHECKOUT_STARTED_EVENT,
+  ORDER_CANCELLED_EVENT,
+  ORDER_DELIVERED_EVENT,
+  ORDER_FULFILLED_EVENT,
+  ORDER_PAID_EVENT,
+  ORDER_REFUNDED_EVENT,
+  RETURN_APPROVED_EVENT,
+  RETURN_DECLINED_EVENT,
+  RETURN_RECEIVED_EVENT,
+  RETURN_REFUNDED_EVENT,
+  RETURN_REQUESTED_EVENT,
+} from '../contracts'
 
 /**
  * The order and return events commerce raises (AGL-3611), for other plugins
  * — accounting, shipping, workflows — and for the merchant's own webhooks.
  *
- * Each payload carries `order` in the public API's shape (`GET
- * /v1/sites/{siteId}/orders/{orderId}`), as it stood once the fact was
- * written, so a subscriber reads one documented object rather than the
- * plugin's storage. A subscriber in another plugin restates the fields it
- * reads; these types are this plugin's own.
+ * Their names and payloads are commerce's contract with other plugins and
+ * live in `../contracts` (AGL-3980), which a subscriber imports as
+ * `@aglyn/plugins-commerce/contracts`; they are re-exported here for
+ * commerce's own code. What stays here is how commerce offers them to the
+ * merchant: the labels, the workflow triggers, the picker order.
  */
 
-/** An order as the public API returns it. Money is integer cents. */
-export interface OrderEventOrder {
-  id: string
-  object: 'order'
-  number: number | null
-  status: string | null
-  channel: string
-  currency: string
-  customerEmail: string | null
-  customerName: string | null
-  lineItems: unknown
-  totals: {
-    itemsCents: number
-    shippingCents: number
-    taxCents: number
-    discountCents: number
-    totalCents: number | null
-    feeCents: number
-  }
-  refundedCents: number
-  /** The tax regime: `stripe-automatic`, `manual`, `none`, or `null` when not recorded. */
-  taxMode: string | null
-  [key: string]: unknown
-}
-
-/** A shipment as an event carries it. */
-export interface OrderEventFulfillment {
-  id: string
-  lines: Array<{ lineItemId: number; quantity: number }>
-  carrier: string | null
-  trackingNumber: string | null
-  trackingUrl: string | null
-  labelUrl: string | null
-  /** What the shipment cost to send — its label's cost, or the merchant's hand-entered one (AGL-3705) — in integer cents of the order's currency; `null` when unknown (AGL-3693). */
-  labelCostCents: number | null
-  at: string
-}
-
-/** A refund as an event carries it: what THIS refund moved. */
-export interface OrderEventRefund {
-  /** Stripe's refund id, when there is one. */
-  id: string | null
-  amountCents: number
-  /** The line indexes refunded by name; empty for an amount-only refund. */
-  lineItemIds: number[]
-  /** Whether this refund left nothing more to refund. */
-  full: boolean
-}
-
-/** A return as an event carries it. */
-export interface OrderEventReturn {
-  id: string
-  status: string
-  lines: Array<{ lineItemId: number; quantity: number; reason: string }>
-  refundCents: number | null
-  /** What went back in stock when the parcel arrived; `null` before then. */
-  restock?: Array<{ lineItemId: number; quantity: number }> | null
-}
-
-export interface OrderEventPayload {
-  order: OrderEventOrder
-}
-export interface OrderFulfilledEventPayload extends OrderEventPayload {
-  fulfillment: OrderEventFulfillment
-}
-export interface OrderRefundedEventPayload extends OrderEventPayload {
-  refund: OrderEventRefund
-}
-export interface ReturnEventPayload extends OrderEventPayload {
-  return: OrderEventReturn
-}
-
-export const ORDER_PAID_EVENT = definePluginDomainEvent<OrderEventPayload>('order.paid')
-export const ORDER_FULFILLED_EVENT = definePluginDomainEvent<OrderFulfilledEventPayload>('order.fulfilled')
-export const ORDER_DELIVERED_EVENT = definePluginDomainEvent<OrderEventPayload>('order.delivered')
-export const ORDER_REFUNDED_EVENT = definePluginDomainEvent<OrderRefundedEventPayload>('order.refunded')
-export const ORDER_CANCELLED_EVENT = definePluginDomainEvent<OrderEventPayload>('order.cancelled')
-export const RETURN_REQUESTED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.requested')
-export const RETURN_APPROVED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.approved')
-export const RETURN_DECLINED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.declined')
-export const RETURN_RECEIVED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.received')
-export const RETURN_REFUNDED_EVENT = definePluginDomainEvent<ReturnEventPayload>('return.refunded')
-
-/**
- * A checkout a shopper reached with an address (AGL-3639): the fact an
- * abandoned-cart flow in a merchant's own email platform starts from. Not an
- * order event — nothing was bought — so it is raised beside them rather than
- * among them: it is not a workflow trigger and not offered to the merchant's
- * outbound webhooks, whose events are about orders.
- */
-export interface CheckoutStartedEventPayload {
-  checkout: {
-    /** The checkout session's id: one event per checkout. */
-    id: string
-    email: string
-    /** Whether the shopper ticked the store's marketing box at checkout. */
-    marketingOptIn: boolean
-    currency: string
-    /** The basket's list value, integer cents, before discounts and shipping. */
-    itemsCents: number
-    /** Where the shopper can pick the checkout up again. */
-    resumeUrl: string | null
-    items: Array<{
-      productId: string
-      variantId: string | null
-      name: string
-      sku: string | null
-      quantity: number
-      unitCents: number
-    }>
-  }
-}
-
-export const CHECKOUT_STARTED_EVENT = definePluginDomainEvent<CheckoutStartedEventPayload>('checkout.started')
+export {
+  CHECKOUT_STARTED_EVENT,
+  COMMERCE_EVENT_NAMES,
+  ORDER_CANCELLED_EVENT,
+  ORDER_DELIVERED_EVENT,
+  ORDER_FULFILLED_EVENT,
+  ORDER_PAID_EVENT,
+  ORDER_REFUNDED_EVENT,
+  RETURN_APPROVED_EVENT,
+  RETURN_DECLINED_EVENT,
+  RETURN_RECEIVED_EVENT,
+  RETURN_REFUNDED_EVENT,
+  RETURN_REQUESTED_EVENT,
+} from '../contracts'
+export type {
+  CheckoutStartedEventPayload,
+  CommerceEventName,
+  OrderEventFulfillment,
+  OrderEventOrder,
+  OrderEventPayload,
+  OrderEventRefund,
+  OrderEventReturn,
+  OrderFulfilledEventPayload,
+  OrderRefundedEventPayload,
+  OrderViewFulfillment,
+  ReturnEventPayload,
+} from '../contracts'
 
 export const CHECKOUT_STARTED_EVENT_DECLARATION: PluginDomainEventDeclaration = {
   event: CHECKOUT_STARTED_EVENT as PluginDomainEvent<unknown>,
@@ -154,19 +79,6 @@ export const CHECKOUT_STARTED_EVENT_DECLARATION: PluginDomainEventDeclaration = 
     'A shopper reached checkout with an email address: the basket, its value and the link back to it. Raised once per checkout, whether or not it is paid.',
   payloadKeys: ['checkout'],
 }
-
-/** Every event commerce raises, by name. */
-export type CommerceEventName =
-  | 'order.paid'
-  | 'order.fulfilled'
-  | 'order.delivered'
-  | 'order.refunded'
-  | 'order.cancelled'
-  | 'return.requested'
-  | 'return.approved'
-  | 'return.declined'
-  | 'return.received'
-  | 'return.refunded'
 
 /** The events, in the order pickers list them, with their words. */
 export const COMMERCE_EVENT_DECLARATIONS: ReadonlyArray<
@@ -249,17 +161,3 @@ export const COMMERCE_EVENT_DECLARATIONS: ReadonlyArray<
 export function commerceHostEventFor(event: string): string | null {
   return COMMERCE_EVENT_DECLARATIONS.find((entry) => entry.event.id === event)?.hostEvent ?? null
 }
-
-/** The event names, for a webhook's event picker. */
-export const COMMERCE_EVENT_NAMES: readonly CommerceEventName[] = [
-  'order.paid',
-  'order.fulfilled',
-  'order.delivered',
-  'order.refunded',
-  'order.cancelled',
-  'return.requested',
-  'return.approved',
-  'return.declined',
-  'return.received',
-  'return.refunded',
-]

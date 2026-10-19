@@ -99,6 +99,10 @@ jest.mock('@aglyn/aglyn', () => ({
   checkEntitlement: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
   ).checkEntitlement,
+  // The plan the locked Schedule and "Write with AI" controls name (AGL-3977).
+  planLabelGrantingFeature: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).planLabelGrantingFeature,
   isHostCollectionKind: () => () => true,
   COLLECTION_CATEGORIES_MAX: 20,
   findCollectionSlugOwner: () => null,

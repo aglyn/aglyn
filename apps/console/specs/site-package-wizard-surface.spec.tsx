@@ -54,10 +54,15 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 }))
 jest.mock('next/navigation', () => ({
   useParams: () => ({ orgSlug: 'acme', host: 'acme-site' }),
+  usePathname: () => '/acme/hosts/acme-site/setup',
 }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => mockOrg,
+}))
+jest.mock('../hooks/use-org-scope', () => ({
+  ...jest.requireActual('../hooks/use-org-scope'),
+  useOrgSlug: () => 'acme',
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => {
   const actual = jest.requireActual('@aglyn/shared-ui-jsx')
@@ -232,11 +237,23 @@ describe('the backup card', () => {
     expect(screen.getByRole('dialog', { name: 'Export items' })).toBeTruthy()
   })
 
-  it('refuses a site without the plan, saying so', () => {
+  it('refuses a site without the plan BEFORE the click, saying which plan has it (AGL-3977)', () => {
     mockOrg = { org: { plan: 'free' }, ready: true }
     render(<SiteBackupCard hostId="host-1" />)
+    for (const name of ['Import package', 'Export items', 'Download backup']) {
+      expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true)
+    }
+    expect(screen.getAllByLabelText('Backup and restore is included from Pro.')).toHaveLength(3)
+    expect(screen.getByRole('alert').textContent).toContain('Included from Pro.')
+    expect(screen.getByRole('button', { name: 'Upgrade' }).getAttribute('href')).toBe('/acme/billing#plans')
     fireEvent.click(screen.getByRole('button', { name: 'Import package' }))
     expect(screen.queryByRole('dialog')).toBeNull()
-    expect(mockEnqueueSnackbar).toHaveBeenCalledWith(expect.stringContaining('Pro plan'), expect.anything())
+  })
+
+  it('a pending plan locks nothing', () => {
+    mockOrg = { org: undefined, ready: false }
+    render(<SiteBackupCard hostId="host-1" />)
+    expect((screen.getByRole('button', { name: 'Import package' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })

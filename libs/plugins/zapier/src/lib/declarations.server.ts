@@ -25,9 +25,10 @@ import { ZAPIER_DOMAIN_EVENTS, zapierEventForHostEvent } from './model/hook-even
 /**
  * The Zapier plugin's server declarations (AGL-3643), in both apps:
  *
- * - it subscribes to commerce's order events and the bookings plugin's
- *   booking events by name, on core's outbox, and posts each to the site's
- *   hooks that take it;
+ * - it subscribes to commerce's order events (their names typed by
+ *   commerce's contracts, AGL-3980) and the bookings plugin's booking events
+ *   by name, on core's outbox, and posts each to the site's hooks that take
+ *   it, the payload passed on as it came;
  * - it hears every host event, and a contact created or a form submitted
  *   on a site with a hook taking it is relayed onto the outbox
  *   (`zapier.relay`), which it then delivers the same way.

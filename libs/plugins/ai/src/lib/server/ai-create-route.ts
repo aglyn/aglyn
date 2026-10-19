@@ -30,7 +30,7 @@ import {
   orgSubscriptionState,
   resolveEffectivePlan,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { listPluginSeatAddons } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
+import { listPluginSeatAddons, pluginSeatAddonSoldOn } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
 import type { AglynOrganization, AglynOrgMember } from '@aglyn/aglyn/foundation/definitions/organization.types'
 import {
   emailUnverifiedResponse,
@@ -112,15 +112,14 @@ async function doorCaller(request: Request, orgId: string): Promise<Response | D
 /**
  * Whether an add-on this workspace can buy grants `aiGenerative`: the
  * console's `entitlementPurchasable`, over the add-ons the AI plugin declares
- * on the server.
+ * on the server (`pluginSeatAddonSoldOn`).
  */
 export function aiGenerativePurchasable(org: Partial<AglynOrganization>): boolean {
   const billing = org as Parameters<typeof checkEntitlement>[0]
   if (orgSubscriptionState(billing as never) !== 'live') return false
   const plan = resolveEffectivePlan(billing as never)
   return listPluginSeatAddons().some(
-    (addon) =>
-      addon.features?.includes('aiGenerative') && (!addon.quota || (addon.quota.perUnitByPlan[plan] ?? 0) > 0),
+    (addon) => addon.features?.includes('aiGenerative') && pluginSeatAddonSoldOn(addon, plan),
   )
 }
 

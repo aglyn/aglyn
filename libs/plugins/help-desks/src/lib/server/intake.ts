@@ -17,6 +17,7 @@
 
 import { createHash } from 'node:crypto'
 import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type { CommerceOrderEventName, OrderEventPayload } from '@aglyn/plugins-commerce/contracts'
 import { helpDeskOrderFromView } from '../model/orders'
 import type { HelpDeskTicket } from '../providers/provider'
 import { outboxItemId, type ConnectionStore, type StoredOutboxItem } from './store'
@@ -29,8 +30,9 @@ import { outboxItemId, type ConnectionStore, type StoredOutboxItem } from './sto
  * the console job delivers it.
  *
  * - **Orders** come from commerce's order events through core's domain-event
- *   outbox, by name. Each carries the order in the public API's shape, read
- *   by {@link helpDeskOrderFromView}; never commerce's code.
+ *   outbox. Each carries the order in the public API's shape, read by
+ *   {@link helpDeskOrderFromView}; the shape comes from commerce's contracts
+ *   (AGL-3980).
  * - **Contact form messages** come from the form submission's host event,
  *   which every plugin hears through the runtime's listener registry. Only
  *   a site that switched "Send contact form messages" on is owed one.
@@ -40,13 +42,13 @@ import { outboxItemId, type ConnectionStore, type StoredOutboxItem } from './sto
  */
 
 /** The order events this plugin takes, as commerce raises them. */
-export const HELP_DESKS_ORDER_EVENTS = [
+export const HELP_DESKS_ORDER_EVENTS: readonly CommerceOrderEventName[] = [
   'order.paid',
   'order.fulfilled',
   'order.delivered',
   'order.refunded',
   'order.cancelled',
-] as const
+]
 
 /** The host event a form submission raises, as the forms plugin's door names it. */
 export const FORM_SUBMISSION_HOST_EVENT = 'formSubmission'
@@ -82,10 +84,12 @@ async function owe(
  *
  * @returns how many connections it was owed to.
  */
-export async function intakeOrderEvent(deps: IntakeDeps, envelope: PluginDomainEventEnvelope<unknown>): Promise<number> {
+export async function intakeOrderEvent(
+  deps: IntakeDeps,
+  envelope: PluginDomainEventEnvelope<OrderEventPayload>,
+): Promise<number> {
   if (!(HELP_DESKS_ORDER_EVENTS as readonly string[]).includes(envelope.event) || !envelope.hostId) return 0
-  const payload = (envelope.payload ?? {}) as Record<string, unknown>
-  const read = helpDeskOrderFromView(payload['order'], envelope.occurredAtMs)
+  const read = helpDeskOrderFromView(envelope.payload?.order, envelope.occurredAtMs)
   if (!read) return 0
   const nowMs = deps.now()
   return owe(deps, { hostId: envelope.hostId, orgId: envelope.orgId, kind: 'order', key: envelope.id }, (connectionId, orgId) => ({

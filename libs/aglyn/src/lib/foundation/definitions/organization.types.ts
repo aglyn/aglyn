@@ -26,6 +26,7 @@
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type { AccountAcquisition } from '../../app-utils/account-acquisition'
 import type {
+  AiTierId,
   OrgCrmSettings,
   OrgEntitlements,
   OrgPlan,
@@ -151,6 +152,8 @@ export interface AglynOrganization extends AglynDocument {
    */
   enabledPlugins?: string[]
   seatAddons?: OrgSeatAddons
+  /** Which Aglyn AI tier `seatAddons.aiAddon` is (AGL-3965); see `AglynOrgBilling.aiTier`. */
+  aiTier?: AiTierId | null
   stripeCustomerId?: string
   subscription?: OrgSubscription
   suspendedAt?: ITimestamp | null

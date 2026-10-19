@@ -26,6 +26,7 @@ import {
   pickOrgBillingFields,
   type OrgBillingDoc,
   type OrgInlineBilling,
+  type AiTierId,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from './firebase-admin'
 
@@ -195,7 +196,8 @@ export async function readOrgBillingCustomerModes(
  */
 export async function writeOrgBilling(
   orgId: string,
-  patch: Partial<OrgBillingDoc> & Pick<OrgInlineBilling, 'seatAddons'>,
+  patch: Partial<OrgBillingDoc> &
+    Pick<OrgInlineBilling, 'seatAddons'> & { aiTier?: AiTierId | null },
   options: { writeInline?: boolean } = {},
 ): Promise<void> {
   if (!orgId) return
@@ -230,6 +232,11 @@ export async function writeOrgBilling(
   // subscription items do not name survives.
   if (patch.seatAddons !== undefined) {
     orgPatch['seatAddons'] = patch.seatAddons
+  }
+  // Which Aglyn AI tier those quantities hold (AGL-3965), derived from the
+  // same items and read from the same document, so it travels with them.
+  if (patch.aiTier !== undefined) {
+    orgPatch['aiTier'] = patch.aiTier
   }
   if (Object.keys(orgPatch).length) batch.set(orgRef, orgPatch, { merge: true })
 
