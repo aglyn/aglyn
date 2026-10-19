@@ -1963,6 +1963,46 @@ data class OrderUnresolvedLine(
 )
 
 @Serializable
+data class OrgPermissionDeclaration(
+    val description: String,
+    val key: String,
+    val label: String,
+    val roleDefaults: Map<String, Boolean>,
+)
+
+@Serializable
+data class OrgPermissionEntry(
+    val description: String,
+    val key: String,
+    val label: String,
+    val pluginId: String? = null,
+)
+
+@Serializable
+data class OrgPermissionLayer(
+    val permissions: Map<String, Boolean>? = null,
+)
+
+@Serializable
+data class OrgRoleGrants(
+    val grants: Map<String, List<String>>,
+    val permissions: List<OrgPermissionEntry>,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = OrgRoleNameSerializer::class)
+enum class OrgRoleName(val raw: String) {
+    ADMIN("admin"),
+    EDITOR("editor"),
+    OWNER("owner"),
+    VIEWER("viewer"),
+    UNKNOWN(""),
+}
+
+internal object OrgRoleNameSerializer :
+    RawEnumSerializer<OrgRoleName>("com.aglyn.contracts.OrgRoleName", OrgRoleName.entries, OrgRoleName.UNKNOWN, { it.raw })
+
+@Serializable
 data class PaymentRisk(
     val latestAtMs: Double,
     val latestKind: PaymentRiskSignalKind,
@@ -2949,6 +2989,152 @@ data class TenantEmailEntry(
 )
 
 @Serializable
+data class ThemeAccent(
+    val fill: String,
+    val hover: String,
+    val icon: String,
+    val on: String,
+    val pressed: String,
+    val ring: String,
+    val soft: String,
+    val textDark: String,
+    val textLight: String,
+)
+
+@Serializable
+data class ThemeAccentSwatch(
+    val color: String,
+    val id: String,
+    val label: String,
+)
+
+@Serializable
+data class ThemeColors(
+    val borderStrong: String,
+    val borderSubtle: String,
+    val canvas: String,
+    val dangerBg: String,
+    val dangerFg: String,
+    val dangerFill: String,
+    val dangerFillHover: String,
+    val dangerFillPressed: String,
+    val hover: String,
+    val infoBg: String,
+    val infoFg: String,
+    val newBg: String,
+    val newFg: String,
+    val rail: String,
+    val raised: String,
+    val scrim: String,
+    val successBg: String,
+    val successFg: String,
+    val sunken: String,
+    val surface: String,
+    val textPrimary: String,
+    val textSecondary: String,
+    val textTertiary: String,
+    val titlebar: String,
+    val warningBg: String,
+    val warningFg: String,
+)
+
+@Serializable
+data class ThemeDensity(
+    val controlHeight: Long,
+    val id: ThemeDensityId,
+    val label: String,
+    val listRowHeight: Long,
+    val phoneRowHeight: Long,
+    val radius2xl: Long,
+    val radiusFull: Long,
+    val radiusLg: Long,
+    val radiusMd: Long,
+    val radiusSm: Long,
+    val radiusXl: Long,
+    val radiusXs: Long,
+    val rowHeight: Long,
+    val space10: Long,
+    val space12: Long,
+    val space16: Long,
+    val space2: Long,
+    val space20: Long,
+    val space24: Long,
+    val space32: Long,
+    val space4: Long,
+    val space40: Long,
+    val space48: Long,
+    val space6: Long,
+    val space64: Long,
+    val space8: Long,
+    val titlebarHeight: Long,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ThemeDensityIdSerializer::class)
+enum class ThemeDensityId(val raw: String) {
+    COMFORTABLE("comfortable"),
+    COMPACT("compact"),
+    UNKNOWN(""),
+}
+
+internal object ThemeDensityIdSerializer :
+    RawEnumSerializer<ThemeDensityId>("com.aglyn.contracts.ThemeDensityId", ThemeDensityId.entries, ThemeDensityId.UNKNOWN, { it.raw })
+
+@Serializable
+data class ThemeNamedAccent(
+    val accent: ThemeAccent,
+    val id: String,
+    val label: String,
+)
+
+@Serializable
+data class ThemePalette(
+    val accent: String,
+    val alwaysDark: Boolean? = null,
+    val brandLabel: Boolean? = null,
+    val dark: ThemeColors,
+    val id: ThemePaletteId,
+    val label: String,
+    val light: ThemeColors,
+    val source: ThemeSource,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ThemePaletteIdSerializer::class)
+enum class ThemePaletteId(val raw: String) {
+    AGLYN("aglyn"),
+    HIGH_CONTRAST("highContrast"),
+    NIGHT("night"),
+    OCEAN("ocean"),
+    QUIET("quiet"),
+    WARM("warm"),
+    UNKNOWN(""),
+}
+
+internal object ThemePaletteIdSerializer :
+    RawEnumSerializer<ThemePaletteId>("com.aglyn.contracts.ThemePaletteId", ThemePaletteId.entries, ThemePaletteId.UNKNOWN, { it.raw })
+
+@Serializable
+data class ThemePreview(
+    val accent: String,
+    val canvas: String,
+    val rail: String,
+    val surface: String,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = ThemeSourceSerializer::class)
+enum class ThemeSource(val raw: String) {
+    CONSOLE("console"),
+    DERIVED("derived"),
+    FIGMA("figma"),
+    UNKNOWN(""),
+}
+
+internal object ThemeSourceSerializer :
+    RawEnumSerializer<ThemeSource>("com.aglyn.contracts.ThemeSource", ThemeSource.entries, ThemeSource.UNKNOWN, { it.raw })
+
+@Serializable
 data class WhereUsedDependent(
     val id: String? = null,
     val name: String? = null,
@@ -3184,16 +3370,18 @@ internal data class ContractValuesPart4(
     @SerialName("ORDER_STATUS_OPTIONS") val orderStatusOptions: List<ListFilterOption>,
     @SerialName("ORDERS_TO_SHIP_FILTER_LABEL") val ordersToShipFilterLabel: String,
     @SerialName("ORDERS_TO_SHIP_FILTER_VALUE") val ordersToShipFilterValue: JsonElement,
+    @SerialName("ORG_ROLE_GRANTS") val orgRoleGrants: OrgRoleGrants,
+    @SerialName("ORG_ROLE_NAMES") val orgRoleNames: List<OrgRoleName>,
     @SerialName("ORG_SUBMISSION_LIST_QUERY") val orgSubmissionListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_DEFAULT_ALLOWED_COUNTRIES") val outreachDefaultAllowedCountries: List<String>,
     @SerialName("OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY") val outreachDoNotContactDomainListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_ENROLLMENT_LIST_QUERY") val outreachEnrollmentListQuery: ListQueryDeclaration,
-    @SerialName("OUTREACH_MAX_EMAIL_STEPS") val outreachMaxEmailSteps: Long,
-    @SerialName("OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS") val outreachMaxStepDelayBusinessDays: Long,
 )
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("OUTREACH_MAX_EMAIL_STEPS") val outreachMaxEmailSteps: Long,
+    @SerialName("OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS") val outreachMaxStepDelayBusinessDays: Long,
     @SerialName("OUTREACH_MAX_STEPS") val outreachMaxSteps: Long,
     @SerialName("OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS") val outreachMinEmailFollowUpBusinessDays: Long,
     @SerialName("OUTREACH_SEQUENCE_LIST_QUERY") val outreachSequenceListQuery: ListQueryDeclaration,
@@ -3240,12 +3428,12 @@ internal data class ContractValuesPart5(
     @SerialName("RAIL_ALL_WORKSPACES_AT_MOST") val railAllWorkspacesAtMost: Long,
     @SerialName("RAIL_RECENT_ORGS") val railRecentOrgs: Long,
     @SerialName("RECENT_ORGS_FIELD") val recentOrgsField: String,
-    @SerialName("RECENT_ORGS_MAX") val recentOrgsMax: Long,
-    @SerialName("RECENTS_FIELD") val recentsField: String,
 )
 
 @Serializable
 internal data class ContractValuesPart6(
+    @SerialName("RECENT_ORGS_MAX") val recentOrgsMax: Long,
+    @SerialName("RECENTS_FIELD") val recentsField: String,
     @SerialName("RECENTS_MAX") val recentsMax: Long,
     @SerialName("REFUND_BLOCKED_BY_DISPUTE") val refundBlockedByDispute: String,
     @SerialName("REMINDER_WINDOW_END_HOURS") val reminderWindowEndHours: Long,
@@ -3283,6 +3471,19 @@ internal data class ContractValuesPart6(
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
     @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
     @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
+    @SerialName("THEME_ACCENT_SWATCHES") val themeAccentSwatches: List<ThemeAccentSwatch>,
+    @SerialName("THEME_ACCENTS") val themeAccents: List<ThemeNamedAccent>,
+    @SerialName("THEME_CONSOLE_FIELDS") val themeConsoleFields: List<String>,
+    @SerialName("THEME_DARK_RAIL_SEEDS") val themeDarkRailSeeds: Map<String, String>,
+    @SerialName("THEME_DENSITIES") val themeDensities: List<ThemeDensity>,
+    @SerialName("THEME_NON_TEXT_CONTRAST") val themeNonTextContrast: Long,
+    @SerialName("THEME_PALETTES") val themePalettes: List<ThemePalette>,
+    @SerialName("THEME_PREVIEWS") val themePreviews: Map<String, ThemePreview>,
+    @SerialName("THEME_TEXT_CONTRAST") val themeTextContrast: Double,
+)
+
+@Serializable
+internal data class ContractValuesPart7(
     @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
     @SerialName("TIME_ZONE_DEFAULT_LABEL") val timeZoneDefaultLabel: String,
     @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
@@ -3302,6 +3503,7 @@ class ContractValues internal constructor(
     private val part4: ContractValuesPart4,
     private val part5: ContractValuesPart5,
     private val part6: ContractValuesPart6,
+    private val part7: ContractValuesPart7,
 ) {
     val accountColorPattern: String get() = part1.accountColorPattern
     val accountItemLabelMax: Long get() = part1.accountItemLabelMax
@@ -3489,12 +3691,14 @@ class ContractValues internal constructor(
     val orderStatusOptions: List<ListFilterOption> get() = part4.orderStatusOptions
     val ordersToShipFilterLabel: String get() = part4.ordersToShipFilterLabel
     val ordersToShipFilterValue: JsonElement get() = part4.ordersToShipFilterValue
+    val orgRoleGrants: OrgRoleGrants get() = part4.orgRoleGrants
+    val orgRoleNames: List<OrgRoleName> get() = part4.orgRoleNames
     val orgSubmissionListQuery: ListQueryDeclaration get() = part4.orgSubmissionListQuery
     val outreachDefaultAllowedCountries: List<String> get() = part4.outreachDefaultAllowedCountries
     val outreachDoNotContactDomainListQuery: ListQueryDeclaration get() = part4.outreachDoNotContactDomainListQuery
     val outreachEnrollmentListQuery: ListQueryDeclaration get() = part4.outreachEnrollmentListQuery
-    val outreachMaxEmailSteps: Long get() = part4.outreachMaxEmailSteps
-    val outreachMaxStepDelayBusinessDays: Long get() = part4.outreachMaxStepDelayBusinessDays
+    val outreachMaxEmailSteps: Long get() = part5.outreachMaxEmailSteps
+    val outreachMaxStepDelayBusinessDays: Long get() = part5.outreachMaxStepDelayBusinessDays
     val outreachMaxSteps: Long get() = part5.outreachMaxSteps
     val outreachMinEmailFollowUpBusinessDays: Long get() = part5.outreachMinEmailFollowUpBusinessDays
     val outreachSequenceListQuery: ListQueryDeclaration get() = part5.outreachSequenceListQuery
@@ -3541,8 +3745,8 @@ class ContractValues internal constructor(
     val railAllWorkspacesAtMost: Long get() = part5.railAllWorkspacesAtMost
     val railRecentOrgs: Long get() = part5.railRecentOrgs
     val recentOrgsField: String get() = part5.recentOrgsField
-    val recentOrgsMax: Long get() = part5.recentOrgsMax
-    val recentsField: String get() = part5.recentsField
+    val recentOrgsMax: Long get() = part6.recentOrgsMax
+    val recentsField: String get() = part6.recentsField
     val recentsMax: Long get() = part6.recentsMax
     val refundBlockedByDispute: String get() = part6.refundBlockedByDispute
     val reminderWindowEndHours: Long get() = part6.reminderWindowEndHours
@@ -3580,15 +3784,24 @@ class ContractValues internal constructor(
     val templateListQuery: ListQueryDeclaration get() = part6.templateListQuery
     val tenantEmailCollection: String get() = part6.tenantEmailCollection
     val tenantEmails: List<TenantEmailEntry> get() = part6.tenantEmails
-    val timeZoneChoices: List<String> get() = part6.timeZoneChoices
-    val timeZoneDefaultLabel: String get() = part6.timeZoneDefaultLabel
-    val workflowMaxSteps: Long get() = part6.workflowMaxSteps
-    val workspaceColorsField: String get() = part6.workspaceColorsField
-    val workspaceColorsMax: Long get() = part6.workspaceColorsMax
+    val themeAccentSwatches: List<ThemeAccentSwatch> get() = part6.themeAccentSwatches
+    val themeAccents: List<ThemeNamedAccent> get() = part6.themeAccents
+    val themeConsoleFields: List<String> get() = part6.themeConsoleFields
+    val themeDarkRailSeeds: Map<String, String> get() = part6.themeDarkRailSeeds
+    val themeDensities: List<ThemeDensity> get() = part6.themeDensities
+    val themeNonTextContrast: Long get() = part6.themeNonTextContrast
+    val themePalettes: List<ThemePalette> get() = part6.themePalettes
+    val themePreviews: Map<String, ThemePreview> get() = part6.themePreviews
+    val themeTextContrast: Double get() = part6.themeTextContrast
+    val timeZoneChoices: List<String> get() = part7.timeZoneChoices
+    val timeZoneDefaultLabel: String get() = part7.timeZoneDefaultLabel
+    val workflowMaxSteps: Long get() = part7.workflowMaxSteps
+    val workspaceColorsField: String get() = part7.workspaceColorsField
+    val workspaceColorsMax: Long get() = part7.workspaceColorsMax
 
-    override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4 && part5 == other.part5 && part6 == other.part6)
+    override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4 && part5 == other.part5 && part6 == other.part6 && part7 == other.part7)
 
-    override fun hashCode(): Int = listOf<Any>(part1, part2, part3, part4, part5, part6).hashCode()
+    override fun hashCode(): Int = listOf<Any>(part1, part2, part3, part4, part5, part6, part7).hashCode()
 
     companion object {
         /** Decodes every part from one JSON text; the format must ignore unknown keys. */
@@ -3601,6 +3814,7 @@ class ContractValues internal constructor(
                 json.decodeFromJsonElement(ContractValuesPart4.serializer(), tree),
                 json.decodeFromJsonElement(ContractValuesPart5.serializer(), tree),
                 json.decodeFromJsonElement(ContractValuesPart6.serializer(), tree),
+                json.decodeFromJsonElement(ContractValuesPart7.serializer(), tree),
             )
         }
     }
