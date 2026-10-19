@@ -311,7 +311,7 @@ struct TemplatesSection: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.padding(.horizontal, AglynSpace.two) }
+      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.aglynContentEdges() }
       AglynLiveList(
         rows: list.rows, ready: list.ready, failure: list.failure, hasMore: list.hasMore, failedTitle: "Could not load templates",
         emptyTitle: search.isEmpty ? "No email designs yet" : "No templates match",
@@ -467,7 +467,7 @@ struct AudiencesSection: View {
         AglynChoiceChip("Rule", selected: kind == "dynamic") { kind = "dynamic" }
         Spacer()
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
       if selectable {
         if list.ready && list.failure == nil && !list.rows.isEmpty {
@@ -543,15 +543,15 @@ struct ListDetail: View {
   var body: some View {
     let row = doc.document.map(emailListRow)
     VStack(spacing: 0) {
-      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.padding(.horizontal, AglynSpace.two) }
+      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.aglynContentEdges() }
       if let row, row.dynamic {
         AglynNotice("Everyone the list's rule matches is on it. The rule is edited on the website for now; its members are listed here.", tone: .info)
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
       }
       TextField("Search members", text: $searchText)
         .textFieldStyle(.roundedBorder)
         .onSubmit { search = searchText }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
       AglynLiveList(
         rows: members.rows, ready: members.ready, failure: members.failure, hasMore: members.hasMore,
@@ -730,7 +730,7 @@ struct TopicsSection: View {
   var body: some View {
     let rows = list.rows.sorted { ($0.archived ? 1 : 0, $0.name.lowercased()) < ($1.archived ? 1 : 0, $1.name.lowercased()) }
     VStack(spacing: 0) {
-      if let error { AglynNotice(error, tone: .error) { self.error = nil }.padding(.horizontal, AglynSpace.two) }
+      if let error { AglynNotice(error, tone: .error) { self.error = nil }.aglynContentEdges() }
       AglynLiveList(
         rows: rows, ready: list.ready, failure: list.failure, hasMore: false, failedTitle: "Could not load topics",
         emptyTitle: "No topics yet",
@@ -794,7 +794,7 @@ struct SuppressionsSection: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.padding(.horizontal, AglynSpace.two) }
+      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.aglynContentEdges() }
       AglynLiveList(
         rows: list.rows, ready: list.ready, failure: list.failure, hasMore: list.hasMore, failedTitle: "Could not load suppressions",
         emptyTitle: search.isEmpty ? "Nobody is suppressed" : "No address matches",

@@ -107,7 +107,7 @@ struct EmailsScreen: View {
             AglynChoiceChip(label, selected: status == value) { status = value }
           }
         }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
       }
       if !list.ready {

@@ -195,7 +195,7 @@ struct SubmissionsScreen: View {
           .accessibilityIdentifier("inbox-form-pick")
         }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
     }
   }
@@ -205,10 +205,10 @@ struct SubmissionsScreen: View {
     VStack(spacing: 0) {
       chips
       if exporting == nil, replying == nil, deleting == nil, let error = runner.error {
-        AglynNotice(error, tone: .error) { runner.clear() }.padding(.horizontal, AglynSpace.two)
+        AglynNotice(error, tone: .error) { runner.clear() }.aglynContentEdges()
       }
       if let notice = model.notice {
-        AglynNotice(notice, tone: .info).padding(.horizontal, AglynSpace.two)
+        AglynNotice(notice, tone: .info).aglynContentEdges()
       }
       content(selectable: selectable)
     }

@@ -38,8 +38,8 @@ struct HomeView: View {
       }
       .padding(.horizontal, wide ? AglynContentInsets.horizontal : AglynSpace.two)
       .padding(.vertical, wide ? 24 : AglynSpace.two)
-      .frame(maxWidth: 880, alignment: .leading)
-      .frame(maxWidth: .infinity, alignment: wide ? .leading : .center)
+      // Home fills its column at every width, its cards on the content edges (Zach, 2026-10-19: no capped column).
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
     // The content's ground is the surface on the Mac and iPad (Figma Home 2:6), the canvas on a phone.
     .background(wide ? AglynColor.paper : AglynColor.page)

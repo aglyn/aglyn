@@ -271,7 +271,7 @@ struct DatasetsScreen: View {
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       if sheet == nil, exporting == nil, let error = runner.error {
-        AglynNotice(error, tone: .error) { runner.clear() }.padding(.horizontal, AglynSpace.two)
+        AglynNotice(error, tone: .error) { runner.clear() }.aglynContentEdges()
       }
       // Calm rule 8: no banner at rest. Who a new dataset is shared with is said in New dataset itself.
       content(selectable: selectable)

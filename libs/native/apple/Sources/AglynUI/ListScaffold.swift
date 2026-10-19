@@ -126,7 +126,7 @@ public struct AglynListToolbar<Filter: View>: View {
       }
       filter.environment(\.aglynTouchToolbar, touch)
     }
-    .padding(.horizontal, touch ? 16 : (inset ?? AglynContentInsets.horizontal))
+    .padding(.horizontal, touch ? AglynContentInsets.phone : (inset ?? AglynContentInsets.horizontal))
     .padding(.bottom, touch ? 12 : 10)
     .background(touch ? AglynColor.page : AglynColor.paper)
   }
@@ -180,7 +180,10 @@ public struct AglynFilterMenu<Content: View>: View {
   }
 }
 
-/// The content's side margins on the Mac and iPad (Figma: 32 points from the sidebar's edge).
+/// The one content edge, E, of every column on the Mac and iPad: its crumbs, title, search and Filter, each row's
+/// leading icon and trailing chevron, its section heads and cards sit on E and on width − E, and its hairlines run
+/// exactly from one to the other (Zach, 2026-10-19: one inset system; Figma has no token for it, so this is the rule
+/// Figma's frames follow). 32 on the Mac (Compact), 24 on iPad (Touch); a phone's lists keep their 16.
 public enum AglynContentInsets {
   public static var horizontal: CGFloat {
     #if os(macOS)
@@ -188,6 +191,40 @@ public enum AglynContentInsets {
     #else
       24
     #endif
+  }
+
+  /// A phone's side margin.
+  public static let phone: CGFloat = 16
+
+  /// What a plain `List` adds outside a row's own insets: 8 before and 9 after it on the Mac (measured by laying a
+  /// list out off screen; it also ignores `contentMargins`), nothing on iPad.
+  public static var listBuiltIn: (leading: CGFloat, trailing: CGFloat) {
+    #if os(macOS)
+      (8, 9)
+    #else
+      (0, 0)
+    #endif
+  }
+
+  /// A plain list row's insets that put its content on E and width − E, less `padding` the row draws itself.
+  public static func listRow(padding: CGFloat = 0, vertical: CGFloat = 0) -> EdgeInsets {
+    EdgeInsets(
+      top: vertical, leading: horizontal - listBuiltIn.leading - padding,
+      bottom: vertical, trailing: horizontal - listBuiltIn.trailing - padding)
+  }
+}
+
+extension View {
+  /// A screen-level row (a notice, a chip row, a scope bar, a search field) on its column's content edges: E on the
+  /// Mac and iPad, the phone's 16 on a phone.
+  public func aglynContentEdges() -> some View { modifier(AglynContentEdgesModifier()) }
+}
+
+private struct AglynContentEdgesModifier: ViewModifier {
+  @Environment(\.aglynWideChrome) private var wide
+
+  func body(content: Content) -> some View {
+    content.padding(.horizontal, wide ? AglynContentInsets.horizontal : AglynContentInsets.phone)
   }
 }
 
@@ -408,8 +445,33 @@ public struct AglynBlockableButton<Label: View>: View {
 
 extension View {
   /// A content list on the Mac and iPad as Figma draws one (Mac Sites 13:3): rows on the surface, hairlines between
-  /// them, 32-point margins; a phone keeps its grouped list.
+  /// them, every row on the content edges (`aglynContentRow`); a phone keeps its grouped list.
   public func aglynContentList() -> some View { modifier(AglynContentListModifier()) }
+
+  /// One row of an `aglynContentList` on the Mac and iPad: its content on E and width − E, and the hairline under it
+  /// running exactly between them (none under the last row). A phone keeps its grouped row.
+  public func aglynContentRow(separator: Bool = true) -> some View { modifier(AglynContentRowModifier(separator: separator)) }
+}
+
+private struct AglynContentRowModifier: ViewModifier {
+  @Environment(\.aglynWideChrome) private var wide
+  let separator: Bool
+
+  func body(content: Content) -> some View {
+    if wide {
+      content
+        .listRowInsets(AglynContentInsets.listRow())
+        .listRowSeparator(.hidden)
+        .listRowBackground(AglynColor.paper)
+        .overlay(alignment: .bottom) {
+          if separator { AglynHairline() }
+        }
+    } else {
+      content
+        .listRowInsets(EdgeInsets(top: 0, leading: AglynContentInsets.phone, bottom: 0, trailing: AglynContentInsets.phone))
+        .listRowBackground(AglynColor.paper)
+    }
+  }
 }
 
 private struct AglynContentListModifier: ViewModifier {
@@ -422,7 +484,9 @@ private struct AglynContentListModifier: ViewModifier {
         .scrollContentBackground(.hidden)
         .background(AglynColor.paper)
         .environment(\.defaultMinListRowHeight, 48)
-        .contentMargins(.horizontal, AglynContentInsets.horizontal - 8, for: .scrollContent)
+        // The rows put themselves on the edges (`aglynContentRow`); a margin here would move them off E on iPad, and
+        // the Mac's list ignores it.
+        .contentMargins(.horizontal, 0, for: .scrollContent)
     } else {
       content.aglynListBackground()
     }
@@ -622,8 +686,8 @@ public struct AglynListColumnHeader<Actions: View>: View {
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  /// The list column's side margins (Figma: 20 from the column's edges).
-  public static var inset: CGFloat { 20 }
+  /// The list column's side margins: the content edge, as every column's (`AglynContentInsets`).
+  public static var inset: CGFloat { AglynContentInsets.horizontal }
 }
 
 /// A phone title row's 40-point button (Figma 22:499): the create action filled with the accent, any other action
@@ -709,7 +773,7 @@ public struct AglynDetailCrumbs: View {
   public var body: some View {
     // Figma 13:483: the crumbs 24 from the column's top and 40 from its edge, where the record's head lines up.
     head.crumbs
-      .padding(.horizontal, 40)
+      .padding(.horizontal, AglynContentInsets.horizontal)
       .padding(.top, 24)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(AglynColor.paper)

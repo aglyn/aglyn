@@ -156,7 +156,7 @@ struct ArtifactsScreen: View {
       Spacer()
       sortMenu
     }
-    .padding(.horizontal, AglynSpace.two)
+    .aglynContentEdges()
     .padding(.vertical, AglynSpace.one)
   }
 
@@ -193,7 +193,7 @@ struct ArtifactsScreen: View {
       ForEach(model.notices, id: \.self) { notice in
         Text(notice).font(AglynFont.caption).foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
       }
       if !kind.kindChoices.isEmpty {
         AglynChipRow(kind.kindChoices.map { AglynChipOption($0.value ?? "all", $0.label) }, selected: model.kindFilter ?? "all") {
@@ -201,7 +201,7 @@ struct ArtifactsScreen: View {
         }
       }
       if dialog == nil, let notice = runner.notice {
-        AglynNotice(notice, tone: .success) { runner.clear() }.padding(.horizontal, AglynSpace.two)
+        AglynNotice(notice, tone: .success) { runner.clear() }.aglynContentEdges()
       }
       rows(selectable: selectable)
     }

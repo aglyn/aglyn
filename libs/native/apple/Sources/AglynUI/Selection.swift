@@ -131,12 +131,15 @@ public enum AglynRowDensity: Sendable {
     #endif
   }
 
-  /// The gap between the highlight and the column edge.
-  var inset: CGFloat {
+  /// The row's insets in its list. A sidebar row keeps its gap between the highlight and the column's edge; a content
+  /// list row's content sits on the column's content edges (`AglynContentInsets`), its highlight reaching `horizontal`
+  /// past them.
+  var insets: EdgeInsets {
+    if self == .list { return AglynContentInsets.listRow(padding: horizontal, vertical: 1) }
     #if os(macOS)
-      self == .sidebar ? 8 : 6
+      return EdgeInsets(top: 1, leading: 8, bottom: 1, trailing: 8)
     #else
-      self == .sidebar ? 10 : 8
+      return EdgeInsets(top: 1, leading: 10, bottom: 1, trailing: 10)
     #endif
   }
 }
@@ -240,7 +243,7 @@ extension View {
   ) -> some View {
     Button(action: action) { self }
       .buttonStyle(AglynSelectableRowStyle(selected: selected, density: density))
-      .listRowInsets(EdgeInsets(top: 1, leading: density.inset, bottom: 1, trailing: density.inset))
+      .listRowInsets(density.insets)
       .listRowBackground(Color.clear)
       .listRowSeparator(.hidden)
       .accessibilityAddTraits(selected ? [.isSelected] : [])

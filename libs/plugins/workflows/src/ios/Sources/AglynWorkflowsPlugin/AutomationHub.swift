@@ -98,7 +98,7 @@ struct AutomationHubScreen: View {
                 ForEach(sections) { Text($0.shortTitle).tag($0) }
               }
               .pickerStyle(.segmented)
-              .padding(.horizontal, AglynSpace.two)
+              .aglynContentEdges()
               .padding(.vertical, AglynSpace.one)
               .background(.bar)
               .accessibilityIdentifier("automation-sections")

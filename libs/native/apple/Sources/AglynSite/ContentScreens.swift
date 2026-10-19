@@ -206,7 +206,7 @@ private struct CollectionEntries: View {
       Picker("Collection", selection: Binding(get: { collection.id }, set: { picked = $0 })) {
         ForEach(collections) { Text("\($0.name) (/\($0.slug))").tag($0.id) }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.top, AglynSpace.one)
       .accessibilityIdentifier("collection-picker")
       AglynChipRow(
@@ -214,7 +214,7 @@ private struct CollectionEntries: View {
         selected: model.status ?? "all"
       ) { model.status = $0 == "all" ? nil : $0 }
       if let notice = env.runner.notice {
-        AglynNotice(notice, tone: .success) { env.runner.clear() }.padding(.horizontal, AglynSpace.two)
+        AglynNotice(notice, tone: .success) { env.runner.clear() }.aglynContentEdges()
       }
       rows(selectable: selectable)
     }

@@ -100,7 +100,7 @@ struct RecordsSection: View {
           AglynChoiceChip(filter.label, selected: filterID == filter.id) { filterID = filter.id }
         }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
     }
   }
@@ -847,7 +847,7 @@ struct CreateRecordSheet: View {
           }
           Picker("Stage", selection: $stageID) { ForEach(pipeline.openStages) { Text($0.name).tag($0.id) } }
         }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .onAppear {
           if pipelineID.isEmpty { pipelineID = pipeline.id }
           if stageID.isEmpty { stageID = pipeline.openStages.first?.id ?? "" }

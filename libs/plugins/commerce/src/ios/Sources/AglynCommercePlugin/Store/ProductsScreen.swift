@@ -115,16 +115,16 @@ struct ProductsScreen: View {
       ProductsZone(context: context, slot: commerceProductsHubSlot)
       if created != nil {
         AglynNotice("Product added.", tone: .success) { created = nil }
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
       }
       // Products listed before they have a price (AGL-3676): the one step left before the store sells them.
       if let notice = comingSoonNotice(model.rows.filter { $0.status == "active" && $0.priceMissing }.map(\.name)) {
-        AglynNotice(notice, tone: .info).padding(.horizontal, AglynSpace.two)
+        AglynNotice(notice, tone: .info).aglynContentEdges()
       }
       content(selectable: selectable)
       // The cap, standing rather than only on refusal (AGL-2113).
       AglynQuotaReadout(ready: quota.ready, used: quota.used, limit: quota.limit, noun: "product")
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
         .frame(maxWidth: .infinity, alignment: .leading)
     }

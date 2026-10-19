@@ -7,14 +7,13 @@ import AglynPluginHost
 import AglynUI
 import SwiftUI
 
-/// Wraps an editor's Form: readable width on a wide window, the list look, the toast.
+/// Wraps an editor's Form: the column's full width, the list look, the toast.
 struct EditorFrame<Content: View>: View {
   @ViewBuilder let content: () -> Content
 
   var body: some View {
     content()
       .formStyle(.grouped)
-      .frame(maxWidth: 820)
       .frame(maxWidth: .infinity)
       .aglynListBackground()
   }

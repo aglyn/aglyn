@@ -312,8 +312,8 @@ public struct AglynRecordForm<Content: View>: View {
       List {
         content
           .listRowSeparator(.hidden)
-          // A list row adds 4 of its own, so the content lands 40 from the column's edges (Figma 13:483).
-          .listRowInsets(EdgeInsets(top: 0, leading: 36, bottom: 0, trailing: 36))
+          // On the column's content edges, as every column's (`AglynContentInsets`).
+          .listRowInsets(AglynContentInsets.listRow())
           .listRowBackground(Color.clear)
       }
       .listStyle(.plain)

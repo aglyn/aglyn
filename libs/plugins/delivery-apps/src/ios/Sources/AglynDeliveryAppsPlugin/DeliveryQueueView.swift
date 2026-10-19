@@ -71,7 +71,7 @@ struct DeliveryQueueView: View {
     }
     .padding(AglynSpace.two)
     .aglynCardSurface()
-    .padding(.horizontal, AglynSpace.two)
+    .aglynContentEdges()
     .padding(.vertical, AglynSpace.one)
     .confirmationDialog(
       model.rejecting.map { "Reject \($0.serviceLabel) \($0.externalRef)?" } ?? "Reject order?",

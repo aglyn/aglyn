@@ -225,7 +225,7 @@ struct EventsScreen: View {
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       if let (text, tone) = notice { AglynNotice(text, tone: tone) { notice = nil }.padding(AglynSpace.two) }
-      if events.full { AglynNotice("Showing the newest \(eventCeiling) events.", tone: .info).padding(.horizontal, AglynSpace.two) }
+      if events.full { AglynNotice("Showing the newest \(eventCeiling) events.", tone: .info).aglynContentEdges() }
       if let rows = events.rows {
         if events.failed && rows.isEmpty {
           AglynEmptyState("Could not load this site's events", systemImage: "exclamationmark.triangle")

@@ -66,9 +66,9 @@ struct BrowseScreen: View {
         // The sections span the window over both columns, so the browse list keeps its column to itself.
         VStack(spacing: 0) {
           SectionTabs(context: context, current: marketplaceBrowseScreen)
-            .frame(maxWidth: 640)
-            .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: 640, alignment: .leading)
+            .aglynContentEdges().padding(.vertical, AglynSpace.one)
+            .frame(maxWidth: .infinity, alignment: .leading)
           Divider()
           AglynListDetailColumns(listWidth: 400, showsDetail: !(list.ready && list.rows.isEmpty)) {
             shelf(selectable: true)
@@ -120,7 +120,7 @@ struct BrowseScreen: View {
     VStack(spacing: 0) {
       if !selectable {
         SectionTabs(context: context, current: marketplaceBrowseScreen)
-          .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
+          .aglynContentEdges().padding(.vertical, AglynSpace.one)
       }
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: AglynSpace.one) {
@@ -139,7 +139,7 @@ struct BrowseScreen: View {
           .help("Order the listings")
           .accessibilityIdentifier("marketplace-sort")
         }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
       }
       // The home: New and Popular as preview cards, while nothing is searched or picked.
@@ -147,7 +147,7 @@ struct BrowseScreen: View {
         VStack(alignment: .leading, spacing: AglynSpace.one) {
           shelfRow("New", newest.rows)
           shelfRow("Popular", popular.rows)
-          Text("All listings").font(AglynFont.headline).padding(.horizontal, AglynSpace.two).padding(.top, AglynSpace.one)
+          Text("All listings").font(AglynFont.headline).aglynContentEdges().padding(.top, AglynSpace.one)
         }
         .accessibilityIdentifier("marketplace-home")
       }
@@ -161,7 +161,7 @@ struct BrowseScreen: View {
   private func shelfRow(_ title: String, _ rows: [ListingRow]) -> some View {
     if !rows.isEmpty {
       VStack(alignment: .leading, spacing: 6) {
-        Text(title).font(AglynFont.headline).padding(.horizontal, AglynSpace.two)
+        Text(title).font(AglynFont.headline).aglynContentEdges()
         ScrollView(.horizontal, showsIndicators: false) {
           HStack(spacing: AglynSpace.oneAndHalf) {
             ForEach(rows) { row in
@@ -170,7 +170,7 @@ struct BrowseScreen: View {
               }
             }
           }
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
         }
       }
     }
@@ -700,10 +700,10 @@ struct InstalledScreen: View {
     let site = sitePins.state.value.map { $0.map { InstallPinRow($0, scope: .host) } }
     let org = orgPins.state.value.map { $0.map { InstallPinRow($0, scope: .org) } }
     VStack(spacing: 0) {
-      SectionTabs(context: context, current: marketplaceInstalledScreen).padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
+      SectionTabs(context: context, current: marketplaceInstalledScreen).aglynContentEdges().padding(.vertical, AglynSpace.one)
       if removing == nil {
-        if let notice = runner.notice { AglynNotice(notice, tone: .success) { runner.clear() }.padding(.horizontal, AglynSpace.two) }
-        if let error = runner.error { AglynNotice(error, tone: .error) { runner.clear() }.padding(.horizontal, AglynSpace.two) }
+        if let notice = runner.notice { AglynNotice(notice, tone: .success) { runner.clear() }.aglynContentEdges() }
+        if let error = runner.error { AglynNotice(error, tone: .error) { runner.clear() }.aglynContentEdges() }
       }
       if let site, let org {
         if site.isEmpty && org.isEmpty {
@@ -795,7 +795,7 @@ struct LicencesScreen: View {
     let heldRows = held.state.value.map { $0.map(LicenceRow.init) }
     let mineRows = mine.state.value.map { $0.map(LicenceRow.init) }
     VStack(spacing: 0) {
-      SectionTabs(context: context, current: marketplaceLicencesScreen).padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
+      SectionTabs(context: context, current: marketplaceLicencesScreen).aglynContentEdges().padding(.vertical, AglynSpace.one)
       List {
         Section {
           AglynNotice(

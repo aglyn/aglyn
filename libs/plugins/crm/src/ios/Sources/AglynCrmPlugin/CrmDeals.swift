@@ -40,7 +40,7 @@ struct DealsSection: View {
           Label("List", systemImage: "list.bullet").tag(false)
         }
         .pickerStyle(.segmented)
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .accessibilityIdentifier("deals-view")
         if showBoard {
           DealsBoard(context: context, scope: scope, api: api, reference: reference)
@@ -66,9 +66,9 @@ struct DealsBoard: View {
     VStack(spacing: 0) {
       if reference.activePipelines.count > 1 {
         Picker("Pipeline", selection: $pipelineID) { ForEach(reference.activePipelines) { Text($0.name).tag($0.id) } }
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
       }
-      if let error { AglynNotice(error, tone: .error) { self.error = nil }.padding(.horizontal, AglynSpace.two) }
+      if let error { AglynNotice(error, tone: .error) { self.error = nil }.aglynContentEdges() }
       if let list, list.ready {
         if list.rows.isEmpty {
           AglynEmptyState("No deals in \(pipeline.name) yet", systemImage: "dollarsign.circle", message: "Add a deal from the list, or convert a lead with one.")

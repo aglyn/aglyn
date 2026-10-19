@@ -87,7 +87,7 @@ struct MarketingHubScreen: View {
               .fixedSize()
               Spacer(minLength: 0)
             }
-            .padding(.horizontal, AglynSpace.two)
+            .aglynContentEdges()
             .padding(.vertical, AglynSpace.one)
           }
           CampaignsSection(context: context, actions: actions, access: access, initial: initial)
@@ -522,7 +522,7 @@ struct ConversionsSection: View {
             AglynChoiceChip("From the web", selected: channel == "web") { channel = "web" }
           }
         }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
       }
       AglynLiveList(
@@ -561,7 +561,7 @@ struct OverlaysSection: View {
   var body: some View {
     let rows = list.rows.filter { $0.data["deletedAt"] == nil }.sorted { ($0.order, $0.title.lowercased()) < ($1.order, $1.title.lowercased()) }
     VStack(spacing: 0) {
-      if let notice { AglynNotice(notice, tone: .error) { self.notice = nil }.padding(.horizontal, AglynSpace.two) }
+      if let notice { AglynNotice(notice, tone: .error) { self.notice = nil }.aglynContentEdges() }
       AglynLiveList(
         rows: rows, ready: list.ready, failure: list.failure, hasMore: false, failedTitle: "Could not load overlays",
         emptyTitle: "No overlays yet", emptyMessage: "An announcement bar across the top, or a popup, shown on the pages you pick.",

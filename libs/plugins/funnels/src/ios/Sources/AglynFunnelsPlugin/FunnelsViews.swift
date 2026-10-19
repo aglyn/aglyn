@@ -100,7 +100,7 @@ struct FunnelsScreen: View {
           if let notice = editor.notice { AglynNotice(notice, tone: .success) { editor.notice = nil } }
         }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
     }
     .sheet(isPresented: Binding(get: { editor?.draft != nil }, set: { if !$0 { editor?.close() } })) {
       if let editor { FunnelEditorSheet(editor: editor) }

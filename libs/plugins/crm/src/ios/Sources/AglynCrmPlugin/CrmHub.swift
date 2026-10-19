@@ -181,7 +181,7 @@ struct CrmHubScreen: View {
               AglynChoiceChip(item.label, systemImage: item.symbol, selected: section == item) { section = item }
             }
           }
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
           .padding(.vertical, AglynSpace.one)
         }
         .accessibilityIdentifier("crm-sections")
@@ -233,7 +233,7 @@ struct CrmCreateSitePick: View {
         .accessibilityIdentifier("crm-create-site")
         Spacer(minLength: 0)
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.bottom, AglynSpace.one)
     }
   }

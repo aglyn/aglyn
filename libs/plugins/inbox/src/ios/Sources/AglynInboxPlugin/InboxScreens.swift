@@ -118,17 +118,18 @@ struct PeopleScreen: View {
       .pickerStyle(.segmented)
       .labelsHidden()
       .frame(maxWidth: 420)
-      .padding(.horizontal, AglynSpace.two)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .aglynContentEdges()
       .padding(.top, AglynSpace.two)
       .disabled(wholeWorkspace)
       if wholeWorkspace {
         Text("Every site's leads, newest first. Members sign up to one site each — choose a site to list its members.")
           .font(AglynFont.subheadline).foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
       }
       Spacer().frame(height: AglynSpace.one)
-      if let error { AglynNotice(error, tone: .error) { self.error = nil }.padding(.horizontal, AglynSpace.two) }
+      if let error { AglynNotice(error, tone: .error) { self.error = nil }.aglynContentEdges() }
       // The rows, or the empty state centered in all the room under the picker (never a box floating mid-window).
       Group { if tab == "members" { membersList } else { leadsList } }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

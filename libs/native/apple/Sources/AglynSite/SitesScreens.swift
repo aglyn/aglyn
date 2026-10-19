@@ -135,8 +135,8 @@ struct SitesScreen: View {
               .contentShape(Rectangle())
             }
             .buttonStyle(.aglynRow)
-            .aglynListRow()
-            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+            // On the content edges, the favicon on E and the chevron on width − E, a hairline between rows (Figma 13:3).
+            .aglynContentRow(separator: row.id != rows.last?.id || model.hasMore)
             .accessibilityIdentifier("site-\(row.id)")
           }
           if model.hasMore { AglynLoadMoreRow("Show more sites") { model.loadMore() } }
@@ -163,7 +163,7 @@ struct SiteListRow: View {
     // membership row's copy of it.
     let favicon = siteFavicon(doc) ?? row.favicon
     // Figma List/Site row 36:826: a 36-point favicon, the name at 14 semibold over the address at 12, then the chips and
-    // when it was edited; 62 points tall with 12/16 padding and 14 between.
+    // when it was edited; 62 points tall, 12 above and below and 14 between, its sides on the content edges.
     HStack(spacing: 14) {
       AglynBrandPicture(
         mediaPreviewURL(favicon, origin: context.api.origin, hostID: row.id, width: 96), size: 36, cornerRadius: 8

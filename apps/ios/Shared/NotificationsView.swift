@@ -290,7 +290,7 @@ struct NotificationsView: View {
           Button("Clear") { filter.types = [] }.buttonStyle(.borderless)
         }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
     }
   }
@@ -308,7 +308,7 @@ struct NotificationsView: View {
     VStack(spacing: 0) {
       filterBar
       if let (text, tone) = notice {
-        AglynNotice(text, tone: tone) { notice = nil }.padding(.horizontal, AglynSpace.two)
+        AglynNotice(text, tone: tone) { notice = nil }.aglynContentEdges()
       }
       Group {
         if let rows = feed.rows {
@@ -390,6 +390,7 @@ struct NotificationsView: View {
 struct NotificationDetail: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
+  @Environment(\.aglynWideChrome) private var wide
   let row: FeedNotification
 
   var body: some View {
@@ -423,10 +424,11 @@ struct NotificationDetail: View {
         }
       }
       .padding(AglynSpace.three)
-      .frame(maxWidth: 720, alignment: .leading)
+      .frame(maxWidth: .infinity, alignment: .leading)
       .aglynCardSurface()
-      .padding(AglynSpace.two)
-      .frame(maxWidth: .infinity)
+      // The card fills the detail column, on its content edges (no capped column).
+      .padding(.horizontal, wide ? AglynContentInsets.horizontal : AglynContentInsets.phone)
+      .padding(.vertical, AglynSpace.two)
     }
     .aglynListBackground()
     .accessibilityIdentifier("notification-detail")

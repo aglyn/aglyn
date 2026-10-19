@@ -48,7 +48,7 @@ struct MediaScreen: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .padding(.horizontal, AglynSpace.two)
+            .aglynContentEdges()
             .padding(.top, AglynSpace.one)
             .accessibilityIdentifier("media-tabs")
           }
@@ -325,7 +325,7 @@ struct MediaLibrary: View {
           }
       }
     }
-    .padding(.horizontal, AglynSpace.two)
+    .aglynContentEdges()
     .padding(.bottom, AglynSpace.one)
   }
 
@@ -389,7 +389,7 @@ struct MediaLibrary: View {
           .font(AglynFont.caption).foregroundStyle(.secondary)
           .accessibilityLabel("Sorted by \(ContractValues.shared.mediaSortLabels[model.sort.rawValue] ?? "")")
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.top, AglynSpace.one)
       AglynChipRow(
         mediaTypeChoices().map { AglynChipOption($0.value ?? "all", $0.label) }, selected: model.type ?? "all"
@@ -397,12 +397,12 @@ struct MediaLibrary: View {
       if scopeTokens != nil && !model.search.isEmpty {
         Text(ContractValues.shared.mediaScopedSearchNotice)
           .font(AglynFont.caption).foregroundStyle(.secondary)
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
       }
       ForEach(model.notices, id: \.self) { notice in
         Text(notice)
           .font(AglynFont.caption).foregroundStyle(AglynColor.error)
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
           .accessibilityIdentifier("media-filter-notice")
       }
     }

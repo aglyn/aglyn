@@ -77,7 +77,7 @@ public struct MediaChooserSheet: View {
           }
           .pickerStyle(.segmented)
           .labelsHidden()
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
           .padding(.vertical, AglynSpace.one)
         }
         if let scope {
@@ -204,7 +204,7 @@ private struct MediaChooserGrid: View {
           AglynNotice(error, tone: .error) { runner.clear() }.accessibilityIdentifier("chooser-upload-error")
         }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
     }
     .toolbar {
       ToolbarItem(placement: .primaryAction) {

@@ -166,7 +166,7 @@ struct BookingsCalendarScreen: View {
       toolbar
       if let booker {
         AglynNotice("Bookings for \(booker)", tone: .info) { self.booker = nil }
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
           .accessibilityIdentifier("booker-banner")
       } else if effectiveMode != .list {
         let (from, to) = calendarRange(effectiveMode, anchor: anchor)
@@ -174,7 +174,7 @@ struct BookingsCalendarScreen: View {
           title(from: from, to: to), onPrevious: { anchor = stepAnchor(effectiveMode, anchor, -1) },
           onToday: { anchor = Date() }, onNext: { anchor = stepAnchor(effectiveMode, anchor, 1) }
         )
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
       }
       Group {
@@ -231,7 +231,7 @@ struct BookingsCalendarScreen: View {
         .accessibilityIdentifier("service-filter")
       }
     }
-    .padding(.horizontal, AglynSpace.two)
+    .aglynContentEdges()
     .padding(.top, AglynSpace.one)
   }
 

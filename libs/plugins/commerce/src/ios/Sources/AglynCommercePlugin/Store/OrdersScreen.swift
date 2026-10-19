@@ -284,10 +284,10 @@ struct OrdersScreen: View {
       chips
       // Calm rule 8: no info banner at rest; the query's notice shows while a filter or search is on.
       if let notice = model.notice, filtering || !model.search.isEmpty {
-        AglynNotice(notice, tone: .info).padding(.horizontal, AglynSpace.two)
+        AglynNotice(notice, tone: .info).aglynContentEdges()
       }
       if let notice {
-        AglynNotice(notice, tone: .success) { self.notice = nil }.padding(.horizontal, AglynSpace.two)
+        AglynNotice(notice, tone: .success) { self.notice = nil }.aglynContentEdges()
       }
       // Charges a shopper's bank is disputing, whatever the list is filtered to (the console's banner).
       if disputes.summary.count > 0 {
@@ -299,14 +299,14 @@ struct OrdersScreen: View {
             Button("Show them") { model.filter = .disputes }.buttonStyle(.bordered)
           }
         }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .accessibilityIdentifier("orders-disputes")
       }
       if let done = outcome {
         AglynNotice(describeBulkFulfill(done), tone: done.refused.isEmpty && done.unknown.isEmpty ? .success : .warning) {
           outcome = nil
         }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
       }
       content(selectable: selectable)
     }

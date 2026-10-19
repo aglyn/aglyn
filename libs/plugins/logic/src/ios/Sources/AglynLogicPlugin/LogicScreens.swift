@@ -92,11 +92,11 @@ struct LogicScreen: View {
           }
           .pickerStyle(.segmented)
           .labelsHidden()
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
           .padding(.vertical, AglynSpace.one)
           .accessibilityIdentifier("logic-tabs")
           if sheet == nil, let error = runner.error {
-            AglynNotice(error, tone: .error) { runner.clear() }.padding(.horizontal, AglynSpace.two)
+            AglynNotice(error, tone: .error) { runner.clear() }.aglynContentEdges()
           }
           content(hostID, api)
         }
@@ -168,7 +168,7 @@ struct LogicScreen: View {
 
   private var cutNotice: some View {
     AglynNotice("Showing the first \(logicCeiling). Delete ones you no longer use to see the rest.", tone: .info)
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
   }
 
   private func scan(_ api: LogicAPI, _ kind: String, _ id: String, _ name: String, open: @escaping (WhereUsedResult) -> LogicSheet) {

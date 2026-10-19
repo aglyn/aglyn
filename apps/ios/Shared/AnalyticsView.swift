@@ -158,6 +158,7 @@ final class AnalyticsModel {
 struct AnalyticsView: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
+  @Environment(\.aglynWideChrome) private var wide
   @State private var analytics = AnalyticsModel()
   @State private var range = 14
   @State private var pagesRange = 14
@@ -179,9 +180,10 @@ struct AnalyticsView: View {
           }
         }
       }
-      .padding(AglynSpace.two)
-      .frame(maxWidth: 1180)
-      .frame(maxWidth: .infinity)
+      // Its cards fill the column, on the content edges on the Mac and iPad (no capped column).
+      .padding(.horizontal, wide ? AglynContentInsets.horizontal : AglynContentInsets.phone)
+      .padding(.vertical, AglynSpace.two)
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
     .aglynListBackground()
     .navigationTitle("Analytics")

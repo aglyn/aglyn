@@ -264,7 +264,7 @@ private struct RecordsBody: View {
           clauses: model.clauses, refused: model.plan.refused, notices: model.plan.notices
         ) { model.setFilters($0) }
       }
-      .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
+      .aglynContentEdges().padding(.vertical, AglynSpace.one)
       content(selectable: selectable)
     }
     .background(AglynColor.page)

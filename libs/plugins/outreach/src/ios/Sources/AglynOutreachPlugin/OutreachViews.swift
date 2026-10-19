@@ -153,7 +153,7 @@ struct SequencesSection: View {
             AglynChoiceChip(sequenceStatusLabels[value] ?? value, selected: status == value) { status = value }
           }
         }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
       }
       if selectable && list.ready && list.failure == nil && !list.rows.isEmpty {
@@ -582,7 +582,7 @@ struct MailboxesSection: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.padding(.horizontal, AglynSpace.two) }
+      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.aglynContentEdges() }
       AglynLiveList(
         rows: list.rows, ready: list.ready, failure: list.failure, hasMore: false, failedTitle: "Could not load mailboxes",
         emptyTitle: "No mailboxes yet", emptyMessage: "A sequence sends from a connected Google or Microsoft mailbox.", systemImage: "tray.full",
