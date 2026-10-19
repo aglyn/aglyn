@@ -17,15 +17,17 @@
 
 import { subscribePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import { registerPluginFulfillmentProvider } from '@aglyn/aglyn/plugin-manager/plugin-fulfillment-providers'
+import { ORDER_CANCELLED_EVENT, ORDER_PAID_EVENT, ORDER_REFUNDED_EVENT } from '@aglyn/plugins-commerce/contracts'
 import { FULFILLMENT_NETWORKS_PLUGIN_ID } from './constants'
 import { NETWORK_PROVIDER_IDS, NETWORK_PROVIDERS } from './model/networks'
 
 /**
  * The plugin's SERVER declarations (AGL-3634), loaded by both apps' servers:
  *
- * - commerce's order events, by the names commerce raises them under. The
- *   outbox drains in the tenant, so the subscribers live here, and they only
- *   QUEUE (`server/intake.ts`): no grant, no network call;
+ * - commerce's order events, by the tokens in commerce's contracts
+ *   (AGL-3980). The outbox drains in the tenant, so the subscribers live
+ *   here, and they only QUEUE (`server/intake.ts`): no grant, no network
+ *   call;
  * - each network as an outside fulfiller on core's
  *   `core.fulfillment-providers`, so a label buyer, another fulfiller and
  *   the merchant see which units a network holds.
@@ -33,7 +35,11 @@ import { NETWORK_PROVIDER_IDS, NETWORK_PROVIDERS } from './model/networks'
  * Light at boot: every body is imported when it is first called.
  */
 
-export const FULFILLMENT_NETWORKS_SUBSCRIBED_EVENTS = ['order.paid', 'order.cancelled', 'order.refunded'] as const
+export const FULFILLMENT_NETWORKS_SUBSCRIBED_EVENTS = [
+  ORDER_PAID_EVENT.id,
+  ORDER_CANCELLED_EVENT.id,
+  ORDER_REFUNDED_EVENT.id,
+] as const
 
 async function intake() {
   const [module, { defaultIntakeDeps }] = await Promise.all([import('./server/intake'), import('./server/intake-deps')])
@@ -43,26 +49,26 @@ async function intake() {
 export function registerFulfillmentNetworksServerDeclarations(): void {
   const owner = { pluginId: FULFILLMENT_NETWORKS_PLUGIN_ID }
   subscribePluginDomainEvent(
-    'order.paid',
+    ORDER_PAID_EVENT,
     async (envelope) => {
       const { module, deps } = await intake()
-      await module.onOrderPaid(deps, envelope as never)
+      await module.onOrderPaid(deps, envelope)
     },
     owner,
   )
   subscribePluginDomainEvent(
-    'order.cancelled',
+    ORDER_CANCELLED_EVENT,
     async (envelope) => {
       const { module, deps } = await intake()
-      await module.onOrderCancelled(deps, envelope as never)
+      await module.onOrderCancelled(deps, envelope)
     },
     owner,
   )
   subscribePluginDomainEvent(
-    'order.refunded',
+    ORDER_REFUNDED_EVENT,
     async (envelope) => {
       const { module, deps } = await intake()
-      await module.onOrderRefunded(deps, envelope as never)
+      await module.onOrderRefunded(deps, envelope)
     },
     owner,
   )

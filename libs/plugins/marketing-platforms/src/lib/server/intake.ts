@@ -16,6 +16,12 @@
  */
 
 import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type {
+  CheckoutStartedEventPayload,
+  OrderEventOrder,
+  OrderFulfilledEventPayload,
+  OrderRefundedEventPayload,
+} from '@aglyn/plugins-commerce/contracts'
 import type { MarketingEvent, MarketingEventItem, MarketingEventName } from '../providers/provider'
 import type { ConnectionStore } from './store'
 
@@ -26,13 +32,21 @@ import type { ConnectionStore } from './store'
  * order event commerce raises through core's domain-event outbox (AGL-3611)
  * is turned into the plugin's own {@link MarketingEvent} and written once per
  * active connection on the site that takes events; the console job delivers
- * them. It reads only the payload's public order view — never commerce's
- * code — so the shapes below are the outbox's words, read defensively.
+ * them. It reads only the payload's public order view, whose shape comes
+ * from commerce's contracts (AGL-3980), and reads it defensively.
  *
  * The event id is the outbox envelope's, so a redelivered envelope is the
  * same owed event (the store's create is the dedupe) and the same event at
  * the provider (its unique id).
  */
+
+/**
+ * What the subscribed events carry, any of them: a checkout, or an order with
+ * the fulfillment or refund its event names.
+ */
+export type MarketingEnvelopePayload = Partial<
+  CheckoutStartedEventPayload & OrderFulfilledEventPayload & OrderRefundedEventPayload
+>
 
 /** The domain events this plugin takes, and what each is called in its own words. */
 export const MARKETING_SUBSCRIBED_EVENTS: Readonly<Record<string, MarketingEventName>> = {
@@ -52,6 +66,7 @@ const text = (value: unknown): string | null => (typeof value === 'string' && va
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+// Commerce types an order's `lineItems` as `unknown`; the line fields read here are this plugin's own reading.
 function items(lines: unknown, unitKey: 'unitAmountCents' | 'unitCents'): MarketingEventItem[] {
   if (!Array.isArray(lines)) return []
   return lines.slice(0, 100).flatMap((line: any) => {
@@ -74,54 +89,55 @@ function items(lines: unknown, unitKey: 'unitAmountCents' | 'unitCents'): Market
  * One envelope in the plugin's words, or `null` for one it does not take: an
  * event it does not subscribe to, or one with no address to attach it to.
  */
-export function marketingEventFromEnvelope(envelope: PluginDomainEventEnvelope<unknown>): MarketingEvent | null {
+export function marketingEventFromEnvelope(
+  envelope: PluginDomainEventEnvelope<MarketingEnvelopePayload>,
+): MarketingEvent | null {
   const name = MARKETING_SUBSCRIBED_EVENTS[envelope.event]
   if (!name) return null
-  const payload = (envelope.payload ?? {}) as Record<string, any>
+  const payload: MarketingEnvelopePayload = envelope.payload ?? {}
 
   if (name === 'checkout.started') {
-    const checkout = (payload['checkout'] ?? {}) as Record<string, any>
-    const email = String(checkout['email'] ?? '').trim().toLowerCase()
+    const checkout: Partial<CheckoutStartedEventPayload['checkout']> = payload.checkout ?? {}
+    const email = String(checkout.email ?? '').trim().toLowerCase()
     if (!EMAIL.test(email)) return null
     return {
       id: envelope.id,
       name,
       email,
       occurredAtMs: envelope.occurredAtMs,
-      currency: (text(checkout['currency']) ?? 'usd').toUpperCase(),
-      valueCents: cents(checkout['itemsCents']),
+      currency: (text(checkout.currency) ?? 'usd').toUpperCase(),
+      valueCents: cents(checkout.itemsCents),
       orderId: null,
       orderNumber: null,
-      checkoutUrl: text(checkout['resumeUrl']),
-      items: items(checkout['items'], 'unitCents'),
+      checkoutUrl: text(checkout.resumeUrl),
+      items: items(checkout.items, 'unitCents'),
       tracking: null,
     }
   }
 
-  const order = (payload['order'] ?? {}) as Record<string, any>
-  const email = String(order['customerEmail'] ?? '').trim().toLowerCase()
+  const order: Partial<OrderEventOrder> = payload.order ?? {}
+  const email = String(order.customerEmail ?? '').trim().toLowerCase()
   if (!EMAIL.test(email)) return null
-  const totals = (order['totals'] ?? {}) as Record<string, unknown>
-  const refund = payload['refund'] as Record<string, unknown> | undefined
-  const fulfillment = payload['fulfillment'] as Record<string, unknown> | undefined
-  const valueCents =
-    name === 'order.refunded' ? cents(refund?.['amountCents']) : cents(totals['totalCents'] ?? totals['itemsCents'])
+  const totals: Partial<OrderEventOrder['totals']> = order.totals ?? {}
+  const refund = payload.refund
+  const fulfillment = payload.fulfillment
+  const valueCents = name === 'order.refunded' ? cents(refund?.amountCents) : cents(totals.totalCents ?? totals.itemsCents)
   return {
     id: envelope.id,
     name,
     email,
     occurredAtMs: envelope.occurredAtMs,
-    currency: (text(order['currency']) ?? 'usd').toUpperCase(),
+    currency: (text(order.currency) ?? 'usd').toUpperCase(),
     valueCents,
-    orderId: text(order['id']),
-    orderNumber: typeof order['number'] === 'number' ? `#${order['number']}` : null,
+    orderId: text(order.id),
+    orderNumber: typeof order.number === 'number' ? `#${order.number}` : null,
     checkoutUrl: null,
-    items: items(order['lineItems'], 'unitAmountCents'),
+    items: items(order.lineItems, 'unitAmountCents'),
     tracking: fulfillment
       ? {
-          carrier: text(fulfillment['carrier']),
-          number: text(fulfillment['trackingNumber']),
-          url: text(fulfillment['trackingUrl']),
+          carrier: text(fulfillment.carrier),
+          number: text(fulfillment.trackingNumber),
+          url: text(fulfillment.trackingUrl),
         }
       : null,
   }
@@ -143,7 +159,7 @@ export interface IntakeDeps {
  */
 export async function intakeMarketingEvent(
   deps: IntakeDeps,
-  envelope: PluginDomainEventEnvelope<unknown>,
+  envelope: PluginDomainEventEnvelope<MarketingEnvelopePayload>,
 ): Promise<number> {
   const event = marketingEventFromEnvelope(envelope)
   if (!event || !envelope.hostId) return 0

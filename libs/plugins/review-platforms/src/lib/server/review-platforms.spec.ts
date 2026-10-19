@@ -19,6 +19,12 @@
  */
 
 import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type {
+  OrderEventFulfillment,
+  OrderEventOrder,
+  OrderEventPayload,
+  OrderFulfilledEventPayload,
+} from '@aglyn/plugins-commerce/contracts'
 import {
   registerPluginOrderEmailCopies,
   resolvePluginOrderEmailCopies,
@@ -33,8 +39,6 @@ import {
   invitationRef,
   sendOrderToYotpo,
   trustpilotEmailCopy,
-  type OrderEventPayload,
-  type OrderFulfilledPayload,
 } from './invitations'
 import { orderRoute, settingsRoute } from './routes'
 
@@ -156,10 +160,12 @@ const BCC = 'candles.example+a1b2c3@invite.trustpilot.com'
 const BUSINESS_UNIT = '5d3f8a2b9c1e4f0012345678'
 const YOTPO_APP_KEY = 'AbCdEf0123456789'
 
-const ORDER = {
+const ORDER: OrderEventOrder = {
   id: 'cs_live_1',
+  object: 'order',
   number: 1042,
   status: 'fulfilled',
+  channel: 'online',
   livemode: true,
   currency: 'usd',
   customerEmail: 'ann@example.com',
@@ -168,9 +174,21 @@ const ORDER = {
     { productId: 'lamp', name: 'Lamp', sku: 'L-1', quantity: 2, unitAmountCents: 10_000 },
     { productId: 'pdf', name: 'Guide', quantity: 1, unitAmountCents: 500 },
   ],
-  totals: { totalCents: 20_500 },
+  totals: { itemsCents: 20_500, shippingCents: 0, taxCents: 0, discountCents: 0, totalCents: 20_500, feeCents: 0 },
   refundedCents: 0,
+  taxMode: 'none',
   created: '2026-10-06T15:00:00.000Z',
+}
+
+const FULFILLMENT: OrderEventFulfillment = {
+  id: 'f_1',
+  lines: [{ lineItemId: 0, quantity: 2 }],
+  carrier: null,
+  trackingNumber: null,
+  trackingUrl: null,
+  labelUrl: null,
+  labelCostCents: null,
+  at: '2026-10-07T12:00:00.000Z',
 }
 
 function envelope<P>(event: string, payload: P, id = `${event}:1`): PluginDomainEventEnvelope<P> {
@@ -441,7 +459,7 @@ describe('Yotpo Reviews', () => {
   })
 
   const fulfilled = (order = ORDER) =>
-    envelope<OrderFulfilledPayload>('order.fulfilled', { order, fulfillment: { id: 'f_1', at: '2026-10-07T12:00:00.000Z' } })
+    envelope<OrderFulfilledEventPayload>('order.fulfilled', { order, fulfillment: FULFILLMENT })
 
   it('creates each product, then the order with a successful fulfillment, once', async () => {
     await sendOrderToYotpo(fulfilled())
