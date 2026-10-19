@@ -67,6 +67,9 @@ const DOORS = [
   'tools/scripts/seed-e2e.mjs',
   'tools/scripts/lib/seed-demo.mjs',
   'tools/scripts/seed-marketing-screens.mjs',
+  // The managed landing page (AGL-3960): one page under Landing pages,
+  // created beside its campaign and form.
+  'tools/scripts/publish-managed-landing-page.mjs',
   'tools/e2e/capture-docs-shots.mjs',
   'tools/e2e/starter-root-wire.mjs',
   'tools/e2e/dam-replace-and-video.e2e.mjs',
