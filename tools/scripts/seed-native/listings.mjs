@@ -25,7 +25,7 @@ import { listingQueryFields } from '../lib/listing-query-fields.mjs'
 
 const DAY = 24 * 60 * 60_000
 
-export async function seedMarketplace({ put, orgId, now: date }) {
+export async function seedListings({ put, orgId, now: date }) {
   const now = date.getTime()
   const studio = 'seed-publisher-fernhill'
   await put(`publisherProfiles/${studio}`, {

@@ -172,7 +172,7 @@ const areas = [
   ['ai-jobs', 'seedAiJobs'],
   ['sequences', 'seedSequences'],
   ['accounting', 'seedAccounting'],
-  ['marketplace', 'seedMarketplace'],
+  ['listings', 'seedListings'],
 ]
 let staff = null
 for (const [file, name] of areas) {
