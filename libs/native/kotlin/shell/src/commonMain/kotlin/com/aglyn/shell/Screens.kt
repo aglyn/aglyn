@@ -320,6 +320,8 @@ internal fun SettingsScreen(
       modifier = Modifier.testTag("settings-notifications"),
     )
     HorizontalDivider()
+    HelpSection(services.config)
+    HorizontalDivider()
     Column(Modifier.padding(space(2f)).widthIn(max = 480.dp).fillMaxWidth()) {
       OutlinedButton(onClick = { scope.launch { services.signOut() } }, modifier = Modifier.fillMaxWidth().testTag("sign-out")) {
         Text("Sign out")

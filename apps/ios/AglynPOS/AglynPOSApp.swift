@@ -37,6 +37,7 @@ struct AglynPOSApp: App {
       CommandGroup(after: .toolbar) {
         Button("Refresh") { model.refresh() }.keyboardShortcut("r", modifiers: .command)
       }
+      HelpCommands(model: model)
     }
 
     #if os(macOS)

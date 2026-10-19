@@ -68,6 +68,8 @@ public struct AglynConfig: Equatable, Sendable {
   public static let defaultBrandName = "Aglyn"
   /// Where the published Terms of Service and Privacy Policy live (the console's `OPERATOR_LEGAL_ORIGIN`).
   public static let defaultLegalOrigin = "https://aglyn.com"
+  /// Where the documentation lives (the console's `NEXT_PUBLIC_DOCS_ORIGIN`).
+  public static let defaultDocsOrigin = "https://docs.aglyn.com"
 
   public var app: AglynAppID
   /// The console origin every API call and WebView page is on.
@@ -92,6 +94,9 @@ public struct AglynConfig: Equatable, Sendable {
   /// The origin the sign-up's Terms of Service and Privacy Policy links point at (`AGLYN_LEGAL_ORIGIN`), the console's
   /// `LEGAL_URLS` (`<origin>/legal/terms`, `<origin>/legal/privacy`).
   public var legalOrigin: String = AglynConfig.defaultLegalOrigin
+  /// The origin the Documentation and What's new links point at (`AGLYN_DOCS_ORIGIN`), the console's
+  /// `NEXT_PUBLIC_DOCS_ORIGIN`: a self-hosted build's own documentation, never ours presented as theirs.
+  public var docsOrigin: String = AglynConfig.defaultDocsOrigin
   /// Whether Sign in with Apple is offered (`AGLYN_APPLE_SIGN_IN`): it needs the app's Sign in with Apple capability and
   /// the Firebase project's Apple provider, so a build turns it on once both exist.
   public var appleSignIn: Bool = false
@@ -102,6 +107,7 @@ public struct AglynConfig: Equatable, Sendable {
     "AGLYN_FIREBASE_MESSAGING_SENDER_ID", "AGLYN_AUTH_EMULATOR_HOST",
     "AGLYN_FIRESTORE_EMULATOR_HOST", "AGLYN_GOOGLE_IOS_CLIENT_ID", "AGLYN_GOOGLE_WEB_CLIENT_ID",
     "AGLYN_BRAND_NAME", "AGLYN_PASSKEY_RP_ID", "AGLYN_APP_CHECK", "AGLYN_LEGAL_ORIGIN", "AGLYN_APPLE_SIGN_IN",
+    "AGLYN_DOCS_ORIGIN",
   ]
 
   /// True for the hosts a local development stack runs on.
@@ -185,16 +191,20 @@ public struct AglynConfig: Equatable, Sendable {
       passkeyRelyingParty: relyingParty(env["AGLYN_PASSKEY_RP_ID"]),
       appCheck: try appCheckSetting(env["AGLYN_APP_CHECK"], localStack: localStack),
       legalOrigin: legalOriginSetting(env["AGLYN_LEGAL_ORIGIN"]),
+      docsOrigin: originSetting(env["AGLYN_DOCS_ORIGIN"], default: defaultDocsOrigin),
       appleSignIn: ["yes", "on", "true", "1"].contains(clean(env["AGLYN_APPLE_SIGN_IN"]).lowercased())
     )
   }
 
   /// An `https:` origin for the legal documents, or the default.
-  static func legalOriginSetting(_ value: String?) -> String {
+  static func legalOriginSetting(_ value: String?) -> String { originSetting(value, default: defaultLegalOrigin) }
+
+  /// An `https:` origin, or `fallback`.
+  static func originSetting(_ value: String?, default fallback: String) -> String {
     var raw = clean(value)
     while raw.hasSuffix("/") { raw.removeLast() }
     return raw.range(of: "^https://[A-Za-z0-9.-]+(:[0-9]{2,5})?$", options: .regularExpression) != nil
-      ? raw.lowercased() : defaultLegalOrigin
+      ? raw.lowercased() : fallback
   }
 
   /// Reads the `AGLYN_*` keys from a bundle's Info.plist.

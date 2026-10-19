@@ -15,24 +15,34 @@
  * limitations under the License.
  */
 
-/** AGL-3838. How an AI-built site moves: decided by its kind and seed, in code. */
+/**
+ * AGL-3838, AGL-3941. How an AI-built site moves: the motion style its look
+ * chose, else its kind's mood, turned by its seed in code.
+ */
 
 import {
   ANIMATION_EASINGS,
   ANIMATION_MAX_DURATION_MS,
   ANIMATION_MAX_STAGGER_STEP_MS,
   ANIMATION_PRESETS,
+  NODE_ANIMATION_PROPS,
   nodePropsAnimate,
 } from '@aglyn/aglyn/app-utils/element-animation'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { aiLayoutPageCheck } from '../jobs/ai-job-page-language'
+import { aiLayoutMotionSiteOf, aiLayoutPageCheck } from '../jobs/ai-job-page-language'
+import { AI_JUNIPER_PORTFOLIO_PAGE_ANSWER } from '../jobs/fixtures/ai-juniper-portfolio-page-recording'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
 import {
   AI_SITE_MOTION_KINDS,
   AI_SITE_MOTION_MOODS,
+  AI_SITE_MOTION_STYLE_RANGES,
+  AI_SITE_MOTION_STYLES,
+  AI_SITE_MOTION_SUITS,
   aiSiteMotion,
   aiSiteMotionMood,
+  aiSiteMotionStyle,
   aiWithSiteMotion,
+  type AiSiteMotionStyle,
 } from './ai-layout-motion'
 
 const SEEDS = Array.from({ length: 64 }, (_, index) => Math.imul(index + 1, 0x9e3779b1) >>> 0)
@@ -211,5 +221,223 @@ describe('a page the AI designs in the layout language moves (AGL-3838)', () => 
   it('never overwrites what an author set, so a page run through it again is left as it is', () => {
     const nodes = built({ kind: 'yoga', seed: 3, home: false })?.value?.nodes as Record<string, any>
     expect(aiWithSiteMotion(nodes, { kind: 'fitness', seed: 99 })).toBe(nodes)
+  })
+})
+
+/**
+ * The recorded Juniper Clay Studio portfolio answer (2026-10-08, see its
+ * fixture), planned with all three of the sections it gave: its hero, its
+ * six "Selected works" cards, and its inquiry — the inquiry with a picture on
+ * the left in place of the form: the split Zach pointed at on 2026-10-18, a
+ * picture beside a heading, its words and a button.
+ */
+const juniper = () => {
+  const recorded = JSON.parse(JSON.stringify(AI_JUNIPER_PORTFOLIO_PAGE_ANSWER)) as { sections: Array<Record<string, any>> }
+  const [hero, works, inquiry] = recorded.sections
+  const words = inquiry.blocks
+    .filter((entry: { kind: string }) => entry.kind !== 'form')
+    .map((entry: Record<string, unknown>) => ({ ...entry, col: 1 }))
+  const picture = { kind: 'image', col: 0, text: 'A potter trimming a stoneware vase at the wheel', to: '', style: 'none', icon: '', items: [] }
+  return { sections: [hero, works, { ...inquiry, blocks: [picture, ...words] }] }
+}
+
+describe('a site’s motion style, chosen with its look (AGL-3941)', () => {
+  const screen = {
+    title: 'Portfolio',
+    slug: '/portfolio',
+    template: null,
+    sections: [
+      { name: 'Portfolio Hero', uses: [], items: 0 },
+      { name: 'Selected works', uses: [], items: 6 },
+      { name: 'Interested in a piece', uses: [], items: 0 },
+    ],
+  }
+  const sectionIds = ['sec-0', 'sec-1', 'sec-2']
+  const build = (site: { kind?: string; seed: number; motion?: AiSiteMotionStyle }) => {
+    const result = aiLayoutPageCheck({
+      screen: screen as never,
+      sectionIds,
+      targets: { pageId: 'p0', pages: [], homeIds: [], forms: [], formPageId: null, components: [], facts: 'Juniper Clay Studio, a ceramics studio.' } as never,
+      context: { screenIds: [], formIds: [], componentIds: [], codeBuilt: true, repeatsCompiled: true, scrollTargetIds: sectionIds, reusableComponents: false },
+      reusableComponents: false,
+      design: { kind: 'portfolio', seed: site.seed, home: false },
+      motion: site,
+    })(juniper())
+    expect(result.violations).toEqual([])
+    return result.value?.nodes as Record<string, any>
+  }
+  const within = (nodes: Record<string, any>, ancestor: string, id: string): boolean => {
+    for (let at: string | null = id; at; at = nodes[at]?.parentId ?? null) if (at === ancestor) return true
+    return false
+  }
+  const motionOf = (nodes: Record<string, any>): Record<string, Record<string, unknown>> =>
+    Object.fromEntries(
+      Object.keys(nodes)
+        .filter((id) => nodePropsAnimate(nodes[id].props))
+        .sort()
+        .map((id) => [id, Object.fromEntries(NODE_ANIMATION_PROPS.filter((prop) => prop in nodes[id].props).map((prop) => [prop, nodes[id].props[prop]]))]),
+    )
+  /** The split: the inquiry section's moving blocks, those that hold its picture and those that do not. */
+  const split = (nodes: Record<string, any>) => {
+    const moving = Object.keys(nodes).filter((id) => within(nodes, 'sec-2', id) && nodePropsAnimate(nodes[id].props))
+    const holdsPicture = (id: string) => Object.keys(nodes).some((other) => within(nodes, id, other) && nodes[other].componentId === 'image')
+    return { picture: moving.filter(holdsPicture), words: moving.filter((id) => !holdsPicture(id)) }
+  }
+
+  it('keeps every style inside 400–800 ms, 60–120 ms between items, and the vocabulary; every mood suits several', () => {
+    for (const style of AI_SITE_MOTION_STYLES) {
+      const range = AI_SITE_MOTION_STYLE_RANGES[style]
+      expect(range.duration[0]).toBeGreaterThanOrEqual(400)
+      expect(range.duration[1]).toBeLessThanOrEqual(Math.min(800, ANIMATION_MAX_DURATION_MS))
+      expect(range.stagger[0]).toBeGreaterThanOrEqual(60)
+      expect(range.stagger[1]).toBeLessThanOrEqual(Math.min(120, ANIMATION_MAX_STAGGER_STEP_MS))
+      const presets = [...range.presets, ...range.media, ...(range.heroPresets ?? []), ...(range.groupPresets ?? [])]
+      for (const preset of presets) expect(ANIMATION_PRESETS).toContain(preset)
+      for (const ease of range.eases) expect(ANIMATION_EASINGS).toContain(ease)
+      for (const seed of SEEDS) {
+        const motion = aiSiteMotion({ kind: 'portfolio', seed, motion: style })
+        expect(motion.durationMs).toBeGreaterThanOrEqual(range.duration[0])
+        expect(motion.durationMs).toBeLessThanOrEqual(range.duration[1])
+        expect(motion.staggerStepMs).toBeGreaterThanOrEqual(range.stagger[0])
+        expect(motion.staggerStepMs).toBeLessThanOrEqual(range.stagger[1])
+      }
+    }
+    for (const suits of Object.values(AI_SITE_MOTION_SUITS)) {
+      expect(suits.length).toBeGreaterThanOrEqual(3)
+      for (const style of suits) expect(AI_SITE_MOTION_STYLES).toContain(style)
+    }
+    // Every style suits some mood, so the seed can draw each.
+    expect(new Set(Object.values(AI_SITE_MOTION_SUITS).flat())).toEqual(new Set(AI_SITE_MOTION_STYLES))
+  })
+
+  it('moves the same recorded page five different ways for the five styles a look can choose', () => {
+    const drawn = AI_SITE_MOTION_STYLES.map((motion) => JSON.stringify(motionOf(build({ kind: 'portfolio', seed: 42, motion }))))
+    expect(new Set(drawn).size).toBe(AI_SITE_MOTION_STYLES.length)
+    // And none of them is the portfolio's mood, which a page whose look chose nothing moves in.
+    expect(drawn).not.toContain(JSON.stringify(motionOf(build({ kind: 'portfolio', seed: 42 }))))
+  })
+
+  it('still moves two sites that chose the same style apart, by their seeds', () => {
+    for (const motion of AI_SITE_MOTION_STYLES) {
+      const drawn = new Set(SEEDS.map((seed) => JSON.stringify(aiSiteMotion({ kind: 'portfolio', seed, motion }))))
+      expect([motion, drawn.size > 4]).toEqual([motion, true])
+      expect(aiSiteMotion({ kind: 'portfolio', seed: 9, motion })).toEqual(aiSiteMotion({ kind: 'portfolio', seed: 9, motion }))
+    }
+  })
+
+  it('under "sides", brings the split’s picture in from its own side and its words from the other', () => {
+    for (const seed of SEEDS.slice(0, 16)) {
+      const nodes = build({ kind: 'portfolio', seed, motion: 'sides' })
+      const { picture, words } = split(nodes)
+      expect(picture).toHaveLength(1)
+      expect(words).toHaveLength(1)
+      // The picture is on the left, so it comes in from the left; the words from the right, a stagger step after it.
+      expect(nodes[picture[0]].props).toMatchObject({ aglynAnimation: 'slide-right', aglynAnimationTrigger: 'scroll' })
+      expect(nodes[words[0]].props).toMatchObject({ aglynAnimation: 'slide-left', aglynAnimationTrigger: 'scroll' })
+      expect(nodes[words[0]].props.aglynAnimationDelay).toBe(aiSiteMotion({ kind: 'portfolio', seed, motion: 'sides' }).staggerStepMs)
+    }
+    // No other style slides a split in from its sides.
+    for (const motion of AI_SITE_MOTION_STYLES.filter((style) => style !== 'sides')) {
+      const presets = Object.values(motionOf(build({ kind: 'portfolio', seed: 42, motion }))).map((props) => props['aglynAnimation'])
+      expect([motion, presets.filter((preset) => preset === 'slide-left' || preset === 'slide-right')]).toEqual([motion, []])
+    }
+  })
+
+  it('draws each kind of section from the style: cascade ripples the cards widest, scale zooms the pictures, still only fades', () => {
+    const cards = (nodes: Record<string, any>) =>
+      Object.keys(nodes).find((id) => within(nodes, 'sec-1', id) && nodes[id].props?.aglynAnimationStagger === true) as string
+    for (const seed of SEEDS.slice(0, 16)) {
+      const cascade = build({ kind: 'portfolio', seed, motion: 'cascade' })
+      const character = aiSiteMotion({ kind: 'portfolio', seed, motion: 'cascade' })
+      // The recorded works are picture cards, so they ripple in the picture preset; word cards take the group's.
+      const grid = cards(cascade)
+      const pictured = (cascade[grid].nodes as string[]).every((card) =>
+        Object.keys(cascade).some((id) => within(cascade, card, id) && cascade[id].componentId === 'image'),
+      )
+      expect(pictured).toBe(true)
+      expect(cascade[grid].props).toMatchObject({ aglynAnimation: character.mediaPreset, aglynAnimationStaggerStep: character.staggerStepMs })
+      expect(character.groupPreset).toBeDefined()
+      expect(character.staggerStepMs).toBeGreaterThanOrEqual(105)
+      const scale = build({ kind: 'portfolio', seed, motion: 'scale' })
+      expect(['zoom-in', 'zoom-out']).toContain(scale[split(scale).picture[0]].props.aglynAnimation)
+      const still = build({ kind: 'portfolio', seed, motion: 'still' })
+      expect(new Set(Object.values(motionOf(still)).map((props) => props['aglynAnimation']))).toEqual(new Set(['fade']))
+    }
+  })
+
+  it('PINS: under every style the hero’s heading stays still, and only the animation props reduced motion turns off are written', () => {
+    const strip = (nodes: Record<string, any>) =>
+      Object.fromEntries(
+        Object.entries(nodes).map(([id, node]) => [
+          id,
+          {
+            ...node,
+            props: Object.fromEntries(Object.entries(node.props ?? {}).filter(([key]) => !(NODE_ANIMATION_PROPS as readonly string[]).includes(key))),
+          },
+        ]),
+      )
+    // One page, its motion taken off, moved again in every style.
+    const plain = strip(build({ kind: 'portfolio', seed: 1 }))
+    for (const motion of AI_SITE_MOTION_STYLES) {
+      for (const seed of SEEDS.slice(0, 8)) {
+        const nodes = aiWithSiteMotion(plain, { kind: 'portfolio', seed, motion }, { sectionIds })
+        const heading = Object.keys(nodes).find((id) => within(nodes, 'sec-0', id) && /^(h1|display)/i.test(String(nodes[id].props?.variant ?? '')))
+        expect(heading).toBeDefined()
+        for (let at: string | null = heading as string; at; at = nodes[at]?.parentId ?? null) {
+          expect([motion, at, nodePropsAnimate(nodes[at]?.props)]).toEqual([motion, at, false])
+        }
+        // The rest of the hero still climbs in on load.
+        expect(Object.keys(nodes).some((id) => within(nodes, 'sec-0', id) && nodes[id].props?.aglynAnimationTrigger === 'load')).toBe(true)
+        // Nothing but the `aglynAnimation*` props differs from a page that moves another way: no inline
+        // transform, transition or opacity, so the tenant's stylesheet, whose every motion rule sits inside
+        // `prefers-reduced-motion: no-preference` (element-animation-assets.spec.ts), is all that plays it.
+        expect(strip(nodes)).toEqual(plain)
+        for (const props of Object.values(motionOf(nodes))) expect(ANIMATION_PRESETS).toContain(props['aglynAnimation'])
+      }
+    }
+  })
+
+  it('falls back to the kind’s mood, unchanged, for a look that chose no style', () => {
+    // As AGL-3838 drew them, before a look could choose.
+    expect(aiSiteMotion({ kind: 'portfolio', seed: 42 })).toEqual({
+      preset: 'slide-up',
+      sectionPresets: ['slide-up', 'fade'],
+      sides: true,
+      mediaPreset: 'zoom-in',
+      ease: 'smooth',
+      durationMs: 700,
+      staggerStepMs: 90,
+      heroStepMs: 110,
+    })
+    expect(aiSiteMotion({ kind: 'yoga', seed: 7 })).toEqual({
+      preset: 'slide-up',
+      sectionPresets: ['slide-up', 'fade'],
+      sides: true,
+      mediaPreset: 'fade',
+      ease: 'gentle-end',
+      durationMs: 660,
+      staggerStepMs: 100,
+      heroStepMs: 140,
+    })
+    for (const seed of SEEDS) {
+      const mood = aiSiteMotion({ kind: 'portfolio', seed })
+      for (const motion of [null, undefined, '', 'bounce', 'SIDES']) expect(aiSiteMotion({ kind: 'portfolio', seed, motion })).toEqual(mood)
+    }
+    expect(aiSiteMotionStyle('cascade')).toBe('cascade')
+    expect(aiSiteMotionStyle('bounce')).toBeNull()
+  })
+
+  it('reads the style from the look a unit is handed, and nothing from a look stored before it chose one', () => {
+    const job = (siteStyle?: Record<string, unknown>) =>
+      ({ $id: 'job-1-p', inputs: { siteKind: 'portfolio', originJobId: 'job-1', ...(siteStyle ? { siteStyle } : {}) } }) as never
+    expect(aiLayoutMotionSiteOf(job({ headerAlign: 'start', rhythm: 'calm', seed: 42, motion: 'cascade' }), '/')).toEqual({
+      kind: 'portfolio',
+      seed: 42,
+      motion: 'cascade',
+    })
+    expect(aiLayoutMotionSiteOf(job({ headerAlign: 'start', rhythm: 'calm', seed: 42 }), '/')).toEqual({ kind: 'portfolio', seed: 42 })
+    expect(aiLayoutMotionSiteOf(job({ seed: 42, motion: 'bounce' }), '/')).toEqual({ kind: 'portfolio', seed: 42 })
+    // A job that names no kind of site still carries the style its look chose.
+    expect(aiLayoutMotionSiteOf({ $id: 'job-2', inputs: { siteStyle: { motion: 'still' } } } as never, '/')).toMatchObject({ motion: 'still' })
   })
 })

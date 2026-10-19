@@ -236,7 +236,7 @@ describe('why the Kasvora and ACCA FA2 pages had no picture (AGL-3923, beta.265)
 })
 
 describe('a picture whose own world finds nothing widens to the kind, the starter, its own words and the starter’s common photos (AGL-3923)', () => {
-  it('lists the wider worlds for a world of its own words, and none for a listed craft or a kind-read world', () => {
+  it('lists the wider worlds for a world of its own words, and only the kind’s own common photos for any other', () => {
     const kasvora = aiStockWiderTerms(aiStockSourceTerms({ business: KASVORA.inputs.businessType, kind: 'business' }), 'business')
     // The business kind is the business starter's own kind, so it is listed once.
     expect(kasvora.map((rung) => rung.rung)).toEqual(['kind', 'generic'])
@@ -245,17 +245,25 @@ describe('a picture whose own world finds nothing widens to the kind, the starte
     const acca = aiStockWiderTerms(aiStockSourceTerms({ business: ACCA.inputs.businessType, kind: 'education' }), 'education')
     expect(acca.map((rung) => rung.rung)).toEqual(['kind', 'starter', 'generic'])
     expect(acca[0]?.terms.broad).toEqual(['adult students classroom', 'online learning', 'adult education'])
-    // Kinds that already find their photos keep their own world, and a slot nothing in it fits keeps no photo (AGL-3831).
-    for (const [business, kind] of [
-      ['a wedding and portrait photographer', 'photography'],
-      ['Strength gym', 'fitness'],
-      ['Family law firm', 'professional'],
-      ['Wood-fired pizza restaurant', 'restaurant'],
-      ['A barbecue catering company', 'events'],
-    ] as const)
-      expect(aiStockWiderTerms(aiStockSourceTerms({ business, kind }), kind)).toEqual([])
-    // "LMS" is read by its education kind (#1693): a curated world, no widening.
-    expect(aiStockWiderTerms(aiStockSourceTerms({ business: 'LMS', name: 'Adult Hybrid Learning Center', kind: 'education' }), 'education')).toEqual([])
+    // The education kind's own common photos, never the business starter's office.
+    expect(acca[2]?.terms.broad).toEqual(['library books', 'classroom', 'study desk books'])
+    // A listed world keeps its own searches first, and then takes only its own kind's common photos.
+    for (const [business, kind, first] of [
+      ['a wedding and portrait photographer', 'photography', 'camera lens'],
+      ['Strength gym', 'fitness', 'gym equipment'],
+      ['Family law firm', 'professional', 'office desk documents'],
+      ['Wood-fired pizza restaurant', 'restaurant', 'restaurant interior'],
+    ] as const) {
+      const rungs = aiStockWiderTerms(aiStockSourceTerms({ business, kind }), kind)
+      expect(rungs.map((rung) => rung.rung)).toEqual(['generic'])
+      expect(rungs[0]?.terms.broad[0]).toBe(first)
+    }
+    // A world the picked kind says nothing of is never given that kind's photos: a gym is no office (AGL-3831).
+    expect(aiStockWiderTerms(aiStockSourceTerms({ business: 'Strength gym', kind: 'business' }), 'business')).toEqual([])
+    expect(aiStockWiderTerms(aiStockSourceTerms({ business: 'ceramic artist making stoneware bowls', kind: 'portfolio' }), 'portfolio')).toEqual([])
+    // "LMS" is read by its education kind (#1693), and takes the education kind's common photos last.
+    const lms = aiStockWiderTerms(aiStockSourceTerms({ business: 'LMS', name: 'Adult Hybrid Learning Center', kind: 'education' }), 'education')
+    expect(lms.map((rung) => rung.rung)).toEqual(['generic'])
   })
 
   it('gives the Kasvora cover hero a photo of a workplace, and keeps it', async () => {

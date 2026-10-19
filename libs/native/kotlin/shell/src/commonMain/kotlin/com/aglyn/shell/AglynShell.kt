@@ -69,7 +69,8 @@ fun AglynShell(
       com.aglyn.ui.LocalImageTransformer provides (com.aglyn.ui.LocalImageTransformer.current ?: platformImageTransformer()),
       com.aglyn.ui.LocalVideoProbe provides (com.aglyn.ui.LocalVideoProbe.current ?: platformVideoProbe()),
     ) {
-    // A site's live address, a preview or a help page opens in the app's web sheet; a provider's sign-in keeps the secure tab.
+    // A site's live address, a preview, a docs or legal page opens in the app's browser screen (over the sign-in until there
+    // is a shell; the signed-in shell pushes it onto its own stack); a provider's sign-in keeps the secure tab.
     com.aglyn.webview.ProvideInAppBrowser(secureTab = services.openHostedPage) {
     val auth by services.auth.state.collectAsState()
     val impersonation by services.auth.impersonation.collectAsState()
@@ -232,6 +233,9 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
   )
 
   androidx.compose.runtime.CompositionLocalProvider(com.aglyn.screens.LocalScreenSession provides screenSession) {
+  // Every plain web page a screen opens is pushed onto this stack as the browser screen (AGL-3935).
+  com.aglyn.webview.ProvideInAppBrowser(secureTab = services.openHostedPage, openPage = navigator::openWeb) {
+  val openInBrowser = com.aglyn.webview.rememberSystemBrowser()
   val inDrawer = widthClass == WidthClass.EXPANDED || widthClass == WidthClass.LARGE
   AglynNavigationSuite(
     destinations, navigator.top, onSelect = navigator::select,
@@ -245,6 +249,17 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
     drawerFooter = { WorkspaceFooter(workspace, services.api.origin) { navigator.push(Route.Switcher) } },
   ) {
     val route = navigator.current
+    if (route is Route.Web) {
+      // The browser screen brings its own bar (title, address, history and its menu); the navigation stays beside it.
+      entries.SaveableStateProvider(navigator.currentKey) {
+        com.aglyn.webview.WebPageScreen(
+          route.url,
+          onClose = { navigator.back() },
+          openInBrowser = openInBrowser,
+          header = { impersonation?.let { ImpersonationBanner(it, onExit = { exitScope.launch { services.auth.endImpersonation() } }) } },
+        )
+      }
+    } else {
     // A pushed screen may name itself once its data is in (an AI job by its brief); a fresh state per screen.
     val screenTitle = remember(navigator.currentKey) { mutableStateOf<String?>(null) }
     val title = when (route) {
@@ -253,6 +268,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
       Route.Analytics -> "Analytics"
       Route.Switcher -> "Switch workspace or site"
       Route.NotificationSettings -> "Notifications"
+      is Route.Web -> ""
       null -> destinations.firstOrNull { it.key == navigator.top }?.label ?: ""
     }
     Scaffold(
@@ -296,6 +312,7 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
           Route.Analytics -> AnalyticsScreen(services, context)
           Route.Switcher -> SwitcherScreen(services.workspace, workspace, services.api.origin) { navigator.back() }
           Route.NotificationSettings -> NotificationSettingsScreen(services, uid)
+          is Route.Web -> Unit
           null -> when {
             navigator.top == ShellNavigator.HOME -> HomeScreen(services, context, workspace, widthClass, navigator)
             navigator.top == ShellNavigator.MORE -> MoreScreen(services, context, workspace.site?.name) { navigator.push(Route.Analytics) }
@@ -312,6 +329,8 @@ private fun SignedInShell(services: ShellServices, navigator: ShellNavigator, ui
       }
       }
     }
+    }
+  }
   }
 }
 }

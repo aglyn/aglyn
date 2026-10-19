@@ -4,8 +4,10 @@ The rule since 2026-10-07: everything you can do on the website you can do in
 the app. Every console area is a native screen on iPhone, iPad, Android phone
 and tablet, Mac and Windows. Only the Besigner opens in the in-app web view
 (`native-architecture.md`, "Native console, Besigner-only web view"). A site's
-live address, its preview and any plain web link open in the apps' in-app web
-sheet, which has Open in browser (#1705 Android and desktop, #1712 Apple).
+live address, its preview, the docs, legal and What's new pages and any plain
+web link open in the apps' in-app browser screen (AGL-3935): pushed onto the
+stack on a phone, in the main area beside the navigation on a tablet, Mac or
+Windows, with back, forward, reload and Open in browser, Copy link and Share.
 
 This is the checklist. A box is ticked only when the row's screens and actions
 were driven in the running apps on the seeded local stack (Firebase emulators,

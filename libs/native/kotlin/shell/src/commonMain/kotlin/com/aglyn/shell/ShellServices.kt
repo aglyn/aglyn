@@ -96,6 +96,8 @@ sealed interface Route {
   data object Analytics : Route
   data object Switcher : Route
   data object NotificationSettings : Route
+  /** A plain web page (a live site, a preview, a docs or legal page) in the in-app browser screen. */
+  data class Web(val url: String) : Route
 }
 
 /**
@@ -134,6 +136,13 @@ class ShellNavigator(initialTop: String = HOME) {
   fun push(route: Route) {
     stack.add(route)
   }
+
+  /**
+   * Opens a plain web page in the in-app browser screen, pushed over what is showing: the whole screen on a phone, the main
+   * area beside the navigation on anything wider. Every page the shell opens comes through here, so this is where a
+   * new-tab request will branch once the shell has tabs.
+   */
+  fun openWeb(url: String) = push(Route.Web(url))
 
   /** True when something was popped; false at a top-level destination. */
   fun back(): Boolean = if (stack.isEmpty()) false else { stack.removeAt(stack.lastIndex); true }
