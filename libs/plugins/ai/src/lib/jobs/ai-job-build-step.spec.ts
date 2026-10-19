@@ -58,6 +58,7 @@ import { aiFreeCreditsNoneLeftText } from '../model/ai-site-job'
 import { registerAiJobStep } from './ai-jobs'
 import { aiBuildBuiltRefs } from './ai-build-unit-outcome'
 import { aiLayoutListingsOf } from '../layout-language/ai-layout-listings'
+import { AI_LAYOUT_SITE_MOTION_INPUT, aiLayoutMotionSiteOf } from './ai-job-page-language'
 
 const NOW = new Date('2026-10-06T12:00:00.000Z')
 
@@ -250,6 +251,36 @@ describe('the build step (AGL-3616)', () => {
     expect(aiBuildItemOutputNote({ where: 'Events', live: true })).toBe('Live now, in Events.')
     expect(aiBuildItemOutputNote({ where: 'Events', live: true }, { live: true })).toBe('Live now, in Events.')
     expect(aiBuildItemOutputNote({ where: 'Notes' })).toBe('A draft, in Notes.')
+  })
+
+  it('hands a page built on an existing site that site’s stored motion, and nothing where it stored none (AGL-3949)', async () => {
+    const items: AiJobItemLedger[] = aiBuildInitialLedger(aiBuildUnits(plan())).map((row) =>
+      row.slot === 'i0' ? { ...row, status: 'succeeded', outputs: ['svc-1'] } : row,
+    )
+    const hostWith = (data: Record<string, unknown>) =>
+      ({ collection: () => ({ doc: () => ({ get: async () => ({ data: () => data }) }) }) }) as unknown as FirebaseFirestore.Firestore
+    const siteStyle = { v: 1, kind: 'photography', base: 'starter', seed: 4242, hue: 20, accent: 200, headerAlign: 'start', rhythm: 'calm', motion: 'sides' }
+    const seen: AiJob[] = []
+    await step({ writer: writer().impl, seen })({ ...context(job({ items })), firestore: hostWith({ siteStyle }) })
+    expect(seen[0].inputs[AI_LAYOUT_SITE_MOTION_INPUT]).toEqual({ kind: 'photography', seed: 4242, motion: 'sides' })
+    // Only the motion travels: the page's prompt is told no look it was not told before.
+    expect(seen[0].inputs['siteStyle']).toBeUndefined()
+    expect(aiLayoutMotionSiteOf(seen[0], '/book')).toEqual({ kind: 'photography', seed: 4242, motion: 'sides' })
+
+    const bare: AiJob[] = []
+    await step({ writer: writer().impl, seen: bare })(context(job({ items })))
+    expect(bare[0].inputs[AI_LAYOUT_SITE_MOTION_INPUT]).toBeUndefined()
+  })
+
+  it('hands the stored motion only to what moves: pages, layouts and templates (AGL-3949)', () => {
+    const units = aiBuildUnits(editPlan())
+    const siteMotion = { kind: 'photography', seed: 7, motion: 'rise' as const }
+    const edit = aiBuildUnitJob(job({ plan: editPlan() }), units[0], { kind: 'edit', units, ledger: aiBuildInitialLedger(units), ops: OPS, siteMotion })
+    expect(edit.inputs[AI_LAYOUT_SITE_MOTION_INPUT]).toBeUndefined()
+    for (const kind of ['page', 'layout', 'template'] as const) {
+      const derived = aiBuildUnitJob(job({ plan: editPlan() }), units[0], { kind, units, ledger: aiBuildInitialLedger(units), ops: OPS, siteMotion })
+      expect(derived.inputs[AI_LAYOUT_SITE_MOTION_INPUT]).toEqual(siteMotion)
+    }
   })
 
   it('tells the page to place the Booking block for the service it built', async () => {
