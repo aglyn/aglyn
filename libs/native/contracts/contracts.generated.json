@@ -4957,8 +4957,11 @@
                 "id": "automation",
                 "label": "Automation",
                 "order": 60,
+                "params": {
+                  "scope": "org"
+                },
                 "pluginId": "workflows",
-                "screen": "workflows.org-automation"
+                "screen": "workflows.automation"
               },
               {
                 "console": {

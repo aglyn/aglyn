@@ -38,7 +38,10 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       id: 'automation',
       label: 'Automation',
       icon: nativeNavIcon('bolt', 'bolt'),
-      screen: 'workflows.org-automation',
+      // The automation hub on the organization's sections (Org automations, and every site's workflows, actions and
+      // webhooks), as the console's workspace Automation tab lists them; never the new-automation editor.
+      screen: 'workflows.automation',
+      params: { scope: 'org' },
       pluginId: 'workflows',
       order: 60,
       docs: '/marketing-and-automation/workflows-and-actions/overview',
