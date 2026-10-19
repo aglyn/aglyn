@@ -52,14 +52,17 @@ final class SiteTests: XCTestCase {
         + "change your role.")
   }
 
-  /// The plan's site limit is said before the click, counted as the route counts it: the larger of the workspace's
-  /// sites and its directory, so a lagging directory does not let the sheet through to a 403.
-  func testTheSiteLimitCountsAsTheRouteDoes() {
-    XCTAssertEqual(siteLimitBlock(limit: 3, mapped: nil, counted: 3), .limit(3))
-    XCTAssertEqual(siteLimitBlock(limit: 3, mapped: 3, counted: nil), .limit(3))
-    XCTAssertEqual(siteLimitBlock(limit: 3, mapped: 0, counted: 3), .limit(3))
-    XCTAssertNil(siteLimitBlock(limit: 3, mapped: 2, counted: 2))
-    XCTAssertNil(siteLimitBlock(limit: 3, mapped: nil, counted: nil))
+  /// The plan's site limit is said before the click, counted as the console's create-site dialog counts it: the set
+  /// entries of the org's `hosts` directory against `hostLimit`.
+  func testTheSiteLimitCountsAsTheConsolesDialogDoes() {
+    let three: [String: Any] = ["a": true, "b": true, "c": "host-c"]
+    XCTAssertEqual(siteLimitBlock(limit: 3, directory: three), .limit(3))
+    XCTAssertEqual(siteLimitBlock(limit: 1, directory: ["a": ["at": 1]]), .limit(1))
+    // Removed sites (null, false) and empty entries do not count, as `filter(Boolean)` does not.
+    XCTAssertNil(siteLimitBlock(limit: 3, directory: ["a": true, "b": NSNull(), "c": false, "d": 0, "e": ""]))
+    XCTAssertNil(siteLimitBlock(limit: 3, directory: ["a": true, "b": true]))
+    // No directory yet counts none.
+    XCTAssertNil(siteLimitBlock(limit: 3, directory: [:]))
   }
 
   func testRegistersEveryDeclaredContribution() {

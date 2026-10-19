@@ -441,39 +441,46 @@ enum CreateSiteBlock: Equatable {
   }
 }
 
-/// The console's check before Create site: the role may create sites (`hosts.create`), and the workspace's sites (its
-/// `hosts` directory) are under the plan's `hostLimit` (`checkQuota`). Nil when nothing stops it or it cannot tell; the
-/// route still refuses what it must.
+/// The console's check before Create site (`CreateHostDialog`): the role may create sites (`hosts.create`), and the
+/// workspace's `hosts` directory is under the plan's `hostLimit` (`checkQuota`). Nil when nothing stops it or it cannot
+/// tell; the route still refuses what it must.
 @MainActor
 func createSiteBlock(_ context: NativePluginContext, orgID: String) async -> CreateSiteBlock? {
   if let role = context.orgRole, !siteCreatorRoles.contains(role) { return .role }
   guard let entitlements = try? await context.api.request("/api/orgs/entitlements", query: [("orgId", orgID)]),
     let limit = entitlements["quotas"]?["hostLimit"]?.numberValue
   else { return nil }
-  let mapped: Int? = await withCheckedContinuation { continuation in
+  // The org document, read once: its `hosts` directory is what the console's dialog counts. Nil only when the read
+  // failed; a workspace with no directory yet counts none, as the dialog's does.
+  let directory: [String: Any]? = await withCheckedContinuation { continuation in
     var listener: FirestoreListening?
     var answered = false
     listener = context.firestore.listenDocument(["orgs", orgID]) { result in
       guard !answered else { return }
       answered = true
       listener?.remove()
-      let hosts = (try? result.get())?.data["hosts"] as? [String: Any]
-      continuation.resume(returning: hosts.map { $0.values.filter { !($0 is NSNull) && ($0 as? Bool) != false }.count })
+      guard let document = try? result.get() else { return continuation.resume(returning: nil) }
+      continuation.resume(returning: document.data["hosts"] as? [String: Any] ?? [:])
     }
   }
-  // The route counts the larger of the workspace's sites and its directory (`claimHostForOrg`); a workspace whose
-  // directory lags its sites (a seeded one, an older one) is still stopped before the click, not after it.
-  let counted = try? await context.firestore.count(
-    FirestoreQuery(["hosts"], filters: [ListQueryConstraint(path: "orgId", op: .equal, value: orgID)]))
-  guard mapped != nil || counted != nil else { return nil }
-  return siteLimitBlock(limit: Int(limit), mapped: mapped, counted: counted ?? nil)
+  guard let directory else { return nil }
+  return siteLimitBlock(limit: Int(limit), directory: directory)
 }
 
-/// The route's count of a workspace's sites against its plan's `hostLimit`: the larger of the sites that name the
-/// workspace and its `hosts` directory; nil while there is room.
-func siteLimitBlock(limit: Int, mapped: Int?, counted: Int?) -> CreateSiteBlock? {
-  let used = max(mapped ?? 0, counted ?? 0)
+/// The console dialog's count of a workspace's sites against its plan's `hostLimit`: the entries of the org's `hosts`
+/// directory that are set (`Object.values(hosts).filter(Boolean)`); nil while there is room.
+func siteLimitBlock(limit: Int, directory: [String: Any]) -> CreateSiteBlock? {
+  let used = directory.values.filter(isSet).count
   return used >= limit ? .limit(limit) : nil
+}
+
+/// JavaScript's `Boolean(value)` for a Firestore value: null, false, 0 and "" are unset; anything else is set.
+private func isSet(_ value: Any) -> Bool {
+  if value is NSNull { return false }
+  if let flag = value as? Bool { return flag }
+  if let number = value as? Double { return number != 0 && !number.isNaN }
+  if let text = value as? String { return !text.isEmpty }
+  return true
 }
 
 /// The picked site's own overview screen.
