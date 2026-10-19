@@ -15,54 +15,13 @@
  * limitations under the License.
  */
 
-import { definePluginServiceContract } from '@aglyn/aglyn/plugin-manager/plugin-services'
-import type { OrderEventOrder } from './order-events'
-
 /**
- * A site's order HISTORY, for another plugin (AGL-3614).
- *
- * The order events (`order-events.ts`) bring every order from the moment a
- * subscriber listens. A plugin that must also read the orders BEFORE that —
- * accounting, posting a merchant's earlier sales from a start date — reads
- * them through this service, in the same public shape the events carry, and
- * never through commerce's storage. Commerce registers the one
- * implementation from its console server declarations; a reader in another
- * plugin restates this contract under the same id, as an event subscriber
- * restates an event.
+ * A site's order HISTORY, for another plugin (AGL-3614). The service is
+ * commerce's contract with other plugins and lives in `../contracts`
+ * (AGL-3980), which a reader imports as `@aglyn/plugins-commerce/contracts`;
+ * it is re-exported here for commerce's own code, which registers the one
+ * implementation from its console server declarations.
  */
 
-/** One stored order, as the history hands it out. */
-export interface OrderHistoryEntry {
-  id: string
-  createdAtMs: number
-  /** When it was paid; `null` for one never paid. */
-  paidAtMs: number | null
-  /** The newest refund on its timeline, or `null`. */
-  lastRefundAtMs: number | null
-  /** Whether its prices include the tax. */
-  taxInclusive: boolean
-  /** The tax rate it was charged under, when one was named. */
-  taxRateId: string | null
-  /** The order in the public API's shape. */
-  order: OrderEventOrder
-}
-
-export interface OrderHistoryPageRequest {
-  hostId: string
-  /** Orders created at or after this… */
-  fromMs: number
-  /** …and before this. */
-  untilMs: number
-  /** At most this many, oldest first; capped at 200. */
-  limit: number
-}
-
-export interface OrderHistoryReader {
-  listOrders(request: OrderHistoryPageRequest): Promise<OrderHistoryEntry[]>
-}
-
-export const ORDER_HISTORY_CONTRACT_ID = 'commerce.orderHistory'
-
-export const ORDER_HISTORY_CONTRACT = definePluginServiceContract<OrderHistoryReader>(ORDER_HISTORY_CONTRACT_ID, {
-  multiple: false,
-})
+export { ORDER_HISTORY_CONTRACT, ORDER_HISTORY_CONTRACT_ID } from '../contracts'
+export type { OrderHistoryEntry, OrderHistoryPageRequest, OrderHistoryReader } from '../contracts'

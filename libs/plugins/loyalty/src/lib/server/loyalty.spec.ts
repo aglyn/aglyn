@@ -117,7 +117,7 @@ function order(overrides: Partial<LoyaltyEventOrder> = {}): LoyaltyEventOrder {
     channel: 'online',
     customerEmail: 'pat@example.com',
     customerName: 'Pat',
-    totals: { itemsCents: 10_000, discountCents: 1_000, totalCents: 9_900 },
+    totals: { itemsCents: 10_000, shippingCents: 0, taxCents: 0, discountCents: 1_000, totalCents: 9_900, feeCents: 0 },
     refundedCents: 0,
     credits: [],
     ...overrides,
@@ -201,10 +201,10 @@ describe('earning on order.paid (AGL-3640)', () => {
     const basis = earnBasisCents(
       order({
         channel: 'pos',
-        totals: { itemsCents: 5_000, discountCents: 0, totalCents: 5_400 },
+        totals: { itemsCents: 5_000, shippingCents: 0, taxCents: 0, discountCents: 0, totalCents: 5_400, feeCents: 0 },
         credits: [
-          { providerId: 'loyalty.rewards', reference: 'm:x', amountCents: 2_000, appliedAs: 'tender' },
-          { providerId: 'other.credit', reference: 'x', amountCents: 500, appliedAs: 'tender' },
+          { providerId: 'loyalty.rewards', pluginId: 'loyalty', label: 'Credit', last4: '0000', reference: 'm:x', amountCents: 2_000, appliedAs: 'tender' },
+          { providerId: 'other.credit', pluginId: 'other', label: 'Credit', last4: '0000', reference: 'x', amountCents: 500, appliedAs: 'tender' },
         ],
       }),
     )
@@ -318,8 +318,8 @@ describe('the rewards credit, online', () => {
   it('gives online rewards back in proportion to a refund, and the rest on a cancel', async () => {
     const key = await seedMember('sam@example.com', { points: 1_000, creditCents: 1_000 })
     await settle(`m:${key}`, 'cs_r', 2_000, { holdKey: 'h' })
-    const credits = [{ providerId: 'loyalty.rewards', reference: `m:${key}`, amountCents: 2_000, appliedAs: 'discount' as const }]
-    const base = order({ id: 'cs_r', customerEmail: 'sam@example.com', totals: { itemsCents: 10_000, discountCents: 2_000, totalCents: 8_000 }, credits })
+    const credits = [{ providerId: 'loyalty.rewards', pluginId: 'loyalty', label: 'Credit', last4: '0000', reference: `m:${key}`, amountCents: 2_000, appliedAs: 'discount' as const }]
+    const base = order({ id: 'cs_r', customerEmail: 'sam@example.com', totals: { itemsCents: 10_000, shippingCents: 0, taxCents: 0, discountCents: 2_000, totalCents: 8_000, feeCents: 0 }, credits })
     await reverseForOrder(envelope({ order: { ...base, refundedCents: 4_000 }, refund: { full: false } }, 'r1'), 'refunded')
     expect(member('sam@example.com')).toMatchObject({ creditCents: 500, points: 500 })
     await reverseForOrder(envelope({ order: { ...base, refundedCents: 4_000 }, refund: { full: false } }, 'r1'), 'refunded')
@@ -391,8 +391,8 @@ describe('referrals', () => {
       id: 'cs_friend',
       customerEmail: 'friend@example.com',
       customerName: 'Fran',
-      totals: { itemsCents: 5_000, discountCents: 1_000, totalCents: 4_000 },
-      credits: [{ providerId: 'loyalty.rewards', reference, amountCents: 1_000, appliedAs: 'discount' }],
+      totals: { itemsCents: 5_000, shippingCents: 0, taxCents: 0, discountCents: 1_000, totalCents: 4_000, feeCents: 0 },
+      credits: [{ providerId: 'loyalty.rewards', pluginId: 'loyalty', label: 'Credit', last4: '0000', reference, amountCents: 1_000, appliedAs: 'discount' }],
     })
     await earnForOrder(envelope({ order: paid }))
     await earnForOrder(envelope({ order: paid }, 'again'))

@@ -36,9 +36,10 @@ import { getRegisteringPluginId } from '../app-utils/registering-plugin'
  * carries `id`, stable across retries, for a subscriber to dedupe on.
  *
  * TYPED BY TOKEN. `definePluginDomainEvent<Payload>(name)` gives the raiser
- * and a subscriber the same payload type; a subscriber in another plugin
- * restates the shape it reads and defines its own token under the same
- * name, as a widget restates a zone's props.
+ * and a subscriber the same payload type. The raising plugin publishes its
+ * tokens and payloads in its contracts module, and a subscriber in another
+ * plugin imports them from `@aglyn/plugins-<id>/contracts` and names the
+ * raiser in its `uses` (AGL-3980, docs/PACKAGES.md); it never restates them.
  *
  * The registry lives on `globalThis` (AGL-3412): subscriptions register from
  * the plugins' server declarations at boot, in a module graph the routes and
