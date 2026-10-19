@@ -145,6 +145,12 @@ internal fun shellPlaces(registry: com.aglyn.pluginhost.NativePluginRegistry, ap
   return tabs + actions
 }
 
+/**
+ * The plan feature each plugin's screens need, as the console gates the plugin's page (`featureFlag`), for the plugins
+ * whose plan the console's notice can name.
+ */
+internal val PLUGIN_PLAN_FEATURES = mapOf("crm" to "crm", "commerce" to "commerce", "bookings" to "bookings")
+
 @Composable
 internal fun PluginScreenHost(
   services: ShellServices,
@@ -155,8 +161,19 @@ internal fun PluginScreenHost(
   onExit: () -> Unit = {},
 ) {
   val screen = services.registry.screen(screenId)
+  // A plugin the plan leaves out shows the console's upgrade notice where its screen would be (the console's blocked
+  // plugin page), from the console's own settled answer; while that is read, or if it cannot be, the screen shows.
+  val feature = screen?.pluginId?.let { PLUGIN_PLAN_FEATURES[it] }
+  val orgId = services.workspace.state.collectAsState().value.org?.id
+  val entitlements = if (feature != null && orgId != null) services.entitlements.state(orgId).collectAsState().value else null
+  if (feature != null && orgId != null) LaunchedEffect(orgId) { services.entitlements.load(orgId) }
   when {
     screen == null -> EmptyState("This page is not available", body = "Update the app to open it.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
+    feature != null && entitlements != null && !entitlements.has(feature) -> com.aglyn.ui.UpgradeNoticeScreen(
+      com.aglyn.core.upgradeNoticeMessage(screen.title, feature),
+      com.aglyn.ui.UpgradeKind.PLAN,
+      tag = "feature-gate-$feature",
+    ) { context.navigate("core.billing") }
     screen.requiresSite && !hasSite -> EmptyState("Pick a site first", body = "This page shows one site's data.", icon = AglynIcons.named("public"))
     screen.upcoming -> EmptyState(
       "${screen.title} is coming to the app",

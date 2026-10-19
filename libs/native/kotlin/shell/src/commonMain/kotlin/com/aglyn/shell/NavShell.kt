@@ -89,7 +89,7 @@ import kotlinx.coroutines.launch
 internal const val ASSIST_PANEL_SLOT = "assistPanel"
 
 /** Areas whose screens draw their own section chips (the CRM, Emails, Marketing and Marketplace hubs): no tabs over them. */
-internal val SELF_SECTIONED_ROWS = setOf("crm", "emails", "marketing", "marketplace")
+internal val SELF_SECTIONED_ROWS = setOf("crm", "emails", "marketing", "marketplace", "orders")
 
 /** Room the window leaves at the top for its own controls (the Mac's traffic lights over a transparent title bar). */
 val LocalTitleBarInset = androidx.compose.runtime.staticCompositionLocalOf { 0.dp }
@@ -425,10 +425,16 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     val planNotice = remember(feed, workspace.org?.id, planDismissals) { planNoticeFor(feed, workspace.org?.id, uid, services.prefs, com.aglyn.core.nowMillis()) }
     val planFoot: @Composable () -> Unit = {
       planNotice?.let { notice ->
-        PlanCard(
-          notice,
+        // Figma 98:1048: whose plan it is, the console's notice, and the way to more (its link: plans or billing).
+        val org = workspace.org
+        com.aglyn.ui.PlanUsageCard(
+          detail = org?.let { o -> listOfNotNull(o.name, workspace.orgLogo?.plan?.let { "${it.replaceFirstChar { c -> c.uppercase() }} plan" }).joinToString(" · ") },
+          title = notice.title,
+          actionTitle = if (notice.link?.contains("plans") == true) "Upgrade" else "See plans and usage",
+          reached = notice.level == "error" || notice.level == "critical",
           onOpen = { notice.link?.let { context.openLink(it) } ?: navigator.select(NavKeys.of("core.billing")) },
           onDismiss = { services.prefs.set(planCardDismissedKey(uid, notice.id), "1"); planDismissals++ },
+          modifier = Modifier.padding(start = com.aglyn.ui.shellMetrics.sidebarPad, end = com.aglyn.ui.shellMetrics.sidebarPad, bottom = 12.dp),
         )
       }
     }
@@ -489,7 +495,9 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
                 val steps = buildList {
                   add(Crumb(workspace.site?.name ?: workspace.org?.name ?: "") { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) })
                   group?.let { add(Crumb(it, null)) }
-                  place?.let { add(Crumb(it) { navigator.select(navigator.top) }) }
+                  place?.let { add(Crumb(it) { navigator.select(row?.key ?: navigator.top) }) }
+                  // A section the row opens without tabs (Orders' Returns): the row leads back, then the section.
+                  row?.sections?.firstOrNull { it.key == navigator.top && it.key != row.key }?.takeIf { row.rowId in SELF_SECTIONED_ROWS }?.let { add(Crumb(it.label, null)) }
                   if (route != null && title.isNotBlank() && title != place) add(Crumb(title, null))
                 }.filter { it.label.isNotBlank() }
                 Breadcrumbs(steps, star = starSlot?.takeIf { !it.claimed })

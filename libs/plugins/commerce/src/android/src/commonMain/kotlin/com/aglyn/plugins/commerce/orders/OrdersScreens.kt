@@ -190,7 +190,9 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
   // sort); Select, Export for shipping, Import tracking and More filters in ⋯.
   var advanced by remember { mutableStateOf(model.clauses.isNotEmpty()) }
   val sorts = Contracts.orderListQuery.sorts
-  val filterChoices = OrderFilter.entries.map { com.aglyn.ui.FilterChoice("Status", it.name, it.label) } +
+  // Calm rule (Figma 13:483 draws no tabs): Returns and Reservations are one Filter choice away, not a tab row.
+  val filterChoices = ORDERS_SHOW.map { (key, label) -> com.aglyn.ui.FilterChoice("Show", key, label) } +
+    OrderFilter.entries.map { com.aglyn.ui.FilterChoice("Status", it.name, it.label) } +
     sorts.mapIndexed { index, sort -> com.aglyn.ui.FilterChoice("Sort", "sort-$index", com.aglyn.plugins.commerce.lists.sortLabel(sort)) }
   val sortKey = sorts.indexOf(model.sort ?: sorts.firstOrNull()).takeIf { it >= 0 }?.let { "sort-$it" }
   val moreActions = buildList {
@@ -217,12 +219,13 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
     onQuery = model::type,
     placeholder = "Order, customer or email",
     tag = "orders",
-    primary = com.aglyn.ui.PrimaryAction("orders-draft", "New order") { drafting = true },
+    primary = com.aglyn.ui.PrimaryAction("orders-draft", "Draft order") { drafting = true },
     more = moreActions,
     filters = filterChoices,
-    picked = mapOf("Status" to model.filter.name) + (sortKey?.let { mapOf("Sort" to it) } ?: emptyMap()),
+    picked = mapOf("Show" to COMMERCE_ORDERS_SCREEN, "Status" to model.filter.name) + (sortKey?.let { mapOf("Sort" to it) } ?: emptyMap()),
     onPick = { choice ->
-      if (choice.group == "Status") model.pick(OrderFilter.valueOf(choice.key))
+      if (choice.group == "Show") { if (choice.key != COMMERCE_ORDERS_SCREEN) context.navigate(choice.key, emptyMap()) }
+      else if (choice.group == "Status") model.pick(OrderFilter.valueOf(choice.key))
       else choice.key.removePrefix("sort-").toIntOrNull()?.let { index -> model.sortBy(if (index == 0) null else sorts[index]) }
     },
   ) {
@@ -975,3 +978,10 @@ private fun FulfillItemsDialog(detail: OrderDetail, actions: OrderActionsModel) 
     SwitchRow("Notify customer", notify, { notify = it })
   }
 }
+
+/** What the Orders list can show besides orders, as the console's Products hub sections name them. */
+private val ORDERS_SHOW = listOf(
+  COMMERCE_ORDERS_SCREEN to "Orders",
+  "commerce.returns" to "Returns",
+  "commerce.reservations" to "Reservations",
+)

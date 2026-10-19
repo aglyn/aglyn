@@ -99,6 +99,16 @@ internal fun WorkspaceMenu(services: ShellServices, workspace: WorkspaceState, c
       actions.enterSettings(NativeNavListId.WORKSPACE_SETTINGS)
     }
     MenuRow("Billing and usage", "credit_card", tag = "workspace-menu-billing") { chrome.workspaceMenu = false; actions.openScreen("core.billing", emptyMap()) }
+    // The console's "Upgrade plan" (its user menu): once the plan is known, below the top plans, to an owner or admin.
+    val logo = workspace.orgLogo
+    if (logo?.plan != null && logo.plan !in setOf("agency", "enterprise") && !logo.enterprise && org.role in setOf("owner", "admin")) {
+      androidx.compose.material3.Button(
+        onClick = { chrome.workspaceMenu = false; actions.openScreen("core.billing", emptyMap()) },
+        shape = com.aglyn.ui.controlShape(),
+        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onSurface, contentColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).testTag("workspace-menu-upgrade"),
+      ) { Text("Upgrade plan") }
+    }
     HorizontalDivider()
     MenuRow("Workspace color", "palette", trailing = "›", tag = "workspace-menu-color") { chrome.workspaceMenu = false; chrome.colorFor = org.id }
   }

@@ -51,6 +51,8 @@ data class WorkspaceOrgLogo(
    */
   val brandMark: String? = null,
   val brandMarkDark: String? = null,
+  /** Custom-priced or flagged Enterprise, as the console's `isEnterpriseOrg` reads it: nothing to upgrade to. */
+  val enterprise: Boolean = false,
 ) {
   companion object {
     fun from(data: Map<String, Any?>?): WorkspaceOrgLogo = WorkspaceOrgLogo(
@@ -61,6 +63,8 @@ data class WorkspaceOrgLogo(
       plan = data?.let { effectivePlan(it) },
       brandMark = ((data?.get("brandingProfile") as? Map<*, *>)?.get("faviconUrl") as? String)?.trim()?.ifEmpty { null },
       brandMarkDark = ((data?.get("brandingProfile") as? Map<*, *>)?.get("faviconDarkUrl") as? String)?.trim()?.ifEmpty { null },
+      enterprise = data?.get("enterprise") == true || data?.get("plan") == "enterprise" ||
+        (((data?.get("subscription") as? Map<*, *>)?.get("customMonthlyUsd") as? Number)?.toDouble() ?: 0.0) > 0,
     )
   }
 }

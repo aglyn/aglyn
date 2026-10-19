@@ -43,26 +43,3 @@ internal fun planNoticeFor(feed: List<FeedNotification>, orgId: String?, uid: St
     ?.takeIf { notice -> notice.createdAt?.let { nowMs - it.seconds * 1000 <= PLAN_CARD_DAYS * 86_400_000 } ?: false }
     ?.takeIf { prefs.get(planCardDismissedKey(uid, it.id)) == null }
 }
-
-@Composable
-internal fun PlanCard(notice: FeedNotification, onOpen: () -> Unit, onDismiss: () -> Unit) {
-  val palette = LocalAglynPalette.current
-  val reached = notice.level == "error" || notice.level == "critical"
-  val tint = if (reached) palette.error.text else palette.warning.text
-  Surface(
-    shape = MaterialTheme.shapes.medium,
-    color = MaterialTheme.colorScheme.surfaceContainerLowest,
-    modifier = Modifier.fillMaxWidth().padding(12.dp).testTag("plan-card"),
-  ) {
-    Row(Modifier.clickable(onClick = onOpen).padding(start = 12.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-      Icon(AglynIcons.named(if (reached) "error" else "data_usage"), null, Modifier.size(20.dp), tint = tint)
-      Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(notice.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 3, overflow = TextOverflow.Ellipsis)
-        Text("See plans and usage", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-      }
-      IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp).testTag("plan-card-dismiss").semantics { contentDescription = "Dismiss" }) {
-        Icon(AglynIcons.named("close"), null, Modifier.size(16.dp))
-      }
-    }
-  }
-}
