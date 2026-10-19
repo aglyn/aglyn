@@ -26,6 +26,7 @@ import {
   isImpersonationSession,
   lockdownRefusal,
   logHostActivity,
+  releaseCustomDomainTwin,
   syncHostProjectionForMembers,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
@@ -167,9 +168,19 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+    // The `www.`/apex twin (AGL-3961) forwards to the name just released, so
+    // it goes with it. Best-effort: a twin left on the deployment redirects
+    // to a name that no longer serves, which is a dead end but not another
+    // site — and the claim below is cleared either way, so no site can be
+    // shown the name as its own.
+    await releaseCustomDomainTwin(hostSnapshot.get('cnameTwin')).catch(
+      () => false,
+    )
     await hostSnapshot.ref.set(
       {
         cname: firebaseAdmin.firestore.FieldValue.delete(),
+        cnameTwin: firebaseAdmin.firestore.FieldValue.delete(),
+        cnameTwinPending: firebaseAdmin.firestore.FieldValue.delete(),
         cnameAttachmentPending: firebaseAdmin.firestore.FieldValue.delete(),
         cnameDetachmentPending: firebaseAdmin.firestore.FieldValue.delete(),
         subdomainRedirectPending: firebaseAdmin.firestore.FieldValue.delete(),

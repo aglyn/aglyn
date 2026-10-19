@@ -81,6 +81,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Response.json({ error: 'Verify your email' }, { status: 403 }),
   attachProjectDomain: (...args: unknown[]) => mockAttachProjectDomain(...args),
   detachProjectDomain: (...args: unknown[]) => mockDetachProjectDomain(...args),
+  // The twin's release (AGL-3961), modelled on the real one: no twin, no
+  // call; otherwise the same provider detach the primary goes through.
+  releaseCustomDomainTwin: async (twin: unknown) => {
+    const name = String(twin ?? '').trim().toLowerCase()
+    if (!name) return true
+    const released = await mockDetachProjectDomain(name, 'tenant')
+    return released?.outcome !== 'failed'
+  },
   // CAPTURED, not stubbed away (AGL-118): which branch writes the entry is
   // half of what this file now pins. Named explicitly because this factory is
   // a closed world — an absent export is `undefined`, the route throws past
@@ -377,5 +385,51 @@ describe('the release is recorded once, and only where it happened', () => {
     expect(
       (mockLogHostActivity.mock.calls[0] as unknown as unknown[])[3],
     ).toMatchObject({ name: 'shop.example.com' })
+  })
+})
+
+describe('the www twin goes with the domain it forwards to (AGL-3961)', () => {
+  it('releases the twin and clears its claim', async () => {
+    mockHostData.mockReturnValue({
+      memberRoles: { 'u-1': 'admin' },
+      cname: 'example.com',
+      cnameTwin: 'www.example.com',
+      subdomain: 'shop',
+      orgId: 'org-1',
+    })
+
+    expect((await post()).status).toBe(200)
+    expect(mockDetachProjectDomain).toHaveBeenCalledWith(
+      'www.example.com',
+      'tenant',
+    )
+    const cleared = mockHostSet.mock.calls
+      .map(([patch]) => patch as Record<string, unknown>)
+      .find((patch) => 'cname' in patch)
+    expect(cleared).toMatchObject({
+      cname: 'FIELD_DELETE',
+      cnameTwin: 'FIELD_DELETE',
+      cnameTwinPending: 'FIELD_DELETE',
+    })
+  })
+
+  it('clears the claim even when the twin release fails', async () => {
+    mockHostData.mockReturnValue({
+      memberRoles: { 'u-1': 'admin' },
+      cname: 'example.com',
+      cnameTwin: 'www.example.com',
+      orgId: 'org-1',
+    })
+    mockDetachProjectDomain.mockImplementation(async (domain: string) =>
+      domain === 'www.example.com'
+        ? { outcome: 'failed', domain }
+        : detached(domain),
+    )
+
+    expect((await post()).status).toBe(200)
+    const cleared = mockHostSet.mock.calls
+      .map(([patch]) => patch as Record<string, unknown>)
+      .find((patch) => 'cname' in patch)
+    expect(cleared).toMatchObject({ cnameTwin: 'FIELD_DELETE' })
   })
 })

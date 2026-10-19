@@ -1285,6 +1285,19 @@ describe('hosts', () => {
         cnameDetachmentPending: false,
       }),
     )
+    // The `www.`/apex twin is a name claimed for the site in the same
+    // transaction as `cname` (AGL-3961); a forged one reserves another
+    // site's address, and clearing its retry flag strands the redirect.
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), {
+        cnameTwin: 'www.someone-elses.example',
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        cnameTwinPending: false,
+      }),
+    )
     // Theme provenance is written by the install route; a client rewrite
     // makes `isOverrideForCurrentTheme()` lie about which theme an override
     // belongs to. The Enterprise project pointers have no client writer.

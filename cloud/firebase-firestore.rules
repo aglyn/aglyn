@@ -3215,6 +3215,10 @@ service cloud.firestore {
                      'hosts', 'subdomain',
                      'cname', 'cnameAttachmentPending',
                      'cnameDetachmentPending', 'themeInstalledFrom',
+                     // The `www.`/apex twin of `cname` and its retry flag
+                     // (AGL-3961): a name claimed for this site, so a forged
+                     // one would reserve another site's address.
+                     'cnameTwin', 'cnameTwinPending',
                      'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
                      'suspendedUntilMs', 'suspendedMode', 'suspendedEnforcement',
                      'suspended', 'bandwidthCeiling',

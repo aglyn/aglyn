@@ -103,6 +103,10 @@ export * from './lib/server/firebase-admin'
 export * from './lib/server/free-workspace-cap'
 export * from './lib/server/ga4-measurement-protocol'
 export * from './lib/server/host-memberships'
+// Connecting a name to a site, for the attach route and for plugins that
+// bought the name (AGL-3961).
+export * from './lib/server/host-custom-domain'
+export * from './lib/server/custom-domain-redirects'
 export * from './lib/server/host-visitor-records'
 export * from './lib/server/list-members'
 export * from './lib/server/lockdown'
