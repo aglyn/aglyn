@@ -1061,6 +1061,14 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
   {
     pluginId: 'domains',
     subprocessors: [],
+    hosts: [
+      {
+        host: "www.icann.org",
+        disposition: "no-request",
+        reason: "ICANN’s registrant benefits and responsibilities page, linked from the purchase dialog (`ICANN_REGISTRANT_RIGHTS_URL` in `libs/plugins/domains/src/lib/components/purchase-dialog.component.tsx`) because a registrar must point a buyer at it. The buyer’s own browser opens it; no server of ours requests it.",
+        dataReceived: "Nothing from our servers. It is a plain link with no parameters.",
+      },
+    ],
     uses: [
       {
         host: "api.vercel.com",

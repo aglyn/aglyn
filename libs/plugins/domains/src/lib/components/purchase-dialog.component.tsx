@@ -37,6 +37,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { LEGAL_ORIGIN } from '@aglyn/aglyn/app-utils/published-legal-pages'
 import { useEffect, useState } from 'react'
 import { DOMAINS_API_ROUTES } from '../constants/bundle-common'
 import type { DomainRegistrationView } from '../model/registration'
@@ -54,8 +55,13 @@ import {
  * no nameservers, no records, no years to choose.
  */
 
-/** Where the domain registration terms are published. */
-export const DOMAIN_TERMS_URL = 'https://aglyn.com/legal/terms'
+/**
+ * Where the domain registration terms are published: the deployment's own
+ * terms page, the origin the console's clickwrap links read
+ * (`NEXT_PUBLIC_OPERATOR_LEGAL_ORIGIN`), so a self-hosted install never
+ * points its buyers at Aglyn's terms.
+ */
+export const DOMAIN_TERMS_URL = `${LEGAL_ORIGIN}/legal/terms`
 /** ICANN's statement of what a registrant may expect and must do. */
 export const ICANN_REGISTRANT_RIGHTS_URL =
   'https://www.icann.org/resources/pages/benefits-2013-09-16-en'

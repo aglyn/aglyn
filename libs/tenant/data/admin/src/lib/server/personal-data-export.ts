@@ -284,6 +284,20 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'Purchases and leads owed to a connected ad account (AGL-3694): the event id, order id, value and items, the visitor’s details as SHA-256 hashes, and the IP address, user agent and vendor browser ids. A SHOPPER’s data held for the merchant as controller, so disclosed to the ORG only; the personal fields are dropped once the event is sent, and every row expires after 14 days.',
   },
   {
+    collection: 'domainRegistrations',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each domain the workspace bought through Aglyn (AGL-3962): the name, the site it serves, the registrar and its order id, status, registration and expiry dates, auto-renew, what was charged for the first year and quoted for renewals and the invoices for each, the renewal state, the registrant’s name and email as typed at purchase, ICANN’s registrant email check, any dispute, the member who bought it the latest events and the registrar’s own prices at purchase. The registration itself, and the full registrant contact, are held by the registrar. Keyed by the domain name.',
+  },
+  {
+    collection: 'domainConnectSessions',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Each one-click DNS request a site sent to its DNS provider through Domain Connect (AGL-3963): the domain and host, the provider and template, the member who started it and their email, its status, and when it was applied, resolved and expires. The document id is a SHA-256 of the state token the provider echoes back, a lookup key and not the token, which is never stored.',
+  },
+  {
     collection: 'fulfillmentNetworkConnections',
     keyedBy: 'field',
     subjects: ['org'],
@@ -1218,6 +1232,8 @@ export async function exportOrgData(
     'podOrders',
     'deliveryAppStores',
     'deliveryAppOrders',
+    'domainRegistrations',
+    'domainConnectSessions',
   ]) {
     data[collection] = await readByField(db, collection, 'orgId', orgId)
   }
