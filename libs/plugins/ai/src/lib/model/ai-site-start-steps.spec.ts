@@ -17,6 +17,7 @@
 
 import { AI_SITE_START_ANSWERS, aiSiteStartRefusal, type AiSiteStartAnswers } from './ai-site-start'
 import {
+  AI_SITE_START_MORE_FIELDS,
   AI_SITE_START_STEP_FIELDS,
   AI_SITE_START_STEPS,
   aiSiteStartFieldErrors,
@@ -82,5 +83,47 @@ describe('the guided start’s steps (AGL-3898)', () => {
     const fine = answers({ audience: 'locals', kind: 'restaurant', pages: 8, submissions: 'lead', welcomeEmail: false })
     expect(aiSiteStartRefusal(fine)).toBeNull()
     expect(aiSiteStartFieldErrors(fine)).toEqual({})
+  })
+})
+
+describe('the business details each step asks (AGL-3979)', () => {
+  it('asks the phone and email on Details, and offers More details on every question step', () => {
+    expect(AI_SITE_START_STEP_FIELDS.details.slice(0, 2)).toEqual(['phone', 'email'])
+    for (const step of ['kind', 'audience', 'style', 'details'] as const) {
+      expect(AI_SITE_START_MORE_FIELDS[step].length).toBeGreaterThan(0)
+      for (const field of AI_SITE_START_MORE_FIELDS[step]) expect(AI_SITE_START_STEP_FIELDS[step]).toContain(field)
+    }
+    expect(AI_SITE_START_MORE_FIELDS.choose).toEqual([])
+    expect(AI_SITE_START_MORE_FIELDS.review).toEqual([])
+  })
+
+  it('every detail is optional, and one given is held to its rule on its own step', () => {
+    expect(aiSiteStartStepErrors('details', answers())).toEqual([])
+    expect(aiSiteStartStepErrors('details', answers({ phone: 'call us', email: 'nope' }))).toEqual([
+      { field: 'phone', code: 'invalid', message: expect.stringMatching(/area code/) },
+      { field: 'email', code: 'invalid', message: expect.stringMatching(/email address/) },
+    ])
+    expect(aiSiteStartStepErrors('kind', answers({ founded: '15' }))).toEqual([
+      { field: 'founded', code: 'invalid', message: expect.stringMatching(/four digits/) },
+    ])
+    expect(aiSiteStartStepErrors('audience', answers({ languages: 'x'.repeat(200) }))[0]).toMatchObject({ field: 'languages', code: 'too_long' })
+    // The review opens on the step whose detail cannot go forward, and the start says why.
+    expect(aiSiteStartFirstInvalidStep(answers({ social: 'my instagram' }))).toBe('details')
+    expect(aiSiteStartRefusal(answers({ social: 'my instagram' }))).toMatch(/profile/)
+  })
+})
+
+describe('the Style step holds both the sites they like and its More details (AGL-3975, AGL-3979)', () => {
+  it('asks the style, then the sites they like, then the brand color under More details', () => {
+    expect(AI_SITE_START_STEP_FIELDS.style).toEqual(['kind', 'inspiration', ...AI_SITE_START_MORE_FIELDS.style])
+    expect(AI_SITE_START_MORE_FIELDS.style).toEqual(['brand'])
+  })
+
+  it('says each one’s reason on the Style step, the sites they like first', () => {
+    expect(aiSiteStartStepErrors('style', answers({ inspiration: ['not a site'], brand: 'x'.repeat(200) }))).toEqual([
+      { field: 'inspiration', code: 'invalid', message: expect.stringMatching(/https address/) },
+      { field: 'brand', code: 'too_long', message: expect.stringMatching(/under/) },
+    ])
+    expect(aiSiteStartFirstInvalidStep(answers({ inspiration: ['https://a.example.com', 'https://b.example.com'] }), { freeTaste: true })).toBe('style')
   })
 })

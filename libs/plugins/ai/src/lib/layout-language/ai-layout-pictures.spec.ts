@@ -251,6 +251,22 @@ describe('a language page fills its picture slots with photos the site serves it
     warn.mockRestore()
   })
 
+  it('describes every photo it places, even one that brings no words, and hides none as decorative (AGL-3979)', async () => {
+    const page = towingPage()
+    const map = page as unknown as Record<string, Node>
+    // The compiler's stand-in: decorative while it shows nothing.
+    const [heroId] = Object.entries(map).find(([, node]) => node.componentId === 'image') ?? []
+    map[heroId as string] = { ...map[heroId as string], props: { ...map[heroId as string].props, decorative: true } }
+    const source = async (slots: readonly AiLayoutPictureSlot[]) =>
+      slots.map(() => ({ src: '/api/media/cdn/h_site/own', width: 1600, height: 1067 }))
+    const after = await aiResolveLayoutPictures(page, { ...input('job-f:home'), source })
+    for (const image of imagesOf(after)) {
+      expect(image.props?.['src']).toBe('/api/media/cdn/h_site/own')
+      expect(String(image.props?.['alt'] ?? '').trim()).not.toBe('')
+      expect(image.props?.['decorative']).toBeUndefined()
+    }
+  })
+
   it('leaves a slot that already has a source alone', async () => {
     const once = await aiResolveLayoutPictures(towingPage(), input('job-e:home'))
     const twice = await aiResolveLayoutPictures(once, input('another-seed'))
