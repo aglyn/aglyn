@@ -34,20 +34,19 @@
  *
  * The orders are read through commerce's order history service
  * (`commerce.orderHistory`), in the public shape its events carry, never
- * from commerce's storage: this plugin restates the contract by id, and a
- * deployment without commerce's reader leaves the backfill waiting.
+ * from commerce's storage; the contract comes from commerce's contracts
+ * (AGL-3980), and a deployment without commerce's reader leaves the backfill
+ * waiting.
  */
 
-import {
-  definePluginServiceContract,
-  resolvePluginService,
-} from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { resolvePluginService } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { ORDER_HISTORY_CONTRACT, type OrderHistoryEntry } from '@aglyn/plugins-commerce/contracts'
 import { toCents } from '../model/accounting-money'
 import type { AccountingOrderSnapshot, AccountingRefundSnapshot } from '../model/accounting-sources'
 import { connectionRef, type AccountingConnectionRecord } from './connection-store'
 import type { AccountingEngineDeps } from './sync-engine'
 import { enqueueOrderPaid } from './sync-engine'
-import { feeRefundedFor, merchantShareOfRefund, snapshotFromOrderEvent, type CommerceOrderEventOrder } from './sync-intake'
+import { feeRefundedFor, merchantShareOfRefund, snapshotFromOrderEvent } from './sync-intake'
 import { createSyncItems, itemsForRefund, syncItemId } from './sync-store'
 
 /** Where a backfill stands, on the connection document. */
@@ -65,31 +64,11 @@ export interface AccountingBackfillState {
 /** Orders read per page. */
 const PAGE = 100
 
-/** One order of commerce's history: the fields this plugin reads, restated. */
-export interface CommerceOrderHistoryEntry {
-  id: string
-  createdAtMs: number
-  paidAtMs: number | null
-  lastRefundAtMs: number | null
-  taxInclusive: boolean
-  taxRateId: string | null
-  order: CommerceOrderEventOrder
-}
-
-/** Commerce's order history reader, restated by its contract id. */
-export interface CommerceOrderHistoryReader {
-  listOrders(request: { hostId: string; fromMs: number; untilMs: number; limit: number }): Promise<CommerceOrderHistoryEntry[]>
-}
-
-export const COMMERCE_ORDER_HISTORY = definePluginServiceContract<CommerceOrderHistoryReader>('commerce.orderHistory', {
-  multiple: false,
-})
-
 /** A history entry → the sync's snapshot, or `null` for one that was never paid. */
 export function snapshotFromHistoryEntry(
   orgId: string,
   hostId: string,
-  entry: CommerceOrderHistoryEntry,
+  entry: OrderHistoryEntry,
 ): AccountingOrderSnapshot | null {
   if (entry.paidAtMs === null || !entry.order?.id) return null
   const snapshot = snapshotFromOrderEvent(entry.order, { orgId, hostId, occurredAtMs: entry.paidAtMs })
@@ -100,7 +79,7 @@ export function snapshotFromHistoryEntry(
 /** The refund a backfilled order already carries, or `null`. */
 export function backfillRefund(
   order: AccountingOrderSnapshot,
-  entry: Pick<CommerceOrderHistoryEntry, 'order' | 'lastRefundAtMs'>,
+  entry: Pick<OrderHistoryEntry, 'order' | 'lastRefundAtMs'>,
   nowMs: number,
 ): (AccountingRefundSnapshot & { coversUntilMs: number }) | null {
   // What came back to the buyer, less a Stripe Tax sale's tax, which was Aglyn's.
@@ -151,7 +130,7 @@ export async function runBackfillStep(
     await ref.update({ 'backfill.done': true })
     return 0
   }
-  const reader = resolvePluginService(COMMERCE_ORDER_HISTORY)
+  const reader = resolvePluginService(ORDER_HISTORY_CONTRACT)
   // Commerce's reader is registered by its console declarations; until it
   // is, the backfill waits where it stands.
   if (!reader) return 0

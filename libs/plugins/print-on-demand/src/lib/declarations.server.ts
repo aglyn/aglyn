@@ -17,6 +17,7 @@
 
 import { subscribePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import { registerPluginFulfillmentProvider } from '@aglyn/aglyn/plugin-manager/plugin-fulfillment-providers'
+import { ORDER_CANCELLED_EVENT, ORDER_PAID_EVENT, ORDER_REFUNDED_EVENT } from '@aglyn/plugins-commerce/contracts'
 import { POD_PLUGIN_ID } from './constants/bundle-common'
 import { POD_PROVIDER_LABELS, POD_PROVIDERS } from './model/print-on-demand'
 
@@ -24,9 +25,9 @@ import { POD_PROVIDER_LABELS, POD_PROVIDERS } from './model/print-on-demand'
  * Print-on-demand's SERVER declarations (AGL-3641), loaded by both apps'
  * servers before any plugin handler, cron or webhook runs: the subscriptions
  * that send a paid order's lines to the service that makes them, and cancel
- * them when the store cancels or refunds the order in full — by the events'
- * names, so the seller that raises them is never imported. Delivered by the
- * event outbox wherever it drains, which retries a handler that throws.
+ * them when the store cancels or refunds the order in full — by commerce's
+ * event tokens, whose shapes come from its contracts (AGL-3980). Delivered by
+ * the event outbox wherever it drains, which retries a handler that throws.
  *
  * And each service as a fulfillment provider (`core.fulfillment-providers`):
  * the units of an order it holds and has not shipped, so a label bought for
@@ -37,13 +38,13 @@ import { POD_PROVIDER_LABELS, POD_PROVIDERS } from './model/print-on-demand'
  */
 export function registerPrintOnDemandServerDeclarations(): void {
   const handlers = () => import('./server/orders')
-  subscribePluginDomainEvent<any>('order.paid', async (envelope) => (await handlers()).onOrderPaid(envelope), {
+  subscribePluginDomainEvent(ORDER_PAID_EVENT, async (envelope) => (await handlers()).onOrderPaid(envelope), {
     pluginId: POD_PLUGIN_ID,
   })
-  subscribePluginDomainEvent<any>('order.cancelled', async (envelope) => (await handlers()).onOrderCancelled(envelope), {
+  subscribePluginDomainEvent(ORDER_CANCELLED_EVENT, async (envelope) => (await handlers()).onOrderCancelled(envelope), {
     pluginId: POD_PLUGIN_ID,
   })
-  subscribePluginDomainEvent<any>('order.refunded', async (envelope) => (await handlers()).onOrderRefunded(envelope), {
+  subscribePluginDomainEvent(ORDER_REFUNDED_EVENT, async (envelope) => (await handlers()).onOrderRefunded(envelope), {
     pluginId: POD_PLUGIN_ID,
   })
   for (const provider of POD_PROVIDERS) {

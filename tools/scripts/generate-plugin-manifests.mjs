@@ -66,6 +66,7 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mobileManifestRows } from './lib/mobile-manifest.mjs'
+import { pluginCodeDependencies } from './lib/lib-boundaries.mjs'
 import {
   IOS_MANIFEST_PLUGINS_DIR,
   nativeManifestOutputs,
@@ -3793,6 +3794,13 @@ function consoleRedirectRows() {
  * Built and validated in ./lib/native-manifest.mjs, which has its own tests;
  * a plugin may name its registrar only once its native package exists.
  */
+// Each plugin's `uses` (AGL-3980) names real plugins and never itself: the
+// optional code dependencies whose `/contracts` it may import, which
+// `check:lib-boundaries` and the lint rule read from the same helper.
+{
+  const { findings } = pluginCodeDependencies(config)
+  if (findings.length) throw new Error(findings.join('\n'))
+}
 // Each `mobile` block's declared inventory is valid before a native row reads it.
 mobileManifestRows(config.plugins)
 const NATIVE_ROWS = nativeManifestRows(config.plugins, { exists: (path) => existsSync(join(ROOT, path)) })

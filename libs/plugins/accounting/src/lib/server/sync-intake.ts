@@ -31,10 +31,15 @@
  * redelivered event queues nothing the second time.
  *
  * The payload is commerce's public order view (`GET /v1/sites/{siteId}/
- * orders/{orderId}`); the fields read are restated here, as a subscriber in
- * another plugin does, rather than imported.
+ * orders/{orderId}`); its shape comes from commerce's contracts (AGL-3980).
  */
 
+import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type {
+  OrderEventOrder,
+  OrderEventPayload,
+  OrderRefundedEventPayload,
+} from '@aglyn/plugins-commerce/contracts'
 import { toCents } from '../model/accounting-money'
 import type {
   AccountingOrderSnapshot,
@@ -58,54 +63,14 @@ import {
   syncItemsCollection,
 } from './sync-store'
 
-/** The order as commerce's events carry it: the fields the sync reads. */
-export interface CommerceOrderEventOrder {
-  id: string
-  number?: number | null
-  status?: string | null
-  channel?: string | null
-  currency?: string | null
-  customerEmail?: string | null
-  customerName?: string | null
-  lineItems?: unknown
-  totals?: {
-    itemsCents?: number
-    shippingCents?: number
-    taxCents?: number
-    discountCents?: number
-    totalCents?: number | null
-    feeCents?: number
-  }
-  refundedCents?: number
-  /**
-   * Which tax regime the sale carried: `stripe-automatic` when Stripe Tax
-   * computed it under Aglyn's registrations, `manual` or `none` otherwise,
-   * `null` on an order from before it was recorded.
-   */
-  taxMode?: string | null
-}
-
 /** The tax regime under which Aglyn, as marketplace facilitator, holds and remits the tax. */
 export const MARKETPLACE_TAX_MODE = 'stripe-automatic'
 
-/** `order.paid` and `order.cancelled`. */
-export interface CommerceOrderEventPayload {
-  order: CommerceOrderEventOrder
-}
-
-/** `order.refunded`: what THIS refund moved. */
-export interface CommerceOrderRefundedEventPayload extends CommerceOrderEventPayload {
-  refund: { id: string | null; amountCents: number; lineItemIds?: number[]; full?: boolean }
-}
-
 /** The envelope fields the intake reads. */
-export interface AccountingEventEnvelope<Payload> {
-  id: string
-  hostId: string
-  orgId: string | null
-  occurredAtMs: number
-  payload: Payload
-}
+export type AccountingEventEnvelope<Payload> = Pick<
+  PluginDomainEventEnvelope<Payload>,
+  'id' | 'hostId' | 'orgId' | 'occurredAtMs' | 'payload'
+>
 
 export interface AccountingIntakeDeps {
   firestore: () => FirebaseFirestore.Firestore
@@ -143,10 +108,11 @@ export async function orgOfHost(
 
 /** Commerce's order view → the sync's snapshot. */
 export function snapshotFromOrderEvent(
-  order: CommerceOrderEventOrder,
+  order: OrderEventOrder,
   context: { orgId: string; hostId: string; occurredAtMs: number },
 ): AccountingOrderSnapshot {
-  const totals = order.totals ?? {}
+  const totals: Partial<OrderEventOrder['totals']> = order.totals ?? {}
+  // Commerce types `lineItems` as `unknown`; the line fields read here are this plugin's own reading.
   const lines = Array.isArray(order.lineItems) ? (order.lineItems as Array<Record<string, unknown>>) : []
   // A Stripe Tax sale's tax is Aglyn's to remit and never reaches the
   // merchant's account, so it is neither the merchant's liability nor money
@@ -288,7 +254,7 @@ export async function enqueuePayout(deps: AccountingIntakeDeps, payout: Accounti
 /** `order.paid` → its sale and fee, queued. */
 export async function onOrderPaid(
   deps: AccountingIntakeDeps,
-  envelope: AccountingEventEnvelope<CommerceOrderEventPayload>,
+  envelope: AccountingEventEnvelope<OrderEventPayload>,
 ): Promise<number> {
   const order = envelope.payload?.order
   if (!order?.id) return 0
@@ -303,7 +269,7 @@ export async function onOrderPaid(
 /** `order.refunded` → the refund and the fee it gave back, queued behind the sale. */
 export async function onOrderRefunded(
   deps: AccountingIntakeDeps,
-  envelope: AccountingEventEnvelope<CommerceOrderRefundedEventPayload>,
+  envelope: AccountingEventEnvelope<OrderRefundedEventPayload>,
 ): Promise<number> {
   const order = envelope.payload?.order
   const refund = envelope.payload?.refund
@@ -333,7 +299,7 @@ export async function onOrderRefunded(
 /** `order.cancelled` → a sale not yet posted is skipped. */
 export async function onOrderCancelled(
   deps: AccountingIntakeDeps,
-  envelope: AccountingEventEnvelope<CommerceOrderEventPayload>,
+  envelope: AccountingEventEnvelope<OrderEventPayload>,
 ): Promise<boolean> {
   const order = envelope.payload?.order
   if (!order?.id) return false

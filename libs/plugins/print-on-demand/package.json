@@ -36,9 +36,15 @@
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
+    "@aglyn/plugins-commerce": "1.0.0-beta.270",
     "@mui/material": "^9.3.1",
     "firebase-admin": "^14.3.0",
     "react": "^19.2.8"
+  },
+  "peerDependenciesMeta": {
+    "@aglyn/plugins-commerce": {
+      "optional": true
+    }
   },
   "sideEffects": false,
   "description": "Print-on-demand for Aglyn stores: a merchant connects their own Printful or Printify account, imports its products with their costs, and paid orders are sent to it to make and ship, with tracking written back to the order."

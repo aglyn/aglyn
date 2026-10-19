@@ -66,28 +66,29 @@ point new QR codes at its labels.
 - the Inbox, with the form's alert to the site's notification recipients;
 - the person as a contact in the CRM;
 - `hosts/DXnRbPH4CQ/campaignAttributions/form:{submissionId}` (and
-  `contact:…`, or `lead:…` once lead routing is on) with `campaignId`,
+  `contact:…` and `lead:…`) with `campaignId`,
   `source`, `medium` and `campaign` when the link carried a declared label.
 
 Following up is the sales routine's job: a lead from this form joins the
 "One job" sequence that fits it, as every other inbound lead does.
 
-## Lead routing is off until the funnel count moves
+## Lead routing is on
 
-The form was written with `routing.lead: false`. `/api/health/funnel` grades
-an exact count of live lead forms against `AGLYN_FUNNEL_MIN_LEAD_FORMS` on the
-`aglyn-tenant` Vercel project (15 on 2026-10-19), so flipping a sixteenth form
-on without moving that number turns the check red. Moving it is a production
-config change and a redeploy, so it waits for the account owner's go. To flip
-it, in this order:
+Lead routing for the form is on in production, so a submission also makes a
+lead, and its attribution is written under `lead:…` as well.
 
-1. Set `AGLYN_FUNNEL_MIN_LEAD_FORMS=16` on `aglyn-tenant` (it is a sensitive
-   variable: set it through `PATCH /v9/projects/aglyn-tenant/env/<id>`, since
-   piped `vercel env add` can store it blank).
-2. Set `routing.lead: true` on the form.
-3. Redeploy the current production tenant deployment
-   (`vercel redeploy <url> --target production`).
-4. Read `https://aglyn.com/api/health/funnel` until `leadForms` and `required`
-   are both 16 with no faults. The probe memoizes for two minutes per
-   instance, so expect the Lead forms monitor to blip once while the build
-   runs.
+`/api/health/funnel` grades an exact count of live lead forms against
+`AGLYN_FUNNEL_MIN_LEAD_FORMS` on the `aglyn-tenant` Vercel project, so the
+sixteenth form and that number had to move together. What was done on
+2026-10-19:
+
+1. At 06:03Z, `AGLYN_FUNNEL_MIN_LEAD_FORMS` on `aglyn-tenant` was raised from
+   15 to 16.
+2. Lead routing was turned on for the form `chjqg6-XOD`.
+3. Production was redeployed (commit `8fb356b`) so the new number took effect.
+4. `https://aglyn.com/api/health/funnel` then read `leadForms` 16 of 16, with
+   no faults.
+
+The next lead form that goes live owes the same pair of changes: raise the
+number to match and redeploy, then read the health check until it shows the
+new count with no faults.
