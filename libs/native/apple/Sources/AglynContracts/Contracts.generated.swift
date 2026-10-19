@@ -4976,12 +4976,17 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let nativeCreateSiteRoleReason: String
   public let nativeCrmActivityDirections: [String: [String]]
   public let nativeCrmActivityKinds: [String]
+  public let nativeCrmFieldCurrencies: [String]
+  public let nativeCrmFieldDefaultCurrency: String
   public let nativeCrmFieldObjects: [String]
+  public let nativeCrmFieldTypeLabels: [String: String]
+  public let nativeCrmFieldTypes: [String]
   public let nativeCrmLeadOpenStatuses: [String]
   public let nativeCrmLeadStatuses: [String]
   public let nativeCrmPicklists: [NativeCrmPicklist]
   public let nativeCrmReportPeriods: [String]
   public let nativeCrmTaskKinds: [String]
+  public let nativeCurrencyFractionDigits: [String: Double]
   public let nativeNavManifest: NativeNavManifest
   public let nativeNavShellScreens: [String]
   public let nativeSiteCampaignsQuery: ListQueryDeclaration
@@ -5272,12 +5277,17 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case nativeCreateSiteRoleReason = "NATIVE_CREATE_SITE_ROLE_REASON"
     case nativeCrmActivityDirections = "NATIVE_CRM_ACTIVITY_DIRECTIONS"
     case nativeCrmActivityKinds = "NATIVE_CRM_ACTIVITY_KINDS"
+    case nativeCrmFieldCurrencies = "NATIVE_CRM_FIELD_CURRENCIES"
+    case nativeCrmFieldDefaultCurrency = "NATIVE_CRM_FIELD_DEFAULT_CURRENCY"
     case nativeCrmFieldObjects = "NATIVE_CRM_FIELD_OBJECTS"
+    case nativeCrmFieldTypeLabels = "NATIVE_CRM_FIELD_TYPE_LABELS"
+    case nativeCrmFieldTypes = "NATIVE_CRM_FIELD_TYPES"
     case nativeCrmLeadOpenStatuses = "NATIVE_CRM_LEAD_OPEN_STATUSES"
     case nativeCrmLeadStatuses = "NATIVE_CRM_LEAD_STATUSES"
     case nativeCrmPicklists = "NATIVE_CRM_PICKLISTS"
     case nativeCrmReportPeriods = "NATIVE_CRM_REPORT_PERIODS"
     case nativeCrmTaskKinds = "NATIVE_CRM_TASK_KINDS"
+    case nativeCurrencyFractionDigits = "NATIVE_CURRENCY_FRACTION_DIGITS"
     case nativeNavManifest = "NATIVE_NAV_MANIFEST"
     case nativeNavShellScreens = "NATIVE_NAV_SHELL_SCREENS"
     case nativeSiteCampaignsQuery = "NATIVE_SITE_CAMPAIGNS_QUERY"

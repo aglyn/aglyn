@@ -29,8 +29,16 @@ struct AglynCommands: Commands {
           .disabled(navigation == nil)
       }
       if !pins.isEmpty { Divider() }
-      Button("Switch Workspace…") { navigation?.picker = .workspace }
+      Button("Search or Jump To…") { navigation?.showOneBox = true }
         .keyboardShortcut("k", modifiers: .command)
+        .disabled(navigation == nil)
+      Button("Back") { navigation?.goBack() }
+        .keyboardShortcut("[", modifiers: .command)
+        .disabled(navigation?.canGoBack != true)
+      Button("Forward") { navigation?.goForward() }
+        .keyboardShortcut("]", modifiers: .command)
+        .disabled(navigation?.canGoForward != true)
+      Button("All Workspaces…") { navigation?.picker = .workspace }
         .disabled(navigation == nil)
       Button("Switch Site…") { navigation?.picker = .site }
         .keyboardShortcut("k", modifiers: [.command, .shift])

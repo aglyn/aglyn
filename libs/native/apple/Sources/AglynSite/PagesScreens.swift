@@ -123,6 +123,8 @@ enum PageConfirm {
 struct PagesScreen: View {
   let context: NativePluginContext
   var initialPageID: String?
+  /// Opens New page on arrival (Create new's Page, `new=1`).
+  var startNew = false
   @State private var model = SitePagesModel()
   @State private var runner = ActionRunner()
   @State private var selection: String?
@@ -161,6 +163,7 @@ struct PagesScreen: View {
           }
         }
         .task(id: hostID) {
+          if startNew && canEdit { sheet = .newPage }
           await model.bind(context.firestore, hostID: hostID)
           if let initialPageID { await model.reveal(initialPageID) }
         }

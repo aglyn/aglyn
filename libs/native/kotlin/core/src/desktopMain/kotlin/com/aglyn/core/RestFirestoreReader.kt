@@ -12,8 +12,10 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
@@ -39,6 +41,8 @@ import java.time.Instant
  * that token expires. A stream that cannot be held ([LISTEN_ATTEMPTS] tries
  * in a row with no snapshot) falls back to REST, re-reading every
  * [refreshMillis] while collected. Without [listen], every observation polls.
+ * Every write this reader makes ends the polls' wait, so a screen shows its own
+ * save at once rather than a poll later (AGL-3971).
  */
 class RestFirestoreReader(
   private val http: HttpClient,
@@ -52,6 +56,9 @@ class RestFirestoreReader(
 ) : FirestoreReader, FirestoreWriter {
   private val root = (emulatorHost?.let { "http://$it" } ?: "https://firestore.googleapis.com") +
     "/v1/projects/$projectId/databases/(default)/documents"
+
+  /** Each write this reader made: a polled observation re-reads on it instead of waiting out [refreshMillis]. */
+  private val wrote = MutableSharedFlow<Unit>(extraBufferCapacity = 64)
 
   private suspend fun bearer(): String = idToken() ?: throw IllegalStateException("Sign in to continue.")
 
@@ -134,6 +141,7 @@ class RestFirestoreReader(
       val body = runCatching { Json.parseToJsonElement(response.bodyAsText()) }.getOrNull()
       throw IllegalStateException(body?.let(::errorOf) ?: "Could not save.")
     }
+    wrote.tryEmit(Unit)
   }
 
   /** A PATCH whose mask names each top-level key, with the document required to exist: `updateDoc`. */
@@ -151,6 +159,7 @@ class RestFirestoreReader(
       val body = runCatching { Json.parseToJsonElement(response.bodyAsText()) }.getOrNull()
       throw IllegalStateException(body?.let(::errorOf) ?: "Could not save.")
     }
+    wrote.tryEmit(Unit)
   }
 
   override suspend fun delete(path: String) {
@@ -159,6 +168,7 @@ class RestFirestoreReader(
       val body = runCatching { Json.parseToJsonElement(response.bodyAsText()) }.getOrNull()
       throw IllegalStateException(body?.let(::errorOf) ?: "Could not delete.")
     }
+    wrote.tryEmit(Unit)
   }
 
   override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> =
@@ -214,7 +224,8 @@ class RestFirestoreReader(
     emit(Live.Loading)
     while (true) {
       emit(runCatching { read() }.fold({ Live.Ready(it) }, { Live.Failed(it) }))
-      delay(refreshMillis)
+      // The interval, or less when this reader has just written.
+      withTimeoutOrNull(refreshMillis) { wrote.first() }
     }
   }
 

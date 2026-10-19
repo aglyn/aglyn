@@ -34,7 +34,28 @@ class FunctionCasesTest {
   @Test
   fun everyFunctionHasCases() {
     assertEquals("UTC", root.getValue("timeZone").jsonPrimitive.content)
-    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales", "productPriceRange", "productInventory", "isLowStock", "liftLegacyProduct", "describeRestockCheck", "posPinProblem", "posCashVarianceCents", "expandVariantMatrix", "renameProductOptions")))
+    assertTrue(functions.keys.containsAll(listOf("formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel", "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents", "apportionCents", "accountPushSwitch", "orderLineFulfillmentStates", "orderDisputeBlocksRefund", "liftLegacyOrder", "orderIsTestMode", "orderCountsAsSale", "orderWindowFigures", "productSales", "productPriceRange", "productInventory", "isLowStock", "liftLegacyProduct", "describeRestockCheck", "posPinProblem", "posCashVarianceCents", "expandVariantMatrix", "renameProductOptions", "currencyFractionDigits", "currencyMinorToMajor", "parseCurrencyInput", "customFieldCurrency")))
+  }
+
+  /** A CRM currency field's amounts (AGL-3971): USD's two decimals, JPY's none, BHD's three, as the console's Intl. */
+  @Test
+  fun currencyFieldAmountsUseEachCurrencysOwnDecimals() {
+    cases("currencyFractionDigits").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.long.toInt(), currencyFractionDigits(str(args[0]).orEmpty()), args.toString())
+    }
+    cases("currencyMinorToMajor").forEach { (args, result) ->
+      assertEquals(result.jsonPrimitive.double, currencyMinorToMajor(args[0].jsonPrimitive.double, str(args[1]).orEmpty()), args.toString())
+    }
+    cases("parseCurrencyInput").forEach { (args, result) ->
+      assertEquals((result as? JsonPrimitive)?.takeIf { it !is JsonNull }?.long, parseCurrencyInput(str(args[0]), str(args[1]).orEmpty()), args.toString())
+    }
+    cases("customFieldCurrency").forEach { (args, result) ->
+      assertEquals(str(result), customFieldCurrency(str((args[0] as? JsonObject)?.get("currency"))), args.toString())
+    }
+    assertEquals("1250.50", currencyInputText(125050.0, "usd"))
+    assertEquals("1500", currencyInputText(1500.0, "jpy"))
+    assertEquals("1.250", currencyInputText(1250.0, "bhd"))
+    assertEquals("-0.05", currencyInputText(-5.0, "usd"))
   }
 
   @Test

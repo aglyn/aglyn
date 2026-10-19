@@ -1,26 +1,27 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynCore
 import AglynPluginHost
 import AglynUI
 import SwiftUI
 
-/// Home, a site dashboard in four sections: the site header, quick actions,
-/// "At a glance" metric cards, and recent activity. Wide windows keep the
-/// header full width and put recent activity beside the rest.
+/// Home answers one question: what needs me now? (AGL-3945, Figma Home "Needs you" 2:6; Calm rules.) The site in one
+/// line, then only what is waiting on the person (each line opens its list, already filtered), then where they left off,
+/// then the one-line AI prompt that starts Create with AI. No charts here: those are Overview's.
 struct HomeView: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
-  @Environment(\.openURL) private var openURL
-  @State private var feed = NotificationFeed()
   @State private var site = SiteStatus()
+  @State private var prompt = ""
+  /// How tall each Needs-you line drew: a line with nothing waiting draws nothing.
+  @State private var lineHeights: [String: CGFloat] = [:]
 
-  /// How many recent notifications the dashboard reads, and how many it lists.
-  private static let recentWindow = 50
-  private static let recentShown = 5
+  /// The plugins' "Needs you" lines (the `homeNeedsYou` slot): each draws one line, or nothing when nothing waits.
+  static let needsYouSlot = "homeNeedsYou"
 
-  private var hasSite: Bool { model.scopedSite(navigation) != nil }
+  private var picked: WorkspaceSite? { model.scopedSite(navigation) }
 
   var body: some View {
     ScrollView {
@@ -28,152 +29,163 @@ struct HomeView: View {
         if let workspace = model.workspace, workspace.ready, workspace.orgs.isEmpty {
           FirstRunView()
         } else {
-          header
-          // Inside the scroll view: the width class alone decides, as a measured width has no height to give here.
-          WideLayoutReader(minimumWidth: nil) { wide in
-            if wide {
-              HStack(alignment: .top, spacing: AglynSpace.three) {
-                VStack(alignment: .leading, spacing: AglynSpace.three) {
-                  quickActions
-                  glance
-                }
-                .frame(minWidth: 360, maxWidth: .infinity)
-                .layoutPriority(1)
-                activity.frame(minWidth: 280, maxWidth: 400)
-              }
-            } else {
-              VStack(alignment: .leading, spacing: AglynSpace.three) {
-                quickActions
-                glance
-                activity
-              }
-            }
-          }
+          scopeLine
+          needsYou
+          pickUp
+          if picked != nil, model.registry.screen("ai.create") != nil { aiPrompt }
         }
       }
       .padding(AglynSpace.two)
-      .frame(maxWidth: 1200, alignment: .leading)
+      .frame(maxWidth: 880, alignment: .leading)
       .frame(maxWidth: .infinity)
     }
     .background(AglynColor.page)
     .navigationTitle("Home")
     .refreshable { model.refresh() }
-    .task(id: "\(model.auth?.user?.uid ?? ""):\(model.refreshToken)") {
-      feed.start(reader: model.reader, uid: model.auth?.user?.uid, count: Self.recentWindow)
-    }
-    .task(id: "\(model.scopedSite(navigation)?.id ?? ""):\(model.refreshToken)") {
-      site.start(reader: model.reader, hostID: model.scopedSite(navigation)?.id)
+    .task(id: "\(picked?.id ?? ""):\(model.refreshToken)") {
+      site.start(reader: model.reader, hostID: picked?.id)
     }
   }
 
-  // MARK: 1. The site
+  // MARK: The site, in one line
 
-  private var header: some View {
-    let picked = model.scopedSite(navigation)
-    let address = HostStatus.siteAddress(picked?.subdomain)
-    return SiteHeaderCard(
-      workspace: model.workspace?.org?.name,
-      name: picked?.name ?? (model.workspace?.ready == true ? "Pick a site" : "Loading site"),
-      address: address,
-      iconURL: model.mediaURL(picked?.favicon, hostID: picked?.id, width: 160),
-      status: site.chip,
-      // Live needs no sentence: the pages card counts them.
-      detail: site.status.flatMap { $0.kind == .live ? nil : $0.detail },
-      loading: model.workspace?.ready != true,
-      onVisit: address.flatMap { URL(string: "https://\($0)/") }.map { url in { openURL(url) } },
-      onSwitch: { navigation.showSwitcher = true })
-  }
-
-  // MARK: 2. Quick actions
-
-  private var quickActions: some View {
-    let actions = model.registry.quickActions(for: .aglyn).filter { hasSite || !$0.requiresSite }
-    return Group {
-      if !actions.isEmpty || hasSite {
-        VStack(alignment: .leading, spacing: AglynSpace.oneAndHalf) {
-          AglynSectionHeader("Quick actions")
-          AglynGrid(minimum: 76) {
-            if hasSite {
-              QuickActionTile("Analytics", systemImage: "chart.bar.xaxis") { navigation.push(.analytics) }
-                .accessibilityIdentifier("quick-action-analytics")
-            }
-            ForEach(actions) { action in
-              QuickActionTile(action.title, systemImage: action.icon) {
-                navigation.push(.screen(action.screen, action.params))
-              }
-              .accessibilityIdentifier("quick-action-\(action.id)")
-            }
-          }
+  @ViewBuilder
+  private var scopeLine: some View {
+    if let picked {
+      let address = HostStatus.siteAddress(picked.subdomain)
+      HStack(spacing: AglynSpace.one) {
+        AglynBrandPicture(model.mediaURL(picked.favicon, hostID: picked.id), size: 28, cornerRadius: 14) {
+          IconBadge("globe", tone: .neutral, size: 28, circle: true)
+        }
+        Text(picked.name).font(AglynFont.title2).lineLimit(1)
+        if let chip = site.chip { StatusChip(chip.text, tone: chip.tone) }
+        Spacer(minLength: AglynSpace.one)
+        if let address, let url = URL(string: "https://\(address)/") {
+          Button("Visit site") { navigation.openWeb(AglynWebPage(url)) }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("home-visit-site")
         }
       }
+      .accessibilityElement(children: .contain)
+      .accessibilityIdentifier("home-site-line")
+    } else if let org = model.workspace?.org {
+      HStack(spacing: AglynSpace.one) {
+        PinTile(orgID: org.id, size: 28)
+        Text(org.name).font(AglynFont.title2).lineLimit(1)
+        if let plan = model.workspace?.orgLogos[org.id]?.planLabel { StatusChip(plan) }
+        Spacer()
+      }
+      .accessibilityIdentifier("home-workspace-line")
     }
   }
 
-  // MARK: 3. At a glance
+  // MARK: Needs you
 
-  private var glance: some View {
-    let widgets = model.registry.widgets(for: .aglyn).filter { hasSite || !$0.requiresSite }
-    let rows = feed.rows
-    let unread = rows?.filter { !$0.read }.count
-    let pages = site.status?.publishedPages
-    return VStack(alignment: .leading, spacing: AglynSpace.oneAndHalf) {
-      AglynSectionHeader("At a glance")
-      AglynCardGrid(minimum: 160, maxColumns: 3) {
-        if hasSite {
-          MetricCard(
-            "Published pages", systemImage: "doc.text",
-            value: site.loaded ? pages.map(String.init) ?? "0" : nil,
-            caption: pages == 0 ? "Nothing published yet" : pages == 1 ? "page visitors can open" : "pages visitors can open",
-            failed: site.failed ? "Could not load this site." : nil)
-          .accessibilityIdentifier("glance-pages")
-        }
-        MetricCard(
-          "Unread notifications", systemImage: "bell",
-          value: unread.map(String.init),
-          caption: unread == 0 ? "You're all caught up" : "of \(rows?.count ?? 0) recent",
-          actionLabel: "Open notifications", failed: feed.failed ? "Could not load notifications." : nil
-        ) {
-          navigation.select(.notifications)
-        }
-        .accessibilityIdentifier("glance-unread")
-        if let context = model.context(for: navigation) {
-          ForEach(widgets) { widget in
-            widget.make(context)
-              .aglynGridFullWidth(widget.size == .full)
-              .id("\(widget.id):\(context.hostID ?? ""):\(model.refreshToken)")
+  private var needsYou: some View {
+    let lines = model.registry.widgets(for: .aglyn, slot: Self.needsYouSlot).filter { picked != nil || !$0.requiresSite }
+    return VStack(alignment: .leading, spacing: AglynSpace.one) {
+      AglynSectionHeader("Needs you")
+      if let context = model.context(for: navigation), !lines.isEmpty {
+        let drawn = lines.contains { (lineHeights[$0.id] ?? 0) > 1 }
+        VStack(spacing: 0) {
+          ForEach(lines) { line in
+            line.make(context).id("\(line.id):\(context.hostID ?? ""):\(model.refreshToken)")
+              .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { lineHeights[line.id] = $0 }
           }
         }
-      }
-    }
-  }
-
-  // MARK: 4. Recent activity
-
-  private var activity: some View {
-    VStack(alignment: .leading, spacing: AglynSpace.oneAndHalf) {
-      AglynSectionHeader("Recent activity") {
-        Button("All notifications") { navigation.select(.notifications) }.buttonStyle(.borderless)
-      }
-      if let rows = feed.rows {
-        if rows.isEmpty {
-          AglynEmptyState("No activity yet", systemImage: "bell", message: "Orders, form submissions and bookings show up here.")
-            .aglynCardSurface()
-        } else {
-          AglynListCard(Array(rows.prefix(Self.recentShown))) { row in
-            Button { openNotification(row, model: model, navigation: navigation) } label: {
-              NotificationRow(row: row)
-            }
-            .buttonStyle(.aglynRow)
-          }
+        .aglynCardSurface()
+        .opacity(drawn ? 1 : 0)
+        if !drawn {
+          Text("Nothing needs you right now.").foregroundStyle(.secondary)
+            .accessibilityIdentifier("home-nothing-waiting")
         }
       } else {
-        AglynListCard([0, 1, 2].map { SkeletonID(id: $0) }) { _ in
-          ActivityRow("Loading a notification", subtitle: "Loading its body", time: "now", systemImage: "bell", tone: .info, unread: false)
-            .redacted(reason: .placeholder)
+        Text("Nothing needs you right now.").foregroundStyle(.secondary)
+          .accessibilityIdentifier("home-nothing-waiting")
+      }
+    }
+  }
+
+  // MARK: Pick up where you left off
+
+  @ViewBuilder
+  private var pickUp: some View {
+    let items = (model.preferences?.recents ?? []).filter { item in
+      item.orgId == model.workspace?.org?.id && (picked == nil || item.hostId == nil || item.hostId == picked?.id)
+    }.prefix(6)
+    if !items.isEmpty {
+      VStack(alignment: .leading, spacing: AglynSpace.one) {
+        AglynSectionHeader("Pick up where you left off")
+        AglynCardGrid(minimum: 180, maxColumns: 3) {
+          ForEach(Array(items), id: \.key) { item in
+            Button {
+              open(item)
+            } label: {
+              VStack(alignment: .leading, spacing: 6) {
+                Image(systemName: icon(item)).font(.title3).foregroundStyle(AglynColor.tint)
+                Text(item.label).font(AglynFont.strongSubheadline).lineLimit(1)
+                Text(detail(item)).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1)
+              }
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(AglynSpace.oneAndHalf)
+              .aglynCardSurface()
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("home-recent-\(item.id)")
+          }
         }
       }
     }
   }
-}
 
-private struct SkeletonID: Identifiable { let id: Int }
+  private func icon(_ item: RecentItem) -> String {
+    NativeNav.manifest.lists.flatMap(\.groups).flatMap(\.rows).first { $0.id == item.id || $0.screen == item.screen }?
+      .icon.apple ?? "clock"
+  }
+
+  private func detail(_ item: RecentItem) -> String {
+    let site = item.hostId.flatMap { id in model.workspace?.sites.first { $0.id == id }?.name }
+    return [site ?? model.workspace?.org?.name, relativeTime(Date(timeIntervalSince1970: Double(item.openedAtMs) / 1000))]
+      .compactMap { $0 }.joined(separator: " · ")
+  }
+
+  private func open(_ item: RecentItem) {
+    if let hostID = item.hostId {
+      model.workspace?.selectSite(hostID)
+      navigation.inSite = true
+    }
+    navigation.select(ShellSection.opening(item.screen, item.params))
+  }
+
+  // MARK: The AI prompt
+
+  private var aiPrompt: some View {
+    HStack(spacing: AglynSpace.one) {
+      Image(systemName: "sparkles").foregroundStyle(AglynColor.tint).accessibilityHidden(true)
+      TextField("Describe what you want to build", text: $prompt, axis: .vertical)
+        .textFieldStyle(.plain)
+        .lineLimit(1...3)
+        .onSubmit(startAI)
+        .accessibilityIdentifier("home-ai-prompt")
+      Button {
+        startAI()
+      } label: {
+        Label("Start", systemImage: "arrow.up.circle.fill").labelStyle(.iconOnly).font(.title2)
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(AglynColor.tint)
+      .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      .accessibilityIdentifier("home-ai-start")
+    }
+    .padding(AglynSpace.oneAndHalf)
+    .aglynCardSurface()
+  }
+
+  /// Opens Create with AI on a page, the brief already written (the existing flow: it asks, then starts the job).
+  private func startAI() {
+    let brief = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !brief.isEmpty else { return }
+    navigation.push(.screen("ai.create", ["kind": "page", "brief": brief]))
+    prompt = ""
+  }
+}

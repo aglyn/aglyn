@@ -26,7 +26,7 @@ import { useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import MediaFieldSection from './media-field-section.component'
 import { FAVICON_HINT } from '../constants/media-size-hints'
-import { resyncHostMemberships } from '../utils/resync-host-memberships'
+import { saveMirroredHostFields } from '../utils/resync-host-memberships'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface FaviconCardProps {
@@ -47,8 +47,14 @@ export function FaviconCard(props: FaviconCardProps) {
   const { data: user } = useUser()
   const {
     doc: { data },
-    setDoc,
   } = useHost({ hostId })
+  /*
+   * Through the server, never `setDoc`: it writes `seo.favicon` and re-fans
+   * every member's site list row in one request (AGL-3972), where a client
+   * write and a ping behind it could leave the lists on the old icon.
+   */
+  const saveFavicon = (favicon: string) =>
+    saveMirroredHostFields(hostId, user as never, { favicon })
   const [pickerOpen, setPickerOpen] = useState(false)
   const favicon = data?.seo?.favicon
   /**
@@ -122,11 +128,9 @@ export function FaviconCard(props: FaviconCardProps) {
             size="small"
             color="error"
             onClick={() =>
-              setDoc({ seo: { favicon: '' } }, { merge: true })
+              // `''`, as the clear has always been written (AGL-1071).
+              saveFavicon('')
                 .then(() => {
-                  // Clearing must re-fan too (AGL-1071) — otherwise the
-                  // switcher keeps showing the icon the user just removed.
-                  resyncHostMemberships(hostId, user as never)
                   enqueueSnackbar('Favicon removed', {
                     variant: 'success',
                     persist: false,
@@ -166,9 +170,8 @@ export function FaviconCard(props: FaviconCardProps) {
           // `''` and not a missing key: a cleared media value has to REACH
           // Firestore as an empty string or the form stack drops it and the
           // old icon survives the clear (AGL-1191).
-          void setDoc({ seo: { favicon: next } }, { merge: true })
+          void saveFavicon(next)
             .then(() => {
-              resyncHostMemberships(hostId, user as never)
               enqueueSnackbar('Favicon updated', {
                 variant: 'success',
                 persist: false,
@@ -194,11 +197,8 @@ export function FaviconCard(props: FaviconCardProps) {
           // conversion the next time someone opens this card.
           const src = Aglyn.mediaNodeSrc(media)
           if (!src) return
-          void setDoc({ seo: { favicon: src } }, { merge: true })
+          void saveFavicon(src)
             .then(() => {
-              // A client write to the host doc bypasses the membership
-              // funnel, so the switcher's projection needs a nudge (AGL-1071).
-              resyncHostMemberships(hostId, user as never)
               enqueueSnackbar('Favicon saved', {
                 variant: 'success',
                 persist: false,
