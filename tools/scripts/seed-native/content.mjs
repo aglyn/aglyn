@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { seededFavicon } from './workspace.mjs'
+
 /**
  * The demo site's content for the Aglyn app's content screens (AGL-3668):
  * its pages (a home page, a group, nested pages, a draft) with their
@@ -167,7 +169,7 @@ export async function seedContent({ put, uid, orgId, hostId, now }) {
   await put(
     `hosts/${hostId}`,
     {
-      logoUrl: 'https://juniperstreet.example/logo.png',
+      logoUrl: `/api/media/cdn/${hostId}/seed-media-logo`,
       business: {
         supportEmail: 'hello@juniperstreet.example',
         address: '12 Main St\nPortland, OR 97201',
@@ -182,7 +184,7 @@ export async function seedContent({ put, uid, orgId, hostId, now }) {
         title: 'Juniper Street Bakery',
         description: 'Fresh bread and pastries, baked every morning in Portland.',
         separator: '|',
-        favicon: 'https://juniperstreet.example/favicon.png',
+        favicon: seededFavicon(hostId),
         entity: {
           type: '1',
           name: 'Juniper Street Bakery',
