@@ -318,6 +318,10 @@ const PLUGIN_TOPICS = {
   webhooks: '/marketing-and-automation/workflows-and-actions/webhooks',
   // The Live chat card on a site's setup page (AGL-3698).
   liveChat: '/building-sites/live-chat',
+  // The domains plugin's Get a domain card on the Custom Domain page
+  // (AGL-3962). Unlisted until the deployment names a registrar and a Stripe
+  // product; see PLUGIN_UNLISTED_TOPICS.
+  buyADomain: '/building-sites/custom-domains/buy-a-domain',
   // The Zapier card on a site's setup page (AGL-3643). Unlisted until the
   // deployment sets ZAPIER_APP_URL; see PLUGIN_UNLISTED_TOPICS.
   zapier: '/marketing-and-automation/workflows-and-actions/zapier',
@@ -329,6 +333,10 @@ const PLUGIN_TOPICS = {
 // still link it when the card itself renders only behind that same flag: the
 // reader who can see the card is the reader the page was written for.
 const PLUGIN_UNLISTED_TOPICS = new Set([
+  // The Get a domain card draws nothing until the console holds
+  // DOMAINS_REGISTRAR and STRIPE_PRODUCT_DOMAIN_REGISTRATION (AGL-3962), the
+  // gate the guide waits on.
+  'buyADomain',
   // The Ad conversions card draws nothing until the console holds
   // AD_CONVERSIONS_TOKEN_KEY, the gate the guide waits on (AGL-3694).
   'adConversions',
