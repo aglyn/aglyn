@@ -34,6 +34,9 @@ enum FormDetailAction {
 struct FormsScreen: View {
   let context: NativePluginContext
   var initialFormID: String?
+  /// Opened from Create new (`new=1`): the new-form sheet comes up once the person's site role allows it.
+  var startNew = false
+  @State private var startedNew = false
 
   #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -131,6 +134,11 @@ struct FormsScreen: View {
         form.retired
           ? "It joins the forms in use again."
           : "It leaves the forms in use. Its submissions are kept, and you can bring it back.")
+    }
+    .onChange(of: role.canEditContent, initial: true) { _, canEdit in
+      guard startNew, !startedNew, canEdit else { return }
+      startedNew = true
+      sheet = .create
     }
     .task(id: context.hostID) {
       role.start(context)

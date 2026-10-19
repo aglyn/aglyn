@@ -35,6 +35,7 @@ struct OrderDetailView: View {
   @State private var refundingLine: Int?
   @State private var lineRefundKey: String?
   @State private var working = false
+  @State private var noting = false
   @Environment(\.openURL) private var openURL
 
   var body: some View {
@@ -60,12 +61,14 @@ struct OrderDetailView: View {
     let order = row.order
     return Form {
       Section {
-        // The kit's detail head (spec 7): the order number, its channel and time, its status.
-        AglynDetailHeader(
+        // The record's head (the calmer screens): the next step for its state as the one filled button, every other
+        // act in the ⋯ menu.
+        AglynRecordHeader(
           row.number,
           subtitle: [orderChannelLabel(order.channel?.rawValue), row.createdAt.map { $0.formatted(date: .abbreviated, time: .shortened) }]
             .compactMap { $0 }.joined(separator: " · "),
-          systemImage: "bag", status: (row.statusLabel, orderStatusTone(row.status).tone))
+          systemImage: "bag", status: (row.statusLabel, orderStatusTone(row.status).tone),
+          primary: primaryAction(row), more: moreActions(row))
         if let dispute = describeOrderDispute(order) {
           AglynNotice("\(dispute.label). \(dispute.detail)", tone: dispute.tone == "open" || dispute.tone == "lost" ? .error : .info)
             .accessibilityIdentifier("order-dispute")
@@ -78,41 +81,6 @@ struct OrderDetailView: View {
         }
         if let problem { AglynNotice(problem, tone: .error) { self.problem = nil } }
         if let done { AglynNotice(done, tone: .success) { self.done = nil } }
-        let actions = OrderAction.available(for: row.status)
-        if !actions.isEmpty {
-          // One row when the labels fit whole, otherwise one button per line:
-          // a phone never breaks "Refund" into "Ref / und".
-          let buttons = Group {
-            if orderCanRefund(order) {
-              Button(role: .destructive) { refundingSheet = true } label: {
-                Label("Refund", systemImage: "arrow.uturn.backward")
-              }
-              .buttonStyle(.bordered)
-              .disabled(busy != nil)
-              .accessibilityIdentifier("order-action-refund")
-            }
-            ForEach(actions) { action in
-              Button(role: action == .cancel ? .destructive : nil) {
-                switch action {
-                case .cancel: confirming = action
-                case .fulfill: fulfilling = true
-                default: Task { await run(action) }
-                }
-              } label: {
-                if busy == action { ProgressView() } else { Label(action.title, systemImage: action.systemImage) }
-              }
-              .buttonStyle(.bordered)
-              .disabled(busy != nil)
-              .accessibilityIdentifier("order-action-\(action.rawValue)")
-            }
-          }
-          .lineLimit(1)
-          .fixedSize(horizontal: true, vertical: false)
-          ViewThatFits(in: .horizontal) {
-            HStack { buttons }
-            VStack(alignment: .leading) { buttons }
-          }
-        }
       }
 
       Section("Items") {
@@ -183,14 +151,9 @@ struct OrderDetailView: View {
         Text(describeOrderTaxMode(order.taxMode?.rawValue))
       }
 
-      Section("Customer") {
+      AglynFoldedSection("Customer details", identifier: "order-fold-customer") {
         LabeledContent("Name", value: row.customer)
         if let email = order.customerEmail, !email.isEmpty { LabeledContent("Email", value: email) }
-        // Their CRM record, which the order fed (the console's "View customer in CRM").
-        if let link = customerCrmLink(orgSlug: context.orgSlug, hostSlug: context.hostSlug, email: order.customerEmail) {
-          Button("View customer in CRM", systemImage: "person.crop.circle") { context.openLink(link) }
-            .accessibilityIdentifier("order-customer-crm")
-        }
         if let phone = order.customerPhone, !phone.isEmpty { LabeledContent("Phone", value: phone) }
         if let address = order.shippingAddress, let text = addressText(address) {
           LabeledContent("Ships to") { Text(text).multilineTextAlignment(.trailing) }
@@ -198,43 +161,9 @@ struct OrderDetailView: View {
         if let note = order.note, !note.isEmpty { LabeledContent("Note", value: note) }
       }
 
-      if row.status != .pending {
-        Section {
-          Button {
-            receiptSheet = true
-          } label: {
-            Label("Send the receipt", systemImage: "envelope")
-          }
-          .accessibilityIdentifier("order-receipt")
-        } header: {
-          Text("Receipt")
-        } footer: {
-          Text("Sends the receipt again, by email or text.")
-        }
-      }
-
-      // The console's Packing slip and Invoice: its own pages, on this device's print sheet.
-      Section {
-        ForEach(OrderPrintKind.allCases) { kind in
-          Button {
-            Task { await printPage(kind) }
-          } label: {
-            HStack {
-              Label(kind.title, systemImage: kind.systemImage)
-              Spacer()
-              if printing == kind.rawValue { ProgressView() }
-            }
-          }
-          .disabled(printing != nil)
-          .accessibilityIdentifier("order-print-\(kind.rawValue)")
-        }
-      } header: {
-        Text("Print")
-      }
-
       let shipments = order.fulfillments ?? []
       if !shipments.isEmpty {
-        Section("Shipments") {
+        AglynFoldedSection("Shipments", count: shipments.count, identifier: "order-fold-shipments") {
           ForEach(shipments, id: \.id) { shipment in shipmentRow(shipment, order: order, number: row.number) }
         }
       }
@@ -264,7 +193,7 @@ struct OrderDetailView: View {
       }
 
       if let payments = order.payments, !payments.isEmpty {
-        Section("Payments") {
+        AglynFoldedSection("Payment and refunds", count: payments.count, identifier: "order-fold-payment") {
           ForEach(payments, id: \.id) { payment in
             AglynRow(
               paymentLabel(payment), subtitle: payment.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized,
@@ -276,23 +205,7 @@ struct OrderDetailView: View {
         }
       }
 
-      // Pickup and delivery steps, returns on this order, shipping labels and the services the store has connected.
-      Section {
-        Button {
-          context.navigate("commerce.orderServices", ["orderId": orderID])
-        } label: {
-          AglynRow(
-            "Pickup, returns and services", subtitle: "Pickup and delivery steps, returns, labels and connected services",
-            systemImage: "puzzlepiece.extension"
-          ) {
-            Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
-          }
-        }
-        .buttonStyle(.aglynRow)
-        .accessibilityIdentifier("order-more")
-      }
-
-      OrderAnnotationSections(context: context, orderID: orderID, order: order)
+      OrderAnnotationSections(context: context, orderID: orderID, order: order, noting: $noting)
     }
     .formStyle(.grouped)
     .aglynListBackground()
@@ -335,6 +248,66 @@ struct OrderDetailView: View {
     .sheet(isPresented: $receiptSheet) {
       ReceiptSheet(context: context, order: order, orderID: orderID, number: row.number) { done = "The receipt is on its way." }
     }
+  }
+
+  /// The one filled button: the order's next step (Fulfill, then Mark delivered), none once it has none.
+  private func primaryAction(_ row: OrderRow) -> AglynRecordAction? {
+    let offer = OrderAction.available(for: row.status)
+    if offer.contains(.fulfill) {
+      return AglynRecordAction("order-action-fulfill", "Fulfill", systemImage: OrderAction.fulfill.systemImage, enabled: busy == nil) {
+        fulfilling = true
+      }
+    }
+    if offer.contains(.deliver) {
+      return AglynRecordAction(
+        "order-action-deliver", OrderAction.deliver.title, systemImage: OrderAction.deliver.systemImage, enabled: busy == nil,
+        busy: busy == .deliver
+      ) { Task { await run(.deliver) } }
+    }
+    return nil
+  }
+
+  /// Every other act on the order, in the ⋯ menu: the receipt, its printouts, a note, the customer's CRM record, the
+  /// order's services, then Refund and Cancel order.
+  private func moreActions(_ row: OrderRow) -> [AglynRecordAction] {
+    let order = row.order
+    var out: [AglynRecordAction] = []
+    if row.status != .pending {
+      out.append(AglynRecordAction("order-receipt", "Send receipt", systemImage: "envelope") { receiptSheet = true })
+    }
+    // The console's Packing slip and Invoice: its own pages, on this device's print sheet.
+    for kind in OrderPrintKind.allCases {
+      out.append(
+        AglynRecordAction(
+          "order-print-\(kind.rawValue)", kind.title, systemImage: kind.systemImage, enabled: printing == nil,
+          busy: printing == kind.rawValue
+        ) { Task { await printPage(kind) } })
+    }
+    out.append(AglynRecordAction("order-add-note", "Add a note", systemImage: "square.and.pencil") { noting = true })
+    // Their CRM record, which the order fed (the console's "View customer in CRM").
+    if let link = customerCrmLink(orgSlug: context.orgSlug, hostSlug: context.hostSlug, email: order.customerEmail) {
+      out.append(AglynRecordAction("order-customer-crm", "View customer in CRM", systemImage: "person.crop.circle") {
+        context.openLink(link)
+      })
+    }
+    // Pickup and delivery steps, returns on this order, shipping labels and the services the store has connected.
+    out.append(AglynRecordAction("order-more", "Pickup, returns and services", systemImage: "puzzlepiece.extension") {
+      context.navigate("commerce.orderServices", ["orderId": orderID])
+    })
+    if orderCanRefund(order) {
+      out.append(
+        AglynRecordAction("order-action-refund", "Refund", systemImage: "arrow.uturn.backward", destructive: true, enabled: busy == nil) {
+          refundingSheet = true
+        })
+    }
+    if OrderAction.available(for: row.status).contains(.cancel) {
+      out.append(
+        AglynRecordAction(
+          "order-action-cancel", OrderAction.cancel.title, systemImage: OrderAction.cancel.systemImage, destructive: true,
+          enabled: busy == nil, busy: busy == .cancel
+        ) { confirming = .cancel })
+    }
+    return out
   }
 
   private func run(_ action: OrderAction) async {

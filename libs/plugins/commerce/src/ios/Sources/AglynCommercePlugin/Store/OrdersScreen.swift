@@ -24,6 +24,9 @@ extension OrderTone {
 struct OrdersScreen: View {
   let context: NativePluginContext
   var initialFilter: OrderFilter = .all
+  /// Opened from Create new (`new=1`): its create form comes up on arrival.
+  var startNew = false
+  @State private var startedNew = false
   @State private var model = OrdersModel()
   @State private var selection: OrderRow.ID?
   @State private var searchText = ""
@@ -98,6 +101,11 @@ struct OrdersScreen: View {
           .accessibilityIdentifier("orders-import-tracking")
         }
       }
+    }
+    .onAppear {
+      guard startNew, !startedNew else { return }
+      startedNew = true
+      drafting = true
     }
     .sheet(isPresented: $drafting) {
       DraftOrderSheet(context: context) { notice = $0 }

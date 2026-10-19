@@ -42,6 +42,8 @@ final class AppModel {
   let authFlow = AuthFlow()
   /// The tabs closed in this run, for ⌘⇧T and Recently Closed.
   let closedTabs = ClosedTabs()
+  /// What the person may do in the workspace in hand (Create new's prerequisites).
+  let orgAccess = OrgAccess()
   /// The first verified session's workspace settling (the held sign-up name, AGL-2590).
   var firstRun: FirstRunState = .idle
   /// Whose first run has been settled, so it runs once per person per launch.

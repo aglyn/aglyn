@@ -23,8 +23,8 @@ public func registerBookingsNative(_ r: NativePluginRegistrar) {
   r.screen(bookingScreen, title: "Booking", requiresSite: true, apps: [.aglyn, .pos], icon: "calendar") { ctx, params in
     BookingScreen(context: ctx, params: params)
   }
-  r.screen(bookingsServicesScreen, title: "Services", requiresSite: true, icon: "list.bullet.rectangle") { ctx, _ in
-    BookingServicesScreen(context: ctx)
+  r.screen(bookingsServicesScreen, title: "Services", requiresSite: true, icon: "list.bullet.rectangle") { ctx, params in
+    BookingServicesScreen(context: ctx, startNew: params["new"] == "1")
   }
   r.screen(bookingsCounterScreen, title: "Today's bookings", requiresSite: true, apps: [.pos], icon: "calendar", placement: .menu) {
     ctx, _ in

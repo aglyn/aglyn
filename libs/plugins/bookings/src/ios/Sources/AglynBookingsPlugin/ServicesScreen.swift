@@ -12,6 +12,9 @@ import SwiftUI
 /// service dialog, offer a draft or withdraw a live one, and delete it.
 struct BookingServicesScreen: View {
   let context: NativePluginContext
+  /// Opened from Create new (`new=1`): its create form comes up on arrival.
+  var startNew = false
+  @State private var startedNew = false
   @State private var services = LiveList<ServiceRow>()
   @State private var selection: String?
   @State private var adding = false
@@ -44,6 +47,12 @@ struct BookingServicesScreen: View {
         }
         .accessibilityIdentifier("add-service")
       }
+    }
+    .onAppear {
+      guard startNew, !startedNew else { return }
+      startedNew = true
+      adding = true
+      selection = Self.newID
     }
     .sheet(isPresented: Binding(get: { adding && !isWide }, set: { if !$0 { adding = false } })) {
       NavigationStack { editor(for: nil) }

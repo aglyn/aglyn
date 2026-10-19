@@ -166,6 +166,8 @@ struct CrmHubScreen: View {
   var initialRecord: String?
   /// The Contacts list asked to open the one person with this address (`?email=`, `contactByEmail`).
   var openEmail: String?
+  /// Opened from Create new (`new=1`): the section's list opens its new-record sheet.
+  var startNew = false
 
   var body: some View { hub(context) }
 
@@ -198,7 +200,7 @@ struct CrmHubScreen: View {
     case .contacts, .leads, .companies:
       RecordsSection(
         context: context, kind: section.kind!, scope: scope, api: api, reference: reference, initial: initialRecord,
-        openEmail: section == .contacts ? openEmail : nil)
+        openEmail: section == .contacts ? openEmail : nil, startNew: startNew)
         .id(section)
     case .deals: DealsSection(context: context, scope: scope, api: api, reference: reference, initial: initialRecord)
     case .tasks: TasksSection(context: context, scope: scope, api: api, reference: reference)

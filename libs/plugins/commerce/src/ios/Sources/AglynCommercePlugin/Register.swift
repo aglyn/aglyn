@@ -65,7 +65,9 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   SpecScreens.register(ScreenCatalog.load(from: .module), into: r)
 
   r.screen(commerceOrdersScreen, title: "Orders", requiresSite: true, icon: "bag") { context, params in
-    OrdersScreen(context: context, initialFilter: params["filter"].flatMap(OrderFilter.init(rawValue:)) ?? .all)
+    OrdersScreen(
+      context: context, initialFilter: params["filter"].flatMap(OrderFilter.init(rawValue:)) ?? .all,
+      startNew: params["new"] == "1")
   }
   r.screen(commerceOrderScreen, title: "Order", requiresSite: true, icon: "bag") { context, params in
     OrderScreen(context: context, orderID: params["orderId"] ?? "")

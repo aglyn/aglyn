@@ -156,6 +156,9 @@ final class HostEvents {
 /// The site's events, the picked one's editor beside the list on iPad and Mac.
 struct EventsScreen: View {
   let context: NativePluginContext
+  /// Opened from Create new (`new=1`): its create form comes up on arrival.
+  var startNew = false
+  @State private var startedNew = false
   @State private var events = HostEvents()
   @State private var selection: String?
   @State private var adding = false
@@ -189,6 +192,11 @@ struct EventsScreen: View {
       }
     }
     .sheet(isPresented: $adding) { NavigationStack { editor(for: nil) } }
+    .onAppear {
+      guard startNew, !startedNew else { return }
+      startedNew = true
+      if sizeClass == .compact { adding = true } else { selection = Self.newID }
+    }
     .task(id: context.hostID) { events.start(context.firestore, hostID: context.hostID) }
     .onDisappear { events.stop() }
     .confirmationDialog(
@@ -391,7 +399,9 @@ struct EventEditor: View {
 /// natively from a link. The Kotlin registrar is the same list.
 @MainActor
 public func registerEventsCalendarNative(_ r: NativePluginRegistrar) {
-  r.screen(eventsScreen, title: "Events", requiresSite: true, icon: "calendar") { ctx, _ in EventsScreen(context: ctx) }
+  r.screen(eventsScreen, title: "Events", requiresSite: true, icon: "calendar") { ctx, params in
+    EventsScreen(context: ctx, startNew: params["new"] == "1")
+  }
   r.quickAction("events-calendar.open", title: "Events", icon: "calendar", order: 320, screen: eventsScreen, requiresSite: true)
   r.deepLink("events-calendar.page", path: "/events", screen: eventsScreen)
 }

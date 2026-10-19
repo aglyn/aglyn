@@ -242,6 +242,8 @@ struct EmailHubScreen: View {
   var initial: String?
   /// Opens the composer on arrival, filing the new email under this campaign (a campaign's "Write an email").
   var composeCampaign: String?
+  /// Opened from Create new (`new=1`): the section opens its create sheet.
+  var startNew = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -266,7 +268,7 @@ struct EmailHubScreen: View {
       let actions = EmailActions(context: context, orgID: orgID, hostID: hostID)
       switch section {
       case .messages: EmailsScreen(context: context, initial: initial, composeCampaign: composeCampaign)
-      case .templates: TemplatesSection(context: context, actions: actions)
+      case .templates: TemplatesSection(context: context, actions: actions, startNew: startNew)
       case .audiences: AudiencesSection(context: context, actions: actions, initial: initial)
       case .topics: TopicsSection(context: context, actions: actions)
       case .sending: SendingSection(context: context, actions: actions)
@@ -294,6 +296,9 @@ func templateRow(_ doc: FirestoreDocument) -> TemplateRow {
 struct TemplatesSection: View {
   let context: NativePluginContext
   let actions: EmailActions
+  /// Opened from Create new (`new=1`): the new-design sheet comes up once the person's role is known to allow it.
+  var startNew = false
+  @State private var startedNew = false
   @State private var list = LiveQueryList(pageSize: 25, map: templateRow)
   @State private var role = EmailRoleModel()
   @State private var searchText = ""
@@ -349,6 +354,11 @@ struct TemplatesSection: View {
       list.show(context.firestore) { templatesQuery(hostID, search: search, limit: $0) }
     }
     .onDisappear { list.stop() }
+    .onChange(of: role.canEdit, initial: true) { _, canEdit in
+      guard startNew, !startedNew, canEdit else { return }
+      startedNew = true
+      creating = true
+    }
     .sheet(isPresented: $creating) {
       NameSheet(title: "New email design", label: "Name", initial: "Untitled email", confirm: "Create") { name in
         let ids = try await actions.createDesign(name)

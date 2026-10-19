@@ -150,6 +150,17 @@ final class NavContractsTests: XCTestCase {
     }
   }
 
+  func testTheCreateMenuResolvesPerScope() throws {
+    for item in cases("resolveCreateList") {
+      let scope = NativeNavCreateScope(rawValue: item.args[0] as? String ?? "") ?? .unknown
+      XCTAssertEqual(
+        resolveCreateList(
+          scope, enabledPluginIds: strings(item.args[1]), permissions: item.args[2] as? [String: Bool] ?? [:],
+          features: item.args[3] as? [String: Bool] ?? [:], hostRole: item.args[4] as? String),
+        try decode([ResolvedCreateItem].self, item.result), "resolveCreateList \(item.args)")
+    }
+  }
+
   func testTheOneBoxPagesAndFindsScreensAsTheRouteDoes() throws {
     for item in cases("oneBoxLimit") { XCTAssertEqual(oneBoxLimit(item.args[0]), number(item.result), item.label) }
     for item in cases("oneBoxCursor") { XCTAssertEqual(oneBoxCursor(item.args[0]), number(item.result), item.label) }

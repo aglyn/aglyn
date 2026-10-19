@@ -257,32 +257,17 @@ struct ProductDetailView: View {
     .toolbar {
       if let doc = model.doc, let row = model.row {
         // HIG toolbars: the two actions used most stay visible, every other one is in one labeled More menu.
-        ToolbarItemGroup(placement: .secondaryAction) {
-          Button {
-            editing = .editing(doc)
-          } label: {
-            Label("Edit", systemImage: "pencil")
-          }
-          .help("Edit this product's name, price and stock")
-          .accessibilityIdentifier("edit-product")
-          Button {
-            // The pictures, and a digital product's downloads and members videos.
-            context.navigate(commerceProductMediaScreen, ["productId": productID])
-          } label: {
-            Label("Images and files", systemImage: "photo.on.rectangle")
-          }
-          .help("This product's pictures and files")
-          .accessibilityIdentifier("product-media")
-        }
+        // The calmer screens: the one filled button sits in the header below; every other act is in this one menu.
         ToolbarItem(placement: .secondaryAction) {
           AglynMoreMenu {
-            // The address, supplier, tags, categories, tax, billing and search listing: a spec screen on the shared renderer.
-            Button {
-              context.navigate("commerce.productDetails", ["productId": productID])
-            } label: {
-              Label("Details", systemImage: "slider.horizontal.3")
+            if row.status == "draft" {
+              Button {
+                editing = .editing(doc)
+              } label: {
+                Label("Edit product", systemImage: "pencil")
+              }
+              .accessibilityIdentifier("edit-product")
             }
-            .accessibilityIdentifier("product-details")
             Button {
               adjusting = true
             } label: {
@@ -361,11 +346,37 @@ struct ProductDetailView: View {
       Section {
         // The product's main picture is a media reference (or a console path): served from the console's media CDN for
         // this site, as the register's tiles and the console's product editor show it.
-        AglynDetailHeader(
+        AglynRecordHeader(
           row.name, subtitle: row.price,
           imageURL: row.item.imageURL.flatMap { mediaPreviewURL($0, origin: context.api.origin, hostID: context.hostID) },
           systemImage: "shippingbox",
-          status: (row.statusLabel, row.status == "active" ? .success : .neutral))
+          status: (row.statusLabel, row.status == "active" ? .success : .neutral), primary: primaryAction(row))
+      }
+      // The address, supplier, tags, categories, tax and search listing, and the pictures and downloads: one step in,
+      // as rows rather than more buttons.
+      Section {
+        Button {
+          context.navigate("commerce.productDetails", ["productId": productID])
+        } label: {
+          AglynRow("Details", subtitle: "Address, supplier, tags, categories, tax and search listing", systemImage: "info.circle") {
+            Image(systemName: "chevron.forward").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+          }
+        }
+        .buttonStyle(.aglynRow)
+        .accessibilityIdentifier("product-details")
+        Button {
+          // The pictures, and a digital product's downloads and members videos.
+          context.navigate(commerceProductMediaScreen, ["productId": productID])
+        } label: {
+          AglynRow(
+            "Images and files", subtitle: row.type == "digital" ? "Pictures, downloads and members videos" : "Pictures",
+            systemImage: "photo.on.rectangle"
+          ) {
+            Image(systemName: "chevron.forward").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+          }
+        }
+        .buttonStyle(.aglynRow)
+        .accessibilityIdentifier("product-media")
       }
       Section("Pricing and stock") {
         LabeledContent("Price", value: row.price)
@@ -413,6 +424,17 @@ extension ProductDetailView {
     } catch {
       notice = (productWriteProblem(error).errorDescription ?? "Could not duplicate product", .warning)
     }
+  }
+
+  /// The one filled button, the product's next step: a draft goes live; anything else is edited.
+  private func primaryAction(_ row: ProductRow) -> AglynRecordAction? {
+    guard let doc = model.doc else { return nil }
+    if row.status == "draft" {
+      return AglynRecordAction("activate-product", "Activate", systemImage: "checkmark.circle", enabled: !working, busy: working) {
+        Task { await setStatus(doc, row, "active") }
+      }
+    }
+    return AglynRecordAction("edit-product", "Edit", systemImage: "pencil") { editing = .editing(doc) }
   }
 
   fileprivate func setStatus(_ doc: FirestoreDocument, _ row: ProductRow, _ status: String) async {

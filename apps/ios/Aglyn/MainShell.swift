@@ -34,6 +34,9 @@ struct MainShell: View {
           .modifier(MacWindowTab(navigation: navigation, closedTabs: model.closedTabs))
       #endif
     }
+    .task(id: "\(model.workspace?.org?.id ?? ""):\(model.auth?.user?.uid ?? ""):\(model.orgAccess.memberRoleID ?? "")") {
+      model.orgAccess.follow(reader: model.reader, orgID: model.workspace?.org?.id, uid: model.auth?.user?.uid)
+    }
     .task(id: model.workspace?.ready == true) {
       guard !seeded, let seed, model.workspace?.ready == true else { return }
       seeded = true
@@ -832,49 +835,23 @@ struct CreateAction: Identifiable {
 }
 
 extension ShellScope {
-  /// What Create new lists for this scope: the site's own makes (a page, then each area's create action) or the
-  /// workspace's (a site). An area that is off for the site stays listed, disabled, saying how to turn it on.
+  /// What Create new lists for this scope, from the manifest's menu (`resolveCreateList`): an item of a plugin that is
+  /// off is not offered; one the person's role, site role or plan stands in front of is listed disabled with why. An
+  /// item whose screen this build lacks is left out.
   var createActions: [CreateAction] {
-    var out: [CreateAction] = []
-    if inSite {
-      if model.registry.screen("site.pages") != nil {
-        let canEdit = ["admin", "editor", "author"].contains(site?.role ?? "") || hostAdmin
-        out.append(
-          CreateAction(
-            id: "page", label: "Page", icon: "doc.text", screen: "site.pages", params: ["new": "1"],
-            blocked: canEdit ? nil : "Your role on this site cannot add pages."))
-      }
-      let shown = Set(mainList.groups.flatMap(\.rows).map(\.id))
-      let every = resolveNavList(.site, enabledPluginIds: NativeNav.allPluginIDs, hostAdmin: true).groups.flatMap(\.rows)
-      for row in every {
-        for action in row.actions ?? [] where action.params?["new"] == "1" && model.registry.screen(action.screen) != nil {
-          out.append(
-            CreateAction(
-              id: action.id, label: action.label.replacingOccurrences(of: "New ", with: "").capitalizedFirst,
-              icon: row.appleIcon, screen: action.screen, params: action.params ?? [:],
-              blocked: shown.contains(row.id) ? nil : "Turn on \(row.label) in Site settings first."))
-        }
-      }
-    } else if model.registry.screen("site.sites") != nil {
-      let canCreate = ["owner", "admin"].contains(org?.role ?? "")
-      out.append(
-        CreateAction(
-          id: "site", label: "Site", icon: "globe", screen: "site.sites", params: ["new": "1"],
-          blocked: canCreate ? nil : "Only a workspace owner or admin creates sites."))
+    let scope: NativeNavCreateScope = inSite ? .site : .workspace
+    let items = NativeNav.manifest.create?.first(where: { $0.scope == scope })?.items ?? []
+    let access = model.orgAccess
+    let resolved = resolveCreateList(
+      scope, enabledPluginIds: inSite ? sitePlugins : workspacePlugins,
+      permissions: access.permissions(items.compactMap(\.permission)),
+      features: access.features(items.compactMap(\.planFeature)), hostRole: inSite ? (hostAdmin ? "admin" : site?.role) : nil)
+    return resolved.filter { model.registry.screen($0.screen) != nil }.map { item in
+      CreateAction(
+        id: item.id, label: item.label, icon: item.icon.apple, screen: item.screen, params: item.params ?? [:],
+        blocked: item.blocked ? item.reason : nil)
     }
-    return out
   }
-}
-
-extension NativeNav {
-  /// Every plugin a manifest row names, to read a list as if each were on.
-  static var allPluginIDs: [String] {
-    Array(Set(manifest.lists.flatMap(\.groups).flatMap(\.rows).compactMap(\.pluginId)))
-  }
-}
-
-extension String {
-  var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }
 
 /// Create new on a phone: the same items as a sheet.

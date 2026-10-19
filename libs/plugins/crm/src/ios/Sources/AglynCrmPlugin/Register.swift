@@ -20,7 +20,7 @@ public func registerCrmNative(_ r: NativePluginRegistrar) {
     ) { ctx, params in
       CrmHubScreen(
         context: ctx, section: section, initialRecord: section.kind.flatMap { params[$0.param] },
-        openEmail: section == .contacts ? params[contactsListEmailParam] : nil)
+        openEmail: section == .contacts ? params[contactsListEmailParam] : nil, startNew: params["new"] == "1")
     }
   }
   for kind in CrmKind.allCases {
