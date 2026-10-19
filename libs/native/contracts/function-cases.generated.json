@@ -5905,6 +5905,406 @@
         }
       ]
     },
+    "deriveAccent": {
+      "module": "libs/aglyn/src/lib/app-utils/native-themes.ts",
+      "cases": [
+        {
+          "args": [
+            "#00b0ff"
+          ],
+          "result": {
+            "fill": "#0073ae",
+            "hover": "#00669b",
+            "icon": "#0091d5",
+            "on": "#ffffff",
+            "pressed": "#005884",
+            "ring": "#00b0ff",
+            "soft": "#00b0ff29",
+            "textDark": "#00b0ff",
+            "textLight": "#0078ad"
+          }
+        },
+        {
+          "args": [
+            "#7a5cf0"
+          ],
+          "result": {
+            "fill": "#5b3fd6",
+            "hover": "#4e34c2",
+            "icon": "#8c72f5",
+            "on": "#ffffff",
+            "pressed": "#4129aa",
+            "ring": "#7a5cf0",
+            "soft": "#7a5cf02e",
+            "textDark": "#9178f3",
+            "textLight": "#7a5cf0"
+          }
+        },
+        {
+          "args": [
+            "#e040fb"
+          ],
+          "result": {
+            "fill": "#e040fb",
+            "hover": "#cc2ee6",
+            "icon": "#c93ae3",
+            "on": "#1e0424",
+            "pressed": "#b523cf",
+            "ring": "#e040fb",
+            "soft": "#e040fb29",
+            "textDark": "#e040fb",
+            "textLight": "#c405e5"
+          }
+        },
+        {
+          "args": [
+            "#3fa77a"
+          ],
+          "result": {
+            "fill": "#2e7d5b",
+            "hover": "#276c4e",
+            "icon": "#2e8f66",
+            "on": "#ffffff",
+            "pressed": "#205a41",
+            "ring": "#3fa77a",
+            "soft": "#2e7d5b2e",
+            "textDark": "#3fa77a",
+            "textLight": "#31825f"
+          }
+        },
+        {
+          "args": [
+            "#0073ae"
+          ],
+          "result": {
+            "fill": "#0073ae",
+            "hover": "#00669a",
+            "icon": "#0073ae",
+            "on": "#ffffff",
+            "pressed": "#005885",
+            "ring": "#0073ae",
+            "soft": "#0073ae29",
+            "textDark": "#0095e1",
+            "textLight": "#0073ae"
+          }
+        },
+        {
+          "args": [
+            "#2e7d5b"
+          ],
+          "result": {
+            "fill": "#2e7d5b",
+            "hover": "#296e50",
+            "icon": "#2e7d5b",
+            "on": "#ffffff",
+            "pressed": "#235f45",
+            "ring": "#2e7d5b",
+            "soft": "#2e7d5b29",
+            "textDark": "#3ca276",
+            "textLight": "#2e7d5b"
+          }
+        },
+        {
+          "args": [
+            "#c2571a"
+          ],
+          "result": {
+            "fill": "#b95319",
+            "hover": "#a74b17",
+            "icon": "#c2571a",
+            "on": "#ffffff",
+            "pressed": "#954314",
+            "ring": "#c2571a",
+            "soft": "#c2571a29",
+            "textDark": "#e26823",
+            "textLight": "#b95319"
+          }
+        },
+        {
+          "args": [
+            "#087e8b"
+          ],
+          "result": {
+            "fill": "#087e8b",
+            "hover": "#076d78",
+            "icon": "#087e8b",
+            "on": "#ffffff",
+            "pressed": "#065b64",
+            "ring": "#087e8b",
+            "soft": "#087e8b29",
+            "textDark": "#0aa1b2",
+            "textLight": "#087e8b"
+          }
+        },
+        {
+          "args": [
+            "#ffab40"
+          ],
+          "result": {
+            "fill": "#b06300",
+            "hover": "#9c5800",
+            "icon": "#d97a00",
+            "on": "#ffffff",
+            "pressed": "#874c00",
+            "ring": "#ffab40",
+            "soft": "#ffab4029",
+            "textDark": "#ffab40",
+            "textLight": "#b06300"
+          }
+        },
+        {
+          "args": [
+            "#4caf50"
+          ],
+          "result": {
+            "fill": "#39843c",
+            "hover": "#337636",
+            "icon": "#49a84d",
+            "on": "#ffffff",
+            "pressed": "#2d682f",
+            "ring": "#4caf50",
+            "soft": "#4caf5029",
+            "textDark": "#4caf50",
+            "textLight": "#39843c"
+          }
+        },
+        {
+          "args": [
+            "#d2462f"
+          ],
+          "result": {
+            "fill": "#d2462f",
+            "hover": "#c3402a",
+            "icon": "#d2462f",
+            "on": "#ffffff",
+            "pressed": "#b23a26",
+            "ring": "#d2462f",
+            "soft": "#d2462f29",
+            "textDark": "#db6b59",
+            "textLight": "#d2462f"
+          }
+        },
+        {
+          "args": [
+            "#404c5c"
+          ],
+          "result": {
+            "fill": "#404c5c",
+            "hover": "#384250",
+            "icon": "#404c5c",
+            "on": "#ffffff",
+            "pressed": "#2f3844",
+            "ring": "#404c5c",
+            "soft": "#404c5c29",
+            "textDark": "#7c8da4",
+            "textLight": "#404c5c"
+          }
+        },
+        {
+          "args": [
+            "#ffffff"
+          ],
+          "result": {
+            "fill": "#757575",
+            "hover": "#6b6b6b",
+            "icon": "#949494",
+            "on": "#ffffff",
+            "pressed": "#616161",
+            "ring": "#ffffff",
+            "soft": "#ffffff29",
+            "textDark": "#ffffff",
+            "textLight": "#757575"
+          }
+        },
+        {
+          "args": [
+            "#000000"
+          ],
+          "result": {
+            "fill": "#000000",
+            "hover": "#000000",
+            "icon": "#000000",
+            "on": "#ffffff",
+            "pressed": "#000000",
+            "ring": "#000000",
+            "soft": "#00000029",
+            "textDark": "#8f8f8f",
+            "textLight": "#000000"
+          }
+        },
+        {
+          "args": [
+            "#00B0FF"
+          ],
+          "result": {
+            "fill": "#0073ae",
+            "hover": "#00669b",
+            "icon": "#0091d5",
+            "on": "#ffffff",
+            "pressed": "#005884",
+            "ring": "#00b0ff",
+            "soft": "#00b0ff29",
+            "textDark": "#00b0ff",
+            "textLight": "#0078ad"
+          }
+        },
+        {
+          "args": [
+            "blue"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "#12345"
+          ],
+          "result": null
+        }
+      ]
+    },
+    "deriveThemeFromPreview": {
+      "module": "libs/aglyn/src/lib/app-utils/native-themes.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "rail": "#0b3954",
+              "surface": "#f2f8fb",
+              "canvas": "#e3eef4",
+              "accent": "#087e8b"
+            },
+            "#0b3954"
+          ],
+          "result": {
+            "dark": {
+              "borderStrong": "#45525f",
+              "borderSubtle": "#2e3944",
+              "canvas": "#14222c",
+              "dangerBg": "#3b1a1a",
+              "dangerFg": "#ed7876",
+              "dangerFill": "#c93a31",
+              "dangerFillHover": "#b3261e",
+              "dangerFillPressed": "#9c211a",
+              "hover": "#2a343e",
+              "infoBg": "#132c42",
+              "infoFg": "#5da1dc",
+              "newBg": "#3a1e44",
+              "newFg": "#e979fc",
+              "rail": "#0d2533",
+              "raised": "#223240",
+              "scrim": "#0000008c",
+              "successBg": "#1b3320",
+              "successFg": "#82c785",
+              "sunken": "#12181d",
+              "surface": "#1b2935",
+              "textPrimary": "#f3f5f7",
+              "textSecondary": "#b3bcc6",
+              "textTertiary": "#8a96a3",
+              "titlebar": "#1a2128",
+              "warningBg": "#3a2c14",
+              "warningFg": "#ffc479"
+            },
+            "light": {
+              "borderStrong": "#9eafbc",
+              "borderSubtle": "#bcc8d1",
+              "canvas": "#e3eef4",
+              "dangerBg": "#fce6e5",
+              "dangerFg": "#a8231e",
+              "dangerFill": "#b3261e",
+              "dangerFillHover": "#9c211a",
+              "dangerFillPressed": "#861c16",
+              "hover": "#dbe5ea",
+              "infoBg": "#e3f0fb",
+              "infoFg": "#10548f",
+              "newBg": "#f5e4f9",
+              "newFg": "#8e2aa1",
+              "rail": "#0b3954",
+              "raised": "#f2f8fb",
+              "scrim": "#0f172152",
+              "successBg": "#e5f3e6",
+              "successFg": "#2e6f31",
+              "sunken": "#adc1cc",
+              "surface": "#f2f8fb",
+              "textPrimary": "#1f2329",
+              "textSecondary": "#5e6773",
+              "textTertiary": "#7a838e",
+              "titlebar": "#edf5f9",
+              "warningBg": "#fff0da",
+              "warningFg": "#85560f"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "rail": "#e9dccb",
+              "surface": "#fffaf3",
+              "canvas": "#f5ece0",
+              "accent": "#c2571a"
+            },
+            "#7a5634"
+          ],
+          "result": {
+            "dark": {
+              "borderStrong": "#45525f",
+              "borderSubtle": "#2e3944",
+              "canvas": "#2c2925",
+              "dangerBg": "#3b1a1a",
+              "dangerFg": "#ed7876",
+              "dangerFill": "#c93a31",
+              "dangerFillHover": "#b3261e",
+              "dangerFillPressed": "#9c211a",
+              "hover": "#2a343e",
+              "infoBg": "#132c42",
+              "infoFg": "#5da1dc",
+              "newBg": "#3a1e44",
+              "newFg": "#e979fc",
+              "rail": "#3f3225",
+              "raised": "#36383a",
+              "scrim": "#0000008c",
+              "successBg": "#1b3320",
+              "successFg": "#82c785",
+              "sunken": "#12181d",
+              "surface": "#2f2f2f",
+              "textPrimary": "#f3f5f7",
+              "textSecondary": "#b3bcc6",
+              "textTertiary": "#8a96a3",
+              "titlebar": "#1a2128",
+              "warningBg": "#3a2c14",
+              "warningFg": "#ffc479"
+            },
+            "light": {
+              "borderStrong": "#cfd3d6",
+              "borderSubtle": "#e4e5e6",
+              "canvas": "#f5ece0",
+              "dangerBg": "#fce6e5",
+              "dangerFg": "#a8231e",
+              "dangerFill": "#b3261e",
+              "dangerFillHover": "#9c211a",
+              "dangerFillPressed": "#861c16",
+              "hover": "#fdf7ef",
+              "infoBg": "#e3f0fb",
+              "infoFg": "#10548f",
+              "newBg": "#f5e4f9",
+              "newFg": "#8e2aa1",
+              "rail": "#e9dccb",
+              "raised": "#fffaf3",
+              "scrim": "#0f172152",
+              "successBg": "#e5f3e6",
+              "successFg": "#2e6f31",
+              "sunken": "#f2e8db",
+              "surface": "#fffaf3",
+              "textPrimary": "#1f2329",
+              "textSecondary": "#5e6773",
+              "textTertiary": "#7a838e",
+              "titlebar": "#fcf5ec",
+              "warningBg": "#fff0da",
+              "warningFg": "#85560f"
+            }
+          }
+        }
+      ]
+    },
     "describeFulfillmentLines": {
       "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
       "cases": [
@@ -15057,6 +15457,35 @@
         {
           "args": [
             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          "result": false
+        }
+      ]
+    },
+    "isThemeColor": {
+      "module": "libs/aglyn/src/lib/app-utils/native-themes.ts",
+      "cases": [
+        {
+          "args": [
+            "#00b0ff"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "#00b0ff29"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "00b0ff"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            null
           ],
           "result": false
         }
@@ -53236,6 +53665,221 @@
         }
       ]
     },
+    "rolePermissions": {
+      "module": "libs/aglyn/src/lib/app-utils/org-role-grants.ts",
+      "leadingValue": "ORG_ROLE_GRANTS",
+      "cases": [
+        {
+          "args": [
+            "owner",
+            null,
+            null
+          ],
+          "result": {
+            "ai.generate": true,
+            "ai.use": true,
+            "billing.manage": true,
+            "billing.view": true,
+            "data.manage": true,
+            "hosts.create": true,
+            "hosts.delete": true,
+            "marketplace.publish": true,
+            "members.manage": true,
+            "org.auditLog": true,
+            "org.settings": true,
+            "plugins.install": true
+          }
+        },
+        {
+          "args": [
+            "admin",
+            null,
+            null
+          ],
+          "result": {
+            "ai.generate": true,
+            "ai.use": true,
+            "billing.manage": true,
+            "billing.view": true,
+            "data.manage": true,
+            "hosts.create": true,
+            "hosts.delete": true,
+            "marketplace.publish": true,
+            "members.manage": true,
+            "org.auditLog": true,
+            "org.settings": true,
+            "plugins.install": true
+          }
+        },
+        {
+          "args": [
+            "editor",
+            null,
+            null
+          ],
+          "result": {
+            "ai.generate": true,
+            "ai.use": true,
+            "billing.manage": false,
+            "billing.view": false,
+            "data.manage": true,
+            "hosts.create": false,
+            "hosts.delete": false,
+            "marketplace.publish": true,
+            "members.manage": false,
+            "org.auditLog": false,
+            "org.settings": false,
+            "plugins.install": true
+          }
+        },
+        {
+          "args": [
+            "viewer",
+            null,
+            null
+          ],
+          "result": {
+            "ai.generate": false,
+            "ai.use": false,
+            "billing.manage": false,
+            "billing.view": false,
+            "data.manage": false,
+            "hosts.create": false,
+            "hosts.delete": false,
+            "marketplace.publish": false,
+            "members.manage": false,
+            "org.auditLog": false,
+            "org.settings": false,
+            "plugins.install": false
+          }
+        },
+        {
+          "args": [
+            null,
+            null,
+            null
+          ],
+          "result": {
+            "ai.generate": false,
+            "ai.use": false,
+            "billing.manage": false,
+            "billing.view": false,
+            "data.manage": false,
+            "hosts.create": false,
+            "hosts.delete": false,
+            "marketplace.publish": false,
+            "members.manage": false,
+            "org.auditLog": false,
+            "org.settings": false,
+            "plugins.install": false
+          }
+        },
+        {
+          "args": [
+            "guest",
+            null,
+            null
+          ],
+          "result": {
+            "ai.generate": false,
+            "ai.use": false,
+            "billing.manage": false,
+            "billing.view": false,
+            "data.manage": false,
+            "hosts.create": false,
+            "hosts.delete": false,
+            "marketplace.publish": false,
+            "members.manage": false,
+            "org.auditLog": false,
+            "org.settings": false,
+            "plugins.install": false
+          }
+        },
+        {
+          "args": [
+            "editor",
+            {
+              "permissions": {
+                "hosts.create": true,
+                "data.manage": false,
+                "ai.generate": false,
+                "unknown.key": true
+              }
+            },
+            null
+          ],
+          "result": {
+            "ai.generate": false,
+            "ai.use": true,
+            "billing.manage": false,
+            "billing.view": false,
+            "data.manage": false,
+            "hosts.create": true,
+            "hosts.delete": false,
+            "marketplace.publish": true,
+            "members.manage": false,
+            "org.auditLog": false,
+            "org.settings": false,
+            "plugins.install": true
+          }
+        },
+        {
+          "args": [
+            "viewer",
+            {
+              "permissions": {
+                "billing.view": true
+              }
+            },
+            {
+              "permissions": {
+                "billing.view": false,
+                "ai.use": true
+              }
+            }
+          ],
+          "result": {
+            "ai.generate": false,
+            "ai.use": true,
+            "billing.manage": false,
+            "billing.view": false,
+            "data.manage": false,
+            "hosts.create": false,
+            "hosts.delete": false,
+            "marketplace.publish": false,
+            "members.manage": false,
+            "org.auditLog": false,
+            "org.settings": false,
+            "plugins.install": false
+          }
+        },
+        {
+          "args": [
+            "admin",
+            null,
+            {
+              "permissions": {
+                "hosts.delete": false
+              }
+            }
+          ],
+          "result": {
+            "ai.generate": true,
+            "ai.use": true,
+            "billing.manage": true,
+            "billing.view": true,
+            "data.manage": true,
+            "hosts.create": true,
+            "hosts.delete": false,
+            "marketplace.publish": true,
+            "members.manage": true,
+            "org.auditLog": true,
+            "org.settings": true,
+            "plugins.install": true
+          }
+        }
+      ]
+    },
     "rollUp": {
       "module": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
       "cases": [
@@ -58272,6 +58916,282 @@
             }
           ],
           "result": "\"/404\" is a reserved address on every Aglyn site — pick another slug"
+        }
+      ]
+    },
+    "themeContrast": {
+      "module": "libs/aglyn/src/lib/app-utils/native-themes.ts",
+      "cases": [
+        {
+          "args": [
+            "#ffffff",
+            "#000000"
+          ],
+          "result": 21
+        },
+        {
+          "args": [
+            "#00b0ff",
+            "#ffffff"
+          ],
+          "result": 2.426586061863023
+        },
+        {
+          "args": [
+            "#0073ae",
+            "#ffffff"
+          ],
+          "result": 5.167968804878227
+        },
+        {
+          "args": [
+            "#e040fb",
+            "#1e0424"
+          ],
+          "result": 5.7336643538310375
+        },
+        {
+          "args": [
+            "bad",
+            "#ffffff"
+          ],
+          "result": 1
+        }
+      ]
+    },
+    "themeLerp": {
+      "module": "libs/aglyn/src/lib/app-utils/native-themes.ts",
+      "cases": [
+        {
+          "args": [
+            "#e3eef4",
+            "#0b3954",
+            0.25
+          ],
+          "result": "#adc1cc"
+        },
+        {
+          "args": [
+            "#000000",
+            "#ffffff",
+            0.5
+          ],
+          "result": "#808080"
+        },
+        {
+          "args": [
+            "#161c21",
+            "#7a5634",
+            0.22
+          ],
+          "result": "#2c2925"
+        }
+      ]
+    },
+    "themePalette": {
+      "module": "libs/aglyn/src/lib/app-utils/native-themes.ts",
+      "cases": [
+        {
+          "args": [
+            "night"
+          ],
+          "result": {
+            "accent": "#00b0ff",
+            "alwaysDark": true,
+            "dark": {
+              "borderStrong": "#33405c",
+              "borderSubtle": "#222c42",
+              "canvas": "#0b1120",
+              "dangerBg": "#3a1820",
+              "dangerFg": "#f08a8f",
+              "dangerFill": "#c93a31",
+              "dangerFillHover": "#b3261e",
+              "dangerFillPressed": "#9c211a",
+              "hover": "#1e2840",
+              "infoBg": "#122a47",
+              "infoFg": "#79b2ee",
+              "newBg": "#36193f",
+              "newFg": "#e68af6",
+              "rail": "#050913",
+              "raised": "#1a2337",
+              "scrim": "#00000099",
+              "successBg": "#12301f",
+              "successFg": "#7bcb8f",
+              "sunken": "#070c17",
+              "surface": "#121a2b",
+              "textPrimary": "#eef2fa",
+              "textSecondary": "#a9b4cb",
+              "textTertiary": "#8290ab",
+              "titlebar": "#0e1525",
+              "warningBg": "#352914",
+              "warningFg": "#f6be6e"
+            },
+            "id": "night",
+            "label": "Night",
+            "light": {
+              "borderStrong": "#33405c",
+              "borderSubtle": "#222c42",
+              "canvas": "#0b1120",
+              "dangerBg": "#3a1820",
+              "dangerFg": "#f08a8f",
+              "dangerFill": "#c93a31",
+              "dangerFillHover": "#b3261e",
+              "dangerFillPressed": "#9c211a",
+              "hover": "#1e2840",
+              "infoBg": "#122a47",
+              "infoFg": "#79b2ee",
+              "newBg": "#36193f",
+              "newFg": "#e68af6",
+              "rail": "#050913",
+              "raised": "#1a2337",
+              "scrim": "#00000099",
+              "successBg": "#12301f",
+              "successFg": "#7bcb8f",
+              "sunken": "#070c17",
+              "surface": "#121a2b",
+              "textPrimary": "#eef2fa",
+              "textSecondary": "#a9b4cb",
+              "textTertiary": "#8290ab",
+              "titlebar": "#0e1525",
+              "warningBg": "#352914",
+              "warningFg": "#f6be6e"
+            },
+            "source": "figma"
+          }
+        },
+        {
+          "args": [
+            "nope"
+          ],
+          "result": {
+            "accent": "#00b0ff",
+            "dark": {
+              "borderStrong": "#45525f",
+              "borderSubtle": "#2e3944",
+              "canvas": "#161c21",
+              "dangerBg": "#3b1a1a",
+              "dangerFg": "#ed7876",
+              "dangerFill": "#c93a31",
+              "dangerFillHover": "#b3261e",
+              "dangerFillPressed": "#9c211a",
+              "hover": "#2a343e",
+              "infoBg": "#132c42",
+              "infoFg": "#5da1dc",
+              "newBg": "#3a1e44",
+              "newFg": "#e979fc",
+              "rail": "#0f1418",
+              "raised": "#27313b",
+              "scrim": "#0000008c",
+              "successBg": "#1b3320",
+              "successFg": "#82c785",
+              "sunken": "#12181d",
+              "surface": "#1e262e",
+              "textPrimary": "#f3f5f7",
+              "textSecondary": "#b3bcc6",
+              "textTertiary": "#8a96a3",
+              "titlebar": "#1a2128",
+              "warningBg": "#3a2c14",
+              "warningFg": "#ffc479"
+            },
+            "id": "aglyn",
+            "label": "Aglyn",
+            "light": {
+              "borderStrong": "#c8d0d9",
+              "borderSubtle": "#e3e7ec",
+              "canvas": "#f5f5f5",
+              "dangerBg": "#fce6e5",
+              "dangerFg": "#a8231e",
+              "dangerFill": "#b3261e",
+              "dangerFillHover": "#9c211a",
+              "dangerFillPressed": "#861c16",
+              "hover": "#eef1f5",
+              "infoBg": "#e3f0fb",
+              "infoFg": "#10548f",
+              "newBg": "#f5e4f9",
+              "newFg": "#8e2aa1",
+              "rail": "#e6eaf0",
+              "raised": "#ffffff",
+              "scrim": "#0f172152",
+              "successBg": "#e5f3e6",
+              "successFg": "#2e6f31",
+              "sunken": "#edf0f4",
+              "surface": "#ffffff",
+              "textPrimary": "#1f2329",
+              "textSecondary": "#5e6773",
+              "textTertiary": "#7a838e",
+              "titlebar": "#fafbfc",
+              "warningBg": "#fff0da",
+              "warningFg": "#85560f"
+            },
+            "source": "figma"
+          }
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "accent": "#00b0ff",
+            "dark": {
+              "borderStrong": "#45525f",
+              "borderSubtle": "#2e3944",
+              "canvas": "#161c21",
+              "dangerBg": "#3b1a1a",
+              "dangerFg": "#ed7876",
+              "dangerFill": "#c93a31",
+              "dangerFillHover": "#b3261e",
+              "dangerFillPressed": "#9c211a",
+              "hover": "#2a343e",
+              "infoBg": "#132c42",
+              "infoFg": "#5da1dc",
+              "newBg": "#3a1e44",
+              "newFg": "#e979fc",
+              "rail": "#0f1418",
+              "raised": "#27313b",
+              "scrim": "#0000008c",
+              "successBg": "#1b3320",
+              "successFg": "#82c785",
+              "sunken": "#12181d",
+              "surface": "#1e262e",
+              "textPrimary": "#f3f5f7",
+              "textSecondary": "#b3bcc6",
+              "textTertiary": "#8a96a3",
+              "titlebar": "#1a2128",
+              "warningBg": "#3a2c14",
+              "warningFg": "#ffc479"
+            },
+            "id": "aglyn",
+            "label": "Aglyn",
+            "light": {
+              "borderStrong": "#c8d0d9",
+              "borderSubtle": "#e3e7ec",
+              "canvas": "#f5f5f5",
+              "dangerBg": "#fce6e5",
+              "dangerFg": "#a8231e",
+              "dangerFill": "#b3261e",
+              "dangerFillHover": "#9c211a",
+              "dangerFillPressed": "#861c16",
+              "hover": "#eef1f5",
+              "infoBg": "#e3f0fb",
+              "infoFg": "#10548f",
+              "newBg": "#f5e4f9",
+              "newFg": "#8e2aa1",
+              "rail": "#e6eaf0",
+              "raised": "#ffffff",
+              "scrim": "#0f172152",
+              "successBg": "#e5f3e6",
+              "successFg": "#2e6f31",
+              "sunken": "#edf0f4",
+              "surface": "#ffffff",
+              "textPrimary": "#1f2329",
+              "textSecondary": "#5e6773",
+              "textTertiary": "#7a838e",
+              "titlebar": "#fafbfc",
+              "warningBg": "#fff0da",
+              "warningFg": "#85560f"
+            },
+            "source": "figma"
+          }
         }
       ]
     },

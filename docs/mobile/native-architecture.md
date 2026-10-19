@@ -716,6 +716,75 @@ light appearance, and `-light` the dark one:
   the sha256 of every source SVG, in
   `tools/scripts/native-brand-assets.lock.json`.
 
+### Themes, accents and density (AGL-3950)
+
+The native apps' themes are contract values in
+`libs/aglyn/src/lib/app-utils/native-themes.ts`. The source is the Native
+App Figma file's variables (Themes, page 2:8): the collections Aglyn /
+Theme, Appearance, Accent, Brand and Density. Figma wins wherever it
+defines a value.
+
+- **`THEME_PALETTES`**: six themes, Aglyn, Quiet, Night, Ocean, Warm and
+  High contrast. Each has a light and a dark `ThemeColors`:
+  - canvas, surface, raised, sunken, rail, hover and titlebar;
+  - the subtle and strong borders;
+  - three text colors;
+  - five status bg/fg pairs;
+  - the scrim and the danger fill.
+
+  Aglyn, Quiet, Night (always dark) and High contrast are Figma's values
+  exactly.
+- **Ocean and Warm** exist in Figma only as four-color previews.
+  `deriveThemeFromPreview` builds their full palettes by one rule for both:
+  - *Light:* the previewed canvas, surface and rail; raised = surface;
+    sunken = canvas 25% toward the rail; hover = surface 10% toward the rail;
+    titlebar = surface 35% toward the canvas; borders = Aglyn's, 18% and 22%
+    toward the rail.
+  - *Dark:* Aglyn's dark appearance tinted toward the dark rail seed (Ocean
+    #0B3954, Warm #7A5634): canvas 22%, surface and raised 18%, rail 45%.
+  - Text, status and the scrim are Aglyn's.
+
+  Figma board 87:4930 on the Themes page shows the derived values.
+- **Accents.** `THEME_ACCENTS` holds Figma's four Accent modes exactly (Blue,
+  Violet, Pink, Workspace brand), each with fill, icon, soft, ring, on, hover
+  and pressed, plus derived text shades. `THEME_ACCENT_SWATCHES` holds the
+  picker's six swatches. `deriveAccent(hex)` returns a Figma mode for its
+  ring color and derives any other color, such as a picked accent or a
+  workspace's brand color:
+  1. If white text on the color reaches 4.5:1, the fill keeps the color and
+     `on` is white.
+  2. Otherwise, if white reaches at least 3:1 and near-black reaches 4.5:1,
+     the fill keeps the brand color and `on` flips to near-black. This is
+     Figma's Pink. The 3:1 threshold sends Pink (3.34:1) here, and Blue
+     (2.43:1) and the workspace green (2.99:1) to step 3, as Figma draws them.
+  3. Otherwise the fill is darkened in 2% HSL-lightness steps until white
+     reaches 4.5:1.
+
+  For every accent:
+  - hover and pressed are the fill 4% and 8% darker;
+  - soft is the color at 16% alpha;
+  - ring is the color itself;
+  - icon reaches 3:1 on the light surface;
+  - the two text shades reach 4.5:1 on Aglyn's light and dark surfaces.
+
+  Figma's Violet is darker than the rule needs; Figma wins.
+- **The console differs.** Its MUI theme (`accent-text.ts`,
+  `accessible-shade.ts`) keeps `main` as a contained button's fill (3:1 for
+  fills) and walks only a text shade, in 1% steps. Both measure contrast the
+  same way (WCAG 2 relative luminance).
+- **`THEME_DENSITIES`**: Comfortable and Compact, with Figma's space, radius,
+  row, list-row, phone-row and title-bar sizes.
+
+Role grants live beside these. `org-role-grants.ts` exports
+`ORG_ROLE_GRANTS`: the org permission catalog and each role's default keys,
+including the keys plugins declare, which the generator assembles from the
+AI plugin's declarations. It also exports `rolePermissions(grants, role,
+customRole?, overrides?)`, which mirrors the console's
+`resolveOrgPermissions`. A native gate such as `hosts.create` or
+`data.manage` therefore answers as the console does when a member row has
+no `resolvedPermissions` stamp. `apps/console/specs/native-org-role-grants.spec.ts`
+holds the table to the console's `DEFAULT_ROLE_PERMISSIONS`.
+
 ### Brand, type and polish (binding)
 
 Every Apple screen is SwiftUI, on iPhone, iPad and macOS. UIKit or AppKit
