@@ -11,8 +11,6 @@ struct FirstRunView: View {
   @Environment(AppModel.self) private var model
   @State private var creating = false
   @State private var name = ""
-  @State private var busy = false
-  @State private var error: String?
   @State private var invites: [PendingInvite] = []
   @State private var answering: String?
   @State private var inviteError: String?
@@ -99,6 +97,20 @@ struct FirstRunView: View {
   }
 
   private var createSheet: some View {
+    CreateWorkspaceSheet(name: name) { creating = false }
+  }
+}
+
+/// Creates a workspace (the console's "Create an organization"): from the first run, and from Add workspace in the
+/// workspace picker.
+struct CreateWorkspaceSheet: View {
+  @Environment(AppModel.self) private var model
+  @State var name: String
+  let done: () -> Void
+  @State private var busy = false
+  @State private var error: String?
+
+  var body: some View {
     NavigationStack {
       Form {
         Section {
@@ -113,12 +125,13 @@ struct FirstRunView: View {
       .formStyle(.grouped)
       .navigationTitle("Create an organization")
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { creating = false } }
+        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { done() } }
         ToolbarItem(placement: .confirmationAction) {
           if busy {
             ProgressView()
           } else {
             Button("Create") { create() }.disabled(SignUpRules.organization(name) != nil)
+              .accessibilityIdentifier("create-workspace-submit")
           }
         }
       }
@@ -135,7 +148,7 @@ struct FirstRunView: View {
       if let failure = await model.createWorkspace(named: name) {
         error = failure
       } else {
-        creating = false
+        done()
       }
       busy = false
     }

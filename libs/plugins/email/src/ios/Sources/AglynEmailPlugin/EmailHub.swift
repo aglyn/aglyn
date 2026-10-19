@@ -247,22 +247,32 @@ struct EmailHubScreen: View {
     VStack(spacing: 0) {
       AglynSectionBar(EmailSection.allCases, selection: $section, label: \.label, systemImage: \.symbol)
       Group {
-        if let orgID = context.orgID, let hostID = context.hostID {
-          let actions = EmailActions(context: context, orgID: orgID, hostID: hostID)
-          switch section {
-          case .messages: EmailsScreen(context: context, initial: initial, composeCampaign: composeCampaign)
-          case .templates: TemplatesSection(context: context, actions: actions)
-          case .audiences: AudiencesSection(context: context, actions: actions, initial: initial)
-          case .topics: TopicsSection(context: context, actions: actions)
-          case .sending: SendingSection(context: context, actions: actions)
-          case .suppressions: SuppressionsSection(context: context, actions: actions)
-          }
+        if context.hostID == nil {
+          // The workspace's Emails page: the same sections, read one site at a time, as the console's org page does.
+          WorkspaceSitePick(context: context, key: "emails", prompt: "Emails of") { site in sections(site) }
+        } else {
+          sections(context)
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .background(AglynColor.page)
     .navigationTitle(section == .messages ? "Emails" : section.label)
+  }
+
+  @ViewBuilder
+  private func sections(_ context: NativePluginContext) -> some View {
+    if let orgID = context.orgID, let hostID = context.hostID {
+      let actions = EmailActions(context: context, orgID: orgID, hostID: hostID)
+      switch section {
+      case .messages: EmailsScreen(context: context, initial: initial, composeCampaign: composeCampaign)
+      case .templates: TemplatesSection(context: context, actions: actions)
+      case .audiences: AudiencesSection(context: context, actions: actions, initial: initial)
+      case .topics: TopicsSection(context: context, actions: actions)
+      case .sending: SendingSection(context: context, actions: actions)
+      case .suppressions: SuppressionsSection(context: context, actions: actions)
+      }
+    }
   }
 }
 

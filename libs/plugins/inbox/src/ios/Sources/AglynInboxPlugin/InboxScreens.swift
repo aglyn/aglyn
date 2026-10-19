@@ -92,7 +92,22 @@ struct PeopleScreen: View {
   @State private var removing: SiteMemberRow?
   @State private var error: String?
 
+  /// The workspace's Inbox: every site's leads (members sign up to one site each), for a role that manages data.
+  private var wholeWorkspace: Bool { context.hostID == nil }
+  private var managesData: Bool { ["owner", "admin", "editor"].contains(context.orgRole ?? "") }
+
   var body: some View {
+    if wholeWorkspace && !managesData {
+      AglynEmptyState(
+        "Leads are for data managers", systemImage: "lock",
+        message: "Listing every site's leads needs a role that manages the workspace's data. Choose a site to see its members and leads.")
+        .navigationTitle("Members & leads")
+    } else {
+      people
+    }
+  }
+
+  private var people: some View {
     VStack(spacing: 0) {
       Picker("Show", selection: $tab) {
         Text("Site members").tag("members")
@@ -101,7 +116,16 @@ struct PeopleScreen: View {
       .pickerStyle(.segmented)
       .labelsHidden()
       .frame(maxWidth: 420)
-      .padding(AglynSpace.two)
+      .padding(.horizontal, AglynSpace.two)
+      .padding(.top, AglynSpace.two)
+      .disabled(wholeWorkspace)
+      if wholeWorkspace {
+        Text("Every site's leads, newest first. Members sign up to one site each — choose a site to list its members.")
+          .font(AglynFont.subheadline).foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, AglynSpace.two)
+      }
+      Spacer().frame(height: AglynSpace.one)
       if let error { AglynNotice(error, tone: .error) { self.error = nil }.padding(.horizontal, AglynSpace.two) }
       // The rows, or the empty state centered in all the room under the picker (never a box floating mid-window).
       Group { if tab == "members" { membersList } else { leadsList } }
@@ -120,7 +144,14 @@ struct PeopleScreen: View {
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .task(id: "\(tab)|\(search)|\(context.hostID ?? "")") {
       site.start(context)
-      guard let hostID = context.hostID else { return }
+      if wholeWorkspace { tab = "leads" }
+      guard let hostID = context.hostID else {
+        if let orgID = context.orgID, managesData {
+          let search = search
+          leads.show(context.firestore) { orgLeadsQuery(orgID: orgID, search: search, limit: $0) }
+        }
+        return
+      }
       let search = search
       if tab == "members" {
         members.show(context.firestore) { siteMembersQuery(hostID, search: search, limit: $0) }
@@ -187,7 +218,9 @@ struct PeopleScreen: View {
     } else if let failure = leads.failure {
       AglynEmptyState("Could not load leads", systemImage: "exclamationmark.triangle", message: failure)
     } else if leads.rows.isEmpty {
-      AglynEmptyState("No leads yet", systemImage: "person.badge.plus", message: "People your forms capture as leads show up here.")
+      AglynEmptyState(
+        "No leads yet", systemImage: "person.badge.plus",
+        message: wholeWorkspace ? "No leads on any site yet." : "People your forms capture as leads show up here.")
     } else {
       List {
         ForEach(leads.rows) { lead in

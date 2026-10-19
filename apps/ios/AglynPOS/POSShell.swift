@@ -10,6 +10,7 @@ import SwiftUI
 struct POSShell: View {
   @Environment(AppModel.self) private var model
   @Bindable var navigation: ShellNavigation
+  @State private var confirmSignOut = false
 
   var body: some View {
     NavigationStack(path: navigation.path(.home)) {
@@ -34,14 +35,16 @@ struct POSShell: View {
               }
               Divider()
             }
-            Button("Switch store", systemImage: "storefront") { navigation.showSwitcher = true }
+            Button("Switch store", systemImage: "storefront") { navigation.picker = .workspace }
             #if os(iOS)
               Button("Settings", systemImage: "gearshape") { navigation.push(.settings) }
                 .accessibilityIdentifier("pos-menu-settings")
             #endif
+            // Every account signed in on this register, and Add account (each keeps its own sign-in and stores).
+            AccountSwitchItems()
             Divider()
             Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
-              Task { await model.signOut() }
+              confirmSignOut = true
             }
           } label: {
             Label("Store", systemImage: "storefront")
@@ -50,9 +53,16 @@ struct POSShell: View {
         }
       }
     }
-    .sheet(isPresented: $navigation.showSwitcher) {
-      SwitcherView(siteNoun: "Store").environment(model)
+    .sheet(item: $navigation.picker) { _ in
+      ScopePickerSheet(start: .workspace, twoStep: true, siteNoun: "Store").environment(model).environment(navigation)
     }
+    .sheet(isPresented: $navigation.showAddAccount) { AddAccountView().environment(model) }
+    .onChange(of: navigation.showSwitcher) { _, asked in
+      guard asked else { return }
+      navigation.showSwitcher = false
+      navigation.picker = .workspace
+    }
+    .signOutConfirmation(isPresented: $confirmSignOut)
     .onAppear { DebugLaunch.route(navigation) }
   }
 }

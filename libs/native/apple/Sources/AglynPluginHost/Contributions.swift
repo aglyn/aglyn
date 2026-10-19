@@ -47,13 +47,32 @@ public enum ConsoleScope: Sendable {
 /// API client, navigation, and the Besigner (the only web content the apps
 /// show; every other console area is a native screen). `hostID` is nil until a site is picked; a
 /// contribution that needs one says `requiresSite`.
+/// One of the workspace's sites, as a workspace-wide screen names and picks them.
+public struct NativeSiteRef: Hashable, Identifiable, Sendable {
+  public let id: String
+  public let name: String
+  public let subdomain: String
+  /// The person's role on it (`admin`, `editor`…).
+  public let role: String
+
+  public init(id: String, name: String, subdomain: String, role: String) {
+    self.id = id
+    self.name = name
+    self.subdomain = subdomain
+    self.role = role
+  }
+}
+
 public struct NativePluginContext {
   public let uid: String
   public let orgID: String?
-  public let hostID: String?
+  public private(set) var hostID: String?
+  /// The workspace's sites the person can open, for a workspace-wide screen: its site column, and the site a new
+  /// record goes to. Empty where the shell gives none.
+  public var sites: [NativeSiteRef] = []
   /// The console's URL slugs for the same pick (`/{orgSlug}/hosts/{hostSlug}`).
   public let orgSlug: String?
-  public let hostSlug: String?
+  public private(set) var hostSlug: String?
   public let firestore: FirestoreReader
   public let api: ConsoleAPIClient
   /// Writes the console makes straight to Firestore (no route), made the
@@ -65,7 +84,7 @@ public struct NativePluginContext {
   /// The person's role on the picked site (`admin`, `editor`, `author` or
   /// `viewer`), as their membership row names it; nil without a site. A
   /// screen reads it only to grey out what the rules would refuse.
-  public let siteRole: String?
+  public private(set) var siteRole: String?
   /// The person's role in the picked workspace (`owner`, `admin`, `editor`, `viewer`).
   public let orgRole: String?
   private let navigateAction: @MainActor (String, NativeParams) -> Void
@@ -111,6 +130,22 @@ public struct NativePluginContext {
   /// slot draws these; core and the host never name the plugins that contribute.
   @MainActor public func slotWidgets(_ slot: String) -> [NativeWidget] {
     slotWidgetsAction?(slot) ?? []
+  }
+
+  /// The same context on one of the workspace's sites: a workspace-wide list acts on a row through its own site.
+  public func onSite(_ hostID: String) -> NativePluginContext {
+    var copy = self
+    let site = sites.first { $0.id == hostID }
+    copy.hostID = hostID
+    copy.hostSlug = site.map { $0.subdomain.isEmpty ? $0.id : $0.subdomain }
+    copy.siteRole = site?.role
+    return copy
+  }
+
+  /// A site's name, from the workspace's list; its id when it is not there.
+  public func siteName(_ hostID: String?) -> String {
+    guard let hostID else { return "" }
+    return sites.first { $0.id == hostID }?.name ?? hostID
   }
 
   /// Makes `hostID` the picked site, as the site switcher does.
@@ -177,7 +212,12 @@ public struct NativeScreen: Identifiable {
   /// Non-nil: a staff screen, listed only in the shell's Staff section and
   /// shown only to staff whose role this admits (empty admits every role).
   public var staffRoles: [String]? = nil
+  /// A site screen that also draws the whole workspace when no site is picked.
+  public var workspaceView = false
   public let make: ScreenBuilder
+
+  /// Whether this screen needs a site picked before it can open, where the context names none.
+  public var needsSite: Bool { requiresSite && !workspaceView }
 
   /// Whether `staff` may open this screen.
   public func admits(_ staff: StaffStanding?) -> Bool {

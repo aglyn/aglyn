@@ -165,16 +165,20 @@ public final class NativePluginRegistrar {
     do { try add() } catch { errors.append((error as? RegistryError)?.message ?? "\(error)") }
   }
 
+  /// `workspaceView`: a screen that reads one site at a time (`requiresSite`) and also has a view of the whole
+  /// workspace, which it draws when the context names no site (the console's org page for the same plugin).
   public func screen<V: View>(
-    _ id: String, title: String, requiresSite: Bool = false, apps: Set<AglynAppKind> = [.aglyn],
-    icon: String? = nil, placement: POSPlacement? = nil, staffRoles: [String]? = nil,
+    _ id: String, title: String, requiresSite: Bool = false, workspaceView: Bool = false,
+    apps: Set<AglynAppKind> = [.aglyn], icon: String? = nil, placement: POSPlacement? = nil,
+    staffRoles: [String]? = nil,
     @ViewBuilder _ content: @escaping @MainActor (NativePluginContext, NativeParams) -> V
   ) {
     admit(.screens, id) {
-      try registry.add(
-        NativeScreen(
-          pluginID: pluginID, id: id, title: title, requiresSite: requiresSite, apps: apps, icon: icon,
-          placement: placement, staffRoles: staffRoles, make: { AnyView(content($0, $1)) }))
+      var screen = NativeScreen(
+        pluginID: pluginID, id: id, title: title, requiresSite: requiresSite, apps: apps, icon: icon,
+        placement: placement, staffRoles: staffRoles, make: { AnyView(content($0, $1)) })
+      screen.workspaceView = workspaceView
+      try registry.add(screen)
     }
   }
 
