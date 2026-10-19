@@ -47,6 +47,21 @@ final class ShellTests: XCTestCase {
     XCTAssertEqual(navigation.paths[.notifications], [])
   }
 
+  /// Opening a site, or going back to the whole workspace, starts every screen at its root: the workspace's search
+  /// results pushed on its Home never show under the site's Home (P4).
+  func testOpeningAScopeStartsItsScreensAtTheirRoots() {
+    let navigation = ShellNavigation()
+    navigation.enterWorkspace()
+    navigation.push(.searchResults("ord"))
+    navigation.select(.plugin("site.sites"))
+    navigation.enterSite()
+    XCTAssertEqual(navigation.section, .home)
+    XCTAssertEqual(navigation.paths[.home] ?? [], [])
+    navigation.push(.screen("commerce.order", ["orderId": "o-1"]))
+    navigation.enterWorkspace()
+    XCTAssertEqual(navigation.paths[.home] ?? [], [])
+  }
+
   /// Firebase Auth's app-delegate proxy hands the APNs device token only to a delegate class that implements the
   /// callback itself, and SwiftUI's forwards it to `PushAppDelegate`: with the proxy on, the token never reaches `PushCenter`.
   func testBothAppsKeepFirebasesAppDelegateProxyOff() throws {

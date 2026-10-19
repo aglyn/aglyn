@@ -552,7 +552,10 @@ struct TitleBarSearch: View {
     .help("Search or jump to (⌘K)")
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("titlebar-search")
-    .onChange(of: focused) { _, now in if now { navigation.showOneBox = true } }
+    .onChange(of: focused) { _, now in
+      guard now, !navigation.showOneBox else { return }
+      if Self.deliberateFocus { navigation.showOneBox = true } else { focused = false }
+    }
     .onChange(of: navigation.showOneBox, initial: true) { _, now in
       if now != focused { focused = now }
       if !now { navigation.search.reset() }
@@ -588,6 +591,22 @@ struct TitleBarSearch: View {
   private func close() {
     navigation.showOneBox = false
     focused = false
+  }
+
+  /// Whether the caret reached the field because a person put it there: a click, or Tab from the field before. A Mac
+  /// also hands the window's focus back to its first field when a popover or sheet closes (Esc on the site switcher
+  /// did); that opens nothing and leaves the caret out of the search (⌘K opens it on its own).
+  private static var deliberateFocus: Bool {
+    #if os(macOS)
+      guard let event = NSApp.currentEvent else { return false }
+      switch event.type {
+      case .leftMouseDown, .leftMouseUp, .rightMouseDown, .otherMouseDown: return true
+      case .keyDown: return event.keyCode == 48  // Tab
+      default: return false
+      }
+    #else
+      return true
+    #endif
   }
 }
 

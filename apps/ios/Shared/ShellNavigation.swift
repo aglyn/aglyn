@@ -242,6 +242,9 @@ extension ShellNavigation {
   func enterWorkspace() {
     inSite = false
     mode = .main
+    // Every screen starts at its root in the scope just opened: a stack pushed in the other one (the workspace's search
+    // results under the site's Home) is not this scope's.
+    paths = [:]
     select(.home)
   }
 
@@ -249,6 +252,7 @@ extension ShellNavigation {
   func enterSite() {
     inSite = true
     mode = .main
+    paths = [:]
     select(.home)
   }
 

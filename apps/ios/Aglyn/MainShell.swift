@@ -116,6 +116,12 @@ struct ShellChrome: View {
   #endif
   @Bindable var strip: TabStrip
   @State private var unreadFeed = NotificationFeed()
+  #if os(macOS)
+    /// The window this chrome draws, and whether it is full screen: there its own buttons are gone, and so is the room
+    /// the tab row keeps for them (P1).
+    @State private var window: NSWindow?
+    @State private var fullScreen = false
+  #endif
 
   #if os(macOS)
     static let tabRow: CGFloat = 34
@@ -125,13 +131,22 @@ struct ShellChrome: View {
     static let toolRow: CGFloat = 48
   #endif
 
+  /// The room at the tab row's leading edge for the window's close, minimize and zoom buttons.
+  private var windowButtonsRoom: CGFloat {
+    #if os(macOS)
+      fullScreen ? 0 : AglynShellMetrics.trafficLights
+    #else
+      AglynShellMetrics.trafficLights
+    #endif
+  }
+
   var body: some View {
     @Bindable var navigation = navigation
     let unread = unreadFeed.rows?.filter { !$0.read }.count ?? 0
     VStack(spacing: 0) {
       // The tab strip: the window's buttons, the tabs (each as wide as its title, to a cap), "+".
       HStack(spacing: 4) {
-        Color.clear.frame(width: AglynShellMetrics.trafficLights, height: 1)
+        Color.clear.frame(width: windowButtonsRoom, height: 1)
         ForEach(Array(strip.tabs.enumerated()), id: \.offset) { index, tab in
           if index == 0 {
             // The pinned Home tab is the brand's mark alone (Figma Titlebar/Home tab 117:16049).
@@ -174,6 +189,18 @@ struct ShellChrome: View {
       #if os(macOS)
         // Double-clicking the tab row zooms the window, as a title bar does.
         .onTapGesture(count: 2) { NSApp.keyWindow?.performZoom(nil) }
+        .background(
+          WindowReader { found in
+            guard window !== found else { return }
+            window = found
+            fullScreen = found.styleMask.contains(.fullScreen)
+          })
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willEnterFullScreenNotification)) { note in
+          if note.object as? NSWindow === window { fullScreen = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willExitFullScreenNotification)) { note in
+          if note.object as? NSWindow === window { fullScreen = false }
+        }
       #endif
       .overlay(alignment: .bottom) { Rectangle().fill(AglynColor.divider).frame(height: 1) }
       // The toolbar: the rail toggle and history on the left, the bell, Help and AI on the right, and the one search
