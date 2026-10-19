@@ -16,9 +16,10 @@
  */
 
 import {
+  type NativeNavContribution,
+  type NativeNavCreateContribution,
   nativeNavIcon,
   nativeNavRef,
-  type NativeNavContribution,
 } from '@aglyn/aglyn/app-utils/native-nav'
 
 /**
@@ -41,6 +42,25 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       screen: 'bookings.calendar',
       pluginId: 'bookings',
       order: 30,
+      docs: '/commerce-and-bookings/bookings/overview',
+      console: nativeNavRef('hostPluginTab', '/bookings'),
+    },
+  },
+]
+
+/** A bookable service, the console's "Add service" on Bookings. */
+export const NATIVE_NAV_CREATE: readonly NativeNavCreateContribution[] = [
+  {
+    scope: 'site',
+    item: {
+      id: 'service',
+      label: 'Service',
+      icon: nativeNavIcon('calendar.badge.clock', 'event_available'),
+      screen: 'bookings.services',
+      params: { new: '1' },
+      pluginId: 'bookings',
+      planFeature: 'bookings',
+      order: 40,
       console: nativeNavRef('hostPluginTab', '/bookings'),
     },
   },

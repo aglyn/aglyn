@@ -16,11 +16,12 @@
  */
 
 import {
+  type NativeNavContribution,
+  type NativeNavCreateContribution,
+  type NativeNavRow,
   nativeNavHubSection,
   nativeNavIcon,
   nativeNavRef,
-  type NativeNavContribution,
-  type NativeNavRow,
 } from '@aglyn/aglyn/app-utils/native-nav'
 
 /**
@@ -53,6 +54,7 @@ function row(scope: 'org' | 'host', order: number): NativeNavRow {
       nativeNavHubSection(scope, '/emails', 'sending', 'Sending', 'email.sending'),
       nativeNavHubSection(scope, '/emails', 'suppressions', 'Suppressions', 'email.suppressions'),
     ],
+    docs: '/marketing-and-automation/email-campaigns/overview',
     console: nativeNavRef(scope === 'org' ? 'orgPluginTab' : 'hostPluginTab', '/emails'),
   }
 }
@@ -60,4 +62,22 @@ function row(scope: 'org' | 'host', order: number): NativeNavRow {
 export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
   { list: 'workspace', group: 'workspace', row: row('org', 40) },
   { list: 'site', group: 'customers', row: row('host', 30) },
+]
+
+/** An email template, the console's "New template" on the workspace's Emails → Templates. */
+export const NATIVE_NAV_CREATE: readonly NativeNavCreateContribution[] = [
+  {
+    scope: 'workspace',
+    item: {
+      id: 'emailTemplate',
+      label: 'Email template',
+      icon: nativeNavIcon('envelope', 'mail'),
+      screen: 'email.templates',
+      params: { new: '1' },
+      pluginId: 'email',
+      permission: 'data.manage',
+      order: 30,
+      console: nativeNavRef('orgPluginSection', '/emails/templates'),
+    },
+  },
 ]

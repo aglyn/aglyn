@@ -53,6 +53,7 @@ import hostNavTabItems from '../constants/host-nav-tabs'
 import orgNavTabItems from '../constants/org-nav-tabs'
 import { CONSOLE_PLUGIN_MANIFEST } from '../constants/plugins.client.generated'
 import { setupSections } from '../app/(app)/[orgSlug]/hosts/[host]/setup/setup-sections'
+import { DOCS_HELP_TOPICS } from '../constants/docs-help.generated'
 
 const ROOT = resolve(__dirname, '../../..')
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8')
@@ -99,6 +100,14 @@ let console_: {
   team: Map<string, string>
   billing: Map<string, string>
   widgets: Map<string, string>
+  /** The help page each plugin hub's header names, by `{scope}:{href}`. */
+  hubDocs: Map<string, string>
+}
+
+/** A docs topic and anchor as the console's help links them. */
+function docsPath(topic: string | undefined, anchor?: string): string | undefined {
+  const entry = topic ? (DOCS_HELP_TOPICS as Record<string, { path: string }>)[topic] : undefined
+  return entry ? `${entry.path}${anchor ?? ''}` : undefined
 }
 
 beforeAll(async () => {
@@ -139,6 +148,16 @@ beforeAll(async () => {
     team: layoutSections(`${LAYOUTS}/team/(sections)/layout.tsx`, SECTION_OBJECT),
     billing: layoutSections(`${LAYOUTS}/billing/(sections)/layout.tsx`, SECTION_OBJECT),
     widgets,
+    hubDocs: new Map(
+      [
+        ...navItems.map((item) => ['host', item] as const),
+        ...orgItems.map((item) => ['org', item] as const),
+      ].flatMap(([scope, item]) => {
+        const header = (item as { header?: { docsTopic?: string; docsAnchor?: string } }).header
+        const path = docsPath(header?.docsTopic, header?.docsAnchor)
+        return path ? [[`${scope}:${item.href}`, path] as const] : []
+      }),
+    ),
   }
 }, 120_000)
 
@@ -417,6 +436,123 @@ describe('one icon per idea', () => {
         expect([row.icon[platform], owner ?? row.id]).toEqual([row.icon[platform], row.id])
         owners.set(row.icon[platform], row.id)
       }
+    }
+  })
+})
+
+
+/**
+ * The help each place's console page offers (AGL-3943): a plugin hub's
+ * header (`docsTopic`, `docsAnchor`), a settings hub's `help` prop, and the
+ * Sites list's. The registry is the console's own, `docs-help.generated.ts`.
+ */
+describe('every row’s help is the console’s help for that place', () => {
+  const LAYOUT_HELP = /help=\{\{\s*topic: '(\w+)',\s*anchor: '([^']+)'/
+  const layoutDocs = (path: string) => {
+    const match = read(path).match(LAYOUT_HELP)
+    return match ? docsPath(match[1], match[2]) : undefined
+  }
+  const HUB_LAYOUTS: Partial<Record<NativeNavConsoleRef['surface'], string>> = {
+    teamSection: `${LAYOUTS}/team/(sections)/layout.tsx`,
+    billingSection: `${LAYOUTS}/billing/(sections)/layout.tsx`,
+    orgSettingsSection: `${LAYOUTS}/settings/(sections)/layout.tsx`,
+    hostAdminSection: `${LAYOUTS}/hosts/[host]/admin/(sections)/layout.tsx`,
+  }
+  const ORG_TAB_PAGES: Record<string, string> = {
+    'nav-tab-org-sites': `${LAYOUTS}/hosts/page.tsx`,
+  }
+
+  /** What the console's help for a row's place says, when the console has a readable one. */
+  function expected(ref: NativeNavConsoleRef): string | undefined {
+    switch (ref.surface) {
+      case 'hostPluginTab':
+        return console_.hubDocs.get(`host:${ref.id}`)
+      case 'orgPluginTab':
+        return console_.hubDocs.get(`org:${ref.id}`)
+      case 'hostPluginSection':
+        return console_.hubDocs.get(`host:/${ref.id.split('/')[1]}`)
+      case 'orgPluginSection':
+        return console_.hubDocs.get(`org:/${ref.id.split('/')[1]}`)
+      case 'orgTab':
+        return ORG_TAB_PAGES[ref.id] ? layoutDocs(ORG_TAB_PAGES[ref.id]) : undefined
+      default:
+        return HUB_LAYOUTS[ref.surface] ? layoutDocs(HUB_LAYOUTS[ref.surface] as string) : undefined
+    }
+  }
+
+  it('CONTROL: the console’s help was read', () => {
+    expect(console_.hubDocs.get('org:/crm')).toBe('/content-and-data/crm/overview#at-the-organization-level')
+    expect(console_.hubDocs.get('host:/crm')).toBe('/content-and-data/crm/overview')
+  })
+
+  it.each(
+    lists.flatMap((entry) =>
+      rowsOf(entry).map((row) => ({ what: `${entry.id}/${row.id}`, row })),
+    ),
+  )('$what carries the console’s help for its place', ({ row }) => {
+    expect(row.docs).toBe(expected(row.console))
+    for (const section of row.sections ?? []) {
+      expect([section.id, section.docs]).toEqual([section.id, row.docs])
+    }
+  })
+})
+
+/**
+ * The Create new menu offers what the console offers from that scope
+ * (AGL-3943), each item named as the console's own create action names it.
+ * The evidence is the console's button, read from the file that draws it.
+ */
+describe('the Create new menu is the console’s create actions', () => {
+  const create = NATIVE_NAV_MANIFEST.create ?? []
+  const items = create.flatMap((entry) => entry.items.map((item) => ({ scope: entry.scope, item })))
+  const EVIDENCE: Record<string, [string, string]> = {
+    'workspace/site': ['apps/console/app/(app)/[orgSlug]/hosts/page.tsx', "'Create site'"],
+    'workspace/contact': ['libs/plugins/crm/src/lib/components/contacts-section.tsx', "'New contact'"],
+    'workspace/emailTemplate': ['libs/plugins/email/src/lib/components/org-email-templates-card.tsx', "'New template'"],
+    'site/page': ['apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx', "'Create new page'"],
+    'site/product': ['libs/plugins/commerce/src/lib/components/console/products-hub-card.component.tsx', "'Add product'"],
+    'site/draftOrder': ['libs/plugins/commerce/src/lib/components/console/host-orders-card.component.tsx', "'Draft order'"],
+    'site/service': ['libs/plugins/bookings/src/lib/components/bookings-console-page.tsx', "'Add service'"],
+    'site/event': ['libs/plugins/events-calendar/src/lib/components/events-console-page.tsx', "'Add event'"],
+    'site/form': ['libs/plugins/forms/src/lib/components/host-forms-card.component.tsx', "'Create Form'"],
+    'site/contact': ['libs/plugins/crm/src/lib/components/contacts-section.tsx', "'New contact'"],
+  }
+
+  it('CONTROL: both scopes have a menu', () => {
+    expect(create.map((entry) => entry.scope).sort()).toEqual(['site', 'workspace'])
+  })
+
+  it('every item is a create action the console draws, and every one listed here is offered', () => {
+    expect(items.map(({ scope, item }) => `${scope}/${item.id}`).sort()).toEqual(Object.keys(EVIDENCE).sort())
+    for (const [key, [file, button]] of Object.entries(EVIDENCE)) {
+      expect([key, read(file).includes(button)]).toEqual([key, true])
+    }
+  })
+
+  it.each(items.map(({ scope, item }) => ({ what: `${scope}/${item.id}`, item })))(
+    '$what opens a real screen from a real console place, in its plugin',
+    ({ item }) => {
+      expect([item.console, consoleLabel(item.console)]).toEqual([item.console, expect.any(String)])
+      const owner = plugins.find((plugin) => plugin.mobile?.contributes?.screens?.includes(item.screen))
+      if (item.pluginId) expect([item.screen, owner?.id]).toEqual([item.screen, item.pluginId])
+      else expect(item.screen.startsWith('site.')).toBe(true)
+    },
+  )
+
+  it('each menu draws one picture per item, all of them in the Kotlin kit', () => {
+    const kotlin = new Set(
+      ['Icons.kt', 'IconsContent.kt'].flatMap((file) =>
+        [...read(`libs/native/kotlin/ui/src/commonMain/kotlin/com/aglyn/ui/${file}`).matchAll(/"([a-z_0-9]+)" to/g)].map(
+          (match) => match[1],
+        ),
+      ),
+    )
+    for (const entry of create) {
+      for (const platform of ['apple', 'android'] as const) {
+        const pictures = entry.items.map((item) => item.icon[platform])
+        expect(new Set(pictures).size).toBe(pictures.length)
+      }
+      expect(entry.items.filter((item) => !kotlin.has(item.icon.android)).map((item) => item.id)).toEqual([])
     }
   })
 })

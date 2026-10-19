@@ -16,11 +16,12 @@
  */
 
 import {
+  type NativeNavContribution,
+  type NativeNavCreateContribution,
+  type NativeNavElsewhere,
   nativeNavHubSection,
   nativeNavIcon,
   nativeNavRef,
-  type NativeNavContribution,
-  type NativeNavElsewhere,
 } from '@aglyn/aglyn/app-utils/native-nav'
 
 /**
@@ -48,6 +49,7 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
         nativeNavHubSection('host', '/products', 'returns', 'Returns', 'commerce.returns'),
         nativeNavHubSection('host', '/products', 'reservations', 'Reservations', 'commerce.reservations'),
       ],
+      docs: '/commerce-and-bookings/commerce/overview',
       console: nativeNavRef('hostPluginSection', '/products/orders'),
     },
   },
@@ -82,6 +84,7 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
           params: { new: '1' },
         },
       ],
+      docs: '/commerce-and-bookings/commerce/overview',
       console: nativeNavRef('hostPluginTab', '/products'),
     },
   },
@@ -90,4 +93,36 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
 /** The console's POS tab is the register app's, not a row of this one. */
 export const NATIVE_NAV_ELSEWHERE: readonly NativeNavElsewhere[] = [
   { console: nativeNavRef('hostPluginTab', '/pos'), where: 'The POS app' },
+]
+
+/** A product ("Add product" on Catalog) and a draft order ("Draft order" on Orders). */
+export const NATIVE_NAV_CREATE: readonly NativeNavCreateContribution[] = [
+  {
+    scope: 'site',
+    item: {
+      id: 'product',
+      label: 'Product',
+      icon: nativeNavIcon('tag', 'sell'),
+      screen: 'commerce.product',
+      params: { new: '1' },
+      pluginId: 'commerce',
+      planFeature: 'commerce',
+      order: 20,
+      console: nativeNavRef('hostPluginSection', '/products/catalog'),
+    },
+  },
+  {
+    scope: 'site',
+    item: {
+      id: 'draftOrder',
+      label: 'Draft order',
+      icon: nativeNavIcon('link.badge.plus', 'link'),
+      screen: 'commerce.orders',
+      params: { new: '1' },
+      pluginId: 'commerce',
+      planFeature: 'commerce',
+      order: 30,
+      console: nativeNavRef('hostPluginSection', '/products/orders'),
+    },
+  },
 ]

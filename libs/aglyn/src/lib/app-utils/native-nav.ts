@@ -102,6 +102,8 @@ export interface NativeNavSection {
   params?: Record<string, string>
   /** Set only when the section belongs to another plugin than its row's. */
   pluginId?: string
+  /** The help docs page for it; its row's, unless the console names its own. */
+  docs?: string
   console: NativeNavConsoleRef
 }
 
@@ -138,6 +140,13 @@ export interface NativeNavRow {
   keywords?: string[]
   /** Where the row sits in its group, ascending; a plugin's row is placed by it. */
   order?: number
+  /**
+   * The help docs page for the place, as the console's own help names it
+   * (its `docsTopic` and `docsAnchor`, or the page's `help` prop): a docs-site
+   * path with its anchor, e.g. `/content-and-data/crm/overview#at-the-organization-level`.
+   * The apps open it in the in-app browser, on the docs origin.
+   */
+  docs?: string
   sections?: NativeNavSection[]
   actions?: NativeNavAction[]
   console: NativeNavConsoleRef
@@ -175,8 +184,56 @@ export interface NativeNavContribution {
   row: NativeNavRow
 }
 
+/** Where the Create new menu is offered: the whole workspace, or one site. */
+export type NativeNavCreateScope = 'workspace' | 'site'
+
+/**
+ * One item of the Create new menu ("+" on the rail, the center tab on
+ * phones): what the console offers to create from that scope, opening the
+ * area's own create form.
+ */
+export interface NativeNavCreateItem {
+  id: string
+  /** The thing made, in the console's words ("Draft order", "Service"). */
+  label: string
+  icon: NativeNavIcon
+  /** The native screen the item opens, with `params` that open its create form. */
+  screen: string
+  params?: Record<string, string>
+  /** The plugin it belongs to: off for the workspace or site, the item is not offered. */
+  pluginId?: string
+  /** Only a site admin is offered it. */
+  requiresHostAdmin?: boolean
+  /** The workspace permission the console's create action asks for (`hosts.create`, `data.manage`). */
+  permission?: string
+  /** The site roles that may make it, as the rules hold them (`canWriteHostContent`). */
+  hostRoles?: string[]
+  /** The plan feature it needs; without it the item is shown blocked, with `blockedReason`. */
+  planFeature?: string
+  /** Why it is blocked when the plan lacks `planFeature`; the default reason otherwise. */
+  blockedReason?: string
+  /** Where it sits in the menu, ascending. */
+  order?: number
+  /** Where the console offers the same create action. */
+  console: NativeNavConsoleRef
+}
+
+/** One scope's Create new menu. */
+export interface NativeNavCreateList {
+  scope: NativeNavCreateScope
+  items: NativeNavCreateItem[]
+}
+
+/** A plugin's Create new item, and the scope that offers it. */
+export interface NativeNavCreateContribution {
+  scope: NativeNavCreateScope
+  item: NativeNavCreateItem
+}
+
 export interface NativeNavManifest {
   lists: NativeNavList[]
+  /** The Create new menu per scope (AGL-3943). */
+  create?: NativeNavCreateList[]
   /** Destinations the shells own, which no plugin registers. */
   shellScreens: string[]
   elsewhere: NativeNavElsewhere[]
@@ -281,6 +338,7 @@ const WORKSPACE: NativeNavList = {
           icon: ICONS.sites,
           screen: 'site.sites',
           order: 10,
+          docs: '/getting-started/console-tour#the-sites-list',
           console: ref('orgTab', 'nav-tab-org-sites'),
         },
         {
@@ -371,6 +429,14 @@ const SITE: NativeNavList = {
 const ordered = (rows: NativeNavRow[]): NativeNavRow[] =>
   rows.map((row, index) => ({ ...row, order: row.order ?? (index + 1) * 10 }))
 
+/** The help page each settings hub's `help` prop names, the rows' docs. */
+const HUB_DOCS: Partial<Record<NativeNavConsoleSurface, string>> = {
+  teamSection: '/workspace-and-billing/teams-and-roles/overview#team-page',
+  billingSection: '/workspace-and-billing/billing-and-plans/overview#billing-page',
+  orgSettingsSection: '/getting-started/console-tour#organization-settings',
+  hostAdminSection: '/getting-started/create-a-site#site-admin',
+}
+
 const setupRow = (
   id: string,
   label: string,
@@ -400,6 +466,7 @@ const adminRow = (
   icon: rowIcon,
   screen,
   requiresHostAdmin: true,
+  docs: HUB_DOCS.hostAdminSection,
   console: ref('hostAdminSection', route),
 })
 
@@ -411,7 +478,15 @@ const settingsRow = (
   screen: string,
   route: string,
   extra: Partial<Pick<NativeNavRow, 'keywords' | 'order'>> = {},
-): NativeNavRow => ({ id, label, icon: rowIcon, screen, ...extra, console: ref(surface, route) })
+): NativeNavRow => ({
+  id,
+  label,
+  icon: rowIcon,
+  screen,
+  ...extra,
+  ...(HUB_DOCS[surface] ? { docs: HUB_DOCS[surface] } : {}),
+  console: ref(surface, route),
+})
 
 const WORKSPACE_SETTINGS: NativeNavList = {
   id: 'workspaceSettings',
@@ -524,6 +599,39 @@ const SITE_SETTINGS: NativeNavList = {
   ],
 }
 
+const CREATE: NativeNavCreateList[] = [
+  {
+    scope: 'workspace',
+    items: [
+      {
+        id: 'site',
+        label: 'Site',
+        icon: ICONS.sites,
+        screen: 'site.sites',
+        params: { new: '1' },
+        permission: 'hosts.create',
+        order: 10,
+        console: ref('orgTab', 'nav-tab-org-sites'),
+      },
+    ],
+  },
+  {
+    scope: 'site',
+    items: [
+      {
+        id: 'page',
+        label: 'Page',
+        icon: ICONS.pages,
+        screen: 'site.pages',
+        params: { new: '1' },
+        hostRoles: ['admin', 'editor', 'author'],
+        order: 10,
+        console: ref('hostTab', 'nav-tab-screens'),
+      },
+    ],
+  },
+]
+
 /**
  * The core's half of the manifest: every list and group, and the core's own
  * rows. The manifest the apps read (`ContractValues.nativeNavManifest`) is
@@ -531,6 +639,7 @@ const SITE_SETTINGS: NativeNavList = {
  */
 export const NATIVE_NAV_MANIFEST: NativeNavManifest = {
   lists: [WORKSPACE, SITE, WORKSPACE_SETTINGS, SITE_SETTINGS],
+  create: CREATE,
   shellScreens: [...NATIVE_NAV_SHELL_SCREENS],
   elsewhere: [
     { console: ref('hostTab', 'nav-tab-dashboard'), where: 'Home, inside the site (shell.home)' },
@@ -553,7 +662,13 @@ export function assembleNativeNav(
   core: NativeNavManifest,
   contributions: readonly NativeNavContribution[],
   elsewhere: readonly NativeNavElsewhere[] = [],
+  creates: readonly NativeNavCreateContribution[] = [],
 ): NativeNavManifest {
+  const byOrder = <T extends { order?: number }>(entries: T[]): T[] =>
+    entries
+      .map((entry, index) => ({ entry, index }))
+      .sort((a, b) => (a.entry.order ?? 0) - (b.entry.order ?? 0) || a.index - b.index)
+      .map(({ entry }) => entry)
   const lists = core.lists.map((list) => ({
     ...list,
     groups: list.groups.map((group) => ({ ...group, rows: [...group.rows] })),
@@ -570,13 +685,77 @@ export function assembleNativeNav(
   }
   for (const list of lists) {
     for (const group of list.groups) {
-      group.rows = group.rows
-        .map((row, index) => ({ row, index }))
-        .sort((a, b) => (a.row.order ?? 0) - (b.row.order ?? 0) || a.index - b.index)
-        .map(({ row }) => row)
+      // A section is helped by its row's page unless the console names its own.
+      group.rows = byOrder(group.rows).map((row) =>
+        row.docs && row.sections
+          ? { ...row, sections: row.sections.map((section) => (section.docs ? section : { ...section, docs: row.docs })) }
+          : row,
+      )
     }
   }
-  return { ...core, lists, elsewhere: [...core.elsewhere, ...elsewhere] }
+  const create = (core.create ?? []).map((entry) => ({ ...entry, items: [...entry.items] }))
+  for (const { scope, item } of creates) {
+    const target = create.find((entry) => entry.scope === scope)
+    if (!target) throw new Error(`native nav: create item ${item.id} names ${scope}, which has no menu`)
+    if (target.items.some((entry) => entry.id === item.id)) {
+      throw new Error(`native nav: the ${scope} create menu holds ${item.id} twice`)
+    }
+    target.items.push(item)
+  }
+  return {
+    ...core,
+    lists,
+    create: create.map((entry) => ({ ...entry, items: byOrder(entry.items) })),
+    elsewhere: [...core.elsewhere, ...elsewhere],
+  }
+}
+
+/** What a Create new item that cannot be used says, when its own reason does not apply. */
+export const NATIVE_CREATE_PERMISSION_REASON =
+  "Your role can't create this here. Ask an owner or admin of the workspace."
+export const NATIVE_CREATE_SITE_ROLE_REASON = "Your role on this site can't create this. Ask a site admin."
+export const NATIVE_CREATE_PLAN_REASON = "Your plan doesn't include this. See the plans in Billing."
+
+/** A Create new item as one scope offers it. */
+export interface ResolvedCreateItem extends NativeNavCreateItem {
+  /** Shown, but disabled with `reason`: a prerequisite stands between the person and it. */
+  blocked: boolean
+  reason?: string
+}
+
+/**
+ * The Create new menu for the workspace or site in hand. An item of a plugin
+ * that is off is not offered, nor an admin-only item to a non-admin. One the
+ * person may not use is SHOWN, disabled with its reason (prerequisites are
+ * shown, never hidden): a permission or site role they lack, then a plan
+ * feature the workspace lacks. `permissions` and `features` are the
+ * workspace's resolved answers (an absent key is not held); `hostRole` is
+ * the person's role on the site, null at the workspace.
+ */
+export function resolveCreateList(
+  manifest: NativeNavManifest,
+  scope: NativeNavCreateScope,
+  enabledPluginIds: readonly string[],
+  permissions: Readonly<Record<string, boolean>>,
+  features: Readonly<Record<string, boolean>>,
+  hostRole: string | null,
+): ResolvedCreateItem[] {
+  const on = new Set(enabledPluginIds)
+  const items = manifest.create?.find((entry) => entry.scope === scope)?.items ?? []
+  return items
+    .filter((item) => (!item.pluginId || on.has(item.pluginId)) && (!item.requiresHostAdmin || hostRole === 'admin'))
+    .map((item): ResolvedCreateItem => {
+      if (item.permission && permissions[item.permission] !== true) {
+        return { ...item, blocked: true, reason: NATIVE_CREATE_PERMISSION_REASON }
+      }
+      if (item.hostRoles && !item.hostRoles.includes(hostRole ?? '')) {
+        return { ...item, blocked: true, reason: NATIVE_CREATE_SITE_ROLE_REASON }
+      }
+      if (item.planFeature && features[item.planFeature] !== true) {
+        return { ...item, blocked: true, reason: item.blockedReason ?? NATIVE_CREATE_PLAN_REASON }
+      }
+      return { ...item, blocked: false }
+    })
 }
 
 /** A list as one scope shows it: rows for plugins that are off, or admin rows for a non-admin, left out. */

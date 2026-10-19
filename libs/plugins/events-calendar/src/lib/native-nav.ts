@@ -16,9 +16,10 @@
  */
 
 import {
+  type NativeNavContribution,
+  type NativeNavCreateContribution,
   nativeNavIcon,
   nativeNavRef,
-  type NativeNavContribution,
 } from '@aglyn/aglyn/app-utils/native-nav'
 
 /**
@@ -41,6 +42,25 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       screen: 'events-calendar.events',
       pluginId: 'events-calendar',
       order: 40,
+      docs: '/content-and-data/events/overview',
+      console: nativeNavRef('hostPluginTab', '/events'),
+    },
+  },
+]
+
+/** An event, the console's "Add event" on Events. */
+export const NATIVE_NAV_CREATE: readonly NativeNavCreateContribution[] = [
+  {
+    scope: 'site',
+    item: {
+      id: 'event',
+      label: 'Event',
+      icon: nativeNavIcon('calendar', 'event'),
+      screen: 'events-calendar.events',
+      params: { new: '1' },
+      pluginId: 'events-calendar',
+      planFeature: 'eventCalendar',
+      order: 50,
       console: nativeNavRef('hostPluginTab', '/events'),
     },
   },
