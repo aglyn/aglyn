@@ -234,10 +234,14 @@ still apply: a page past your plan's page count, a form past its form count, cam
 email or a second site still need a plan upgrade. See
 [Billing & plans](overview.md) for what each plan includes.
 
-**How to ask for a change.** Email **support@aglyn.com** or reply to any message
-from us, and say which site and what to change. Send photos as attachments. If a
-request will go past the month's time, or is a project, we reply first with the extra
-time it needs or a flat quote, and start once you say yes.
+**How to ask for a change.** Open the site in the console and press **Request a
+change** at the top of its dashboard, then say what to change. Any member of the
+workspace can ask. You can also email **support@aglyn.com** or reply to any message
+from us, and say which site and what to change; send photos as attachments. We email
+you when we have the request, with the day it will be done, and again when it is done,
+with what changed and the time it took. If a request will go past the month's time, or
+is a project, we reply first with the extra time it needs or a flat quote, and start
+once you say yes.
 
 - **Fair use.** About an hour a month is a guide, not a meter that cuts you off
   mid-change. Time past it is extra time, billed only for a request you said yes to;
@@ -253,6 +257,19 @@ time it needs or a flat quote, and start once you say yes.
   Enterprise workspaces arrange it in their agreement instead.
 - **Turning it off** takes effect at the end of the period you already paid for, like
   every add-on removal. Every change we already made stays on your site.
+
+### Your Site Care statement {#site-care-statement}
+
+The **Site Care** card on **Billing** is the month's statement, kept up to date as we
+work. It shows each request with the time it took, how much of the month's included
+time is used and how much is left, any extra time and where its charge stands (on your
+next invoice, removed, credited back or refunded), and every record in order: each
+request, each approval you gave us, each charge and each correction, with the reason.
+Switch to **Last month** to see the month before. Anyone who can view billing sees it.
+
+Nothing on it is ever rewritten. If we correct the time on a request, or remove,
+credit or refund a charge, a new record says what it was, what it is now and why, and
+we email you the same. We can also email you the whole month's statement; just ask.
 
 ## How changes bill
 

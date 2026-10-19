@@ -83,6 +83,12 @@ export const WATCHED = Object.freeze([
     optionalScalars: Object.freeze([
       'PAGE_VIEW_CDN_REQUEST_COST_USD',
       'SITE_CARE_ADDON_MONTHLY_USD',
+      // Site Care's included hour, the block it is counted in and the
+      // extra-time rate (AGL-3959): optional for the same reason, until the
+      // base ref carries them.
+      'SITE_CARE_INCLUDED_MINUTES',
+      'SITE_CARE_INCLUDED_BLOCK_MINUTES',
+      'SITE_CARE_EXTRA_HOUR_USD',
     ]),
   }),
   Object.freeze({

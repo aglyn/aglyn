@@ -136,6 +136,7 @@ const INDIRECT_READS: Record<string, string> = {
   META_CATALOG_APP_SECRET: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
   META_GRAPH_API_VERSION: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
   SALES_CHANNELS_TOKEN_KEY: 'libs/plugins/sales-channels/src/lib/server/connect/config.ts',
+  SITE_CARE_INBOUND_WEBHOOK_SECRET: 'apps/console/app/api/site-care/inbound/route.ts',
 }
 
 /**
