@@ -46,12 +46,26 @@ final class PushCenter: NSObject {
     UNUserNotificationCenter.current().delegate = self
   }
 
-  /// Follows the signed-in person: asks for permission (the system asks only
-  /// once) and registers with APNs. A token APNs already handed out is
-  /// written for the new person at once.
+  /// Follows the signed-in person. Nothing is asked here: a launch can restore a session that the sign-in screen then
+  /// replaces, so the system's permission sheet waits for `askPermission`, once the signed-in shell is on screen. A
+  /// device that already allows notifications registers with APNs at once, and a token APNs already handed out is
+  /// written for the new person.
   func signedIn(uid: String?, reader: FirestoreReader?) {
     self.uid = uid
     self.reader = reader
+    guard uid != nil, receivesPushes else { return }
+    Task {
+      let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+      authorization = status
+      guard status == .authorized || status == .provisional else { return }
+      registerWithAPNs()
+      if let token { await write(token) }
+    }
+  }
+
+  /// Asks for permission (the system asks only once) and registers with APNs: called by the signed-in shell, never
+  /// from the signed-out screens.
+  func askPermission() {
     guard uid != nil, receivesPushes else { return }
     #if DEBUG
       // Screenshot and UI-test runs keep the system's permission sheet away.
@@ -62,13 +76,17 @@ final class PushCenter: NSObject {
       let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
       authorization = await center.notificationSettings().authorizationStatus
       guard granted else { return }
-      #if os(iOS)
-        UIApplication.shared.registerForRemoteNotifications()
-      #elseif os(macOS)
-        NSApplication.shared.registerForRemoteNotifications()
-      #endif
+      registerWithAPNs()
       if let token { await write(token) }
     }
+  }
+
+  private func registerWithAPNs() {
+    #if os(iOS)
+      UIApplication.shared.registerForRemoteNotifications()
+    #elseif os(macOS)
+      NSApplication.shared.registerForRemoteNotifications()
+    #endif
   }
 
   /// Drops this install's row while the person can still write it.

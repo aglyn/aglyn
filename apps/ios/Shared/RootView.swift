@@ -44,6 +44,8 @@ struct RootView<Shell: View>: View {
             // A support session says so on every screen, with its way back to the staff member's own session.
             // The first verified session of an account with no workspace creates the one its sign-up asked for.
             .task(id: "\(auth.user?.uid ?? ""):\(model.workspace?.ready == true)") { await model.settleFirstRun() }
+            // Notifications are asked for once someone is signed in and in the app, never on the signed-out screens.
+            .task(id: auth.user?.uid) { if auth.impersonation == nil { model.push.askPermission() } }
             .safeAreaInset(edge: .top, spacing: 0) {
               if let impersonation = auth.impersonation {
                 AglynNotice(
