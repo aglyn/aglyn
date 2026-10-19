@@ -288,7 +288,7 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     keyedBy: 'field',
     subjects: ['org'],
     exported: true,
-    note: 'Each domain the workspace bought on this platform (AGL-3962): the name, the site it serves, the registrar and its order id, status, registration and expiry dates, auto-renew, what was charged for the first year and quoted for renewals and the invoices for each, the renewal state, the registrant’s name and email as typed at purchase, ICANN’s registrant email check, any dispute, the member who bought it the latest events and the registrar’s own prices at purchase. The registration itself, and the full registrant contact, are held by the registrar. Keyed by the domain name.',
+    note: 'Each domain the workspace bought on this platform (AGL-3962): the name, the site it serves, the registrar and its order id, status, registration and expiry dates, auto-renew, what was charged for the first year and quoted for renewals and the invoices for each, the renewal state, the registrant’s name and email as typed at purchase, ICANN’s registrant email check, any dispute, the member who bought it, its latest events, and the registrar’s own prices at purchase. The registration itself, and the full registrant contact, are held by the registrar. Keyed by the domain name.',
   },
   {
     collection: 'domainConnectSessions',
