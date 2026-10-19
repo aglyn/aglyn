@@ -189,23 +189,13 @@ struct OrderDetailView: View {
         AglynAmountRow("Total", amount: row.total, emphasized: true)
           // Figma 13:483: the total sits under a hairline in the plain column.
           .overlay(alignment: .top) { if wide { AglynHairline() } }
+        // In the plain column the notes are a row, so they line up with the totals (a footer ignores the row insets).
+        if wide { totalsNotes(order).font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText) }
       } header: {
         // In the plain column the totals follow the items directly, under the total's hairline (Figma 13:483).
         if !wide { Text("Totals") }
       } footer: {
-        // As the console's order says it: how the tax on this order was computed (AGL-2451; absent means not
-        // recorded, never "no tax"), then what was refunded and what a lost chargeback took, two doors said apart
-        // (AGL-1787), in the error color.
-        let reversal = splitOrderReversal(order)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(describeOrderTaxMode(order.taxMode?.rawValue))
-          if reversal.refundedCents > 0 {
-            Text("Refunded \(formatOrderMoney(reversal.refundedCents))").foregroundStyle(AglynColor.error)
-          }
-          if reversal.chargedBackCents > 0 {
-            Text("Charged back \(formatOrderMoney(reversal.chargedBackCents))").foregroundStyle(AglynColor.error)
-          }
-        }
+        if !wide { totalsNotes(order) }
       }
 
       let shipments = order.fulfillments ?? []
@@ -492,6 +482,22 @@ struct OrderDetailView: View {
     case .done: break
     case .openInstead: if let url = URL(string: link) { openURL(url) }
     case .failed(let message): problem = message
+    }
+  }
+
+  /// Under the totals, as the console's order says it: how the tax was computed (AGL-2451; absent means not recorded,
+  /// never "no tax"), then what was refunded and what a lost chargeback took, two doors said apart (AGL-1787), in the
+  /// error color.
+  private func totalsNotes(_ order: HostOrder) -> some View {
+    let reversal = splitOrderReversal(order)
+    return VStack(alignment: .leading, spacing: 2) {
+      Text(describeOrderTaxMode(order.taxMode?.rawValue))
+      if reversal.refundedCents > 0 {
+        Text("Refunded \(formatOrderMoney(reversal.refundedCents))").foregroundStyle(AglynColor.error)
+      }
+      if reversal.chargedBackCents > 0 {
+        Text("Charged back \(formatOrderMoney(reversal.chargedBackCents))").foregroundStyle(AglynColor.error)
+      }
     }
   }
 
