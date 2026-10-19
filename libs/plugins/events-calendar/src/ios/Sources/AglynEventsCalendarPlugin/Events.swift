@@ -364,7 +364,7 @@ struct EventEditor: View {
         Section { Button("Delete", role: .destructive, action: onDelete).accessibilityIdentifier("event-delete") }
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .navigationTitle(draft.id == nil ? "New event" : draft.title.isEmpty ? "Event" : draft.title)
     .aglynScreenTitle(draft.id == nil ? "New event" : draft.title.isEmpty ? "Event" : draft.title)

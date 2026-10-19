@@ -263,7 +263,7 @@ struct SequenceDetail: View {
             if enrollments.hasMore { Button("Show more") { enrollments.loadMore() } }
           }
         }
-        .formStyle(.grouped)
+        .formStyle(.aglynGrouped)
         .aglynListBackground()
         .navigationTitle(row.name)
         .aglynScreenTitle(row.name)
@@ -391,7 +391,7 @@ struct SequenceEditor: View {
           Text(issues.first { !$0.path.hasPrefix("steps.") }?.message ?? "Use {{enrollment.personalLine}} in the first email for the line written for each person.")
         }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle(sequence == nil ? "New sequence" : "Edit sequence")
       .aglynScreenTitle(sequence == nil ? "New sequence" : "Edit sequence")
       .toolbar {
@@ -503,7 +503,7 @@ struct EnrollSheet: View {
           }
         }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle("Enroll people")
       .aglynScreenTitle("Enroll people")
       .toolbar {
@@ -806,7 +806,7 @@ struct ComplianceSection: View {
         Text("Tracked links point at your own domain rather than a shared one.")
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .task {
       let orgID = orgID

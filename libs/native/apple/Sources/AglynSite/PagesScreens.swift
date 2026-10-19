@@ -548,7 +548,7 @@ struct PageDetail: View {
           context: context, hostID: hostID, page: page, model: model, api: api, runner: runner, canPublish: canPublish)
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     // Back from the Besigner: the tree reads a page once, so what its publish changed (Published, Updated, the
     // live version) is read again now rather than shown stale until the list is reopened.

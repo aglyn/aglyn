@@ -50,7 +50,7 @@ struct ListAssignmentSheet: View {
         }
         if let error { Text(error).foregroundStyle(AglynColor.error) }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle("Add to a marketing list")
       .aglynScreenTitle("Add to a marketing list")
       .toolbar {

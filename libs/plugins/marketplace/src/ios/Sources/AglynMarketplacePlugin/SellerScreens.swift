@@ -63,7 +63,7 @@ struct SellScreen: View {
             case .sales: SalesSection(context: context, orgID: orgID, profile: profile)
             }
           }
-          .formStyle(.grouped)
+          .formStyle(.aglynGrouped)
           .aglynListBackground()
           .accessibilityIdentifier("sell-\(section.rawValue)")
         }

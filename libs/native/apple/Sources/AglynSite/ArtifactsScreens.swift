@@ -356,7 +356,7 @@ private struct ArtifactDetail: View {
         UsedByCard(api: api, row: row)
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .task(id: row.parentLayoutID) {
       guard kind == .layout, let parentID = row.parentLayoutID else { return }

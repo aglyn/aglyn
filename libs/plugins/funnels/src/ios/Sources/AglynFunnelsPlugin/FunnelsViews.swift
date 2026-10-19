@@ -395,7 +395,7 @@ struct FunnelEditorSheet: View {
           .accessibilityIdentifier("funnel-add-step")
         }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle(editor.draft?.id == nil ? "New funnel" : "Edit funnel")
       .aglynScreenTitle(editor.draft?.id == nil ? "New funnel" : "Edit funnel")
       #if os(iOS)
@@ -506,7 +506,7 @@ struct FunnelProposeSheet: View {
           Text("Describe the journey you want to measure. The draft is checked against the pages and records your site has, and opens in the editor. Nothing is saved until you save it.")
         }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle("Create a funnel with AI")
       .aglynScreenTitle("Create a funnel with AI")
       #if os(iOS)
@@ -553,7 +553,7 @@ struct DropOffSheet: View {
           )
         }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle("Act on this drop-off")
       .aglynScreenTitle("Act on this drop-off")
       #if os(iOS)

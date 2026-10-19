@@ -86,7 +86,7 @@ struct FormDetailView: View {
         if let updatedAt = form.updatedAt { LabeledContent("Updated", value: relativeTime(updatedAt, now: now)) }
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .accessibilityIdentifier("form-detail")
   }

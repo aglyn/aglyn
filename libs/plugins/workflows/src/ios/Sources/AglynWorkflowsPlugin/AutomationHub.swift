@@ -481,7 +481,7 @@ struct DuplicateWorkflowSheet: View {
         }
         if let error { Section { AglynNotice(error, tone: .error) } }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle("Duplicate workflow")
       .aglynScreenTitle("Duplicate workflow")
       #if os(iOS)

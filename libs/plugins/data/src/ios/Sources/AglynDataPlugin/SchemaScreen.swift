@@ -156,7 +156,7 @@ private struct SchemaEditor: View {
         .accessibilityIdentifier("schema-save")
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .accessibilityIdentifier("schema-editor")
     .sheet(item: $sheet) { sheetView($0) }
@@ -432,7 +432,7 @@ private struct FieldEditorSheet: View {
         }
         validationSection
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle(isNew ? "New field" : "Edit field")
       .aglynScreenTitle(isNew ? "New field" : "Edit field")
       #if os(iOS)

@@ -186,7 +186,7 @@ struct BookingDetailView: View {
         }
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .accessibilityIdentifier("booking-detail")
     .confirmationDialog(
@@ -353,7 +353,7 @@ struct PaySheet: View {
           Section { Label(prompt, systemImage: "wave.3.right") }
         }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle("Take payment")
       .aglynScreenTitle("Take payment")
       .toolbar {

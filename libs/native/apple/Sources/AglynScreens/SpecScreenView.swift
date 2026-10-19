@@ -71,7 +71,7 @@ public struct SpecScreenView: View {
           SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: false, embedded: embedded)
         }
       } else {
-        Form { SkeletonRows(count: 6) }.formStyle(.grouped)
+        AglynGroupedForm { SkeletonRows(count: 6) }
       }
     }
     .environment(\.aglynPluginContext, plugin)
@@ -334,7 +334,7 @@ struct SpecScreenBody: View {
   private var content: some View {
     switch model.phase {
     case .loading:
-      Form { SkeletonRows(count: 6) }.formStyle(.grouped)
+      AglynGroupedForm { SkeletonRows(count: 6) }
     case .failed(let message):
       // On the page's own ground, as the loaded screen is: a bare state shows the window behind it (black in dark).
       AglynEmptyState("This did not load", systemImage: "exclamationmark.triangle", message: message) {
@@ -352,13 +352,12 @@ struct SpecScreenBody: View {
       .background(AglynColor.page)
     case .ready:
       let blocks = model.spec.blocks.filter { ScreenValues.condition($0.when, in: context) }
-      Form {
+      // Fills its column: the Mac draws its own grouped sections (`AglynGroupedForm`), the cards on the content edges.
+      AglynGroupedForm {
         ForEach(blocks) { block in
           blockView(block)
         }
       }
-      .formStyle(.grouped)
-      .aglynListBackground()
       .refreshable { await model.load() }
       .modifier(SearchModifier(enabled: searchLoad != nil, text: $searchText) {
         if let key = searchLoad {
@@ -550,8 +549,7 @@ struct SpecScreenBody: View {
       if contributions.isEmpty, widgets.isEmpty, let empty = block["empty"]?.stringValue {
         Section {
           AglynNotice(ScreenValues.render(empty, in: context), tone: .info)
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
+            .aglynFormBare()
         }
       }
     case "image":
@@ -584,8 +582,7 @@ struct SpecScreenBody: View {
     case "notice":
       Section {
         AglynNotice(ScreenValues.render(block["text"]?.stringValue ?? "", in: context), tone: tone(block["tone"]?.stringValue))
-          .listRowInsets(EdgeInsets())
-          .listRowBackground(Color.clear)
+          .aglynFormBare()
       } header: {
         if let title { Text(title) }
       }

@@ -783,7 +783,7 @@ struct MediaDetailBody: View {
         }
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .accessibilityIdentifier("media-detail")
     .onChange(of: item, initial: true) { _, _ in reset() }

@@ -130,7 +130,7 @@ struct SetupDetail: View {
       case .integrations: IntegrationsSection(context: context, widgets: integrations)
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .navigationTitle(section.title)
     .aglynScreenTitle(section.title)

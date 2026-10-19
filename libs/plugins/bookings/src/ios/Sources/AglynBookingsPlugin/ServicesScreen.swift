@@ -264,7 +264,7 @@ struct ServiceEditor: View {
         }
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .navigationTitle(service == nil ? "New service" : form.name.isEmpty ? "Service" : form.name)
     .aglynScreenTitle(service == nil ? "New service" : form.name.isEmpty ? "Service" : form.name)
