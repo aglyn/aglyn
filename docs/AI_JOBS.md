@@ -2219,7 +2219,7 @@ org, its owner or an admin, a paid plan (`resolveEffectivePlan` is not
   pages and the plan's page count. Answers the inventory.
 - **The crawler** (`site-import/site-import-crawl.ts`) reads through
   `fetchPublicTextDetailed`, the theme job's SSRF-guarded fetch, as
-  `AglynBot/1.0 (+https://aglyn.com/bot)`: robots.txt first (a 404 allows
+  `AglynBot/1.0 (+<SITE_IMPORT_BOT_INFO_URL>)`: robots.txt first (a 404 allows
   all; an unreadable one stops the crawl), sitemaps next, then same-site
   links. The site is the domain and its `www.` twin; a redirect or link
   anywhere else is refused. Budgets: pages, bytes per page (a page over it is

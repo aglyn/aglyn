@@ -113,6 +113,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "AGL-2703. Which hosts wear the OPERATOR's own brand rather than the neutral tenant palette. The two literals are the `??` default of `NEXT_PUBLIC_PLATFORM_BRAND_HOSTS` and nothing else reads them: a self-host operator points that variable at their own marketing domain, and their customers keep resolving the tenant default either way. Left as the default so the platform's own deployment needs no variable to keep its brand. On a self-hosted instance the literals are inert — no host there ever equals them, so every site correctly gets the tenant palette.",
   },
   {
+    file: 'libs/plugins/ai/src/lib/site-import/site-import-crawl.ts',
+    count: 1,
+    reason:
+      "AGL-3983. The page the site-import crawler's user agent names (`AglynBot/1.0 (+…)`), for a site owner who wants to know what read their site. The literal is the `??` default of `SITE_IMPORT_BOT_INFO_URL` and nothing else reads it: a self-host operator points that variable at their own page about their crawler, so their deployment never tells a site it was read by Aglyn. Left as the default so the platform's own deployment needs no variable.",
+  },
+  {
     file: 'libs/aglyn/src/lib/app-utils/inbound-mail-domain.ts',
     count: 1,
     reason:

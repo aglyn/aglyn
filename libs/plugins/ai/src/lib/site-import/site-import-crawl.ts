@@ -31,7 +31,7 @@
  * - **One site.** The site is `https://<domain>` and `https://www.<domain>`,
  *   one site to its owner. Every redirect hop and every discovered link must
  *   stay on it; a page that redirects anywhere else is refused, not followed.
- * - **AglynBot.** Every request says `AglynBot/1.0 (+https://aglyn.com/bot)`,
+ * - **AglynBot.** Every request says `AglynBot/1.0 (+<the operator's bot page>)`,
  *   and robots.txt is read first and honored for every page: the AglynBot
  *   group, else `*`. A robots.txt that answers 404 allows everything; one
  *   that cannot be read at all (5xx, no answer) stops the crawl, because
@@ -72,8 +72,16 @@ import {
   type RobotsRule,
 } from './site-import-robots'
 
+/**
+ * Where the bot's user agent points a site owner who wants to know what it is
+ * (AGL-3983): the operator's own page about it. `SITE_IMPORT_BOT_INFO_URL` on
+ * a self-hosted deployment, so its crawler never names Aglyn's address; the
+ * literal is only that variable's default.
+ */
+export const AGLYN_BOT_INFO_URL = process.env['SITE_IMPORT_BOT_INFO_URL'] ?? 'https://aglyn.com/bot'
+
 /** What every crawler request says it is. */
-export const AGLYN_BOT_USER_AGENT = 'AglynBot/1.0 (+https://aglyn.com/bot)'
+export const AGLYN_BOT_USER_AGENT = `AglynBot/1.0 (+${AGLYN_BOT_INFO_URL})`
 
 export const SITE_IMPORT_DEFAULTS = {
   maxPageBytes: 2 * 1024 * 1024,
