@@ -13,5 +13,6 @@
   "libs/plugins/inventory-sync/src/lib/providers/cin7-core.ts": 1,
   "libs/plugins/marketplace/src/lib/components/marketplace-hub.component.tsx": 2,
   "libs/plugins/marketplace/src/lib/components/plugin-review-detail.component.tsx": 1,
+  "libs/plugins/marketplace/src/lib/model/marketplace-section-ids.ts": 1,
   "libs/plugins/marketplace/src/lib/model/plugin-review-checklist.ts": 1
 }
