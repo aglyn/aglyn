@@ -677,6 +677,8 @@ export function MoreDetails({ step, ...props }: StepProps & { step: AiSiteStartS
     <Accordion
       disableGutters
       variant="outlined"
+      // The same outlined, rounded section as the build page's plan.
+      sx={{ borderRadius: 2, '&::before': { display: 'none' } }}
       expanded={expanded}
       onChange={(_, next) => {
         setOpen(next)
