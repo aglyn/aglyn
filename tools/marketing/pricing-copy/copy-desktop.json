@@ -5,7 +5,7 @@
   "frameName": "Pricing",
   "frameSize": {
     "width": 1440,
-    "height": 7659
+    "height": 8060
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -15,7 +15,7 @@
       "name": "Hero",
       "order": 0,
       "widthPx": 1440,
-      "heightPx": 343,
+      "heightPx": 372,
       "groups": [
         {
           "figmaNodeId": "77:62",
@@ -47,14 +47,14 @@
         },
         {
           "figmaNodeId": "77:64",
-          "name": "Every paid plan includes the full platform — Besigner, CRM, commerce, forms, media, and workflows. Beta pricing — plans and limits may change as Aglyn evolves.",
+          "name": "Every paid plan includes the full platform — Besigner, CRM, commerce, forms, media, workflows and a band of Aglyn AI credits. Start free with one website; upgrade for your own domain and a store.",
           "widthPx": 680,
           "records": [
             {
               "figmaNodeId": "77:64",
               "name": null,
               "cells": [
-                "Every paid plan includes the full platform — Besigner, CRM, commerce, forms, media, and workflows. Beta pricing — plans and limits may change as Aglyn evolves."
+                "Every paid plan includes the full platform — Besigner, CRM, commerce, forms, media, workflows and a band of Aglyn AI credits. Start free with one website; upgrade for your own domain and a store."
               ]
             }
           ]
@@ -543,7 +543,7 @@
               "figmaNodeId": "87:195",
               "name": "row",
               "cells": [
-                "Screen versioning",
+                "Page versioning",
                 "—",
                 "—",
                 "✓",
@@ -1201,7 +1201,7 @@
               "figmaNodeId": "88:255",
               "name": "row",
               "cells": [
-                "Per-screen analytics",
+                "Per-page analytics",
                 "—",
                 "—",
                 "✓",
@@ -1290,7 +1290,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 1440,
-      "heightPx": 1238,
+      "heightPx": 1406,
       "groups": [
         {
           "figmaNodeId": "89:57",
@@ -1490,6 +1490,42 @@
               "cells": [
                 "Starter $9 · Pro $19 · Business $39 · Scale $69 · Advanced $99 · Agency $299 a month, per workspace. Adds AI credits to your plan’s included band — 4,000 on Starter, 9,000 on Pro, 19,000 on Business, 34,000 on Scale, 49,000 on Advanced, 149,000 on Agency. Enterprise by agreement."
               ]
+            },
+            {
+              "figmaNodeId": "2542:3005",
+              "name": "h",
+              "cells": [
+                "Site Care",
+                "$49 / mo"
+              ]
+            },
+            {
+              "figmaNodeId": "2542:3008",
+              "name": null,
+              "cells": [
+                "We make your site changes for you: hours, prices, photos, a staff member, a seasonal banner, a section on an existing page. Up to about an hour of work a month, done within 2 business days."
+              ]
+            },
+            {
+              "figmaNodeId": "2542:3009",
+              "name": null,
+              "cells": [
+                "Extra work past the hour is $79 per started hour, once you’ve said yes."
+              ]
+            },
+            {
+              "figmaNodeId": "2542:3010",
+              "name": null,
+              "cells": [
+                "Bigger jobs are quoted flat up front: landing pages from $249, redesigns from $749, logo or brand kit from $349. Plan limits still apply."
+              ]
+            },
+            {
+              "figmaNodeId": "2542:3011",
+              "name": null,
+              "cells": [
+                "Any paid plan."
+              ]
             }
           ]
         },
@@ -1561,7 +1597,7 @@
       "name": "FAQ",
       "order": 4,
       "widthPx": 1440,
-      "heightPx": 954,
+      "heightPx": 1123,
       "groups": [
         {
           "figmaNodeId": "90:31",
@@ -1582,14 +1618,6 @@
           "name": "grid",
           "widthPx": 1392,
           "records": [
-            {
-              "figmaNodeId": "90:33",
-              "name": "qa",
-              "cells": [
-                "Is there really a free plan?",
-                "Yes — the Free plan gives you one site, with the Besigner builder, forms, and media included. No credit card required."
-              ]
-            },
             {
               "figmaNodeId": "90:36",
               "name": "qa",
@@ -1651,7 +1679,39 @@
               "name": "qa",
               "cells": [
                 "Do you offer SSO or an SLA?",
-                "SAML / OIDC single sign-on is available on Enterprise today — you set it up yourself in the console after proving your domain. Enterprise also includes dedicated support with a named manager and a 24–48 hour first response. We do not offer a contractual uptime SLA during public beta."
+                "SAML / OIDC single sign-on is available on Enterprise today — you set it up yourself in the console after proving your domain. Enterprise also includes dedicated support with a named manager and a 24–48 hour first response. We do not offer a contractual uptime SLA."
+              ]
+            },
+            {
+              "figmaNodeId": "2297:56084",
+              "name": "qa",
+              "cells": [
+                "How much does it cost to build a website on Aglyn?",
+                "Nothing to build and publish on the free plan: one site, up to five pages, forms, media and AI credits. Your own domain, the store, bookings and the CRM come with Starter; the pricing page lists every plan."
+              ]
+            },
+            {
+              "figmaNodeId": "2297:56087",
+              "name": "qa",
+              "cells": [
+                "Is the free plan a trial?",
+                "No. It does not expire or downgrade. It is capped rather than billed: one site, five pages, 250 MB of storage and 2 GB of bandwidth a month."
+              ]
+            },
+            {
+              "figmaNodeId": "2345:9777",
+              "name": "qa",
+              "cells": [
+                "How does Aglyn compare to alternatives?",
+                "Our comparison pages set Aglyn beside Webflow, Wix, Squarespace, WordPress, Shopify and Duda, dated, and say where each of them is the better answer."
+              ]
+            },
+            {
+              "figmaNodeId": "2345:9780",
+              "name": "qa",
+              "cells": [
+                "What is Aglyn?",
+                "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start."
               ]
             }
           ]
@@ -1697,14 +1757,14 @@
         },
         {
           "figmaNodeId": "90:54",
-          "name": "No credit card required. Beta pricing — plans, prices, and included features may change as Aglyn evolves.",
+          "name": "No credit card required. Upgrade, downgrade or cancel anytime from the billing page.",
           "widthPx": 620,
           "records": [
             {
               "figmaNodeId": "90:54",
               "name": null,
               "cells": [
-                "No credit card required. Beta pricing — plans, prices, and included features may change as Aglyn evolves."
+                "No credit card required. Upgrade, downgrade or cancel anytime from the billing page."
               ]
             }
           ]
