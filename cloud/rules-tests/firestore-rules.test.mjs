@@ -10870,6 +10870,65 @@ describe('a custom sending domain is unwritable and unreadable from any client',
 })
 
 /**
+ * A website ownership claim's `status: 'proven'` is what lets a site import
+ * read a website (AGL-3974), so a client that could write it could import,
+ * and clone, any site. Owners and admins read it, because it carries the
+ * token they publish; nobody else does.
+ */
+describe('a website ownership claim is read by managers and written by no client', () => {
+  const DOMAIN = 'bakery.test'
+  const claimPath = (orgId = ORG) => ['orgs', orgId, 'domainOwnershipClaims', DOMAIN]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), ...claimPath()), {
+        domain: DOMAIN,
+        token: 'tok-pending',
+        status: 'pending',
+        createdAt: Date.now(),
+        createdBy: OWNER,
+        emailCode: null,
+      })
+    })
+  })
+
+  it('the owner reads it; an editor, a viewer, an outsider and anon do not', async () => {
+    await assertSucceeds(getDoc(doc(authed(OWNER), ...claimPath())))
+    for (const [label, db] of [
+      ['an editor', authed(EDITOR)],
+      ['a viewer', authed(VIEWER)],
+      ['an outsider', authed(OUTSIDER)],
+      ['an anonymous visitor', anon()],
+    ]) {
+      await mustDeny(`${label} reading orgs/${ORG}/domainOwnershipClaims/${DOMAIN}`, getDoc(doc(db, ...claimPath())))
+    }
+  })
+
+  it('nobody marks a claim proven, plants one or deletes one — owner and staff alike', async () => {
+    for (const [label, db] of [
+      ['the org owner', authed(OWNER)],
+      ['an editor', authed(EDITOR)],
+      ['an outsider', authed(OUTSIDER)],
+      ['staff', authed(STAFF, { staff: true })],
+      ['an anonymous visitor', anon()],
+    ]) {
+      await mustDeny(
+        `${label} marking orgs/${ORG}/domainOwnershipClaims/${DOMAIN} proven`,
+        updateDoc(doc(db, ...claimPath()), { status: 'proven', provenMethod: 'dns' }),
+      )
+      await mustDeny(
+        `${label} planting a proven claim`,
+        setDoc(doc(db, 'orgs', ORG, 'domainOwnershipClaims', 'someone-else.test'), {
+          domain: 'someone-else.test',
+          status: 'proven',
+        }),
+      )
+      await mustDeny(`${label} deleting a claim`, deleteDoc(doc(db, ...claimPath())))
+    }
+  })
+})
+
+/**
  * THE CRM IS SCOPED, AND ITS DELETE IS A DETACH.
  *
  * `contacts` was `isOrgWideMember()` on both sides, so every site in an

@@ -122,13 +122,14 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
 
     it('gives every Resend-delivered email a reason, and nothing else one', () => {
       // Premise: the catalog's Resend emails, all of them.
-      // The 31 written out — the workspace handoff and the upgrade proposal
+      // The 32 written out — the workspace handoff and the upgrade proposal
       // joined them in AGL-3466, the staff follow-up in AGL-3691, the weekly
-      // summary's workspace and site emails in AGL-3867 — the five
-      // getting-started emails (AGL-3692), and one per risk notice kind plus the risk
-      // digest and review acknowledgment (AGL-3368, pinned in
+      // summary's workspace and site emails in AGL-3867, the website
+      // ownership code in AGL-3974 — the five getting-started emails
+      // (AGL-3692), and one per risk notice kind plus the risk digest and
+      // review acknowledgment (AGL-3368, pinned in
       // `risk-notice-catalog.spec.ts`).
-      expect(editable.length).toBe(31 + 5 + RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length)
+      expect(editable.length).toBe(32 + 5 + RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length)
       for (const entry of SYSTEM_EMAIL_TEMPLATES) {
         if (isSystemEmailEditable(entry)) {
           expect(entry.footerReason?.startsWith('You’re receiving this')).toBe(true)

@@ -1277,6 +1277,49 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       source: 'libs/tenant/data/admin/src/lib/server/member-email-aliases.ts',
     },
     {
+      key: 'domain-ownership-code',
+      name: 'Website ownership code',
+      description:
+        'Sent to an address at a website’s own domain when a workspace ' +
+        'proves it owns that website before bringing it into the product. ' +
+        'Carries a six-digit code that works for 15 minutes.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Your code to verify {{domain}}',
+      mergeTokens: [
+        {
+          name: 'org.name',
+          description: 'The workspace that asked',
+          sample: 'Test Org',
+        },
+        {
+          name: 'domain',
+          description: 'The website’s domain',
+          sample: 'example.com',
+        },
+        {
+          name: 'code',
+          description: 'The one-time code',
+          sample: '123456',
+        },
+        {
+          name: 'expiresInMinutes',
+          description: 'How many minutes the code works',
+          sample: '15',
+        },
+      ],
+      defaultBody: [
+        { block: 'text', text: '{{domain}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Your verification code', variant: 'heading' },
+        { block: 'text', text: '{{org.name}} asked to confirm that {{domain}} belongs to them, so they can bring the site into {{brand.productName}}. Type this code where you asked for it.', variant: 'body' },
+        { block: 'text', text: 'Code: {{code}}\nWebsite: {{domain}}\nWorks for: {{expiresInMinutes}} minutes', variant: 'details' },
+        { block: 'text', text: 'If you did not ask for this, ignore this email. Nothing is copied from your site without the code.', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because someone in {{org.name}} on ' +
+        '{{brand.productName}} asked to verify a website at this address’s domain.',
+      source: 'libs/tenant/data/admin/src/lib/server/domain-ownership.ts',
+    },
+    {
       key: 'crm-daily-digest',
       name: 'Daily CRM digest',
       description:
