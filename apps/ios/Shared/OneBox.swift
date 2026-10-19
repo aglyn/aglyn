@@ -114,6 +114,13 @@ struct OneBoxCatalog {
     return text.isEmpty ? emptySections : searchSections(text, perGroup: 5, seeAll: true)
   }
 
+  /// The title bar's dropdown (Figma Search/Dropdown, Typing 118:15773): the best match of each group, then "See all
+  /// results", so the whole answer fits under the field; the rest is one Enter away on the results screen.
+  var dropdownSections: [OneBoxSection] {
+    let text = box.query.trimmingCharacters(in: .whitespacesAndNewlines)
+    return text.isEmpty ? emptySections : searchSections(text, perGroup: 1, seeAll: true)
+  }
+
   /// Focused, nothing typed: the account's recent places and what it starred (Figma "Empty" 118:15883).
   var emptySections: [OneBoxSection] {
     var out: [OneBoxSection] = []
@@ -467,7 +474,7 @@ struct OneBoxDropdown: View {
 
   var body: some View {
     let box = navigation.search
-    let sections = OneBoxCatalog(model: model, navigation: navigation, box: box).sections
+    let sections = OneBoxCatalog(model: model, navigation: navigation, box: box).dropdownSections
     let typing = !box.query.trimmingCharacters(in: .whitespaces).isEmpty
     let scope = ShellScope(model: model, navigation: navigation)
     VStack(spacing: 0) {
@@ -569,7 +576,7 @@ struct TitleBarSearch: View {
   }
 
   private var flat: [OneBoxItem] {
-    OneBoxCatalog(model: model, navigation: navigation, box: navigation.search).sections.flatMap(\.items)
+    OneBoxCatalog(model: model, navigation: navigation, box: navigation.search).dropdownSections.flatMap(\.items)
   }
 
   private func move(down: Bool) -> KeyPress.Result {
