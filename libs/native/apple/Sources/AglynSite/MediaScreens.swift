@@ -432,7 +432,7 @@ struct MediaLibrary: View {
         message: canEdit ? "Upload photos, videos and documents to use on your pages." : nil
       ) {
         if canEdit && model.search.isEmpty && model.type == nil && model.filters.count == 0 {
-          Button("Upload") { pickSource = PickSource.available.first }.buttonStyle(.borderedProminent)
+          Button("Upload") { pickSource = PickSource.available.first }.buttonStyle(.aglynProminent)
         }
       }
     case .ready(let items):
@@ -742,7 +742,7 @@ struct MediaDetailBody: View {
               try await api.saveDetails(item.id, fileName: name, alt: alt, description: details, tags: tags)
             }
           }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .disabled(!canEdit || !dirty || fileName.trimmed.isEmpty || runner.busy)
           .keyboardShortcut("s", modifiers: .command)
           .accessibilityIdentifier("media-save")

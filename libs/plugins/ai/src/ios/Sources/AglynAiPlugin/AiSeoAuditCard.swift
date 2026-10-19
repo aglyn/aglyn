@@ -57,7 +57,7 @@ struct AiSeoAuditCard: View {
     Section {
       HStack {
         Button(view != nil ? "Propose fixes again" : "Propose fixes") { propose(hostID: hostID, orgID: orgID, keywords: keywords) }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .disabled(busy || running)
           .accessibilityIdentifier("ai-seo-propose")
         if running { ProgressView().controlSize(.small) }
@@ -132,7 +132,7 @@ struct AiSeoAuditCard: View {
             stageSite(zone: zone, jobID: jobID, values: siteValues, fields: siteFields.map(\.field))
             applyAll(hostID: hostID, orgID: orgID, jobID: jobID ?? "")
           }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .disabled(applying || running || job?["status"]?.stringValue != "done" || !view.complete || !somethingToApply)
           .accessibilityIdentifier("ai-seo-apply")
           if applying { ProgressView().controlSize(.small) }

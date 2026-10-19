@@ -18,11 +18,9 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,8 +50,10 @@ import com.aglyn.contracts.posTipProblem
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.KeepScreenOn
 import com.aglyn.ui.NoticeBanner
+import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.StatusTone
+import com.aglyn.ui.TextButton
 import com.aglyn.ui.space
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive

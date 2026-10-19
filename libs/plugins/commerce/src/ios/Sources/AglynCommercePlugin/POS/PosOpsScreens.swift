@@ -472,7 +472,7 @@ struct LockedRegister: View {
       VStack(spacing: AglynSpace.two) {
         Image(systemName: "lock.fill").font(.largeTitle).foregroundStyle(.secondary)
         Text("Register locked").font(AglynFont.title2)
-        Button("Enter PIN") { entering = true }.buttonStyle(.borderedProminent)
+        Button("Enter PIN") { entering = true }.buttonStyle(.aglynProminent)
       }
     }
     .accessibilityIdentifier("pos-locked")

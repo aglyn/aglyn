@@ -184,8 +184,7 @@ public struct SiteHeaderCard: View {
         Label("Visit site", systemImage: "arrow.up.right.square")
           .foregroundStyle(AglynColor.primaryContrast)
       }
-      .buttonStyle(.borderedProminent)
-      .tint(AglynColor.primary)
+      .buttonStyle(.aglynProminent)
       .controlSize(.large)
       .accessibilityIdentifier("home-visit-site")
     }

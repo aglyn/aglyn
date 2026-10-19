@@ -248,7 +248,7 @@ struct CheckoutView: View {
           guard let cents = centsFromText(tendered) else { return }
           Task { await checkout.payCash(tenderedCents: cents) }
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.aglynProminent)
         .disabled(centsFromText(tendered) == nil || checkout.busy)
         .accessibilityIdentifier("take-cash")
       }
@@ -269,7 +269,7 @@ struct CheckoutView: View {
         Button("Check balance") { Task { await checkout.checkGiftCard(code: giftCode) } }.buttonStyle(.bordered)
         Spacer()
         Button("Apply") { Task { await checkout.payGiftCard(code: giftCode) } }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .disabled(giftCode.isEmpty || checkout.busy)
       }
     }
@@ -329,7 +329,7 @@ struct CheckoutView: View {
           creditText = ""
           Task { await checkout.payCredit(providerID: providerID, code: code) }
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.aglynProminent)
         .disabled(checkout.busy || creditText.trimmingCharacters(in: .whitespaces).isEmpty || creditText.contains("@"))
         .accessibilityIdentifier("credit-apply")
       }
@@ -465,7 +465,7 @@ struct CheckoutView: View {
           model.display.cancelAsk()
           Task { if await checkout.sendReceipt(channel: channel, to: receiptTo) { model.finished() } }
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.aglynProminent)
         .disabled(
           !(isReceiptEmail(receiptTo) || (model.context?.smsReceipts == true && isReceiptPhone(receiptTo))) || checkout.busy)
       }

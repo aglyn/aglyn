@@ -134,7 +134,7 @@ struct KioskQueueCard: View {
             }
             Spacer()
             Button("Take payment") { Task { await model.takeKioskOrder(entry) } }
-              .buttonStyle(.borderedProminent)
+              .buttonStyle(.aglynProminent)
               .disabled(model.checkout != nil || queue.taking != nil)
               .accessibilityIdentifier("kiosk-take-\(entry.number)")
           }

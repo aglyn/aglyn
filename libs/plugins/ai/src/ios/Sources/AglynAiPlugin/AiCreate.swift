@@ -416,7 +416,7 @@ struct AiCreateScreen: View {
         }
         .frame(maxWidth: .infinity)
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.aglynProminent)
       .disabled(
         busy || brief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
           || aiCreateInputs(door, picks: picks, collectionID: collectionID) == nil
@@ -480,7 +480,7 @@ struct AiCreateScreen: View {
           } label: {
             Label(open.label, systemImage: "arrow.right.circle").frame(maxWidth: .infinity)
           }
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(.aglynProminent)
           .accessibilityIdentifier("ai-create-open")
           if let besigner = open.besigner {
             Button {
@@ -511,7 +511,7 @@ struct AiCreateScreen: View {
           if let notice { AglynNotice(notice, tone: .warning) }
           if let confirm = view.confirm {
             Button(confirm.label) { decide(jobID, cancel: false) }
-              .buttonStyle(.borderedProminent)
+              .buttonStyle(.aglynProminent)
               .disabled(busy || !confirm.enabled)
               .accessibilityIdentifier("ai-create-confirm")
           }

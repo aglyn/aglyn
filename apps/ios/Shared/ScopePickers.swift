@@ -376,7 +376,7 @@ struct AddWorkspaceSheet: View {
                 HStack {
                   Text(invite.sentence).frame(maxWidth: .infinity, alignment: .leading)
                   Button(answering == invite.id ? "Joining…" : "Accept") { accept(invite) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.aglynProminent)
                     .disabled(answering != nil)
                 }
               }

@@ -785,6 +785,7 @@ public struct AglynDetailCrumbs: View {
 /// the tile is 36, the title 17 and the detail 13, 68 points tall.
 public struct AglynRecordRow<Trailing: View>: View {
   @Environment(\.aglynRowPadding) private var rowPadding
+  @Environment(\.aglynRowSelected) private var rowSelected
   #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
   #endif
@@ -810,11 +811,16 @@ public struct AglynRecordRow<Trailing: View>: View {
 
   public var body: some View {
     HStack(spacing: 12) {
+      // Selected: the paper with a 1-point ring in the accent's text shade, so the tile stands off the selection's wash
+      // (Figma List/Order row Selected 11:343, AGL-3990).
       Image(systemName: systemImage)
         .font(.system(size: phone ? 16 : 14))
-        .foregroundStyle(AglynColor.secondaryText)
+        .foregroundStyle(rowSelected ? AglynColor.tint : AglynColor.secondaryText)
         .frame(width: phone ? 36 : 32, height: phone ? 36 : 32)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AglynColor.sunken))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(rowSelected ? AglynColor.paper : AglynColor.sunken))
+        .overlay {
+          if rowSelected { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(AglynColor.tint, lineWidth: 1) }
+        }
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 2) {
         Text(title).font(.system(size: phone ? 17 : 14, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)

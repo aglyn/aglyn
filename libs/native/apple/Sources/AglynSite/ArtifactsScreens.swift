@@ -416,7 +416,7 @@ private struct ArtifactDetail: View {
       } label: {
         Label("Edit in the Besigner", systemImage: "wand.and.stars")
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.aglynProminent)
       .disabled(runner.busy || (kind != .template && versions.state.isLoading) || (!canEdit && versionToOpen(row, versions: loaded) == nil))
       .accessibilityIdentifier("artifact-edit-besigner")
       let preview = artifactBesignerPath(kind, id: row.id, versionID: row.versionID, preview: true)
