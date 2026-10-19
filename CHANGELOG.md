@@ -99,6 +99,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **native:** every embed task and the Windows check read JSON as LF ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **native:** embed contract JSON with LF on every platform, so Windows compiles ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **native:** draw a logo mark or favicon whole instead of cropping it to the badge ([AGL-3991](https://linear.app/aglyn/issue/AGL-3991))
 - **apple:** one content edge per column; Home, Analytics and notices fill it ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
@@ -210,6 +211,7 @@ content on the marketing site and is written separately.
 
 ### Documentation
 
+- **release:** beta.271 changelog carries the Windows contract embed fix ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **release:** beta.271 changelog carries Site Care (#1840, #1820) merged in from main ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **release:** beta.271 changelog carries everything merged in from main ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **ai:** each style's layout, and the style cards' new pictures ([AGL-3985](https://linear.app/aglyn/issue/AGL-3985))
