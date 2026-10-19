@@ -48,7 +48,9 @@ fun AglynTheme(
   val base = if (isDark) AglynDarkColorScheme else AglynLightColorScheme
   val basePalette = if (isDark) AglynTokens.dark else AglynTokens.light
   val customAccent = appTheme?.accent?.let(::colorOfHex)
-  val seed = brand ?: customAccent ?: themeAccentSeed(theme).takeIf { theme != AppThemeName.AGLYN }
+  // Every theme, Aglyn's too, derives its accent token from its seed: the Aglyn theme's #00B0FF gives the fill a button
+  // wears, #0073AE (Figma's accent token, white text at 4.5:1), rather than filling with the bright seed itself.
+  val seed = brand ?: customAccent ?: themeAccentSeed(theme)
   val accent = seed?.let { deriveAccent(it, isDark) }
   val scheme = themedColorScheme(base, surfaces, accent, isDark)
   val palette = themedPalette(basePalette, surfaces, accent)

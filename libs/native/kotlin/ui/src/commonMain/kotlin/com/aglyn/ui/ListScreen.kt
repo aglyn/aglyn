@@ -90,16 +90,13 @@ fun CompactButton(
   val metrics = LocalShellMetrics.current
   val shape = androidx.compose.foundation.shape.RoundedCornerShape(metrics.controlRadius)
   val scheme = MaterialTheme.colorScheme
-  // Filled, it wears the accent token's fill (Figma's buttons: the Aglyn theme's #0073AE), not the brighter palette primary.
-  val dark = (scheme.background.red + scheme.background.green + scheme.background.blue) / 3 < 0.5f
-  val accent = LocalAccent.current ?: remember(dark) { deriveAccent(themeAccentSeed(com.aglyn.contracts.AppThemeName.AGLYN), dark) }
-  val ink = if (filled) accent.onFill else scheme.onSurface
+  val ink = if (filled) scheme.onPrimary else scheme.onSurface
   Row(
     modifier
       .heightIn(min = if (tall) 36.dp else 28.dp)
       .alpha(if (enabled) 1f else 0.38f)
       .clip(shape)
-      .background(if (filled) accent.fill else scheme.surface)
+      .background(if (filled) scheme.primary else scheme.surface)
       .then(if (filled) Modifier else Modifier.border(1.dp, scheme.outline, shape))
       .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
       .padding(horizontal = if (tall) 14.dp else 10.dp),
