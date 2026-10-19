@@ -27,22 +27,19 @@ import com.aglyn.ui.AglynIcons
 /** What the "+" is checked against: the member's permissions, the workspace's plan features and the site role. */
 internal data class CreateGates(val permissions: Map<String, Boolean>, val features: Map<String, Boolean>, val hostRole: String?)
 
-/**
- * The core permissions the "+" asks about, by org role, when the member row carries no `resolvedPermissions` stamp (the
- * console's `CORE_ROLE_GRANTS` for these keys); a stamp, written by the server, always wins.
- */
-private val ROLE_CREATE_GRANTS = mapOf(
-  "owner" to setOf("hosts.create", "data.manage"),
-  "admin" to setOf("hosts.create", "data.manage"),
-  "editor" to setOf("data.manage"),
-)
+private fun layerOf(value: Any?): com.aglyn.contracts.OrgPermissionLayer? =
+  (value as? Map<*, *>)?.mapNotNull { (k, v) -> (v as? Boolean)?.let { k.toString() to it } }?.toMap()
+    ?.let { com.aglyn.contracts.OrgPermissionLayer(permissions = it) }
 
-/** The member's permissions from their row: the server's stamp, else their role's grants. */
-internal fun memberPermissions(member: Map<String, Any?>?, orgRole: String?): Map<String, Boolean> {
-  val stamp = (member?.get("resolvedPermissions") as? Map<*, *>)
-    ?.mapNotNull { (k, v) -> (v as? Boolean)?.let { k.toString() to it } }?.toMap()
-  if (!stamp.isNullOrEmpty()) return stamp
-  return ROLE_CREATE_GRANTS[member?.get("role") as? String ?: orgRole].orEmpty().associateWith { true }
+/**
+ * The member's permissions as the console resolves them (the contract's `rolePermissions` over ORG_ROLE_GRANTS): their
+ * role's grants, then their custom role's values, then their own overrides.
+ */
+internal fun memberPermissions(member: Map<String, Any?>?, orgRole: String?, customRole: Map<String, Any?>? = null): Map<String, Boolean> {
+  if (member == null && orgRole == null) return emptyMap()
+  val role = member?.get("role") as? String ?: orgRole
+  val custom = if (member?.get("roleId") != null) layerOf(customRole?.get("permissions")) else null
+  return com.aglyn.contracts.rolePermissions(role, custom, layerOf(member?.get("permissions")))
 }
 
 /** The site role the "+" checks: the workspace's owners and admins administer every site. */
@@ -57,13 +54,16 @@ internal fun rememberCreateGates(services: ShellServices, workspace: WorkspaceSt
   val org by remember(orgId) { orgId?.let { services.firestore.observeDoc("orgs/$it") } ?: kotlinx.coroutines.flow.flowOf(Live.Loading) }
     .collectAsState(Live.Loading)
   val memberData = (member as? Live.Ready)?.value?.data
+  val roleId = memberData?.get("roleId") as? String
+  val customRole by remember(orgId, roleId) { if (orgId != null && roleId != null) services.firestore.observeDoc("orgs/$orgId/roles/$roleId") else kotlinx.coroutines.flow.flowOf(Live.Loading) }
+    .collectAsState(Live.Loading)
   val orgData = (org as? Live.Ready)?.value?.data
   val features = remember(orgData) {
     val asked = com.aglyn.contracts.NativeNavManifestValue.create.orEmpty().flatMap { it.items }.mapNotNull { it.planFeature }.toSet()
     asked.associateWith { planFeatureCarried(orgData, it) }
   }
   return CreateGates(
-    permissions = memberPermissions(memberData, workspace.org?.role),
+    permissions = memberPermissions(memberData, workspace.org?.role, (customRole as? Live.Ready)?.value?.data),
     features = features,
     hostRole = createHostRole(workspace.site?.role, workspace.org?.role),
   )

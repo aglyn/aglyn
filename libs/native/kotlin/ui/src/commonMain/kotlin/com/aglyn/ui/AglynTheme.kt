@@ -49,8 +49,7 @@ fun AglynTheme(
   val basePalette = if (isDark) AglynTokens.dark else AglynTokens.light
   val customAccent = appTheme?.accent?.let(::colorOfHex)
   val seed = brand ?: customAccent ?: themeAccentSeed(theme).takeIf { theme != AppThemeName.AGLYN }
-  val page = surfaces?.surface ?: base.surfaceContainerLowest
-  val accent = seed?.let { deriveAccent(it, isDark, page) }
+  val accent = seed?.let { deriveAccent(it, isDark) }
   val scheme = themedColorScheme(base, surfaces, accent, isDark)
   val palette = themedPalette(basePalette, surfaces, accent)
   val density = LocalDensity.current

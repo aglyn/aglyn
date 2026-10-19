@@ -18,11 +18,11 @@ class AppThemesTest {
     for (raw in colors) {
       for (dark in listOf(false, true)) {
         val page = if (dark) Color(0xFF1E262E) else Color.White
-        val accent = deriveAccent(raw, dark, page)
+        val accent = deriveAccent(raw, dark)
         assertTrue(contrastRatio(accent.onFill, accent.fill) >= 4.5f, "fill of $raw")
         assertTrue(contrastRatio(accent.text, page) >= 4.5f, "text of $raw on dark=$dark")
         assertTrue(accent.fillPressed.luminance() <= accent.fillHover.luminance() && accent.fillHover.luminance() <= accent.fill.luminance())
-        assertEquals(raw, accent.ring)
+        assertEquals(raw.toHex(), accent.ring.toHex())
       }
     }
   }
@@ -30,7 +30,7 @@ class AppThemesTest {
   @Test
   fun aColorThatAlreadyReadsIsLeftAsItIs() {
     val green = Color(0xFF2E7D5B)
-    assertEquals(green.toHex(), deriveAccent(green, false, Color.White).fill.toHex())
+    assertEquals(green.toHex(), deriveAccent(green, false).fill.toHex())
   }
 
   @Test
@@ -51,8 +51,8 @@ class AppThemesTest {
   @Test
   fun aThemeLaysItsGroundsAndAccentOverTheScheme() {
     val surfaces = themeSurfaces(AppThemeName.QUIET, false)
-    val accent = deriveAccent(Color(0xFF7A5CF0), false, surfaces!!.surface)
-    val scheme = themedColorScheme(AglynLightColorScheme, surfaces, accent, dark = false)
+    val accent = deriveAccent(Color(0xFF7A5CF0), false)
+    val scheme = themedColorScheme(AglynLightColorScheme, surfaces!!, accent, dark = false)
     assertEquals(surfaces.canvas, scheme.background)
     assertEquals(accent.fill, scheme.primary)
     assertNotEquals(AglynLightColorScheme.primary, scheme.primary)

@@ -56,7 +56,6 @@ import com.aglyn.contracts.AppThemeName
 import com.aglyn.contracts.AppThemePrefs
 import com.aglyn.contracts.Contracts
 import com.aglyn.core.WorkspaceState
-import com.aglyn.ui.ACCENT_SWATCHES
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynLightColorScheme
 import com.aglyn.ui.SettingsDivider
@@ -126,11 +125,17 @@ internal fun ThemeSettingsScreen(services: ShellServices, workspace: WorkspaceSt
     }
     SettingsGroup("Accent", footer = "Hover, pressed, selected and text-on-accent are worked out for you; a hard-to-read color is nudged until it passes.") {
       Row(Modifier.fillMaxWidth().padding(space(1.5f)), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Swatch("Theme's own", themeAccentSeed(theme.theme), theme.accent == "theme", "accent-theme") { save(theme.copy(accent = "theme")) }
-        for ((name, color) in ACCENT_SWATCHES) {
-          Swatch(name, color, theme.accent.equals(color.toHex(), ignoreCase = true), "accent-${name.lowercase()}") { save(theme.copy(accent = color.toHex())) }
+        for (swatch in Contracts.themeAccentSwatches) {
+          Swatch(swatch.label, com.aglyn.ui.themeColor(swatch.color), theme.accent.equals(swatch.color, ignoreCase = true), "accent-${swatch.id}") {
+            save(theme.copy(accent = swatch.color.uppercase()))
+          }
         }
         TextButton(onClick = { customAccent = true }, modifier = Modifier.testTag("accent-custom")) { Text("Custom…") }
+      }
+      if (theme.accent != "theme") {
+        TextButton(onClick = { save(theme.copy(accent = "theme")) }, modifier = Modifier.padding(start = space(1f)).testTag("accent-theme")) {
+          Text("Use ${themeLabel(theme.theme)}'s own accent")
+        }
       }
     }
     SettingsGroup("Layout") {
@@ -217,7 +222,7 @@ private fun ThemeTile(name: AppThemeName, selected: Boolean, onClick: () -> Unit
   val page = surfaces?.canvas ?: AglynLightColorScheme.background
   val card = surfaces?.surface ?: AglynLightColorScheme.surfaceContainerLowest
   val line = surfaces?.borderSubtle ?: AglynLightColorScheme.outlineVariant
-  val accent = deriveAccent(themeAccentSeed(name), dark = false, page = card).fill
+  val accent = deriveAccent(themeAccentSeed(name), dark = false).fill
   val ring = MaterialTheme.colorScheme.primary
   Column(
     Modifier.width(112.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)
@@ -268,7 +273,7 @@ private fun CustomAccentDialog(initial: String?, onDone: (String?) -> Unit) {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(text, { text = it }, label = { Text("Color") }, placeholder = { Text("#7A5CF0") }, singleLine = true, isError = text.length > 1 && color == null, modifier = Modifier.fillMaxWidth().testTag("accent-custom-field"))
         color?.let {
-          val worked = deriveAccent(it, dark = false, page = Color.White)
+          val worked = deriveAccent(it, dark = false)
           Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.clip(RoundedCornerShape(8.dp)).background(worked.fill).padding(horizontal = 14.dp, vertical = 8.dp)) {
               Text("Button", color = worked.onFill, style = MaterialTheme.typography.labelLarge)
