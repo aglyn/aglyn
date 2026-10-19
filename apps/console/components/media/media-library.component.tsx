@@ -150,7 +150,10 @@ import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
-import { getDocsBounded } from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-bounded-read'
+import {
+  getDocBounded,
+  getDocsBounded,
+} from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-bounded-read'
 import { settleMediaPageRead } from './media-page-read'
 import { imageEditCopyName } from '@aglyn/aglyn/app-utils/image-edit'
 import { mediaSrc, mediaThumbnailSrc } from '@aglyn/aglyn/app-utils/media-src'
@@ -220,10 +223,12 @@ import {
   MEDIA_TYPE_OPTIONS,
   mediaFilterFields,
   mediaFolderDescendants,
+  mediaIdSearch,
   mediaQuery,
   type MediaSort,
   mediaSortOf,
 } from '@aglyn/aglyn/app-utils/media-filter'
+import { mediaKindOf } from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   mediaListColumns,
   mediaSortFromModel,
@@ -257,6 +262,8 @@ export interface MediaLibraryComponentProps {
   orgId?: string
   /** When set, clicking an item selects it instead of exposing row actions. */
   onSelect?: (media: Aglyn.AglynHostMedia) => void
+  /** With `onSelect`: the file the picker is showing, marked on its card. */
+  pickedId?: string
   /**
    * Restrict the ORG library to what one site may actually render
    * (AGL-1045). Set by the picker: you can only place an asset the target
@@ -329,9 +336,12 @@ const SCOPE_CHUNK_SIZE = 100
  */
 const TILE_MIN_WIDTH = 160
 
-/** Says what the search box reads: the words of a file's name. */
+/**
+ * Says what the search box reads: the words of a file's name, or one file's
+ * ID, link or reference (`mediaIdSearch`).
+ */
 const MEDIA_GRID_LOCALE_TEXT = {
-  toolbarQuickFilterPlaceholder: 'Search file names',
+  toolbarQuickFilterPlaceholder: 'Search by name or ID',
 }
 
 /** Held once, so the grid's props stay the same object between renders. */
@@ -528,7 +538,7 @@ function uploadRefusalOptions(payload: { code?: unknown } | null | undefined) {
 }
 
 export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
-  const { hostId, orgId, onSelect, forHostId, kind } = props
+  const { hostId, orgId, onSelect, pickedId, forHostId, kind } = props
   // Scope plumbing: one library serves both a site's media and the org
   // DAM — only the Firestore base path and the API identity differ.
   const scopeCollection = orgId ? 'orgs' : 'hosts'
@@ -1261,11 +1271,103 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   })
 
   /**
+   * A search that names one file — its ID, a link to it, a `media:`
+   * reference — answered by reading that document (`mediaIdSearch`). No word
+   * index holds an ID, so the query cannot find it. One read, made when the
+   * search is typed, never on mount.
+   */
+  const idSearch = useMemo(() => mediaIdSearch(searchWords), [searchWords])
+  const idSearchKey = idSearch
+    ? `${scopeCollection}/${scopeId}/${idSearch.mediaId}`
+    : ''
+  const [idLookup, setIdLookup] = useState<{
+    key: string
+    media: Aglyn.AglynHostMedia | null
+  } | null>(null)
+  useEffect(() => {
+    if (!idSearch || !scopeReady) return
+    let cancelled = false
+    const key = idSearchKey
+    getDocBounded(doc(firestore, scopeCollection, scopeId, 'media', idSearch.mediaId))
+      .then(({ snapshot }) => {
+        if (cancelled) return
+        setIdLookup({
+          key,
+          media: snapshot.exists()
+            ? ({ ...snapshot.data(), $id: snapshot.id } as Aglyn.AglynHostMedia)
+            : null,
+        })
+      })
+      .catch(() => {
+        // A scoped reader is refused a file outside their sites, which for
+        // them is a file this library does not have.
+        if (!cancelled) setIdLookup({ key, media: null })
+      })
+    return () => {
+      cancelled = true
+    }
+    // `idSearchKey` stands for the search, the library and the ID.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idSearchKey, scopeReady, firestore])
+  const idLookupPending = Boolean(idSearch) && idLookup?.key !== idSearchKey
+  /**
+   * What the ID names, held to the same bounds as the query: a picker for a
+   * site offers only what that site may render (AGL-1045), and a narrowed
+   * library only its kind (AGL-2953). The scope test mirrors the query's
+   * `visibleTo array-contains-any`, so a file with no scope stamped is not
+   * offered under one either.
+   */
+  const idFound = idLookupPending ? null : (idLookup?.media ?? null)
+  const idFoundInScope =
+    idFound &&
+    (!needsScope ||
+      (Array.isArray((idFound as any).visibleTo) &&
+        (idFound as any).visibleTo.some((token: string) =>
+          scopeTokens.includes(token),
+        )))
+      ? idFound
+      : null
+  const idFoundKind = idFoundInScope ? mediaKindOf(idFoundInScope.contentType) : null
+  const idMatch = idFoundInScope && (!kind || idFoundKind === kind) ? idFoundInScope : null
+  /**
+   * Why a search for one file's ID shows nothing, when it can say: the link
+   * names another library, or the file is not the kind this picker takes.
+   * Null leaves the ordinary "nothing matches" words.
+   */
+  const idSearchEmpty = useMemo(() => {
+    if (!idSearch?.exact || idLookupPending || idMatch) return null
+    const ownScope = orgId ? `org:${orgId}` : hostId
+    const elsewhere =
+      idSearch.scope &&
+      !(idSearch.scope === ownScope || idSearch.scope.startsWith(`${ownScope}:`))
+    return {
+      label: 'No file with that ID here',
+      description: elsewhere
+        ? 'That link is to a file in another library. Open that library and ' +
+          'search there.'
+        : idFoundInScope && kind
+          ? `That file is not ${PICKER_KIND_COPY[kind].one}, so it cannot be ` +
+            'used here.'
+          : 'Check the ID, or clear the search to see everything in this ' +
+            'library.',
+    }
+  }, [idSearch, idLookupPending, idMatch, idFoundInScope, orgId, hostId, kind])
+
+  /**
    * The files on screen: the query's answer, in the query's order. Every
    * filter and the search are on the query (AGL-3327), so there is nothing
-   * left to match here.
+   * left to match here. A file found by its ID leads, once; a search that can
+   * only be an ID shows that file alone.
    */
-  const visibleItems = items
+  const visibleItems = useMemo(
+    () =>
+      idMatch
+        ? [idMatch, ...items.filter((item: any) => item.$id !== idMatch.$id)]
+        : idSearch?.exact
+          ? []
+          : items,
+    [idMatch, idSearch, items],
+  )
   /**
    * The order a ⇧-click measures against (AGL-1462): the cards as drawn,
    * after filtering and sorting. Deriving it here rather than inside the
@@ -3960,7 +4062,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       <ListTable
         {...gridToolbarProps}
         rows={visibleItems}
-        loading={loadingMedia}
+        loading={loadingMedia || idLookupPending}
         hideFooter
         sortingMode="server"
         sortModel={listSortModel}
@@ -3972,17 +4074,19 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           onSelect ? onSelect(row as Aglyn.AglynHostMedia) : openDetails(row)
         }
         noRowsLabel={
-          filtersActive
+          idSearchEmpty?.label ??
+          (filtersActive
             ? 'No media matches these filters'
             : kind
               ? `No ${PICKER_KIND_COPY[kind].plural} here yet`
-              : 'No media here yet'
+              : 'No media here yet')
         }
         noRowsDescription={
-          filtersActive
+          idSearchEmpty?.description ??
+          (filtersActive
             ? 'Try a different search, folder, or type — or clear the ' +
               'filters to see everything in this library.'
-            : 'Drop files here or use Upload media above.'
+            : 'Drop files here or use Upload media above.')
         }
         noRowsAction={
           filtersActive ? (
@@ -3997,6 +4101,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       gridToolbarProps,
       visibleItems,
       loadingMedia,
+      idLookupPending,
+      idSearchEmpty,
       listSortModel,
       sortBy,
       listSelection,
@@ -4512,18 +4618,22 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         */
         <EmptyStateComponent
           label={
-            loadingMedia
+            loadingMedia || idLookupPending
               ? 'Loading media…'
-              : filtersActive
+              : idSearchEmpty
+                ? idSearchEmpty.label
+                : filtersActive
                 ? 'No media matches these filters'
                 : kind
                   ? `No ${PICKER_KIND_COPY[kind].plural} here yet`
                   : 'No media here yet'
           }
           description={
-            loadingMedia
+            loadingMedia || idLookupPending
               ? undefined
-              : filtersActive
+              : idSearchEmpty
+                ? idSearchEmpty.description
+                : filtersActive
                 ? 'Try a different search, folder, or type — or clear the ' +
                   'filters to see everything in this library.'
                 : kind
@@ -4537,7 +4647,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           // Nothing is offered while the read is still in flight: an upload
           // button under "Loading media…" invites a second library.
           action={
-            loadingMedia ? null : filtersActive ? (
+            loadingMedia || idLookupPending ? null : filtersActive ? (
               <Button size="small" onClick={clearFilters}>
                 {'Clear filters'}
               </Button>
@@ -4643,7 +4753,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   quarantine={quarantined[media.$id as string]}
                   onSelect={onSelect}
                   selectable={!onSelect}
-                  selected={selected.has(media.$id as string)}
+                  selected={
+                    onSelect
+                      ? media.$id === pickedId
+                      : selected.has(media.$id as string)
+                  }
                   // ⇧-click ranges over what is ON SCREEN (AGL-1462) — the
                   // filtered, sorted order, not the fetch order, because that
                   // is the run of cards a person is pointing at.

@@ -16,6 +16,7 @@
  */
 
 import { mediaSearchToken } from './media-metadata'
+import { mediaRefFromCdnPath, parseMediaRef } from './media-ref'
 import { nameSearchNormalizers } from './name-search'
 import type {
   ListFilterField,
@@ -338,6 +339,55 @@ export function mediaQuery(input: MediaQueryInput): MediaQuery {
       : plan.orderBy
   const notices = scopedSearch ? [MEDIA_SCOPED_SEARCH_NOTICE, ...plan.notices] : plan.notices
   return { plan: { ...plan, orderBy, notices }, subfoldersDropped }
+}
+
+// ---------------------------------------------------------------------------
+// Search by ID
+// ---------------------------------------------------------------------------
+
+/** One file the search box names by its ID, rather than words of a name. */
+export interface MediaIdSearch {
+  mediaId: string
+  /**
+   * The CDN scope a pasted link or reference names (`{hostId}`,
+   * `org:{orgId}` or `org:{orgId}:{hostId}`), when it names one.
+   */
+  scope?: string
+  /**
+   * Whether the text can only be an ID: a link, a CDN path or a `media:`
+   * reference. The library answers it with that one file. A bare word shaped
+   * like an ID may also be a word of a file name, so the name search still
+   * runs beside it.
+   */
+  exact: boolean
+}
+
+/**
+ * The shape of a bare media ID: one CDN path segment, long enough and mixed
+ * enough (a digit or a capital) that an ordinary word of a file name does not
+ * read as one. IDs are minted as random mixed-case strings, so a real one
+ * nearly always qualifies; a word that slips through costs one document read
+ * that finds nothing.
+ */
+const BARE_MEDIA_ID = /^(?=.*[0-9A-Z])[A-Za-z0-9_-]{8,64}$/
+
+/**
+ * The file the search box names, or null when it names words of a name.
+ *
+ * Takes what people actually have in hand: the ID the File info shows, the
+ * address Copy URL gives (with or without the origin, a `?w=` width or a
+ * content hash after the ID), the CDN path a settings field stores, and the
+ * `media:` reference a page node stores. The library reads that one document
+ * by its ID, which no word index can find.
+ */
+export function mediaIdSearch(search: readonly string[]): MediaIdSearch | null {
+  const words = search.map((word) => word.trim()).filter(Boolean)
+  if (words.length !== 1) return null
+  const typed = words[0]
+  const ref =
+    parseMediaRef(typed) ?? parseMediaRef(mediaRefFromCdnPath(typed.split(/[?#]/)[0]))
+  if (ref) return { mediaId: ref.mediaId, scope: ref.scope, exact: true }
+  return BARE_MEDIA_ID.test(typed) ? { mediaId: typed, exact: false } : null
 }
 
 /**

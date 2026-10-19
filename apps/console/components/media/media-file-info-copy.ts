@@ -88,6 +88,9 @@ export function mediaStoredFacts(
           timeStyle: 'short',
         })
   }
+  // The ID first: it is what the library's search, the CDN address and every
+  // stored reference name the file by, and the one fact a person copies out.
+  push('ID', media['$id'])
   push('Type', media['contentType'])
   push('Size', formatBytes(Number(media['sizeBytes'] ?? 0)))
   const video = media['video'] as
