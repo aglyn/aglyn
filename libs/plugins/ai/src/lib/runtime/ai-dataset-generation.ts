@@ -27,6 +27,7 @@ import {
   type AiDataset,
 } from '../tools/ai-dataset-tool'
 import { runValidatedGeneration, type AiValidatedGeneration } from './ai-doctrine'
+import { aiLayoutArticles } from '../layout-language/ai-layout-copy'
 import type { AiSystemBlock } from './ai-runtime'
 
 /**
@@ -136,21 +137,30 @@ export function generateAiDataset(input: GenerateAiDatasetInput): Promise<AiVali
   }) as Promise<AiValidatedGeneration<AiDataset>>
 }
 
-/** A designed dataset as the data plugin's `dataset` writer takes it: values by field name. */
+/**
+ * A designed dataset as the data plugin's `dataset` writer takes it: values by
+ * field name. Its words' "a" and "an" agree with what follows them in English
+ * (`aiLayoutArticles`, AGL-3988), as a page's do: the beta.270 Sugar Hollow
+ * packages said "A easygoing session" in their records and on every page
+ * that listed them.
+ */
 export function aiDatasetDraftContent(
   name: string,
   dataset: AiDataset,
-  options: { recordPages: boolean },
+  options: { recordPages: boolean; language?: string | null },
 ): Record<string, unknown> {
+  const said = (value: string) => aiLayoutArticles(value, options.language)
   const records = dataset.records.map((values) => {
     const record: Record<string, unknown> = {}
     dataset.fields.forEach((field, column) => {
       const value = (values[column] ?? '').trim()
       if (!value) return
       if (field.type === 'list') {
-        record[field.name] = value.split(AI_DATASET_LIST_SEPARATOR.trim()).map((part) => part.trim()).filter(Boolean)
+        record[field.name] = value.split(AI_DATASET_LIST_SEPARATOR.trim()).map((part) => said(part.trim())).filter(Boolean)
       } else if (field.type === 'number' || field.type === 'integer') {
         record[field.name] = value.replace(/,/g, '')
+      } else if (field.type === 'text') {
+        record[field.name] = said(value)
       } else {
         record[field.name] = value
       }

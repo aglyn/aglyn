@@ -19,8 +19,11 @@ import {
   createPixabayClient,
   isPixabayImageUrl,
   parsePixabayAnswer,
+  PIXABAY_DOWNLOAD_RETRIES,
+  PIXABAY_DOWNLOADS_AT_ONCE,
   PIXABAY_LOCAL_PER_MINUTE,
   pixabayLargeSize,
+  pixabayRetryAfterMs,
   pixabaySearchParams,
 } from './pixabay'
 import {
@@ -326,5 +329,125 @@ describe('the Pixabay client', () => {
     expect(await client.download(url, { maxBytes: 1_000_000 })).toBeNull()
     expect(await client.download(url, { maxBytes: 1_000 })).toBeNull()
     expect(await client.download(url, { maxBytes: 10 })).toBeNull()
+  })
+
+  /*
+   * The beta.270 Sugar Hollow Photography start (2026-10-19 19:03Z, AGL-3988):
+   * pixabay.com's Cloudflare answered 429 to 12 downloads of its dataset's
+   * covers inside 200 ms, then to every pick of its home and contact pages,
+   * and each slot ran through its three picks in the same burst.
+   */
+  describe('a burst the image hosts refuse (AGL-3988)', () => {
+    const limited = (headers: Record<string, string> = {}) =>
+      new Response('rate limited', { status: 429, headers: { server: 'cloudflare', 'cf-ray': 'x-IAD', ...headers } })
+    const photo = () => new Response(TINY_JPEG, { status: 200, headers: { 'content-type': 'image/jpeg' } })
+
+    it('waits out a 429 and asks again, as long as the answer asks, and then copies the photo', async () => {
+      const waits: number[] = []
+      const { fn, calls } = fakeFetch([limited({ 'retry-after': '2' }), limited(), photo()])
+      let clock = 1_000_000
+      const client = createPixabayClient({
+        apiKey: () => KEY,
+        fetch: fn,
+        now: () => clock,
+        sleep: async (ms) => {
+          waits.push(ms)
+          clock += ms
+        },
+      })
+      const got = await client.download('https://pixabay.com/get/a_1280.jpg', { maxBytes: 1_000_000 })
+      expect(got?.contentType).toBe('image/jpeg')
+      expect(calls).toHaveLength(3)
+      // The answer's own two seconds, then the doubling backoff's second try.
+      expect(waits).toEqual([2_000, 2_000])
+    })
+
+    it('gives up after its retries and says so, by status and the tries it took', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      try {
+        const answers = Array.from({ length: PIXABAY_DOWNLOAD_RETRIES + 1 }, () => limited())
+        const { fn, calls } = fakeFetch(answers)
+        const client = createPixabayClient({ apiKey: () => KEY, fetch: fn, sleep: async () => undefined })
+        expect(await client.download('https://pixabay.com/get/g5aaf9c_signed_1280.jpg', { maxBytes: 1_000_000 })).toBeNull()
+        expect(calls).toHaveLength(PIXABAY_DOWNLOAD_RETRIES + 1)
+        expect(warn).toHaveBeenCalledTimes(1)
+        expect(warn.mock.calls[0]).toEqual([
+          'pixabay: a photo download failed',
+          { reason: 'status', status: 429, host: 'pixabay.com', server: 'cloudflare', ray: true, attempts: PIXABAY_DOWNLOAD_RETRIES + 1 },
+        ])
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('g5aaf9c_signed')
+      } finally {
+        warn.mockRestore()
+      }
+    })
+
+    it('never asks again once the caller’s time is up', async () => {
+      const controller = new AbortController()
+      const { fn, calls } = fakeFetch([limited(), photo()])
+      const client = createPixabayClient({
+        apiKey: () => KEY,
+        fetch: fn,
+        sleep: async () => controller.abort(),
+      })
+      expect(await client.download('https://pixabay.com/get/a_1280.jpg', { maxBytes: 1_000_000, signal: controller.signal })).toBeNull()
+      expect(calls).toHaveLength(1)
+    })
+
+    it('fetches a few photos at a time, and a 429 holds every download of the process', async () => {
+      let open = 0
+      let most = 0
+      let first = true
+      const releases: Array<() => void> = []
+      const fn = (async () => {
+        open += 1
+        most = Math.max(most, open)
+        await new Promise<void>((resolve) => releases.push(resolve))
+        open -= 1
+        if (first) {
+          first = false
+          return limited({ 'retry-after': '1' })
+        }
+        return photo()
+      }) as unknown as typeof fetch
+      const waits: number[] = []
+      let clock = 0
+      const client = createPixabayClient({
+        apiKey: () => KEY,
+        fetch: fn,
+        now: () => clock,
+        sleep: async (ms) => {
+          waits.push(ms)
+          clock += ms
+        },
+      })
+      const downloads = Array.from({ length: 5 }, (_, index) =>
+        client.download(`https://pixabay.com/get/p${index}_1280.jpg`, { maxBytes: 1_000_000 }),
+      )
+      // Release each fetch as it is asked, until every download has answered.
+      let settled = false
+      const all = Promise.all(downloads).then((value) => {
+        settled = true
+        return value
+      })
+      while (!settled) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        releases.shift()?.()
+      }
+      const got = await all
+      expect(got.every((one) => one?.contentType === 'image/jpeg')).toBe(true)
+      expect(most).toBe(PIXABAY_DOWNLOADS_AT_ONCE)
+      // The first 429's one second was waited by the downloads that started after it.
+      expect(waits.length).toBeGreaterThanOrEqual(1)
+      expect(waits[0]).toBe(1_000)
+    })
+
+    it('reads a Retry-After in seconds or as a date', () => {
+      expect(pixabayRetryAfterMs('3', 0)).toBe(3_000)
+      expect(pixabayRetryAfterMs('0.5', 0)).toBe(500)
+      expect(pixabayRetryAfterMs(new Date(10_000).toUTCString(), 4_000)).toBe(6_000)
+      expect(pixabayRetryAfterMs('', 0)).toBeNull()
+      expect(pixabayRetryAfterMs(null, 0)).toBeNull()
+      expect(pixabayRetryAfterMs('soon', 0)).toBeNull()
+    })
   })
 })

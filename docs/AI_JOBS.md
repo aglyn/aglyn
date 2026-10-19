@@ -2984,6 +2984,26 @@ AGL-3660), which fills every empty slot and takes the icon out of its frame:
   a source that throws, takes a starter photo. A picture never fails a job: on
   any error the page keeps its slots as the compiler wrote them. The resolver
   costs no AI credits.
+- **The job's own photos before a starter (AGL-3988).** Where the site has a
+  library, a slot the source could not answer (the library down, out of time,
+  or its pick not copied) takes one of the photos the same job already placed
+  on the site (`jobPhotos`: the other pages' pictures read off their drafts by
+  `aiStockPlacedPhotos`, and the datasets' records' photos the site step hands
+  each page as `stockPhotoJobPhotos`), picked by `aiLayoutJobPhotoPicks`: one
+  the page does not show yet, a wide one for a hero, the shape nearest the
+  frame, the words shared with the slot's, never the photo beside it, never for
+  a product or a portrait of the business's people. The page floor takes one
+  the same way. A neutral starter only where the job has none; a slot the
+  library answered with nothing fitting is still taken out (AGL-3831). A
+  dataset's covers do the same within their list
+  (`aiSiteDatasetRecordsFromOwn`: same category, then a photo of the record's
+  moment's people, filled from whichever end repeats least), and take neutral
+  starters in turn (`aiLayoutNeutralStarterRun`) only where the list has none.
+  The beta.270 Sugar Hollow Photography start (2026-10-19) placed the desk and
+  an office team on a wedding photographer's home and contact heroes and five
+  wedding galleries' covers: Pixabay's image hosts answered 429 to every copy
+  of each burst, which the client now waits out (`PIXABAY_DOWNLOADS_AT_ONCE`
+  at a time, `Retry-After` honored, three retries inside the caller's signal).
 - **Stock photos.** The page step hands the resolver
   `aiLayoutStockPhotoSource` (`src/lib/jobs/ai-layout-stock-photos.ts`), which
   names no library: it asks core for the deployment's stock photo provider
@@ -3987,6 +4007,38 @@ the element budget its request asks for.
   (`blogUnwritten`), and the publish takes every link to a blog address out of the
   layout it puts live (`aiSiteUnwrittenBlogHrefs`): no header, menu or footer link to a
   /blog that does not exist.
+- **No link to a page that is not live (AGL-3988).** The beta.270 Sugar Hollow
+  Photography Galleries page failed its checks, and the home page it published still
+  linked it from two buttons and the header, to a 404. The site step hands its publish
+  the pages it planned and did not build (`unbuiltScreenIds`); the publish takes every
+  Page Link to one of those, or to a page it left a draft, out of each page going live
+  (`aiPageWithoutLinksTo`, with every frame left holding none, up to its section; a
+  picture that opened one keeps its place and loses the link) and out of the shared
+  layout (`droppedScreenIds` of `aiLayoutWithNavigation`). It also writes each page's
+  `order` from the plan (`siteOrder`) where the page has none, so the console's Pages
+  list and the built-in error page's links follow the site's order, not the alphabet.
+  Try again's publish adds a rebuilt page's header entry back, as it adds any page's.
+- **Like columns fold, buttons and all (AGL-3988).** The compiler's like-columns fold
+  (`sameShape`, `columnsAsCards`) read only columns holding a heading and no button, and
+  the Galleries page's row of four like columns was drawn as four like Grid cells,
+  refused for rule 1 after its one re-ask. Like columns with no heading, or with one
+  button each, now fold too: their words one cards group, their buttons one button
+  after it where they go to one place, else a list of links named by their cards. The
+  generation's re-ask already happens once (`AI_GENERATION_MAX_ATTEMPTS`); a job-level
+  retry would be a third paid answer, so the fold is the change, and a rule 1 repeat
+  the re-ask still names is said in the language's own terms
+  (`aiLayoutRepeatsSaidInTheLanguage`): its sections, and one group with an item each,
+  never "a reusable component" an answer cannot make.
+- **The same start's smaller words (AGL-3988).** The site listing's title is never cut at
+  the "and" that joins its subject's parts (`aiSiteSeoTitle`: "Sugar Hollow Photography
+  — Wedding and family photographer", never "— Wedding"). "a" and "an" agree with the
+  next word in English copy wherever the compiler fits a line and in a dataset's words
+  (`aiLayoutArticles`: "An easygoing session", never "A easygoing"), only where the
+  letters settle it. A form's note names only the bracketed facts a visitor reads, says
+  apart those in the message shown after sending (the Form's Success message), never one
+  in a field's name or value, and a choice that is a marker is dropped
+  (`aiFormBracketedFactsNote`). The welcome email is named for the business
+  (`aiSiteWelcomeEmailName`), never "New email".
 - **Every device width, and an axe audit.** `libs/plugins/ai/scripts/record-ai-page-axe.mts`
   (AGL-3020) assembles each golden page the page step builds from a site — the ten
   briefs, both Free pages and the two-person page — through the step's own section

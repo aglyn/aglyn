@@ -39,7 +39,11 @@ import {
  *   in `X-RateLimit-*` headers). The client reads the headers on every answer
  *   and stops asking, keeping a margin, until the window resets; a 429 stops
  *   it for the window the answer names. A search it does not make answers
- *   `null`, and the caller uses its own fallback rather than retrying.
+ *   `null`, and the caller uses its own fallback rather than retrying. The
+ *   image hosts answer a burst of downloads with 429 too (AGL-3988), so the
+ *   photos are fetched {@link PIXABAY_DOWNLOADS_AT_ONCE} at a time, and a 429
+ *   pauses every download of the process for as long as it asks before the
+ *   photo is asked for again.
  * - **Show where search results are from.** No search result is ever shown
  *   to anyone: a job places one photo. The asset records its credit anyway
  *   (the photographer, the photo's Pixabay page and the license), which the
@@ -95,6 +99,51 @@ export const PIXABAY_LOCAL_PER_MINUTE = 60
 const SEARCH_TIMEOUT_MS = 8_000
 const DOWNLOAD_TIMEOUT_MS = 15_000
 const MAX_REDIRECTS = 3
+
+/**
+ * Photos fetched from Pixabay's image hosts at once, by every caller in this
+ * process together (AGL-3988). The beta.270 Sugar Hollow Photography start
+ * (2026-10-19) copied four at a time, and pixabay.com's Cloudflare answered
+ * 429 to every one of them within 200 ms: a dataset's covers, then a home
+ * page, then a contact page, each slot running through its three picks in
+ * the same burst. Its terms also ask for no mass downloads.
+ */
+export const PIXABAY_DOWNLOADS_AT_ONCE = 2
+
+/** Times a rate-limited download asks again before it gives up (AGL-3988). */
+export const PIXABAY_DOWNLOAD_RETRIES = 3
+
+/** The longest a rate-limited download waits before it asks again, whatever the answer said (AGL-3988). */
+export const PIXABAY_DOWNLOAD_RETRY_MAX_MS = 8_000
+
+/** The first wait after a 429 that names none; it doubles on each retry. */
+const DOWNLOAD_RETRY_FIRST_MS = 1_000
+
+/** A refusal that says "later": the rate limit, or a host too busy to answer. */
+const RATE_LIMITED = new Set([429, 503])
+
+/** How long a rate-limited answer asks to be left alone, in ms, from its `Retry-After`; `null` when it names none. */
+export function pixabayRetryAfterMs(value: string | null, nowMs: number): number | null {
+  const text = (value ?? '').trim()
+  if (!text) return null
+  if (/^\d+(?:\.\d+)?$/.test(text)) return Math.round(Number(text) * 1000)
+  const at = Date.parse(text)
+  return Number.isFinite(at) ? Math.max(0, at - nowMs) : null
+}
+
+/** Waits `ms`, or less when `signal` aborts first; resolves either way. */
+function sleepFor(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted || ms <= 0) return resolve()
+    const timer = setTimeout(done, ms)
+    function done() {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', done)
+      resolve()
+    }
+    signal?.addEventListener('abort', done, { once: true })
+  })
+}
 
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
@@ -234,6 +283,8 @@ export interface PixabayClientOptions {
   apiKey?: () => string
   fetch?: typeof fetch
   now?: () => number
+  /** How a rate-limited download waits; specs hand in one that records and returns at once. */
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>
 }
 
 export interface PixabayClient {
@@ -262,7 +313,42 @@ export function createPixabayClient(
   const apiKey = options.apiKey ?? pixabayApiKeyFromEnv
   const doFetch = options.fetch ?? ((input, init) => fetch(input, init))
   const now = options.now ?? Date.now
+  const sleep = options.sleep ?? sleepFor
   const rate: RateState = { remaining: null, resetAtMs: 0, recent: [] }
+
+  // Downloads take turns (AGL-3988): a few at once, and none while a 429 asked to wait.
+  let downloading = 0
+  const waiting: Array<() => void> = []
+  /** Until when Pixabay's image hosts asked this process to leave them alone. */
+  let pausedUntil = 0
+  /** Takes a turn to download; `false` when `signal` aborted while it waited. */
+  const takeTurn = async (signal?: AbortSignal): Promise<boolean> => {
+    while (downloading >= PIXABAY_DOWNLOADS_AT_ONCE) {
+      if (signal?.aborted) return false
+      await new Promise<void>((resolve) => {
+        const done = () => {
+          signal?.removeEventListener('abort', done)
+          const at = waiting.indexOf(done)
+          if (at >= 0) waiting.splice(at, 1)
+          resolve()
+        }
+        waiting.push(done)
+        signal?.addEventListener('abort', done, { once: true })
+      })
+    }
+    downloading += 1
+    const pause = pausedUntil - now()
+    if (pause > 0) await sleep(pause, signal)
+    if (signal?.aborted) {
+      giveTurn()
+      return false
+    }
+    return true
+  }
+  const giveTurn = () => {
+    downloading = Math.max(0, downloading - 1)
+    waiting.shift()?.()
+  }
 
   const rateLimited = (): boolean => {
     const at = now()
@@ -333,8 +419,6 @@ export function createPixabayClient(
       }
     },
     async download(address, { maxBytes, signal }) {
-      let url = address
-      const deadline = withTimeout(DOWNLOAD_TIMEOUT_MS, signal)
       // Every way a copy fails says why (AGL-3923): from 2026-10-18 07:38Z
       // production stored no stock photo at all while its searches answered,
       // and nothing said whether Pixabay refused, redirected or timed out.
@@ -344,59 +428,86 @@ export function createPixabayClient(
           console.warn('pixabay: a photo download failed', { reason, ...detail })
         return null
       }
-      for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-        if (!isPixabayImageUrl(url)) return failed('host', { host: hostOf(url), hop })
-        let response: Response
-        try {
-          response = await doFetch(url, {
-            method: 'GET',
-            redirect: 'manual',
-            signal: deadline,
-          })
-        } catch (error) {
-          return failed(deadline.aborted ? 'timeout' : 'network', { host: hostOf(url), error: String(error).slice(0, 160) })
-        }
-        if (response.status >= 300 && response.status < 400) {
-          const location = response.headers.get('location')
-          if (!location) return failed('redirect-without-location', { status: response.status })
+      /** One try: the photo, `null` for a failure of its own, or how long the hosts asked to wait. */
+      const once = async (): Promise<StockPhotoDownload | null | { waitMs: number | null; detail: Record<string, unknown> }> => {
+        let url = address
+        const deadline = withTimeout(DOWNLOAD_TIMEOUT_MS, signal)
+        for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+          if (!isPixabayImageUrl(url)) return failed('host', { host: hostOf(url), hop })
+          let response: Response
           try {
-            url = new URL(location, url).toString()
-          } catch {
-            return failed('redirect-unreadable', { status: response.status })
+            response = await doFetch(url, {
+              method: 'GET',
+              redirect: 'manual',
+              signal: deadline,
+            })
+          } catch (error) {
+            return failed(deadline.aborted ? 'timeout' : 'network', { host: hostOf(url), error: String(error).slice(0, 160) })
           }
-          continue
-        }
-        if (!response.ok)
-          return failed('status', {
+          if (response.status >= 300 && response.status < 400) {
+            const location = response.headers.get('location')
+            if (!location) return failed('redirect-without-location', { status: response.status })
+            try {
+              url = new URL(location, url).toString()
+            } catch {
+              return failed('redirect-unreadable', { status: response.status })
+            }
+            continue
+          }
+          const detail = {
             status: response.status,
             host: hostOf(url),
             server: response.headers.get('server') ?? null,
             ray: response.headers.get('cf-ray') ? true : false,
-          })
-        const labeled = String(response.headers.get('content-type') ?? '')
-          .split(';')[0]
-          .trim()
-          .toLowerCase()
-        const declared = Number(response.headers.get('content-length'))
-        if (Number.isFinite(declared) && declared > maxBytes) return failed('too-large', { declared, maxBytes })
-        let bytes: Uint8Array
-        try {
-          bytes = new Uint8Array(await response.arrayBuffer())
-        } catch (error) {
-          return failed(deadline.aborted ? 'timeout' : 'body', { error: String(error).slice(0, 160) })
+          }
+          if (RATE_LIMITED.has(response.status))
+            return { waitMs: pixabayRetryAfterMs(response.headers.get('retry-after'), now()), detail }
+          if (!response.ok) return failed('status', detail)
+          const labeled = String(response.headers.get('content-type') ?? '')
+            .split(';')[0]
+            .trim()
+            .toLowerCase()
+          const declared = Number(response.headers.get('content-length'))
+          if (Number.isFinite(declared) && declared > maxBytes) return failed('too-large', { declared, maxBytes })
+          let bytes: Uint8Array
+          try {
+            bytes = new Uint8Array(await response.arrayBuffer())
+          } catch (error) {
+            return failed(deadline.aborted ? 'timeout' : 'body', { error: String(error).slice(0, 160) })
+          }
+          if (!bytes.length || bytes.length > maxBytes) return failed('size', { bytes: bytes.length, maxBytes })
+          // The bytes say what the photo is, never the label (AGL-3923): photo
+          // 10157445 came labeled image/png and was not PNG, and the media
+          // library's own check refused it. The same signatures decide here.
+          const contentType = sniffPhotoContentType(bytes)
+          if (!contentType || !IMAGE_TYPES.has(contentType))
+            return failed('type', { declared: labeled.slice(0, 60), sniffed: contentType, status: response.status })
+          if (contentType !== labeled)
+            console.info('pixabay: a photo was labeled other than its bytes', { declared: labeled.slice(0, 60), sniffed: contentType })
+          return { bytes, contentType }
         }
-        if (!bytes.length || bytes.length > maxBytes) return failed('size', { bytes: bytes.length, maxBytes })
-        // The bytes say what the photo is, never the label (AGL-3923): photo
-        // 10157445 came labeled image/png and was not PNG, and the media
-        // library's own check refused it. The same signatures decide here.
-        const contentType = sniffPhotoContentType(bytes)
-        if (!contentType || !IMAGE_TYPES.has(contentType))
-          return failed('type', { declared: labeled.slice(0, 60), sniffed: contentType, status: response.status })
-        if (contentType !== labeled)
-          console.info('pixabay: a photo was labeled other than its bytes', { declared: labeled.slice(0, 60), sniffed: contentType })
-        return { bytes, contentType }
+        return failed('too-many-redirects', { hops: MAX_REDIRECTS + 1 })
       }
-      return failed('too-many-redirects', { hops: MAX_REDIRECTS + 1 })
+      // A 429 is the hosts asking to wait, never a refusal of this photo
+      // (AGL-3988): every download of the process waits it out together, then
+      // this one asks again, a few times, inside the caller's own time.
+      for (let attempt = 0; ; attempt += 1) {
+        if (!(await takeTurn(signal))) return null
+        let result: Awaited<ReturnType<typeof once>>
+        try {
+          result = await once()
+        } finally {
+          giveTurn()
+        }
+        if (!result || 'bytes' in result) return result
+        if (attempt >= PIXABAY_DOWNLOAD_RETRIES || signal?.aborted)
+          return failed('status', { ...result.detail, attempts: attempt + 1 })
+        const waitMs = Math.min(
+          PIXABAY_DOWNLOAD_RETRY_MAX_MS,
+          result.waitMs ?? DOWNLOAD_RETRY_FIRST_MS * 2 ** attempt,
+        )
+        pausedUntil = Math.max(pausedUntil, now() + waitMs)
+      }
     },
   }
 }

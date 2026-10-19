@@ -890,6 +890,16 @@ describe('what the welcome email is told', () => {
     }
   })
 
+  it('names it for the business in Marketing, never "New email" (AGL-3988)', () => {
+    // The beta.270 Sugar Hollow start's welcome email was listed as "New email".
+    expect(emailJob({ businessName: 'Sugar Hollow Photography' }).inputs?.['name']).toBe('Sugar Hollow Photography welcome email')
+    expect(emailJob().inputs?.['name']).toBe('Welcome email')
+    const job = siteJob({ inputs: { businessType: 'dog groomer', businessName: 'Waggle', pages: AI_SITE_PAGES.min, welcomeEmail: true } })
+    for (const unit of aiSiteJobUnits(confirmedPlan(), { welcomeEmail: true }).filter((each) => each.kind !== 'email')) {
+      expect(aiSiteUnitJob(job, unit, new Map()).inputs?.['name']).toBeUndefined()
+    }
+  })
+
   it('keeps the scaffold’s own answers on the email’s inputs beside the kind', () => {
     // The kind is added to the inputs, not swapped for them: the form's
     // routing and the audience are read off the same job.
@@ -1457,6 +1467,24 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
     }
     await step(context({ ...lastPass({ autoConfirm: true }), sitePublish: everyPage }))
     expect(publish).not.toHaveBeenCalled()
+  })
+
+  /*
+   * The beta.270 Sugar Hollow start (AGL-3988): its Galleries page failed its
+   * checks, and the pages it published still linked it, to a 404.
+   */
+  it('hands the publish the pages it planned and did not build, and the site’s order (AGL-3988)', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const refused = { reason: 'doctrine' as const, message: 'This could not be built within the building rules.', findings: [] }
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'drftPage03')], review: refused })) },
+      { publish },
+    )
+    await step(context(lastPass({ autoConfirm: true })))
+    expect(publish).toHaveBeenCalledTimes(1)
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { unbuiltScreenIds: string[]; siteOrder: string[] }]
+    expect(input.unbuiltScreenIds).toEqual(['drftPage03'])
+    expect(input.siteOrder).toEqual(confirmedPlan().screens.map((screen) => screen.id))
   })
 
   it('hands the publish the language its plan says the brief is in, and none where it says none (AGL-3750)', async () => {
