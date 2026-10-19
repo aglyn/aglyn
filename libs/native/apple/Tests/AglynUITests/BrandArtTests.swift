@@ -70,4 +70,32 @@ final class BrandArtTests: XCTestCase {
     XCTAssertFalse(art.opaqueCorners)
     XCTAssertEqual(art.scale(cornerFraction: 0.5), 0.44 / 0.58926, accuracy: 1e-3)
   }
+
+  /// A logo that fails to load is tried again (AGL-3991): a CDN route still starting answered the first request with an
+  /// error, and the workspace's initials stayed in its place for good.
+  func testAFailedPictureIsTriedAgainUntilItLoads() async throws {
+    let context = try XCTUnwrap(CGContext(
+      data: nil, width: 4, height: 4, bitsPerComponent: 8, bytesPerRow: 16,
+      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ))
+    let image = try XCTUnwrap(context.makeImage())
+    let picture = AglynBrandImage(image: image, art: AglynBrandArt(image: image))
+    let url = try XCTUnwrap(URL(string: "https://example.test/logo.png"))
+    var tries = 0
+    let loaded = await AglynBrandImageLoader.loadRetrying(url, delays: [.zero, .zero, .zero]) { _ in
+      tries += 1
+      return tries < 3 ? nil : picture
+    }
+    XCTAssertTrue(loaded === picture)
+    XCTAssertEqual(tries, 3)
+
+    tries = 0
+    let never = await AglynBrandImageLoader.loadRetrying(url, delays: [.zero, .zero]) { _ in
+      tries += 1
+      return nil
+    }
+    XCTAssertNil(never)
+    XCTAssertEqual(tries, 3, "the first try and one per delay")
+    XCTAssertEqual(AglynBrandImageLoader.retryDelays, [.seconds(1), .seconds(3), .seconds(8)])
+  }
 }

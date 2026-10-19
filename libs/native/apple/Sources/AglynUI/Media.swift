@@ -98,7 +98,7 @@ public struct AglynBrandPicture<Fallback: View>: View {
       .accessibilityHidden(true)
       .task(id: shown) {
         guard AglynBrandImageLoader.cached(shown) == nil,
-              let picture = await AglynBrandImageLoader.load(shown) else { return }
+              let picture = await AglynBrandImageLoader.loadRetrying(shown) else { return }
         loaded = (shown, picture)
       }
     } else {
@@ -233,6 +233,26 @@ enum AglynBrandImageLoader {
 
   static func cached(_ url: URL) -> AglynBrandImage? {
     cache.object(forKey: url as NSURL)
+  }
+
+  /// How long to wait before each further try of a picture that failed: a CDN route still starting, a dropped
+  /// connection. A logo that failed once otherwise kept its fallback (the workspace's initials) until the view was
+  /// rebuilt (AGL-3991).
+  static let retryDelays: [Duration] = [.seconds(1), .seconds(3), .seconds(8)]
+
+  /// The picture at `url`, tried again after each of `delays` while it fails; nil once every try has, or when the
+  /// view that asked has gone (its task is cancelled).
+  static func loadRetrying(
+    _ url: URL, delays: [Duration] = retryDelays,
+    load: (URL) async -> AglynBrandImage? = { await AglynBrandImageLoader.load($0) }
+  ) async -> AglynBrandImage? {
+    if let picture = await load(url) { return picture }
+    for delay in delays {
+      try? await Task.sleep(for: delay)
+      if Task.isCancelled { return nil }
+      if let picture = await load(url) { return picture }
+    }
+    return nil
   }
 
   /// The picture at `url`, or nil when it cannot be fetched or is not an image.
