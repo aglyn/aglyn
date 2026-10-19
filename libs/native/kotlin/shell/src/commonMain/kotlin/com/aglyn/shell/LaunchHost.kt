@@ -35,8 +35,9 @@ internal fun LaunchHost(
 ) {
   val intro = remember { if (playIntro) LaunchIntro.create() else LaunchIntro.skipped() }
   val isReady by rememberUpdatedState(ready)
+  val reduce = com.aglyn.ui.reduceMotion()
   LaunchedEffect(intro) {
-    intro.run(reduceMotion = false) { isReady }
+    intro.run(reduceMotion = reduce) { isReady }
     onRevealed()
   }
   val frame = intro.frame()

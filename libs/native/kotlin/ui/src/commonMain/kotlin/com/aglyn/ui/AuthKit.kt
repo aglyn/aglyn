@@ -52,6 +52,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -520,11 +522,11 @@ class LaunchIntro internal constructor(played: Boolean) {
       return
     }
     settled = true
+    // The mark holds from the first frame; the wordmark wipes in beside it (P14: one motion, no cross-fade to flash).
     delay(t.LOCKUP_START_MS.toLong())
     markAtLockup = true
-    delay((t.LOCKUP_END_MS - t.CROSS_FADE_MS - t.LOCKUP_START_MS).toLong())
     lockupVisible = true
-    delay(t.CROSS_FADE_MS.toLong())
+    delay((t.LOCKUP_END_MS - t.LOCKUP_START_MS).toLong())
     if (!isReady()) {
       waiting = true
       while (!isReady()) delay(16)
@@ -543,6 +545,9 @@ class LaunchIntro internal constructor(played: Boolean) {
 
     /** An intro already at its end: where the platform's own splash screen plays instead (Android). */
     fun skipped(): LaunchIntro = LaunchIntro(true)
+
+    /** An intro at its start whatever played before: for previews and frame-by-frame checks. */
+    fun unplayed(): LaunchIntro = LaunchIntro(false)
   }
 }
 
@@ -569,31 +574,46 @@ fun LaunchIntro.frame(): LaunchIntroFrame {
   return LaunchIntroFrame(settle, breath.value, if (crossFades) 0f else (1 - reveal) * t.DESTINATION_RISE, reveal)
 }
 
-/** The intro's travelling mark: centered at the launch size, then at the lockup's place, where the lockup cross-fades in. */
+/**
+ * The intro's lockup (P14, Zach 2026-10-19: "flashes a lot and doesn't flow"): one continuous motion. The mark holds at its
+ * place in the centered lockup from the first frame, the wordmark reveals beside it with a mask wipe, and the lockup fades
+ * out as the destination rises in ([LaunchIntroFrame.reveal]). Nothing cross-fades between two images, so no frame flashes.
+ * Reduce motion: the whole lockup is there at once and only fades.
+ */
 @Composable
 fun LaunchMark(intro: LaunchIntro, name: String, compact: Boolean, modifier: Modifier = Modifier) {
   val t = AuthTokens.Intro
-  val spring = spring<Float>(dampingRatio = t.SPRING_DAMPING, stiffness = springStiffness(t.SPRING_RESPONSE))
-  val travel by animateFloatAsState(if (intro.markAtLockup) 1f else 0f, spring)
-  val lockup by animateFloatAsState(if (intro.lockupVisible) 1f else 0f, tween((if (intro.crossFades) t.REDUCE_MOTION_FADE_MS else t.CROSS_FADE_MS).toInt()))
+  val wipe by animateFloatAsState(
+    if (intro.lockupVisible || intro.crossFades) 1f else 0f,
+    if (intro.crossFades) tween(0) else tween((t.LOCKUP_END_MS - t.LOCKUP_START_MS).toInt(), easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)),
+  )
+  val handOver by animateFloatAsState(
+    if (intro.revealed) 0f else 1f,
+    tween((if (intro.crossFades) t.REDUCE_MOTION_FADE_MS else t.DESTINATION_MS).toInt()),
+  )
   BoxWithConstraints(modifier.semantics { contentDescription = name }) {
-    val launch = M.LAUNCH_MARK_COMPACT
-    val height = M.LOCKUP_HEIGHT
-    val leading = if (compact) M.LOCKUP_LEADING_COMPACT else M.LOCKUP_LEADING_REGULAR
-    val top = if (compact) M.LOCKUP_TOP_COMPACT else M.LOCKUP_CLEAR_SPACE
-    val size = launch + (height - launch) * travel
-    val x = ((maxWidth.value - launch) / 2) * (1 - travel) + leading * travel
-    val y = ((maxHeight.value - launch) / 2) * (1 - travel) + top * travel
-    AglynMark(
-      Modifier.graphicsLayer { translationX = x.dp.toPx(); translationY = y.dp.toPx(); alpha = 1 - lockup }.size(size.dp),
-      contentDescription = null,
-    )
+    // The lockup's art is 79 × 24 with the mark the first 24 of it (generate-native-brand-assets.mjs).
+    val height = if (compact) 40f else 48f
+    val width = height * LOCKUP_ART_WIDTH / LOCKUP_ART_HEIGHT
+    val markWidth = height * MARK_ART_WIDTH / LOCKUP_ART_HEIGHT
+    val x = (maxWidth.value - width) / 2
+    val y = (maxHeight.value - height) / 2
     AglynLogo(
-      Modifier.graphicsLayer { translationX = leading.dp.toPx(); translationY = top.dp.toPx(); alpha = lockup }.height(height.dp),
+      Modifier
+        .graphicsLayer { translationX = x.dp.toPx(); translationY = y.dp.toPx(); alpha = handOver }
+        .size(width.dp, height.dp)
+        .drawWithContent {
+          val shown = markWidth.dp.toPx() + (size.width - markWidth.dp.toPx()) * wipe
+          clipRect(right = shown) { this@drawWithContent.drawContent() }
+        },
       contentDescription = null,
     )
   }
 }
+
+private const val LOCKUP_ART_WIDTH = 79f
+private const val LOCKUP_ART_HEIGHT = 24f
+private const val MARK_ART_WIDTH = 24f
 
 /** A spring's stiffness from SwiftUI's response (the period of one oscillation, in seconds). */
 private fun springStiffness(response: Float): Float = ((2 * PI / response) * (2 * PI / response)).toFloat()
