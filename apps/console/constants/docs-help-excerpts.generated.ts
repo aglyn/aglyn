@@ -46,7 +46,7 @@ export const DOCS_HELP_EXCERPTS = {
   adTracking: 'Run your own Meta, TikTok, Pinterest, Google Ads and LinkedIn tags on your site — only for visitors who allow advertising.',
   agencySites: 'Run one brief across many client sites: each is its own build job with its own plan and drafts, per-site allotments keep spend separate, and nothing reaches a client\'s live site until your team publishes it.',
   aglynAssist: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
-  ai: 'Aglyn AI is an AI website builder inside your console: describe a page, form, email, product listing or theme change and it builds a draft you edit and publish yourself. Included on every plan, metered in credits, with tiers that add more.',
+  ai: 'Aglyn AI is an AI website builder inside your console: describe a page, form, email, product listing or theme change and it builds a draft you edit and publish yourself. Included on every plan, metered in credits.',
   aiAllotments: 'Give a member, a site collaborator or a whole site a monthly share of the workspace\'s AI credits, see your own usage while you work, and choose which model answers.',
   aiCredits: 'Everything Aglyn AI does draws AI credits from one monthly pool: what each plan includes (300 on Free), what an Aglyn AI tier adds on top, what jobs cost, the check before a job starts, and when credits come back.',
   aiJobsAndActivity: 'Review what Aglyn AI did: a site\'s AI jobs page lists every job with its kind, brief, status and credits, each job has its own page, and the AI filter in your activity logs records who started, applied or canceled what.',
