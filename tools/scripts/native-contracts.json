@@ -1,5 +1,5 @@
 {
-  "$comment": "What tools/scripts/generate-native-contracts.mjs emits for the native apps (docs/mobile/native-architecture.md §5). Every module must be on tools/scripts/mobile-pure-modules.json. `types` become Swift/Kotlin types, `values` become contracts.generated.json entries (typed by ContractValues). `ints` narrows a number field to an integer, `json` reads a field as raw JSON, `omit` leaves a field out; each names `Type.field` and must match a field the run emits. `optional` makes a field (`Type.field`) or every field of a struct (`Type`) decode when a stored document lacks it, and must match a field or struct the run emits. `listQueryCases` names the list declarations whose planner cases are recorded. `functionCases` runs pure functions over listed inputs (`args`, or `argsProduct` for every combination) into function-cases.generated.json, so each platform's formatter or rule replays the console's answers.",
+  "$comment": "What tools/scripts/generate-native-contracts.mjs emits for the native apps (docs/mobile/native-architecture.md §5). Every module must be on tools/scripts/mobile-pure-modules.json. `types` become Swift/Kotlin types, `values` become contracts.generated.json entries (typed by ContractValues). `ints` narrows a number field to an integer, `json` reads a field as raw JSON, `omit` leaves a field out; each names `Type.field` and must match a field the run emits. `optional` makes a field (`Type.field`) or every field of a struct (`Type`) decode when a stored document lacks it, and must match a field or struct the run emits. `listQueryCases` names the list declarations whose planner cases are recorded. `assembled` builds a value from its module's half and the parts other pure modules declare (the nav manifest: the core's lists and each plugin's rows), and a functionCases entry with `leadingValue` is called with that contract value ahead of its recorded args. `functionCases` runs pure functions over listed inputs (`args`, or `argsProduct` for every combination) into function-cases.generated.json, so each platform's formatter or rule replays the console's answers.",
   "modules": {
     "libs/shared/util/tools/src/lib/list-query/list-query-plan.ts": {
       "types": [
@@ -814,6 +814,127 @@
         "PRINTER_STATE_LABELS",
         "PRINTER_OFFLINE_AFTER_MS"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/account-preferences.ts": {
+      "types": [
+        "AccountItemRef",
+        "StarredItem",
+        "RecentItem",
+        "StarColor",
+        "AppThemePrefs",
+        "AppAppearance",
+        "AppThemeName",
+        "AppDensity",
+        "AppTextSize",
+        "AppSidebarStyle",
+        "PinOrgResult",
+        "PinOrgOutcome",
+        "RailWorkspaces",
+        "StarResult",
+        "StarOutcome",
+        "WorkspaceColor",
+        "WorkspaceColorSource"
+      ],
+      "values": [
+        "PINNED_ORGS_FIELD",
+        "PINNED_ORGS_MAX",
+        "RECENT_ORGS_FIELD",
+        "RECENT_ORGS_MAX",
+        "RAIL_RECENT_ORGS",
+        "RAIL_ALL_WORKSPACES_AT_MOST",
+        "STARRED_FIELD",
+        "STARRED_MAX",
+        "RECENTS_FIELD",
+        "RECENTS_MAX",
+        "WORKSPACE_COLORS_FIELD",
+        "WORKSPACE_COLORS_MAX",
+        "APP_THEME_FIELD",
+        "ACCOUNT_ITEM_LABEL_MAX",
+        "ACCOUNT_COLOR_PATTERN",
+        "STAR_COLORS",
+        "DEFAULT_APP_THEME",
+        "APP_APPEARANCES",
+        "APP_THEME_NAMES",
+        "APP_DENSITIES",
+        "APP_TEXT_SIZES",
+        "APP_SIDEBAR_STYLES",
+        "APP_ICON_ID_MAX"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/native-nav.ts": {
+      "types": [
+        "NativeNavManifest",
+        "NativeNavList",
+        "NativeNavListId",
+        "NativeNavGroup",
+        "NativeNavRow",
+        "NativeNavSection",
+        "NativeNavAction",
+        "NativeNavIcon",
+        "NativeNavConsoleRef",
+        "NativeNavConsoleSurface",
+        "NativeNavElsewhere",
+        "ResolvedNavList",
+        "NativeNavContribution",
+        "NativeNavCreateScope",
+        "NativeNavCreateItem",
+        "NativeNavCreateList",
+        "NativeNavCreateContribution",
+        "ResolvedCreateItem"
+      ],
+      "values": [
+        "NATIVE_NAV_MANIFEST",
+        "NATIVE_NAV_SHELL_SCREENS",
+        "NATIVE_CREATE_PERMISSION_REASON",
+        "NATIVE_CREATE_SITE_ROLE_REASON",
+        "NATIVE_CREATE_PLAN_REASON"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/one-box-search.ts": {
+      "types": [
+        "OneBoxRow",
+        "OneBoxGroup",
+        "OneBoxResponse"
+      ],
+      "values": [
+        "ONE_BOX_SEARCH_PATH",
+        "ONE_BOX_ROWS_DEFAULT",
+        "ONE_BOX_ROWS_MAX",
+        "ONE_BOX_QUERY_MAX",
+        "ONE_BOX_WORKSPACES_GROUP",
+        "ONE_BOX_SCREENS_GROUP"
+      ]
+    }
+  },
+  "assembled": {
+    "NATIVE_NAV_MANIFEST": {
+      "$comment": "The core's lists and rows, with each plugin's NATIVE_NAV_ROWS placed and its NATIVE_NAV_ELSEWHERE added (assembleNativeNav). apps/console/specs/native-nav-manifest.spec.ts holds this list to every plugin that has a native-nav module.",
+      "with": "assembleNativeNav",
+      "collect": [
+        "NATIVE_NAV_ROWS",
+        "NATIVE_NAV_ELSEWHERE",
+        "NATIVE_NAV_CREATE"
+      ],
+      "parts": [
+        "libs/plugins/accounting/src/lib/native-nav.ts",
+        "libs/plugins/ai/src/lib/native-nav.ts",
+        "libs/plugins/bookings/src/lib/native-nav.ts",
+        "libs/plugins/commerce/src/lib/native-nav.ts",
+        "libs/plugins/crm/src/lib/native-nav.ts",
+        "libs/plugins/data/src/lib/native-nav.ts",
+        "libs/plugins/email/src/lib/native-nav.ts",
+        "libs/plugins/events-calendar/src/lib/native-nav.ts",
+        "libs/plugins/forms/src/lib/native-nav.ts",
+        "libs/plugins/funnels/src/lib/native-nav.ts",
+        "libs/plugins/inbox/src/lib/native-nav.ts",
+        "libs/plugins/logic/src/lib/native-nav.ts",
+        "libs/plugins/marketing/src/lib/native-nav.ts",
+        "libs/plugins/marketplace/src/lib/native-nav.ts",
+        "libs/plugins/outreach/src/lib/native-nav.ts",
+        "libs/plugins/redirects/src/lib/native-nav.ts",
+        "libs/plugins/sms/src/lib/native-nav.ts",
+        "libs/plugins/workflows/src/lib/native-nav.ts"
+      ]
     }
   },
   "ints": [
@@ -843,6 +964,9 @@
     "FunnelStepResult.dropOff",
     "FunnelStepResult.index",
     "FunnelStepResult.visitors",
+    "OneBoxGroup.matched",
+    "OneBoxGroup.nextCursor",
+    "OneBoxGroup.searched",
     "PosKioskContext.idleSeconds",
     "PosKioskLine.quantity",
     "PosKioskSale.discountCents",
@@ -858,9 +982,12 @@
     "PosKioskVariant.priceCents",
     "ProductLabel.copies",
     "ProductLabel.priceCents",
+    "RailWorkspaces.total",
+    "RecentItem.openedAtMs",
     "ScreenTrafficRow.total",
     "SeoAuditReport.skipped",
     "SeoPageReport.score",
+    "StarredItem.starredAtMs",
     "WhereUsedResult.legacyCount",
     "WhereUsedResult.total"
   ],
@@ -2658,6 +2785,20 @@
         ],
         [
           "text"
+        ],
+        [
+          {
+            "type": "content.order",
+            "link": "/h1/orders",
+            "orgId": "o1",
+            "uid": "u-2"
+          }
+        ],
+        [
+          {
+            "type": "content.order",
+            "uid": 7
+          }
         ]
       ]
     },
@@ -25773,6 +25914,1938 @@
             "chargesEnabled": "true",
             "accountLivemode": "x"
           }
+        ]
+      ]
+    },
+    "readPinnedOrgs": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "pinnedOrgs": [
+              "a",
+              "b",
+              "a"
+            ]
+          }
+        ],
+        [
+          {
+            "pinnedOrgs": [
+              "a",
+              7,
+              "",
+              null
+            ]
+          }
+        ],
+        [
+          {
+            "pinnedOrgs": "a"
+          }
+        ],
+        [
+          null
+        ],
+        [
+          {
+            "pinnedOrgs": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g"
+            ]
+          }
+        ]
+      ]
+    },
+    "effectivePinnedOrgs": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g"
+          ]
+        ],
+        [
+          [
+            "a",
+            "b"
+          ]
+        ],
+        [
+          []
+        ],
+        [
+          [
+            "a",
+            "a",
+            "b"
+          ]
+        ]
+      ]
+    },
+    "pinnedOrgsOverCap": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f"
+          ]
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e"
+          ]
+        ],
+        [
+          []
+        ]
+      ]
+    },
+    "pinOrg": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            "a",
+            "b"
+          ],
+          "c"
+        ],
+        [
+          [
+            "a",
+            "b"
+          ],
+          "a"
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e"
+          ],
+          "f"
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g"
+          ],
+          "h"
+        ],
+        [
+          [],
+          ""
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g"
+          ],
+          "b"
+        ]
+      ]
+    },
+    "unpinOrg": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          "b"
+        ],
+        [
+          [
+            "a"
+          ],
+          "z"
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g"
+          ],
+          "a"
+        ]
+      ]
+    },
+    "replacePinnedOrg": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e"
+          ],
+          "c",
+          "f"
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e"
+          ],
+          "z",
+          "f"
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e"
+          ],
+          "c",
+          "a"
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e"
+          ],
+          "c",
+          ""
+        ]
+      ]
+    },
+    "keepPinnedOrgs": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g"
+          ],
+          [
+            "g",
+            "b",
+            "e"
+          ]
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g"
+          ],
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g"
+          ]
+        ],
+        [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "z"
+          ]
+        ]
+      ]
+    },
+    "movePinnedOrg": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          "b",
+          -1
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          "b",
+          1
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          "a",
+          -1
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          "c",
+          1
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          "z",
+          1
+        ]
+      ]
+    },
+    "readRecentOrgs": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "recentOrgs": [
+              "a",
+              "b",
+              "a",
+              "c"
+            ]
+          }
+        ],
+        [
+          {
+            "recentOrgs": [
+              "a",
+              "b",
+              "c",
+              "d",
+              "e",
+              "f",
+              "g",
+              "h",
+              "i",
+              "j"
+            ]
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "recordRecentOrg": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          "c"
+        ],
+        [
+          [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g",
+            "h"
+          ],
+          "z"
+        ],
+        [
+          [],
+          "a"
+        ],
+        [
+          [
+            "a"
+          ],
+          ""
+        ]
+      ]
+    },
+    "railWorkspaces": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            "a",
+            "b",
+            "c"
+          ],
+          [
+            "b"
+          ],
+          [
+            "c"
+          ]
+        ],
+        [
+          [
+            "o1",
+            "o2",
+            "o3",
+            "o4",
+            "o5",
+            "o6",
+            "o7",
+            "o8",
+            "o9",
+            "o10",
+            "o11",
+            "o12"
+          ],
+          [
+            "o3",
+            "o1"
+          ],
+          [
+            "o5",
+            "o1",
+            "o9",
+            "o7",
+            "o2"
+          ]
+        ],
+        [
+          [
+            "o1",
+            "o2",
+            "o3",
+            "o4",
+            "o5",
+            "o6",
+            "o7",
+            "o8",
+            "o9",
+            "o10",
+            "o11",
+            "o12"
+          ],
+          [
+            "gone",
+            "o4",
+            "o5",
+            "o6",
+            "o7",
+            "o8",
+            "o9"
+          ],
+          [
+            "o10",
+            "gone2",
+            "o11",
+            "o12"
+          ]
+        ],
+        [
+          [],
+          [
+            "a"
+          ],
+          [
+            "b"
+          ]
+        ],
+        [
+          [
+            "o1",
+            "o2",
+            "o3",
+            "o4",
+            "o5",
+            "o6",
+            "o7",
+            "o8"
+          ],
+          [],
+          []
+        ]
+      ]
+    },
+    "accountItemKey": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "kind": "page",
+            "id": "p1",
+            "orgId": "o1",
+            "hostId": "h1",
+            "label": "Home",
+            "screen": "site.pages",
+            "params": {
+              "page": "p1"
+            }
+          }
+        ],
+        [
+          {
+            "kind": "workspace",
+            "id": "o1",
+            "orgId": "o1",
+            "label": "Acme",
+            "screen": "shell.home"
+          }
+        ]
+      ]
+    },
+    "readStarred": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "starred": [
+              {
+                "kind": "page",
+                "id": "p1",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Home",
+                "screen": "site.pages",
+                "params": {
+                  "page": "p1"
+                },
+                "starredAtMs": 5,
+                "color": "blue"
+              },
+              {
+                "kind": "page",
+                "id": "p1",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Home",
+                "screen": "site.pages",
+                "params": {
+                  "page": "p1"
+                },
+                "starredAtMs": 6
+              },
+              {
+                "kind": "page"
+              },
+              {
+                "kind": "screen",
+                "id": "site.orders",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Orders",
+                "screen": "commerce.orders",
+                "starredAtMs": 7,
+                "color": "mauve"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "starred": "x"
+          }
+        ],
+        [
+          {
+            "starred": [
+              {
+                "kind": "screen",
+                "id": "site.orders",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL",
+                "screen": "commerce.orders",
+                "starredAtMs": 1
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "toggleStarred": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [],
+          {
+            "kind": "page",
+            "id": "p1",
+            "orgId": "o1",
+            "hostId": "h1",
+            "label": "Home",
+            "screen": "site.pages",
+            "params": {
+              "page": "p1"
+            }
+          },
+          10
+        ],
+        [
+          [
+            {
+              "kind": "page",
+              "id": "p1",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Home",
+              "screen": "site.pages",
+              "params": {
+                "page": "p1"
+              },
+              "starredAtMs": 1,
+              "color": "pink"
+            }
+          ],
+          {
+            "kind": "page",
+            "id": "p1",
+            "orgId": "o1",
+            "hostId": "h1",
+            "label": "Home",
+            "screen": "site.pages",
+            "params": {
+              "page": "p1"
+            }
+          },
+          10
+        ],
+        [
+          [
+            {
+              "kind": "page",
+              "id": "p0",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 0
+            },
+            {
+              "kind": "page",
+              "id": "p1",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 1
+            },
+            {
+              "kind": "page",
+              "id": "p2",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 2
+            },
+            {
+              "kind": "page",
+              "id": "p3",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 3
+            },
+            {
+              "kind": "page",
+              "id": "p4",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 4
+            },
+            {
+              "kind": "page",
+              "id": "p5",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 5
+            },
+            {
+              "kind": "page",
+              "id": "p6",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 6
+            },
+            {
+              "kind": "page",
+              "id": "p7",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 7
+            },
+            {
+              "kind": "page",
+              "id": "p8",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 8
+            },
+            {
+              "kind": "page",
+              "id": "p9",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 9
+            },
+            {
+              "kind": "page",
+              "id": "p10",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 10
+            },
+            {
+              "kind": "page",
+              "id": "p11",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 11
+            },
+            {
+              "kind": "page",
+              "id": "p12",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 12
+            },
+            {
+              "kind": "page",
+              "id": "p13",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 13
+            },
+            {
+              "kind": "page",
+              "id": "p14",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 14
+            },
+            {
+              "kind": "page",
+              "id": "p15",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 15
+            },
+            {
+              "kind": "page",
+              "id": "p16",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 16
+            },
+            {
+              "kind": "page",
+              "id": "p17",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 17
+            },
+            {
+              "kind": "page",
+              "id": "p18",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 18
+            },
+            {
+              "kind": "page",
+              "id": "p19",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 19
+            },
+            {
+              "kind": "page",
+              "id": "p20",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 20
+            },
+            {
+              "kind": "page",
+              "id": "p21",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 21
+            },
+            {
+              "kind": "page",
+              "id": "p22",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 22
+            },
+            {
+              "kind": "page",
+              "id": "p23",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 23
+            },
+            {
+              "kind": "page",
+              "id": "p24",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 24
+            },
+            {
+              "kind": "page",
+              "id": "p25",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 25
+            },
+            {
+              "kind": "page",
+              "id": "p26",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 26
+            },
+            {
+              "kind": "page",
+              "id": "p27",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 27
+            },
+            {
+              "kind": "page",
+              "id": "p28",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 28
+            },
+            {
+              "kind": "page",
+              "id": "p29",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 29
+            },
+            {
+              "kind": "page",
+              "id": "p30",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 30
+            },
+            {
+              "kind": "page",
+              "id": "p31",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 31
+            },
+            {
+              "kind": "page",
+              "id": "p32",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 32
+            },
+            {
+              "kind": "page",
+              "id": "p33",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 33
+            },
+            {
+              "kind": "page",
+              "id": "p34",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 34
+            },
+            {
+              "kind": "page",
+              "id": "p35",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 35
+            },
+            {
+              "kind": "page",
+              "id": "p36",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 36
+            },
+            {
+              "kind": "page",
+              "id": "p37",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 37
+            },
+            {
+              "kind": "page",
+              "id": "p38",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 38
+            },
+            {
+              "kind": "page",
+              "id": "p39",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 39
+            },
+            {
+              "kind": "page",
+              "id": "p40",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 40
+            },
+            {
+              "kind": "page",
+              "id": "p41",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 41
+            },
+            {
+              "kind": "page",
+              "id": "p42",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 42
+            },
+            {
+              "kind": "page",
+              "id": "p43",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 43
+            },
+            {
+              "kind": "page",
+              "id": "p44",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 44
+            },
+            {
+              "kind": "page",
+              "id": "p45",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 45
+            },
+            {
+              "kind": "page",
+              "id": "p46",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 46
+            },
+            {
+              "kind": "page",
+              "id": "p47",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 47
+            },
+            {
+              "kind": "page",
+              "id": "p48",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 48
+            },
+            {
+              "kind": "page",
+              "id": "p49",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "starredAtMs": 49
+            }
+          ],
+          {
+            "kind": "screen",
+            "id": "site.orders",
+            "orgId": "o1",
+            "hostId": "h1",
+            "label": "Orders",
+            "screen": "commerce.orders"
+          },
+          10
+        ],
+        [
+          [
+            {
+              "kind": "page",
+              "id": "p1",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Home",
+              "screen": "site.pages",
+              "params": {
+                "page": "p1"
+              },
+              "starredAtMs": 1
+            }
+          ],
+          {
+            "kind": "page"
+          },
+          10
+        ]
+      ]
+    },
+    "setStarColor": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "kind": "page",
+              "id": "p1",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Home",
+              "screen": "site.pages",
+              "params": {
+                "page": "p1"
+              },
+              "starredAtMs": 1,
+              "color": "blue"
+            },
+            {
+              "kind": "screen",
+              "id": "site.orders",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Orders",
+              "screen": "commerce.orders",
+              "starredAtMs": 2
+            }
+          ],
+          "page:o1:h1:p1",
+          "green"
+        ],
+        [
+          [
+            {
+              "kind": "page",
+              "id": "p1",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Home",
+              "screen": "site.pages",
+              "params": {
+                "page": "p1"
+              },
+              "starredAtMs": 1,
+              "color": "blue"
+            }
+          ],
+          "page:o1:h1:p1",
+          null
+        ],
+        [
+          [
+            {
+              "kind": "page",
+              "id": "p1",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Home",
+              "screen": "site.pages",
+              "params": {
+                "page": "p1"
+              },
+              "starredAtMs": 1
+            }
+          ],
+          "page:o1:h1:p1",
+          "mauve"
+        ]
+      ]
+    },
+    "readRecents": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "recents": [
+              {
+                "kind": "screen",
+                "id": "site.orders",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Orders",
+                "screen": "commerce.orders",
+                "openedAtMs": 9
+              },
+              {
+                "kind": "page",
+                "id": "p1",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Home",
+                "screen": "site.pages",
+                "params": {
+                  "page": "p1"
+                },
+                "openedAtMs": 8
+              },
+              {
+                "kind": "screen",
+                "id": "site.orders",
+                "orgId": "o1",
+                "hostId": "h1",
+                "label": "Orders",
+                "screen": "commerce.orders",
+                "openedAtMs": 7
+              }
+            ]
+          }
+        ],
+        [
+          {}
+        ]
+      ]
+    },
+    "recordRecent": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "kind": "page",
+              "id": "p1",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Home",
+              "screen": "site.pages",
+              "params": {
+                "page": "p1"
+              },
+              "openedAtMs": 1
+            },
+            {
+              "kind": "screen",
+              "id": "site.orders",
+              "orgId": "o1",
+              "hostId": "h1",
+              "label": "Orders",
+              "screen": "commerce.orders",
+              "openedAtMs": 2
+            }
+          ],
+          {
+            "kind": "screen",
+            "id": "site.orders",
+            "orgId": "o1",
+            "hostId": "h1",
+            "label": "Orders",
+            "screen": "commerce.orders"
+          },
+          10
+        ],
+        [
+          [
+            {
+              "kind": "page",
+              "id": "p0",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 0
+            },
+            {
+              "kind": "page",
+              "id": "p1",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 1
+            },
+            {
+              "kind": "page",
+              "id": "p2",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 2
+            },
+            {
+              "kind": "page",
+              "id": "p3",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 3
+            },
+            {
+              "kind": "page",
+              "id": "p4",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 4
+            },
+            {
+              "kind": "page",
+              "id": "p5",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 5
+            },
+            {
+              "kind": "page",
+              "id": "p6",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 6
+            },
+            {
+              "kind": "page",
+              "id": "p7",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 7
+            },
+            {
+              "kind": "page",
+              "id": "p8",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 8
+            },
+            {
+              "kind": "page",
+              "id": "p9",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 9
+            },
+            {
+              "kind": "page",
+              "id": "p10",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 10
+            },
+            {
+              "kind": "page",
+              "id": "p11",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 11
+            },
+            {
+              "kind": "page",
+              "id": "p12",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 12
+            },
+            {
+              "kind": "page",
+              "id": "p13",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 13
+            },
+            {
+              "kind": "page",
+              "id": "p14",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 14
+            },
+            {
+              "kind": "page",
+              "id": "p15",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 15
+            },
+            {
+              "kind": "page",
+              "id": "p16",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 16
+            },
+            {
+              "kind": "page",
+              "id": "p17",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 17
+            },
+            {
+              "kind": "page",
+              "id": "p18",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 18
+            },
+            {
+              "kind": "page",
+              "id": "p19",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 19
+            },
+            {
+              "kind": "page",
+              "id": "p20",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 20
+            },
+            {
+              "kind": "page",
+              "id": "p21",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 21
+            },
+            {
+              "kind": "page",
+              "id": "p22",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 22
+            },
+            {
+              "kind": "page",
+              "id": "p23",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 23
+            },
+            {
+              "kind": "page",
+              "id": "p24",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 24
+            },
+            {
+              "kind": "page",
+              "id": "p25",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 25
+            },
+            {
+              "kind": "page",
+              "id": "p26",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 26
+            },
+            {
+              "kind": "page",
+              "id": "p27",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 27
+            },
+            {
+              "kind": "page",
+              "id": "p28",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 28
+            },
+            {
+              "kind": "page",
+              "id": "p29",
+              "orgId": "o1",
+              "label": "Item",
+              "screen": "site.pages",
+              "openedAtMs": 29
+            }
+          ],
+          {
+            "kind": "page",
+            "id": "p1",
+            "orgId": "o1",
+            "hostId": "h1",
+            "label": "Home",
+            "screen": "site.pages",
+            "params": {
+              "page": "p1"
+            }
+          },
+          99
+        ],
+        [
+          [],
+          {
+            "kind": "page"
+          },
+          1
+        ]
+      ]
+    },
+    "readWorkspaceColors": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "workspaceColors": {
+              "o1": "#00B0FF",
+              "o2": "blue",
+              "o3": "#e040fb",
+              "": "#000000"
+            }
+          }
+        ],
+        [
+          {
+            "workspaceColors": [
+              "#00B0FF"
+            ]
+          }
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "resolveWorkspaceColor": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          "#112233",
+          "#00B0FF",
+          "#445566",
+          true
+        ],
+        [
+          null,
+          "#00B0FF",
+          "#445566",
+          true
+        ],
+        [
+          null,
+          "#00B0FF",
+          "#445566",
+          false
+        ],
+        [
+          null,
+          null,
+          "#445566",
+          true
+        ],
+        [
+          "red",
+          null,
+          null,
+          true
+        ],
+        [
+          null,
+          null,
+          null,
+          false
+        ],
+        [
+          "#112233",
+          null,
+          null,
+          false
+        ]
+      ]
+    },
+    "readAppTheme": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "appTheme": {
+              "appearance": "dark",
+              "theme": "ocean",
+              "accent": "#7A5CF0",
+              "density": "compact",
+              "textSize": "large",
+              "sidebarStyle": "plain",
+              "appIcon": "night",
+              "useWorkspaceBrand": false
+            }
+          }
+        ],
+        [
+          {
+            "appTheme": {
+              "appearance": "sepia",
+              "theme": "x",
+              "accent": "purple",
+              "density": 1,
+              "textSize": "huge",
+              "sidebarStyle": "",
+              "appIcon": "",
+              "useWorkspaceBrand": "no"
+            }
+          }
+        ],
+        [
+          {
+            "appTheme": "dark"
+          }
+        ]
+      ]
+    },
+    "isAccountColor": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          "#00B0FF"
+        ],
+        [
+          "#00b0ff"
+        ],
+        [
+          "#0B0FF"
+        ],
+        [
+          "00B0FF"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "resolveNavList": {
+      "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "leadingValue": "NATIVE_NAV_MANIFEST",
+      "args": [
+        [
+          "site",
+          [
+            "forms",
+            "logic",
+            "commerce",
+            "bookings",
+            "events-calendar",
+            "inbox",
+            "crm",
+            "email",
+            "workflows",
+            "redirects",
+            "funnels",
+            "sms",
+            "ai",
+            "data"
+          ],
+          true
+        ],
+        [
+          "site",
+          [
+            "forms",
+            "commerce",
+            "inbox"
+          ],
+          false
+        ],
+        [
+          "siteSettings",
+          [],
+          false
+        ],
+        [
+          "siteSettings",
+          [],
+          true
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "inbox",
+            "email",
+            "data",
+            "marketplace"
+          ],
+          false
+        ],
+        [
+          "workspaceSettings",
+          [
+            "ai"
+          ],
+          false
+        ],
+        [
+          "workspace",
+          [],
+          false
+        ]
+      ]
+    },
+    "searchNavScreens": {
+      "module": "libs/aglyn/src/lib/app-utils/one-box-search.ts",
+      "leadingValue": "NATIVE_NAV_MANIFEST",
+      "args": [
+        [
+          "billing",
+          "workspace",
+          [
+            "ai"
+          ],
+          false
+        ],
+        [
+          "seo",
+          "site",
+          [
+            "commerce"
+          ],
+          true
+        ],
+        [
+          "orders",
+          "site",
+          [
+            "commerce"
+          ],
+          false
+        ],
+        [
+          "orders",
+          "site",
+          [],
+          false
+        ],
+        [
+          "deal",
+          "site",
+          [
+            "crm"
+          ],
+          false
+        ],
+        [
+          "danger",
+          "site",
+          [],
+          false
+        ],
+        [
+          "danger",
+          "site",
+          [],
+          true
+        ],
+        [
+          "plan",
+          "account",
+          [],
+          false
+        ],
+        [
+          "b",
+          "workspace",
+          [],
+          false
+        ]
+      ]
+    },
+    "oneBoxLimit": {
+      "module": "libs/aglyn/src/lib/app-utils/one-box-search.ts",
+      "args": [
+        [
+          "10"
+        ],
+        [
+          100
+        ],
+        [
+          0
+        ],
+        [
+          "x"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "oneBoxCursor": {
+      "module": "libs/aglyn/src/lib/app-utils/one-box-search.ts",
+      "args": [
+        [
+          "5"
+        ],
+        [
+          -1
+        ],
+        [
+          null
+        ],
+        [
+          2.5
+        ]
+      ]
+    },
+    "oneBoxQuery": {
+      "module": "libs/aglyn/src/lib/app-utils/one-box-search.ts",
+      "args": [
+        [
+          "  acme  "
+        ],
+        [
+          "a"
+        ],
+        [
+          null
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ]
+      ]
+    },
+    "resolveCreateList": {
+      "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "leadingValue": "NATIVE_NAV_MANIFEST",
+      "args": [
+        [
+          "workspace",
+          [
+            "crm",
+            "email"
+          ],
+          {
+            "hosts.create": true,
+            "data.manage": true
+          },
+          {
+            "crm": true
+          },
+          null
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "email"
+          ],
+          {
+            "hosts.create": false,
+            "data.manage": true
+          },
+          {
+            "crm": false
+          },
+          null
+        ],
+        [
+          "workspace",
+          [],
+          {},
+          {},
+          null
+        ],
+        [
+          "site",
+          [
+            "forms",
+            "commerce",
+            "bookings",
+            "events-calendar",
+            "crm"
+          ],
+          {
+            "data.manage": true
+          },
+          {
+            "commerce": true,
+            "bookings": true,
+            "eventCalendar": true,
+            "crm": true
+          },
+          "admin"
+        ],
+        [
+          "site",
+          [
+            "forms",
+            "commerce",
+            "bookings",
+            "events-calendar",
+            "crm"
+          ],
+          {
+            "data.manage": true
+          },
+          {
+            "commerce": false,
+            "bookings": true,
+            "eventCalendar": false,
+            "crm": true
+          },
+          "editor"
+        ],
+        [
+          "site",
+          [
+            "forms",
+            "commerce",
+            "bookings",
+            "events-calendar",
+            "crm"
+          ],
+          {},
+          {},
+          "viewer"
+        ],
+        [
+          "site",
+          [
+            "forms"
+          ],
+          {},
+          {},
+          "author"
         ]
       ]
     }

@@ -30,6 +30,17 @@ open class RawEnumSerializer<E : Enum<E>>(
 }
 
 @Serializable
+data class AccountItemRef(
+    val hostId: String? = null,
+    val id: String,
+    val kind: String,
+    val label: String,
+    val orgId: String,
+    val params: Map<String, String>? = null,
+    val screen: String,
+)
+
+@Serializable
 data class AccountPushSettings(
     val account: Map<String, AccountPushSettingsAccountValue>? = null,
     val accountTypes: Map<String, AccountPushSettingsAccountTypesValue>? = null,
@@ -57,6 +68,81 @@ enum class ApnsEnvironment(val raw: String) {
 
 internal object ApnsEnvironmentSerializer :
     RawEnumSerializer<ApnsEnvironment>("com.aglyn.contracts.ApnsEnvironment", ApnsEnvironment.entries, ApnsEnvironment.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = AppAppearanceSerializer::class)
+enum class AppAppearance(val raw: String) {
+    DARK("dark"),
+    LIGHT("light"),
+    SYSTEM("system"),
+    UNKNOWN(""),
+}
+
+internal object AppAppearanceSerializer :
+    RawEnumSerializer<AppAppearance>("com.aglyn.contracts.AppAppearance", AppAppearance.entries, AppAppearance.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = AppDensitySerializer::class)
+enum class AppDensity(val raw: String) {
+    COMFORTABLE("comfortable"),
+    COMPACT("compact"),
+    UNKNOWN(""),
+}
+
+internal object AppDensitySerializer :
+    RawEnumSerializer<AppDensity>("com.aglyn.contracts.AppDensity", AppDensity.entries, AppDensity.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = AppSidebarStyleSerializer::class)
+enum class AppSidebarStyle(val raw: String) {
+    PLAIN("plain"),
+    TINTED("tinted"),
+    UNKNOWN(""),
+}
+
+internal object AppSidebarStyleSerializer :
+    RawEnumSerializer<AppSidebarStyle>("com.aglyn.contracts.AppSidebarStyle", AppSidebarStyle.entries, AppSidebarStyle.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = AppTextSizeSerializer::class)
+enum class AppTextSize(val raw: String) {
+    EXTRA_LARGE("extraLarge"),
+    LARGE("large"),
+    MEDIUM("medium"),
+    SMALL("small"),
+    SYSTEM("system"),
+    UNKNOWN(""),
+}
+
+internal object AppTextSizeSerializer :
+    RawEnumSerializer<AppTextSize>("com.aglyn.contracts.AppTextSize", AppTextSize.entries, AppTextSize.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = AppThemeNameSerializer::class)
+enum class AppThemeName(val raw: String) {
+    AGLYN("aglyn"),
+    HIGH_CONTRAST("highContrast"),
+    NIGHT("night"),
+    OCEAN("ocean"),
+    QUIET("quiet"),
+    WARM("warm"),
+    UNKNOWN(""),
+}
+
+internal object AppThemeNameSerializer :
+    RawEnumSerializer<AppThemeName>("com.aglyn.contracts.AppThemeName", AppThemeName.entries, AppThemeName.UNKNOWN, { it.raw })
+
+@Serializable
+data class AppThemePrefs(
+    val accent: String,
+    val appearance: AppAppearance,
+    val appIcon: String,
+    val density: AppDensity,
+    val sidebarStyle: AppSidebarStyle,
+    val textSize: AppTextSize,
+    val theme: AppThemeName,
+    val useWorkspaceBrand: Boolean,
+)
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = BindingRefViaSerializer::class)
@@ -1171,6 +1257,7 @@ data class MobilePushData(
     val link: String? = null,
     val orgId: String? = null,
     val type: String,
+    val uid: String? = null,
 )
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
@@ -1205,12 +1292,210 @@ data class NativeCrmPicklist(
 )
 
 @Serializable
+data class NativeNavAction(
+    val icon: NativeNavIcon,
+    val id: String,
+    val label: String,
+    val params: Map<String, String>? = null,
+    val screen: String,
+)
+
+@Serializable
+data class NativeNavConsoleRef(
+    val id: String,
+    val surface: NativeNavConsoleSurface,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = NativeNavConsoleSurfaceSerializer::class)
+enum class NativeNavConsoleSurface(val raw: String) {
+    BILLING_SECTION("billingSection"),
+    CONSOLE_WIDGET("consoleWidget"),
+    HOST_ADMIN_SECTION("hostAdminSection"),
+    HOST_PLUGIN_SECTION("hostPluginSection"),
+    HOST_PLUGIN_TAB("hostPluginTab"),
+    HOST_TAB("hostTab"),
+    NATIVE_ONLY("nativeOnly"),
+    ORG_PLUGIN_SECTION("orgPluginSection"),
+    ORG_PLUGIN_TAB("orgPluginTab"),
+    ORG_SETTINGS_SECTION("orgSettingsSection"),
+    ORG_TAB("orgTab"),
+    SETUP_SECTION("setupSection"),
+    SHELL("shell"),
+    TEAM_SECTION("teamSection"),
+    UNKNOWN(""),
+}
+
+internal object NativeNavConsoleSurfaceSerializer :
+    RawEnumSerializer<NativeNavConsoleSurface>("com.aglyn.contracts.NativeNavConsoleSurface", NativeNavConsoleSurface.entries, NativeNavConsoleSurface.UNKNOWN, { it.raw })
+
+@Serializable
+data class NativeNavContribution(
+    val group: String,
+    val list: NativeNavListId,
+    val row: NativeNavRow,
+)
+
+@Serializable
+data class NativeNavCreateContribution(
+    val item: NativeNavCreateItem,
+    val scope: NativeNavCreateScope,
+)
+
+@Serializable
+data class NativeNavCreateItem(
+    val blockedReason: String? = null,
+    val console: NativeNavConsoleRef,
+    val hostRoles: List<String>? = null,
+    val icon: NativeNavIcon,
+    val id: String,
+    val label: String,
+    val order: Double? = null,
+    val params: Map<String, String>? = null,
+    val permission: String? = null,
+    val planFeature: String? = null,
+    val pluginId: String? = null,
+    val requiresHostAdmin: Boolean? = null,
+    val screen: String,
+)
+
+@Serializable
+data class NativeNavCreateList(
+    val items: List<NativeNavCreateItem>,
+    val scope: NativeNavCreateScope,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = NativeNavCreateScopeSerializer::class)
+enum class NativeNavCreateScope(val raw: String) {
+    SITE("site"),
+    WORKSPACE("workspace"),
+    UNKNOWN(""),
+}
+
+internal object NativeNavCreateScopeSerializer :
+    RawEnumSerializer<NativeNavCreateScope>("com.aglyn.contracts.NativeNavCreateScope", NativeNavCreateScope.entries, NativeNavCreateScope.UNKNOWN, { it.raw })
+
+@Serializable
+data class NativeNavElsewhere(
+    val console: NativeNavConsoleRef,
+    val where: String,
+)
+
+@Serializable
+data class NativeNavGroup(
+    val dynamic: String? = null,
+    val foldable: Boolean,
+    val id: String,
+    val label: String? = null,
+    val rows: List<NativeNavRow>,
+)
+
+@Serializable
+data class NativeNavIcon(
+    val android: String,
+    val apple: String,
+)
+
+@Serializable
+data class NativeNavList(
+    val groups: List<NativeNavGroup>,
+    val id: NativeNavListId,
+    val title: String? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = NativeNavListIdSerializer::class)
+enum class NativeNavListId(val raw: String) {
+    SITE("site"),
+    SITE_SETTINGS("siteSettings"),
+    WORKSPACE("workspace"),
+    WORKSPACE_SETTINGS("workspaceSettings"),
+    UNKNOWN(""),
+}
+
+internal object NativeNavListIdSerializer :
+    RawEnumSerializer<NativeNavListId>("com.aglyn.contracts.NativeNavListId", NativeNavListId.entries, NativeNavListId.UNKNOWN, { it.raw })
+
+@Serializable
+data class NativeNavManifest(
+    val create: List<NativeNavCreateList>? = null,
+    val elsewhere: List<NativeNavElsewhere>,
+    val lists: List<NativeNavList>,
+    val shellScreens: List<String>,
+)
+
+@Serializable
+data class NativeNavRow(
+    val actions: List<NativeNavAction>? = null,
+    val console: NativeNavConsoleRef,
+    val consoleLabel: String? = null,
+    val description: String? = null,
+    val docs: String? = null,
+    val icon: NativeNavIcon,
+    val id: String,
+    val keywords: List<String>? = null,
+    val label: String,
+    val order: Double? = null,
+    val params: Map<String, String>? = null,
+    val pluginId: String? = null,
+    val requiresHostAdmin: Boolean? = null,
+    val screen: String,
+    val sections: List<NativeNavSection>? = null,
+)
+
+@Serializable
+data class NativeNavSection(
+    val console: NativeNavConsoleRef,
+    val docs: String? = null,
+    val id: String,
+    val label: String,
+    val params: Map<String, String>? = null,
+    val pluginId: String? = null,
+    val screen: String,
+)
+
+@Serializable
 data class NotificationSound(
     val android: String,
     val apple: String,
     val id: String,
     val label: String,
     val web: String,
+)
+
+@Serializable
+data class OneBoxGroup(
+    val failed: Boolean,
+    val group: String,
+    val heading: String,
+    val matched: Long,
+    val nextCursor: Long? = null,
+    val noun: String,
+    val rows: List<OneBoxRow>,
+    val searched: Long,
+    val truncated: Boolean,
+)
+
+@Serializable
+data class OneBoxResponse(
+    val groups: List<OneBoxGroup>,
+    val hostId: String? = null,
+    val orgId: String? = null,
+    val query: String,
+)
+
+@Serializable
+data class OneBoxRow(
+    val detail: String? = null,
+    val group: String,
+    val hostId: String? = null,
+    val id: String,
+    val label: String,
+    val link: String? = null,
+    val orgId: String? = null,
+    val params: Map<String, String>? = null,
+    val screen: String? = null,
 )
 
 @Serializable
@@ -1711,6 +1996,24 @@ data class PickupLocationSettings(
     val hours: String? = null,
     val instructions: String? = null,
     val readyWithinMinutes: Double? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PinOrgOutcomeSerializer::class)
+enum class PinOrgOutcome(val raw: String) {
+    ALREADY_PINNED("alreadyPinned"),
+    FULL("full"),
+    PINNED("pinned"),
+    UNKNOWN(""),
+}
+
+internal object PinOrgOutcomeSerializer :
+    RawEnumSerializer<PinOrgOutcome>("com.aglyn.contracts.PinOrgOutcome", PinOrgOutcome.entries, PinOrgOutcome.UNKNOWN, { it.raw })
+
+@Serializable
+data class PinOrgResult(
+    val outcome: PinOrgOutcome,
+    val pinned: List<String>,
 )
 
 @Serializable
@@ -2339,6 +2642,15 @@ data class ProductVariant(
 )
 
 @Serializable
+data class RailWorkspaces(
+    val allTile: Boolean,
+    val pinned: List<String>,
+    val recent: List<String>,
+    val rest: List<String>,
+    val total: Long,
+)
+
+@Serializable
 data class ReceiptData(
     val banner: String? = null,
     val barcode: String? = null,
@@ -2377,6 +2689,44 @@ data class ReceiptLine(
 data class ReceiptTender(
     val amountCents: Double,
     val label: String,
+)
+
+@Serializable
+data class RecentItem(
+    val hostId: String? = null,
+    val id: String,
+    val kind: String,
+    val label: String,
+    val openedAtMs: Long,
+    val orgId: String,
+    val params: Map<String, String>? = null,
+    val screen: String,
+)
+
+@Serializable
+data class ResolvedCreateItem(
+    val blocked: Boolean,
+    val blockedReason: String? = null,
+    val console: NativeNavConsoleRef,
+    val hostRoles: List<String>? = null,
+    val icon: NativeNavIcon,
+    val id: String,
+    val label: String,
+    val order: Double? = null,
+    val params: Map<String, String>? = null,
+    val permission: String? = null,
+    val planFeature: String? = null,
+    val pluginId: String? = null,
+    val reason: String? = null,
+    val requiresHostAdmin: Boolean? = null,
+    val screen: String,
+)
+
+@Serializable
+data class ResolvedNavList(
+    val groups: List<NativeNavGroup>,
+    val id: NativeNavListId,
+    val title: String? = null,
 )
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
@@ -2513,6 +2863,54 @@ internal object SiteJourneyStepTypeSerializer :
     RawEnumSerializer<SiteJourneyStepType>("com.aglyn.contracts.SiteJourneyStepType", SiteJourneyStepType.entries, SiteJourneyStepType.UNKNOWN, { it.raw })
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = StarColorSerializer::class)
+enum class StarColor(val raw: String) {
+    BLUE("blue"),
+    GREEN("green"),
+    GREY("grey"),
+    ORANGE("orange"),
+    PINK("pink"),
+    PURPLE("purple"),
+    RED("red"),
+    YELLOW("yellow"),
+    UNKNOWN(""),
+}
+
+internal object StarColorSerializer :
+    RawEnumSerializer<StarColor>("com.aglyn.contracts.StarColor", StarColor.entries, StarColor.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = StarOutcomeSerializer::class)
+enum class StarOutcome(val raw: String) {
+    FULL("full"),
+    STARRED("starred"),
+    UNSTARRED("unstarred"),
+    UNKNOWN(""),
+}
+
+internal object StarOutcomeSerializer :
+    RawEnumSerializer<StarOutcome>("com.aglyn.contracts.StarOutcome", StarOutcome.entries, StarOutcome.UNKNOWN, { it.raw })
+
+@Serializable
+data class StarredItem(
+    val color: StarColor? = null,
+    val hostId: String? = null,
+    val id: String,
+    val kind: String,
+    val label: String,
+    val orgId: String,
+    val params: Map<String, String>? = null,
+    val screen: String,
+    val starredAtMs: Long,
+)
+
+@Serializable
+data class StarResult(
+    val outcome: StarOutcome,
+    val starred: List<StarredItem>,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = StorefrontTaxModeSerializer::class)
 enum class StorefrontTaxMode(val raw: String) {
     MANUAL("manual"),
@@ -2567,7 +2965,36 @@ data class WhereUsedResult(
 )
 
 @Serializable
+data class WorkspaceColor(
+    val color: String? = null,
+    val source: WorkspaceColorSource,
+    val tintsApp: Boolean,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = WorkspaceColorSourceSerializer::class)
+enum class WorkspaceColorSource(val raw: String) {
+    BRAND("brand"),
+    LOGO("logo"),
+    NONE("none"),
+    PICKED("picked"),
+    UNKNOWN(""),
+}
+
+internal object WorkspaceColorSourceSerializer :
+    RawEnumSerializer<WorkspaceColorSource>("com.aglyn.contracts.WorkspaceColorSource", WorkspaceColorSource.entries, WorkspaceColorSource.UNKNOWN, { it.raw })
+
+@Serializable
 internal data class ContractValuesPart1(
+    @SerialName("ACCOUNT_COLOR_PATTERN") val accountColorPattern: String,
+    @SerialName("ACCOUNT_ITEM_LABEL_MAX") val accountItemLabelMax: Long,
+    @SerialName("APP_APPEARANCES") val appAppearances: List<AppAppearance>,
+    @SerialName("APP_DENSITIES") val appDensities: List<AppDensity>,
+    @SerialName("APP_ICON_ID_MAX") val appIconIdMax: Long,
+    @SerialName("APP_SIDEBAR_STYLES") val appSidebarStyles: List<AppSidebarStyle>,
+    @SerialName("APP_TEXT_SIZES") val appTextSizes: List<AppTextSize>,
+    @SerialName("APP_THEME_FIELD") val appThemeField: String,
+    @SerialName("APP_THEME_NAMES") val appThemeNames: List<AppThemeName>,
     @SerialName("AREA_SERVED_MAX") val areaServedMax: Long,
     @SerialName("AREA_SERVED_NAME_MAX_LENGTH") val areaServedNameMaxLength: Long,
     @SerialName("ARTIFACT_TYPE_LABELS") val artifactTypeLabels: Map<String, String>,
@@ -2607,6 +3034,10 @@ internal data class ContractValuesPart1(
     @SerialName("CRM_ACTIVITY_DIRECTION_LABELS") val crmActivityDirectionLabels: Map<String, String>,
     @SerialName("CRM_ACTIVITY_KIND_LABELS") val crmActivityKindLabels: Map<String, String>,
     @SerialName("CRM_EMAIL_BODY_MAX") val crmEmailBodyMax: Long,
+)
+
+@Serializable
+internal data class ContractValuesPart2(
     @SerialName("CRM_EMAIL_SUBJECT_MAX") val crmEmailSubjectMax: Long,
     @SerialName("CRM_FIELD_OBJECT_LABELS") val crmFieldObjectLabels: Map<String, String>,
     @SerialName("CRM_LEAD_STATUS_LABELS") val crmLeadStatusLabels: Map<String, String>,
@@ -2616,12 +3047,9 @@ internal data class ContractValuesPart1(
     @SerialName("DATASET_AUTHORABLE_FIELD_TYPES") val datasetAuthorableFieldTypes: List<DatasetFieldType>,
     @SerialName("DATASET_FIELD_TYPE_LABELS") val datasetFieldTypeLabels: Map<String, String>,
     @SerialName("DATASET_FIELD_TYPES") val datasetFieldTypes: List<DatasetFieldType>,
-)
-
-@Serializable
-internal data class ContractValuesPart2(
     @SerialName("DATASET_FILTER_PREFIX_MAX") val datasetFilterPrefixMax: Long,
     @SerialName("DEAL_LIST_DECLARATION") val dealListDeclaration: ListQueryDeclaration,
+    @SerialName("DEFAULT_APP_THEME") val defaultAppTheme: AppThemePrefs,
     @SerialName("DEFAULT_DEAL_STAGES") val defaultDealStages: List<CrmDealStage>,
     @SerialName("DEFAULT_NOTIFICATION_SOUND") val defaultNotificationSound: String,
     @SerialName("DEFAULT_TITLE_PATTERN") val defaultTitlePattern: String,
@@ -2658,6 +3086,10 @@ internal data class ContractValuesPart2(
     @SerialName("FUNNEL_LABEL_MAX") val funnelLabelMax: Long,
     @SerialName("FUNNEL_MAX_RANGE_DAYS") val funnelMaxRangeDays: Long,
     @SerialName("FUNNEL_MAX_STEPS") val funnelMaxSteps: Long,
+)
+
+@Serializable
+internal data class ContractValuesPart3(
     @SerialName("FUNNEL_MIN_STEPS") val funnelMinSteps: Long,
     @SerialName("FUNNEL_NAME_MAX") val funnelNameMax: Long,
     @SerialName("FUNNEL_STEP_TYPE_LABELS") val funnelStepTypeLabels: Map<String, String>,
@@ -2668,10 +3100,6 @@ internal data class ContractValuesPart2(
     @SerialName("IMAGE_EDIT_ASPECTS_JSON") val imageEditAspectsJson: String,
     @SerialName("IMAGE_EDIT_JPEG_QUALITY") val imageEditJpegQuality: Double,
     @SerialName("IMAGE_EDIT_PREVIEW_MAX") val imageEditPreviewMax: Long,
-)
-
-@Serializable
-internal data class ContractValuesPart3(
     @SerialName("INSTALL_TARGETS") val installTargets: Map<String, List<InstallTarget>>,
     @SerialName("LABEL_CODE_MAX_LENGTH") val labelCodeMaxLength: Long,
     @SerialName("LABEL_SIZES") val labelSizes: List<LabelSize>,
@@ -2710,7 +3138,14 @@ internal data class ContractValuesPart3(
     @SerialName("NAME_TOKEN_LIMIT") val nameTokenLimit: Long,
     @SerialName("NAME_TOKEN_MAX_PREFIX") val nameTokenMaxPrefix: Long,
     @SerialName("NATIVE_CAMPAIGN_SEND_STATUSES") val nativeCampaignSendStatuses: List<NativeCampaignSendStatusesItem>,
+)
+
+@Serializable
+internal data class ContractValuesPart4(
     @SerialName("NATIVE_CONTACT_LIFECYCLE_STAGES") val nativeContactLifecycleStages: List<String>,
+    @SerialName("NATIVE_CREATE_PERMISSION_REASON") val nativeCreatePermissionReason: String,
+    @SerialName("NATIVE_CREATE_PLAN_REASON") val nativeCreatePlanReason: String,
+    @SerialName("NATIVE_CREATE_SITE_ROLE_REASON") val nativeCreateSiteRoleReason: String,
     @SerialName("NATIVE_CRM_ACTIVITY_DIRECTIONS") val nativeCrmActivityDirections: Map<String, List<String>>,
     @SerialName("NATIVE_CRM_ACTIVITY_KINDS") val nativeCrmActivityKinds: List<String>,
     @SerialName("NATIVE_CRM_FIELD_OBJECTS") val nativeCrmFieldObjects: List<String>,
@@ -2719,15 +3154,19 @@ internal data class ContractValuesPart3(
     @SerialName("NATIVE_CRM_PICKLISTS") val nativeCrmPicklists: List<NativeCrmPicklist>,
     @SerialName("NATIVE_CRM_REPORT_PERIODS") val nativeCrmReportPeriods: List<String>,
     @SerialName("NATIVE_CRM_TASK_KINDS") val nativeCrmTaskKinds: List<String>,
+    @SerialName("NATIVE_NAV_MANIFEST") val nativeNavManifest: NativeNavManifest,
+    @SerialName("NATIVE_NAV_SHELL_SCREENS") val nativeNavShellScreens: List<String>,
     @SerialName("NATIVE_SITE_CAMPAIGNS_QUERY") val nativeSiteCampaignsQuery: ListQueryDeclaration,
-)
-
-@Serializable
-internal data class ContractValuesPart4(
     @SerialName("NATIVE_SITE_EMAILS_QUERY") val nativeSiteEmailsQuery: ListQueryDeclaration,
     @SerialName("NOTHING_MOVED") val nothingMoved: String,
     @SerialName("NOTIFICATION_SOUND_FIELD") val notificationSoundField: String,
     @SerialName("NOTIFICATION_SOUNDS") val notificationSounds: List<NotificationSound>,
+    @SerialName("ONE_BOX_QUERY_MAX") val oneBoxQueryMax: Long,
+    @SerialName("ONE_BOX_ROWS_DEFAULT") val oneBoxRowsDefault: Long,
+    @SerialName("ONE_BOX_ROWS_MAX") val oneBoxRowsMax: Long,
+    @SerialName("ONE_BOX_SCREENS_GROUP") val oneBoxScreensGroup: String,
+    @SerialName("ONE_BOX_SEARCH_PATH") val oneBoxSearchPath: String,
+    @SerialName("ONE_BOX_WORKSPACES_GROUP") val oneBoxWorkspacesGroup: String,
     @SerialName("OPEN_DISPUTE_CLAUSE") val openDisputeClause: ListFilterClause,
     @SerialName("ORDER_CHANNEL_LABELS") val orderChannelLabels: Map<String, String>,
     @SerialName("ORDER_CHANNEL_OPTIONS") val orderChannelOptions: List<ListFilterOption>,
@@ -2751,12 +3190,18 @@ internal data class ContractValuesPart4(
     @SerialName("OUTREACH_ENROLLMENT_LIST_QUERY") val outreachEnrollmentListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_MAX_EMAIL_STEPS") val outreachMaxEmailSteps: Long,
     @SerialName("OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS") val outreachMaxStepDelayBusinessDays: Long,
+)
+
+@Serializable
+internal data class ContractValuesPart5(
     @SerialName("OUTREACH_MAX_STEPS") val outreachMaxSteps: Long,
     @SerialName("OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS") val outreachMinEmailFollowUpBusinessDays: Long,
     @SerialName("OUTREACH_SEQUENCE_LIST_QUERY") val outreachSequenceListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_SEQUENCE_NAME_MAX") val outreachSequenceNameMax: Long,
     @SerialName("OUTREACH_TASK_TITLE_MAX") val outreachTaskTitleMax: Long,
     @SerialName("PAYMENT_ACCEPTED_MAX_LENGTH") val paymentAcceptedMaxLength: Long,
+    @SerialName("PINNED_ORGS_FIELD") val pinnedOrgsField: String,
+    @SerialName("PINNED_ORGS_MAX") val pinnedOrgsMax: Long,
     @SerialName("POS_CASH_EVENT_LABELS") val posCashEventLabels: Map<String, String>,
     @SerialName("POS_DISPLAY_MAX_LINES") val posDisplayMaxLines: Long,
     @SerialName("POS_DISPLAY_PAIRING_TTL_MS") val posDisplayPairingTtlMs: Double,
@@ -2772,10 +3217,6 @@ internal data class ContractValuesPart4(
     @SerialName("POS_KIOSK_UNLOCK_LOCKOUT_MS") val posKioskUnlockLockoutMs: Double,
     @SerialName("POS_KIOSK_UNLOCK_MAX_ATTEMPTS") val posKioskUnlockMaxAttempts: Long,
     @SerialName("POS_KIOSK_UNLOCK_TTL_MS") val posKioskUnlockTtlMs: Double,
-)
-
-@Serializable
-internal data class ContractValuesPart5(
     @SerialName("POS_OFFLINE_CLOCK_SKEW_MS") val posOfflineClockSkewMs: Double,
     @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
     @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
@@ -2796,6 +3237,16 @@ internal data class ContractValuesPart5(
     @SerialName("PRODUCT_LIST_OPTIONS") val productListOptions: Map<String, List<ListFilterOption>>,
     @SerialName("PRODUCT_LIST_QUERY") val productListQuery: ListQueryDeclaration,
     @SerialName("PRODUCT_LIST_SELECT_FIELDS") val productListSelectFields: List<String>,
+    @SerialName("RAIL_ALL_WORKSPACES_AT_MOST") val railAllWorkspacesAtMost: Long,
+    @SerialName("RAIL_RECENT_ORGS") val railRecentOrgs: Long,
+    @SerialName("RECENT_ORGS_FIELD") val recentOrgsField: String,
+    @SerialName("RECENT_ORGS_MAX") val recentOrgsMax: Long,
+    @SerialName("RECENTS_FIELD") val recentsField: String,
+)
+
+@Serializable
+internal data class ContractValuesPart6(
+    @SerialName("RECENTS_MAX") val recentsMax: Long,
     @SerialName("REFUND_BLOCKED_BY_DISPUTE") val refundBlockedByDispute: String,
     @SerialName("REMINDER_WINDOW_END_HOURS") val reminderWindowEndHours: Long,
     @SerialName("REMINDER_WINDOW_START_HOURS") val reminderWindowStartHours: Long,
@@ -2819,15 +3270,14 @@ internal data class ContractValuesPart5(
     @SerialName("SITE_JOURNEY_KEY_MAX") val siteJourneyKeyMax: Long,
     @SerialName("SITE_LIST_DECLARATION") val siteListDeclaration: ListQueryDeclaration,
     @SerialName("SITE_MEMBER_LIST_QUERY") val siteMemberListQuery: ListQueryDeclaration,
+    @SerialName("STAR_COLORS") val starColors: List<StarColor>,
+    @SerialName("STARRED_FIELD") val starredField: String,
+    @SerialName("STARRED_MAX") val starredMax: Long,
     @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
     @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
     @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
     @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
     @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
-)
-
-@Serializable
-internal data class ContractValuesPart6(
     @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
     @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
@@ -2836,6 +3286,8 @@ internal data class ContractValuesPart6(
     @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
     @SerialName("TIME_ZONE_DEFAULT_LABEL") val timeZoneDefaultLabel: String,
     @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
+    @SerialName("WORKSPACE_COLORS_FIELD") val workspaceColorsField: String,
+    @SerialName("WORKSPACE_COLORS_MAX") val workspaceColorsMax: Long,
 )
 
 /**
@@ -2851,6 +3303,15 @@ class ContractValues internal constructor(
     private val part5: ContractValuesPart5,
     private val part6: ContractValuesPart6,
 ) {
+    val accountColorPattern: String get() = part1.accountColorPattern
+    val accountItemLabelMax: Long get() = part1.accountItemLabelMax
+    val appAppearances: List<AppAppearance> get() = part1.appAppearances
+    val appDensities: List<AppDensity> get() = part1.appDensities
+    val appIconIdMax: Long get() = part1.appIconIdMax
+    val appSidebarStyles: List<AppSidebarStyle> get() = part1.appSidebarStyles
+    val appTextSizes: List<AppTextSize> get() = part1.appTextSizes
+    val appThemeField: String get() = part1.appThemeField
+    val appThemeNames: List<AppThemeName> get() = part1.appThemeNames
     val areaServedMax: Long get() = part1.areaServedMax
     val areaServedNameMaxLength: Long get() = part1.areaServedNameMaxLength
     val artifactTypeLabels: Map<String, String> get() = part1.artifactTypeLabels
@@ -2890,17 +3351,18 @@ class ContractValues internal constructor(
     val crmActivityDirectionLabels: Map<String, String> get() = part1.crmActivityDirectionLabels
     val crmActivityKindLabels: Map<String, String> get() = part1.crmActivityKindLabels
     val crmEmailBodyMax: Long get() = part1.crmEmailBodyMax
-    val crmEmailSubjectMax: Long get() = part1.crmEmailSubjectMax
-    val crmFieldObjectLabels: Map<String, String> get() = part1.crmFieldObjectLabels
-    val crmLeadStatusLabels: Map<String, String> get() = part1.crmLeadStatusLabels
-    val crmReportPeriodLabels: Map<String, String> get() = part1.crmReportPeriodLabels
-    val crmTaskKindLabels: Map<String, String> get() = part1.crmTaskKindLabels
-    val crossMaxDepth: Long get() = part1.crossMaxDepth
-    val datasetAuthorableFieldTypes: List<DatasetFieldType> get() = part1.datasetAuthorableFieldTypes
-    val datasetFieldTypeLabels: Map<String, String> get() = part1.datasetFieldTypeLabels
-    val datasetFieldTypes: List<DatasetFieldType> get() = part1.datasetFieldTypes
+    val crmEmailSubjectMax: Long get() = part2.crmEmailSubjectMax
+    val crmFieldObjectLabels: Map<String, String> get() = part2.crmFieldObjectLabels
+    val crmLeadStatusLabels: Map<String, String> get() = part2.crmLeadStatusLabels
+    val crmReportPeriodLabels: Map<String, String> get() = part2.crmReportPeriodLabels
+    val crmTaskKindLabels: Map<String, String> get() = part2.crmTaskKindLabels
+    val crossMaxDepth: Long get() = part2.crossMaxDepth
+    val datasetAuthorableFieldTypes: List<DatasetFieldType> get() = part2.datasetAuthorableFieldTypes
+    val datasetFieldTypeLabels: Map<String, String> get() = part2.datasetFieldTypeLabels
+    val datasetFieldTypes: List<DatasetFieldType> get() = part2.datasetFieldTypes
     val datasetFilterPrefixMax: Long get() = part2.datasetFilterPrefixMax
     val dealListDeclaration: ListQueryDeclaration get() = part2.dealListDeclaration
+    val defaultAppTheme: AppThemePrefs get() = part2.defaultAppTheme
     val defaultDealStages: List<CrmDealStage> get() = part2.defaultDealStages
     val defaultNotificationSound: String get() = part2.defaultNotificationSound
     val defaultTitlePattern: String get() = part2.defaultTitlePattern
@@ -2937,16 +3399,16 @@ class ContractValues internal constructor(
     val funnelLabelMax: Long get() = part2.funnelLabelMax
     val funnelMaxRangeDays: Long get() = part2.funnelMaxRangeDays
     val funnelMaxSteps: Long get() = part2.funnelMaxSteps
-    val funnelMinSteps: Long get() = part2.funnelMinSteps
-    val funnelNameMax: Long get() = part2.funnelNameMax
-    val funnelStepTypeLabels: Map<String, String> get() = part2.funnelStepTypeLabels
-    val funnelsMaxPerSite: Long get() = part2.funnelsMaxPerSite
-    val heldLicenceQuery: ListQueryDeclaration get() = part2.heldLicenceQuery
-    val hostEvents: List<HostEventDeclaration> get() = part2.hostEvents
-    val hostVariableTypeLabels: Map<String, String> get() = part2.hostVariableTypeLabels
-    val imageEditAspectsJson: String get() = part2.imageEditAspectsJson
-    val imageEditJpegQuality: Double get() = part2.imageEditJpegQuality
-    val imageEditPreviewMax: Long get() = part2.imageEditPreviewMax
+    val funnelMinSteps: Long get() = part3.funnelMinSteps
+    val funnelNameMax: Long get() = part3.funnelNameMax
+    val funnelStepTypeLabels: Map<String, String> get() = part3.funnelStepTypeLabels
+    val funnelsMaxPerSite: Long get() = part3.funnelsMaxPerSite
+    val heldLicenceQuery: ListQueryDeclaration get() = part3.heldLicenceQuery
+    val hostEvents: List<HostEventDeclaration> get() = part3.hostEvents
+    val hostVariableTypeLabels: Map<String, String> get() = part3.hostVariableTypeLabels
+    val imageEditAspectsJson: String get() = part3.imageEditAspectsJson
+    val imageEditJpegQuality: Double get() = part3.imageEditJpegQuality
+    val imageEditPreviewMax: Long get() = part3.imageEditPreviewMax
     val installTargets: Map<String, List<InstallTarget>> get() = part3.installTargets
     val labelCodeMaxLength: Long get() = part3.labelCodeMaxLength
     val labelSizes: List<LabelSize> get() = part3.labelSizes
@@ -2985,20 +3447,31 @@ class ContractValues internal constructor(
     val nameTokenLimit: Long get() = part3.nameTokenLimit
     val nameTokenMaxPrefix: Long get() = part3.nameTokenMaxPrefix
     val nativeCampaignSendStatuses: List<NativeCampaignSendStatusesItem> get() = part3.nativeCampaignSendStatuses
-    val nativeContactLifecycleStages: List<String> get() = part3.nativeContactLifecycleStages
-    val nativeCrmActivityDirections: Map<String, List<String>> get() = part3.nativeCrmActivityDirections
-    val nativeCrmActivityKinds: List<String> get() = part3.nativeCrmActivityKinds
-    val nativeCrmFieldObjects: List<String> get() = part3.nativeCrmFieldObjects
-    val nativeCrmLeadOpenStatuses: List<String> get() = part3.nativeCrmLeadOpenStatuses
-    val nativeCrmLeadStatuses: List<String> get() = part3.nativeCrmLeadStatuses
-    val nativeCrmPicklists: List<NativeCrmPicklist> get() = part3.nativeCrmPicklists
-    val nativeCrmReportPeriods: List<String> get() = part3.nativeCrmReportPeriods
-    val nativeCrmTaskKinds: List<String> get() = part3.nativeCrmTaskKinds
-    val nativeSiteCampaignsQuery: ListQueryDeclaration get() = part3.nativeSiteCampaignsQuery
+    val nativeContactLifecycleStages: List<String> get() = part4.nativeContactLifecycleStages
+    val nativeCreatePermissionReason: String get() = part4.nativeCreatePermissionReason
+    val nativeCreatePlanReason: String get() = part4.nativeCreatePlanReason
+    val nativeCreateSiteRoleReason: String get() = part4.nativeCreateSiteRoleReason
+    val nativeCrmActivityDirections: Map<String, List<String>> get() = part4.nativeCrmActivityDirections
+    val nativeCrmActivityKinds: List<String> get() = part4.nativeCrmActivityKinds
+    val nativeCrmFieldObjects: List<String> get() = part4.nativeCrmFieldObjects
+    val nativeCrmLeadOpenStatuses: List<String> get() = part4.nativeCrmLeadOpenStatuses
+    val nativeCrmLeadStatuses: List<String> get() = part4.nativeCrmLeadStatuses
+    val nativeCrmPicklists: List<NativeCrmPicklist> get() = part4.nativeCrmPicklists
+    val nativeCrmReportPeriods: List<String> get() = part4.nativeCrmReportPeriods
+    val nativeCrmTaskKinds: List<String> get() = part4.nativeCrmTaskKinds
+    val nativeNavManifest: NativeNavManifest get() = part4.nativeNavManifest
+    val nativeNavShellScreens: List<String> get() = part4.nativeNavShellScreens
+    val nativeSiteCampaignsQuery: ListQueryDeclaration get() = part4.nativeSiteCampaignsQuery
     val nativeSiteEmailsQuery: ListQueryDeclaration get() = part4.nativeSiteEmailsQuery
     val nothingMoved: String get() = part4.nothingMoved
     val notificationSoundField: String get() = part4.notificationSoundField
     val notificationSounds: List<NotificationSound> get() = part4.notificationSounds
+    val oneBoxQueryMax: Long get() = part4.oneBoxQueryMax
+    val oneBoxRowsDefault: Long get() = part4.oneBoxRowsDefault
+    val oneBoxRowsMax: Long get() = part4.oneBoxRowsMax
+    val oneBoxScreensGroup: String get() = part4.oneBoxScreensGroup
+    val oneBoxSearchPath: String get() = part4.oneBoxSearchPath
+    val oneBoxWorkspacesGroup: String get() = part4.oneBoxWorkspacesGroup
     val openDisputeClause: ListFilterClause get() = part4.openDisputeClause
     val orderChannelLabels: Map<String, String> get() = part4.orderChannelLabels
     val orderChannelOptions: List<ListFilterOption> get() = part4.orderChannelOptions
@@ -3022,27 +3495,29 @@ class ContractValues internal constructor(
     val outreachEnrollmentListQuery: ListQueryDeclaration get() = part4.outreachEnrollmentListQuery
     val outreachMaxEmailSteps: Long get() = part4.outreachMaxEmailSteps
     val outreachMaxStepDelayBusinessDays: Long get() = part4.outreachMaxStepDelayBusinessDays
-    val outreachMaxSteps: Long get() = part4.outreachMaxSteps
-    val outreachMinEmailFollowUpBusinessDays: Long get() = part4.outreachMinEmailFollowUpBusinessDays
-    val outreachSequenceListQuery: ListQueryDeclaration get() = part4.outreachSequenceListQuery
-    val outreachSequenceNameMax: Long get() = part4.outreachSequenceNameMax
-    val outreachTaskTitleMax: Long get() = part4.outreachTaskTitleMax
-    val paymentAcceptedMaxLength: Long get() = part4.paymentAcceptedMaxLength
-    val posCashEventLabels: Map<String, String> get() = part4.posCashEventLabels
-    val posDisplayMaxLines: Long get() = part4.posDisplayMaxLines
-    val posDisplayPairingTtlMs: Double get() = part4.posDisplayPairingTtlMs
-    val posDisplayThanksMs: Long get() = part4.posDisplayThanksMs
-    val posKioskCatalogLimit: Long get() = part4.posKioskCatalogLimit
-    val posKioskDoneSeconds: Long get() = part4.posKioskDoneSeconds
-    val posKioskIdleSecondsDefault: Long get() = part4.posKioskIdleSecondsDefault
-    val posKioskIdleSecondsMax: Long get() = part4.posKioskIdleSecondsMax
-    val posKioskIdleSecondsMin: Long get() = part4.posKioskIdleSecondsMin
-    val posKioskIdleWarningSeconds: Long get() = part4.posKioskIdleWarningSeconds
-    val posKioskMaxLines: Long get() = part4.posKioskMaxLines
-    val posKioskMaxQuantity: Long get() = part4.posKioskMaxQuantity
-    val posKioskUnlockLockoutMs: Double get() = part4.posKioskUnlockLockoutMs
-    val posKioskUnlockMaxAttempts: Long get() = part4.posKioskUnlockMaxAttempts
-    val posKioskUnlockTtlMs: Double get() = part4.posKioskUnlockTtlMs
+    val outreachMaxSteps: Long get() = part5.outreachMaxSteps
+    val outreachMinEmailFollowUpBusinessDays: Long get() = part5.outreachMinEmailFollowUpBusinessDays
+    val outreachSequenceListQuery: ListQueryDeclaration get() = part5.outreachSequenceListQuery
+    val outreachSequenceNameMax: Long get() = part5.outreachSequenceNameMax
+    val outreachTaskTitleMax: Long get() = part5.outreachTaskTitleMax
+    val paymentAcceptedMaxLength: Long get() = part5.paymentAcceptedMaxLength
+    val pinnedOrgsField: String get() = part5.pinnedOrgsField
+    val pinnedOrgsMax: Long get() = part5.pinnedOrgsMax
+    val posCashEventLabels: Map<String, String> get() = part5.posCashEventLabels
+    val posDisplayMaxLines: Long get() = part5.posDisplayMaxLines
+    val posDisplayPairingTtlMs: Double get() = part5.posDisplayPairingTtlMs
+    val posDisplayThanksMs: Long get() = part5.posDisplayThanksMs
+    val posKioskCatalogLimit: Long get() = part5.posKioskCatalogLimit
+    val posKioskDoneSeconds: Long get() = part5.posKioskDoneSeconds
+    val posKioskIdleSecondsDefault: Long get() = part5.posKioskIdleSecondsDefault
+    val posKioskIdleSecondsMax: Long get() = part5.posKioskIdleSecondsMax
+    val posKioskIdleSecondsMin: Long get() = part5.posKioskIdleSecondsMin
+    val posKioskIdleWarningSeconds: Long get() = part5.posKioskIdleWarningSeconds
+    val posKioskMaxLines: Long get() = part5.posKioskMaxLines
+    val posKioskMaxQuantity: Long get() = part5.posKioskMaxQuantity
+    val posKioskUnlockLockoutMs: Double get() = part5.posKioskUnlockLockoutMs
+    val posKioskUnlockMaxAttempts: Long get() = part5.posKioskUnlockMaxAttempts
+    val posKioskUnlockTtlMs: Double get() = part5.posKioskUnlockTtlMs
     val posOfflineClockSkewMs: Double get() = part5.posOfflineClockSkewMs
     val posOfflineDisabledTenders: Map<String, String> get() = part5.posOfflineDisabledTenders
     val posOfflineFlagLabels: Map<String, String> get() = part5.posOfflineFlagLabels
@@ -3063,34 +3538,43 @@ class ContractValues internal constructor(
     val productListOptions: Map<String, List<ListFilterOption>> get() = part5.productListOptions
     val productListQuery: ListQueryDeclaration get() = part5.productListQuery
     val productListSelectFields: List<String> get() = part5.productListSelectFields
-    val refundBlockedByDispute: String get() = part5.refundBlockedByDispute
-    val reminderWindowEndHours: Long get() = part5.reminderWindowEndHours
-    val reminderWindowStartHours: Long get() = part5.reminderWindowStartHours
-    val replyBodyMax: Long get() = part5.replyBodyMax
-    val replySubjectMax: Long get() = part5.replySubjectMax
-    val reservedScreenRouteSegments: List<String> get() = part5.reservedScreenRouteSegments
-    val returnReasonLabels: Map<String, String> get() = part5.returnReasonLabels
-    val returnReasons: List<ReturnReason> get() = part5.returnReasons
-    val scopedSearchJoin: String get() = part5.scopedSearchJoin
-    val screenRootPath: String get() = part5.screenRootPath
-    val screenSlugPathSeparatorMessage: String get() = part5.screenSlugPathSeparatorMessage
-    val searchEngineVerificationLabels: Map<String, String> get() = part5.searchEngineVerificationLabels
-    val searchEngineVerificationMetaNames: Map<String, String> get() = part5.searchEngineVerificationMetaNames
-    val seoFindingLabels: Map<String, String> get() = part5.seoFindingLabels
-    val seoKeywordLinesMaxChars: Long get() = part5.seoKeywordLinesMaxChars
-    val seoMaxKeywords: Long get() = part5.seoMaxKeywords
-    val shippingCostMaxCents: Long get() = part5.shippingCostMaxCents
-    val siteCardsPageSize: Long get() = part5.siteCardsPageSize
-    val siteFilterHeaders: Map<String, String> get() = part5.siteFilterHeaders
-    val siteFilterOptions: SiteFilterOptions get() = part5.siteFilterOptions
-    val siteJourneyKeyMax: Long get() = part5.siteJourneyKeyMax
-    val siteListDeclaration: ListQueryDeclaration get() = part5.siteListDeclaration
-    val siteMemberListQuery: ListQueryDeclaration get() = part5.siteMemberListQuery
-    val submissionFilterHeaders: Map<String, String> get() = part5.submissionFilterHeaders
-    val submissionListQuery: ListQueryDeclaration get() = part5.submissionListQuery
-    val submissionReadOptions: List<ListFilterOption> get() = part5.submissionReadOptions
-    val suppressionListQuery: ListQueryDeclaration get() = part5.suppressionListQuery
-    val taskListDeclaration: ListQueryDeclaration get() = part5.taskListDeclaration
+    val railAllWorkspacesAtMost: Long get() = part5.railAllWorkspacesAtMost
+    val railRecentOrgs: Long get() = part5.railRecentOrgs
+    val recentOrgsField: String get() = part5.recentOrgsField
+    val recentOrgsMax: Long get() = part5.recentOrgsMax
+    val recentsField: String get() = part5.recentsField
+    val recentsMax: Long get() = part6.recentsMax
+    val refundBlockedByDispute: String get() = part6.refundBlockedByDispute
+    val reminderWindowEndHours: Long get() = part6.reminderWindowEndHours
+    val reminderWindowStartHours: Long get() = part6.reminderWindowStartHours
+    val replyBodyMax: Long get() = part6.replyBodyMax
+    val replySubjectMax: Long get() = part6.replySubjectMax
+    val reservedScreenRouteSegments: List<String> get() = part6.reservedScreenRouteSegments
+    val returnReasonLabels: Map<String, String> get() = part6.returnReasonLabels
+    val returnReasons: List<ReturnReason> get() = part6.returnReasons
+    val scopedSearchJoin: String get() = part6.scopedSearchJoin
+    val screenRootPath: String get() = part6.screenRootPath
+    val screenSlugPathSeparatorMessage: String get() = part6.screenSlugPathSeparatorMessage
+    val searchEngineVerificationLabels: Map<String, String> get() = part6.searchEngineVerificationLabels
+    val searchEngineVerificationMetaNames: Map<String, String> get() = part6.searchEngineVerificationMetaNames
+    val seoFindingLabels: Map<String, String> get() = part6.seoFindingLabels
+    val seoKeywordLinesMaxChars: Long get() = part6.seoKeywordLinesMaxChars
+    val seoMaxKeywords: Long get() = part6.seoMaxKeywords
+    val shippingCostMaxCents: Long get() = part6.shippingCostMaxCents
+    val siteCardsPageSize: Long get() = part6.siteCardsPageSize
+    val siteFilterHeaders: Map<String, String> get() = part6.siteFilterHeaders
+    val siteFilterOptions: SiteFilterOptions get() = part6.siteFilterOptions
+    val siteJourneyKeyMax: Long get() = part6.siteJourneyKeyMax
+    val siteListDeclaration: ListQueryDeclaration get() = part6.siteListDeclaration
+    val siteMemberListQuery: ListQueryDeclaration get() = part6.siteMemberListQuery
+    val starColors: List<StarColor> get() = part6.starColors
+    val starredField: String get() = part6.starredField
+    val starredMax: Long get() = part6.starredMax
+    val submissionFilterHeaders: Map<String, String> get() = part6.submissionFilterHeaders
+    val submissionListQuery: ListQueryDeclaration get() = part6.submissionListQuery
+    val submissionReadOptions: List<ListFilterOption> get() = part6.submissionReadOptions
+    val suppressionListQuery: ListQueryDeclaration get() = part6.suppressionListQuery
+    val taskListDeclaration: ListQueryDeclaration get() = part6.taskListDeclaration
     val templateKindOptions: List<ListFilterOption> get() = part6.templateKindOptions
     val templateListBase: List<ListQueryFilter> get() = part6.templateListBase
     val templateListQuery: ListQueryDeclaration get() = part6.templateListQuery
@@ -3099,6 +3583,8 @@ class ContractValues internal constructor(
     val timeZoneChoices: List<String> get() = part6.timeZoneChoices
     val timeZoneDefaultLabel: String get() = part6.timeZoneDefaultLabel
     val workflowMaxSteps: Long get() = part6.workflowMaxSteps
+    val workspaceColorsField: String get() = part6.workspaceColorsField
+    val workspaceColorsMax: Long get() = part6.workspaceColorsMax
 
     override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4 && part5 == other.part5 && part6 == other.part6)
 

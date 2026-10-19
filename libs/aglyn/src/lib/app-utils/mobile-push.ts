@@ -96,6 +96,13 @@ export interface MobilePushData {
   link?: string
   orgId?: string
   hostId?: string
+  /**
+   * The account the push was sent to (AGL-3943). An app signed in to more
+   * than one account opens a tapped push in that account, switching to it
+   * when it is signed in but not the one in use. A push without it (sent
+   * before this field) routes as before, in the account in use.
+   */
+  uid?: string
 }
 
 export function mobilePushData(payload: {
@@ -103,12 +110,14 @@ export function mobilePushData(payload: {
   link?: string | null
   orgId?: string | null
   hostId?: string | null
+  uid?: string | null
 }): MobilePushData {
   return {
     type: payload.type,
     ...(payload.link ? { link: payload.link } : {}),
     ...(payload.orgId ? { orgId: payload.orgId } : {}),
     ...(payload.hostId ? { hostId: payload.hostId } : {}),
+    ...(payload.uid ? { uid: payload.uid } : {}),
   }
 }
 
@@ -125,6 +134,7 @@ export function readMobilePushData(data: unknown): MobilePushData | null {
     link: link && (link.startsWith('/') || link.startsWith('https://')) ? link : undefined,
     orgId: text(record['orgId']),
     hostId: text(record['hostId']),
+    uid: text(record['uid']),
   })
 }
 

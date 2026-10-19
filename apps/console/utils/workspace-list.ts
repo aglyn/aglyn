@@ -42,28 +42,21 @@ import type {
  * grammar the toolbar's Filters panel reads.
  */
 
-/** `users/{uid}` field holding the ids of the workspaces the reader pinned. */
-export const PINNED_ORGS_FIELD = 'pinnedOrgs'
-
-/**
- * The ids the reader pinned, from their account document.
- *
- * Anything that is not a list of non-empty strings reads as no pins, so a
- * stray value can never take the chooser down.
+/*
+ * The pins themselves — the field, the five-pin cap and the rules over it —
+ * are the account preferences' (AGL-3943), shared with the native apps
+ * through the generated contracts.
  */
-export function readPinnedOrgs(profile: unknown): string[] {
-  const stored = (profile as Record<string, unknown> | null | undefined)?.[
-    PINNED_ORGS_FIELD
-  ]
-  if (!Array.isArray(stored)) return []
-  return [
-    ...new Set(
-      stored.filter(
-        (entry): entry is string => typeof entry === 'string' && entry !== '',
-      ),
-    ),
-  ]
-}
+export {
+  effectivePinnedOrgs,
+  keepPinnedOrgs,
+  PINNED_ORGS_FIELD,
+  PINNED_ORGS_MAX,
+  pinnedOrgsOverCap,
+  pinOrg,
+  readPinnedOrgs,
+  replacePinnedOrg,
+} from '@aglyn/aglyn/app-utils/account-preferences'
 
 /** A membership as the list reads it: the row, its plan and its pin. */
 export interface WorkspaceRow extends UserOrgMembership {
