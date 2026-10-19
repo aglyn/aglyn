@@ -592,6 +592,37 @@ async function ensureAiOverageProduct() {
 env['STRIPE_PRODUCT_AI_OVERAGE'] = await ensureAiOverageProduct()
 
 /**
+ * Domain registration and renewal (AGL-3962) are one-off invoices whose line
+ * carries its own amount — the registrar's price at cost + 30% — so, like
+ * the AI overage, there is no Price, only the product that carries the tax
+ * code. Found by metadata, created on a miss.
+ */
+async function ensureDomainRegistrationProduct() {
+  const query = encodeURIComponent(
+    `active:'true' AND metadata['aglynProduct']:'domain_registration'`,
+  )
+  const search = await stripe(`products/search?query=${query}`)
+  const existing = (search?.data ?? [])[0]
+  if (existing?.id) {
+    console.log(`= Domain registration product already exists (${existing.id})`)
+    return existing.id
+  }
+  if (DRY_RUN) {
+    dryRunMissing += 1
+    console.log('! Domain registration product MISSING (would be created)')
+    return '<MISSING:domain_registration_product>'
+  }
+  const product = await stripe('products', {
+    name: 'Domain registration',
+    'metadata[aglynProduct]': 'domain_registration',
+    tax_code: PLATFORM_TAX_CODE,
+  })
+  console.log(`+ created Domain registration product (${product.id})`)
+  return product.id
+}
+env['STRIPE_PRODUCT_DOMAIN_REGISTRATION'] = await ensureDomainRegistrationProduct()
+
+/**
  * THE TAX POSITION, checked on every run (AGL-1877).
  *
  * The products this account already had were tagged by hand in the Stripe
