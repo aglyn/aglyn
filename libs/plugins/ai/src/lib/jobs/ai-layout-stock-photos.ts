@@ -216,6 +216,27 @@ export const AI_STOCK_PHOTO_PAGES_INPUT = 'stockPhotoPages'
  */
 export const AI_STOCK_PHOTO_AVOID_INPUT = 'stockPhotoAvoid'
 
+/**
+ * The unit job input holding the photos another part of the job placed
+ * outside its pages — a dataset's records — with their size and words
+ * (AGL-3988): what a picture the library failed takes before any starter.
+ */
+export const AI_STOCK_PHOTO_JOB_PHOTOS_INPUT = 'stockPhotoJobPhotos'
+
+/** The job photos a unit input holds ({@link AI_STOCK_PHOTO_JOB_PHOTOS_INPUT}): library photos with a size; anything else is dropped. */
+export function aiStockJobPhotosOf(value: unknown): AiLayoutPicturePhoto[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((entry) => {
+    const photo = entry as Partial<AiLayoutPicturePhoto> | null
+    const src = typeof photo?.src === 'string' ? photo.src : ''
+    const width = Number(photo?.width)
+    const height = Number(photo?.height)
+    if (!src.startsWith('media:') || !(width > 0) || !(height > 0)) return []
+    const alt = typeof photo?.alt === 'string' ? photo.alt.trim() : ''
+    return [{ src, width, height, ...(alt ? { alt } : {}) }]
+  })
+}
+
 const words = (list: string) => new Set(list.trim().split(/\s+/))
 
 /** Words that carry no subject. */
@@ -2696,6 +2717,28 @@ export function aiStockPlacedSrcs(
 }
 
 /**
+ * The library photos a stored page shows, each as a slot takes it (AGL-3988):
+ * its source, its size and what it shows. A photo the job placed on another
+ * page is what a slot the library failed takes before any starter
+ * (`aiLayoutJobPhotoPicks`). Each photo once; one without a size is left out.
+ */
+export function aiStockPlacedPhotos(nodes: NodesMap | null | undefined): AiLayoutPicturePhoto[] {
+  const map = (nodes ?? {}) as unknown as Record<string, { componentId?: string; props?: Record<string, unknown> }>
+  const out = new Map<string, AiLayoutPicturePhoto>()
+  for (const node of Object.values(map)) {
+    if (node?.componentId !== 'image') continue
+    const src = node.props?.['src']
+    const width = Number(node.props?.['intrinsicWidth'])
+    const height = Number(node.props?.['intrinsicHeight'])
+    if (typeof src !== 'string' || !src.startsWith('media:') || out.has(src)) continue
+    if (!(width > 0) || !(height > 0)) continue
+    const alt = typeof node.props?.['alt'] === 'string' ? (node.props['alt'] as string).trim() : ''
+    out.set(src, { src, width, height, ...(alt ? { alt } : {}) })
+  }
+  return [...out.values()]
+}
+
+/**
  * What this process has placed for each job, by source key and asset src,
  * with the scope (the page's seed) that placed it (AGL-3660). It spans the
  * passes of one job that run here, so a page, the products or a post built
@@ -2757,8 +2800,35 @@ const DESCRIBING = words(
     'tet christmas easter halloween diwali ramadan hanukkah thanksgiving ' +
     'indian asian african american european caucasian vietnamese japanese chinese korean thai latino latina hispanic ' +
     'japan vietnam viet nam thailand india china korea germany france italy spain england britain uk usa america ' +
-    'canada mexico brazil australia africa europe asia',
+    'canada mexico brazil australia africa europe asia ' +
+    // How a scene feels or looks, never a thing in it (AGL-3988): "mountain,
+    // snow, winter, cold, couple, color, landscape" is a couple in the snow.
+    'cold warm hot chilly freezing frozen icy color colors colour colours landscape landscapes ' +
+    'panorama panoramic vista scene scenes',
 )
+
+/**
+ * The sky and the light over a scene, never a thing in it (AGL-3988): "A
+ * couple with a sky at sunset" and "A child with clouds by a lake" were a
+ * couple at sunset and a child by a lake.
+ */
+const SCENERY = words('sky skies cloud clouds sun sunshine sunlight daylight light shadow shadows horizon')
+
+/**
+ * The weather a scene is in, said as where (AGL-3988): "A couple with a fog
+ * at a wedding" was a couple in the fog, "A snow in the mountains" a couple
+ * in the snow.
+ */
+const WEATHER: Readonly<Record<string, string>> = {
+  fog: 'in the fog',
+  mist: 'in the mist',
+  haze: 'in the haze',
+  rain: 'in the rain',
+  snow: 'in the snow',
+  snowfall: 'in the snow',
+  snowflakes: 'in the snow',
+  wind: 'in the wind',
+}
 
 /**
  * Words a tag uses for what a person or a thing is like, said before it
@@ -2774,7 +2844,7 @@ const QUALITIES = words(
 const MASS_NOUNS = words(
   'food coffee tea bread wood water wax soap clay money fabric yarn wool furniture jewelry jewellery ' +
     'pottery glass paper music art hair makeup chalk paint ink dust stone marble concrete steel metal ' +
-    'skincare equipment decor fashion wildlife weather traffic wine beer chocolate rice sugar flour milk ' +
+    'skincare equipment decor wildlife weather traffic wine beer chocolate rice sugar flour milk ' +
     'cheese honey oil ice fire light sunlight dough sourdough pastry dessert people foliage greenery faculty staff ' +
     'clothing bedding frosting icing flooring',
 )
@@ -2799,6 +2869,9 @@ const ABSTRACT_NOUNS = words(
     'session lesson course hobby leisure power energy wellness talent formation participation ' +
     'press show day days night year years time holiday month months week weeks morning evening afternoon season seasons ' +
     'kiss hug embrace ' +
+    // A feeling, never a thing anyone holds (AGL-3988): "A father with a care".
+    'care worry trust hope joy peace fear faith grief pride comfort safety bliss delight passion desire feeling feelings ' +
+    'moment moments memory memories fashion style ' +
     'photo photos picture pictures image images shot shots shoot shoots spot spots ' +
     'read write learn study lift move remove focus relax think sit smile laugh eat swim teach enjoy celebrate explore ' +
     'hike can',
@@ -2845,10 +2918,26 @@ const PEOPLE_NOUNS = words(
     'trainer coach teacher teachers instructor lecturer professor tutor worker workers entrepreneur model ' +
     'photographer potter artist florist mother father parent parents grandmother grandfather grandparents ' +
     'faculty staff team participants volunteer volunteers musician dancer leader manager owner founder ' +
-    'journalist journalists reporter reporters master masters lovers newlywed newlyweds husband wife fiance fiancee spouse',
+    'journalist journalists reporter reporters master masters lovers newlywed newlyweds husband wife fiance fiancee spouse ' +
+    // Whoever else is about (AGL-3988): "A family with tourists" was a family.
+    'tourist tourists traveler travelers traveller travellers hiker hikers visitor visitors friend friends crowd ' +
+    // A family's people, said as a parent with a child (AGL-3988).
+    'dad dads mom moms mum mums son sons daughter daughters toddler toddlers',
 )
 /** People said by no role: a model is whoever posed (AGL-3856), "a woman" of "woman, model, show, teacher". */
-const GENERIC_PEOPLE = words('man men woman women person people human humans guy guys lady ladies adult boy boys girl girls model models')
+const GENERIC_PEOPLE = words(
+  'man men woman women person people human humans guy guys lady ladies adult boy boys girl girls model models ' +
+    'tourist tourists traveler travelers traveller travellers hiker hikers visitor visitors friend friends crowd',
+)
+
+/** A parent a photo shows, said with the child beside them: "A father with a girl" (AGL-3988). */
+const PARENTS = words('father mother dad mom mum parent parents grandfather grandmother grandparent grandparents')
+
+/** A child a photo shows beside a parent (AGL-3988). */
+const CHILDREN = words('child children kid kids baby babies toddler toddlers girl girls boy boys son sons daughter daughters')
+
+/** How a family's word is said: "a dad" is a father (AGL-3988). */
+const SAID_AS: Readonly<Record<string, string>> = { dad: 'father', dads: 'fathers', mom: 'mother', moms: 'mothers', mum: 'mother', mums: 'mothers' }
 
 /**
  * A body's parts, never a thing a photo is described by (AGL-3856): "A girl
@@ -2932,6 +3021,14 @@ const PLACES: Readonly<Record<string, string>> = {
   cliff: 'on',
   river: 'by',
   lake: 'by',
+  lakeside: 'by',
+  lakeshore: 'by',
+  sea: 'by',
+  ocean: 'by',
+  seaside: 'by',
+  coast: 'on',
+  shore: 'on',
+  sundown: 'at',
   waterfall: 'at',
 }
 
@@ -2939,10 +3036,42 @@ const PLACES: Readonly<Record<string, string>> = {
 const OBJECT_PLACES = words('desk table counter bridge bed sofa couch bench')
 
 /** Places said without an article: "in court", "at sunset". */
-const BARE_PLACES = words('court sunset sunrise dusk dawn')
+const BARE_PLACES = words('court sunset sunrise sundown dusk dawn')
 
 /** Places said in words of their own: a mountain tag is "in the mountains". */
-const PLACES_SAID: Readonly<Record<string, string>> = { mountain: 'the mountains' }
+const PLACES_SAID: Readonly<Record<string, string>> = {
+  mountain: 'the mountains',
+  lakeside: 'the lake',
+  lakeshore: 'the lake',
+  sea: 'the sea',
+  ocean: 'the ocean',
+  seaside: 'the sea',
+  coast: 'the coast',
+  shore: 'the shore',
+}
+
+/** Places that say when, said after where: "a couple in the mountains at sunset" (AGL-3988). */
+const TIME_PLACES = words('sunset sunrise sundown dusk dawn')
+
+/** Places out of doors, said after a thing to sit on: "a couple on a bench by the lake" (AGL-3988). */
+const OUTDOORS = words(
+  'forest field meadow valley mountain hill cliff river lake lakeside lakeshore waterfall beach park garden trail sea ocean seaside coast shore',
+)
+
+/** Words inside a tag that say one thing is where another is: "couple on bench" (AGL-3988). */
+const TAG_PREPOSITIONS = words('on in at by with under near beside')
+
+/**
+ * A tag that is a phrase of its own, read as its parts (AGL-3988): "couple
+ * on bench" is a couple, and a bench they are on. The beta.270 Sugar Hollow
+ * About page read it whole, as a place, and said "A lakeside on a couple on
+ * bench".
+ */
+function tagParts(tag: string): string[] {
+  const list = tag.toLowerCase().trim().split(/\s+/)
+  const at = list.findIndex((word, index) => index > 0 && index < list.length - 1 && TAG_PREPOSITIONS.has(word))
+  return at > 0 ? [list.slice(0, at).join(' '), list.slice(at + 1).join(' ')] : [tag]
+}
 
 /** How many of a photo's first tags its description reads: the things and people it is OF. */
 const ALT_TAGS_READ = 8
@@ -3062,7 +3191,17 @@ function nearSynonyms(a: string, b: string): boolean {
  * - a second thing comes only from the first two tags and where no place is
  *   said, what a person holds only from the first three, where it is set
  *   from the first ten;
- * - no word is said twice: never "an elderly couple and an elderly".
+ * - no word is said twice: never "an elderly couple and an elderly";
+ * - the sky, the clouds and the light are no thing anyone holds, and the
+ *   weather is said as where it is: "a couple in the fog at a wedding",
+ *   "a couple in the snow in the mountains", never "a couple with a sky at
+ *   sunset" or "a snow in the mountains"; a feeling ("care", "worry") is no
+ *   thing either; whoever else is about ("tourists") is never said beside a
+ *   family; a parent beside a child is said with them ("a father with a
+ *   girl"); a tag that is a phrase of its own ("couple on bench") is read as
+ *   its parts; a time of day comes after where ("in the mountains at
+ *   sunset"), and a bench out of doors says where it stands ("on a bench by
+ *   the lake") (AGL-3988).
  *
  * `null` where no tag names a thing.
  */
@@ -3070,7 +3209,10 @@ export function aiStockTagsAlt(tags: readonly string[], proper: ReadonlySet<stri
   const parts: AiStockAltPart[] = []
   let quality = ''
   let portrait = false
-  for (const [index, tag] of tags.slice(0, ALT_PLACE_TAGS_READ).entries()) {
+  /** The weather it is in, said as where ({@link WEATHER}). */
+  let weather = ''
+  const read = tags.slice(0, ALT_PLACE_TAGS_READ).flatMap((tag, index) => tagParts(tag).map((part) => ({ tag: part, index })))
+  for (const { tag, index } of read) {
     const lower = tag.toLowerCase().trim()
     const reading = index < ALT_TAGS_READ
     if (reading && (lower === 'portrait' || lower === 'portraits')) {
@@ -3081,7 +3223,14 @@ export function aiStockTagsAlt(tags: readonly string[], proper: ReadonlySet<stri
       if (reading) quality ||= lower
       continue
     }
-    const said = describedTag(tag, proper)
+    // The sky is never a thing a photo is described by; the weather is where it is.
+    if (SCENERY.has(lower)) continue
+    if (WEATHER[lower]) {
+      if (reading) weather ||= WEATHER[lower] as string
+      continue
+    }
+    const family = SAID_AS[lower]
+    const said = family ? `${articleFor(family)} ${family}`.replace(/^an? (?=\S+s$)/, '') : describedTag(tag, proper)
     if (!said) continue
     const bare = said.replace(/^an?\s+/, '')
     const stems = stemList(bare)
@@ -3124,7 +3273,12 @@ export function aiStockTagsAlt(tags: readonly string[], proper: ReadonlySet<stri
   const role = posed
     ? undefined
     : people.find((part) => !GENERIC_PEOPLE.has(part.head) && part.index < ALT_ROLE_TAGS_READ && leads(part))
-  const person = role ?? people.find(leads)
+  // A parent beside a child is said with them (AGL-3988): "A father with a
+  // girl", never "a child with clouds" of "child, clouds, dad, dock, father".
+  const parent = people.find((part) => PARENTS.has(part.head) && part.index < ALT_ROLE_TAGS_READ)
+  const child = people.find((part) => CHILDREN.has(part.head) && part.index < ALT_ROLE_TAGS_READ)
+  const family = parent && child && (!role || role === parent || role === child) ? parent : undefined
+  const person = family ?? role ?? people.find(leads)
   // Nothing but places: a desk is the thing in a classroom; "a school in a classroom" says one place.
   if (!person && !things.length && places.length > 1) {
     const object = places.find((part) => OBJECT_PLACES.has(part.head))
@@ -3134,7 +3288,7 @@ export function aiStockTagsAlt(tags: readonly string[], proper: ReadonlySet<stri
     } else places = places.slice(0, 1)
   }
   const place = places[0]
-  if (!person && !things.length && !place) return null
+  if (!person && !things.length && !place && !weather) return null
   /** Every word said so far, so none is said twice. */
   const said = new Set<string>()
   const fresh = (part: AiStockAltPart) => {
@@ -3151,18 +3305,37 @@ export function aiStockTagsAlt(tags: readonly string[], proper: ReadonlySet<stri
   let phrase = ''
   if (person && fresh(person)) {
     phrase = portrait ? `a portrait of ${person.said}` : qualified(person)
-    const held = things.find((part) => part.index <= 2)
+    const held = family && child && child !== person ? child : things.find((part) => part.index <= 2)
     if (!portrait && held && fresh(held)) phrase += ` ${CLOTHING.has(held.head) ? 'in' : 'with'} ${held.said}`
   } else if (things[0] && fresh(things[0])) {
     phrase = qualified(things[0])
     const second = things[1]
     if (second && second.index <= 1 && !place && fresh(second)) phrase += ` and ${second.said}`
   }
+  /** A place as it is said alone: "a classroom", "the mountains", "sunset". */
+  const placeOf = (part: AiStockAltPart) =>
+    PLACES_SAID[part.head] ?? (BARE_PLACES.has(part.head) && /^an? \S+$/.test(part.said) ? part.head : part.said)
+  /** A place as it is said after what is there: "in the mountains", "at sunset", "on a bench". */
+  const whereOf = (part: AiStockAltPart) => `${PLACES[part.head] ?? 'in'} ${placeOf(part)}`
+  // The weather is said before where (AGL-3988): "a couple in the fog at a
+  // wedding"; alone, it is what the photo shows: "snow in the mountains".
+  if (weather && phrase) phrase += ` ${weather}`
+  else if (weather) phrase = weather.replace(/^in the /, '')
   if (place && fresh(place)) {
-    const preposition = PLACES[place.head] ?? 'in'
-    const where =
-      PLACES_SAID[place.head] ?? (BARE_PLACES.has(place.head) && /^an? \S+$/.test(place.said) ? place.head : place.said)
-    phrase = phrase ? `${phrase} ${preposition} ${where}` : where
+    // A second place where the first is a time of day or a bench out of
+    // doors: "a couple in the mountains at sunset", "a couple on a bench by
+    // the lake"; never a bed in a room.
+    const second = places.find(
+      (part) =>
+        part !== place &&
+        !OBJECT_PLACES.has(part.head) &&
+        !TIME_PLACES.has(part.head) &&
+        (TIME_PLACES.has(place.head) || (place.head === 'bench' && OUTDOORS.has(part.head))),
+    )
+    const after = second && fresh(second) ? second : null
+    const [first, last] = after && TIME_PLACES.has(place.head) ? [after, place] : [place, after]
+    const tail = last ? ` ${whereOf(last)}` : ''
+    phrase = phrase ? `${phrase} ${whereOf(first)}${tail}` : `${placeOf(first)}${tail}`
   }
   // Never a dangling article or preposition, whatever a tag left behind.
   phrase = phrase.replace(DANGLING_END, '').trim()

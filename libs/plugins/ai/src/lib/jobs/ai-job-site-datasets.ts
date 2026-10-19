@@ -48,6 +48,8 @@ import {
   type AiLayoutListingScreen,
 } from '../layout-language/ai-layout-listings'
 import {
+  aiLayoutNeutralStarterRun,
+  aiLayoutSeedNumber,
   aiLayoutStarterPhotos,
   type AiLayoutPicturePhoto,
   type AiLayoutPictureSlot,
@@ -56,7 +58,13 @@ import { aiSiteWords } from '../model/ai-site-job'
 import type { AiJobAdmissionContext } from './ai-job-admission'
 import { aiOriginJobId } from './ai-job-draft-ids'
 import { aiSiteProductPhotoSrc } from './ai-job-site-content'
-import { aiLayoutStockPhotoSource, aiStockPhotoWordsOf } from './ai-layout-stock-photos'
+import {
+  aiLayoutStockPhotoSource,
+  aiStockJobPhotosOf,
+  aiStockPhotoWordsOf,
+  aiStockRecordScene,
+  aiStockStem,
+} from './ai-layout-stock-photos'
 import { AI_DATASET_DRAFT_RESOURCE } from './ai-build-unit-outcome'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiGenerationSpent, aiUnspentOutcome } from './ai-job-generation'
@@ -341,6 +349,9 @@ export interface AiSiteDatasetRecordPhoto {
   placed: string | null
   /** What the photo shows, in its own words (AGL-3856); `null` for none. */
   alt?: string | null
+  /** The library photo's size, where it is one (AGL-3988): what a page the library fails reuses it at. */
+  width?: number
+  height?: number
 }
 
 /**
@@ -387,6 +398,8 @@ export async function aiSiteDatasetRecordPhotos(input: {
   }))
   const seed = `${job.$id}:records`
   let found: ReadonlyArray<AiLayoutPicturePhoto | null> = []
+  /** Whether the site has a stock library: its records then never take a starter that shows another business (AGL-3988). */
+  let library = false
   try {
     const source = (input.stockPhotos ?? aiLayoutStockPhotoSource)(
       {
@@ -403,17 +416,109 @@ export async function aiSiteDatasetRecordPhotos(input: {
       },
       { budgetMs: AI_SITE_DATASET_PHOTOS_BUDGET_MS },
     )
+    library = Boolean(source)
     if (source) found = await source(slots)
   } catch (error) {
-    console.warn('ai site dataset: the stock photos failed; starter photos fill them', { error: String(error) })
+    console.warn('ai site dataset: the stock photos failed; the job’s own photos or starters fill them', { error: String(error) })
   }
-  const starters = aiLayoutStarterPhotos(slots, seed)
   const hostId = job.hostId
+  const copied: Array<AiLayoutPicturePhoto | null> = slots.map((_slot, index) => (found[index]?.src ? (found[index] as AiLayoutPicturePhoto) : null))
+  // A record left without a photo takes one this list already shows, on its
+  // own subject (AGL-3988), before any starter.
+  const photos =
+    library && !people
+      ? aiSiteDatasetRecordsFromOwn(
+          input.names.map((name, index) => ({ name, category: input.categories?.[index] ?? null })),
+          copied,
+          seed,
+        )
+      : copied
+  // Only a job with no photo of its own takes starters: with a library, the
+  // neutral ones in turn, never a workbench or houseplants (AGL-3923); a
+  // team's records, and a site with no library, the starters as before.
+  const starters = library && !people ? aiLayoutNeutralStarterRun(slots.length, seed) : aiLayoutStarterPhotos(slots, seed)
   return slots.map((_slot, index) => {
-    const stock = aiSiteProductPhotoSrc(found[index]?.src, hostId)
-    if (stock) return { src: stock, placed: found[index]?.src ?? null, alt: found[index]?.alt?.trim() || null }
+    const photo = photos[index]
+    const stock = aiSiteProductPhotoSrc(photo?.src, hostId)
+    if (photo && stock) {
+      const copied = found[index]?.src === photo.src
+      return {
+        src: stock,
+        placed: copied ? photo.src : null,
+        alt: photo.alt?.trim() || null,
+        width: photo.width,
+        height: photo.height,
+      }
+    }
     return { src: aiSiteProductPhotoSrc(starters[index]?.src, hostId), placed: null, alt: starters[index]?.alt?.trim() || null }
   })
+}
+
+/**
+ * The photos of a list's records, each record its library left without one
+ * given one of those the list already shows (AGL-3988). The beta.270 Sugar
+ * Hollow Photography covers, a wedding photographer's, filed five "Weddings
+ * and elopements" galleries under a windowsill, a workbench, a desk and an
+ * office team, every copy refused by Pixabay's rate limit, while three of
+ * its records had copied a snowy mountain wedding, a couple at sunset and a
+ * father and son in the mountains.
+ *
+ * A record takes, in order: a photo of a record filed under the same
+ * category; a photo whose words name the people its own moment shows
+ * (`aiStockRecordScene`: a couple for "Couple Portraits", never a family);
+ * either again where only the record beside it shows them; and last any
+ * photo the list shows. Never the photo of the record beside it while
+ * another fits, the least shown first, the seed picking among equals. A
+ * record no photo fits keeps none, and takes a starter. Pure.
+ */
+export function aiSiteDatasetRecordsFromOwn(
+  records: ReadonlyArray<{ name: string; category?: string | null }>,
+  photos: ReadonlyArray<AiLayoutPicturePhoto | null>,
+  seed: string,
+): Array<AiLayoutPicturePhoto | null> {
+  const own = photos.flatMap((photo, index) => (photo?.src ? [{ photo, index }] : []))
+  if (!own.length) return [...photos]
+  const category = (index: number) => records[index]?.category?.replace(/\s+/g, ' ').trim().toLowerCase() ?? ''
+  const turn = aiLayoutSeedNumber(seed)
+  /** Whether a photo's words name the people a record's moment shows, and none it never shows. */
+  const shows = (photo: AiLayoutPicturePhoto, record: { name: string; category?: string | null }) => {
+    const scene = aiStockRecordScene(record.name, record.category ?? '')
+    if (!scene) return false
+    const stems = new Set(
+      (photo.alt ?? '')
+        .toLowerCase()
+        .split(/[^a-z\u00c0-\u024f]+/)
+        .filter(Boolean)
+        .map(aiStockStem),
+    )
+    return scene.people.some((stem) => stems.has(stem)) && !scene.shun.some((stem) => stems.has(stem))
+  }
+  /** The list filled in one order; the record beside one filled before it is known, the one after not yet. */
+  const fill = (order: readonly number[]) => {
+    const filled = [...photos]
+    for (const index of order) {
+      const record = records[index]
+      if (!record || filled[index]?.src) continue
+      const beside = new Set([filled[index - 1]?.src, filled[index + 1]?.src].filter(Boolean))
+      const apart = (entry: { photo: AiLayoutPicturePhoto }) => !beside.has(entry.photo.src)
+      const same = own.filter((entry) => category(index) && category(entry.index) === category(index))
+      const subject = own.filter((entry) => shows(entry.photo, record))
+      const pool = [same.filter(apart), subject.filter(apart), same, subject, own.filter(apart)].find((list) => list.length)
+      if (!pool) continue
+      const uses = (src: string) => filled.filter((photo) => photo?.src === src).length
+      const rank = (at: number) => (((at - turn) % records.length) + records.length) % records.length
+      const [pick] = [...pool].sort((a, b) => uses(a.photo.src) - uses(b.photo.src) || rank(a.index) - rank(b.index))
+      if (pick) filled[index] = { ...pick.photo }
+    }
+    return filled
+  }
+  // Filled from either end, the one that shows a photo beside itself least:
+  // a record beside a copied one is the most held, and is served first.
+  const forward = fill(records.map((_record, index) => index))
+  const backward = fill(records.map((_record, index) => records.length - 1 - index))
+  const repeats = (list: ReadonlyArray<AiLayoutPicturePhoto | null>) =>
+    list.filter((photo, index) => index > 0 && photo?.src && photo.src === list[index - 1]?.src).length
+  return repeats(backward) < repeats(forward) ? backward : forward
 }
 
 /**
@@ -472,6 +577,11 @@ interface AiSiteDatasetProposal {
   imageField?: string | null
   /** The library photos its records show (`media:` references), which no page places again. */
   photos?: string[]
+  /**
+   * The same photos with their size and words (AGL-3988): what a page's
+   * picture the library fails takes before any starter.
+   */
+  placedPhotos?: AiLayoutPicturePhoto[]
   /**
    * The fields most of its first records leave empty, by id (AGL-3616): a
    * tour's venues not yet known. A card never binds one — it would print
@@ -709,12 +819,18 @@ export function createAiSiteDatasetRunner(deps: AiSiteDatasetRunnerDeps = {}): A
       imageField?: string | null
     }
     const placed = photos.flatMap((photo) => (photo.placed ? [photo.placed] : []))
+    const placedPhotos = photos.flatMap((photo) =>
+      photo.placed && photo.width && photo.height
+        ? [{ src: photo.placed, width: photo.width, height: photo.height, ...(photo.alt ? { alt: photo.alt } : {}) }]
+        : [],
+    )
     const proposal: AiSiteDatasetProposal = {
       fields: facts.fields ?? [],
       recordNames: generation.value.records.map((values) => values[0] ?? '').filter(Boolean).slice(0, 12),
       addressField: facts.addressField ?? null,
       ...(facts.imageField ? { imageField: facts.imageField } : {}),
       ...(placed.length ? { photos: placed } : {}),
+      ...(placedPhotos.length ? { placedPhotos } : {}),
       sparseFields: aiDatasetSparseFields(generation.value, facts.fields ?? []),
       ...aiSiteDatasetGroupsOf(category, facts.fields ?? [], generation.value),
     }
@@ -1084,6 +1200,15 @@ export function aiSiteDatasetPlacedPhotos(outputs: readonly AiJobOutput[]): stri
         .flatMap((output) => proposalOf(output).photos ?? []),
     ),
   ]
+}
+
+/** The same photos with their size and words (AGL-3988), which a page's picture the library fails takes before any starter. */
+export function aiSiteDatasetPlacedPhotoDetails(outputs: readonly AiJobOutput[]): AiLayoutPicturePhoto[] {
+  const seen = new Set<string>()
+  return outputs
+    .filter((output) => output.resource === 'draft' && output.draftResource === AI_SITE_DATASET_RESOURCE)
+    .flatMap((output) => aiStockJobPhotosOf((output.proposal as { placedPhotos?: unknown } | null)?.placedPhotos))
+    .filter((photo) => !seen.has(photo.src) && Boolean(seen.add(photo.src)))
 }
 
 /** What a page is told about the datasets built before it. */
