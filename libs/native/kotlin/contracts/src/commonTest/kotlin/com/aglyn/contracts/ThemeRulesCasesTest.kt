@@ -57,9 +57,16 @@ class ThemeRulesCasesTest {
   @Test
   fun palettesAndPreviews() {
     cases("themePalette").forEach { (args, result) -> same(result, themePalette(text(args[0])), ThemePalette.serializer(), args.toString()) }
-    // Ocean and Warm are derived from Figma's previews where the palettes are generated (deriveThemeFromPreview, over
-    // Figma's own Aglyn modes); the apps read the generated palettes, so the derivation itself is not ported.
-    assertEquals(ThemeSource.DERIVED, themePalette("ocean").source)
+    cases("deriveThemeFromPreview").forEach { (args, result) ->
+      val preview = ContractJsonFormat.decodeFromJsonElement(ThemePreview.serializer(), args[0])
+      same(result, deriveThemeFromPreview(preview, text(args[1])!!), ThemeColorsPair.serializer(), args.toString())
+    }
+    // Ocean and Warm in the generated palettes are the same derivation.
+    for (id in listOf("ocean", "warm")) {
+      val pair = deriveThemeFromPreview(Contracts.themePreviews.getValue(id), Contracts.themeDarkRailSeeds.getValue(id))
+      assertEquals(themePalette(id).light, pair.light, id)
+      assertEquals(themePalette(id).dark, pair.dark, id)
+    }
   }
 
   @Test

@@ -114,6 +114,35 @@ fun themePalette(id: Any?): ThemePalette {
 private val aglynLight: ThemeColors get() = Contracts.themePalettes.first { it.id == ThemePaletteId.AGLYN }.light
 private val aglynDark: ThemeColors get() = Contracts.themePalettes.first { it.id == ThemePaletteId.AGLYN }.dark
 
+/**
+ * A theme's palette from Figma's four-color preview (`deriveThemeFromPreview`), over Figma's own Aglyn modes
+ * (THEME_FIGMA_BASE): light keeps the preview's canvas, surface and rail and blends the rest toward the rail; dark tints
+ * the base's dark mode toward [darkRailSeed].
+ */
+fun deriveThemeFromPreview(preview: ThemePreview, darkRailSeed: String): ThemeColorsPair {
+  val light = Contracts.themeFigmaBase.light
+  val dark = Contracts.themeFigmaBase.dark
+  return ThemeColorsPair(
+    light = light.copy(
+      canvas = preview.canvas,
+      surface = preview.surface,
+      raised = preview.surface,
+      rail = preview.rail,
+      sunken = themeLerp(preview.canvas, preview.rail, 0.25),
+      hover = themeLerp(preview.surface, preview.rail, 0.1),
+      titlebar = themeLerp(preview.surface, preview.canvas, 0.35),
+      borderSubtle = themeLerp(light.borderSubtle, preview.rail, 0.18),
+      borderStrong = themeLerp(light.borderStrong, preview.rail, 0.22),
+    ),
+    dark = dark.copy(
+      canvas = themeLerp(dark.canvas, darkRailSeed, 0.22),
+      surface = themeLerp(dark.surface, darkRailSeed, 0.18),
+      raised = themeLerp(dark.raised, darkRailSeed, 0.18),
+      rail = themeLerp(dark.rail, darkRailSeed, 0.45),
+    ),
+  )
+}
+
 /** Text and icons on a fill that keeps a light brand color. */
 private const val DARK_ON_LIGHTNESS = 0.08
 
