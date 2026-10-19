@@ -16,7 +16,12 @@
  */
 
 import { AI_SITE_INPUT_MAX_CHARS, AI_SITE_SUBMISSIONS, aiSitePagesBand } from './ai-site-job'
-import { aiSiteStartExtraProblem, type AiSiteStartAnswers, type AiSiteStartExtraKey } from './ai-site-start'
+import {
+  aiSiteStartExtraProblem,
+  aiSiteStartInspirationRefusal,
+  type AiSiteStartAnswers,
+  type AiSiteStartExtraKey,
+} from './ai-site-start'
 
 /**
  * The guided start's steps (AGL-3898): the same questions `ai-site-start.ts`
@@ -53,6 +58,7 @@ export type AiSiteStartField =
   | 'siteType'
   | 'audience'
   | 'kind'
+  | 'inspiration'
   | 'pages'
   | 'submissions'
   | 'welcomeEmail'
@@ -77,7 +83,8 @@ export const AI_SITE_START_STEP_FIELDS: Readonly<Record<AiSiteStartStep, readonl
   choose: [],
   kind: ['siteType', ...AI_SITE_START_MORE_FIELDS.kind],
   audience: ['audience', ...AI_SITE_START_MORE_FIELDS.audience],
-  style: ['kind', ...AI_SITE_START_MORE_FIELDS.style],
+  // The sites they like sit under the style cards (AGL-3975), when asked.
+  style: ['kind', 'inspiration', ...AI_SITE_START_MORE_FIELDS.style],
   details: ['phone', 'email', 'submissions', 'pages', 'welcomeEmail', ...AI_SITE_START_MORE_FIELDS.details],
   review: [],
 }
@@ -128,6 +135,8 @@ export function aiSiteStartFieldErrors(
   if (!(AI_SITE_SUBMISSIONS as readonly string[]).includes(answers.submissions)) {
     errors.submissions = { message: 'Say where the contact form’s submissions go.', code: 'invalid' }
   }
+  const inspiration = aiSiteStartInspirationRefusal(answers, options)
+  if (inspiration) errors.inspiration = { message: inspiration, code: 'invalid' }
   // Every extra is optional; one given is held to its own rule (AGL-3979).
   for (const field of Object.values(AI_SITE_START_STEP_FIELDS).flat()) {
     if (field in errors) continue
@@ -137,7 +146,15 @@ export function aiSiteStartFieldErrors(
   return errors
 }
 
-const CORE_FIELDS: ReadonlySet<AiSiteStartField> = new Set(['siteType', 'audience', 'kind', 'pages', 'submissions', 'welcomeEmail'])
+const CORE_FIELDS: ReadonlySet<AiSiteStartField> = new Set([
+  'siteType',
+  'audience',
+  'kind',
+  'inspiration',
+  'pages',
+  'submissions',
+  'welcomeEmail',
+])
 
 function isExtra(field: AiSiteStartField): field is AiSiteStartExtraKey {
   return !CORE_FIELDS.has(field)

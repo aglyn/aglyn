@@ -45,7 +45,8 @@ describe('the guided start’s steps (AGL-3898)', () => {
   it('asks every answer the job is built from on exactly one step, and the example on none (the form never asked it)', () => {
     const asked = Object.values(AI_SITE_START_STEP_FIELDS).flat()
     expect(new Set(asked).size).toBe(asked.length)
-    expect(asked.sort()).toEqual(Object.keys(AI_SITE_START_ANSWERS).filter((key) => key !== 'example').sort())
+    // The sites a person likes are an optional answer no default holds (AGL-3975).
+    expect(asked.sort()).toEqual([...Object.keys(AI_SITE_START_ANSWERS).filter((key) => key !== 'example'), 'inspiration'].sort())
   })
 
   it('keeps what kind of site it is the one required answer', () => {
@@ -109,5 +110,20 @@ describe('the business details each step asks (AGL-3979)', () => {
     // The review opens on the step whose detail cannot go forward, and the start says why.
     expect(aiSiteStartFirstInvalidStep(answers({ social: 'my instagram' }))).toBe('details')
     expect(aiSiteStartRefusal(answers({ social: 'my instagram' }))).toMatch(/profile/)
+  })
+})
+
+describe('the Style step holds both the sites they like and its More details (AGL-3975, AGL-3979)', () => {
+  it('asks the style, then the sites they like, then the brand color under More details', () => {
+    expect(AI_SITE_START_STEP_FIELDS.style).toEqual(['kind', 'inspiration', ...AI_SITE_START_MORE_FIELDS.style])
+    expect(AI_SITE_START_MORE_FIELDS.style).toEqual(['brand'])
+  })
+
+  it('says each one’s reason on the Style step, the sites they like first', () => {
+    expect(aiSiteStartStepErrors('style', answers({ inspiration: ['not a site'], brand: 'x'.repeat(200) }))).toEqual([
+      { field: 'inspiration', code: 'invalid', message: expect.stringMatching(/https address/) },
+      { field: 'brand', code: 'too_long', message: expect.stringMatching(/under/) },
+    ])
+    expect(aiSiteStartFirstInvalidStep(answers({ inspiration: ['https://a.example.com', 'https://b.example.com'] }), { freeTaste: true })).toBe('style')
   })
 })

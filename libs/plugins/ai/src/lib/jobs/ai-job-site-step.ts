@@ -151,6 +151,8 @@ import {
   type AiJobStepRunner,
 } from './ai-job-text-step'
 import { AI_JOB_PAGE_STEP_MINIMUM_MS } from './ai-job-page-budget'
+import { AI_SITE_INSPIRATION_SIGNALS_INPUT, aiSiteInspirationReleased } from './ai-site-inspiration'
+import { aiSiteInspirationRefusal } from '../model/ai-site-inspiration'
 import {
   aiJobStepRunMinimumMs,
   aiJobStepRunnerFor,
@@ -741,6 +743,9 @@ export function aiSiteUnitJob(
   // The job the member started travels with every unit, so what the unit
   // writes names it (AGL-3596).
   const unitInputs: Record<string, unknown> = { ...job.inputs, originJobId: aiOriginJobId(job) }
+  // The look pins what the sites the person likes say of style (AGL-3975):
+  // the signals the plan step read, never the sites themselves.
+  if (unit.kind === 'theme' && plan.inspiration) unitInputs[AI_SITE_INSPIRATION_SIGNALS_INPUT] = plan.inspiration
   // A page is told the pages built before it, whose photos it does not place
   // again (AGL-3660): the maker's portrait in About is never a vase in Work.
   if (unit.screen) {
@@ -929,9 +934,15 @@ export function aiSiteSellsProducts(job: Pick<AiJob, 'items'>): boolean {
  * a scaffold whose pages nothing can build is not a scaffold.
  */
 export function createAiSiteJobAdmission(
-  deps: { freeCreditsLeft?: typeof readFreeAiCreditsLeft; now?: () => Date } = {},
+  deps: {
+    freeCreditsLeft?: typeof readFreeAiCreditsLeft
+    now?: () => Date
+    /** Whether `release_ai_site_inspiration` is on for a workspace (AGL-3975). */
+    inspirationReleased?: (orgId: string) => Promise<boolean>
+  } = {},
 ): AiJobAdmission {
   const freeCreditsLeft = deps.freeCreditsLeft ?? readFreeAiCreditsLeft
+  const inspirationReleased = deps.inspirationReleased ?? aiSiteInspirationReleased
   const now = deps.now ?? (() => new Date())
   return async (context) => {
     const inputs = parseAiSiteJobInputs(context.inputs)
@@ -941,6 +952,13 @@ export function createAiSiteJobAdmission(
     const freeTaste = aiSiteFreeTaste(context.org)
     const pages = aiSitePagesRefusal(inputs.pages, freeTaste)
     if (pages) return { status: 400, error: pages }
+    // The sites the person likes (AGL-3975): one on the Free taste, three on
+    // a paid plan — asked only while the release flag is on, since with it
+    // off they are never read.
+    if (inputs.inspiration?.length && (await inspirationReleased(context.orgId))) {
+      const inspiration = aiSiteInspirationRefusal(inputs.inspiration, freeTaste)
+      if (inspiration) return { status: 400, error: inspiration }
+    }
     // A Free start is admitted on its measured p90 (AGL-3722), not its worst
     // case: one that fits what is left of the month starts with no prompt;
     // one that does not is answered with the prompt — what it is likely to

@@ -24,6 +24,13 @@ import {
 } from './ai-site-details'
 import { aiSiteKind, aiSiteKindFor, type AiSiteKind } from './ai-site-kinds'
 import {
+  AI_SITE_INSPIRATION_INPUT,
+  aiSiteInspirationInput,
+  aiSiteInspirationLimit,
+  aiSiteInspirationRefusal,
+  aiSiteInspirationUrl,
+} from './ai-site-inspiration'
+import {
   AI_SITE_INPUT_MAX_CHARS,
   AI_SITE_SUBMISSIONS,
   aiSitePagesBand,
@@ -162,6 +169,11 @@ export interface AiSiteStartAnswers extends AiSiteDetails {
   city: string
   /** The brand color, as a six-digit hex (AGL-3979); empty for the style's own. */
   brand: string
+  /**
+   * The sites they like (AGL-3975), as typed, one a field; absent or empty
+   * for none. Asked only while `release_ai_site_inspiration` is on.
+   */
+  inspiration?: string[]
 }
 
 /**
@@ -271,7 +283,24 @@ export function aiSiteStartRefusal(
     const problem = aiSiteStartExtraProblem(key, answers[key] ?? '')
     if (problem) return problem.message
   }
-  return null
+  return aiSiteStartInspirationRefusal(answers, options)
+}
+
+/** The sites they typed, without the empty fields. */
+export function aiSiteStartInspirationTyped(answers: Pick<AiSiteStartAnswers, 'inspiration'>): string[] {
+  return (answers.inspiration ?? []).map((entry) => entry.trim()).filter(Boolean)
+}
+
+/** Why the sites they like cannot go forward, as the door would refuse them; `null` when they can. */
+export function aiSiteStartInspirationRefusal(
+  answers: Pick<AiSiteStartAnswers, 'inspiration'>,
+  options: { freeTaste?: boolean } = {},
+): string | null {
+  const typed = aiSiteStartInspirationTyped(answers)
+  if (typed.some((entry) => !aiSiteInspirationUrl(entry))) {
+    return 'Give each site you like as its https address, like https://example.com.'
+  }
+  return aiSiteInspirationRefusal(typed, options.freeTaste)
 }
 
 /**
@@ -326,7 +355,7 @@ export function aiSiteStartBrief(answers: AiSiteStartAnswers): string {
  */
 export function aiSiteStartInputs(
   answers: AiSiteStartAnswers,
-): Omit<AiSiteJobInputs, 'batchId' | AiSiteDetailKey> & Partial<AiSiteDetails> {
+): Omit<AiSiteJobInputs, 'batchId' | 'inspiration' | AiSiteDetailKey> & Partial<AiSiteDetails> & { inspiration?: string } {
   const example = aiSiteStartExample(answers)
   const kind = aiSiteStartKind(answers)
   // The details are sent only where given (AGL-3979): the plan step lists
@@ -337,6 +366,9 @@ export function aiSiteStartInputs(
     const value = (answers[key] ?? '').trim()
     if (value) details[key] = value
   }
+  // The sites they like travel only when there are some (AGL-3975), so a
+  // start without them asks for exactly what it always did.
+  const inspiration = aiSiteInspirationInput(aiSiteStartInspirationTyped(answers))
   return {
     businessType: answers.siteType.trim(),
     audience: answers.audience.trim(),
@@ -349,6 +381,7 @@ export function aiSiteStartInputs(
     submissions: answers.submissions,
     welcomeEmail: answers.welcomeEmail,
     ...details,
+    ...(inspiration ? { [AI_SITE_INSPIRATION_INPUT]: inspiration } : {}),
   }
 }
 
@@ -365,6 +398,7 @@ export const AI_SITE_START_INPUT_KEYS = [
   'submissions',
   'welcomeEmail',
   ...AI_SITE_DETAIL_KEYS,
+  AI_SITE_INSPIRATION_INPUT,
 ] as const
 
 /** A site job's scalar inputs, and nothing else its inputs carry; `null` when it has none. */
@@ -411,5 +445,9 @@ export function aiSiteStartAnswersFromInputs(
     city: text('city'),
     brand: text('brand'),
     ...(Object.fromEntries(AI_SITE_DETAIL_KEYS.map((key) => [key, text(key)])) as unknown as AiSiteDetails),
+    // The sites they liked come back as typed, within the workspace's limit (AGL-3975).
+    ...(text(AI_SITE_INSPIRATION_INPUT)
+      ? { inspiration: text(AI_SITE_INSPIRATION_INPUT).split(/\s+/).filter(Boolean).slice(0, aiSiteInspirationLimit(options.freeTaste)) }
+      : {}),
   }
 }

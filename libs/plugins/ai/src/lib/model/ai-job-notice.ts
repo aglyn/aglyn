@@ -75,6 +75,8 @@ export interface AiJobNoticeSource {
   refundedCredits?: number
   /** A build's or a guided start's items (AGL-3616), so a finished one says what was not built. */
   items?: AiJobItemLedger[] | null
+  /** What a job waiting in `needs_input` asks the person (AGL-3978). */
+  input?: { message: string } | null
 }
 
 /** A stopped job's sentence with what became of its credits, from the job's recorded give-back (AGL-3596). */
@@ -140,6 +142,17 @@ export function aiJobNotice(
   const scope = { orgId: job.orgId, ...(job.hostId ? { hostId: job.hostId } : {}) }
   const link = aiJobNoticeLink(job, to)
   if (to === 'needs-review') {
+    // A plan that needs an ID only the person has first (AGL-3978).
+    if (job.input?.message) {
+      return {
+        type: 'content.aiJobNeedsYou',
+        level: 'warning',
+        title: `Your ${noun === 'AI job' ? 'AI job' : noun} needs one detail from you`,
+        body: `${job.input.message} Nothing is built until you answer it and confirm the plan. It waits in AI jobs.`,
+        link,
+        ...scope,
+      }
+    }
     if (job.review?.reason === 'plan') {
       return {
         type: 'content.aiJobNeedsYou',

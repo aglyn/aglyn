@@ -107,6 +107,8 @@ import {
   registerAiSiteJob,
   type AiSiteUnit,
 } from './ai-job-site-step'
+import { AI_SITE_INSPIRATION_SIGNALS_INPUT } from './ai-site-inspiration'
+import { aiSiteInspirationRefusal } from '../model/ai-site-inspiration'
 import {
   AI_SITE_FREE_POSTS,
   AI_SITE_POST_BUDGET,
@@ -520,6 +522,37 @@ describe('the job each unit is built under', () => {
     ])
     // Never the scaffold's own id, nor one derived from it.
     for (const unit of units) expect(aiSiteUnitJob(job, unit, built).$id).not.toContain('job-1')
+  })
+
+  it('hands the look unit the signals of the sites the person likes, and no unit anything without them (AGL-3975)', () => {
+    const inspiration = {
+      v: 1 as const,
+      unread: 0,
+      sites: [
+        {
+          sections: ['hero' as const, 'gallery' as const],
+          density: 'airy' as const,
+          headerAlign: 'center' as const,
+          header: 'flat' as const,
+          colors: ['#8a6d3b'],
+          ground: 'white' as const,
+          fontMood: 'serif' as const,
+          buttons: 'square' as const,
+          buttonFill: 'outline' as const,
+          corners: 'sharp' as const,
+          cards: null,
+          motion: 'still' as const,
+          features: [],
+        },
+      ],
+    }
+    const look = aiSiteJobUnits(plan, { welcomeEmail: true })[0] as (typeof units)[number]
+    expect(look.kind).toBe('theme')
+    const inspired = siteJob({ plan: { ...plan, inspiration } })
+    expect(aiSiteUnitJob(inspired, look, built).inputs[AI_SITE_INSPIRATION_SIGNALS_INPUT]).toEqual(inspiration)
+    // A page is told nothing of them; a plan without them hands nothing on.
+    expect(aiSiteUnitJob(inspired, units[2] as (typeof units)[number], built).inputs).not.toHaveProperty(AI_SITE_INSPIRATION_SIGNALS_INPUT)
+    expect(aiSiteUnitJob(siteJob({ plan }), look, built).inputs).not.toHaveProperty(AI_SITE_INSPIRATION_SIGNALS_INPUT)
   })
 
   it('names a unit whose plan and step recorded no id by the job’s id and its slot, as every such draft was written', () => {
@@ -1158,6 +1191,34 @@ describe('what a scaffold is admitted with', () => {
       status: 404,
       error: 'Unknown site',
     })
+  })
+
+  it('holds the sites a person likes to https and to their plan: one on Free, three paid, only while the flag is on (AGL-3975)', async () => {
+    const admit = (released: boolean) =>
+      createAiSiteJobAdmission({ inspirationReleased: async () => released, freeCreditsLeft: async () => null })
+    const context = (inspiration: string, org: object) => ({
+      firestore: {} as unknown as FirebaseFirestore.Firestore,
+      orgId: 'org-1',
+      hostId: 'host-1',
+      inputs: { ...good, pages: (org as { plan: string }).plan === 'free' ? 2 : AI_SITE_PAGES.min, inspiration },
+      org,
+    })
+    const one = 'https://one.example'
+    const three = 'https://one.example https://two.example https://three.example'
+    await expect(admit(true)(context(one, { plan: 'free' }))).resolves.toBeNull()
+    await expect(admit(true)(context('https://one.example https://two.example', { plan: 'free' }))).resolves.toEqual({
+      status: 400,
+      error: aiSiteInspirationRefusal(['a', 'b'], true),
+    })
+    await expect(admit(true)(context(three, { plan: 'pro' }))).resolves.toBeNull()
+    await expect(admit(true)(context(`${three} https://four.example`, { plan: 'pro' }))).resolves.toEqual({
+      status: 400,
+      error: 'Name at most 3 sites you like.',
+    })
+    // https only, for every workspace.
+    await expect(admit(true)(context('http://one.example', { plan: 'pro' }))).resolves.toMatchObject({ status: 400 })
+    // With the flag off they are never read, so a Free start's second site is no refusal either.
+    await expect(admit(false)(context('https://one.example https://two.example', { plan: 'free' }))).resolves.toBeNull()
   })
 
   it('refuses a scaffold where nothing can build a page', async () => {

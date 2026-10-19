@@ -301,3 +301,40 @@ describe('a failed start keeps its business details (AGL-3979)', () => {
     ])
   })
 })
+
+describe('a start with business details and sites it likes carries both (AGL-3979, AGL-3975)', () => {
+  const answers = {
+    ...AI_SITE_START_ANSWERS,
+    siteType: 'a family plumbing company',
+    phone: '(512) 555-0142',
+    email: 'hello@pipeworks.co',
+    brand: '#1565c0',
+    inspiration: ['https://pipes.example.com/', 'https://drains.example.com/'],
+  }
+
+  it('sends both, the door admits both, and a failed start reopens on both', () => {
+    const inputs = start.aiSiteStartInputs(answers)
+    expect(inputs).toMatchObject({
+      phone: '(512) 555-0142',
+      email: 'hello@pipeworks.co',
+      brand: '#1565c0',
+      inspiration: 'https://pipes.example.com/ https://drains.example.com/',
+    })
+    expect(parseAiSiteJobInputs(inputs)).toMatchObject({
+      phone: '(512) 555-0142',
+      email: 'hello@pipeworks.co',
+      inspiration: ['https://pipes.example.com/', 'https://drains.example.com/'],
+    })
+    const summary = start.aiSiteStartInputsOf({ ...inputs, autoConfirm: true })
+    expect(summary).toMatchObject({ phone: '(512) 555-0142', inspiration: 'https://pipes.example.com/ https://drains.example.com/' })
+    expect(start.aiSiteStartAnswersFromInputs(summary)).toEqual({ ...answers, example: expect.anything(), kind: expect.any(String) })
+  })
+
+  it('refuses either one on its own rule', () => {
+    expect(aiSiteStartRefusal(answers)).toBeNull()
+    expect(aiSiteStartRefusal({ ...answers, phone: 'call us' })).toMatch(/area code/)
+    expect(aiSiteStartRefusal({ ...answers, inspiration: ['not a site'] })).toMatch(/https address/)
+    // A Free workspace names one site; the details stay its own to give.
+    expect(aiSiteStartRefusal({ ...answers, pages: 2 }, { freeTaste: true })).toMatch(/Free workspace/)
+  })
+})

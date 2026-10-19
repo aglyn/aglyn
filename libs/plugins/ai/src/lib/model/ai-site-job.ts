@@ -17,6 +17,7 @@
 
 import { aiSiteKind } from './ai-site-kinds'
 import { parseAiSiteDetails, type AiSiteDetails } from './ai-site-details'
+import { parseAiSiteInspiration } from './ai-site-inspiration'
 import {
   AI_BUILD_PLAN_CREATION_NOUNS,
   aiPlanFormDatasetNames,
@@ -713,6 +714,12 @@ export interface AiSiteJobInputs extends AiSiteDetails {
   submissions: AiSiteSubmissions | null
   /** The batch this job was created under (AGL-2911); `null` for a single site. */
   batchId: string | null
+  /**
+   * The sites the person likes (AGL-3975), as https addresses in the order
+   * they gave them; empty for none. Read as signals only, behind
+   * `release_ai_site_inspiration`, and never put in front of a model.
+   */
+  inspiration?: string[]
 }
 
 /**
@@ -855,6 +862,10 @@ export function parseAiSiteJobInputs(
   // hours keep only the lines that read, areas and links one a line.
   const details = parseAiSiteDetails(inputs)
   if (typeof details === 'string') return details
+  // https addresses only, at most three; the door holds a workspace to its
+  // plan's own limit (`aiSiteInspirationRefusal`).
+  const inspiration = parseAiSiteInspiration(inputs)
+  if (typeof inspiration === 'string') return inspiration
   return {
     ...details,
     businessType,
@@ -868,6 +879,7 @@ export function parseAiSiteJobInputs(
     welcomeEmail: inputs?.['welcomeEmail'] !== false,
     submissions,
     batchId,
+    ...(inspiration.length ? { inspiration } : {}),
   }
 }
 
