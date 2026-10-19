@@ -114,7 +114,8 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
   }
 
   private func built(_ query: FirestoreQuery) -> Query {
-    var built: Query = collection(query.collection)
+    var built: Query =
+      query.collectionGroup ? db.collectionGroup(query.collection.last ?? "") : collection(query.collection)
     for constraint in query.allFilters { built = constraint.apply(to: built) }
     for order in query.order { built = built.order(by: fieldPath(order.field), descending: order.descending) }
     if let limit = query.limit { built = built.limit(to: limit) }

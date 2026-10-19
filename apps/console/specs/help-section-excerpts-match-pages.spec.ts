@@ -53,7 +53,8 @@ function plainPage(path: string): string | null {
     .replace(/\*\*|__/g, '')
     .replace(/(^|[\s(])[*_]([^*_\s][^*_]*?)[*_](?=[\s.,;:!?)]|$)/gm, '$1$2')
     .replace(/`([^`]*)`/g, '$1')
-    .replace(/<[^>]+>/g, '')
+    // Tags and comments only: a `<` or `<=` quoted in inline code is text.
+    .replace(/<!--[\s\S]*?-->|<\/?[A-Za-z][^>]*>/g, '')
     .replace(/\s+/g, ' ')
 }
 

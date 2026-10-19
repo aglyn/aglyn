@@ -155,6 +155,16 @@ struct CrmHubScreen: View {
   var openEmail: String?
 
   var body: some View {
+    if context.hostID == nil {
+      // The workspace's CRM: read through one of its sites at a time, the site picked here.
+      WorkspaceSitePick(context: context, key: "crm", prompt: "CRM of") { site in hub(site) }
+        .navigationTitle(section == .contacts ? "CRM" : section.label)
+    } else {
+      hub(context)
+    }
+  }
+
+  private func hub(_ context: NativePluginContext) -> some View {
     CrmGate(context: context) { scope, api, reference in
       VStack(spacing: 0) {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -167,7 +177,7 @@ struct CrmHubScreen: View {
           .padding(.vertical, AglynSpace.one)
         }
         .accessibilityIdentifier("crm-sections")
-        sectionView(scope, api, reference).frame(maxWidth: .infinity, maxHeight: .infinity)
+        sectionView(context, scope, api, reference).frame(maxWidth: .infinity, maxHeight: .infinity)
       }
       .background(AglynColor.page)
     }
@@ -175,7 +185,9 @@ struct CrmHubScreen: View {
   }
 
   @ViewBuilder
-  private func sectionView(_ scope: CrmScope, _ api: CrmAPI, _ reference: CrmReference) -> some View {
+  private func sectionView(
+    _ context: NativePluginContext, _ scope: CrmScope, _ api: CrmAPI, _ reference: CrmReference
+  ) -> some View {
     switch section {
     case .contacts, .leads, .companies:
       RecordsSection(

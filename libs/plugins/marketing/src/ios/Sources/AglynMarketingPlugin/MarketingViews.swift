@@ -46,29 +46,11 @@ struct MarketingHubScreen: View {
     VStack(spacing: 0) {
       AglynSectionBar(MarketingSection.allCases, selection: $section, label: \.label, systemImage: \.symbol)
       Group {
-        if let orgID = context.orgID, let hostID = context.hostID {
-          let actions = MarketingActions(context: context, orgID: orgID, hostID: hostID)
-          switch section {
-          case .overview: OverviewSection(context: context, actions: actions) { section = $0 }
-          case .campaigns: CampaignsSection(context: context, actions: actions, access: access, initial: initial)
-          case .conversions: ConversionsSection(context: context, actions: actions)
-          case .overlays:
-            if access.org.ready && !access.carries("marketingOverlays") {
-              AglynEmptyState(
-                "Overlays come with Starter", systemImage: "rectangle.on.rectangle",
-                message: "Announcement bars and popups are included from the Starter plan. Change the plan under Billing to use them.")
-            } else {
-              OverlaysSection(context: context, actions: actions, access: access)
-            }
-          case .experiments:
-            if access.org.ready && !access.carries("abTesting") {
-              AglynEmptyState(
-                "A/B testing comes with Business", systemImage: "flask",
-                message: "Testing two versions of a page or an email is included from the Business plan.")
-            } else {
-              ExperimentsSection(context: context, actions: actions, access: access)
-            }
-          }
+        if context.hostID == nil {
+          // The workspace's Marketing page: its sections read one site at a time, the site picked here.
+          WorkspaceSitePick(context: context, key: "marketing", prompt: "Marketing of") { site in sections(site) }
+        } else {
+          sections(context)
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -77,6 +59,34 @@ struct MarketingHubScreen: View {
     .navigationTitle(section == .overview ? "Marketing" : section.label)
     .task(id: context.hostID) { access.start(context) }
     .onDisappear { access.stop() }
+  }
+
+  @ViewBuilder
+  private func sections(_ context: NativePluginContext) -> some View {
+    if let orgID = context.orgID, let hostID = context.hostID {
+      let actions = MarketingActions(context: context, orgID: orgID, hostID: hostID)
+      switch section {
+      case .overview: OverviewSection(context: context, actions: actions) { section = $0 }
+      case .campaigns: CampaignsSection(context: context, actions: actions, access: access, initial: initial)
+      case .conversions: ConversionsSection(context: context, actions: actions)
+      case .overlays:
+        if access.org.ready && !access.carries("marketingOverlays") {
+          AglynEmptyState(
+            "Overlays come with Starter", systemImage: "rectangle.on.rectangle",
+            message: "Announcement bars and popups are included from the Starter plan. Change the plan under Billing to use them.")
+        } else {
+          OverlaysSection(context: context, actions: actions, access: access)
+        }
+      case .experiments:
+        if access.org.ready && !access.carries("abTesting") {
+          AglynEmptyState(
+            "A/B testing comes with Business", systemImage: "flask",
+            message: "Testing two versions of a page or an email is included from the Business plan.")
+        } else {
+          ExperimentsSection(context: context, actions: actions, access: access)
+        }
+      }
+    }
   }
 }
 

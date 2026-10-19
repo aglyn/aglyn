@@ -197,6 +197,12 @@ describe('the Aglyn AI row (AGL-2899)', () => {
       JSON.parse(String((init as RequestInit).body)),
     )
 
+  /** Every switch except Site Care's, which every plan's card renders. */
+  const aiSwitches = () =>
+    screen
+      .queryAllByRole('switch')
+      .filter((element) => element.getAttribute('aria-label') !== 'Site Care')
+
   const stateFor = (
     plan: string,
     aiAddon: { unitUsd: number | null; quantity?: number },
@@ -285,7 +291,9 @@ describe('the Aglyn AI row (AGL-2899)', () => {
     expect(await screen.findByText('Aglyn AI')).toBeTruthy()
     const link = screen.getByRole('link', { name: 'Upgrade your plan to add Aglyn AI' })
     expect(link.getAttribute('href')).toBe('#plans')
-    expect(screen.queryAllByRole('switch')).toHaveLength(0)
+    // No AI switch. The one switch on the card is Site Care's, shown off and
+    // disabled with its own reason (AGL-3954).
+    expect(aiSwitches()).toHaveLength(0)
     // Free sells no band, so the sentence names what it unlocks and no figure.
     expect(screen.queryByText(/Adds .* AI credits a month/)).toBeNull()
     // …and NOT the generic upgrade caption, which cannot say where to go.
@@ -302,7 +310,125 @@ describe('the Aglyn AI row (AGL-2899)', () => {
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
 
     expect(await screen.findByText('Included in your plan')).toBeTruthy()
-    expect(screen.queryAllByRole('switch')).toHaveLength(0)
+    expect(aiSwitches()).toHaveLength(0)
     expect(screen.queryByText('Upgrade your plan to add Aglyn AI')).toBeNull()
+  })
+})
+
+/**
+ * The Site Care row (AGL-3954). Sold flat on every paid plan, so a paid plan
+ * gets the switch, the price and both sentences; Free and Enterprise keep the
+ * row and a switch that is off and disabled, with the reason beside it —
+ * a prerequisite shown, never hidden.
+ */
+describe('the Site Care row (AGL-3954)', () => {
+  const postedBodies = () =>
+    (global.fetch as jest.Mock).mock.calls.map(([, init]) =>
+      JSON.parse(String((init as RequestInit).body)),
+    )
+
+  const stateFor = (
+    plan: string,
+    options: { interval?: 'month' | 'year'; sold?: boolean } = {},
+  ) => {
+    const sold = options.sold ?? true
+    return {
+      hasSubscription: plan !== 'free',
+      plan,
+      interval: options.interval ?? 'month',
+      quantities: { siteCare: 0 },
+      catalog: {
+        siteCare: {
+          unitUsd: 49,
+          max: sold ? 1 : 0,
+          configured: true,
+          upgradeRequired: !sold,
+        },
+      },
+    }
+  }
+
+  const siteCareSwitch = () =>
+    screen.getByRole('switch', { name: 'Site Care' }) as HTMLInputElement
+
+  it('on a paid plan: the price, what it covers, what it does not, and a switch', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse(stateFor('starter')),
+    ) as unknown as typeof fetch
+
+    render(<BillingAddonsCardComponent orgId="org-1" canManage />)
+
+    expect(await screen.findByText('Site Care — $49/mo')).toBeTruthy()
+    expect(screen.getByText(/We make your site changes for you/)).toBeTruthy()
+    expect(screen.getByText(/done within 2 business days/)).toBeTruthy()
+    expect(screen.getByText(/What it does not cover: plan limits/)).toBeTruthy()
+    const toggle = siteCareSwitch()
+    expect(toggle.checked).toBe(false)
+    expect(toggle.disabled).toBe(false)
+    expect(screen.queryByRole('link', { name: 'Choose a paid plan' })).toBeNull()
+  })
+
+  it('quotes the yearly charge on an annual plan', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse(stateFor('pro', { interval: 'year' })),
+    ) as unknown as typeof fetch
+
+    render(<BillingAddonsCardComponent orgId="org-1" canManage />)
+
+    expect(await screen.findByText('Site Care — $588/yr')).toBeTruthy()
+  })
+
+  it('flipping the switch previews `siteCare` at quantity 1', async () => {
+    global.fetch = jest.fn(async (_url: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      if (body.action === 'preview') {
+        return jsonResponse({ prorationCents: 4_900, chargedNowCents: 4_900, currency: 'usd' })
+      }
+      if (body.action === 'set') {
+        return jsonResponse({ quantities: { siteCare: 1 } })
+      }
+      return jsonResponse(stateFor('business'))
+    }) as unknown as typeof fetch
+
+    render(<BillingAddonsCardComponent orgId="org-1" canManage />)
+    await screen.findByText('Site Care — $49/mo')
+    fireEvent.click(siteCareSwitch())
+
+    await waitFor(() =>
+      expect(postedBodies()).toContainEqual({
+        orgId: 'org-1',
+        action: 'preview',
+        kind: 'siteCare',
+        quantity: 1,
+      }),
+    )
+  })
+
+  it('on Free: the row, a disabled switch, the reason, and a link to the plans', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse(stateFor('free', { sold: false })),
+    ) as unknown as typeof fetch
+
+    render(<BillingAddonsCardComponent orgId="org-1" canManage />)
+
+    await screen.findByText(/Site Care is added to a paid plan/)
+    const toggle = siteCareSwitch()
+    expect(toggle.checked).toBe(false)
+    expect(toggle.disabled).toBe(true)
+    const link = screen.getByRole('link', { name: 'Choose a paid plan' })
+    expect(link.getAttribute('href')).toBe('#plans')
+    expect(screen.getByText(/What it does not cover/)).toBeTruthy()
+  })
+
+  it('on Enterprise: a disabled switch and the agreement, with no plan link', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse(stateFor('enterprise', { sold: false })),
+    ) as unknown as typeof fetch
+
+    render(<BillingAddonsCardComponent orgId="org-1" canManage />)
+
+    await screen.findByText(/Arranged in your Enterprise agreement/)
+    expect(siteCareSwitch().disabled).toBe(true)
+    expect(screen.queryByRole('link', { name: 'Choose a paid plan' })).toBeNull()
   })
 })

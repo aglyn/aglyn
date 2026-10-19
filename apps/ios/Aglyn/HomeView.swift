@@ -20,7 +20,7 @@ struct HomeView: View {
   private static let recentWindow = 50
   private static let recentShown = 5
 
-  private var hasSite: Bool { model.workspace?.site != nil }
+  private var hasSite: Bool { model.scopedSite(navigation) != nil }
 
   var body: some View {
     ScrollView {
@@ -61,15 +61,15 @@ struct HomeView: View {
     .task(id: "\(model.auth?.user?.uid ?? ""):\(model.refreshToken)") {
       feed.start(reader: model.reader, uid: model.auth?.user?.uid, count: Self.recentWindow)
     }
-    .task(id: "\(model.workspace?.site?.id ?? ""):\(model.refreshToken)") {
-      site.start(reader: model.reader, hostID: model.workspace?.site?.id)
+    .task(id: "\(model.scopedSite(navigation)?.id ?? ""):\(model.refreshToken)") {
+      site.start(reader: model.reader, hostID: model.scopedSite(navigation)?.id)
     }
   }
 
   // MARK: 1. The site
 
   private var header: some View {
-    let picked = model.workspace?.site
+    let picked = model.scopedSite(navigation)
     let address = HostStatus.siteAddress(picked?.subdomain)
     return SiteHeaderCard(
       workspace: model.workspace?.org?.name,

@@ -47,11 +47,15 @@ public struct FirestoreQuery: @unchecked Sendable {
   /// Also answer when only the snapshot's metadata changes — a cached
   /// answer the server then confirms — so `fromCache` turns false on screen.
   public var includeMetadataChanges: Bool
+  /// Read every collection named `collection.last`, wherever it sits (the web SDK's `collectionGroup`): a workspace's
+  /// rows across all its sites, which the rules admit under an `orgId` clause.
+  public var collectionGroup: Bool
 
   public init(
     _ collection: [String], equals: [(field: String, value: Any)] = [], filters: [ListQueryConstraint] = [],
-    order: [Order] = [], limit: Int? = nil, includeMetadataChanges: Bool = false
+    order: [Order] = [], limit: Int? = nil, includeMetadataChanges: Bool = false, collectionGroup: Bool = false
   ) {
+    self.collectionGroup = collectionGroup
     self.collection = collection
     self.equals = equals
     self.filters = filters

@@ -174,6 +174,10 @@ export async function register(): Promise<void> {
         const { consoleMediaIngest } = await import('./utils/server/media-ingest')
         return await consoleMediaIngest.findStockPhoto(input)
       },
+      listOwnerPhotos: async (input) => {
+        const { consoleMediaIngest } = await import('./utils/server/media-ingest')
+        return await consoleMediaIngest.listOwnerPhotos(input)
+      },
     },
     { pluginId: 'console' },
   )

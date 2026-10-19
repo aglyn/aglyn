@@ -52,9 +52,11 @@ import {
   type CollaboratorSeatEntry,
   type HostAccessRole,
   type OrgPermission,
+  type OrgPlan,
   type OrgRole,
   type OwnerHandoffPreviousOwner,
 } from '@aglyn/aglyn/server'
+import type { OrgOverrideReasonCode } from '@aglyn/aglyn/app-utils/org-override-reason'
 import type { PluginActivityTargetType } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
 import {
   ACCOUNT_ACQUISITION_FIELD,
@@ -80,6 +82,7 @@ import { ORG_LANDED_AT_PATH } from '@aglyn/aglyn/app-utils/health-report'
 import { runPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/plugin-declarations-repair'
 import { FieldValue } from 'firebase-admin/firestore'
 import { cache } from 'react'
+import { setAdminAudit } from './admin-audit-write'
 import { findUserByUidAcrossPools } from './auth-pools'
 import firebaseAdmin from './firebase-admin'
 import {
@@ -258,6 +261,29 @@ export interface CreateOrganizationOptions {
    * leaves the prospect's one Free seat free for the prospect.
    */
   ownerStaffSeat?: boolean
+  /**
+   * A staff comp granted at birth (AGL-3952).
+   *
+   * A workspace staff build for a prospect used to be two trips: create it
+   * from the picker, then open its staff page and grant the comp from the
+   * override dialog. The second trip is the one a booth build cannot afford,
+   * and nothing about it needs the workspace to exist first — so the comp
+   * rides the creation transaction, as `entitlements.planComp` on the org
+   * document and an `org.override` audit row beside it, exactly as the
+   * override route would have written them a minute later.
+   *
+   * Always capped: this is a sales trial, and an uncapped comp is for an
+   * internal workspace. Only `/api/orgs/create` sets it, from a token with
+   * the `staff` claim; a self-serve caller can never reach it.
+   */
+  planComp?: {
+    plan: OrgPlan
+    reason: OrgOverrideReasonCode
+    /** Staff-only rationale; explicit `null` when none was given. */
+    note: string | null
+    /** The staff uid that granted it — the creator. */
+    grantedBy: string
+  }
 }
 
 /**
@@ -407,7 +433,66 @@ export async function createOrganization(
       // (`ORG_LANDED_AT_PATH`). Written `null`, not left out, because a
       // missing field is how the check recognizes an org made before it.
       [ORG_LANDED_AT_PATH]: null,
+      // The comp the workspace is born with (AGL-3952), in the shape the
+      // override route writes, so `readOrgPlanComp` and the staff surfaces
+      // cannot tell the two apart. `uncapped: false` is written, never left
+      // out: the resolver only lifts caps on a literal `true`, and the
+      // override route's merge later relies on the key being there.
+      ...(options.planComp
+        ? {
+            entitlements: {
+              planComp: {
+                plan: options.planComp.plan,
+                uncapped: false,
+                reason: options.planComp.reason,
+                note: options.planComp.note,
+                grantedBy: options.planComp.grantedBy,
+                grantedAt: FieldValue.serverTimestamp(),
+              },
+            },
+          }
+        : {}),
     })
+    if (options.planComp) {
+      // The row that explains the comp, in the same transaction as the org
+      // (AGL-1784's property, kept): the Audit Log reads a booth build like a
+      // comp granted by hand, with `before` the nothing a new org is and
+      // `planEffect` saying what the act left it on.
+      setAdminAudit(tx, db, {
+        actorUid: options.planComp.grantedBy,
+        action: 'org.override',
+        target: `orgs/${orgId}`,
+        before: { plan: null, entitlements: null, releaseFlags: null },
+        after: {
+          plan: null,
+          entitlements: {
+            planComp: {
+              plan: options.planComp.plan,
+              uncapped: false,
+              reason: options.planComp.reason,
+              note: options.planComp.note,
+              grantedBy: options.planComp.grantedBy,
+              grantedAt: FieldValue.serverTimestamp(),
+            },
+          },
+          releaseFlags: null,
+        },
+        reason: options.planComp.reason,
+        note: options.planComp.note,
+        planEffect: {
+          before: { effectivePlan: 'free', decidedBy: 'no-plan', uncapped: false },
+          after: {
+            effectivePlan: options.planComp.plan,
+            decidedBy: 'comp',
+            compInForce: true,
+            uncapped: false,
+          },
+          compChange: 'granted',
+          planChange: 'unchanged',
+        },
+        at: FieldValue.serverTimestamp(),
+      })
+    }
     tx.set(
       db.collection('orgs').doc(orgId).collection('members').doc(ownerUid),
       {
