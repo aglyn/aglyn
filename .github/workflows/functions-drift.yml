@@ -1,7 +1,9 @@
 name: Functions drift
 
-# Fails when a DEPLOYED Cloud Function is older than the promoted commit that
-# changed `cloud/functions/**` (AGL-2580). The third sibling of
+# Fails when a DEPLOYED Cloud Function does not run the promoted
+# `cloud/functions` source (AGL-2580): each deploy stamps its checkout's sha
+# onto every function (AGLYN_SOURCE_SHA), and the check compares that commit's
+# package tree with the baseline's (AGL-3968). The third sibling of
 # rules-drift.yml and index-drift.yml, and the one that did not exist on
 # 2026-09-04, which is why the second of that day's two incidents was
 # invisible until a customer-facing monitor went red.
