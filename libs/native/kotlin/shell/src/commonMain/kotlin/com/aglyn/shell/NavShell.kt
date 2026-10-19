@@ -5,6 +5,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -748,26 +750,43 @@ private fun ShellBody(
   }
 }
 
-/** An area's sections as tabs over it (Contacts, Leads, Deals… inside CRM), the console's section rail. */
+/**
+ * An area's sections as tabs over it (Contacts, Leads, Deals… inside CRM), the console's section rail. The strip scrolls
+ * edge to edge, but its first label starts on the content edge E and the underline sits under each label (Figma draws no
+ * full-bleed strip, so the rule's edge holds; a Material tab row centres a short label in a 90 minimum and missed it).
+ */
 @Composable
 internal fun SectionTabs(sections: List<NavSectionItem>, selected: String, onSelect: (String) -> Unit) {
   val index = sections.indexOfFirst { it.key == selected }.coerceAtLeast(0)
-  PrimaryScrollableTabRow(
-    selectedTabIndex = index,
-    // A tab pads its label by 16, so the first label sits on the content edge E.
-    edgePadding = (com.aglyn.ui.contentInset() - 16.dp).coerceAtLeast(0.dp),
-    containerColor = MaterialTheme.colorScheme.background,
-    modifier = Modifier.testTag("section-tabs"),
-    divider = { HorizontalDivider(color = shellColors.divider) },
-  ) {
-    sections.forEachIndexed { i, section ->
-      Tab(
-        selected = i == index,
-        onClick = { onSelect(section.key) },
-        text = { Text(section.label, maxLines = 1) },
-        modifier = Modifier.testTag("section-${section.id}"),
-      )
+  val edge = com.aglyn.ui.contentInset()
+  val scroll = androidx.compose.foundation.rememberScrollState()
+  Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).testTag("section-tabs")) {
+    Row(
+      Modifier.fillMaxWidth().horizontalScroll(scroll).padding(start = edge - 12.dp, end = edge - 12.dp).selectableGroup(),
+      verticalAlignment = Alignment.Bottom,
+    ) {
+      sections.forEachIndexed { i, section ->
+        val on = i == index
+        Column(
+          Modifier.clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+            .selectable(selected = on, role = Role.Tab, onClick = { onSelect(section.key) })
+            .padding(horizontal = 12.dp).height(44.dp).testTag("section-${section.id}"),
+          verticalArrangement = Arrangement.Bottom,
+          horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+          Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Text(
+              section.label, maxLines = 1, fontSize = 14.sp, lineHeight = 20.sp,
+              fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
+              color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+          // The underline spans the label, the console's tab indicator.
+          Box(Modifier.height(3.dp).then(if (on) Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)).background(MaterialTheme.colorScheme.primary) else Modifier))
+        }
+      }
     }
+    HorizontalDivider(color = shellColors.divider)
   }
 }
 
