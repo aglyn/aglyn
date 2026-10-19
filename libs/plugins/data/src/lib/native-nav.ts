@@ -54,6 +54,7 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       screen: 'data.datasets',
       pluginId: 'data',
       order: 60,
+      docs: '/content-and-data/datasets/overview',
       console: nativeNavRef('hostPluginTab', '/data'),
     },
   },

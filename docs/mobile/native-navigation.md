@@ -84,6 +84,65 @@ A row (`NativeNavRow`) has these fields:
 - `console`: where the row's twin is in the console (`NativeNavConsoleRef`).
   `apps/console/specs/native-nav-manifest.spec.ts` reads this reference.
 
+**Help docs (`docs`).** A row and each of its sections may carry `docs`: a
+docs-site path with its anchor, such as
+`/content-and-data/crm/overview#at-the-organization-level`. It is the help
+the console's own page for that place offers:
+
+- a plugin hub's `header.docsTopic` and `docsAnchor`, for that scope;
+- a settings hub's `help` prop: Team, Billing, workspace Settings, site
+  Admin;
+- the Sites list's `help` prop.
+
+A section gets its row's page unless the console names one of its own. The
+apps open it in the in-app browser, on the docs origin. The drift spec reads
+the console's registry (`apps/console/constants/docs-help.generated.ts`) and
+holds every row to it, including leaving `docs` out where the console's page
+has no help.
+
+**Create new (`create`).** `NATIVE_NAV_MANIFEST.create` holds one
+`NativeNavCreateList` per scope, `workspace` and `site`. Each item
+(`NativeNavCreateItem`) has these fields:
+
+- `id`, `label`, `icon`;
+- `screen` and `params` (`new: '1'` opens the area's create form);
+- `pluginId`, `requiresHostAdmin`, `permission`, `hostRoles`;
+- `planFeature` and `blockedReason`;
+- `order`;
+- `console`, where the console offers the same action.
+
+The core offers Site (workspace) and Page (site). Each plugin adds its own
+items in its `native-nav.ts` (`NATIVE_NAV_CREATE`).
+
+| scope | items | the console's action |
+| -- | -- | -- |
+| workspace | Site, Contact, Email template | "Create site" on Sites; "New contact" on CRM → Contacts; "New template" on Emails → Templates |
+| site | Page, Product, Draft order, Service, Event, Form, Contact | "Create new page"; "Add product"; "Draft order"; "Add service"; "Add event"; "Create Form"; "New contact" |
+
+Three requested items are not offered, because the console has no such
+action:
+
+- **Booking:** bookings come from the site. The console's Bookings page
+  creates a *service*.
+- **Customer text:** there is no console page for texts. The native screen
+  holds the texting settings.
+- **Order:** the console creates a *draft order*.
+
+`resolveCreateList(manifest, scope, enabledPluginIds, permissions, features,
+hostRole)` builds the menu. An item of a plugin that is off is not offered.
+Otherwise the item is shown, and is blocked with a reason when one of these
+holds, checked in this order:
+
+1. The workspace permission is not held (`NATIVE_CREATE_PERMISSION_REASON`).
+2. The person's site role is not in `hostRoles` (`NATIVE_CREATE_SITE_ROLE_REASON`).
+3. The plan lacks `planFeature` (`blockedReason`, or `NATIVE_CREATE_PLAN_REASON`).
+
+This follows the prerequisite rules: shown, never hidden. The draft order's
+Stripe prerequisite is shown inside its sheet, as in the console. Today only
+`commerce.product` reads `new: '1'`. Each other screen opens its existing
+create sheet when it reads the param, which is part of the Create new piece
+in Phase 2.
+
 `NATIVE_NAV_MANIFEST.elsewhere` lists the console places that no row holds,
 and says where each went: the site Dashboard is the site's Home, Setup and
 Admin are Site settings, POS is the Aglyn POS app, Team, Billing and Settings
@@ -192,7 +251,7 @@ now:
 | The one box (⌘K): search and switching in one place | the title bar field and ⌘K palette | the top bar field and Ctrl+K on desktop | `GET /api/search` (§5) with the ID token; `OneBoxResponse`; plus the local `searchNavScreens` group | `ConsoleAPIClient` / Ktor API client; deep-link resolution of `row.link` (`context.openLink`, `model.open`); the switcher's selection for workspace and site rows | the box, grouped results, "Show more" per group (`group`, `cursor`), back, forward and history |
 | Starred and Recents | ☆ in each screen's title bar; the Starred group; Home's recents | the same | `starred`, `recents` (`toggleStarred`, `setStarColor`, `recordRecent`) | — | all of it |
 | Home: what needs you | rework of `HomeView` | rework of `HomeScreen` | orders by status, unanswered inbox, today's bookings, failed payments, finished AI jobs (the data the apps already list) | existing list screens, opened with their filters | the "Needs you" lines; recents as cards; the one-line AI prompt that opens the existing Create with AI flow |
-| Create new | "+" on the rail; the center tab on phones | the same | role and plan | each area's own create form, shown as a sheet | the menu, with a blocked item shown disabled and its reason (`PrerequisiteNotice` rules) |
+| Create new | "+" on the rail; the center tab on phones | the same | `resolveCreateList` over the manifest's `create` (§1), with the workspace's permissions and plan features and the person's site role | each area's own create form, shown as a sheet | the menu, with a blocked item shown disabled and its reason; each screen reading `new: '1'` (only `commerce.product` does today) |
 | Notifications popover | the bell in the title bar | the same | `users/{uid}/notifications` | `NotificationsView` / `NotificationsScreen`, notification settings | the popover, with a scope filter and All / Unread; the sidebar row goes |
 
 ## 5. The one-box route
@@ -261,14 +320,30 @@ now:
 | -- | -- | -- | -- | -- | -- |
 | Tabs (Mac, iPad) | the system's window tabs; ⌘T, ⌘W, ⌘⇧T | Compose Desktop windows | — | — | tab overview, recently closed |
 | AI panel | docked on the right; a sheet on phones | the same | the console's Assist routes and credits | the AI plugin's screens (`ai.*`) | context chip and suggestions (live AI runs only with Zach's go) |
-| Help and in-app docs | "?" in the title bar | the same | — | the in-app browser screen (AGL-3935) | the menu |
+| Help and in-app docs | "?" in the title bar | the same | the row's or section's `docs` (§1) for "Help docs" on this screen | the in-app browser screen (AGL-3935) | the menu |
 | Whole-app theming | `AppThemePrefs` applied through the shared tokens (`AglynUI`) | through `AglynTheme` / `Tokens.generated.kt` | `appTheme`, `workspaceColors`, local override | generated tokens | themes, accent with contrast checks, density, text size, sidebar style, app icons |
 | Screen patterns, Marketplace home, plan card | — | — | — | the console's counts and listings | per the proposal |
 
 Every native UI change updates the "Native App" Figma file in the same change
 (`feedback_native_app_figma_stays_in_sync`).
 
-## 7. Owed deploys
+## 7. Push routing per account
+
+`MobilePushData` (`libs/aglyn/src/lib/app-utils/mobile-push.ts`) carries
+`uid`, the account a push was sent to. The fan-out
+(`libs/tenant/data/admin/src/lib/server/push-delivery.ts`) makes one send per
+recipient, each with that account's `uid`.
+
+- **Apple:** `AglynCore` `MobilePushData.uid` is read from the payload.
+- **Android:** `AglynMessagingService` puts `EXTRA_UID` (`"uid"`) on the tap
+  intent.
+
+An app signed in to several accounts (Add account, Phase 1) opens a tapped
+push in that account, switching to it when it is signed in but not in use. A
+push without `uid` (sent before the field) opens in the account in use, as
+before.
+
+## 8. Owed deploys
 
 - **Firestore rules:** `accountPrefsValid()` on `users/{userId}`. Deploy them
   before or with the promotion that ships this change, and before any app
