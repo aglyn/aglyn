@@ -28,9 +28,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
@@ -753,7 +751,7 @@ private fun ShellBody(
 /**
  * An area's sections as tabs over it (Contacts, Leads, Deals… inside CRM), the console's section rail. The strip scrolls
  * edge to edge, but its first label starts on the content edge E and the underline sits under each label (Figma draws no
- * full-bleed strip, so the rule's edge holds; a Material tab row centres a short label in a 90 minimum and missed it).
+ * full-bleed strip, so the rule's edge holds; a Material tab row centers a short label in a 90 minimum and missed it).
  */
 @Composable
 internal fun SectionTabs(sections: List<NavSectionItem>, selected: String, onSelect: (String) -> Unit) {
