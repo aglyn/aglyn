@@ -208,6 +208,8 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
     // Music (AGL-3716): on for every workspace, and a site can turn it off.
     // Help desks (AGL-3824): sold with commerce, hidden until the deployment
     // can seal a merchant's own help desk credentials.
+    // Domains (AGL-3962): on for every workspace, buying hidden until the
+    // deployment names a registrar, and a site can turn it off.
     expect(WORKSPACE_LOCKED).toEqual([
       'forms',
       'ai',
@@ -229,6 +231,7 @@ describe('a plugin on for every workspace is switchable per site (AGL-3028, AGL-
       'music',
       'help-desks',
       'ad-conversions',
+      'domains',
     ])
   })
 

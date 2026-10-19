@@ -9,6 +9,69 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.270 — 2026-10-19
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.269...v1.0.0-beta.270)
+
+### Added
+
+- **billing:** site care add-on at a flat $49/mo on every paid plan ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
+- **media:** a site photo link drops phone photos in the library; the AI uses them first ([AGL-3957](https://linear.app/aglyn/issue/AGL-3957))
+- **console:** staff comp a client's workspace as they create it ([AGL-3952](https://linear.app/aglyn/issue/AGL-3952))
+- **native:** export the Figma base palettes the preview derivation starts from ([AGL-3950](https://linear.app/aglyn/issue/AGL-3950))
+- **native:** the Aglyn theme is the console's shipping scheme; tokens, roles, docs ([AGL-3950](https://linear.app/aglyn/issue/AGL-3950))
+- **native:** theme palettes, accent derivation and role grants as contracts ([AGL-3950](https://linear.app/aglyn/issue/AGL-3950))
+- **kotlin:** port resolveCreateList, a push tap opens in its own account ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **native:** create menus and help docs in the nav manifest ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+- **native:** a push names its recipient account, uid in MobilePushData ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+- **kotlin:** home opens the site picker, invitations join from the picker ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **kotlin:** the workspace scope opens crm, inbox, emails and marketing ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **apple:** workspace views for Inbox, Emails, Marketing and CRM ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
+- **apple:** workspace rail, scope sidebar, pickers and Add account ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
+- **kotlin:** nav shell phase 1: rail, scoped sidebar, pickers, menus, add account ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **console:** one-box search route, nav manifest drift spec and nav doc ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943), [AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
+- **kotlin:** port the nav manifest, account preferences and one-box rules ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **native:** nav manifest, account preferences and one-box contracts ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+- **kotlin:** sign-in on the Facets ground, the button system and the splash hand-over ([AGL-3934](https://linear.app/aglyn/issue/AGL-3934))
+- **apple:** sign-in on the Facets ground, the button system and the launch intro ([AGL-3934](https://linear.app/aglyn/issue/AGL-3934))
+- **native:** one sign-in and launch theme for Apple, Kotlin and the launch art ([AGL-3934](https://linear.app/aglyn/issue/AGL-3934))
+
+### Fixed
+
+- **tools:** grade deployed functions by source stamp, not deploy time ([AGL-3968](https://linear.app/aglyn/issue/AGL-3968))
+- **media:** photo link page is web-only, dialog mounts on open, excerpt check reads code ([AGL-3957](https://linear.app/aglyn/issue/AGL-3957))
+- **data:** datasets empty state names no template syntax
+- **console:** pending invites stop re-reading on every tab flip ([AGL-3953](https://linear.app/aglyn/issue/AGL-3953))
+- **ai:** pages a build adds to a site move in the site's own motion style ([AGL-3949](https://linear.app/aglyn/issue/AGL-3949))
+- **native:** sign-in fixes from the device drive, and a sign-in title override ([AGL-3934](https://linear.app/aglyn/issue/AGL-3934))
+- **plugins:** the one box's search sources live on globalThis ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943), [AGL-3947](https://linear.app/aglyn/issue/AGL-3947))
+- **ai:** a form field's placeholder is never a bracketed marker ([AGL-3942](https://linear.app/aglyn/issue/AGL-3942))
+- **ai:** stock alt texts read plainly; mountain sites skip beaches; show the work ([AGL-3942](https://linear.app/aglyn/issue/AGL-3942))
+
+### Performance
+
+- **tenant:** the render's org read stops holding every page at a 60s ISR window ([AGL-3951](https://linear.app/aglyn/issue/AGL-3951))
+
+### Changed
+
+- **native:** plugins declare their nav rows, the generator assembles them ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+
+### Documentation
+
+- site care add-on decision of 2026-10-18 in the decision log index ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954), [AGL-3960](https://linear.app/aglyn/issue/AGL-3960))
+
+<details>
+<summary>Also in this release: 4 test, 2 chore</summary>
+
+- **docs:** regenerate the feature matrix for the site care rows ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
+- **apple:** a workspace without a plan reads as Free in its logo row ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
+- **tools:** the launch logo spec checks the mark PNGs at 1x-3x ([AGL-3934](https://linear.app/aglyn/issue/AGL-3934))
+- **console:** the licenses section spec reads the shared section-id constant ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+- **tools:** the Licenses section id's baseline row moves with it ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+- **kotlin:** accounts and account preferences keep each account apart ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+
+</details>
+
 ## v1.0.0-beta.269 — 2026-10-18
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.268...v1.0.0-beta.269)

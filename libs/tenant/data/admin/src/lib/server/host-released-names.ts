@@ -19,8 +19,7 @@ import { TENANT_APEX } from '@aglyn/aglyn/app-utils/tenant-apex'
 
 /**
  * The names a deleted site stops answering on: its custom domain and its
- * platform subdomain (AGL-3629). The `www.` twin is the custom domain's, and
- * a plugin derives it from the domain the way the router does.
+ * platform subdomain (AGL-3629), and the `www.` twin when the site claimed one.
  */
 export function releasedHostNames(
   host: Record<string, unknown> | null | undefined,
@@ -30,6 +29,9 @@ export function releasedHostNames(
   const names: string[] = []
   const cname = clean(host?.['cname'])
   if (cname) names.push(cname)
+  // The twin this site claimed for its domain (AGL-3961), when it has one.
+  const twin = clean(host?.['cnameTwin'])
+  if (twin && cname) names.push(twin)
   const subdomain = clean(host?.['subdomain'])
   if (subdomain) names.push(`${subdomain}.${TENANT_APEX}`)
   return names

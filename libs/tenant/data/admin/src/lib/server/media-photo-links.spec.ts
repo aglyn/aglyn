@@ -82,7 +82,9 @@ describe('a site photo link (AGL-3957)', () => {
     expect(minted.digest).not.toContain(minted.secret)
     expect(parsePhotoLinkToken(minted.token)).toEqual({ linkId: minted.linkId, secret: minted.secret })
     expect(photoLinkSecretMatches(minted.digest, minted.secret)).toBe(true)
-    expect(photoLinkSecretMatches(minted.digest, minted.secret.replace(/./, 'f'))).toBe(false)
+    // One character changed for certain: a fixed replacement is a no-op whenever the random secret already starts with it.
+    const altered = `${minted.secret[0] === 'f' ? 'e' : 'f'}${minted.secret.slice(1)}`
+    expect(photoLinkSecretMatches(minted.digest, altered)).toBe(false)
     expect(photoLinkSecretMatches(undefined, minted.secret)).toBe(false)
   })
 
