@@ -22,6 +22,8 @@ import {
   entryPublishSortStamp,
 } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { PlanUpsellNotice } from '@aglyn/shared-ui-jsx/components/plan-upsell-notice.component'
 import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -63,6 +65,7 @@ import {
   useUser,
   type CollectionSort,
 } from '@aglyn/tenant-feature-instance'
+import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../../utils/revalidate-live-pages'
@@ -75,10 +78,10 @@ import {
 } from './entry-list-query'
 import { useHostId, useHostSubdomain } from '../host-id-provider'
 import { buildRoute, Route } from '../../constants/route-links'
-import { hasEntitlement } from '../../constants/entitlements'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../../constants/shared'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import useCurrentOrg from '../../hooks/use-current-org'
+import { usePlanFeatureLock } from '../../hooks/use-plan-feature-lock'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
@@ -397,7 +400,11 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
   const { confirm } = useConfirmationContext()
   const logActivity = useHostActivityLogger(hostId)
   const { data: user } = useUser()
-  const { org, ready: orgReady } = useCurrentOrg()
+  const { ready: orgReady } = useCurrentOrg()
+  // Scheduling an entry is Business; the dialog says so before a time is
+  // picked rather than after Schedule is pressed.
+  const scheduling = usePlanFeatureLock('scheduledPublishing')
+  const schedulingReason = planLockReason('Scheduled publishing', scheduling.planLabel)
 
   const { data: collectionDocs } = useFirestoreCollection<any>(
     () =>
@@ -1073,11 +1080,11 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         persist: false,
       })
     }
-    if (!hasEntitlement('scheduledPublishing', org)) {
-      return enqueueSnackbar(
-        'Scheduled publishing requires a Business plan — see Billing to upgrade',
-        { variant: 'warning', persist: false },
-      )
+    if (scheduling.locked) {
+      return enqueueSnackbar(`${schedulingReason} See Billing to upgrade.`, {
+        variant: 'warning',
+        persist: false,
+      })
     }
     if (!Aglyn.entryHasByline(scheduler.entry)) {
       return enqueueSnackbar(Aglyn.ENTRY_BYLINE_REQUIRED_MESSAGE, {
@@ -1114,8 +1121,9 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
     scheduler,
     selected,
     entryRef,
-    org,
     orgReady,
+    scheduling.locked,
+    schedulingReason,
     enqueueSnackbar,
     logActivity,
     announceEntryChange,
@@ -1520,6 +1528,14 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
+          {scheduling.locked ? (
+            <PlanUpsellNotice
+              planLabel={scheduling.planLabel}
+              upgradeHref={scheduling.upgradeHref}
+            >
+              {'Write ahead and have entries go live on their own at a set date and time.'}
+            </PlanUpsellNotice>
+          ) : null}
           <Typography variant="body2" color="text.secondary">
             {'The entry goes live once the time passes (applied on the next ' +
               'site refresh).'}
@@ -1539,14 +1555,16 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setScheduler(null)}>{'Cancel'}</Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={!scheduler?.at}
-            onClick={handleScheduleEntry}
-          >
-            {'Schedule'}
-          </Button>
+          <BlockedControl blocked={scheduling.locked} reason={schedulingReason}>
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={!scheduler?.at}
+              onClick={handleScheduleEntry}
+            >
+              {'Schedule'}
+            </Button>
+          </BlockedControl>
         </DialogActions>
       </Dialog>
       {/*

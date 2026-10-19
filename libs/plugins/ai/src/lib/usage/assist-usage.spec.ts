@@ -36,7 +36,7 @@ import {
   assistUsdFromCredits,
 } from './assist-credits'
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
+  AI_TIERS,
   PLAN_ENTITLEMENTS,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
@@ -2530,11 +2530,12 @@ describe('Starter is metered the same with and without the AI add-on (AGL-3014, 
   const monthPath = `orgs/${ORG}/assistUsage/2026-08`
   /**
    * Starter's whole band once the add-on is on, sold past at $3.00 per
-   * 1,000: the plan's own 750 credits (AGL-3203) PLUS the add-on's 4,000.
-   * The add-on widens the one pool; it does not replace the plan's row.
+   * 1,000: the plan's own 750 credits (AGL-3203) PLUS the tier's 4,000 — an
+   * add-on with no `aiTier` written is Starter's old one, Spark (AGL-3965).
+   * The tier widens the one pool; it does not replace the plan's row.
    */
   const ADDON_BAND =
-    PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth + AI_ADDON_CREDITS_PER_MONTH.starter
+    PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth + AI_TIERS.spark.credits
   /** Pinned beside the sum, so a silent move of either half is caught. */
   const BARE_BAND = 750
   const starterWithAi = { plan: 'starter' as const, seatAddons: { aiAddon: 1 } }
@@ -2546,7 +2547,7 @@ describe('Starter is metered the same with and without the AI add-on (AGL-3014, 
 
   it('the band is the plan row plus the add-on, and neither half is zero', () => {
     expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(BARE_BAND)
-    expect(AI_ADDON_CREDITS_PER_MONTH.starter).toBe(4_000)
+    expect(AI_TIERS.spark.credits).toBe(4_000)
     expect(ADDON_BAND).toBe(4_750)
   })
 

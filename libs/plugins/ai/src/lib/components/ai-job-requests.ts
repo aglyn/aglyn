@@ -47,6 +47,8 @@ export interface AiJobDecision {
    * inline (AGL-3722): what the plan just spent, so the strip moves with it.
    */
   meter?: unknown
+  /** Why each answer a `needs_input` job asked for cannot be used, by field (AGL-3978). */
+  fieldErrors?: Record<string, string> | null
 }
 
 /**
@@ -60,6 +62,8 @@ export interface AiJobResumeOptions {
   creditsConfirmed?: boolean
   /** "Build the home page first" (AGL-3722): the plan narrowed to its home page and what it needs. */
   reduce?: 'first-page'
+  /** The answers a job waiting in `needs_input` asks for (AGL-3978), by `aiJobInputKey`. */
+  input?: Record<string, string>
 }
 
 /**
@@ -86,6 +90,7 @@ export async function resumeAiJobRequest(
           ...(options.retry ? { retry: options.retry } : {}),
           ...(options.creditsConfirmed ? { creditsConfirmed: true } : {}),
           ...(options.reduce ? { reduce: options.reduce } : {}),
+          ...(options.input ? { input: options.input } : {}),
         }),
       },
     )
@@ -102,6 +107,7 @@ export async function resumeAiJobRequest(
         ? null
         : String(payload?.error ?? 'The job could not be resumed — try again.'),
       ...(credits ? { credits } : {}),
+      ...(payload?.fieldErrors ? { fieldErrors: payload.fieldErrors as Record<string, string> } : {}),
     }
   } catch {
     return { job: null, error: 'The job could not be resumed — try again.' }

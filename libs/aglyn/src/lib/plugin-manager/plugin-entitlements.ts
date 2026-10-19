@@ -47,7 +47,7 @@
  * in a different order per session.
  */
 
-import type { HostAccessRole, OrgPlan, OrgRole } from '../foundation'
+import type { AglynOrgBilling, HostAccessRole, OrgPlan, OrgRole } from '../foundation'
 import { FIRST_PARTY_PLUGINS } from './enabled-plugins'
 import {
   registerPluginPermissions,
@@ -65,16 +65,42 @@ export interface PluginSeatAddonDeclaration {
    */
   maxUnits?: number
   /**
-   * The quota each unit widens, per plan: the resolved entitlement named by
-   * `key` gains `perUnitByPlan[plan] × units`. A plan the add-on is not sold
-   * on declares 0.
+   * The quota each unit widens: the resolved entitlement named by `key`
+   * gains `perUnit(org, plan) × units` when the figure depends on WHAT was
+   * bought (the Aglyn AI tier, AGL-3965), else `perUnitByPlan[plan] × units`.
+   * A plan the add-on is not sold on answers 0.
    */
   quota?: {
     key: string
-    perUnitByPlan: Readonly<Record<OrgPlan, number>>
+    perUnitByPlan?: Readonly<Record<OrgPlan, number>>
+    /**
+     * The per-unit figure read off the org itself. `org` is the billing
+     * document as `resolveOrgEntitlements` received it and `plan` its
+     * effective plan.
+     */
+    perUnit?: (org: Readonly<Partial<AglynOrgBilling>>, plan: OrgPlan) => number
   }
   /** Feature flags a purchased unit switches on. */
   features?: readonly string[]
+  /**
+   * Whether a plan sells the add-on, when `perUnitByPlan` cannot say so
+   * (a `perUnit` quota, AGL-3965). Absent: sold where `perUnitByPlan` names
+   * a figure above zero, or everywhere for an add-on with no quota.
+   */
+  soldOn?: (plan: OrgPlan) => boolean
+}
+
+/**
+ * Whether a plan sells a declared seat add-on: its own `soldOn`, else a
+ * `perUnitByPlan` figure above zero for the plan, else (no quota) yes.
+ */
+export function pluginSeatAddonSoldOn(
+  addon: PluginSeatAddonDeclaration,
+  plan: OrgPlan,
+): boolean {
+  if (addon.soldOn) return addon.soldOn(plan)
+  if (!addon.quota) return true
+  return (addon.quota.perUnitByPlan?.[plan] ?? 0) > 0
 }
 
 export interface PluginFeatureDeclaration {

@@ -1,0 +1,7 @@
+body { background-color: #ffffff; color: #1c1c1c; font-family: 'Inter', sans-serif; }
+h1, h2 { font-family: 'Cormorant Garamond', serif; font-weight: 500; }
+.site-header { display: flex; justify-content: center; gap: 48px; padding: 32px 0; }
+section { padding: 128px 24px; }
+.btn { border: 1px solid #1c1c1c; background: transparent; border-radius: 0; color: #1c1c1c; }
+a { color: #8a6d3b; }
+.gallery img { width: 100%; }

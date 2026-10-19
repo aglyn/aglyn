@@ -41,13 +41,16 @@ import {
   aiLedgerUnits,
 } from '../model/ai-build-job'
 import { aiCreditsConfirmation, type AiCreditsPrompt } from '../model/ai-credit-estimate'
+import { aiJobInputProblems } from '../model/ai-job-input'
 import { FREE_AI_TASTE_CREDITS_PER_MONTH } from '../plan-entitlements'
 import { aiGateLadder } from '../runtime/ai-gate'
 import { releaseAssistMessage } from '../usage/assist-usage'
 
 /**
  * Resume a job that stopped for a person (AGL-2935): confirm its plan, or
- * try again the step whose answer broke a building rule on its re-ask.
+ * try again the step whose answer broke a building rule on its re-ask — or
+ * answer what a job waiting in `needs_input` asks (`input`, AGL-3978), which
+ * returns it to its plan card, or a 400 with `fieldErrors` by field.
  *
  * A door that SPENDS — the next step calls the provider — so it climbs the
  * whole ladder the create door climbs: `aiGenerative`,
@@ -158,6 +161,19 @@ export async function POST(
       return refused(refusal)
     }
   }
+  // A job waiting for a person's answer (AGL-3978): every field must read
+  // before anything changes, and a refusal names each field it is about.
+  const answering = existing.status === 'needs_input' && Boolean(existing.input?.fields?.length)
+  const rawInput = payload?.['input']
+  const answers = rawInput && typeof rawInput === 'object' && !Array.isArray(rawInput) ? (rawInput as Record<string, unknown>) : null
+  if (answering && existing.input) {
+    const fieldErrors = aiJobInputProblems(existing.input, answers)
+    const first = Object.values(fieldErrors)[0]
+    if (first) {
+      await release()
+      return Response.json({ error: first, fieldErrors, job: aiJobSummary(existing, new Date()) }, { status: 400 })
+    }
+  }
   // A confirmed plan runs the step that writes, and an allowance free when the
   // job was created may be used by now (AGL-2909): the kind is asked again
   // before anything runs, and a refusal leaves the job waiting for review.
@@ -199,6 +215,7 @@ export async function POST(
         publishConfirmed: payload?.['publish'] === true,
         creditsConfirmed: confirmation,
         ...(reduced ? { reducePlan: aiBuildFirstPagePlan } : {}),
+        ...(answering ? { input: answers } : {}),
       })
   if (!changed) {
     await release()
@@ -215,7 +232,7 @@ export async function POST(
     jobId,
     after: {
       status: job.status,
-      reason: retryFailedItems ? 'retry-failed-items' : (existing.review?.reason ?? null),
+      reason: retryFailedItems ? 'retry-failed-items' : answering ? 'input' : (existing.review?.reason ?? null),
       kind: existing.kind,
     },
   })

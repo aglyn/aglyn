@@ -18,6 +18,7 @@
 
 import {
   type AglynOrgBilling,
+  buildRoute,
   checkEntitlement,
   CRM_COLLECTIONS,
   type CrmDealLineItem,
@@ -27,9 +28,11 @@ import {
   lineItemsTotalCents,
   pluginDocsHelp,
   readDealLineItems,
+  Route,
 } from '@aglyn/aglyn'
 import { mdiDeleteOutline, mdiPlus } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
@@ -111,8 +114,9 @@ export interface DealProductsCardProps {
  * variant priced. The catalog is USD; a deal in another currency is told
  * so and can edit the unit amount after. **By hand** takes a name and a
  * price with no product behind them, which is also all a plan without
- * commerce gets: the catalog door is not drawn for it, because the site
- * has no catalog to search.
+ * commerce gets: the catalog door is not drawn for it, and the dialog says
+ * so with a link to Billing (AGL-3982), since a plan with the store is the
+ * one step that opens it.
  *
  * Adding opens a dialog rather than a row of fields above the table, and
  * a quantity is edited in place and written on blur.
@@ -129,6 +133,11 @@ export function DealProductsCard(props: DealProductsCardProps) {
     (org ?? null) as Partial<AglynOrgBilling> | null,
     'commerce',
   )
+  // Where a plan with the store is chosen. The org doc carries its own slug,
+  // so the link costs no read; without one the notice still names the step.
+  const slug = (org as Record<string, unknown> | null | undefined)?.['slug']
+  const orgSlug = typeof slug === 'string' ? slug : ''
+  const billingHref = orgSlug ? `${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#plans` : undefined
   const [busy, setBusy] = useState(false)
   const [adding, setAdding] = useState(false)
 
@@ -305,6 +314,8 @@ export function DealProductsCard(props: DealProductsCardProps) {
         hostId={catalogHostId}
         currency={currency}
         catalog={hasCommerce && Boolean(catalogHostId)}
+        catalogNeedsPlan={!hasCommerce && Boolean(catalogHostId)}
+        billingHref={billingHref}
         busy={busy}
         onAdd={handleAdd}
       />
@@ -370,6 +381,13 @@ interface AddLineDialogProps {
   currency: string
   /** Whether the catalog door is drawn — the plan has commerce. */
   catalog: boolean
+  /**
+   * The deal names a site, but the plan has no store, so its catalog is not
+   * offered: the dialog says why and links to Billing.
+   */
+  catalogNeedsPlan?: boolean
+  /** The workspace's Billing plans, for that notice. */
+  billingHref?: string
   busy: boolean
   onAdd: (line: CrmDealLineItem) => Promise<void>
 }
@@ -377,7 +395,7 @@ interface AddLineDialogProps {
 type Door = 'catalog' | 'manual'
 
 function AddLineDialog(props: AddLineDialogProps) {
-  const { open, onClose, hostId, currency, catalog, busy, onAdd } = props
+  const { open, onClose, hostId, currency, catalog, catalogNeedsPlan, billingHref, busy, onAdd } = props
   const firestore = useFirestore()
   const [door, setDoor] = useState<Door>(catalog ? 'catalog' : 'manual')
   const [picked, setPicked] = useState<CatalogChoice | null>(null)
@@ -481,6 +499,11 @@ function AddLineDialog(props: AddLineDialogProps) {
       <DialogTitle>{'Add a line'}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
+          {catalogNeedsPlan ? (
+            <PrerequisiteNotice href={billingHref} actionLabel="See plans">
+              {'Adding lines from your product catalog needs a plan with the store. Add this line by hand, or choose a plan with the store in Billing.'}
+            </PrerequisiteNotice>
+          ) : null}
           {catalog ? (
             <ToggleButtonGroup
               exclusive

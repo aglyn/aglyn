@@ -244,6 +244,11 @@ export const membershipRow = (
     // list takes can carry. Stored as `false`, never left out, because a query
     // cannot find a document by a field it lacks.
     hasCustomDomain: hasCustomDomain(meta),
+    // The custom domain itself (AGL-3972), so a list shows the address the
+    // site answers on rather than only its platform subdomain. Deleted, not
+    // omitted, when the domain is released, for the merge reason the favicon
+    // below gives.
+    cname: hasCustomDomain(meta) ? String(meta?.cname).trim() : FieldValue.delete(),
     // What the Sites list's Created filter and order read. NULL rather than
     // absent for a site that never recorded one: `orderBy('createdAt')` drops
     // a document MISSING the field, and a site must not vanish from the list
@@ -258,6 +263,65 @@ export const membershipRow = (
     role,
     updatedAt: FieldValue.serverTimestamp(),
   }
+}
+
+/**
+ * The host-document paths a membership row is derived from. A writer that
+ * changes any of them owes `syncHostProjectionForMembers` (AGL-3972): the
+ * rows are written by the Admin SDK at these writers and nowhere else, so a
+ * change that skips the re-fan leaves every member's list on the old value
+ * until something unrelated rewrites the row.
+ */
+export const PROJECTED_HOST_PATHS: readonly string[] = [
+  'displayName',
+  'subdomain',
+  'cname',
+  'seo.favicon',
+  'createdAt',
+]
+
+/** Whether a write that changed these paths owes the membership re-fan. */
+export const changesProjectedHostFields = (paths: readonly string[]): boolean =>
+  paths.some((path) => PROJECTED_HOST_PATHS.includes(path))
+
+/** The longest site name the console's Display name field accepts. */
+export const HOST_DISPLAY_NAME_MAX = 200
+
+/**
+ * The host-document update for a mirrored field a person changed in the
+ * console (AGL-3972), read from a `/api/hosts/sync-memberships` body.
+ *
+ * The console used to write `displayName` and `seo.favicon` from the browser
+ * and then ping the server to re-fan the rows, chained on the write's
+ * server acknowledgement. Under the multi-tab cache that acknowledgement can
+ * take a minute (AGL-3806), and a page left in that minute, or a ping that
+ * failed, left the rows on the old name for good. The server now writes the
+ * field and re-fans in the same request, so the two cannot come apart.
+ *
+ * Answers `null` when the body names neither field (a plain re-fan), and an
+ * error for a value the console would never send. A favicon of `''` is the
+ * Remove button's clear, kept as `''` because that is what the card writes.
+ */
+export function projectedHostFieldsUpdate(
+  body: Record<string, unknown> | null | undefined,
+): { update: Record<string, unknown> | null } | { error: string } {
+  const update: Record<string, unknown> = {}
+  if (body && 'displayName' in body) {
+    const name = typeof body['displayName'] === 'string' ? body['displayName'].trim() : ''
+    if (!name) return { error: 'A site needs a name.' }
+    if (name.length > HOST_DISPLAY_NAME_MAX) {
+      return { error: `A site name is ${HOST_DISPLAY_NAME_MAX} characters at most.` }
+    }
+    update['displayName'] = name
+  }
+  if (body && 'favicon' in body) {
+    const favicon = body['favicon']
+    if (typeof favicon !== 'string' || favicon.length > 2_048) {
+      return { error: 'The favicon must be a link or a media reference.' }
+    }
+    update['seo.favicon'] = favicon.trim()
+  }
+  return { update: Object.keys(update).length ? update : null }
 }
 
 /** Runs a set of write operations in ≤CHUNK-sized batches. */
@@ -334,8 +398,8 @@ export async function syncMemberHostProjections(
 
 /**
  * Re-sync ONE host's projection rows across all org members: set a row for
- * every member who can reach it, delete for those who cannot. Call after a
- * host is created, renamed, or its displayName changes.
+ * every member who can reach it, delete for those who cannot. Call after
+ * any write that changes one of `PROJECTED_HOST_PATHS`.
  */
 export async function syncHostProjectionForMembers(
   orgId: string,

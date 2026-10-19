@@ -187,11 +187,31 @@ async function handler(request: Request): Promise<Response> {
       } else {
         // No account yet: an org invite carries the pending host grant;
         // acceptance applies it and the roster doc flips on next edit.
-        await firestore
+        //
+        // One pending invite per address (AGL-3984), as `/api/orgs/invites`
+        // keeps it (AGL-1111): an address that already has an invite waiting
+        // gets THIS site added to that invite's `hostAccess` — its role and
+        // reach stay as they were — never a second row. Two rows meant two
+        // accept links in the person's inbox, the address listed twice under
+        // Pending invites, and the seat it holds counted twice. Two `==`
+        // filters need no composite index.
+        const invitesRef = firestore
           .collection('orgs')
           .doc(orgId)
           .collection('invites')
-          .add({
+        const pending = await invitesRef
+          .where('email', '==', email)
+          .where('acceptedAt', '==', null)
+          .limit(1)
+          .get()
+        if (!pending.empty) {
+          await invitesRef
+            .doc(pending.docs[0].id)
+            .set({ hostAccess: { [hostId]: role } }, { merge: true })
+        } else {
+          // Named by the platform's id, as the org invite route names its
+          // invites: accept, revoke and resend address the row by it (AGL-3086).
+          await invitesRef.doc(createResourceUid()).set({
             email,
             role: 'viewer',
             allHosts: false,
@@ -200,6 +220,7 @@ async function handler(request: Request): Promise<Response> {
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
             acceptedAt: null,
           })
+        }
       }
       await membersRef.doc(memberId).set({
         email,

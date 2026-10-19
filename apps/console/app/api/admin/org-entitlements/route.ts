@@ -17,8 +17,10 @@
 
 import {
   aiAddonName,
+  aiTierName,
   hasAiAddon,
   PLAN_ENTITLEMENTS,
+  resolveAiTier,
   resolveEffectivePlan,
   resolveOrgEntitlements,
   UNLIMITED,
@@ -101,6 +103,9 @@ async function handler(request: Request): Promise<Response> {
     })
 
     const aiAddon = hasAiAddon(org as never)
+    // The tier it is (AGL-3965), so staff read which band widened the pool.
+    const aiTier = resolveAiTier(org as never)
+    const aiAddonLabel = aiTier ? aiTierName(aiTier) : `${aiAddonName()} add-on`
     const rows = Object.entries(resolved)
       .filter(([key, value]) => key !== 'features' && typeof value === 'number')
       .map(([key, value]) => {
@@ -111,7 +116,7 @@ async function handler(request: Request): Promise<Response> {
           effective: format(value as number),
           planDefault: typeof fallback === 'number' ? format(fallback) : '',
           overridden: overrides[key] !== null && overrides[key] !== undefined,
-          addon: key === 'assistCreditsPerMonth' && aiAddon ? `${aiAddonName()} add-on` : '',
+          addon: key === 'assistCreditsPerMonth' && aiAddon ? aiAddonLabel : '',
         }
       })
     return Response.json({ orgId, rows }, { status: 200 })

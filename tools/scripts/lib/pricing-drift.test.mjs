@@ -27,6 +27,8 @@ import {
   parseUnitRates,
   indexStripePrices,
   comparePlansToStripe,
+  compareAiTiersToStripe,
+  AI_TIER_IDS,
   compareFeeLadder,
   compareUnitRateTables,
   publishedMeteredRates,
@@ -42,7 +44,6 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraSeatMonthlyUsd: null,
     extraCollaboratorMonthlyUsd: null,
     extraDatasetMonthlyUsd: null,
-    aiAddonMonthlyUsd: null,
   },
   pro: {
     basePriceMonthlyUsd: 56,
@@ -51,7 +52,6 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraSeatMonthlyUsd: 4,
     extraCollaboratorMonthlyUsd: 2,
     extraDatasetMonthlyUsd: 2,
-    aiAddonMonthlyUsd: 19,
   },
 }
 `
@@ -140,52 +140,109 @@ test('comparePlansToStripe', async (t) => {
     assert.ok(v.some((x) => x.key === 'aglyn_free_v2' && x.status === 'in-sync'))
   })
 
-  // The Aglyn AI add-on (AGL-2897) prices were minted live on 2026-09-14, so
-  // a missing one is no longer a first-mint report: it is a deleted or
-  // archived price, and the run turns red for it like any other.
-  await t.test('a MISSING add-on price is UNREADABLE now that the prices are minted', () => {
+  await t.test('no per-plan AI add-on row is compared any more (AGL-3965)', () => {
     const v = comparePlansToStripe(code, indexStripePrices(stripePayload()))
-    const monthly = v.find((x) => x.key === 'aglyn_pro_ai_addon')
-    const yearly = v.find((x) => x.key === 'aglyn_pro_ai_addon_yearly')
-    assert.equal(monthly.status, 'unreadable')
-    assert.equal(yearly.status, 'unreadable')
-    assert.equal(v.some((x) => x.status === 'unminted'), false)
-    assert.equal(overallExitCode(v), 2)
+    assert.equal(v.some((x) => /_ai_addon/.test(x.key)), false)
+  })
+})
+
+test('compareAiTiersToStripe (AGL-3965)', async (t) => {
+  const TIERS_TS = `
+export const AI_TIERS: Readonly<Record<AiTierId, AiTier>> = {
+  spark: {
+    label: 'Spark',
+    monthlyUsd: 9,
+    yearlyUsd: 108,
+    credits: 4_000,
+  },
+  boost: {
+    label: 'Boost',
+    monthlyUsd: 19,
+    yearlyUsd: 228,
+    credits: 9_000,
+  },
+  plus: {
+    label: 'Plus',
+    monthlyUsd: 39,
+    yearlyUsd: 468,
+    credits: 19_000,
+  },
+  max: {
+    label: 'Max',
+    monthlyUsd: 69,
+    yearlyUsd: 828,
+    credits: 34_000,
+  },
+  ultra: {
+    label: 'Ultra',
+    monthlyUsd: 99,
+    yearlyUsd: 1188,
+    credits: 49_000,
+  },
+  studio: {
+    label: 'Studio',
+    monthlyUsd: 299,
+    yearlyUsd: 3588,
+    credits: 149_000,
+  },
+}
+`
+  const tiers = parsePlanRecord(TIERS_TS, 'AI_TIERS', AI_TIER_IDS)
+  const price = (lookup_key, usd, interval = 'month', active = true) => ({
+    lookup_key,
+    unit_amount: Math.round(usd * 100),
+    active,
+    recurring: { interval },
   })
 
-  await t.test('a MINTED add-on price is compared exactly, yearly = monthly x 12', () => {
-    const payload = stripePayload({
-      extra: [
-        { lookup_key: 'aglyn_pro_ai_addon', unit_amount: 1900, active: true, recurring: { interval: 'month' } },
-        { lookup_key: 'aglyn_pro_ai_addon_yearly', unit_amount: 22800, active: true, recurring: { interval: 'year' } },
-      ],
-    })
-    const v = comparePlansToStripe(code, indexStripePrices(payload))
-    assert.equal(v.find((x) => x.key === 'aglyn_pro_ai_addon').status, 'in-sync')
-    assert.equal(v.find((x) => x.key === 'aglyn_pro_ai_addon_yearly').status, 'in-sync')
+  await t.test('parses all six tiers', () => {
+    assert.deepEqual(Object.keys(tiers), [...AI_TIER_IDS])
+    assert.equal(tiers.studio.credits, 149000)
   })
 
-  await t.test('CATCHES a minted add-on price at the wrong amount', () => {
-    const payload = stripePayload({
-      extra: [
-        { lookup_key: 'aglyn_pro_ai_addon', unit_amount: 2100, active: true, recurring: { interval: 'month' } },
-      ],
-    })
-    const v = comparePlansToStripe(code, indexStripePrices(payload))
-    const hit = v.find((x) => x.key === 'aglyn_pro_ai_addon')
-    assert.equal(hit.status, 'differs')
-    assert.match(hit.detail, /code \$19 vs Stripe \$21/)
+  await t.test('an unminted tier price is reported, never fatal', () => {
+    const v = compareAiTiersToStripe(tiers, indexStripePrices({ data: [] }))
+    assert.equal(v.filter((x) => x.status === 'unminted').length, 12)
+    assert.equal(v.some((x) => x.status === 'differs' || x.status === 'unreadable'), false)
+  })
+
+  await t.test('a minted tier is compared exactly, yearly = monthly x 12', () => {
+    const v = compareAiTiersToStripe(
+      tiers,
+      indexStripePrices({ data: [price('aglyn_ai_boost', 19), price('aglyn_ai_boost_yearly', 228, 'year')] }),
+    )
+    assert.equal(v.find((x) => x.key === 'aglyn_ai_boost').status, 'in-sync')
+    assert.equal(v.find((x) => x.key === 'aglyn_ai_boost_yearly').status, 'in-sync')
+  })
+
+  await t.test('CATCHES a tier price at the wrong amount, and an inactive one', () => {
+    const v = compareAiTiersToStripe(
+      tiers,
+      indexStripePrices({
+        data: [price('aglyn_ai_spark', 10), price('aglyn_ai_plus', 39, 'month', false)],
+      }),
+    )
+    assert.match(v.find((x) => x.key === 'aglyn_ai_spark').detail, /code \$9 vs Stripe \$10/)
+    assert.equal(v.find((x) => x.key === 'aglyn_ai_plus').status, 'differs')
     assert.equal(overallExitCode(v), 1)
   })
 
-  await t.test('CATCHES a live add-on price for a plan the code says does not sell it', () => {
-    const payload = stripePayload({
-      extra: [
-        { lookup_key: 'aglyn_free_ai_addon', unit_amount: 900, active: true, recurring: { interval: 'month' } },
-      ],
-    })
-    const v = comparePlansToStripe(code, indexStripePrices(payload))
-    assert.equal(v.find((x) => x.key === 'aglyn_free_ai_addon').status, 'differs')
+  await t.test('a legacy per-plan price must charge what its tier charges', () => {
+    const same = compareAiTiersToStripe(
+      tiers,
+      indexStripePrices({ data: [price('aglyn_pro_ai_addon', 19), price('aglyn_agency_ai_addon_yearly', 3588, 'year')] }),
+    )
+    assert.equal(same.find((x) => x.key === 'aglyn_pro_ai_addon').status, 'in-sync')
+    assert.equal(same.find((x) => x.key === 'aglyn_agency_ai_addon_yearly').status, 'in-sync')
+    const moved = compareAiTiersToStripe(
+      tiers,
+      indexStripePrices({ data: [price('aglyn_pro_ai_addon', 21)] }),
+    )
+    assert.equal(moved.find((x) => x.key === 'aglyn_pro_ai_addon').status, 'differs')
+  })
+
+  await t.test('an unparseable table is unreadable, not a clean run', () => {
+    assert.equal(compareAiTiersToStripe({}, {})[0].status, 'unreadable')
   })
 })
 

@@ -39,14 +39,17 @@
  * dashboard) could be re-priced as if it were the plan.
  */
 
-import { PLAN_PRICING, SELF_SERVE_PLANS, type OrgPlan } from '@aglyn/aglyn/server'
+import { AI_TIER_IDS, AI_TIERS, SELF_SERVE_PLANS, type OrgPlan } from '@aglyn/aglyn/server'
 import {
   ADDON_KINDS,
   addonKindFromPriceId,
   addonMaxForPlan,
   addonPriceId,
   addonQuantitiesFromItems,
+  addonTargetPriceId,
   addonUnitUsd,
+  aiTierFromItems,
+  aiTierFromPriceId,
   findPlanItem,
   isMeteredPriceId,
   meteredPriceId,
@@ -69,6 +72,13 @@ for (const plan of ['STARTER', 'PRO', 'BUSINESS', 'SCALE', 'ADVANCED', 'AGENCY']
     PRICE_ENV[`STRIPE_PRICE_${plan}_${suffix}`] = base
     PRICE_ENV[`STRIPE_PRICE_${plan}_${suffix}_YEARLY`] = `${base}_yearly`
   }
+}
+// The Aglyn AI tiers (AGL-3965), one price per tier on every plan. The
+// per-plan `_AI_ADDON` envs above are the prices sold before tiers, still
+// read so an item on one is recognised until the migration moves it.
+for (const tier of ['SPARK', 'BOOST', 'PLUS', 'MAX', 'ULTRA', 'STUDIO']) {
+  PRICE_ENV[`STRIPE_PRICE_AI_${tier}`] = `price_ai_${tier.toLowerCase()}`
+  PRICE_ENV[`STRIPE_PRICE_AI_${tier}_YEARLY`] = `price_ai_${tier.toLowerCase()}_yearly`
 }
 PRICE_ENV['STRIPE_PRICE_POS_REGISTER'] = 'price_pos_register'
 PRICE_ENV['STRIPE_PRICE_POS_REGISTER_YEARLY'] = 'price_pos_register_yearly'
@@ -269,45 +279,107 @@ describe('the metered price is chosen by billing interval (AGL-1280)', () => {
   })
 })
 
-describe('the Aglyn AI add-on is a per-plan, 0/1 kind (AGL-2896)', () => {
-  it('is a kind the catalog enumerates, priced from PLAN_PRICING on every plan', () => {
+describe('the Aglyn AI add-on is a 0/1 kind priced per TIER, on any paid plan (AGL-2896, AGL-3965)', () => {
+  it('is a kind the catalog enumerates, priced from AI_TIERS on every paid plan', () => {
     expect(ADDON_KINDS).toContain('aiAddon')
-    for (const plan of SELF_SERVE_PLANS) {
-      expect(`${plan}: ${addonUnitUsd('aiAddon', plan)}`).toBe(
-        `${plan}: ${PLAN_PRICING[plan].aiAddonMonthlyUsd}`,
-      )
-    }
-    // Sold on every paid self-serve plan, and on neither end of the ladder.
-    expect(addonUnitUsd('aiAddon', 'starter')).toBe(9)
-    expect(addonUnitUsd('aiAddon', 'agency')).toBe(299)
-    expect(addonUnitUsd('aiAddon', 'free')).toBeNull()
-    expect(addonUnitUsd('aiAddon', 'enterprise')).toBeNull()
-  })
-
-  it('names its Stripe price per plan and per interval, and round-trips it', () => {
-    // `STRIPE_PRICE_{PLAN}_AI_ADDON[_YEARLY]`, the per-plan shape the seat
-    // kinds use — not the flat one, because the price differs by tier.
-    expect(addonPriceId('aiAddon', 'pro', 'month')).toBe('price_pro_ai_addon')
-    expect(addonPriceId('aiAddon', 'pro', 'year')).toBe('price_pro_ai_addon_yearly')
-    expect(addonPriceId('aiAddon', 'free', 'month')).toBeNull()
+    // Any tier on any paid plan, at the tier's price.
     for (const plan of PAID_PLANS) {
-      for (const interval of ['month', 'year'] as const) {
-        expect(addonKindFromPriceId(addonPriceId('aiAddon', plan, interval))).toBe('aiAddon')
+      for (const tier of AI_TIER_IDS) {
+        expect(`${plan}+${tier}: ${addonUnitUsd('aiAddon', plan, tier)}`).toBe(
+          `${plan}+${tier}: ${AI_TIERS[tier].monthlyUsd}`,
+        )
       }
     }
-    // …and the webhook's read-back sees it, so the purchase lands on the org.
+    // No tier named: the tier with the plan's old price and band, so a link
+    // published before tiers still sells what it quoted.
+    expect(addonUnitUsd('aiAddon', 'starter')).toBe(9)
+    expect(addonUnitUsd('aiAddon', 'agency')).toBe(299)
+    // …and the decoupling itself: Studio on Starter, Spark on Agency.
+    expect(addonUnitUsd('aiAddon', 'starter', 'studio')).toBe(299)
+    expect(addonUnitUsd('aiAddon', 'agency', 'spark')).toBe(9)
+    // Neither end of the ladder sells one.
+    for (const plan of ['free', 'enterprise'] as const) {
+      expect(addonUnitUsd('aiAddon', plan)).toBeNull()
+      expect(addonUnitUsd('aiAddon', plan, 'boost')).toBeNull()
+    }
+    expect(SELF_SERVE_PLANS).toContain('free')
+  })
+
+  it('names its Stripe price per tier and per interval, the same on every plan, and round-trips it', () => {
+    // `STRIPE_PRICE_AI_{TIER}[_YEARLY]`, flat across plans.
+    expect(addonPriceId('aiAddon', 'pro', 'month', 'boost')).toBe('price_ai_boost')
+    expect(addonPriceId('aiAddon', 'starter', 'year', 'studio')).toBe('price_ai_studio_yearly')
+    expect(addonPriceId('aiAddon', 'agency', 'month', 'spark')).toBe('price_ai_spark')
+    // No tier: the plan's default tier, never the legacy per-plan price.
+    expect(addonPriceId('aiAddon', 'pro', 'month')).toBe('price_ai_boost')
+    expect(addonPriceId('aiAddon', 'free', 'month')).toBeNull()
+    expect(addonPriceId('aiAddon', 'free', 'month', 'spark')).toBeNull()
+    expect(addonPriceId('aiAddon', 'enterprise', 'month', 'spark')).toBeNull()
+    for (const tier of AI_TIER_IDS) {
+      for (const interval of ['month', 'year'] as const) {
+        const id = addonPriceId('aiAddon', 'business', interval, tier)
+        expect(addonKindFromPriceId(id)).toBe('aiAddon')
+        expect(aiTierFromPriceId(id)).toBe(tier)
+      }
+    }
+    // …and the webhook's read-back sees it, so the purchase lands on the org
+    // with its tier.
+    const items = [item('price_starter'), item('price_ai_max_yearly', 1, 'year')]
+    expect(addonQuantitiesFromItems(items)).toMatchObject({ aiAddon: 1 })
+    expect(aiTierFromItems(items)).toBe('max')
+    expect(aiTierFromItems([item('price_starter')])).toBeNull()
+  })
+
+  it('still recognises a legacy per-plan price as the tier with its price and band', () => {
+    // Sold before AGL-3965 and still on subscriptions until
+    // `migrate-ai-addon-tiers.mjs --commit` moves them.
+    const expected: Record<string, string> = {
+      starter: 'spark',
+      pro: 'boost',
+      business: 'plus',
+      scale: 'max',
+      advanced: 'ultra',
+      agency: 'studio',
+    }
+    for (const plan of PAID_PLANS) {
+      for (const suffix of ['', '_yearly']) {
+        const id = `price_${plan}_ai_addon${suffix}`
+        expect(addonKindFromPriceId(id)).toBe('aiAddon')
+        expect(`${plan}${suffix}: ${aiTierFromPriceId(id)}`).toBe(`${plan}${suffix}: ${expected[plan]}`)
+        // Same price, same band: what the plan sold it at.
+        expect(AI_TIERS[aiTierFromPriceId(id) as keyof typeof AI_TIERS].monthlyUsd).toBe(
+          addonUnitUsd('aiAddon', plan),
+        )
+      }
+    }
     expect(
       addonQuantitiesFromItems([item('price_starter'), item('price_starter_ai_addon_yearly', 1)]),
     ).toMatchObject({ aiAddon: 1 })
   })
 
-  it('caps at one on every plan: it is an org-wide toggle', () => {
+  it('keeps its tier across a plan change and only follows the interval', () => {
+    // A tier is chosen on its own: switching Starter -> Agency keeps Boost.
+    expect(addonTargetPriceId('aiAddon', 'agency', 'year', 'price_ai_boost')).toBe(
+      'price_ai_boost_yearly',
+    )
+    // A legacy item becomes the tier with its price and band on the move.
+    expect(addonTargetPriceId('aiAddon', 'business', 'month', 'price_pro_ai_addon')).toBe(
+      'price_ai_boost',
+    )
+    // Every other kind re-prices to the target plan as before.
+    expect(addonTargetPriceId('hosts', 'agency', 'month', 'price_starter_extra_host')).toBe(
+      'price_agency_extra_host',
+    )
+    // A target that sells no tier drops it.
+    expect(addonTargetPriceId('aiAddon', 'free', 'month', 'price_ai_boost')).toBeNull()
+  })
+
+  it('caps at one on every paid plan and at zero on Free and Enterprise: it is an org-wide toggle', () => {
     for (const plan of PAID_PLANS) {
       expect(`${plan}: ${addonMaxForPlan('aiAddon', plan)}`).toBe(`${plan}: 1`)
     }
-    // The ceiling is one for the plans that cannot buy it too; the price map
-    // (null) is what refuses the sale there, exactly as it does for a
-    // register on a plan without POS.
+    expect(addonMaxForPlan('aiAddon', 'free')).toBe(0)
+    expect(addonMaxForPlan('aiAddon', 'enterprise')).toBe(0)
     expect(addonMaxForPlan('eventCalendar', 'pro')).toBe(1)
   })
 })

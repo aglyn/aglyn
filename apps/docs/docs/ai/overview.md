@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: "Aglyn AI: the AI website builder"
-description: "Aglyn AI is an AI website builder inside your console: describe a page, form, email, product listing or theme change and it builds a draft you edit and publish yourself. An add-on on every paid plan, metered in credits."
+description: "Aglyn AI is an AI website builder inside your console: describe a page, form, email, product listing or theme change and it builds a draft you edit and publish yourself. Included on every plan, metered in credits."
 ---
 
 # Aglyn AI: the AI website builder
@@ -75,24 +75,24 @@ Each job also reads the site's [business profile](business-profile.md) — what 
 business does, who it is for, how it sounds and how to reach it — and the edits you
 kept from earlier jobs.
 
-## The Aglyn AI add-on {#the-add-on}
+## Plans and Aglyn AI tiers {#the-add-on}
 
-Aglyn AI is an **add-on**, bought once for the workspace on any paid plan, not per seat
-and not per site. With it on, every member who has the permission to generate can use
-every door above, on every site in the workspace.
+Aglyn AI comes with **every plan**. Each plan includes AI credits every month, and they
+pay for everything above: the assistant's answers and building for you, on every site in
+the workspace, for every member who has the permission to generate.
 
-- It adds a band of **AI credits** to the band your plan already includes.
-- Every paid plan, Starter included, already includes some credits and the guided
-  assist, so the add-on widens a band you have rather than opening your first one.
-- Enterprise workspaces carry generative building in their agreement rather than buying
-  the add-on.
-- **Free workspaces** do not buy it. A Free workspace gets a small monthly allowance of
+- An **Aglyn AI tier** adds more credits on top of your plan's, bought once for the
+  workspace, not per seat and not per site. There are six, from Spark to Studio, and any
+  paid plan can have any of them.
+- Enterprise workspaces carry their AI in their agreement.
+- **Free workspaces** have no tiers. A Free workspace gets a small monthly allowance of
   credits instead, enough to try generating, and it stops at that allowance rather than
   billing you.
 
-What the add-on costs, and the size of the band it adds, are on
+What each tier costs, and the credits it adds, are on
 [aglyn.com/pricing](https://aglyn.com/pricing) and in **Billing** before you confirm —
-see [Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai).
+see [AI credits](./ai-credits.md#the-aglyn-ai-add-on) and
+[Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai).
 
 ## Credits and caps {#credits-and-caps}
 
@@ -104,7 +104,7 @@ What a request costs is not fixed: a rewrite of one headline is small, a site sc
 is large, and a job tells you its estimate before you confirm it. The shape of the
 limits is the part worth knowing:
 
-- **An included band each month**, from your plan plus the add-on, reset monthly.
+- **An included band each month**, from your plan plus your tier, reset monthly.
 - **Past the band**, a paid workspace keeps working and the extra credits bill on the
   monthly invoice at your plan's rate. A switch under **Billing → Usage** stops AI at
   the included band instead; it is off unless you choose it.
@@ -154,7 +154,7 @@ With AI off for a site:
 - an AI job already queued for the site stops with the same sentence, and spends no
   credits. A job that stopped does not restart when AI is switched back on.
 
-Switching AI off for a site does **not** stop the workspace's AI add-on, credits,
+Switching AI off for a site does **not** stop the workspace's AI tier, credits,
 allotments or overage billing. AI keeps working on the workspace's other sites and on
 workspace pages such as **Billing**, and an agency batch still builds the sites in it
 that have AI on.

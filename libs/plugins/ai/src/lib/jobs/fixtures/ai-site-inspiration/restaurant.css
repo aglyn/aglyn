@@ -1,0 +1,12 @@
+:root { --fiamma-red: #b23a1d; }
+body { background-color: #fbf6ec; color: #2b1d14; font-family: 'Lato', sans-serif; }
+h1, h2 { font-family: 'Oswald', sans-serif; letter-spacing: 0.02em; }
+.site-header { display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
+section { padding: 56px 32px; }
+.btn { border-radius: 4px; text-transform: uppercase; background-color: #b23a1d; color: #ffffff; }
+.btn-primary { background-color: #b23a1d; }
+.menu-card { background: #ffffff; border-radius: 8px; box-shadow: 0 4px 16px rgba(43, 29, 20, 0.12); }
+.events article { border-left: 3px solid #b23a1d; }
+a { color: #b23a1d; }
+h3 { color: #2f5d3a; }
+.badge { background: #2f5d3a; color: #ffffff; }

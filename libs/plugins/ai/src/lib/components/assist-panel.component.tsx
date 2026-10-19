@@ -21,6 +21,7 @@ import {
   checkEntitlement,
   lockdownRefusalText,
   parseLockdownRefusal,
+  planLabelGrantingFeature,
   type AglynOrgBilling,
 } from '@aglyn/aglyn'
 import {
@@ -1320,9 +1321,15 @@ export function AssistPanelComponent(props: AssistDockProps) {
                 {'link the docs and the console page to use.'}
                 {orgReady && !entitled && !isStaff && (
                   <>
-                    {' '}
-                    Free workspaces get a limited number of messages a day;
-                    Pro adds page-aware guidance.
+                    {' Free workspaces get a limited number of messages a day. '}
+                    {`Page-aware guidance is included from ${
+                      planLabelGrantingFeature('aiAssist') ?? 'a paid plan'
+                    }. `}
+                    {billingSlug ? (
+                      <AppLink href={`/${billingSlug}/billing#plans`}>
+                        {'Upgrade'}
+                      </AppLink>
+                    ) : null}
                   </>
                 )}
               </Alert>
