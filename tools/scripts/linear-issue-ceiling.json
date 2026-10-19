@@ -1,8 +1,8 @@
 {
   "team": "AGL",
-  "highest": 3988,
+  "highest": 3991,
   "verifiedAt": "2026-10-19",
-  "verifiedBy": "Linear read 2026-10-19 ~19:40Z: AGL-3988 (Photographer guided start: office starters as wedding photos, refused Galleries page linked from home, garbled alts) exists, In Progress, cited by this branch. A floor, not the newest.",
+  "verifiedBy": "Linear read 2026-10-19 ~20:50Z, newest-first with archived: AGL-3991 (Native apps crop site favicons and workspace logos into circles) is the newest AGL issue. AGL-3986, AGL-3989 and AGL-3991 are cited on main.",
   "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace — never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
   "historicalCitations": {
     "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",

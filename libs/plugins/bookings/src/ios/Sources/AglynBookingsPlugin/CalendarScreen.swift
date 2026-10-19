@@ -117,21 +117,25 @@ struct BookingsCalendarScreen: View {
       }
     }
     .navigationTitle("Bookings")
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          context.navigate(bookingsServicesScreen)
-        } label: {
-          Label("Services", systemImage: "list.bullet.rectangle")
-        }
-        .accessibilityIdentifier("open-services")
+    .aglynScreenTitle("Bookings")
+    .aglynScreenToolbar(id: "bookings") {
+      Button {
+        context.navigate(bookingsServicesScreen)
+      } label: {
+        Label("Services", systemImage: "list.bullet.rectangle")
       }
+      .accessibilityIdentifier("open-services")
     }
     .onAppear {
       guard !started else { return }
       started = true
       serviceFilter = params["service"]
       booker = params["email"].flatMap { $0.isEmpty ? nil : $0 }
+      // Opened from Home's line (`day=today`): today's day view.
+      if params["day"] == "today" {
+        mode = .day
+        anchor = Date()
+      }
       selection = params["booking"]
     }
     .task(id: queryKey) {
@@ -162,7 +166,7 @@ struct BookingsCalendarScreen: View {
       toolbar
       if let booker {
         AglynNotice("Bookings for \(booker)", tone: .info) { self.booker = nil }
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
           .accessibilityIdentifier("booker-banner")
       } else if effectiveMode != .list {
         let (from, to) = calendarRange(effectiveMode, anchor: anchor)
@@ -170,7 +174,7 @@ struct BookingsCalendarScreen: View {
           title(from: from, to: to), onPrevious: { anchor = stepAnchor(effectiveMode, anchor, -1) },
           onToday: { anchor = Date() }, onNext: { anchor = stepAnchor(effectiveMode, anchor, 1) }
         )
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
       }
       Group {
@@ -227,7 +231,7 @@ struct BookingsCalendarScreen: View {
         .accessibilityIdentifier("service-filter")
       }
     }
-    .padding(.horizontal, AglynSpace.two)
+    .aglynContentEdges()
     .padding(.top, AglynSpace.one)
   }
 
@@ -343,6 +347,37 @@ struct BookingsTodayWidget: View {
       context.navigate(bookingsCalendarScreen)
     }
     .accessibilityIdentifier("bookings-today")
+    .task(id: context.hostID) {
+      guard let hostID = context.hostID else { return }
+      let start = AglynCalendarMath.startOfDay(Date())
+      bookings.start(
+        context.firestore, BookingQueries.range(hostID, from: ms(start), to: ms(AglynCalendarMath.addDays(start, 1)))
+      ) { $0.map(BookingRow.init) }
+    }
+    .onDisappear { bookings.stop() }
+  }
+}
+
+/// Home's "Needs you" line for bookings (`bookings.needs-you`): what is still to come today, with the next one's time,
+/// opening Bookings on today's day view. Nothing is drawn for nothing.
+struct BookingsNeedsYouWidget: View {
+  let context: NativePluginContext
+  @State private var bookings = LiveList<BookingRow>()
+
+  var body: some View {
+    let now = nowMs()
+    let rows = (bookings.rows ?? []).filter { $0.state(now) != .canceled && $0.state(now) != .expired && $0.endsAtMs > now }
+    VStack(spacing: 0) {
+      if let next = rows.min(by: { $0.startsAtMs < $1.startsAtMs }) {
+        let time = next.start.formatted(date: .omitted, time: .shortened)
+        AglynNeedsYouLine(
+          id: "bookings-today", systemImage: "calendar.badge.clock",
+          text: rows.count == 1 ? "\(next.name) at \(time)" : "\(rows.count) bookings today, next at \(time)", place: "Bookings"
+        ) {
+          context.navigate(bookingsCalendarScreen, ["day": "today"])
+        }
+      }
+    }
     .task(id: context.hostID) {
       guard let hostID = context.hostID else { return }
       let start = AglynCalendarMath.startOfDay(Date())

@@ -33,6 +33,9 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { siteLanguageCode } from '@aglyn/aglyn/app-utils/seo-locale'
 import { AI_BUILD_PLAN_TOOL, aiBuildPlanToolFor, parseAiBuildPlan } from '../model/ai-build-plan'
 import type { AiJobOutput } from '../model/ai-jobs.types'
+import { aiSiteSeoProposalOf } from '../model/ai-site-start-seo'
+import { defaultSiteSeo } from '@aglyn/aglyn/app-utils/default-site'
+import { aiSiteSeoOutputs } from './ai-job-site-step'
 import {
   AI_SITE_PUBLISH_DELETED,
   aiSiteLanguageUpdates,
@@ -679,5 +682,123 @@ describe('a page the start did not build is linked from nowhere (AGL-3988)', () 
     expect(result.drafts.map((page) => page.id)).toEqual(['drft-book'])
     const home = nodesAt('hosts/host-1/screens/drft-home/versions/v-home')
     expect(Object.values(home).some((node) => node.props?.['screenId'] === 'drft-book')).toBe(false)
+  })
+})
+
+/*
+ * Who publishes the site (AGL-3979): the start's answers fill the host's
+ * Setup -> SEO -> Entity and AI agents fields in the publish's own batch, only
+ * where empty, and the announce asks for the whole site, since every page
+ * carries the entity.
+ */
+describe('a guided start fills the site’s Entity and AI-agent fields (AGL-3979)', () => {
+  const DETAILED = {
+    ...JOB,
+    inputs: {
+      businessType: 'a family plumbing company',
+      siteKind: 'trades',
+      businessName: 'Pipeworks',
+      city: 'Austin',
+      phone: '(512) 555-0142',
+      email: 'hello@pipeworks.co',
+      hours: 'Mo-Fr 08:00-18:00',
+      social: 'https://instagram.com/pipeworks',
+    },
+  }
+
+  it('writes the business type, phone, email, hours, profiles and guidance, and announces the whole site', async () => {
+    seedSite()
+    docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), seo: { title: 'Pipeworks', entity: { telephone: '(512) 555-9999' } } })
+    dropCache.mockResolvedValueOnce({ dropped: 0, skipped: 0, complete: false })
+    await aiPublishGuidedSite(firestore, { job: DETAILED, outputs: OUTPUTS, now: NOW }, { sendSitePublished: sendSitePublished as never, dropCache })
+    const seo = (docs.get('hosts/host-1') as Record<string, Record<string, Record<string, unknown>>>)['seo']
+    expect(seo['title']).toBe('Pipeworks')
+    expect(seo['entity']).toMatchObject({
+      name: 'Pipeworks',
+      // The owner's own number is kept.
+      telephone: '(512) 555-9999',
+      email: 'hello@pipeworks.co',
+      businessType: 'Plumber',
+      areaServed: ['Austin'],
+      openingHours: 'Mo-Fr 08:00-18:00',
+      sameAs: ['https://instagram.com/pipeworks'],
+    })
+    expect(seo['entity']).toMatchObject({ contactType: 'customer support' })
+    expect(seo['agent']).toMatchObject({ whenToUse: expect.stringContaining('Pipeworks'), howToUse: expect.stringContaining('hello@pipeworks.co') })
+    // The Business details card's support email, which a form that cannot take a message names.
+    expect((docs.get('hosts/host-1') as Record<string, unknown>)['business']).toEqual({ supportEmail: 'hello@pipeworks.co' })
+    const outbox = [...docs.entries()].filter(([key]) => key.startsWith('publishOutbox/')).map(([, value]) => value)
+    expect(outbox).toEqual([expect.objectContaining({ entireHost: true })])
+  })
+
+  it('a job with no inputs writes no Entity field', async () => {
+    seedSite()
+    await publish()
+    expect((docs.get('hosts/host-1') as Record<string, unknown>)['seo']).toBeUndefined()
+    expect((docs.get('hosts/host-1') as Record<string, unknown>)['business']).toBeUndefined()
+  })
+
+  it('names the site’s own logo as the Entity logo', async () => {
+    seedSite()
+    docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), logoUrl: 'media:host-1/logo' })
+    await aiPublishGuidedSite(firestore, { job: DETAILED, outputs: OUTPUTS, now: NOW }, { sendSitePublished: sendSitePublished as never, dropCache })
+    const seo = (docs.get('hosts/host-1') as Record<string, Record<string, Record<string, unknown>>>)['seo']
+    expect(seo['entity']['logo']).toBe('media:host-1/logo')
+  })
+})
+
+/*
+ * The site's own listing (AGL-3979): the publish writes the start's title and
+ * description over the ones the site was created with, never over an owner's,
+ * and the SEO section's offer of the start's listing stays for a site whose
+ * owner changed theirs.
+ */
+describe('a guided start’s listing goes over the seeded default only (AGL-3979)', () => {
+  const NAME = 'Hillside Dog Grooming'
+  const STARTED = { ...JOB, inputs: { businessType: 'a neighborhood dog groomer', audience: 'busy dog owners', city: 'Austin', siteKind: 'business' } }
+  const seedNamed = (seo: Record<string, unknown>) => {
+    seedSite()
+    docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), displayName: NAME, seo })
+  }
+  const run = (retry = false) =>
+    aiPublishGuidedSite(
+      firestore,
+      { job: STARTED as never, outputs: OUTPUTS, now: NOW, ...(retry ? { retry: true } : {}) },
+      { sendSitePublished: sendSitePublished as never, dropCache },
+    )
+  const seoOf = () => (docs.get('hosts/host-1') as { seo: Record<string, unknown> }).seo
+  /** The listing the job reports, as the SEO section offers it. */
+  const reported = () => aiSiteSeoProposalOf(aiSiteSeoOutputs(STARTED as never, NAME))
+
+  it('writes the start’s listing, with the site’s name, over the default the site was created with', async () => {
+    seedNamed(defaultSiteSeo(NAME))
+    dropCache.mockResolvedValueOnce({ dropped: 0, skipped: 0, complete: false })
+    await run()
+    const listing = reported()
+    expect(seoOf()['title']).toBe(listing?.values['seo.title'])
+    expect(seoOf()['title']).toMatch(/^Hillside Dog Grooming — /)
+    expect(seoOf()['description']).toBe(listing?.values['seo.description'])
+    // The sharing image the site was created with stays.
+    expect(seoOf()['image']).toBe(defaultSiteSeo(NAME)['image'])
+    const outbox = [...docs.entries()].filter(([key]) => key.startsWith('publishOutbox/')).map(([, value]) => value)
+    expect(outbox).toEqual([expect.objectContaining({ entireHost: true })])
+  })
+
+  it('leaves a listing the owner changed as they wrote it, and the start’s is still offered', async () => {
+    seedNamed({ ...defaultSiteSeo(NAME), title: 'Hillside Grooming | Austin dog spa', description: 'Gentle grooming for nervous dogs since 2009.' })
+    await run()
+    expect(seoOf()).toMatchObject({ title: 'Hillside Grooming | Austin dog spa', description: 'Gentle grooming for nervous dogs since 2009.' })
+    const listing = reported()
+    expect(listing).not.toBeNull()
+    expect(listing?.values['seo.title']).not.toBe(seoOf()['title'])
+  })
+
+  it('is stable when Try again publishes again', async () => {
+    seedNamed(defaultSiteSeo(NAME))
+    await run()
+    const first = { ...seoOf() }
+    await run(true)
+    expect(seoOf()['title']).toBe(first['title'])
+    expect(seoOf()['description']).toBe(first['description'])
   })
 })

@@ -96,6 +96,7 @@ struct AccountSwitchItems: View {
 /// Theme ▸: light, dark or the system's, saved on the account so it follows the person (Theming, Phase 4 adds the rest).
 struct ThemeMenu: View {
   @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
 
   var body: some View {
     if let preferences = model.preferences {
@@ -113,6 +114,9 @@ struct ThemeMenu: View {
           Label("Match system", systemImage: "circle.lefthalf.filled").tag(AppAppearance.system)
         }
         .pickerStyle(.inline)
+        Divider()
+        Button("Theme settings…", systemImage: "paintpalette") { navigation.push(.themeSettings) }
+          .accessibilityIdentifier("account-theme-settings")
       } label: {
         Label("Theme", systemImage: "circle.lefthalf.filled")
       }
@@ -194,6 +198,12 @@ struct WorkspaceMenuItems: View {
         }
       }
       Section {
+        if navigation.inSite {
+          Button("Workspace home", systemImage: "house") { navigation.enterWorkspace() }
+        }
+        Button("Switch workspace…", systemImage: "arrow.left.arrow.right") { navigation.showOneBox = true }
+      }
+      Section {
         if model.registry.screen("core.team") != nil {
           Button("Invite people", systemImage: "person.badge.plus") {
             navigation.mode = .workspaceSettings
@@ -211,6 +221,15 @@ struct WorkspaceMenuItems: View {
         }
         Button("Workspace color…", systemImage: "paintpalette") {
           navigation.colorFor = ColorPickTarget(orgID: org.id, name: org.name)
+        }
+      }
+      // The console menu's own "Upgrade plan" (Figma 121:18682): Billing, at the plans.
+      if model.offersUpgrade {
+        Section {
+          Button("Upgrade plan", systemImage: "arrow.up.circle") {
+            navigation.enter(.workspaceSettings, first: .plugin("core.billing"))
+          }
+          .accessibilityIdentifier("workspace-menu-upgrade")
         }
       }
     }

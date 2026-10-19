@@ -105,6 +105,13 @@ export interface AiSiteStartTracker {
   fieldLeft(field: AiSiteStartField): void
   /** A choice was picked: input, but not an edit (comparing cards is not a struggle). */
   fieldPicked(field: AiSiteStartField): void
+  /** The step's "More details" was opened (AGL-3979). */
+  moreDetails(): void
+  /**
+   * The site was asked for with these optional extras given (AGL-3979): one
+   * event a field, naming the step that asks it, never what was typed.
+   */
+  detailsGiven(fields: ReadonlyArray<{ step: AiSiteStartStep; field: AiSiteStartField }>): void
   /** Any input on the step, which puts off the idle signal. */
   activity(): void
   /** A click anywhere in the dialog. */
@@ -194,6 +201,15 @@ export function createAiSiteStartTracker(options: AiSiteStartTrackerOptions = {}
       // read as "one answer changed again and again" (2026-10-18) and is not.
       // Only a typed answer rewritten is a struggle.
       armIdle()
+    },
+    moreDetails() {
+      if (done || !step) return
+      send('site_start_more_details', { step })
+      armIdle()
+    },
+    detailsGiven(fields) {
+      if (done) return
+      for (const { step: at, field } of fields) send('site_start_detail_given', { step: at, field })
     },
     activity() {
       armIdle()

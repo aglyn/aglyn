@@ -39,6 +39,8 @@ import {
 } from '../layout-language/ai-layout-frame-hollows'
 import type { AiJob, AiJobOutput, AiJobSitePublish } from '../model/ai-jobs.types'
 import { AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
+import { aiSiteEntityUpdates, aiSiteEntityValues, aiSiteListingUpdates } from '../model/ai-site-entity'
+import { aiSiteSeoProposalForInputs } from '../model/ai-site-start-seo'
 import { aiLayoutWithStoreLinks, type AiStoreLayoutLinks } from '../model/ai-layout-store-links'
 import { aiLayoutWithMenuChanges, aiNoMenuChanges } from '../model/ai-layout-menus'
 import { AI_STORE_LINKS_SOURCE_FIELD as STORE_LINKS_SOURCE_FIELD } from './ai-job-store-links-layout'
@@ -435,7 +437,7 @@ export function aiMergeSitePublish(previous: AiJobSitePublish, retried: AiJobSit
 export async function aiPublishGuidedSite(
   firestore: Firestore,
   input: {
-    job: Pick<AiJob, '$id' | 'orgId' | 'hostId'>
+    job: Pick<AiJob, '$id' | 'orgId' | 'hostId'> & Partial<Pick<AiJob, 'inputs'>>
     outputs: readonly AiJobOutput[]
     now: Date
     /** The start owed its blog's posts and wrote none (AGL-3660): its links to the blog come out. */
@@ -621,7 +623,32 @@ export async function aiPublishGuidedSite(
     input.language,
   )
   if (language) Object.assign(hostUpdates, language)
-  const entireHost = layoutWrites.length > 0 || language !== null
+  // Who publishes the site, from the start's answers (AGL-3979): its Setup ->
+  // SEO -> Entity and AI agents fields and its Business details, each only
+  // where empty, so every page's structured data and the site's /llms.txt
+  // name its business type, phone, email, address, hours, areas, profiles and
+  // logo. Every page carries the entity, so the announce asks for the whole
+  // site when any of it changes.
+  const siteName = typeof host.get('displayName') === 'string' ? (host.get('displayName') as string) : null
+  const entity = aiSiteEntityUpdates(
+    host.get('seo'),
+    aiSiteEntityValues(job.inputs, { language: input.language ?? null, siteName }),
+    { logoUrl: host.get('logoUrl'), business: host.get('business') },
+  )
+  Object.assign(hostUpdates, entity)
+  // The site's own listing (AGL-3979): the start's, with the site's name,
+  // over the title and description its creation seeded and nowhere else. A
+  // listing the owner changed keeps their words, and the SEO section still
+  // offers the start's beside them. Every page falls back to it, and
+  // `og:site_name` and /llms.txt read it, so it asks for the whole site too.
+  const listing = aiSiteListingUpdates(
+    host.get('seo'),
+    siteName,
+    aiSiteSeoProposalForInputs(job.inputs, input.language ?? null, siteName),
+  )
+  Object.assign(hostUpdates, listing)
+  const entireHost =
+    layoutWrites.length > 0 || language !== null || Object.keys(entity).length > 0 || Object.keys(listing).length > 0
   batch.update(hostRef, hostUpdates)
   for (const page of accepted) {
     batch.set(

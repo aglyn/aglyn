@@ -505,7 +505,7 @@ private struct LastReceiptSection: View {
             .disabled(last.busy)
             .accessibilityIdentifier("pos-last-receipt-print")
         } else {
-          NavigationLink {
+          AglynPushLink {
             RegisterPrintersView(model: model.printers)
           } label: {
             Label("Add a receipt printer", systemImage: "printer")

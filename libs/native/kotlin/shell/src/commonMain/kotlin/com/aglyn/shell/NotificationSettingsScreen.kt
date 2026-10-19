@@ -312,10 +312,9 @@ private fun SettingsColumn(error: String?, content: @Composable () -> Unit) {
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
       Modifier
-        .widthIn(max = 760.dp)
         .fillMaxWidth()
         .verticalScroll(rememberScrollState())
-        .padding(space(2f))
+        .padding(horizontal = com.aglyn.ui.contentInset(), vertical = space(2f))
         .testTag("notification-settings"),
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {

@@ -26,9 +26,13 @@
 // it. Every value below is a placeholder.
 
 import assert from 'node:assert/strict'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, it } from 'node:test'
 
 import {
+  consoleEnvFiles,
   credentialPreflight,
   EMULATOR_PROJECT_FALLBACK,
   EMULATOR_WEB_API_KEY,
@@ -381,5 +385,35 @@ describe('serversHoldNoCredential', () => {
     const verdict = serversHoldNoCredential(servers, { ...options, listen: () => [], read: processes() })
     assert.equal(verdict.ok, false)
     assert.match(verdict.detail, /^the console server at http:\/\/localhost:4310 has no process listening on port 4310\. /)
+  })
+})
+
+describe('consoleEnvFiles', () => {
+  const tree = (files) => {
+    const root = mkdtempSync(join(tmpdir(), 'emulated-env-'))
+    for (const [path, text] of Object.entries(files)) {
+      mkdirSync(join(root, path, '..'), { recursive: true })
+      writeFileSync(join(root, path), text)
+    }
+    return root
+  }
+
+  it("reads a worktree's own env files when it has them", () => {
+    const main = tree({ 'apps/console/.env.local': 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=main-bucket\n' })
+    const worktree = tree({ 'apps/console/.env.local': 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=own-bucket\n' })
+    const files = consoleEnvFiles(worktree, 'console', 'development', main)
+    assert.deepEqual(files.map((file) => file.parsed.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET), ['own-bucket'])
+  })
+
+  it("reads the main checkout's when the worktree has none, as the console it serves does", () => {
+    const main = tree({ 'apps/console/.env.local': 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=main-bucket\n' })
+    const worktree = tree({ 'apps/console/README.md': 'no env files here\n' })
+    const files = consoleEnvFiles(worktree, 'console', 'development', main)
+    assert.deepEqual(files.map((file) => file.parsed.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET), ['main-bucket'])
+  })
+
+  it('reads nothing when neither has any, leaving the emulated default to the caller', () => {
+    const files = consoleEnvFiles(tree({}), 'console', 'development', tree({}))
+    assert.deepEqual(files, [])
   })
 })

@@ -490,7 +490,11 @@ export function aiLayoutPlacePictures(
     delete props['loading']
     // A photo placed is described by its words, never hidden from a screen
     // reader: a stand-in was decorative only while it showed nothing (AGL-3856).
-    if (photo.alt?.trim()) delete props['decorative']
+    // One that brings no words of its own, such as an owner's upload with no
+    // alt text, keeps the slot's (AGL-3979): a picture a visitor sees always
+    // has a description.
+    const alt = photo.alt?.trim() || (typeof props['alt'] === 'string' ? props['alt'].trim() : '')
+    if (alt) delete props['decorative']
     next[slot.imageId] = {
       ...node,
       props: {
@@ -498,7 +502,7 @@ export function aiLayoutPlacePictures(
         src: photo.src,
         intrinsicWidth: photo.width,
         intrinsicHeight: photo.height,
-        ...(photo.alt?.trim() ? { alt: photo.alt.trim() } : {}),
+        ...(alt ? { alt } : {}),
         ...(index === lead && slot.role === 'hero' ? { loading: 'eager' } : {}),
       },
     }

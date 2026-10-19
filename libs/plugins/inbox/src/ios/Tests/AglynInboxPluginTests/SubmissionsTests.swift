@@ -46,7 +46,7 @@ final class SubmissionsTests: XCTestCase {
         NativePluginManifestEntry(
           id: "inbox",
           contributes: [
-            "screens": ["inbox.submissions", "inbox.submission", "inbox.people"], "widgets": ["inbox.glance"],
+            "screens": ["inbox.submissions", "inbox.submission", "inbox.people"], "widgets": ["inbox.glance", "inbox.needs-you", "inbox.sidebar-count"],
             "quickActions": ["inbox.open", "inbox.people"],
             "deepLinks": ["inbox.page", "inbox.submissions-page", "inbox.people-page"],
           ], register: registerInboxNative)

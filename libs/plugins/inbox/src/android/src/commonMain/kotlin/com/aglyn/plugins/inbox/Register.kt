@@ -21,12 +21,17 @@ fun registerInboxNative(r: NativePluginRegistrar) {
       initialSubmission = params["submission"] ?: params["submissionId"],
       scopedForm = params["formId"] ?: params["form"],
       scopedFormName = params["formName"],
+      initialRead = ReadFilter.entries.firstOrNull { it.value != null && it.value == params["read"] } ?: ReadFilter.ALL,
     )
   }
   r.screen(INBOX_SUBMISSION_SCREEN, title = "Message", requiresSite = false, icon = "drafts") { context, params ->
     SubmissionScreen(context, params["submission"] ?: params["submissionId"] ?: params["id"])
   }
   r.screen(INBOX_PEOPLE_SCREEN, title = "Members & leads", requiresSite = false, icon = "group") { context, _ -> PeopleScreen(context) }
+  r.widget("inbox.needs-you", title = "Needs you", order = 20, requiresSite = true, slot = "homeNeedsYou") { context -> InboxNeedsYouWidget(context) }
+  r.widget("inbox.sidebar-count", title = "Inbox", order = 10, requiresSite = false, slot = "sidebarCount.inbox") { context ->
+    InboxSidebarCount(context)
+  }
   r.widget("inbox.glance", title = "Inbox", order = 60, size = WidgetSize.HALF, requiresSite = true) { context -> InboxGlanceWidget(context) }
   r.quickAction("inbox.open", "Inbox", "inbox", 60, requiresSite = true, screen = INBOX_SCREEN)
   r.quickAction("inbox.people", "Members & leads", "group", 62, requiresSite = true, screen = INBOX_PEOPLE_SCREEN)

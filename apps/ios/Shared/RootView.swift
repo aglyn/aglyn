@@ -48,7 +48,10 @@ struct RootView<Shell: View>: View {
     }
     .task {
       // The intro ends when Auth has answered (signed out → sign-in, signed in → the shell), never on a fixed wait.
-      await intro.run(reduceMotion: reduceMotion) { [model] in model.auth?.ready ?? true }
+      // The sign-in and verify screens show the lockup where the intro docks it; the shell does not, so it fades.
+      await intro.run(
+        reduceMotion: reduceMotion, isReady: { [model] in model.auth?.ready ?? true },
+        docksToLockup: { [self] in self.stage == .signedOut || self.stage == .verify })
     }
     .tint(AglynColor.tint)
     .font(AglynFont.body)
@@ -122,6 +125,8 @@ struct RootView<Shell: View>: View {
           // A support session says so on every screen, with its way back to the staff member's own session.
           // The first verified session of an account with no workspace creates the one its sign-up asked for.
           .task(id: "\(auth.user?.uid ?? ""):\(model.workspace?.ready == true)") { await model.settleFirstRun() }
+          // Notifications are asked for once someone is signed in and in the app, never on the signed-out screens.
+          .task(id: auth.user?.uid) { if auth.impersonation == nil { model.push.askPermission(for: auth.user?.uid) } }
           .safeAreaInset(edge: .top, spacing: 0) {
             if let impersonation = auth.impersonation {
               AglynNotice(
@@ -142,10 +147,22 @@ struct RootView<Shell: View>: View {
   /// A tapped push's link, opened once someone is signed in.
   private func openPendingPush() {
     guard let link = model.push.pendingLink, model.auth?.user != nil else { return }
-    let (orgID, hostID) = (model.push.pendingOrgID, model.push.pendingHostID)
+    let (orgID, hostID, uid) = (model.push.pendingOrgID, model.push.pendingHostID, model.push.pendingUID)
     model.push.pendingLink = nil
     model.push.pendingOrgID = nil
     model.push.pendingHostID = nil
+    model.push.pendingUID = nil
+    // A push sent to another account signed in here opens in that account (Add account).
+    if let auth = model.auth, auth.impersonation == nil,
+      let owner = auth.accounts.first(where: { $0.uid == uid && $0.slot != auth.activeSlot })
+        ?? (uid == nil ? AccountRosterRules.owner(ofOrg: orgID, in: auth.accounts, activeSlot: auth.activeSlot) : nil)
+    {
+      Task {
+        await auth.switchAccount(to: owner.slot)
+        model.follow(link, orgID: orgID, hostID: hostID, in: navigation)
+      }
+      return
+    }
     model.follow(link, orgID: orgID, hostID: hostID, in: navigation)
   }
 }
@@ -180,10 +197,15 @@ enum DebugLaunch {
     #endif
   }
 
+  @MainActor private static var routed = false
+
   /// `-AglynSection notifications|settings|more|analytics|home`, `-AglynDemoRoute <screen id>` and `-AglynDemoParams`.
   @MainActor
   static func route(_ navigation: ShellNavigation) {
     #if DEBUG
+      // Once per launch: a tab opened later starts where it was opened, not on the launch's route.
+      guard !routed else { return }
+      routed = true
       let defaults = UserDefaults.standard
       switch defaults.string(forKey: "AglynSection") {
       case "notifications": navigation.section = .notifications

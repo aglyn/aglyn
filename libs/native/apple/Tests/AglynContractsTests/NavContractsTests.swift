@@ -150,6 +150,42 @@ final class NavContractsTests: XCTestCase {
     }
   }
 
+  func testTheCreateMenuResolvesPerScope() throws {
+    for item in cases("resolveCreateList") {
+      let scope = NativeNavCreateScope(rawValue: item.args[0] as? String ?? "") ?? .unknown
+      XCTAssertEqual(
+        resolveCreateList(
+          scope, enabledPluginIds: strings(item.args[1]), permissions: item.args[2] as? [String: Bool] ?? [:],
+          features: item.args[3] as? [String: Bool] ?? [:], hostRole: item.args[4] as? String),
+        try decode([ResolvedCreateItem].self, item.result), "resolveCreateList \(item.args)")
+    }
+  }
+
+  func testAccentsDeriveAsTheConsoleDerivesThem() throws {
+    for item in cases("deriveAccent") {
+      let expected = item.result is NSNull ? nil : try decode(ThemeAccent.self, item.result)
+      XCTAssertEqual(deriveAccent(item.args[0] as? String ?? ""), expected, item.label)
+    }
+  }
+
+  func testThemesDeriveFromTheirPreviewsAsTheConsoleDerivesThem() throws {
+    for item in cases("deriveThemeFromPreview") {
+      XCTAssertEqual(
+        deriveThemeFromPreview(try decode(ThemePreview.self, item.args[0]), darkRailSeed: item.args[1] as? String ?? ""),
+        try decode(ThemeColorsPair.self, item.result), item.label)
+    }
+  }
+
+  func testRolesGrantAsTheConsoleResolvesThem() throws {
+    for item in cases("rolePermissions") {
+      XCTAssertEqual(
+        rolePermissions(
+          ContractValues.shared.orgRoleGrants, role: item.args[0] as? String, customRole: item.args[1] as? [String: Any],
+          overrides: item.args[2] as? [String: Any]),
+        item.result as? [String: Bool], item.label)
+    }
+  }
+
   func testTheOneBoxPagesAndFindsScreensAsTheRouteDoes() throws {
     for item in cases("oneBoxLimit") { XCTAssertEqual(oneBoxLimit(item.args[0]), number(item.result), item.label) }
     for item in cases("oneBoxCursor") { XCTAssertEqual(oneBoxCursor(item.args[0]), number(item.result), item.label) }

@@ -20,14 +20,28 @@ struct ShellScope {
   var site: WorkspaceSite? { model.scopedSite(navigation) }
   var inSite: Bool { site != nil }
 
-  /// The workspace's plugins on (`resolveEnabledPlugins`).
-  var workspacePlugins: [String] { resolveEnabledPlugins(model.workspace?.orgLogo?.enabledPlugins) }
+  /// The workspace's plugins on (`resolveEnabledPlugins`), less those the platform has not released to it.
+  var workspacePlugins: [String] { released(resolveEnabledPlugins(model.workspace?.orgLogo?.enabledPlugins)) }
 
   /// The site's plugins on: the workspace's, less the site's own off list, plus the default-off ones it opted into.
   var sitePlugins: [String] {
     let choices = model.workspace?.sitePlugins
-    return resolveHostEnabledPlugins(
-      orgEnabled: model.workspace?.orgLogo?.enabledPlugins, hostDisabled: choices?.disabled, hostEnabled: choices?.enabled)
+    return released(
+      resolveHostEnabledPlugins(
+        orgEnabled: model.workspace?.orgLogo?.enabledPlugins, hostDisabled: choices?.disabled, hostEnabled: choices?.enabled))
+  }
+
+  /// Drops a plugin whose release flag is off for this workspace (Accounting until a deployment has its ledger
+  /// credentials, Outreach until staff open it). The console's shell hides such a plugin's tab and its routes answer
+  /// 404, so a row for it would only open "This did not load"; a gate only the platform lifts stays hidden.
+  private func released(_ pluginIDs: [String]) -> [String] {
+    let logo = model.workspace?.orgLogo
+    let staff = model.auth?.staff != nil
+    return pluginIDs.filter { id in
+      guard let flag = PluginCatalog.plugin(id)?.releaseFlag, !staff else { return true }
+      let value = ReleaseFlagDefaults.byKey[flag] ?? ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: [])
+      return isReleaseFlagOn(flag, value: value, orgID: org?.id, plan: logo?.plan, overrides: logo?.releaseFlags)
+    }
   }
 
   /// Whether the person sees the site's Admin rows, as the console shows its Admin tab: a site admin, or a workspace

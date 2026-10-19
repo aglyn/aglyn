@@ -20,6 +20,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -60,12 +61,15 @@ fun AglynShell(
   onLinkOpened: () -> Unit = {},
   /** Light or dark regardless of the system's; null follows the system. */
   dark: Boolean? = null,
-  /** The desktop's first window plays the launch intro (Android's splash screen plays instead). */
+  /** The desktop's first window, and Android's first launch (on from its splash), play the launch intro. */
   playIntro: Boolean = false,
   /** The intro has handed over to the destination (the desktop's window grows then). */
   onIntroRevealed: () -> Unit = {},
+  /** Android: the splash screen's mark size the intro starts from, and whether the splash has gone (the intro then moves). */
+  launchMark: androidx.compose.ui.unit.Dp? = null,
+  launchScreenGone: () -> Boolean = { true },
 ) {
-  AglynTheme(dark = dark ?: appearanceDark(services)) {
+  AccountTheme(services, dark) {
     androidx.compose.runtime.CompositionLocalProvider(
       com.aglyn.ui.LocalImageLoader provides services.imageLoader,
       com.aglyn.ui.LocalMediaPicker provides (com.aglyn.ui.LocalMediaPicker.current ?: services.mediaPicker),
@@ -90,12 +94,18 @@ fun AglynShell(
     val state = auth
     val authScreen = state is AuthState.SignedOut ||
       (state is AuthState.SignedIn && (services.authFlow.landing || (!state.user.emailVerified && impersonation == null)))
-    LaunchHost(services, ready = state !is AuthState.Restoring, backdrop = authScreen, playIntro = playIntro, onRevealed = onIntroRevealed) { reveal ->
+    // One signed-out screen, moved rather than rebuilt when the account appears mid sign-up: rebuilding it cancelled the
+    // sign-up's own coroutine, so its acceptance, names and held workspace could go unwritten.
+    val signedOutScreen = remember(services, autoSignIn) { movableContentOf { SignedOutScreen(services, autoSignIn) } }
+    LaunchHost(
+      services, ready = state !is AuthState.Restoring, backdrop = authScreen, playIntro = playIntro, onRevealed = onIntroRevealed,
+      launchMark = launchMark, mayStart = launchScreenGone,
+    ) { reveal ->
       when (state) {
         AuthState.Restoring -> Unit
-        AuthState.SignedOut -> AddAccountFrame(services) { SignedOutScreen(services, autoSignIn) }
+        AuthState.SignedOut -> AddAccountFrame(services) { signedOutScreen() }
         // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
-        is AuthState.SignedIn if services.authFlow.landing -> SignedOutScreen(services, autoSignIn)
+        is AuthState.SignedIn if services.authFlow.landing -> AddAccountFrame(services) { signedOutScreen() }
         // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
         is AuthState.SignedIn if !state.user.emailVerified && impersonation == null -> VerifyEmailScreen(services, state.user.email)
         // Keyed by the account: switching accounts starts the shell over, so nothing of one account's shows in the other's.
@@ -108,6 +118,33 @@ fun AglynShell(
       }
     }
     }
+    }
+  }
+}
+
+/**
+ * The account's theme over the whole app (its appearance, theme, accent, density and, on the desktop, text size), the
+ * device's own when "Apply to this device only" is on; [dark] forces light or dark (tests, snapshots).
+ */
+@Composable
+internal fun AccountTheme(services: ShellServices, dark: Boolean? = null, brand: androidx.compose.ui.graphics.Color? = null, content: @Composable () -> Unit) {
+  val prefs by services.accountPrefs.state.collectAsState()
+  val theme = prefs.theme
+  // The home-screen icon follows the account's choice, set on another device too.
+  LaunchedEffect(theme.appIcon, prefs.loaded) { if (prefs.loaded) services.appIcons?.apply(theme.appIcon) }
+  AglynTheme(
+    dark = dark ?: appearanceDark(services),
+    appTheme = theme,
+    brand = brand,
+    textScale = if (appSetsTextSize) com.aglyn.ui.textScaleOf(theme.textSize) else 1f,
+  ) {
+    // The desktop is Compact everywhere (sign-in, dialogs and the shell): its sizes and its radii.
+    if (LocalUsesCompactChrome.current) {
+      MaterialTheme(colorScheme = MaterialTheme.colorScheme, typography = MaterialTheme.typography, shapes = com.aglyn.ui.CompactShapes) {
+        androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalShellMetrics provides com.aglyn.ui.CompactShellMetrics, content = content)
+      }
+    } else {
+      content()
     }
   }
 }

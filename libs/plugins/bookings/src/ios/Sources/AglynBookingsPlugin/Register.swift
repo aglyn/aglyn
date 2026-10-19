@@ -18,13 +18,17 @@ public let bookingsCounterScreen = "bookings.counter"
 @MainActor
 public func registerBookingsNative(_ r: NativePluginRegistrar) {
   r.screen(bookingsCalendarScreen, title: "Bookings", requiresSite: true, icon: "calendar") { ctx, params in
-    BookingsCalendarScreen(context: ctx, params: params)
+    AglynFeatureGate(context: ctx, feature: "bookings", title: "Bookings") {
+      BookingsCalendarScreen(context: ctx, params: params)
+    }
   }
   r.screen(bookingScreen, title: "Booking", requiresSite: true, apps: [.aglyn, .pos], icon: "calendar") { ctx, params in
     BookingScreen(context: ctx, params: params)
   }
-  r.screen(bookingsServicesScreen, title: "Services", requiresSite: true, icon: "list.bullet.rectangle") { ctx, _ in
-    BookingServicesScreen(context: ctx)
+  r.screen(bookingsServicesScreen, title: "Services", requiresSite: true, icon: "list.bullet.rectangle") { ctx, params in
+    AglynFeatureGate(context: ctx, feature: "bookings", title: "Bookings") {
+      BookingServicesScreen(context: ctx, startNew: params["new"] == "1")
+    }
   }
   r.screen(bookingsCounterScreen, title: "Today's bookings", requiresSite: true, apps: [.pos], icon: "calendar", placement: .menu) {
     ctx, _ in
@@ -32,6 +36,9 @@ public func registerBookingsNative(_ r: NativePluginRegistrar) {
   }
   r.widget("bookings.today", title: "Today's bookings", icon: "calendar", order: 300, size: .half, requiresSite: true) {
     BookingsTodayWidget(context: $0)
+  }
+  r.widget("bookings.needs-you", title: "Needs you", order: 30, requiresSite: true, slot: "homeNeedsYou") {
+    BookingsNeedsYouWidget(context: $0)
   }
   r.quickAction("bookings.open", title: "Bookings", icon: "calendar", order: 300, screen: bookingsCalendarScreen, requiresSite: true)
   r.deepLink("bookings.page", path: "/bookings", screen: bookingsCalendarScreen)

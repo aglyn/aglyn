@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,8 +48,10 @@ fun SignInScreen(
   subtitle: String? = null,
 ) {
   val flow = services.authFlow
-  LaunchedEffect(Unit) { services.debugSignIn?.first?.let { if (flow.email.isEmpty()) flow.email = it } }
-  var password by remember { mutableStateOf(services.debugSignIn?.second ?: "") }
+  // A debug build fills its seeded member in, but never while adding a second account (that member is already in).
+  val adding = services.accounts?.adding?.collectAsState()?.value != null
+  LaunchedEffect(Unit) { if (!adding) services.debugSignIn?.first?.let { if (flow.email.isEmpty()) flow.email = it } }
+  var password by remember { mutableStateOf(if (adding) "" else services.debugSignIn?.second ?: "") }
   var busy by remember { mutableStateOf(false) }
   /** The password door is working (the provider doors share [busy], which disables every button). */
   var submitting by remember { mutableStateOf(false) }

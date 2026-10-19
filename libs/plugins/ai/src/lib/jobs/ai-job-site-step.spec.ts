@@ -64,6 +64,7 @@ import {
   aiFreeSitePrompt,
   aiFreeSiteCreditRange,
   aiFreeCreditsNoneLeftText,
+  parseAiSiteJobInputs,
 } from '../model/ai-site-job'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSiteAliases, aiLayoutSitePages, aiLayoutWithSitePages } from './ai-job-layout-site-pages'
 import { aiLayoutPageTargets } from './ai-job-page-language'
@@ -92,6 +93,7 @@ import {
   aiCreationUnit,
   aiRunJobUnit,
   aiSiteBuiltRefs,
+  aiSiteBriefLines,
   aiSiteInitialLedger,
   aiSiteJobRunMinimumMs,
   aiSiteJobUnits,
@@ -976,6 +978,24 @@ describe('the site’s own listing, from the answers', () => {
       'seo.title': 'Neighborhood dog groomer',
       'seo.description': 'Neighborhood dog groomer for local dog owners.',
     })
+  })
+
+  it('leads with the site’s own name where the start named no business, as the publish writes it (AGL-3979)', async () => {
+    const siteName = jest.fn(async () => 'Hillside Dog Grooming')
+    const step = stepWith({ page: fakeRunner([], () => ({ outputs: [output('screen', 's')] })) }, { siteName })
+    const job = siteJob({
+      inputs: { businessType: 'a neighborhood dog groomer', audience: 'local dog owners', pages: AI_SITE_PAGES.min, welcomeEmail: false },
+    })
+    const outcome = await step(context(job))
+    expect(siteName).toHaveBeenCalledWith(expect.anything(), job.hostId)
+    expect(aiSiteSeoProposalOf(outcome.outputs)?.values).toEqual({
+      'seo.title': 'Hillside Dog Grooming — Neighborhood dog groomer',
+      'seo.description': 'Hillside Dog Grooming is a neighborhood dog groomer for local dog owners.',
+    })
+    // Once reported, no pass reads the name again.
+    siteName.mockClear()
+    await step(context(siteJob({ ...job, outputs: [LOOK, ...outcome.outputs] })))
+    expect(siteName).not.toHaveBeenCalled()
   })
 
   it('says it in the language the plan writes the site in, with no English around the answers (AGL-3792)', async () => {
@@ -2418,5 +2438,27 @@ describe('an event-led start’s first events (AGL-3755)', () => {
     const home = units.find((unit) => unit.slot === 'p0') as AiSiteUnit
     const job = aiSiteUnitJob(siteJob({ plan, outputs: [LOOK] }), home, new Map())
     expect(aiLayoutListingsOf(job.inputs).some((listing) => listing.kind === 'events')).toBe(false)
+  })
+})
+
+describe('what every unit is told about the business (AGL-3979)', () => {
+  const parsed = (inputs: Record<string, unknown>) => {
+    const value = parseAiSiteJobInputs({ businessType: 'a family plumber', pages: 5, businessName: 'Pipeworks', ...inputs })
+    if (typeof value === 'string') throw new Error(value)
+    return value
+  }
+
+  it('the phone, email, address and hours given, and that the pages show the phone and email as written', () => {
+    const lines = aiSiteBriefLines('A 5-page website.', parsed({ phone: '(512) 555-0142', email: 'hello@pipeworks.co', city: 'Austin', street: '214 Main Street' }))
+    expect(lines).toContain('Contact — phone: (512) 555-0142; email: hello@pipeworks.co; address: 214 Main Street, Austin.')
+    expect(lines.join('\n')).toContain('a link that calls goes to "phone"')
+  })
+
+  it('nothing new for a start that gave none', () => {
+    expect(aiSiteBriefLines('A 5-page website.', parsed({}))).toEqual([
+      'A 5-page website.',
+      'Site — name: Pipeworks; business: a family plumber.',
+      expect.stringContaining('“Pipeworks”'),
+    ])
   })
 })

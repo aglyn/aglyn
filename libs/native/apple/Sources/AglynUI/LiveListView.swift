@@ -83,7 +83,7 @@ public struct AglynSectionBar<Section: Hashable & Identifiable>: View {
           AglynChoiceChip(label(item), systemImage: systemImage(item), selected: selection == item) { selection = item }
         }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
     }
     .accessibilityIdentifier("section-bar")

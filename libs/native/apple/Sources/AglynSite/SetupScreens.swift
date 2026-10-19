@@ -73,13 +73,15 @@ struct SetupScreen: View {
           }
         }
         .aglynListBackground()
-        .navigationDestination(item: $pushed) { section in
+        .aglynPushDestination(item: $pushed) { section in
           SetupDetail(context: context, section: section, integrations: integrations).navigationTitle(section.title)
+            .aglynScreenTitle(section.title)
         }
         .onAppear { if pushed == nil, !opened, let initialSection { pushed = SetupSection.of(initialSection); opened = true } }
       }
     }
     .navigationTitle("Setup")
+    .aglynScreenTitle("Setup")
     .task(id: context.hostID) { if let id = context.hostID { await host.bind(context.firestore, ["hosts", id]) } }
     .task(id: context.orgID) { if let id = context.orgID { await org.bind(context.firestore, ["orgs", id]) } }
   }
@@ -131,6 +133,7 @@ struct SetupDetail: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(section.title)
+    .aglynScreenTitle(section.title)
     .accessibilityIdentifier("setup-detail-\(section.id)")
   }
 }
@@ -1115,8 +1118,9 @@ private struct FontBrowserSheet: View {
         ) { category = $0 }
         .background(.bar)
       }
-      .searchable(text: $search, prompt: "Search fonts")
+      .aglynSearchable(text: $search, prompt: "Search fonts")
       .navigationTitle("Font family")
+      .aglynScreenTitle("Font family")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

@@ -34,17 +34,13 @@ struct ActionEditorScreen: View {
       }
     }
     .navigationTitle(editingID == nil ? "Add action" : "Edit action")
+    .aglynScreenTitle(editingID == nil ? "Add action" : "Edit action")
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
     #endif
-    .toolbar {
-      ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-      ToolbarItem(placement: .confirmationAction) {
-        Button(saving ? "Saving…" : "Save action") { save() }
-          .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || saving)
-          .accessibilityIdentifier("action-save")
-      }
-    }
+    .aglynEditorActions(
+      id: "action-save", save: saving ? "Saving…" : "Save action", enabled: !(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || saving), cancel: { dismiss() }
+    ) { save() }
     .task(id: "\(hostID ?? "")|\(editingID ?? "new")") {
       guard let hostID else { return }
       if let editingID { stored.start(context.firestore, AutomationPaths.actions(hostID) + [editingID]) }

@@ -103,13 +103,15 @@ fun RecordsSection(
   reference: CrmReference,
   initial: String?,
   openEmail: String? = null,
+  /** Opened from Create new: the new record's form comes up at once. */
+  startNew: Boolean = false,
 ) {
   val coroutines = rememberCoroutineScope()
   val filters = remember(kind, scope, openEmail) { listOfNotNull(contactEmailFilter(openEmail)) + crmFilters(kind, scope) }
   var filterKey by rememberSaveable(kind) { mutableStateOf(filters.first().key) }
   var search by rememberSaveable(kind) { mutableStateOf("") }
   var asked by rememberSaveable(kind) { mutableStateOf("") }
-  var creating by remember(kind) { mutableStateOf(false) }
+  var creating by remember(kind) { mutableStateOf(startNew && scope.canWrite) }
   val list = remember(kind, scope, context.firestore) {
     LiveQueryList(context.firestore, coroutines, 25) { doc -> crmRow(kind, doc, scope) }
   }
@@ -268,17 +270,20 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
           verticalArrangement = Arrangement.spacedBy(space(2f)),
         ) {
           notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }
-          SectionCard(null, Modifier.fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Column(Modifier.weight(1f)) {
-                Text(row.title, Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
-                if (row.subtitle.isNotBlank()) Text(row.subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          // One filled button, the next step for this record; the rest in ⋯.
+          val (primary, more) = if (scope.canWrite) recordActions(kind, row) { dialog = it } else (null to emptyList())
+          com.aglyn.ui.RecordHeader(
+            row.title,
+            status = {
+              Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+                row.chip?.let { StatusChip(it, chipTone(kind, row)) }
+                if (row.subtitle.isNotBlank()) Text(row.subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
               }
-              row.chip?.let { StatusChip(it, chipTone(kind, row)) }
-            }
-            if (kind == CrmKind.DEAL) DealStagePath(reference.pipeline(doc.string("pipelineId")), doc.string("stageId"), doc.string("status"))
-            if (scope.canWrite) RecordActions(kind, row) { dialog = it }
-          }
+            },
+            primary = primary,
+            more = more,
+          )
+          if (kind == CrmKind.DEAL) DealStagePath(reference.pipeline(doc.string("pipelineId")), doc.string("stageId"), doc.string("status"))
           SectionCard("Details", Modifier.fillMaxWidth()) {
             // The fields that hold something; Edit holds every one.
             val shown = fields.mapNotNull { field ->
@@ -304,57 +309,42 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
   }
 }
 
-@Composable
-private fun RecordActions(kind: CrmKind, row: CrmRow, open: (RecordDialog) -> Unit) {
-  val actions = buildList {
-    add(Triple("Edit", "edit", RecordDialog.EDIT))
-    add(Triple("Log activity", "sticky_note", RecordDialog.LOG))
-    if (kind != CrmKind.COMPANY && row.data["email"] != null || kind == CrmKind.DEAL) add(Triple("Email", "mail", RecordDialog.EMAIL))
-    add(Triple("New task", "task", RecordDialog.TASK))
+/**
+ * What a record's header offers: the next step for its state as the one filled button (Convert a qualified lead, Email a
+ * contact, Move an open deal's stage), and every other act in ⋯, Remove or Delete last.
+ */
+private fun recordActions(kind: CrmKind, row: CrmRow, open: (RecordDialog) -> Unit): Pair<com.aglyn.ui.RecordAction?, List<com.aglyn.ui.RecordAction>> {
+  fun act(label: String, icon: String, dialog: RecordDialog) =
+    com.aglyn.ui.RecordAction("crm-action-${dialog.name.lowercase()}", label, icon, destructive = dialog == RecordDialog.DELETE) { open(dialog) }
+  val all = buildList {
+    add(act("Edit", "edit", RecordDialog.EDIT))
+    add(act("Log activity", "sticky_note", RecordDialog.LOG))
+    if (kind != CrmKind.COMPANY && row.data["email"] != null || kind == CrmKind.DEAL) add(act("Email", "mail", RecordDialog.EMAIL))
+    add(act("New task", "task", RecordDialog.TASK))
     when (kind) {
       CrmKind.LEAD -> {
-        add(Triple("Status", "label", RecordDialog.STATUS))
-        if (row.data["convertedContactId"] == null) add(Triple("Convert", "arrow_forward", RecordDialog.CONVERT))
-        if (row.data["status"] != "unqualified") add(Triple("Unqualify", "cancel", RecordDialog.UNQUALIFY))
+        add(act("Status", "label", RecordDialog.STATUS))
+        if (row.data["convertedContactId"] == null) add(act("Convert", "arrow_forward", RecordDialog.CONVERT))
+        if (row.data["status"] != "unqualified") add(act("Unqualify", "cancel", RecordDialog.UNQUALIFY))
       }
-      CrmKind.CONTACT -> add(Triple("Lifecycle stage", "label", RecordDialog.STAGE))
+      CrmKind.CONTACT -> add(act("Lifecycle stage", "label", RecordDialog.STAGE))
       CrmKind.DEAL -> if (row.data["status"] == "open" || row.data["status"] == null) {
-        add(Triple("Move stage", "view_kanban", RecordDialog.MOVE))
-        add(Triple("Won", "check_circle", RecordDialog.WON))
-        add(Triple("Lost", "cancel", RecordDialog.LOST))
+        add(act("Move stage", "view_kanban", RecordDialog.MOVE))
+        add(act("Won", "check_circle", RecordDialog.WON))
+        add(act("Lost", "cancel", RecordDialog.LOST))
       }
       CrmKind.COMPANY -> Unit
     }
-    add(Triple(if (kind == CrmKind.CONTACT) "Remove" else "Delete", "delete", RecordDialog.DELETE))
+    add(act(if (kind == CrmKind.CONTACT) "Remove" else "Delete", "delete", RecordDialog.DELETE))
   }
-  // Edit and the next two acts in view; the rest in the ⋮ menu, with Remove/Delete last in the error color (the
-  // spec's two or three visible actions, never a wall of outlined buttons).
-  val shown = actions.take(3)
-  val more = actions.drop(3)
-  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-    FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-      shown.forEachIndexed { index, (label, icon, dialog) ->
-        val tag = Modifier.testTag("crm-action-${dialog.name.lowercase()}")
-        if (index == 0) {
-          Button(onClick = { open(dialog) }, modifier = tag) {
-            Icon(AglynIcons.named(icon), contentDescription = null)
-            Text(label, Modifier.padding(start = space(1f)))
-          }
-        } else {
-          OutlinedButton(onClick = { open(dialog) }, modifier = tag) {
-            Icon(AglynIcons.named(icon), contentDescription = null)
-            Text(label, Modifier.padding(start = space(1f)))
-          }
-        }
-      }
-    }
-    OverflowMenu(
-      more.map { (label, icon, dialog) ->
-        MenuAction("crm-action-${dialog.name.lowercase()}", label, icon, destructive = dialog == RecordDialog.DELETE) { open(dialog) }
-      },
-      contentDescription = "More actions for ${row.title}",
-    )
+  val next = when (kind) {
+    CrmKind.LEAD -> if (row.data["status"] == "qualified" && row.data["convertedContactId"] == null) RecordDialog.CONVERT else RecordDialog.LOG
+    CrmKind.CONTACT -> if (row.data["email"] != null) RecordDialog.EMAIL else RecordDialog.LOG
+    CrmKind.DEAL -> if (row.data["status"] == "open" || row.data["status"] == null) RecordDialog.MOVE else RecordDialog.LOG
+    CrmKind.COMPANY -> RecordDialog.LOG
   }
+  val primary = all.firstOrNull { it.id == "crm-action-${next.name.lowercase()}" }
+  return primary to all.filter { it != primary }
 }
 
 /** A deal's stages as a path: done, current, ahead. */

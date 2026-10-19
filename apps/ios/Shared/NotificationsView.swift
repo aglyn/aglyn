@@ -233,7 +233,19 @@ struct NotificationsView: View {
       }
     }
     .navigationTitle("Notifications")
-    .toolbar { toolbar }
+    .aglynPrimaryAction(
+      id: "notifications-mark-all", markingAll ? "Marking…" : "Mark all read", systemImage: "checkmark.circle",
+      enabled: !markingAll, help: "Mark every notification read"
+    ) { markAll() }
+    .aglynScreenToolbar(id: "notifications") {
+      AglynPushLink {
+        NotificationSettingsView()
+      } label: {
+        Label("Notification settings", systemImage: "gearshape")
+      }
+      .help("Choose what reaches you, and the sound it plays")
+      .accessibilityIdentifier("notifications-settings")
+    }
     .task(id: "\(model.auth?.user?.uid ?? ""):\(model.refreshToken):\(filter.status.rawValue):\(filter.types.sorted()):\(shown)") {
       feed.start(reader: model.reader, uid: model.auth?.user?.uid, count: shown, filter: filter)
     }
@@ -245,29 +257,6 @@ struct NotificationsView: View {
     }
     .sheet(item: Binding(get: { navigation.pendingInvite }, set: { navigation.pendingInvite = $0 })) { row in
       InviteReviewSheet(row: row)
-    }
-  }
-
-  @ToolbarContentBuilder
-  private var toolbar: some ToolbarContent {
-    ToolbarItem(placement: .primaryAction) {
-      Button {
-        markAll()
-      } label: {
-        Label(markingAll ? "Marking…" : "Mark all read", systemImage: "checkmark.circle")
-      }
-      .disabled(markingAll)
-      .help("Mark every notification read")
-      .accessibilityIdentifier("notifications-mark-all")
-    }
-    ToolbarItem(placement: .secondaryAction) {
-      NavigationLink {
-        NotificationSettingsView()
-      } label: {
-        Label("Notification settings", systemImage: "gearshape")
-      }
-      .help("Choose what reaches you, and the sound it plays")
-      .accessibilityIdentifier("notifications-settings")
     }
   }
 
@@ -301,7 +290,7 @@ struct NotificationsView: View {
           Button("Clear") { filter.types = [] }.buttonStyle(.borderless)
         }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
     }
   }
@@ -319,7 +308,7 @@ struct NotificationsView: View {
     VStack(spacing: 0) {
       filterBar
       if let (text, tone) = notice {
-        AglynNotice(text, tone: tone) { notice = nil }.padding(.horizontal, AglynSpace.two)
+        AglynNotice(text, tone: tone) { notice = nil }.aglynContentEdges()
       }
       Group {
         if let rows = feed.rows {
@@ -401,6 +390,7 @@ struct NotificationsView: View {
 struct NotificationDetail: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
+  @Environment(\.aglynWideChrome) private var wide
   let row: FeedNotification
 
   var body: some View {
@@ -434,10 +424,11 @@ struct NotificationDetail: View {
         }
       }
       .padding(AglynSpace.three)
-      .frame(maxWidth: 720, alignment: .leading)
+      .frame(maxWidth: .infinity, alignment: .leading)
       .aglynCardSurface()
-      .padding(AglynSpace.two)
-      .frame(maxWidth: .infinity)
+      // The card fills the detail column, on its content edges (no capped column).
+      .padding(.horizontal, wide ? AglynContentInsets.horizontal : AglynContentInsets.phone)
+      .padding(.vertical, AglynSpace.two)
     }
     .aglynListBackground()
     .accessibilityIdentifier("notification-detail")

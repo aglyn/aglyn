@@ -22,8 +22,22 @@ public enum AglynSpace {
 
 /// Corner radii: the console's radius for small controls, and the card radius built on it.
 public enum AglynRadius {
-  public static let control = AglynTokens.radius * 2
-  public static let card = AglynTokens.radius * 3
+  /// A control's rounding: 6 on the Mac (Figma's Compact density), 8 on touch screens.
+  public static var control: CGFloat {
+    #if os(macOS)
+      6
+    #else
+      AglynTokens.radius * 2
+    #endif
+  }
+  /// A card's rounding: 10 on the Mac, 12 on touch screens.
+  public static var card: CGFloat {
+    #if os(macOS)
+      10
+    #else
+      AglynTokens.radius * 3
+    #endif
+  }
 }
 
 extension View {
@@ -358,9 +372,10 @@ public struct AglynCardGrid: Layout {
     self.spacing = spacing
   }
 
-  /// How many columns fit in `width`.
+  /// How many columns fit in `width`. An unbounded width (a scroll view sizing its content on the Mac) fits them all.
   public func columns(for width: CGFloat) -> Int {
-    min(maxColumns, max(1, Int((width + spacing) / (minimum + spacing))))
+    guard width.isFinite else { return maxColumns }
+    return min(maxColumns, max(1, Int((max(0, width) + spacing) / (minimum + spacing))))
   }
 
   /// The subview indices of each row.
@@ -389,7 +404,9 @@ public struct AglynCardGrid: Layout {
 
   public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
     guard !subviews.isEmpty else { return .zero }
-    let width = proposal.width ?? (minimum * CGFloat(min(maxColumns, subviews.count)))
+    // No width, or an unbounded one, asks for the grid's ideal: every column it can hold at its minimum.
+    let ideal = minimum * CGFloat(min(maxColumns, subviews.count))
+    let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? ideal
     let rows = measure(width, subviews)
     let height = rows.reduce(0) { $0 + $1.height } + spacing * CGFloat(max(0, rows.count - 1))
     return CGSize(width: width, height: height)

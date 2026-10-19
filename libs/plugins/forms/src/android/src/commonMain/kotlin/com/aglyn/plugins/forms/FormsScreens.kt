@@ -101,15 +101,16 @@ private sealed interface FormDialog {
  * submissions and their export, and retire or restore.
  */
 @Composable
-fun FormsScreen(context: NativePluginContext, initialFormId: String? = null) {
+fun FormsScreen(context: NativePluginContext, initialFormId: String? = null, startNew: Boolean = false) {
   val hostId = context.hostId ?: return
   val scope = rememberCoroutineScope()
   val model = remember(hostId, context.firestore) { FormsModel(hostId, context.firestore, scope) }
   LaunchedEffect(model) { model.reload() }
   val api = remember(hostId, context.api, context.writer) { FormsApi(context.api, context.writer, hostId) }
   val runner = remember(hostId) { ActionRunner(scope) }
-  var dialog by remember { mutableStateOf<FormDialog?>(null) }
   val canEdit = context.siteRole in CONTENT_ROLES
+  // Opened from Create new: the new-form question comes up at once (for those who may add one).
+  var dialog by remember { mutableStateOf<FormDialog?>(if (startNew && canEdit) FormDialog.Create else null) }
 
   AglynListDetail(
     initialSelected = initialFormId,
@@ -121,10 +122,7 @@ fun FormsScreen(context: NativePluginContext, initialFormId: String? = null) {
       LoadMoreEffect(listState, model.hasMore, onLoadMore = model::loadMore)
       Column(Modifier.fillMaxSize()) {
         ListHeader("Forms") {
-          Button(onClick = { dialog = FormDialog.Create }, enabled = canEdit, modifier = Modifier.testTag("add-form")) {
-            Icon(AglynIcons.named("add"), contentDescription = null)
-            Text("New form", Modifier.padding(start = space(1f)))
-          }
+          com.aglyn.ui.ListHeaderAction("New form", "add", { dialog = FormDialog.Create }, Modifier.testTag("add-form"), enabled = canEdit)
           // Create with AI and anything else a plugin puts beside New form (the console's `hostForms` zone).
           SlotWidgets(context, ListCreateZone.FORMS, SlotPlacement.HEADER)
         }

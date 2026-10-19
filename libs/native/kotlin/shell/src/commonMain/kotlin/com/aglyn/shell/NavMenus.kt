@@ -69,6 +69,7 @@ internal class ShellActions(
   val enterSettings: (NativeNavListId) -> Unit,
   val openWeb: (String) -> Unit,
   val accountSettings: () -> Unit,
+  val themeSettings: () -> Unit,
   val addAccount: () -> Unit,
   val switchAccount: (slot: String) -> Unit,
   val signOut: () -> Unit,
@@ -93,11 +94,21 @@ internal fun WorkspaceMenu(services: ShellServices, workspace: WorkspaceState, c
     }
     HorizontalDivider()
     MenuRow("Invite people", "person_add", tag = "workspace-menu-invite") { chrome.workspaceMenu = false; actions.openScreen("core.team", emptyMap()) }
-    MenuRow("Workspace settings", "settings", trailing = shortcutText(","), tag = "workspace-menu-settings") {
+    MenuRow("Workspace settings", "settings", trailing = shortcutText(",").takeIf { LocalShowShortcuts.current }, tag = "workspace-menu-settings") {
       chrome.workspaceMenu = false
       actions.enterSettings(NativeNavListId.WORKSPACE_SETTINGS)
     }
     MenuRow("Billing and usage", "credit_card", tag = "workspace-menu-billing") { chrome.workspaceMenu = false; actions.openScreen("core.billing", emptyMap()) }
+    // The console's "Upgrade plan" (its user menu): once the plan is known, below the top plans, to an owner or admin.
+    val logo = workspace.orgLogo
+    if (logo?.plan != null && logo.plan !in setOf("agency", "enterprise") && !logo.enterprise && org.role in setOf("owner", "admin")) {
+      androidx.compose.material3.Button(
+        onClick = { chrome.workspaceMenu = false; actions.openScreen("core.billing", emptyMap()) },
+        shape = com.aglyn.ui.controlShape(),
+        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onSurface, contentColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).testTag("workspace-menu-upgrade"),
+      ) { Text("Upgrade plan") }
+    }
     HorizontalDivider()
     MenuRow("Workspace color", "palette", trailing = "›", tag = "workspace-menu-color") { chrome.workspaceMenu = false; chrome.colorFor = org.id }
   }
@@ -129,7 +140,7 @@ internal fun AccountMenuItems(services: ShellServices, user: AuthUser?, close: (
     }
   }
   HorizontalDivider()
-  MenuRow("Theme", "contrast", trailing = appearanceLabel(prefs.theme.appearance) + "  ›", tag = "account-menu-theme") { themeOpen = !themeOpen }
+  MenuRow("Appearance", "contrast", trailing = appearanceLabel(prefs.theme.appearance) + "  ›", tag = "account-menu-appearance") { themeOpen = !themeOpen }
   if (themeOpen) {
     for (appearance in Contracts.appAppearances) {
       MenuRow(
@@ -141,6 +152,7 @@ internal fun AccountMenuItems(services: ShellServices, user: AuthUser?, close: (
       }
     }
   }
+  MenuRow("Theme", "palette", trailing = themeLabel(prefs.theme.theme, services.config.brandName), tag = "account-menu-theme") { close(); actions.themeSettings() }
   MenuRow("Settings", "settings", tag = "account-menu-settings") { close(); actions.accountSettings() }
   MenuRow("Marketplace", "storefront", tag = "account-menu-marketplace") { close(); actions.openScreen("marketplace.sell", emptyMap()) }
   MenuRow("Documentation", "article", tag = "account-menu-docs") { close(); actions.openWeb(helpLinks(services.config).first { it.id == "docs" }.url) }
@@ -208,13 +220,13 @@ internal fun PinnedFullDialog(services: ShellServices, workspace: WorkspaceState
           ) {
             RadioButton(replacing == id, onClick = null, modifier = Modifier.padding(horizontal = 8.dp))
             Text(names[id] ?: id, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(shortcutLabel(index + 1), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
+            if (LocalShowShortcuts.current) Text(shortcutLabel(index + 1), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
           }
         }
       }
     },
     confirmButton = {
-      Button(
+      Button(shape = com.aglyn.ui.controlShape(), 
         onClick = { replacing?.let { services.accountPrefs.replacePin(it, orgId) }; onDone() },
         enabled = replacing != null,
         modifier = Modifier.testTag("pinned-full-replace"),
@@ -262,7 +274,7 @@ internal fun KeepPinsDialog(services: ShellServices, workspace: WorkspaceState, 
       }
     },
     confirmButton = {
-      Button(onClick = { services.accountPrefs.keepPins(kept.toList()); onLater() }, enabled = kept.isNotEmpty(), modifier = Modifier.testTag("keep-pins-confirm")) {
+      Button(shape = com.aglyn.ui.controlShape(), onClick = { services.accountPrefs.keepPins(kept.toList()); onLater() }, enabled = kept.isNotEmpty(), modifier = Modifier.testTag("keep-pins-confirm")) {
         Text("Keep these ${kept.size}")
       }
     },

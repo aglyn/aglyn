@@ -187,7 +187,12 @@ export function aiLayoutGuardContacts(line: string, facts: string): string {
       const digits = digitsOf(phone)
       // A year, a price or a count is not a phone number.
       if (digits.length < 7) return phone
-      return knownDigits.has(digits) ? phone : '[phone number]'
+      // One number with and without its country code is one number (AGL-3979):
+      // "+1 512 555 0142" given admits "(512) 555-0142" written.
+      const known = [...knownDigits].some(
+        (given) => given === digits || (Math.min(given.length, digits.length) >= 7 && (given.endsWith(digits) || digits.endsWith(given)) && Math.abs(given.length - digits.length) <= 3),
+      )
+      return known ? phone : '[phone number]'
     })
 }
 

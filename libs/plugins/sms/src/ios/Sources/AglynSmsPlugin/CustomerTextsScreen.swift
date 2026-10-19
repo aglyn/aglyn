@@ -47,6 +47,7 @@ struct CustomerTextsScreen: View {
       }
     }
     .navigationTitle("Customer texts")
+    .aglynScreenTitle("Customer texts")
     .task(id: context.hostID) {
       guard let hostID = context.hostID else { return }
       let model = CustomerTexts(

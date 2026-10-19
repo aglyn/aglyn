@@ -68,6 +68,7 @@ import { aiGenerationWorstCaseOnTierMs, aiJobStepBudget } from './ai-job-budget'
 import { aiJobBriefLine, aiPlanReferenceLines } from './ai-job-generation'
 import { aiLayoutIsHomeSlug, aiLayoutSiteAliases, aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiLayoutInventedContactViolations } from './ai-layout-site-facts'
+import { aiSiteContactOf } from '../model/ai-site-details'
 
 /**
  * A page built in the compact layout language (AGL-3660): the page step's
@@ -285,6 +286,8 @@ export function aiLayoutPageTargets(input: {
       props: component.props,
     })),
     facts: aiLayoutFacts(job),
+    // The phone and email the person gave, which links call and write to (AGL-3979).
+    contact: aiSiteContactOf(job.inputs),
     // The site's catalog and blog, and the sections that list them (AGL-3676),
     // and its datasets (AGL-3616).
     listings: aiLayoutListingsWithDatasets(aiLayoutListingsOf(job.inputs), inventory),

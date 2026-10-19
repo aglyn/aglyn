@@ -117,7 +117,7 @@ fun <T> LiveListPane(
       modifier = modifier,
       body = rows.error.message ?: "Check the connection and try again.",
       icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
-      action = { OutlinedButton(onClick = list::retry) { Text("Try again") } },
+      action = { OutlinedButton(shape = controlShape(), onClick = list::retry) { Text("Try again") } },
     )
     is Live.Ready -> if (rows.value.isEmpty()) {
       empty()

@@ -64,6 +64,8 @@ export const AI_LAYOUT_LABELS_EN = {
   getInTouch: 'Get in touch',
   /** A stock photo's alt text where the library's own words cannot describe it in the site's language. */
   illustrativePhoto: 'Illustrative photo',
+  /** The footer's heading over the business's phone and email (AGL-3979). */
+  contact: 'Contact',
 } as const
 
 export type AiLayoutLabel = keyof typeof AI_LAYOUT_LABELS_EN
@@ -92,6 +94,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     storeEmptyTextAlone: 'Estamos terminando nuestras primeras piezas. Vuelve pronto.',
     getInTouch: 'Escríbenos',
     illustrativePhoto: 'Foto ilustrativa',
+    contact: 'Contacto',
   },
   fr: {
     seeAll: 'Tout voir',
@@ -113,6 +116,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     storeEmptyTextAlone: 'Nous terminons nos premières pièces. Revenez bientôt.',
     getInTouch: 'Écrivez-nous',
     illustrativePhoto: 'Photo d’illustration',
+    contact: 'Nous contacter',
   },
   pt: {
     seeAll: 'Ver tudo',
@@ -134,6 +138,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     storeEmptyTextAlone: 'Estamos finalizando nossas primeiras peças. Volte em breve.',
     getInTouch: 'Fale conosco',
     illustrativePhoto: 'Imagem ilustrativa',
+    contact: 'Contato',
   },
   de: {
     seeAll: 'Alle ansehen',
@@ -155,6 +160,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     storeEmptyTextAlone: 'Unsere ersten Stücke werden gerade fertig. Schauen Sie bald wieder vorbei.',
     getInTouch: 'Kontakt aufnehmen',
     illustrativePhoto: 'Symbolbild',
+    contact: 'Kontakt',
   },
   it: {
     seeAll: 'Vedi tutto',
@@ -176,6 +182,7 @@ const LABELS: Readonly<Record<string, Labels>> = {
     storeEmptyTextAlone: 'Stiamo finendo i nostri primi pezzi. Torna presto.',
     getInTouch: 'Scrivici',
     illustrativePhoto: 'Immagine illustrativa',
+    contact: 'Contatti',
   },
 }
 

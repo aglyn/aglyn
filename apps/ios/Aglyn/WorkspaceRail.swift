@@ -16,13 +16,13 @@ struct WorkspaceRail: View {
   /// Unread notifications, by workspace.
   let unread: [String: Int]
 
-  static let width: CGFloat = 68
+  static var width: CGFloat { AglynShellMetrics.railWidth }
 
   var body: some View {
     let rail = railModel
     VStack(spacing: 0) {
       ScrollView(.vertical, showsIndicators: false) {
-        VStack(spacing: 10) {
+        VStack(spacing: AglynShellMetrics.railGap) {
           if !rail.pinned.isEmpty {
             caption("Pinned")
             ForEach(rail.pinned, id: \.self) { tile($0, pinned: true) }
@@ -37,7 +37,7 @@ struct WorkspaceRail: View {
             Button {
               navigation.picker = .workspace
             } label: {
-              AglynRailButton(systemImage: "square.grid.2x2", caption: "\(rail.total)")
+              AglynRailButton(systemImage: "square.grid.2x2", caption: "\(rail.total)", size: AglynShellMetrics.tile)
             }
             .buttonStyle(.plain)
             .help("All workspaces")
@@ -45,15 +45,17 @@ struct WorkspaceRail: View {
             .accessibilityIdentifier("rail-all-workspaces")
           }
         }
-        .padding(.vertical, 12)
+        // PINNED starts 17 points down, the gap between the rail's sections (Figma Rail 12:338).
+        .padding(.top, 17)
+        .padding(.bottom, 10)
         .frame(maxWidth: .infinity)
       }
-      VStack(spacing: 12) {
+      VStack(spacing: AglynShellMetrics.railGap + 2) {
         if model.claims.isStaff {
           Button {
             navigation.enter(.admin, first: ShellScope(model: model, navigation: navigation).firstSection(of: .admin))
           } label: {
-            AglynRailButton(systemImage: "shield.lefthalf.filled")
+            AglynRailButton(systemImage: "shield.lefthalf.filled", size: AglynShellMetrics.utility)
           }
           .buttonStyle(.plain)
           .help("Admin")
@@ -61,13 +63,14 @@ struct WorkspaceRail: View {
           .accessibilityIdentifier("rail-admin")
         }
         CreateNewButton()
-        AccountMenuButton()
+        AccountMenuButton(size: AglynShellMetrics.avatar)
       }
       .padding(.vertical, 12)
     }
     .frame(width: Self.width)
     .frame(maxHeight: .infinity)
     .background(AglynColor.rail)
+    .overlay(alignment: .trailing) { Rectangle().fill(AglynColor.divider).frame(width: 1) }
     .task(id: (model.preferences?.pinned ?? []) + (model.preferences?.recentOrgs ?? [])) {
       model.workspace?.loadOrgs((model.preferences?.pinned ?? []) + (model.preferences?.recentOrgs ?? []))
     }
@@ -85,14 +88,14 @@ struct WorkspaceRail: View {
 
   private func caption(_ text: String) -> some View {
     Text(text.uppercased())
-      .font(.system(size: 9, weight: .semibold))
+      .font(.system(size: AglynShellMetrics.railCaption, weight: .semibold))
       .kerning(0.6)
-      .foregroundStyle(AglynColor.secondaryText)
+      .foregroundStyle(AglynColor.railText)
       .accessibilityHidden(true)
   }
 
   private var railDivider: some View {
-    Rectangle().fill(AglynColor.divider).frame(width: 28, height: 1).padding(.vertical, 2)
+    Rectangle().fill(AglynColor.divider).frame(width: 24, height: 1).padding(.vertical, 2)
   }
 
   @ViewBuilder
@@ -110,6 +113,14 @@ struct WorkspaceRail: View {
           selected: selected, unread: unread[orgID] ?? 0)
       }
       .buttonStyle(.plain)
+      // The workspace in use: a 3-point bar at the rail's leading edge beside its ring.
+      .frame(maxWidth: .infinity)
+      .overlay(alignment: .leading) {
+        if selected {
+          UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 0, bottomTrailingRadius: 2, topTrailingRadius: 2)
+            .fill(AglynColor.accentIcon).frame(width: AglynShellMetrics.railBar.width, height: AglynShellMetrics.railBar.height)
+        }
+      }
       .help(pinned ? "\(org.name) (⌘\((pins.firstIndex(of: orgID) ?? 0) + 1))" : org.name)
       .accessibilityIdentifier("rail-org-\(orgID)")
       .contextMenu { RailTileMenu(org: org) }
@@ -182,7 +193,7 @@ struct CreateNewButton: View {
     Menu {
       CreateNewItems()
     } label: {
-      AglynRailButton(systemImage: "plus", filled: true)
+      AglynRailButton(systemImage: "plus", filled: true, size: AglynShellMetrics.utility)
     }
     .menuStyle(.button)
     .buttonStyle(.plain)

@@ -107,7 +107,8 @@ public enum AglynFont {
   /// The point size a step is set at on this platform.
   public static func size(_ style: AglynTextStyle) -> CGFloat {
     #if os(macOS)
-      max(10, (style.size * macScale).rounded(.toNearestOrAwayFromZero))
+      // The Mac's own text size (Theming): the account's choice scales every step.
+      max(10, (style.size * macScale * AglynThemeRuntime.shared.textScale).rounded(.toNearestOrAwayFromZero))
     #else
       style.size
     #endif

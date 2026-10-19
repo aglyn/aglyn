@@ -6,11 +6,15 @@ import AglynCore
 import AglynUI
 import SwiftUI
 
+#if os(iOS)
+  import UIKit
+#endif
+
 // The two pickers, workspace then site (AGL-3945, Figma Menus 2:4 and Phone 2:7): search first, then Pinned, Recent and
 // everyone else A to Z, 50 at a time. Pins are the account's (`pinnedOrgs`), shared with the console, five at most.
 
 /// How many rows a picker shows before "Show more".
-private let pickerPage = 50
+let pickerPage = 50
 
 /// The picker sheet: the workspace step, then the site step. On a phone it is the scope chip's two-step picker; on iPad
 /// and the Mac the All workspaces tile opens it on the workspace step, and the site button on the site step.
@@ -69,8 +73,26 @@ struct ScopePickerSheet: View {
   }
 }
 
+/// A workspace picked in the switcher is open at once, from its Home, whatever mode or pushed screen the window was in:
+/// as the rail, ⌘1–⌘5 and the one box open one. The phone's next step, its sites, only narrows it to a site, so closing
+/// the sheet there leaves the new workspace in front rather than the old one's pushed screen.
+@MainActor
+func openPickedWorkspace(_ orgID: String, in workspace: WorkspaceStore?, navigation: ShellNavigation) {
+  workspace?.open(orgID: orgID)
+  navigation.enterWorkspace()
+}
+
 /// One workspace row: its tile, name, role and plan, and the pin.
 private struct WorkspacePickerRow: View {
+  /// A phone, where the ⌘1–⌘5 shortcuts are not shown.
+  static var isPhone: Bool {
+    #if os(iOS)
+      UIDevice.current.userInterfaceIdiom == .phone
+    #else
+      false
+    #endif
+  }
+
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   let org: WorkspaceOrg
@@ -113,7 +135,8 @@ private struct WorkspacePickerRow: View {
         HStack(spacing: 4) {
           Image(systemName: pinIndex != nil ? "pin.fill" : "pin")
           Text(pinIndex != nil ? "Pinned" : "Pin")
-          if let pinIndex {
+          // The keyboard shortcut, where there is a keyboard to press it (not on a phone).
+          if let pinIndex, !Self.isPhone {
             Text("⌘\(pinIndex + 1)").font(AglynFont.caption).foregroundStyle(.secondary)
           }
         }
@@ -131,6 +154,7 @@ private struct WorkspacePickerRow: View {
 /// The workspace step: search, Pinned (n of 5), Recent, then everyone else A to Z, 50 at a time, and Add workspace.
 struct WorkspacePickerList: View {
   @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
   let twoStep: Bool
   let picked: (String) -> Void
   @State private var query = ""
@@ -149,7 +173,7 @@ struct WorkspacePickerList: View {
         ProgressView()
       }
     }
-    .searchable(text: $query, prompt: "Find a workspace")
+    .aglynSearchable(text: $query, prompt: "Find a workspace")
     .sheet(isPresented: $adding) { AddWorkspaceSheet { adding = false } }
   }
 
@@ -207,7 +231,7 @@ struct WorkspacePickerList: View {
 
   private func row(_ org: WorkspaceOrg) -> some View {
     WorkspacePickerRow(org: org) {
-      model.workspace?.open(orgID: org.id)
+      openPickedWorkspace(org.id, in: model.workspace, navigation: navigation)
       picked(org.id)
     }
   }
@@ -235,7 +259,7 @@ struct SitePickerList: View {
     Group {
       if let workspace = model.workspace { content(workspace) } else { ProgressView() }
     }
-    .searchable(text: $query, prompt: "Find a \(siteNoun.lowercased())")
+    .aglynSearchable(text: $query, prompt: "Find a \(siteNoun.lowercased())")
   }
 
   private func content(_ workspace: WorkspaceStore) -> some View {
@@ -301,7 +325,7 @@ struct SitePickerList: View {
       done()
     } label: {
       AglynRow(
-        site.name, subtitle: HostStatus.siteAddress(site.subdomain) ?? site.subdomain, systemImage: "globe",
+        site.name, subtitle: site.shownAddress, systemImage: "globe",
         imageURL: model.mediaURL(site.favicon, hostID: site.id)
       ) {
         if site.id == model.scopedSite(navigation)?.id {
@@ -314,14 +338,18 @@ struct SitePickerList: View {
     .accessibilityAddTraits(site.id == model.scopedSite(navigation)?.id ? .isSelected : [])
   }
 
-  /// The sites opened most lately, newest first, from the account's recents (`recents` with a site).
-  private func recentSiteIDs(_ workspace: WorkspaceStore) -> [String] {
+  private func recentSiteIDs(_ workspace: WorkspaceStore) -> [String] { model.recentSiteIDs(in: workspace) }
+}
+
+extension AppModel {
+  /// The sites opened most lately, newest first: the one open, then the account's recents (`recents` with a site).
+  func recentSiteIDs(in workspace: WorkspaceStore, limit: Int = 3) -> [String] {
     var seen = Set<String>()
     var out: [String] = []
     if let current = workspace.site?.id { seen.insert(current); out.append(current) }
-    for item in model.preferences?.recents ?? [] where item.orgId == workspace.org?.id {
+    for item in preferences?.recents ?? [] where item.orgId == workspace.org?.id {
+      if out.count >= limit { break }
       if let hostID = item.hostId, seen.insert(hostID).inserted { out.append(hostID) }
-      if out.count >= 3 { break }
     }
     return out
   }

@@ -40,12 +40,21 @@ import { aiSiteWords, type AiSiteWords } from './ai-site-job'
  * pass, so the proposal is waiting while the pages are still building rather
  * than arriving after them.
  *
- * ── A proposal, never a write ────────────────────────────────────────────
+ * ── Written over the seeded default, else a proposal ─────────────────────
  *
  * Nothing here writes the site's settings. The values travel as a job output
  * and land in the site SEO form as unsaved edits through the `hostSeo` zone's
- * own `proposeDraft`; the form's Update is what stores them, and a person who
- * never opens that form is left with exactly what they had.
+ * own `proposeDraft`; the form's Update is what stores them.
+ *
+ * The one write is the publish's (AGL-3979): a site whose listing is still
+ * the one its creation seeded — its name and "Welcome to …" — takes these
+ * values when the start goes live (`aiSiteListingUpdates`), since nobody
+ * chose that default. A listing the owner changed is never written over; it
+ * is offered here as before.
+ *
+ * Both name the site where the start gave no business name of its own: the
+ * site's name leads the title and the description, so the listing that
+ * replaces "Hillside Dog Grooming" as the site's title still says it.
  *
  * Pure: strings in, strings out, no Firestore and no React.
  */
@@ -362,13 +371,20 @@ export function aiSiteSeoProposal(input: AiSiteSeoInput): AiSiteSeoProposal | nu
   }
 }
 
-/** The proposal a job's inputs imply, in the language its plan writes the site in, for the step that reports it. */
+/**
+ * The proposal a job's inputs imply, in the language its plan writes the site
+ * in, for the step that reports it. `siteName` is the site's own name, which
+ * leads the listing where the inputs name no business (AGL-3979): a guided
+ * start names the site on its first step, not in its inputs.
+ */
 export function aiSiteSeoProposalForInputs(
   inputs: Readonly<Record<string, unknown>> | null | undefined,
   language?: string | null,
+  siteName?: string | null,
 ): AiSiteSeoProposal | null {
   const words = aiSiteWords(inputs)
-  const businessName = inputs?.['businessName']
+  const given = inputs?.['businessName']
+  const businessName = typeof given === 'string' && given.trim() ? given : (siteName ?? '').trim() || given
   const city = inputs?.['city']
   return aiSiteSeoProposal({
     ...words,

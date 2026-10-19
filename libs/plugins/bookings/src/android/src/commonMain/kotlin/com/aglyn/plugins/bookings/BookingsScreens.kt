@@ -176,7 +176,8 @@ fun BookingsCalendarScreen(context: NativePluginContext, params: NativeParams) {
   val width = currentWidthClass()
   val wide = width >= WidthClass.EXPANDED
   // Upcoming first at every width, as the console's Bookings page opens; the calendar is a tap away.
-  var mode by rememberSaveable { mutableStateOf(CalendarMode.LIST) }
+  // Opened from Home's line (`day=today`): today's day view.
+  var mode by rememberSaveable { mutableStateOf(if (params["day"] == "today") CalendarMode.DAY else CalendarMode.LIST) }
   var anchor by remember { mutableStateOf(currentMs()) }
   var serviceFilter by remember(params["service"]) { mutableStateOf(params["service"]) }
   var booker by remember(params["email"]) { mutableStateOf(params["email"]?.takeIf { it.isNotBlank() }) }
@@ -465,7 +466,7 @@ fun BookingDetail(context: NativePluginContext, bookingId: String, onBooker: (St
 
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-      Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("booking-detail"),
+      Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)).testTag("booking-detail"),
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {
       notice?.let { (message, noticeTone) -> NoticeBanner(message, noticeTone, action = { TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }
@@ -683,3 +684,21 @@ fun BookingsTodayWidget(context: NativePluginContext) {
   )
 }
 
+
+/**
+ * Home's "Needs you" line for bookings (`bookings.needs-you`): what is still to come today, with the next one's time,
+ * opening Bookings on today's day view.
+ */
+@Composable
+fun BookingsNeedsYouWidget(context: NativePluginContext) {
+  val hostId = context.hostId ?: return
+  val now = remember { currentMs() }
+  val start = startOfLocalDay(now)
+  val live = liveBookings(context, remember(hostId, start) { bookingsRangeQuery(hostId, start, shiftLocalDays(start, 1)) })
+  val rows = (live as? Live.Ready)?.value
+    ?.filter { it.state(now) != BookingState.CANCELED && it.state(now) != BookingState.EXPIRED && it.endsAtMs > now }
+    ?.takeIf { it.isNotEmpty() } ?: return
+  val next = rows.minByOrNull { it.startsAtMs }
+  val text = if (rows.size == 1) "${next?.name ?: "A booking"} at ${next?.let { formatClock(it.startsAtMs) }}" else "${rows.size} bookings today, next at ${next?.let { formatClock(it.startsAtMs) }}"
+  com.aglyn.ui.NeedsYouLine("bookings-today", "event", text, "Bookings", onClick = { context.navigate(BOOKINGS_CALENDAR_SCREEN, mapOf("day" to "today")) })
+}

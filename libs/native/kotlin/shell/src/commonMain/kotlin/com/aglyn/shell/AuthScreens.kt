@@ -158,7 +158,8 @@ internal fun AuthCard(
           verticalArrangement = Arrangement.spacedBy(14.dp),
           horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-          val shape = RoundedCornerShape(M.CARD_RADIUS.dp)
+          // The desktop's card takes the Compact sheet radius (12); touch keeps the auth theme's.
+          val shape = RoundedCornerShape(if (com.aglyn.ui.LocalShellMetrics.current.compact) com.aglyn.ui.LocalShellMetrics.current.sheetRadius else M.CARD_RADIUS.dp)
           Column(
             Modifier
               .fillMaxWidth()

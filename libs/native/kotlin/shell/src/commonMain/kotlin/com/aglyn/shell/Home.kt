@@ -17,6 +17,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.Icon
+import com.aglyn.contracts.toRef
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -57,25 +62,17 @@ import com.aglyn.ui.StatusTone
 import com.aglyn.ui.WidthClass
 import com.aglyn.ui.space
 
-/** The shell's own native areas it offers as quick actions, beside the plugins' own. */
-private data class ShellAction(val key: String, val title: String, val icon: String, val order: Int, val route: Route)
+/** The slot plugins draw their "Needs you" lines in (orders to get ready, unanswered messages, today's bookings…). */
+const val HOME_NEEDS_YOU_SLOT = "homeNeedsYou"
 
-// Pages, Sites and the rest of a site's content are the site registration's
-// own quick actions (libs/native/kotlin/site), listed with the plugins'.
-private val SHELL_ACTIONS = listOf(
-  ShellAction("analytics", "Analytics", "bar_chart", 110, Route.Analytics),
-)
-
-/** How many recent notifications the dashboard reads. */
-private const val RECENT_WINDOW = 50
-private const val RECENT_SHOWN = 5
+/** How many recent places Home offers to pick up. */
+private const val PICK_UP_SHOWN = 4
 
 /**
- * The dashboard. Sections, in order: the site header (name, address, live
- * status, Visit site, Switch site); quick actions; "At a glance" summary
- * cards (the shell's own, then plugin widgets by order); "Recent activity".
- * Expanded windows put the activity beside the actions and cards, and the
- * cards three to a row.
+ * Home answers one question: what needs me now? The site in one line; then "Needs you", only what waits (each line opens
+ * its list, already filtered; the plugins draw their own lines in [HOME_NEEDS_YOU_SLOT], the shell adds the plan's
+ * failed payment); then where the person left off; then the one-line prompt that starts Create with AI. No charts: those
+ * stay in Overview.
  */
 @Composable
 internal fun HomeScreen(
@@ -85,45 +82,22 @@ internal fun HomeScreen(
   widthClass: WidthClass,
   navigator: ShellNavigator,
 ) {
-  val version by services.registry.version.collectAsState()
   val site = workspace.site
-  val hasSite = site != null
   val uriHandler = LocalUriHandler.current
-
   val host = hostDoc(services, site?.id)
-  val feed = notificationFeed(services, context.uid, RECENT_WINDOW)
-  val now = remember(feed) { nowMillis() }
-
-  val actions = remember(version, hasSite, context.orgSlug, context.hostSlug) {
-    val shell = if (hasSite) SHELL_ACTIONS.map { action ->
-      action.order to QuickActionItem(action.key, action.title, action.icon) { navigator.push(action.route) }
-    } else emptyList()
-    val plugins = services.registry.quickActions(NativeApp.AGLYN).filter { hasSite || !it.requiresSite }.map { action ->
-      action.order to QuickActionItem(action.id, action.title, action.icon) { context.navigate(action.screen, action.params) }
-    }
-    (shell + plugins).sortedBy { it.first }.map { it.second }
-  }
-  val widgets = remember(version, hasSite) { services.registry.widgets(NativeApp.AGLYN).filter { hasSite || !it.requiresSite } }
-
-  val glance: List<Pair<GridSpan, @Composable (Modifier) -> Unit>> = buildList {
-    if (hasSite) {
-      add(GridSpan.HALF to { modifier -> PagesCard(host, modifier) { navigator.push(Route.Screen(SITE_PAGES_SCREEN_ID)) } })
-    }
-    add(GridSpan.HALF to { modifier -> UnreadCard(feed, modifier) { navigator.select(ShellNavigator.NOTIFICATIONS) } })
-    for (widget in widgets) {
-      val span = if (widget.size == WidgetSize.FULL) GridSpan.FULL else GridSpan.HALF
-      add(span to { modifier -> Box(modifier.testTag("widget-${widget.id}")) { widget.content(context) } })
-    }
-  }
-
-  val activity: @Composable (Modifier) -> Unit = { modifier ->
-    RecentActivityCard(feed, now, context, modifier) { navigator.select(ShellNavigator.NOTIFICATIONS) }
-  }
+  val now = remember { nowMillis() }
+  val prefs by services.accountPrefs.state.collectAsState()
+  val version by services.registry.version.collectAsState()
+  val lines = remember { com.aglyn.ui.NeedsYouLines() }
+  val needs = remember(version, site != null) { context.slotWidgets(HOME_NEEDS_YOU_SLOT).filter { site != null || !it.requiresSite } }
+  val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data
+  val openRecent = LocalOpenRecent.current
 
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-      Modifier.widthIn(max = 1280.dp).fillMaxWidth().verticalScroll(rememberScrollState())
-        .padding(horizontal = space(2f), vertical = space(1f)),
+      // The whole content area, on the content edge E (Zach 10/19: no left-aligned or capped column).
+      Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+        .padding(horizontal = com.aglyn.ui.contentInset(), vertical = space(2f)).testTag("home"),
       verticalArrangement = Arrangement.spacedBy(space(3f)),
     ) {
       workspace.error?.let { error -> SectionCard(null) { Text(error, color = MaterialTheme.colorScheme.error) } }
@@ -131,39 +105,130 @@ internal fun HomeScreen(
         FirstRunContent(services)
         return@Column
       }
-      SiteHeader(workspace, host, now, services.api.origin, onSwitch = { navigator.command = ShellCommand.SWITCH_SITE }) { url -> runCatching { uriHandler.openUri(url) } }
+      HomeSiteLine(workspace, host, now, services.api.origin, onSwitch = { navigator.command = ShellCommand.SWITCH_SITE }) { url -> runCatching { uriHandler.openUri(url) } }
 
-      val actionsSection: @Composable () -> Unit = {
-        if (actions.isNotEmpty()) {
-          Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
-            DashboardSectionTitle("Quick actions")
-            QuickActionGrid(actions)
+      CompositionLocalProvider(com.aglyn.ui.LocalNeedsYou provides lines) {
+        Column(verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+          DashboardSectionTitle("Needs you")
+          planPaymentProblem(org)?.let { problem ->
+            com.aglyn.ui.NeedsYouLine("plan-payment", "credit_card", problem, "Billing", onClick = { context.navigate("core.billing") }, tone = StatusTone.ERROR)
+          }
+          for (widget in needs) Box(Modifier.testTag("widget-${widget.id}")) { widget.content(context) }
+          if (!lines.any && planPaymentProblem(org) == null) {
+            Text(
+              "Nothing needs you right now.",
+              style = MaterialTheme.typography.bodyLarge,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.padding(horizontal = space(1.5f), vertical = space(1f)).testTag("needs-you-none"),
+            )
           }
         }
       }
-      val glanceSection: @Composable (columns: Int) -> Unit = { columns ->
+
+      val recents = prefs.recents.filter { it.orgId == workspace.org?.id }.take(PICK_UP_SHOWN)
+      if (recents.isNotEmpty()) {
         Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
-          DashboardSectionTitle("At a glance")
-          DashboardGrid(columns, glance)
+          DashboardSectionTitle("Pick up where you left off")
+          val columns = if (widthClass == WidthClass.COMPACT) 2 else 4
+          recents.chunked(columns).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+              row.forEach { item ->
+                RecentCard(item, now, workspace, services.registry.screen(item.screen)?.icon, Modifier.weight(1f)) { openRecent?.invoke(item.toRef()) }
+              }
+              repeat(columns - row.size) { Box(Modifier.weight(1f)) }
+            }
+          }
         }
       }
 
-      when (widthClass) {
-        WidthClass.EXPANDED, WidthClass.LARGE -> Row(horizontalArrangement = Arrangement.spacedBy(space(3f))) {
-          Column(Modifier.weight(1.4f), verticalArrangement = Arrangement.spacedBy(space(3f))) {
-            actionsSection()
-            glanceSection(3)
-          }
-          activity(Modifier.weight(1f))
-        }
-        else -> {
-          actionsSection()
-          glanceSection(2)
-          activity(Modifier.fillMaxWidth())
-        }
+      if (site != null && services.registry.screen(AI_CREATE_SCREEN_ID) != null) {
+        AiPromptLine { brief -> context.navigate(AI_CREATE_SCREEN_ID, mapOf("kind" to "page", "brief" to brief)) }
       }
     }
   }
+}
+
+/** The AI plugin's Create with AI screen, which the prompt opens with what was typed. */
+private const val AI_CREATE_SCREEN_ID = "ai.create"
+
+/** The workspace's own document, live. */
+@Composable
+private fun orgDocLive(services: ShellServices, orgId: String?): Live<FirestoreDoc?> {
+  if (orgId == null) return Live.Ready(null)
+  val flow = remember(orgId) { services.firestore.observeDoc("orgs/$orgId") }
+  val live by flow.collectAsState(Live.Loading)
+  return live
+}
+
+/** The plan's payment failed (the subscription is past due or unpaid): the one money line Home owns. */
+internal fun planPaymentProblem(org: Map<String, Any?>?): String? {
+  val status = (org?.get("billingStatus") as? String)?.takeIf { it.isNotEmpty() }
+    ?: ((org?.get("subscription") as? Map<*, *>)?.get("status") as? String)
+  return when (status) {
+    "past_due" -> "Your plan's last payment did not go through"
+    "unpaid" -> "Your plan is unpaid"
+    else -> null
+  }
+}
+
+/** One recent place as a card: what it was, where, and when. */
+@Composable
+private fun RecentCard(item: com.aglyn.contracts.RecentItem, now: Long, workspace: WorkspaceState, screenIcon: String?, modifier: Modifier, onClick: () -> Unit) {
+  Surface(
+    onClick = onClick,
+    shape = MaterialTheme.shapes.large,
+    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    shadowElevation = 1.dp,
+    modifier = modifier.testTag("recent-${item.id}"),
+  ) {
+    Column(Modifier.padding(space(1.5f)), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+      // The place's own screen icon (Orders' basket), else its kind's.
+      Icon(AglynIcons.named(screenIcon ?: oneBoxIcon(item.kind.takeIf { it != "record" && it != "screen" } ?: "screen")), null, tint = MaterialTheme.colorScheme.primary)
+      Text(item.label, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+      val where = item.hostId?.let { id -> workspace.sites.firstOrNull { it.id == id }?.name }
+      Text(listOfNotNull(where, relativeTime(item.openedAtMs, now)).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+    }
+  }
+}
+
+/** "Describe what you want to build": the one line that starts the existing Create with AI flow with what was typed. */
+@Composable
+private fun AiPromptLine(onStart: (String) -> Unit) {
+  var brief by remember { mutableStateOf("") }
+  Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLowest, shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth().testTag("home-ai-prompt")) {
+    Row(Modifier.padding(start = space(2f), end = space(0.5f)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+      Icon(AglynIcons.named("auto_awesome"), null, tint = MaterialTheme.colorScheme.secondary)
+      androidx.compose.material3.TextField(
+        brief,
+        onValueChange = { brief = it },
+        placeholder = { Text("Describe what you want to build") },
+        singleLine = true,
+        colors = androidx.compose.material3.TextFieldDefaults.colors(
+          focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
+          focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+        ),
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Send),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { if (brief.isNotBlank()) onStart(brief.trim()) }),
+        modifier = Modifier.weight(1f).testTag("home-ai-field"),
+      )
+      androidx.compose.material3.FilledIconButton(onClick = { onStart(brief.trim()) }, enabled = brief.isNotBlank(), modifier = Modifier.testTag("home-ai-start")) {
+        Icon(AglynIcons.named("send"), contentDescription = "Start with AI")
+      }
+    }
+  }
+}
+
+/** The site in one line: its name and status, its address, Visit site, and the switch. */
+@Composable
+private fun HomeSiteLine(
+  workspace: WorkspaceState,
+  host: Live<FirestoreDoc?>,
+  now: Long,
+  origin: String,
+  onSwitch: () -> Unit,
+  onVisit: (String) -> Unit,
+) {
+  SiteHeader(workspace, host, now, origin, onSwitch, onVisit)
 }
 
 @Composable
@@ -217,83 +282,6 @@ private fun SiteHeader(
     onSwitch = onSwitch,
     onVisit = address?.let { { onVisit("https://$it/") } },
   )
-}
-
-@Composable
-private fun PagesCard(host: Live<FirestoreDoc?>, modifier: Modifier, onClick: () -> Unit) {
-  val pages = (host as? Live.Ready)?.value?.data?.let(HostStatus::publishedScreenCount)
-  MetricCard(
-    title = "Published pages",
-    value = pages?.toString(),
-    caption = when (pages) {
-      null -> null
-      0 -> "Nothing published yet"
-      1 -> "page visitors can open"
-      else -> "pages visitors can open"
-    },
-    icon = "description",
-    actionLabel = "Manage pages",
-    modifier = modifier.testTag("glance-pages"),
-    loading = host is Live.Loading,
-    error = if (host is Live.Failed) "Could not load this site." else null,
-    onClick = onClick,
-  )
-}
-
-@Composable
-private fun UnreadCard(feed: Live<List<FeedNotification>>, modifier: Modifier, onClick: () -> Unit) {
-  val rows = (feed as? Live.Ready)?.value
-  val unread = rows?.count { !it.read }
-  MetricCard(
-    title = "Unread notifications",
-    value = unread?.toString(),
-    caption = when {
-      rows == null -> null
-      unread == 0 -> "You're all caught up"
-      else -> "of ${rows.size} recent"
-    },
-    icon = "notifications",
-    actionLabel = "Open notifications",
-    modifier = modifier.testTag("glance-unread"),
-    loading = feed is Live.Loading,
-    error = if (feed is Live.Failed) "Could not load notifications." else null,
-    onClick = onClick,
-  )
-}
-
-@Composable
-private fun RecentActivityCard(
-  feed: Live<List<FeedNotification>>,
-  now: Long,
-  context: ShellPluginContext,
-  modifier: Modifier,
-  onSeeAll: () -> Unit,
-) {
-  Column(modifier, verticalArrangement = Arrangement.spacedBy(space(1f))) {
-    DashboardSectionTitle("Recent activity") {
-      TextButton(onClick = onSeeAll, modifier = Modifier.testTag("see-all-notifications")) { Text("All notifications") }
-    }
-    Surface(
-      Modifier.fillMaxWidth(),
-      shape = MaterialTheme.shapes.large,
-      color = MaterialTheme.colorScheme.surfaceContainerLowest,
-      shadowElevation = 1.dp,
-    ) {
-      Column(Modifier.padding(space(1f))) {
-        when (feed) {
-          Live.Loading -> Column(Modifier.padding(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
-            repeat(3) { Skeleton(height = 44.dp) }
-          }
-          is Live.Failed -> EmptyState("Could not load notifications", body = "Check the connection and try again.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
-          is Live.Ready -> if (feed.value.isEmpty()) {
-            EmptyState("You're all caught up", body = "New orders, form entries and alerts show up here.", icon = AglynIcons.named("notifications"))
-          } else {
-            NotificationRows(feed.value.take(RECENT_SHOWN), now, context)
-          }
-        }
-      }
-    }
-  }
 }
 
 /** A notification type's glyph, by the catalog's type families. */

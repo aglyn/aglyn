@@ -70,6 +70,7 @@ export const DOCS_HELP_EXCERPTS = {
   buildingFeaturePlugins: 'The console-extension + frontend-UI plugin pair pattern for shipping features as plugins.',
   bulkActions: 'Select rows in any CRM table — contacts, companies, deals, tasks or leads — and act on all of them at once, or export them as a CSV.',
   businessProfile: 'Tell Aglyn AI what your business does, who it is for and how it sounds. Every AI job for the site reads it, uses your real contact details only, and remembers the edits you keep.',
+  buyADomain: 'Search for a domain on your site\'s Custom Domain page, buy it, and your site goes live at it automatically — no DNS records, renewals handled for you.',
   catalog: 'Products with options and variants, categories, tags, and manual or smart collections.',
   comingSoonLaunch: 'Put a coming-soon page on your domain, keep the rest of the site out of search while you finish it, collect signups, and reverse all of it on launch day.',
   commerce: 'Sell physical, digital, and service products with a full catalog, orders pipeline, shipping, taxes, and your own Stripe account.',
@@ -292,6 +293,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   addOns: {
     '#assigning-collaborator-seats': 'Collaborator seats work exactly like register seats: a seat is bought once for your workspace and then assigned to one site.',
     '#assigning-register-seats': 'Unlike every other add-on, a POS register seat is bought once for your workspace and then assigned to one site.',
+    '#site-care-statement': 'The Site Care card on Billing is the month\'s statement, kept up to date as we work.',
     '#what-you-can-add': 'Buy extra capacity for the whole workspace on the Plan add-ons card under Billing → Plan: manager seats, datasets and extra sites apply straight away, while collaborator seats and POS registers become pools you then…',
   },
   adTracking: {
@@ -1023,6 +1025,10 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   supportQueue: {
     '#support-queue-page': 'Admin → Support is the triage queue for every organization\'s support tickets.',
     '#triage': 'The list is filtered to Open by default, with Closed and All chips beside it and a count of what\'s still open.',
+  },
+  supportTriage: {
+    '#site-care-month': 'The Site Care card on the staff page for the workspace shows the month: every request with its minutes, billing and history, the totals, and the month\'s own records.',
+    '#site-care-working': 'The Site Care card in the ticket\'s thread is where every step is taken.',
   },
   tasks: {
     '#the-dashboard-card': 'The site dashboard shows a Tasks due card: how many of your tasks are overdue, how many are due today, and the next five assigned to you, each with its due date.',

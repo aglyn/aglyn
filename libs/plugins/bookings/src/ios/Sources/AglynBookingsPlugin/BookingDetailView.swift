@@ -19,6 +19,7 @@ struct BookingScreen: View {
         context.navigate(bookingsCalendarScreen, ["email": email])
       }
       .navigationTitle("Booking")
+      .aglynScreenTitle("Booking")
     } else {
       AglynEmptyState("This booking is not available", systemImage: "calendar.badge.exclamationmark")
     }
@@ -273,6 +274,7 @@ struct RescheduleSheet: View {
         .padding(AglynSpace.two)
       }
       .navigationTitle("Move \(row.name)'s booking")
+      .aglynScreenTitle("Move \(row.name)'s booking")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
@@ -353,6 +355,7 @@ struct PaySheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Take payment")
+      .aglynScreenTitle("Take payment")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") {

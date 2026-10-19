@@ -12,7 +12,9 @@ import SwiftUI
 @MainActor
 public func registerDataNative(_ r: NativePluginRegistrar) {
   r.screen(dataDatasetsScreen, title: "Data", icon: DataSymbols.dataset) { context, params in
-    DatasetsScreen(context: context, initialDatasetID: params["dataset"] ?? params["datasetId"])
+    AglynFeatureGate(context: context, feature: "dataStore", title: "Data") {
+      DatasetsScreen(context: context, initialDatasetID: params["dataset"] ?? params["datasetId"])
+    }
   }
   r.screen(dataRecordsScreen, title: "Records", icon: DataSymbols.records) { context, params in
     if let datasetID = params["dataset"] ?? params["datasetId"] {

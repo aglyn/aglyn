@@ -272,6 +272,14 @@ export interface AnalyticsEventParams {
   site_start_rage_click: { step: string; area: string; clicks: number }
   /** Custom (AGL-3898). A click on a part of the form that does nothing; `area` as above. */
   site_start_dead_click: { step: string; area: string }
+  /** Custom (AGL-3979). A step's "More details" was opened; `step` as above. */
+  site_start_more_details: { step: string }
+  /**
+   * Custom (AGL-3979). A site was asked for with an optional detail given:
+   * one event per detail, `field` its id (`phone`, `email`, `hours`…) and
+   * `step` the step that asks it. Never the value.
+   */
+  site_start_detail_given: { step: string; field: string }
   /** Custom: no GA4 equivalent. Stripe Connect onboarding completed. */
   stripe_connected: Record<string, never>
 
@@ -1033,6 +1041,8 @@ const TAXONOMY_EVENT_NAMES: Record<AnalyticsEventName, true> = {
   site_start_struggle: true,
   site_start_rage_click: true,
   site_start_dead_click: true,
+  site_start_more_details: true,
+  site_start_detail_given: true,
   stripe_connected: true,
   begin_checkout: true,
   purchase: true,

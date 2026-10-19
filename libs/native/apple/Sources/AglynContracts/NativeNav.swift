@@ -51,6 +51,48 @@ public func resolveNavList(
   return ResolvedNavList(groups: groups, id: list.id, title: list.title)
 }
 
+// MARK: Create new (resolveCreateList)
+
+/// The Create new menu of the app's own manifest for the workspace or site in hand.
+public func resolveCreateList(
+  _ scope: NativeNavCreateScope, enabledPluginIds: [String], permissions: [String: Bool], features: [String: Bool],
+  hostRole: String?
+) -> [ResolvedCreateItem] {
+  resolveCreateList(
+    NativeNav.manifest, scope, enabledPluginIds: enabledPluginIds, permissions: permissions, features: features,
+    hostRole: hostRole)
+}
+
+/// The Create new menu for the workspace or site in hand. An item of a plugin that is off is not offered, nor an
+/// admin-only item to a non-admin. One the person may not use is shown, disabled with its reason: a permission or site
+/// role they lack, then a plan feature the workspace lacks. `permissions` and `features` are the workspace's resolved
+/// answers (an absent key is not held); `hostRole` is the person's role on the site, nil at the workspace.
+public func resolveCreateList(
+  _ manifest: NativeNavManifest, _ scope: NativeNavCreateScope, enabledPluginIds: [String], permissions: [String: Bool],
+  features: [String: Bool], hostRole: String?
+) -> [ResolvedCreateItem] {
+  let on = Set(enabledPluginIds)
+  let items = manifest.create?.first(where: { $0.scope == scope })?.items ?? []
+  let values = ContractValues.shared
+  return items
+    .filter { item in (item.pluginId.map(on.contains) ?? true) && (item.requiresHostAdmin != true || hostRole == "admin") }
+    .map { item in
+      var reason: String?
+      if let permission = item.permission, permissions[permission] != true {
+        reason = values.nativeCreatePermissionReason
+      } else if let roles = item.hostRoles, !roles.contains(hostRole ?? "") {
+        reason = values.nativeCreateSiteRoleReason
+      } else if let feature = item.planFeature, features[feature] != true {
+        reason = item.blockedReason ?? values.nativeCreatePlanReason
+      }
+      return ResolvedCreateItem(
+        blocked: reason != nil, blockedReason: item.blockedReason, console: item.console, hostRoles: item.hostRoles,
+        icon: item.icon, id: item.id, label: item.label, order: item.order, params: item.params,
+        permission: item.permission, planFeature: item.planFeature, pluginId: item.pluginId, reason: reason,
+        requiresHostAdmin: item.requiresHostAdmin, screen: item.screen)
+    }
+}
+
 // MARK: Name matching (name-match.ts)
 
 /// How well a row matched; higher sorts first.

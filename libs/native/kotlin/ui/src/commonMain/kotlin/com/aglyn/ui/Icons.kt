@@ -10,6 +10,8 @@ import androidx.compose.material.icons.automirrored.outlined.Notes
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.ViewSidebar
+import androidx.compose.material.icons.filled.Star as FilledStar
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.GridView
@@ -87,6 +89,7 @@ import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.SupervisorAccount
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Tab
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.ToggleOn
 import androidx.compose.material.icons.outlined.TravelExplore
@@ -182,6 +185,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Percent
@@ -195,6 +199,7 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sell
 import androidx.compose.material.icons.outlined.ShoppingBasket
+import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.RotateLeft
@@ -242,6 +247,8 @@ object AglynIcons {
     "keep" to Icons.Outlined.PushPin,
     "keep_off" to Icons.Outlined.PushPin,
     "unfold_more" to Icons.Outlined.UnfoldMore,
+    "star_filled" to Icons.Filled.FilledStar,
+    "view_sidebar" to Icons.Outlined.ViewSidebar,
     "apps" to Icons.Outlined.Apps,
     "arrow_back" to Icons.AutoMirrored.Outlined.ArrowBack,
     "bolt" to Icons.Outlined.Bolt,
@@ -289,6 +296,8 @@ object AglynIcons {
     "remove" to Icons.Outlined.Remove,
     "delete" to Icons.Outlined.DeleteOutline,
     "shopping_basket" to Icons.Outlined.ShoppingBasket,
+    // An order, as Figma and Apple draw it (the bag).
+    "shopping_bag" to Icons.Outlined.ShoppingBag,
     "payments" to Icons.Outlined.Payments,
     "card_giftcard" to Icons.Outlined.CardGiftcard,
     "contactless" to Icons.Outlined.Contactless,
@@ -301,10 +310,12 @@ object AglynIcons {
     "sell" to Icons.Outlined.Sell,
     "percent" to Icons.Outlined.Percent,
     "history" to Icons.Outlined.History,
+    "tab" to Icons.Outlined.Tab,
     "refresh" to Icons.Outlined.Refresh,
     "share" to Icons.Outlined.Share,
     "schedule" to Icons.Outlined.Schedule,
     "wifi_off" to Icons.Outlined.WifiOff,
+    "more_horiz" to Icons.Outlined.MoreHoriz,
     "more_vert" to Icons.Outlined.MoreVert,
     "pause" to Icons.Outlined.PauseCircle,
     "barcode" to Icons.Outlined.QrCodeScanner,
