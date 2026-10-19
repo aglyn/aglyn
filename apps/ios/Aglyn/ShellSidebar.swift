@@ -139,8 +139,8 @@ struct ScopeHeader: View {
 }
 
 /// The workspace's header (Figma Sidebar/Scope header, workspace): its logo, its name with ▾, and its plan; the whole
-/// header opens the workspace menu.
-private struct WorkspaceButton: View {
+/// header opens the workspace menu. The phone's Menu leads with it too, so Workspace settings is one way in everywhere.
+struct WorkspaceButton: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   @State private var hovered = false

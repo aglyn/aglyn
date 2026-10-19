@@ -1301,6 +1301,10 @@ struct MenuScreen: View {
           .accessibilityIdentifier("menu-help")
         }
         .padding(EdgeInsets(top: 12, leading: 16, bottom: 4, trailing: 16))
+        // The workspace and its ▾, the Mac sidebar's own header and menu (WorkspaceMenuItems): Workspace settings,
+        // Members, Billing, Upgrade plan. In a site too, so a phone reaches them the one way a Mac does.
+        WorkspaceButton()
+          .padding(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
       }
       // A settings mode says where it is and leads back; the everyday Menu is under the scope chip.
       if navigation.mode != .main {

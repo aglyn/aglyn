@@ -73,6 +73,15 @@ struct ScopePickerSheet: View {
   }
 }
 
+/// A workspace picked in the switcher is open at once, from its Home, whatever mode or pushed screen the window was in:
+/// as the rail, ⌘1–⌘5 and the one box open one. The phone's next step, its sites, only narrows it to a site, so closing
+/// the sheet there leaves the new workspace in front rather than the old one's pushed screen.
+@MainActor
+func openPickedWorkspace(_ orgID: String, in workspace: WorkspaceStore?, navigation: ShellNavigation) {
+  workspace?.open(orgID: orgID)
+  navigation.enterWorkspace()
+}
+
 /// One workspace row: its tile, name, role and plan, and the pin.
 private struct WorkspacePickerRow: View {
   /// A phone, where the ⌘1–⌘5 shortcuts are not shown.
@@ -145,6 +154,7 @@ private struct WorkspacePickerRow: View {
 /// The workspace step: search, Pinned (n of 5), Recent, then everyone else A to Z, 50 at a time, and Add workspace.
 struct WorkspacePickerList: View {
   @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
   let twoStep: Bool
   let picked: (String) -> Void
   @State private var query = ""
@@ -221,7 +231,7 @@ struct WorkspacePickerList: View {
 
   private func row(_ org: WorkspaceOrg) -> some View {
     WorkspacePickerRow(org: org) {
-      model.workspace?.open(orgID: org.id)
+      openPickedWorkspace(org.id, in: model.workspace, navigation: navigation)
       picked(org.id)
     }
   }
