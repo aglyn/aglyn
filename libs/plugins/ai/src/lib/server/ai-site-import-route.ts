@@ -74,8 +74,9 @@ import {
   readSiteVerificationMeta,
   type SiteImportCrawlSeams,
 } from '../site-import/site-import-crawl'
+import { SITE_IMPORT_RELEASE_FLAG } from '../site-import/site-import-flag'
 
-export const SITE_IMPORT_RELEASE_FLAG = 'release_ai_site_import' as const
+export { SITE_IMPORT_RELEASE_FLAG }
 
 /** Pages the crawl door reads in one request; the import job reads in waves. */
 export const SITE_IMPORT_DOOR_MAX_PAGES = 25

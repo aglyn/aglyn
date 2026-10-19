@@ -21,6 +21,7 @@ import type { AiLoadEstimate } from '../runtime/ai-palette'
 import type { AiBuildPlan } from './ai-build-plan'
 import type { AiFreeCreditsLeft } from './ai-site-job'
 import type { AiJobCreditsConfirmation } from './ai-credit-estimate'
+import type { AiSiteImportState } from './ai-site-import'
 
 /**
  * AI generation jobs (AGL-2904).
@@ -89,6 +90,8 @@ export type AiJobKind =
   | 'media'
   /** A change to a site's analytics and advertising tags, made by code and saved live (AGL-3751). */
   | 'tracking'
+  /** A person's own website brought in, page by page, in reviewed waves (AGL-3976). */
+  | 'import'
 
 /** The union as a value, so a route can validate a body against it. */
 export const AI_JOB_KINDS: readonly AiJobKind[] = [
@@ -117,6 +120,7 @@ export const AI_JOB_KINDS: readonly AiJobKind[] = [
   'settings',
   'media',
   'tracking',
+  'import',
 ]
 
 /**
@@ -361,6 +365,18 @@ export type AiJobReviewReason =
    * again.
    */
   | 'limit'
+  /**
+   * A site import's wave is in (AGL-3976): its pages are drafts for the
+   * person to review, and the next wave starts only when they say so. Or the
+   * import has read the site and waits for the first wave to be started.
+   */
+  | 'wave'
+  /**
+   * A site import's next wave needs a current proof that the workspace owns
+   * the site (AGL-3976): the proof is older than its 30 days, or was never
+   * made. Verifying again and starting the wave runs it.
+   */
+  | 'ownership'
 
 /**
  * A building rule an answer broke, as the job keeps it: the number, the code,
@@ -617,6 +633,13 @@ export interface AiJob {
    * other job.
    */
   siteRemoved?: AiJobSiteRemoved | null
+  /**
+   * An `import` job's site, read and cut into waves (AGL-3976): what was
+   * found, what is brought in in which wave, what was left out and why, and
+   * each wave's state. Written only by the machine's `recordStep`, from what
+   * the import step returns; absent on every other kind.
+   */
+  siteImport?: AiSiteImportState | null
 }
 
 /** When the AI jobs beat removed a guided start's empty site, and which (AGL-3936). */
@@ -754,4 +777,9 @@ export interface AiJobSummary {
    * Absent on every other job.
    */
   siteRemoved?: boolean
+  /**
+   * An `import` job's waves (AGL-3976), without the page text a wave read
+   * holds for the model; absent on every other job.
+   */
+  siteImport?: AiSiteImportState | null
 }

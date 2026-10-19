@@ -114,6 +114,21 @@ export const AI_MEASURED_PAID_SITE_CREDITS = {
 } as const satisfies Record<string, AiMeasuredCredits>
 
 /**
+ * A page brought in from a person's own website (AGL-3976), priced as an AI
+ * page: a paid site start's page as measured above, since an imported page is
+ * one answer in the layout language and its listing, written inside one job
+ * the way a site start writes its pages. Its site's header and footer, built
+ * once in an import's first wave, is that table's layout.
+ *
+ * Re-measure from done `import` jobs' item ledgers once production has run
+ * them: their `page` rows' `creditsSpent`, as the paid table is read.
+ */
+export const AI_MEASURED_IMPORT_CREDITS = {
+  page: AI_MEASURED_PAID_SITE_CREDITS.page,
+  frame: AI_MEASURED_PAID_SITE_CREDITS.layout,
+} as const satisfies Record<string, AiMeasuredCredits>
+
+/**
  * When the table above was read, and from when its jobs ran. Both tables
  * were measured before AGL-3781 asked a paid site's plan at medium effort and
  * the layout language's pages and frames at low. A lower effort draws less,

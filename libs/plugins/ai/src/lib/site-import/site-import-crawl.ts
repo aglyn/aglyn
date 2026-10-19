@@ -177,6 +177,19 @@ export interface SiteImportCrawlOptions {
   maxTotalBytes?: number
   timeBudgetMs?: number
   signal?: AbortSignal
+  /**
+   * Read the sitemap's shallow addresses before its deep ones (AGL-3976), so a
+   * crawl the page budget stops reads a site's main pages before the tail of
+   * its blog. A sitemap's own order is kept among addresses of one depth.
+   */
+  shallowFirst?: boolean
+  /**
+   * Read exactly these addresses of the site, in order, and nothing else
+   * (AGL-3976): an import's wave reads its own pages again when it starts. No
+   * sitemap is read and no link is followed; robots.txt is read and honored
+   * as for any crawl, and every other rule holds.
+   */
+  only?: readonly string[]
 }
 
 export interface SiteImportCrawlSeams {
@@ -312,6 +325,19 @@ export async function crawlSiteForImport(
       return robotsAllows(rules, `${url.pathname}${url.search}`)
     }
 
+    // A wave's own pages (AGL-3976): exactly those, after robots.txt.
+    const only = options.only
+      ? options.only
+          .map((raw) => {
+            try {
+              return siteImportPageKey(new URL(raw), origins)
+            } catch {
+              return null
+            }
+          })
+          .filter((key): key is string => !!key)
+      : null
+
     // Sitemaps: the ones robots.txt names on this site, else /sitemap.xml.
     const sitemapQueue: string[] = []
     for (const raw of inventory.robots.sitemaps) {
@@ -322,7 +348,8 @@ export async function crawlSiteForImport(
         // A malformed Sitemap line names nothing.
       }
     }
-    if (!sitemapQueue.length) sitemapQueue.push(`${origins[0]}/sitemap.xml`)
+    if (!sitemapQueue.length && !only) sitemapQueue.push(`${origins[0]}/sitemap.xml`)
+    if (only) sitemapQueue.length = 0
     const sitemapSeen = new Set<string>()
     const fromSitemap: string[] = []
     let sitemapsRead = 0
@@ -355,10 +382,19 @@ export async function crawlSiteForImport(
       }
     }
     inventory.sitemapUrls = fromSitemap.length
+    if (options.shallowFirst) {
+      const depth = (key: string) => new URL(key).pathname.split('/').filter(Boolean).length
+      const ranked = fromSitemap.map((key, order) => ({ key, order, depth: depth(key) }))
+      ranked.sort((a, b) => a.depth - b.depth || a.order - b.order)
+      fromSitemap.splice(0, fromSitemap.length, ...ranked.map((entry) => entry.key))
+    }
 
     // Pages: home, then the sitemap's, then links the pages themselves name.
-    const queue: { key: string; foundBy: SiteImportPage['foundBy'] }[] = [{ key: home, foundBy: 'home' }]
-    const queued = new Set<string>([home])
+    // A wave's read is its own pages alone.
+    const queue: { key: string; foundBy: SiteImportPage['foundBy'] }[] = only
+      ? only.map((key) => ({ key, foundBy: (new URL(key).pathname === '/' ? 'home' : 'link') as SiteImportPage['foundBy'] }))
+      : [{ key: home, foundBy: 'home' }]
+    const queued = new Set<string>(only ?? [home])
     for (const key of fromSitemap) {
       if (queued.has(key)) continue
       queued.add(key)
@@ -368,7 +404,8 @@ export async function crawlSiteForImport(
     // The site's two names are one site: once the home page says which one
     // it answers on, every address is read on that one, so /about is not
     // read twice as example.com/about and www.example.com/about.
-    let preferred = origins[0]
+    // A wave's read starts on the name its pages were read on the first time.
+    let preferred = only?.length ? new URL(only[0]).origin : origins[0]
     const canon = (raw: string) => {
       const url = new URL(raw)
       return origins.includes(url.origin) && url.origin !== preferred
@@ -444,7 +481,7 @@ export async function crawlSiteForImport(
         const linkKey = siteImportPageKey(new URL(link), origins)
         if (!linkKey) continue
         links.push(linkKey)
-        if (!queued.has(linkKey)) {
+        if (!only && !queued.has(linkKey)) {
           queued.add(linkKey)
           queue.push({ key: linkKey, foundBy: 'link' })
         }

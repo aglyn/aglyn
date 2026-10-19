@@ -274,6 +274,17 @@ import type { AiBuildPlan } from '../model/ai-build-plan'
 import type { AiJob, AiJobDraftSlot, AiJobPlan } from '../model/ai-jobs.types'
 import { aiJobDraftId, aiPlanWithDraftIds } from './ai-job-draft-ids'
 import { createAiJobSiteStep } from './ai-job-site-step'
+import { createAiJobImportStep, SITE_IMPORT_WAVES_PER_ORG_PER_DAY } from './ai-job-import-step'
+import { AI_LAYOUT_IMPORTED_PAGE_INPUT } from './ai-job-page-language'
+import { AI_LAYOUT_PAGE_PHOTOS_INPUT } from './ai-layout-owner-photos'
+import type { SiteImportReviewInput } from '../site-import/site-import-review'
+import type { PluginMediaIngest, PluginMediaIngestRequest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
+import {
+  HARBOR_DOMAIN,
+  HARBOR_INJECTION,
+  harborFetch,
+  harborImageFetch,
+} from '../site-import/fixtures/site-import-wave-recordings'
 import type { AiJobStepRunner } from './ai-job-text-step'
 import { AI_JOB_INLINE_BUDGET_MS } from './ai-job-budget'
 import { aiDoctrineReview, aiGenerationSpent } from './ai-job-generation'
@@ -3266,5 +3277,207 @@ describe('a site start that ends with nothing built schedules its empty site’s
     const stored = (await getAiJob(firestore, ORG, job.$id)) as NonNullable<Awaited<ReturnType<typeof getAiJob>>>
     expect(aiJobSummary(stored, NOW).siteRemoved).toBeUndefined()
     expect(aiJobSummary({ ...stored, siteRemoved: { at: NOW as never, name: 'Kc x carder' } }, NOW).siteRemoved).toBe(true)
+  })
+})
+
+/*
+ * Bring my site (AGL-3976), through the REAL machine: the import step reads a
+ * recorded site at the crawler's seam and hands its header and pages to fake
+ * layout and page runners. What this pins is the machine's half — the waves a
+ * person starts, the review between them, the pages as items that give back
+ * their own spend, and that nothing is ever published.
+ */
+describe('a site import brings a proved site in, wave by wave, each started by a person (AGL-3976)', () => {
+  const spend = { usage: USAGE, estCostUsd: 0.006, model: 'claude-sonnet-5', stopReason: 'tool_use' }
+  let proof: { current: boolean; method: string; provenAt: number; detail: string } | null
+  let allowed: boolean
+  let failing: Set<string>
+  let handed: AiJob[]
+  let reviews: SiteImportReviewInput[]
+  let stored: PluginMediaIngestRequest[]
+  let limited: Array<{ key: string; limit: number }>
+
+  beforeEach(() => {
+    proof = { current: true, method: 'dns', provenAt: NOW.getTime(), detail: '_aglyn-challenge.harbor-dental.com' }
+    allowed = true
+    failing = new Set()
+    handed = []
+    reviews = []
+    stored = []
+    limited = []
+    const passes = new Map<string, number>()
+    const runners: Record<string, AiJobStepRunner> = {
+      layout: async ({ job }) => {
+        handed.push(job)
+        return { outputs: [{ resource: 'layout', id: job.$id, hostId: 'host-1', label: 'Header and footer' }], ...spend }
+      },
+      // A page in the layout language: its answer, then its listing and its report.
+      page: async ({ job }) => {
+        handed.push(job)
+        const title = job.plan?.screens[0]?.title ?? ''
+        if (failing.has(title)) return { outputs: [], ...spend, failure: `${title} could not be written.` }
+        const pass = (passes.get(job.$id) ?? 0) + 1
+        passes.set(job.$id, pass)
+        if (pass === 1) return { outputs: [], ...spend, continue: true }
+        return { outputs: [{ resource: 'screen', id: job.$id, versionId: 'v1', hostId: 'host-1', label: title }], ...spend }
+      },
+    }
+    const byKey = new Map<string, { mediaId: string; src: string; width: number; height: number }>()
+    const ingest: PluginMediaIngest = {
+      ingest: async (request) => {
+        stored.push(request)
+        const asset = { mediaId: `m${stored.length}`, src: `media:host-1/m${stored.length}`, width: 1600, height: 900 }
+        if (request.importedFrom) byKey.set(request.importedFrom.key, asset)
+        return { ok: true, ...asset }
+      },
+      findStockPhoto: async () => null,
+      findImportedPhoto: async ({ sourceKey }) => byKey.get(sourceKey) ?? null,
+    }
+    let minted = 0
+    registerAiJobStep(
+      'import',
+      createAiJobImportStep({
+        crawlSeams: { fetch: harborFetch() },
+        fetchImage: harborImageFetch(),
+        runnerFor: ((kind: string) => runners[kind] ?? null) as never,
+        ownership: async () => proof,
+        rateLimit: async (key, options) => {
+          limited.push({ key, limit: options.limit })
+          return { allowed }
+        },
+        releaseFlagOn: async () => true,
+        ingest: () => ingest,
+        readRoom: async () => ({ limit: 12, used: 0 }),
+        readSiteName: async () => 'Harbor Dental',
+        fileReview: async (_firestore, input) => {
+          reviews.push(input)
+          return 'site-import-row'
+        },
+        pageWritten: async () => true,
+        mintId: () => `drft${String(++minted).padStart(4, '0')}`,
+      }),
+      { minimumMs: 1 },
+    )
+  })
+
+  async function importJob(): Promise<AiJob> {
+    return createAiJob(
+      firestore,
+      { orgId: ORG, hostId: 'host-1', kind: 'import', brief: `Bring in ${HARBOR_DOMAIN}`, inputs: { domain: HARBOR_DOMAIN }, createdBy: 'uid-1' },
+      NOW,
+    )
+  }
+
+  /** The beat, until the job stops for a person or ends. */
+  async function untilParked(jobId: string): Promise<AiJob> {
+    for (let pass = 0; pass < 80; pass += 1) {
+      await runAiJobStep(firestore, ORG, jobId, { owner: 'beat-1', now: NOW })
+      const stored = (await getAiJob(firestore, ORG, jobId)) as AiJob
+      if (['needs_review', 'needs_input', 'done', 'failed', 'canceled'].includes(stored.status)) return stored
+    }
+    throw new Error('the import never stopped')
+  }
+
+  it('reads the site, keeps it under the plan’s page count, and waits: nothing is built until the first wave is started', async () => {
+    const job = await untilParked((await importJob()).$id)
+    expect(job.status).toBe('needs_review')
+    expect(job.review).toMatchObject({ reason: 'wave' })
+    // A decision waiting, never an error.
+    expect(job.error).toBeNull()
+    expect(job.review?.message).toBe('Your site is read: 12 pages to bring in, in 2 waves. Start the first wave when you are ready.')
+    expect(job.siteImport?.waves.map((wave) => [wave.label, wave.slots.length, wave.status])).toEqual([
+      ['Main pages', 6, 'waiting'],
+      ['Blog', 6, 'waiting'],
+    ])
+    expect(job.siteImport?.leftOutCount).toEqual({ 'plan-limit': 8, 'login-form': 1, robots: 1 })
+    expect(job.items?.map((row) => row.status)).toEqual(Array(13).fill('pending'))
+    expect(job.outputs).toEqual([])
+    expect(job.creditsSpent).toBe(0)
+    expect(handed).toEqual([])
+    expect(stored).toEqual([])
+    // Logged for Trust & Safety the moment the site is read, and the day's limit counted once.
+    expect(reviews.map((entry) => entry.event)).toEqual(['read'])
+    expect(limited).toEqual([{ key: `ai-import:${ORG}`, limit: SITE_IMPORT_WAVES_PER_ORG_PER_DAY }])
+    // Waiting for a person is never something the beat resumes.
+    expect((await runAiJobStep(firestore, ORG, job.$id, { owner: 'beat-2', now: NOW })).outcome).toBe('not-claimable')
+  })
+
+  it('runs a wave — header and footer, each page’s photos, each page — then waits for its review; the next starts only when resumed', async () => {
+    const read = await untilParked((await importJob()).$id)
+    expect((await resumeAiJob(firestore, ORG, read.$id, { uid: 'uid-1' }, NOW)).changed).toBe(true)
+    const first = await untilParked(read.$id)
+    expect(first.status).toBe('needs_review')
+    expect(first.review?.message).toBe('Main pages is in: 6 pages ready to review as drafts. Start Blog when you are ready.')
+    expect(first.siteImport?.waves.map((wave) => wave.status)).toEqual(['review', 'waiting'])
+    expect(first.items?.slice(0, 7).map((row) => [row.op, row.status])).toEqual([
+      ['layout', 'succeeded'],
+      ...Array(6).fill(['page', 'succeeded']),
+    ])
+    expect(first.items?.slice(7).every((row) => row.status === 'pending')).toBe(true)
+    // The header and footer first, then the pages inside it, each told its own text and photos.
+    expect(handed[0].kind).toBe('layout')
+    const pages = handed.filter((job) => job.kind === 'page')
+    expect(new Set(pages.map((job) => job.$id)).size).toBe(6)
+    expect(pages.every((job) => job.plan?.screens[0]?.layout === handed[0].$id)).toBe(true)
+    const services = pages.find((job) => job.plan?.screens[0]?.slug === '/services') as AiJob
+    expect((services.inputs[AI_LAYOUT_IMPORTED_PAGE_INPUT] as { text: string }).text).toContain(HARBOR_INJECTION)
+    expect(services.plan?.screens[0]?.sections.map((section) => section.name)).toEqual(['Services', 'Preventive care', 'Restorative care', 'Cosmetic care'])
+    const team = pages.find((job) => job.plan?.screens[0]?.slug === '/team') as AiJob
+    expect((team.inputs[AI_LAYOUT_PAGE_PHOTOS_INPUT] as unknown[]).length).toBe(3)
+    // The logo every page shows and the waiting room two pages show are stored once each.
+    const urls = stored.map((request) => request.importedFrom?.url)
+    expect(urls.filter((url) => url?.endsWith('/logo.png'))).toHaveLength(1)
+    expect(urls.filter((url) => url?.endsWith('/office-wide.jpg'))).toHaveLength(1)
+    expect(new Set(urls).size).toBe(urls.length)
+    // Drafts only: nothing is published, by this wave or any.
+    expect(first.sitePublish).toBeUndefined()
+    expect(first.outputs.map((output) => output.resource)).toEqual(['layout', ...Array(6).fill('screen')])
+    // Only a person starts the next wave.
+    expect((await runAiJobStep(firestore, ORG, read.$id, { owner: 'beat-2', now: NOW })).outcome).toBe('not-claimable')
+    await resumeAiJob(firestore, ORG, read.$id, { uid: 'uid-1' }, NOW)
+    const done = await untilParked(read.$id)
+    expect(done.status).toBe('done')
+    expect(done.siteImport?.waves.map((wave) => wave.status)).toEqual(['done', 'done'])
+    expect(done.items?.every((row) => row.status === 'succeeded')).toBe(true)
+    expect(done.sitePublish).toBeUndefined()
+    expect(reviews.map((entry) => entry.event)).toEqual(['read', 'wave-started', 'wave-finished', 'wave-started', 'wave-finished'])
+    // The console never reads a page's text.
+    expect(aiJobSummary(done, NOW).siteImport?.pages.every((page) => !page.read?.text)).toBe(true)
+  })
+
+  it('gives back a page that failed on our side, alone, and the wave goes on', async () => {
+    failing = new Set(['Services | Harbor Dental'])
+    const read = await untilParked((await importJob()).$id)
+    await resumeAiJob(firestore, ORG, read.$id, { uid: 'uid-1' }, NOW)
+    const first = await untilParked(read.$id)
+    expect(first.status).toBe('needs_review')
+    const row = first.items?.find((entry) => entry.label === 'Services | Harbor Dental')
+    expect(row).toMatchObject({ status: 'failed', failure: { ours: true }, creditsRefunded: 6 })
+    expect(first.items?.filter((entry) => entry.status === 'succeeded')).toHaveLength(6)
+    expect(first.refundedCredits).toBe(6)
+  })
+
+  it('holds a wave the day’s limit refuses, reading nothing, until it is started again', async () => {
+    const read = await untilParked((await importJob()).$id)
+    allowed = false
+    await resumeAiJob(firestore, ORG, read.$id, { uid: 'uid-1' }, NOW)
+    const held = await untilParked(read.$id)
+    expect(held.status).toBe('needs_review')
+    expect(held.review).toMatchObject({ reason: 'limit' })
+    expect(held.siteImport?.waves[0].status).toBe('waiting')
+    expect(handed).toEqual([])
+    allowed = true
+    await resumeAiJob(firestore, ORG, read.$id, { uid: 'uid-1' }, NOW)
+    expect((await untilParked(read.$id)).siteImport?.waves[0].status).toBe('review')
+  })
+
+  it('reads nothing of a site whose proof has lapsed, and asks for it again', async () => {
+    proof = { ...(proof as NonNullable<typeof proof>), current: false }
+    const job = await untilParked((await importJob()).$id)
+    expect(job.status).toBe('needs_review')
+    expect(job.review).toMatchObject({ reason: 'ownership' })
+    expect(job.siteImport).toBeUndefined()
+    expect(reviews).toEqual([])
+    expect(limited).toEqual([])
   })
 })

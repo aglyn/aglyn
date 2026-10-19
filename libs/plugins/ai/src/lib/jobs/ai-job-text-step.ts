@@ -31,6 +31,7 @@ import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import { aiDevEffortFor } from '../runtime/ai-dev-env'
 import { runAiRequest, type AiEffort, type AiSystemBlock } from '../runtime/ai-runtime'
 import type { AssistTokenUsage } from '../usage/assist-usage'
+import type { AiSiteImportState } from '../model/ai-site-import'
 import { aiJobStepBudget } from './ai-job-budget'
 import { aiOverlayCopyRequested } from '../model/ai-overlay-copy'
 import { runAiOverlayCopy } from './ai-job-overlay-copy'
@@ -151,6 +152,12 @@ export interface AiJobStepOutcome {
   item?: AiJobItemOutcome
   /** A `build`'s ledger to start from, written by the machine in the same transaction (AGL-3616). */
   items?: AiJobItemLedger[]
+  /**
+   * An `import` job's waves after this pass (AGL-3976), kept on the job by
+   * the machine in the write that records the pass: a step never writes the
+   * job document itself.
+   */
+  siteImport?: AiSiteImportState
 }
 
 /** What one `build` pass came to for the unit it ran (AGL-3616). */

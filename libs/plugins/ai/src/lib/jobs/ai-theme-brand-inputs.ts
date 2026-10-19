@@ -324,7 +324,8 @@ async function readCapped(
   body: ReadableStream<Uint8Array>,
   maxBytes: number,
   refuseOver = false,
-): Promise<{ text: string; bytes: number; truncated: boolean } | null> {
+  binary = false,
+): Promise<{ text: string; bytes: number; truncated: boolean; data?: Uint8Array } | null> {
   const reader = body.getReader()
   const chunks: Uint8Array[] = []
   let total = 0
@@ -350,6 +351,8 @@ async function readCapped(
     joined.set(chunk, offset)
     offset += chunk.byteLength
   }
+  // A picture's bytes are kept as they came (AGL-3976), never decoded as text.
+  if (binary) return { text: '', bytes: total, truncated, data: joined }
   return { text: new TextDecoder().decode(joined), bytes: total, truncated }
 }
 
@@ -391,6 +394,8 @@ export interface PublicFetchResult {
   status?: number
   /** Where a refused redirect pointed. */
   location?: string
+  /** The body's bytes, with `binary`; absent otherwise. */
+  data?: Uint8Array
 }
 
 function refusedFetch(
@@ -414,6 +419,8 @@ export interface PublicFetchOptions {
   redirectAllowed?: (from: URL, to: URL) => boolean
   /** Refuse a body over `maxBytes` rather than cut it. */
   refuseOver?: boolean
+  /** Keep the body's bytes as `data` rather than decode them as text (a picture, AGL-3976). */
+  binary?: boolean
 }
 
 /**
@@ -494,7 +501,7 @@ export async function fetchPublicTextDetailed(
         await response.body.cancel().catch(() => undefined)
         return refusedFetch('too-large', parsed.toString(), { status: response.status })
       }
-      const body = await readCapped(response.body, options.maxBytes, options.refuseOver)
+      const body = await readCapped(response.body, options.maxBytes, options.refuseOver, options.binary === true)
       if (!body) {
         return refusedFetch('too-large', parsed.toString(), { status: response.status })
       }

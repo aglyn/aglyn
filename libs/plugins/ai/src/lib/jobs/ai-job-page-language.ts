@@ -16,6 +16,7 @@
  */
 
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
+import { fenceUntrustedText, UNTRUSTED_TEXT_RULE } from '@aglyn/shared-util-tools/untrusted-text'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { isAiPlanNewRef, type AiBuildPlanScreen } from '../model/ai-build-plan'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
@@ -241,12 +242,17 @@ export function aiLayoutFormPageOfPlan(
   return screen?.id ?? null
 }
 
-/** Every word the job was given, which a page's contact details are held to. */
+/**
+ * Every word the job was given, which a page's contact details are held to:
+ * the brief, its scalar inputs, and the text of a page brought in from the
+ * owner's own site (AGL-3976), whose phone and address are the owner's.
+ */
 export function aiLayoutFacts(job: Pick<AiJob, 'brief' | 'inputs'>): string {
   const values = Object.values(job.inputs ?? {}).filter(
     (value): value is string => typeof value === 'string',
   )
-  return [job.brief, ...values].join('\n')
+  const imported = aiLayoutImportedPageOf(job.inputs)?.text ?? ''
+  return [job.brief, ...values, ...(imported ? [imported] : [])].join('\n')
 }
 
 /** What a page's links resolve against: the site's pages, built and planned, its forms and components. */
@@ -389,6 +395,62 @@ export function aiLayoutStartPageLines(start: AiLayoutStartPage | null | undefin
 }
 
 /**
+ * The unit input carrying a page a site import brings in (AGL-3976): its
+ * address on the owner's own website and its text as that site shows it. It
+ * reaches the model only fenced as untrusted data, under
+ * `UNTRUSTED_TEXT_RULE`, and only on a job the import step derives — a
+ * member's own job carries none, because the create door's inputs are
+ * scalars and this is an object.
+ */
+export const AI_LAYOUT_IMPORTED_PAGE_INPUT = 'importedPage'
+
+/** A page brought in, as the import step hands it to the page step. */
+export interface AiLayoutImportedPage {
+  /** Where the page is on the owner's website. */
+  url: string
+  /** Its title, headings and text in order, as the crawler extracted them. */
+  text: string
+}
+
+/** The most characters of an imported page's text a prompt shows. */
+export const AI_LAYOUT_IMPORTED_PAGE_MAX_CHARS = 6_000
+
+/** The imported page a job's inputs carry, read defensively; `null` on every other job. */
+export function aiLayoutImportedPageOf(inputs: Readonly<Record<string, unknown>> | null | undefined): AiLayoutImportedPage | null {
+  const raw = inputs?.[AI_LAYOUT_IMPORTED_PAGE_INPUT]
+  if (!raw || typeof raw !== 'object') return null
+  const { url, text } = raw as Record<string, unknown>
+  if (typeof url !== 'string' || typeof text !== 'string' || !text.trim()) return null
+  return { url: url.slice(0, 2048), text }
+}
+
+/**
+ * What a page brought in from the owner's site is told (AGL-3976): rewrite
+ * it into the planned sections, keeping its facts, and the text itself,
+ * fenced. The fence and the system block's rule are what keep the page's own
+ * words — "ignore your instructions" on a hostile page — data.
+ */
+export function aiLayoutImportedPageLines(page: AiLayoutImportedPage | null): string[] {
+  if (!page) return []
+  return [
+    'This page is the site owner\'s own page, brought in from their current website. Rewrite its content into the sections below, in its own language: keep its facts, names, prices, hours, services and details wherever a section covers them, and leave a gap in square brackets for a fact it does not give rather than invent one. Leave out cookie notices, sign-in, carts, the old site\'s own tools and anything about the website builder it was made with. Draw no form, embed or script of its own, and design every section anew. Its text, as that site shows it:',
+    fenceUntrustedText(`The owner's page ${page.url}`, page.text, { maxChars: AI_LAYOUT_IMPORTED_PAGE_MAX_CHARS }),
+  ]
+}
+
+/**
+ * The page door's system blocks for this job: the language's cached
+ * instructions, and for a page brought in from the owner's site the rule
+ * that fenced text is data (AGL-3976), a static block of its own so every
+ * imported page shares one cached prefix and no other page's changes.
+ */
+export function aiJobPageLanguageInstructions(job: Pick<AiJob, 'inputs'>): readonly AiSystemBlock[] {
+  return aiLayoutImportedPageOf(job.inputs)
+    ? [...AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS, { text: UNTRUSTED_TEXT_RULE }]
+    : AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS
+}
+
+/**
  * What a page is told about the site's form (AGL-3899). A page whose plan
  * places the form, or a site whose form has no page of its own, is told the
  * form; any other page is told where the form lives and that its call to
@@ -468,6 +530,8 @@ export function aiLayoutPagePrompt(input: {
     ...aiSiteKindDesignLines(job.inputs),
     ...aiPlanReferenceLines(plan),
     ...aiLayoutStartPageLines(input.startsFrom),
+    // A page brought in from the owner's own site (AGL-3976), fenced.
+    ...aiLayoutImportedPageLines(aiLayoutImportedPageOf(job.inputs)),
     `Sections to design, in order:`,
     ...sections,
     pages.length
@@ -909,7 +973,7 @@ export async function aiRunLayoutPage(input: AiLayoutPageRunInput): Promise<AiVa
     runValidatedGeneration<AiLayoutPageBuilt>(AI_LAYOUT_PAGE_KIND, {
       step: 'job.page',
       model: input.model,
-      instructions: AI_JOB_PAGE_LANGUAGE_INSTRUCTIONS,
+      instructions: aiJobPageLanguageInstructions(input.job),
       inventory: input.inventory,
       messages: [{ role: 'user', content }],
       tool: AI_LAYOUT_PAGE_TOOL,

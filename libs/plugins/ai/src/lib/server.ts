@@ -32,6 +32,7 @@ import { registerAiProductsJob } from './jobs/ai-job-products-step'
 import { registerAiEmailJob } from './jobs/ai-job-email-step'
 import { registerAiCampaignJob } from './jobs/ai-job-campaign-step'
 import { registerAiSiteJob } from './jobs/ai-job-site-step'
+import { registerAiSiteImportJob } from './jobs/ai-job-import-step'
 import { registerAiBuildJob } from './jobs/ai-job-build-step'
 import { registerAiBuildCapabilities } from './jobs/ai-build-capabilities'
 import { registerAiWorkflowJob } from './jobs/ai-job-workflow-step'
@@ -163,6 +164,9 @@ function registerAiJobKinds(): void {
   // The site scaffold, which builds a whole site through the steps above
   // (AGL-2911).
   registerAiSiteJob()
+  // Bring my site (AGL-3976): a proved website brought in as draft pages, in
+  // waves a person starts one at a time, through the page and layout steps.
+  registerAiSiteImportJob()
   // A build from one request (AGL-3616): pages, creations and other
   // plugins' drafts, through the steps above and the writers those plugins
   // register, settled item by item. What this plugin lets a build make is

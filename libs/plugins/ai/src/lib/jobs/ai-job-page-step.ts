@@ -98,11 +98,10 @@ import {
 } from './ai-job-page-sections'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiResolveLayoutPictures } from '../layout-language/ai-layout-pictures'
-import { aiLayoutSitePhotoSource } from './ai-layout-owner-photos'
+import { aiLayoutPagePhotosOf, aiLayoutSitePhotoSource } from './ai-layout-owner-photos'
 import {
   AI_STOCK_PHOTO_AVOID_INPUT,
   AI_STOCK_PHOTO_PAGES_INPUT,
-  aiLayoutStockPhotoSource,
   aiStockPhotoWordsOf,
   aiStockPlacedSrcs,
 } from './ai-layout-stock-photos'
@@ -493,7 +492,7 @@ export interface AiJobPageStepDeps {
   /** The runners a plan's creations are built by (AGL-3031); the registry's otherwise. */
   runnerFor?: typeof aiJobStepRunnerFor
   /** The stock photo source of a language page's pictures (AGL-3660); core's provider otherwise. */
-  stockPhotos?: typeof aiLayoutStockPhotoSource
+  stockPhotos?: typeof aiLayoutSitePhotoSource
 }
 
 export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunner {
@@ -894,6 +893,8 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           sectionNames,
           jobId: aiOriginJobId(job),
           ...(avoid.length ? { avoid } : {}),
+          // A page brought in from the owner's site places its own pictures first (AGL-3976).
+          pagePhotos: aiLayoutPagePhotosOf(job.inputs),
           ...(signal ? { signal } : {}),
         }),
       })
