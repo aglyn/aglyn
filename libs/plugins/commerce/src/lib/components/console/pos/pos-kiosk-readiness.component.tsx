@@ -107,7 +107,8 @@ export function PosKioskReadiness({ user, hostId, registerId, registerName }: Po
   // `error` when the readers could not be listed: then nothing is said, since
   // "no reader" would be a guess.
   const [readers, setReaders] = useState<{ available: boolean; count: number } | 'error' | null>(null)
-  const uid = user?.uid ?? ''
+  // The person, for the load's key: a signed-in session carries its uid.
+  const uid = (user as { uid?: string } | null | undefined)?.uid ?? ''
 
   useEffect(() => {
     if (!user || !registerId) return
