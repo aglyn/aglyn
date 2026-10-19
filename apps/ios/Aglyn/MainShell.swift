@@ -395,16 +395,6 @@ struct TitleBarItems: ToolbarContent {
   @Environment(ShellNavigation.self) private var navigation
   let unread: Int
 
-  /// Where the search field sits: the Mac's toolbar keeps it in the automatic run beside the title, where a primary
-  /// action of a fixed width is dropped from sight.
-  static var searchPlacement: ToolbarItemPlacement {
-    #if os(macOS)
-      .automatic
-    #else
-      .primaryAction
-    #endif
-  }
-
   var body: some ToolbarContent {
     @Bindable var navigation = navigation
     ToolbarItemGroup(placement: .navigation) {
@@ -426,7 +416,21 @@ struct TitleBarItems: ToolbarContent {
       .accessibilityIdentifier("titlebar-forward")
       RecentPlacesMenu()
     }
-    ToolbarItem(placement: Self.searchPlacement) {
+    #if os(macOS)
+      // The Mac's toolbar draws its own control around an item and leaves out a custom-drawn field: a plain labeled
+      // button reads as the search field there.
+      ToolbarItem(placement: .primaryAction) {
+        Button {
+          navigation.showOneBox = true
+        } label: {
+          Label("Search or jump to  ⌘K", systemImage: "magnifyingglass").labelStyle(.titleAndIcon)
+        }
+        .help("Search or jump to (⌘K)")
+        .accessibilityLabel("Search or jump to")
+        .accessibilityIdentifier("titlebar-search")
+      }
+    #else
+    ToolbarItem(placement: .primaryAction) {
       Button {
         navigation.showOneBox = true
       } label: {
@@ -439,7 +443,6 @@ struct TitleBarItems: ToolbarContent {
         .font(AglynFont.subheadline)
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        // A fixed width: the Mac's toolbar moves an item of flexible width out of sight.
         .frame(width: 240)
         .background(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).fill(AglynColor.page))
         .overlay(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).strokeBorder(AglynColor.divider))
@@ -449,6 +452,7 @@ struct TitleBarItems: ToolbarContent {
       .accessibilityLabel("Search or jump to")
       .accessibilityIdentifier("titlebar-search")
     }
+    #endif
     ToolbarItem(placement: .primaryAction) { HelpMenuButton() }
     ToolbarItem(placement: .primaryAction) {
       if AssistSlot.available(model) {
