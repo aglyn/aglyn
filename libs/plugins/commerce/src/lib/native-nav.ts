@@ -40,7 +40,7 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
     row: {
       id: 'orders',
       label: 'Orders',
-      icon: nativeNavIcon('bag', 'shopping_basket'),
+      icon: nativeNavIcon('bag', 'shopping_bag'),
       screen: 'commerce.orders',
       pluginId: 'commerce',
       order: 10,

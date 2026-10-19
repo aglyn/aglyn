@@ -20,6 +20,7 @@ import type * as Aglyn from '@aglyn/aglyn'
 import { hostQualifiedCdnPath } from '@aglyn/aglyn'
 import { useHostOrgId } from '@aglyn/tenant-feature-instance'
 import {
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -27,10 +28,13 @@ import {
   DialogTitle,
   Tab,
   Tabs,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import { useSnackbar } from 'notistack'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import MediaLibraryComponent from './media-library.component'
+import MediaPickerDetails from './media-picker-details.component'
 
 export interface MediaPickerDialogProps {
   /** Host scope — the site's private library. */
@@ -62,6 +66,24 @@ export interface MediaPickerDialogProps {
   onPick: (media: Aglyn.AglynHostMedia, context: { cdnScope: string }) => void
 }
 
+/** Why a private file cannot be placed on a page, and how to change that. */
+const PRIVATE_FILE_REASON =
+  'That file is private, so it cannot be placed on a page. ' +
+  'Turn off Private in the media library to use it here.'
+
+/** The confirm button, named for the file it places. */
+export function mediaPickerConfirmLabel(
+  contentType: string | undefined,
+  kind?: Aglyn.MediaPickerKind,
+): string {
+  const type = String(contentType ?? '')
+  if (type.startsWith('image/') || (!type && kind === 'image')) return 'Use this image'
+  if (type.startsWith('video/') || (!type && kind === 'video')) return 'Use this video'
+  if (type.startsWith('audio/') || (!type && kind === 'audio')) return 'Use this audio'
+  if (type === 'application/pdf' || (!type && kind === 'pdf')) return 'Use this PDF'
+  return 'Use this file'
+}
+
 /** The dialog's title when it offers one kind of file (AGL-2953). */
 const KIND_TITLES: Readonly<Record<Aglyn.MediaPickerKind, string>> = {
   image: 'Choose an image',
@@ -87,6 +109,24 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
   const orgScope = orgId ?? derivedOrgId
   const showTabs = Boolean(hostId) && Boolean(orgScope)
   const [tab, setTab] = useState<'site' | 'org'>(hostId ? 'site' : 'org')
+  /**
+   * The file clicked, and the library it was clicked in. Clicking shows its
+   * details; only the confirm button places it, so a file is never used on
+   * the strength of a thumbnail alone.
+   */
+  const [pending, setPending] = useState<{
+    media: Aglyn.AglynHostMedia
+    cdnScope: string
+  } | null>(null)
+  // A dialog kept mounted while closed opens again with nothing chosen.
+  useEffect(() => {
+    if (!open) setPending(null)
+  }, [open])
+  // Below `sm` the dialog is a full-screen sheet with no room beside the
+  // files, so the details take its place and say how to get back.
+  const narrow = useMediaQuery(useTheme().breakpoints.down('sm'))
+  const blockedReason =
+    pending?.media.private && !allowPrivate ? PRIVATE_FILE_REASON : null
 
   const { enqueueSnackbar } = useSnackbar()
 
@@ -104,11 +144,7 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
      * caller for which a private asset is the right answer.
      */
     if (media.private && !allowPrivate) {
-      enqueueSnackbar(
-        'That file is private, so it cannot be placed on a page. ' +
-          'Turn off Private in the media library to use it here.',
-        { variant: 'warning', persist: false },
-      )
+      enqueueSnackbar(PRIVATE_FILE_REASON, { variant: 'warning', persist: false })
       return
     }
     // Hand back a CDN path that names the site using the asset (AGL-1043).
@@ -181,48 +217,95 @@ export function MediaPickerDialog(props: MediaPickerDialogProps) {
     >
       <DialogTitle>{kind ? KIND_TITLES[kind] : 'Choose media'}</DialogTitle>
       {/*
-        `minHeight: 0` is what makes the grid scroll INSIDE the box. As a
+        `minHeight: 0` is what lets the files scroll INSIDE the box. As a
         column flex child its `min-height: auto` resolves to min-content, so a
         full library would push the paper taller than its own aspect ratio
-        instead of scrolling — the classic flexbox overflow trap. MUI already
-        puts `overflow-y: auto` here; this lets it actually take effect.
+        instead of scrolling — the classic flexbox overflow trap. The files
+        and the details beside them each scroll on their own, so the details
+        of the file clicked stay in view however far down the grid it was.
       */}
-      <DialogContent sx={{ minHeight: 0 }}>
-        {showTabs ? (
-          <Tabs
-            value={tab}
-            onChange={(_event, value) => setTab(value)}
-            variant="scrollable"
-            scrollButtons="auto"
-            allowScrollButtonsMobile
-            sx={{ mb: 2 }}
+      <DialogContent sx={{ minHeight: 0, display: 'flex', gap: 3, overflow: 'hidden' }}>
+        <Box
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            overflowY: 'auto',
+            // Hidden rather than unmounted, so the folder and the scroll
+            // position are where they were on the way back.
+            display: narrow && pending ? 'none' : 'block',
+          }}
+        >
+          {showTabs ? (
+            <Tabs
+              value={tab}
+              onChange={(_event, value) => {
+                setTab(value)
+                setPending(null)
+              }}
+              variant="scrollable"
+              scrollButtons="auto"
+              allowScrollButtonsMobile
+              sx={{ mb: 2 }}
+            >
+              <Tab value="site" label="This site" />
+              <Tab value="org" label="Organization (shared)" />
+            </Tabs>
+          ) : null}
+          {showSite && hostId ? (
+            <MediaLibraryComponent
+              hostId={hostId}
+              kind={kind}
+              pickedId={pending?.media.$id}
+              onSelect={(media) => setPending({ media, cdnScope: hostId })}
+            />
+          ) : null}
+          {showOrg && orgScope ? (
+            <MediaLibraryComponent
+              orgId={orgScope}
+              // Show only what THIS site may render (AGL-1045). This is the
+              // discovery boundary the project exists for: an agency employee
+              // building a client's page cannot find — let alone place — an
+              // asset restricted to the agency's internal sites.
+              forHostId={hostId}
+              kind={kind}
+              pickedId={pending?.media.$id}
+              onSelect={(media) =>
+                setPending({ media, cdnScope: `org:${orgScope}` })
+              }
+            />
+          ) : null}
+        </Box>
+        {pending ? (
+          <Box
+            component="aside"
+            aria-label="Selected file"
+            sx={{
+              width: narrow ? '100%' : 320,
+              flexShrink: 0,
+              overflowY: 'auto',
+              ...(narrow ? {} : { borderLeft: 1, borderColor: 'divider', pl: 3 }),
+            }}
           >
-            <Tab value="site" label="This site" />
-            <Tab value="org" label="Organization (shared)" />
-          </Tabs>
-        ) : null}
-        {showSite && hostId ? (
-          <MediaLibraryComponent
-            hostId={hostId}
-            kind={kind}
-            onSelect={(media) => pick(media, hostId)}
-          />
-        ) : null}
-        {showOrg && orgScope ? (
-          <MediaLibraryComponent
-            orgId={orgScope}
-            // Show only what THIS site may render (AGL-1045). This is the
-            // discovery boundary the project exists for: an agency employee
-            // building a client's page cannot find — let alone place — an
-            // asset restricted to the agency's internal sites.
-            forHostId={hostId}
-            kind={kind}
-            onSelect={(media) => pick(media, `org:${orgScope}`)}
-          />
+            <MediaPickerDetails
+              key={pending.media.$id}
+              media={pending.media}
+              blockedReason={blockedReason}
+              onBack={narrow ? () => setPending(null) : undefined}
+            />
+          </Box>
         ) : null}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{'Cancel'}</Button>
+        <Button
+          variant="contained"
+          disabled={!pending || Boolean(blockedReason)}
+          onClick={() => {
+            if (pending) pick(pending.media, pending.cdnScope)
+          }}
+        >
+          {mediaPickerConfirmLabel(pending?.media.contentType, kind)}
+        </Button>
       </DialogActions>
     </Dialog>
   )

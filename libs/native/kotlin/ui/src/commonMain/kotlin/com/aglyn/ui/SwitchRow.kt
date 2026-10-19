@@ -39,7 +39,7 @@ fun SwitchRow(
   Row(
     modifier
       .fillMaxWidth()
-      .heightIn(min = 56.dp)
+      .heightIn(min = if (LocalUiDensity.current.compact) 48.dp else 56.dp)
       .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
       .semantics(mergeDescendants = true) {
         contentDescription = if (supporting != null) "$title. $supporting" else title

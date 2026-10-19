@@ -224,7 +224,7 @@ internal fun NotificationsScreen(services: ShellServices, uid: String, context: 
             if (filter == NotificationFilter()) "You're all caught up" else "Nothing matches these filters",
             body = if (filter == NotificationFilter()) "New orders, bookings, form entries and alerts show up here." else "Clear a filter to see more.",
             icon = AglynIcons.named("notifications"),
-            action = if (filter == NotificationFilter()) null else ({ OutlinedButton(onClick = { filter = NotificationFilter() }) { Text("Clear filters") } }),
+            action = if (filter == NotificationFilter()) null else ({ OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = { filter = NotificationFilter() }) { Text("Clear filters") } }),
             modifier = Modifier.testTag("notifications-empty"),
           )
           else -> {
@@ -262,7 +262,7 @@ internal fun NotificationsScreen(services: ShellServices, uid: String, context: 
               if (hasMore) {
                 item {
                   Box(Modifier.fillMaxWidth().padding(space(2f)), contentAlignment = Alignment.Center) {
-                    OutlinedButton(onClick = { shown += NOTIFICATION_PAGE }, Modifier.testTag("notifications-more")) { Text("Show more") }
+                    OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = { shown += NOTIFICATION_PAGE }, modifier = Modifier.testTag("notifications-more")) { Text("Show more") }
                   }
                 }
               }
@@ -311,7 +311,7 @@ private fun FeedToolbar(
       )
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-      OutlinedButton(onClick = onPickTypes, Modifier.testTag("notifications-types")) {
+      OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = onPickTypes, modifier = Modifier.testTag("notifications-types")) {
         Icon(AglynIcons.named("filter_list"), contentDescription = null)
         Text(
           when (filter.types.size) {
@@ -336,7 +336,7 @@ private fun NotificationDetail(row: FeedNotification, catalog: NotificationCatal
   val level = catalog.level(row.level, row.type)
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-      Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("notification-detail"),
+      Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)).testTag("notification-detail"),
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {
       SectionCard(null, Modifier.fillMaxWidth()) {
@@ -353,8 +353,8 @@ private fun NotificationDetail(row: FeedNotification, catalog: NotificationCatal
         row.body?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
         HorizontalDivider()
         when {
-          row.inviteId != null && row.orgId != null -> Button(onClick = onOpen, Modifier.testTag("notification-open")) { Text("Review the invitation") }
-          row.link != null -> Button(onClick = onOpen, Modifier.testTag("notification-open")) { Text("Open") }
+          row.inviteId != null && row.orgId != null -> Button(shape = com.aglyn.ui.controlShape(), onClick = onOpen, modifier = Modifier.testTag("notification-open")) { Text("Review the invitation") }
+          row.link != null -> Button(shape = com.aglyn.ui.controlShape(), onClick = onOpen, modifier = Modifier.testTag("notification-open")) { Text("Open") }
           else -> Text("Nothing to open for this one.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }

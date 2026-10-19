@@ -10,17 +10,30 @@ import SwiftUI
 extension AglynColor {
   /// The workspace rail's ground: the slate of the palette, faint over the page, so the rail reads as the frame and
   /// never as content.
-  public static let rail = adaptive(
-    light: AglynTokens.light.tertiary.main.opacity(0.09), dark: AglynTokens.dark.background.default.opacity(0.6))
-  /// The sidebar's ground beside the rail.
-  public static let sidebar = adaptive(light: AglynTokens.light.background.paper, dark: AglynTokens.dark.background.paper)
+  public static let rail = themed { AglynThemeRuntime.shared.surfaces(dark: $0).rail }
+  /// Words and symbols on the rail.
+  public static let railText = themed { AglynThemeRuntime.shared.surfaces(dark: $0).railText }
+  /// The sidebar's ground beside the rail: the surface, tinted with the accent when the sidebar style is Tinted and a
+  /// theme other than the console's is in force.
+  public static let sidebar = themed { dark in
+    let runtime = AglynThemeRuntime.shared
+    let surface = runtime.surfaces(dark: dark).surface
+    guard runtime.sidebarTinted, runtime.theme.id != "aglyn", let accent = runtime.accentIntent(dark: dark) else { return surface }
+    return blend(surface, accent.main, 0.05)
+  }
   /// A tile with no color of its own: the palette's slate.
   public static let neutralTile = adaptive(light: AglynTokens.light.tertiary.main, dark: AglynTokens.dark.grey[700] ?? .gray)
   /// A count that asks for action (unread, waiting): the secondary intent's fill.
   public static let badge = intent({ $0.secondary }, \.main)
   public static let badgeText = intent({ $0.secondary }, \.contrastText)
-  /// Secondary text, the palette's own.
-  public static let secondaryText = adaptive(light: AglynTokens.light.text.secondary, dark: AglynTokens.dark.text.secondary)
+  /// Secondary text, the theme's own.
+  public static let secondaryText = themed { AglynThemeRuntime.shared.surfaces(dark: $0).textSecondary }
+
+  /// `a` with `t` of `b` mixed in, both opaque.
+  static func blend(_ a: Color, _ b: Color, _ t: Double) -> Color {
+    let (x, y) = (AglynAccent.rgb(a), AglynAccent.rgb(b))
+    return AglynAccent.color(AglynAccent.mix(x, y, t))
+  }
 }
 
 extension Color {
@@ -60,11 +73,11 @@ public struct AglynCountBadge: View {
   public var body: some View {
     if count > 0 {
       Text(count > 99 ? "99+" : "\(count)")
-        .font(.system(size: 10, weight: .bold, design: .rounded))
+        .font(.system(size: AglynShellMetrics.badge * 0.6, weight: .bold, design: .rounded))
         .monospacedDigit()
         .foregroundStyle(AglynColor.badgeText)
-        .padding(.horizontal, count > 9 ? 4 : 0)
-        .frame(minWidth: 17, minHeight: 17)
+        .padding(.horizontal, count > 9 ? 3 : 0)
+        .frame(minWidth: AglynShellMetrics.badge, minHeight: AglynShellMetrics.badge)
         .background(Capsule().fill(AglynColor.badge))
         .overlay(Capsule().strokeBorder(AglynColor.paper, lineWidth: 1.5))
         .accessibilityLabel("\(count) waiting")
@@ -85,7 +98,7 @@ public struct AglynWorkspaceTile: View {
 
   public init(
     name: String, logoURL: URL?, darkLogoURL: URL? = nil, colorHex: String?, selected: Bool, unread: Int = 0,
-    size: CGFloat = 40
+    size: CGFloat = AglynShellMetrics.tile
   ) {
     self.name = name
     self.logoURL = logoURL
@@ -96,7 +109,15 @@ public struct AglynWorkspaceTile: View {
     self.size = size
   }
 
-  private var radius: CGFloat { size * 0.25 }
+  /// The gap between a tile and its selection ring: half the ring box's extra width.
+  private var ringPadding: CGFloat {
+    size == AglynShellMetrics.tile ? (AglynShellMetrics.ringBox - AglynShellMetrics.tile) / 2 : 3
+  }
+
+  /// The rail's tile takes the shell's radius; any other size keeps the same proportion.
+  private var radius: CGFloat {
+    size == AglynShellMetrics.tile ? AglynShellMetrics.tileRadius : size * AglynShellMetrics.tileRadius / AglynShellMetrics.tile
+  }
 
   public var body: some View {
     ZStack(alignment: .topTrailing) {
@@ -108,11 +129,12 @@ public struct AglynWorkspaceTile: View {
         .overlay(
           RoundedRectangle(cornerRadius: radius, style: .continuous)
             .strokeBorder(AglynColor.divider, lineWidth: logoURL == nil ? 0 : 1))
-        .padding(3)
+        .padding(ringPadding)
+        // Selected: a 2-point ring in the accent on the ring box (the rail draws the 3-point bar at its edge).
         .overlay(
-          RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
-            .strokeBorder(selected ? (Color(aglynHex: colorHex) ?? AglynColor.primary) : .clear, lineWidth: 2))
-      AglynCountBadge(unread).offset(x: 4, y: -4)
+          RoundedRectangle(cornerRadius: radius + ringPadding, style: .continuous)
+            .strokeBorder(selected ? AglynColor.accentIcon : .clear, lineWidth: 2))
+      AglynCountBadge(unread).offset(x: 3, y: -3)
     }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(name)
@@ -123,7 +145,11 @@ public struct AglynWorkspaceTile: View {
   private var initials: some View {
     let fill = Color(aglynHex: colorHex) ?? AglynColor.neutralTile
     return Text(aglynInitials(name))
-      .font(.system(size: size * (aglynInitials(name).count > 1 ? 0.36 : 0.44), weight: .semibold, design: .rounded))
+      .font(
+        .system(
+          size: size == AglynShellMetrics.tile
+            ? AglynShellMetrics.tileInitials : size * (aglynInitials(name).count > 1 ? 0.36 : 0.44),
+          weight: .semibold))
       .foregroundStyle(colorHex == nil || Color.aglynPrefersLightText(colorHex) ? AglynTokens.light.primary.contrastText : AglynTokens.light.text.primary)
       .frame(width: size, height: size)
       .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(fill))
@@ -137,7 +163,7 @@ public struct AglynRailButton: View {
   let filled: Bool
   let size: CGFloat
 
-  public init(systemImage: String, caption: String? = nil, filled: Bool = false, size: CGFloat = 40) {
+  public init(systemImage: String, caption: String? = nil, filled: Bool = false, size: CGFloat = AglynShellMetrics.tile) {
     self.systemImage = systemImage
     self.caption = caption
     self.filled = filled
@@ -147,15 +173,18 @@ public struct AglynRailButton: View {
   public var body: some View {
     VStack(spacing: 3) {
       Image(systemName: systemImage)
-        .font(.system(size: size * 0.42, weight: .semibold))
-        .foregroundStyle(filled ? AglynColor.primaryContrast : AglynColor.secondaryText)
+        .font(.system(size: size == AglynShellMetrics.utility ? AglynShellMetrics.rowIcon - 2 : size * 0.42, weight: .semibold))
+        .foregroundStyle(filled ? AglynColor.primaryContrast : AglynColor.railText)
         .frame(width: size, height: size)
         .background(
-          RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
-            .fill(filled ? AglynColor.tint : AglynColor.paper.opacity(0.7)))
+          RoundedRectangle(
+            cornerRadius: size == AglynShellMetrics.utility
+              ? AglynShellMetrics.controlRadius : size * AglynShellMetrics.tileRadius / AglynShellMetrics.tile,
+            style: .continuous)
+            .fill(filled ? AglynColor.primary : AglynColor.paper.opacity(0.7)))
       if let caption {
-        Text(caption).font(.system(size: 11, weight: .medium)).monospacedDigit()
-          .foregroundStyle(AglynColor.secondaryText).lineLimit(1)
+        Text(caption).font(.system(size: AglynShellMetrics.railCaption + 1, weight: .medium)).monospacedDigit()
+          .foregroundStyle(AglynColor.railText).lineLimit(1)
       }
     }
   }
@@ -201,28 +230,36 @@ public struct AglynSidebarGroupHeader: View {
 
   public var body: some View {
     Button(action: action) {
-      HStack(spacing: 6) {
+      // A small label with its chevron after it (Figma Sidebar/Group header 6:84), its count on the right while folded.
+      HStack(spacing: 4) {
+        Text(title)
+          .font(.system(size: AglynShellMetrics.groupText, weight: .semibold))
+          .foregroundStyle(AglynColor.secondaryText)
         if foldable {
           Image(systemName: "chevron.right")
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: AglynShellMetrics.groupChevron * 0.7, weight: .semibold))
+            .foregroundStyle(AglynColor.secondaryText)
+            .frame(width: AglynShellMetrics.groupChevron, height: AglynShellMetrics.groupChevron)
             .rotationEffect(.degrees(open ? 90 : 0))
-            .frame(width: 12)
         }
-        Text(title).font(AglynFont.strongSubheadline)
         Spacer(minLength: 4)
+        // While folded, how many rows it holds, right-aligned in the secondary color (Figma Sidebar/Group header).
         if foldable && !open && hiddenCount > 0 {
-          Text("\(hiddenCount)").font(AglynFont.caption).monospacedDigit()
+          Text("\(hiddenCount)").font(.system(size: AglynShellMetrics.groupText + 1)).monospacedDigit()
+            .foregroundStyle(AglynColor.secondaryText)
+            .padding(.horizontal, 6)
         }
       }
-      .foregroundStyle(AglynColor.secondaryText)
+      .padding(.horizontal, AglynShellMetrics.rowPadding)
+      .frame(maxWidth: .infinity, minHeight: AglynShellMetrics.groupHeight, alignment: .leading)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .disabled(!foldable)
+    .padding(.horizontal, AglynShellMetrics.rowInset)
     .accessibilityLabel(title)
     .accessibilityValue(foldable ? (open ? "Open" : "Folded") : "")
     .accessibilityHint(foldable ? (open ? "Folds the group" : "Opens the group") : "")
-    .animation(.easeOut(duration: 0.15), value: open)
   }
 }
 
@@ -268,5 +305,71 @@ public struct AglynColorSwatch: View {
     .overlay(Circle().strokeBorder(AglynColor.divider, lineWidth: 1))
     .padding(3)
     .overlay(Circle().strokeBorder(selected ? AglynColor.tint : .clear, lineWidth: 2))
+  }
+}
+
+/// The lines on screen in Home's "Needs you", by id: a line is there only while something waits, so Home says "Nothing
+/// needs you right now" when none is (the Kotlin kit's `NeedsYouLines`).
+@MainActor
+@Observable
+public final class AglynNeedsYouLines {
+  public private(set) var shown: Set<String> = []
+  public init() {}
+  public var any: Bool { !shown.isEmpty }
+  func appear(_ id: String) { shown.insert(id) }
+  func disappear(_ id: String) { shown.remove(id) }
+}
+
+private struct NeedsYouLinesKey: EnvironmentKey {
+  static let defaultValue: AglynNeedsYouLines? = nil
+}
+
+extension EnvironmentValues {
+  /// Home's "Needs you" lines, for the lines to report themselves to.
+  public var aglynNeedsYou: AglynNeedsYouLines? {
+    get { self[NeedsYouLinesKey.self] }
+    set { self[NeedsYouLinesKey.self] = newValue }
+  }
+}
+
+/// One thing waiting on the person (Home's "Needs you"): what it is ("3 orders to get ready"), the list it opens,
+/// already filtered. A plugin draws one only while something waits; nothing is drawn for nothing.
+public struct AglynNeedsYouLine: View {
+  @Environment(\.aglynNeedsYou) private var lines
+  let id: String
+  let systemImage: String
+  let text: String
+  let place: String
+  let tone: AglynTone
+  let action: () -> Void
+
+  public init(
+    id: String, systemImage: String, text: String, place: String, tone: AglynTone = .neutral, action: @escaping () -> Void
+  ) {
+    self.id = id
+    self.systemImage = systemImage
+    self.text = text
+    self.place = place
+    self.tone = tone
+    self.action = action
+  }
+
+  public var body: some View {
+    Button(action: action) {
+      HStack(spacing: 12) {
+        IconBadge(systemImage, tone: tone == .neutral ? .info : tone, size: 28)
+        Text(text).font(AglynFont.body).foregroundStyle(.primary).multilineTextAlignment(.leading)
+        Spacer(minLength: 8)
+        Text(place).font(AglynFont.caption).foregroundStyle(.secondary)
+        Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 10)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.aglynRow)
+    .onAppear { lines?.appear(id) }
+    .onDisappear { lines?.disappear(id) }
+    .accessibilityIdentifier("needs-you-\(id)")
   }
 }

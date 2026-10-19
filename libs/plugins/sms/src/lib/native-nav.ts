@@ -39,7 +39,10 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       label: 'Customer texts',
       icon: nativeNavIcon('message', 'sms'),
       screen: 'sms.texts',
-      pluginId: 'sms',
+      // The switch lives on the store's Customer notifications card (commerce's `settings/store`), and `sms` is
+      // infrastructure with no catalog entry or switch, so no site ever has it on: gated on it, the row never showed.
+      // The screen says itself when this install has no text provider.
+      pluginId: 'commerce',
       order: 40,
       keywords: ['sms'],
       console: nativeNavRef('nativeOnly', 'sms.texts'),

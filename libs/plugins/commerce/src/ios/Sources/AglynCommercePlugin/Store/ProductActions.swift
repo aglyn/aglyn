@@ -169,6 +169,7 @@ struct ProductKeysSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("License keys — \(productName)")
+      .aglynScreenTitle("License keys — \(productName)")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

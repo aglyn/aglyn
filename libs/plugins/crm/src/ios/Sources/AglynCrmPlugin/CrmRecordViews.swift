@@ -22,6 +22,9 @@ struct RecordsSection: View {
   /// An address to open the one contact of (`contactsListSeed`'s `openEmail`): the list filters on it and moves on
   /// to the record when exactly one matches; no match leaves the filtered list on screen.
   var openEmail: String?
+  /// Opened from Create new (`new=1`): the new-record sheet comes up once the list is on screen.
+  var startNew = false
+  @State private var startedNew = false
   @State private var list: LiveQueryList<CrmRow>?
   @State private var openedByEmail = false
   @State private var filterID = ""
@@ -63,24 +66,20 @@ struct RecordsSection: View {
         if wide { selection = id } else { context.navigate(kind.detailScreen, [kind.param: id]) }
       }
     }
-    .searchable(text: $searchText, prompt: "Search \(kind.plural.lowercased())")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search \(kind.plural.lowercased())", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      if scope.canWrite {
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-            creating = true
-          } label: {
-            Label("New \(kind.singular.lowercased())", systemImage: "plus")
-          }
-          .keyboardShortcut("n", modifiers: .command)
-          .accessibilityIdentifier("crm-new-\(kind.collection)")
-        }
-      }
-    }
+    // Shown to everyone, and off for a member whose role cannot add records.
+    .aglynPrimaryAction(
+      id: "crm-new-\(kind.collection)", "New \(kind.singular.lowercased())", systemImage: "plus", enabled: scope.canWrite,
+      shortcut: KeyboardShortcut("n", modifiers: .command)
+    ) { creating = true }
     .sheet(isPresented: $creating) {
       CreateRecordSheet(kind: kind, scope: scope, api: api, reference: reference) { id in selection = id }
+    }
+    .onAppear {
+      guard startNew, !startedNew, scope.canWrite else { return }
+      startedNew = true
+      creating = true
     }
     .task(id: "\(filterID)|\(search)") {
       if filterID.isEmpty { filterID = filters.first?.id ?? "" }
@@ -101,7 +100,7 @@ struct RecordsSection: View {
           AglynChoiceChip(filter.label, selected: filterID == filter.id) { filterID = filter.id }
         }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
     }
   }
@@ -145,7 +144,7 @@ struct RecordsSection: View {
         if selectable {
           CrmRowView(row: row, reference: reference).aglynSelectableRow(row.id, selection: $selection)
         } else {
-          NavigationLink {
+          AglynPushLink {
             RecordDetail(context: context, kind: kind, id: row.id, scope: scope, api: api, reference: reference)
           } label: {
             CrmRowView(row: row, reference: reference)
@@ -280,11 +279,12 @@ struct RecordDetail: View {
       if let notice { AglynNotice(notice, tone: .success) { self.notice = nil } }
       if let error { AglynNotice(error, tone: .error) { self.error = nil } }
       Section {
-        // The kit's detail head (spec 7): the record's symbol, name, line and status.
-        AglynDetailHeader(
-          row.title, subtitle: row.subtitle, systemImage: kind.symbol, status: row.chip.map { ($0, row.tone) })
+        // The record's head (the calmer screens): the next step for this record as the one filled button, the rest in ⋯.
+        let acts = scope.canWrite ? recordActions(row) : (primary: nil, more: [])
+        AglynRecordHeader(
+          row.title, subtitle: row.subtitle, systemImage: kind.symbol, status: row.chip.map { ($0, row.tone) },
+          primary: acts.primary, more: acts.more)
         if kind == .deal { DealStagePath(pipeline: pipeline, stageID: document.string("stageId"), status: document.string("status")) }
-        if scope.canWrite { actionButtons(row) }
       }
       Section("Details") {
         // The fields that hold something; Edit holds every one.
@@ -315,6 +315,11 @@ struct RecordDetail: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(row.title)
+    .aglynScreenTitle(row.title)
+    #if os(iOS)
+      // The record's head already shows the name large.
+      .navigationBarTitleDisplayMode(.inline)
+    #endif
     .sheet(item: Binding(get: { action.flatMap { $0.confirmsInAlert ? nil : $0 } }, set: { action = $0 })) { action in
       sheet(action, row: row, fields: fields, values: values)
     }
@@ -368,37 +373,38 @@ struct RecordDetail: View {
     }
   }
 
-  private func actionButtons(_ row: CrmRow) -> some View {
-    var buttons: [(String, String, RecordAction)] = [("Edit", "pencil", .edit), ("Log activity", "note.text", .log)]
-    if row.data["email"] != nil || kind == .deal { buttons.append(("Email", "envelope", .email)) }
-    buttons.append(("New task", "checklist", .task))
+  /// What the record's head offers: the next step for its state as the one filled button (Convert a qualified lead,
+  /// Email a contact, Move an open deal's stage, else Log activity), and every other act in ⋯, Remove or Delete last.
+  private func recordActions(_ row: CrmRow) -> (primary: AglynRecordAction?, more: [AglynRecordAction]) {
+    var acts: [(String, String, RecordAction)] = [("Edit", "pencil", .edit), ("Log activity", "note.text", .log)]
+    if row.data["email"] != nil || kind == .deal { acts.append(("Email", "envelope", .email)) }
+    acts.append(("New task", "checklist", .task))
+    let status = row.data["status"] as? String
     switch kind {
     case .lead:
-      buttons.append(("Status", "tag", .status))
-      if row.data["convertedContactId"] == nil { buttons.append(("Convert", "arrow.right.circle", .convert)) }
-      if row.data["status"] as? String != "unqualified" { buttons.append(("Unqualify", "xmark.circle", .unqualify)) }
-    case .contact: buttons.append(("Lifecycle stage", "tag", .stage))
+      acts.append(("Status", "tag", .status))
+      if row.data["convertedContactId"] == nil { acts.append(("Convert", "arrow.right.circle", .convert)) }
+      if status != "unqualified" { acts.append(("Unqualify", "xmark.circle", .unqualify)) }
+    case .contact: acts.append(("Lifecycle stage", "tag", .stage))
     case .deal:
-      let status = row.data["status"] as? String ?? "open"
-      if status == "open" {
-        buttons += [("Move stage", "rectangle.split.3x1", .move), ("Won", "checkmark.seal", .won), ("Lost", "xmark.seal", .lost)]
+      if (status ?? "open") == "open" {
+        acts += [("Move stage", "rectangle.split.3x1", .move), ("Won", "checkmark.seal", .won), ("Lost", "xmark.seal", .lost)]
       }
     case .company: break
     }
-    buttons.append((kind == .contact ? "Remove" : "Delete", "trash", .delete))
-    return ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: AglynSpace.one) {
-        ForEach(buttons, id: \.2) { title, symbol, action in
-          Button(role: action == .delete ? .destructive : nil) {
-            self.action = action
-          } label: {
-            Label(title, systemImage: symbol)
-          }
-          .buttonStyle(.bordered)
-          .accessibilityIdentifier("crm-action-\(action.rawValue)")
-        }
+    acts.append((kind == .contact ? "Remove" : "Delete", "trash", .delete))
+    let next: RecordAction =
+      switch kind {
+      case .lead: status == "qualified" && row.data["convertedContactId"] == nil ? .convert : .log
+      case .contact: row.data["email"] != nil ? .email : .log
+      case .deal: (status ?? "open") == "open" ? .move : .log
+      case .company: .log
       }
+    let all = acts.map { title, symbol, act in
+      AglynRecordAction("crm-action-\(act.rawValue)", title, systemImage: symbol, destructive: act == .delete) { action = act }
     }
+    let primary = all.first { $0.id == "crm-action-\(next.rawValue)" }
+    return (primary, all.filter { $0.id != primary?.id })
   }
 
   @ViewBuilder
@@ -841,7 +847,7 @@ struct CreateRecordSheet: View {
           }
           Picker("Stage", selection: $stageID) { ForEach(pipeline.openStages) { Text($0.name).tag($0.id) } }
         }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .onAppear {
           if pipelineID.isEmpty { pipelineID = pipeline.id }
           if stageID.isEmpty { stageID = pipeline.openStages.first?.id ?? "" }

@@ -21,6 +21,7 @@ import { mdiCalendarMonthOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerEventsRecordRoutes } from './model/events-record-routes'
+import { eventCalendarUpgradeMessage } from './model/upgrade-notice'
 import {
   EVENTS_TRANSFER_LABEL,
   EVENTS_TRANSFER_RESOURCE,
@@ -46,17 +47,10 @@ export function registerEventsCalendarConsole(): void {
     pluginId: BUNDLE_ID,
     displayName: 'Events Calendar',
     featureFlag: 'eventCalendar',
-    // `eventCalendar` is false on every plan — it is sold as a per-org
-    // add-on and nothing else — so the shell's generic "not included in your
-    // current plan" would send a reader to compare tiers that all say no.
-    // The price comes from the constant the invoice is built from, so this
-    // sentence cannot drift away from what a purchase actually charges.
+    // `eventCalendar` is false on every plan, so the notice is the add-on's
+    // own sentence, priced from the constant the invoice is built from.
     upgradeNotice: {
-      message:
-        'The Event Calendar is a paid add-on ' +
-        `($${Aglyn.EVENT_CALENDAR_ADDON_MONTHLY_USD}/mo for your whole ` +
-        `workspace, supported directly by ${Aglyn.PLATFORM_BRAND_NAME}). ` +
-        'Enable it from Billing → Add-ons.',
+      message: eventCalendarUpgradeMessage(Aglyn.EVENT_CALENDAR_ADDON_MONTHLY_USD),
       billingAnchor: 'addons',
     },
     navItems: [

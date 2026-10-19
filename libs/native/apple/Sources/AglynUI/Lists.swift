@@ -39,7 +39,7 @@ public struct AglynChipRow: View {
           .accessibilityIdentifier("chip-\(option.id)")
         }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
     }
     .sensoryFeedback(.selection, trigger: selected)

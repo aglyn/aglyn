@@ -204,6 +204,7 @@ private struct FormulaBuilderSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Build formula")
+      .aglynScreenTitle("Build formula")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

@@ -45,7 +45,7 @@ struct SettingsView: View {
         }
       }
       Section {
-        NavigationLink {
+        AglynPushLink {
           NotificationSettingsView()
         } label: {
           AglynRow("Notifications and sound", subtitle: "What reaches you, where, and how it sounds", systemImage: "bell.badge")
@@ -58,7 +58,7 @@ struct SettingsView: View {
         if !screens.isEmpty {
           Section("Register") {
             ForEach(screens, id: \.id) { screen in
-              NavigationLink {
+              AglynPushLink {
                 // The Mac's Settings window has no shell navigation of its own.
                 PluginScreenView(screenID: screen.id).environment(navigation ?? ShellNavigation())
               } label: {

@@ -34,6 +34,9 @@ enum FormDetailAction {
 struct FormsScreen: View {
   let context: NativePluginContext
   var initialFormID: String?
+  /// Opened from Create new (`new=1`): the new-form sheet comes up once the person's site role allows it.
+  var startNew = false
+  @State private var startedNew = false
 
   #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -77,26 +80,18 @@ struct FormsScreen: View {
       }
     }
     .navigationTitle("Forms")
-    .searchable(text: $searchText, prompt: "Search forms")
+    .aglynScreenTitle("Forms")
+    .aglynSearchable(text: $searchText, prompt: "Search forms")
     .onChange(of: searchText) { _, text in model.type(text) }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          runner.clear()
-          sheet = .create
-        } label: {
-          Label("New form", systemImage: "plus")
-        }
-        .disabled(!role.canEditContent)
-        .keyboardShortcut("n", modifiers: .command)
-        .accessibilityIdentifier("add-form")
-      }
-      // Create with AI and anything else a plugin puts beside New form (the console's `hostForms` zone).
-      ToolbarItemGroup(placement: .primaryAction) {
-        SlotWidgets(context: context, slot: ListCreateZone.forms, placement: .header)
-      }
+    .aglynPrimaryAction(id: "add-form", "New form", systemImage: "plus", enabled: role.canEditContent, shortcut: KeyboardShortcut("n", modifiers: .command), help: AglynRoleReason.site("creating forms")) {
+      runner.clear()
+      sheet = .create
     }
-    .navigationDestination(item: $pushed) { id in detail(id, titled: true) }
+    // Create with AI and anything else a plugin puts beside New form (the console's `hostForms` zone).
+    .aglynScreenToolbar(id: "forms-create") {
+      SlotWidgets(context: context, slot: ListCreateZone.forms, placement: .header)
+    }
+    .aglynPushDestination(item: $pushed) { id in detail(id, titled: true) }
     .safeAreaInset(edge: .bottom) {
       if sheet == nil && exporting == nil, let notice = runner.notice {
         AglynNotice(notice, tone: .success) { runner.clear() }
@@ -132,6 +127,11 @@ struct FormsScreen: View {
           ? "It joins the forms in use again."
           : "It leaves the forms in use. Its submissions are kept, and you can bring it back.")
     }
+    .onChange(of: role.canEditContent, initial: true) { _, canEdit in
+      guard startNew, !startedNew, canEdit else { return }
+      startedNew = true
+      sheet = .create
+    }
     .task(id: context.hostID) {
       role.start(context)
       model.start(context.firestore, hostID: context.hostID)
@@ -161,7 +161,7 @@ struct FormsScreen: View {
             .accessibilityIdentifier("forms-status-\(status.rawValue)")
         }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
     }
   }
@@ -171,10 +171,10 @@ struct FormsScreen: View {
     VStack(spacing: 0) {
       chips
       if sheet == nil, exporting == nil, retiring == nil, let error = runner.error {
-        AglynNotice(error, tone: .error) { runner.clear() }.padding(.horizontal, AglynSpace.two)
+        AglynNotice(error, tone: .error) { runner.clear() }.aglynContentEdges()
       }
       if let notice = model.notice {
-        AglynNotice(notice, tone: .info).padding(.horizontal, AglynSpace.two)
+        AglynNotice(notice, tone: .info).aglynContentEdges()
       }
       content(selectable: selectable)
     }
@@ -386,6 +386,7 @@ struct FormNameSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(title)
+      .aglynScreenTitle(title)
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

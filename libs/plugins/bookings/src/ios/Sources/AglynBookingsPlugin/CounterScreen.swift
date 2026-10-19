@@ -73,6 +73,7 @@ struct CounterBookingsScreen: View {
     }
     .aglynListBackground()
     .navigationTitle("Today's bookings")
+    .aglynScreenTitle("Today's bookings")
     .accessibilityIdentifier("pos-counter-bookings")
     .task(id: context.hostID) {
       guard let hostID = context.hostID else { return }

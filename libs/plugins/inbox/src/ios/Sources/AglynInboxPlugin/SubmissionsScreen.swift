@@ -31,12 +31,15 @@ struct SubmissionsScreen: View {
   @State private var site = ObservedDocument()
   @State private var forms = LiveQueryList(pageSize: 50) { (id: $0.id, name: inboxFormName($0)) }
 
-  init(context: NativePluginContext, formID: String?, formName: String?, initialSubmissionID: String?) {
+  /// `initialRead`: the Read filter it opens on (`read=false` from Home's line: Unread).
+  init(context: NativePluginContext, formID: String?, formName: String?, initialSubmissionID: String?, initialRead: String? = nil) {
     self.context = context
     self.formID = formID
     self.formName = formName
     self.initialSubmissionID = initialSubmissionID
-    _model = State(initialValue: SubmissionsModel(formID: formID))
+    let model = SubmissionsModel(formID: formID)
+    model.read = initialRead == "false" || initialRead == "true" ? initialRead : nil
+    _model = State(initialValue: model)
   }
 
   private var isWide: Bool {
@@ -90,11 +93,11 @@ struct SubmissionsScreen: View {
       }
     }
     .navigationTitle(title)
-    .searchable(text: $searchText, prompt: "Search submissions")
+    .aglynScreenTitle(title)
+    .aglynSearchable(text: $searchText, prompt: "Search submissions")
     .onChange(of: searchText) { _, text in model.type(text) }
-    .toolbar {
+    .aglynScreenToolbar(id: "submissions") {
       if !wholeWorkspace {
-      ToolbarItem(placement: .primaryAction) {
         Button {
           runner.clear()
           exporting = TransferExportRequest(
@@ -108,9 +111,8 @@ struct SubmissionsScreen: View {
         .keyboardShortcut("e", modifiers: [.command, .shift])
         .accessibilityIdentifier("submissions-export")
       }
-      }
     }
-    .navigationDestination(item: $pushed) { id in detail(id, titled: true) }
+    .aglynPushDestination(item: $pushed) { id in detail(id, titled: true) }
     .safeAreaInset(edge: .bottom) {
       if exporting == nil, replying == nil, let notice = runner.notice {
         AglynNotice(notice, tone: .success) { runner.clear() }
@@ -193,7 +195,7 @@ struct SubmissionsScreen: View {
           .accessibilityIdentifier("inbox-form-pick")
         }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
     }
   }
@@ -203,10 +205,10 @@ struct SubmissionsScreen: View {
     VStack(spacing: 0) {
       chips
       if exporting == nil, replying == nil, deleting == nil, let error = runner.error {
-        AglynNotice(error, tone: .error) { runner.clear() }.padding(.horizontal, AglynSpace.two)
+        AglynNotice(error, tone: .error) { runner.clear() }.aglynContentEdges()
       }
       if let notice = model.notice {
-        AglynNotice(notice, tone: .info).padding(.horizontal, AglynSpace.two)
+        AglynNotice(notice, tone: .info).aglynContentEdges()
       }
       content(selectable: selectable)
     }

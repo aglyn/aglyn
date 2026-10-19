@@ -804,7 +804,12 @@ const splashVectorOpen = (indent = '') =>
   `${indent}    android:width="${SPLASH_CANVAS}dp"\n${indent}    android:height="${SPLASH_CANVAS}dp"\n` +
   `${indent}    android:viewportWidth="${SPLASH_CANVAS}"\n${indent}    android:viewportHeight="${SPLASH_CANVAS}">\n`
 
-/** The splash icon before Android 12 (the compat splash draws it still): the mark at rest. */
+/**
+ * The splash icon at rest: before Android 12 (the compat splash draws it still), and on Android 12–13 (API 31–33),
+ * whose SystemUI draws an animatable splash icon in a SurfaceControlViewHost. That host's first-frame sync can fail
+ * ("SurfaceSyncer: Failed to find sync for id=0"), which left the splash ground without its mark, or the launcher,
+ * for seconds before the app's process ran (AGL-3946, recorded at 60 fps on an API 33 tablet).
+ */
 export function splashIconStatic(read) {
   return (
     `<?xml version="1.0" encoding="utf-8"?>\n${GENERATED_XML(LAUNCH_LOGO.light)}\n` +
@@ -813,7 +818,7 @@ export function splashIconStatic(read) {
 }
 
 /**
- * The Android 12+ animated splash icon: the frame draws in, then the pen
+ * The Android 14+ animated splash icon: the frame draws in, then the pen
  * (spec: frame 0–450 ms, pen 250–700 ms, 800 ms in all).
  */
 export function splashIconAnimated(read) {
@@ -869,6 +874,10 @@ export function authOutputs(read) {
       },
       {
         file: `${res}/drawable-v31/splash_icon.xml`,
+        content: splashIconStatic(read),
+      },
+      {
+        file: `${res}/drawable-v34/splash_icon.xml`,
         content: splashIconAnimated(read),
       },
     )

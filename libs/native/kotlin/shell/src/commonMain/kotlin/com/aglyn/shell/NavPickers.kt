@@ -63,6 +63,7 @@ private const val PICKER_PAGE = 50
  * The scope picker, in two steps: a workspace (search, Pinned, Recent, everyone else A to Z 50 at a time), then one of
  * its sites (recent first, the whole workspace, View all sites, Create site). A dialog on wide windows, the whole screen on
  * a phone. [twoStep]: picking a workspace goes on to its sites (phones); otherwise it opens the workspace at once.
+ * [onOpenWorkspace]: a workspace opened whole lands on its Home, as a rail tile does, never on a page that needs a site.
  */
 @Composable
 internal fun ScopePicker(
@@ -72,6 +73,7 @@ internal fun ScopePicker(
   fullScreen: Boolean,
   twoStep: Boolean,
   onPinFull: (String) -> Unit,
+  onOpenWorkspace: () -> Unit,
   onOpenScreen: (String) -> Unit,
 ) {
   val step = chrome.picker ?: return
@@ -102,9 +104,9 @@ internal fun ScopePicker(
         when (step) {
           PickerStep.WORKSPACE -> WorkspaceStep(services, workspace, onPinFull, { screen -> close(); onOpenScreen(screen) }) { org ->
             services.workspace.selectOrg(org.id)
-            if (twoStep) chrome.picker = PickerStep.SITE else close()
+            if (twoStep) chrome.picker = PickerStep.SITE else { close(); onOpenWorkspace() }
           }
-          PickerStep.SITE -> SiteStep(services, workspace, close, onOpenScreen)
+          PickerStep.SITE -> SiteStep(services, workspace, close, { close(); onOpenWorkspace() }, onOpenScreen)
         }
       }
     }
@@ -211,14 +213,15 @@ private fun WorkspaceRow(
         modifier = Modifier.testTag("picker-pin-${org.id}").semantics { contentDescription = if (isPinned) "Unpin ${org.name}" else "Pin ${org.name}" },
       ) {
         Icon(AglynIcons.named("keep"), null, Modifier.size(16.dp))
-        Text(if (isPinned) " Pinned" + if (index in 0..4) "  ${shortcutLabel(index + 1)}" else "" else " Pin", style = MaterialTheme.typography.labelMedium)
+        val showKeys = LocalShowShortcuts.current
+        Text(if (isPinned) " Pinned" + if (index in 0..4 && showKeys) "  ${shortcutLabel(index + 1)}" else "" else " Pin", style = MaterialTheme.typography.labelMedium)
       }
     },
   ) { onPick(org) }
 }
 
 @Composable
-private fun SiteStep(services: ShellServices, workspace: WorkspaceState, close: () -> Unit, onOpenScreen: (String) -> Unit) {
+private fun SiteStep(services: ShellServices, workspace: WorkspaceState, close: () -> Unit, openWhole: () -> Unit, onOpenScreen: (String) -> Unit) {
   val prefs by services.accountPrefs.state.collectAsState()
   var query by remember { mutableStateOf("") }
   val orgId = workspace.org?.id
@@ -242,7 +245,7 @@ private fun SiteStep(services: ShellServices, workspace: WorkspaceState, close: 
           selected = workspace.site == null,
           tag = "picker-whole-workspace",
           leading = { Icon(AglynIcons.named("grid_view"), null, Modifier.size(36.dp).padding(6.dp)) },
-        ) { services.workspace.selectWholeWorkspace(); close() }
+        ) { services.workspace.selectWholeWorkspace(); openWhole() }
         HorizontalDivider(Modifier.padding(vertical = 6.dp))
         PickerRow("View all sites", null, false, "picker-all-sites", leading = { Icon(AglynIcons.named("grid_view"), null, Modifier.size(24.dp)) }) {
           services.workspace.selectWholeWorkspace(); close(); onOpenScreen("site.sites")
@@ -338,7 +341,7 @@ private fun AddWorkspaceRow(services: ShellServices) {
       )
     },
     confirmButton = {
-      Button(
+      Button(shape = com.aglyn.ui.controlShape(), 
         enabled = name.isNotBlank() && !busy,
         onClick = {
           busy = true

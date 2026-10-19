@@ -64,6 +64,13 @@ describe('mediaStoredFacts (AGL-3331)', () => {
     expect(facts).toContainEqual({ label: 'Size', value: '900 B' })
   })
 
+  it('leads with the ID the library is searched by', () => {
+    expect(mediaStoredFacts({ $id: 'FsZiR8vTA3', contentType: 'image/png' })[0]).toEqual({
+      label: 'ID',
+      value: 'FsZiR8vTA3',
+    })
+  })
+
   it('names an API upload and nobody else', () => {
     expect(mediaStoredFacts({ uploadedBy: 'api:key_1' })).toContainEqual({
       label: 'Uploaded by',

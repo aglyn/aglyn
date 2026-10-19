@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
  * The navigation shell's colors (the rail, the sidebar, the title bar, badges and the color picks), derived once from
@@ -43,14 +44,16 @@ data class ShellColors(
 /** The brand gradient's middle stop (242°, #00B0FF → #7A5CF0 → #E040FB), the only brand color with no palette intent. */
 private val BrandViolet = Color(0xFF7A5CF0)
 
-fun shellColors(scheme: ColorScheme, palette: AglynPalette): ShellColors {
+fun shellColors(scheme: ColorScheme, palette: AglynPalette, surfaces: ThemeSurfaces? = null): ShellColors {
   val dark = scheme.background.luminance() < 0.5f
-  val rail = lerp(scheme.background, palette.tertiary.main, if (dark) 0.18f else 0.07f)
+  val rail = surfaces?.rail ?: lerp(scheme.background, palette.tertiary.main, if (dark) 0.18f else 0.07f)
+  // A rail darker than the page it sits on (Ocean's) takes light ink.
+  val onRail = if (rail.luminance() < 0.25f && !dark) Color.White.copy(alpha = 0.86f) else scheme.onSurfaceVariant
   return ShellColors(
     rail = rail,
-    onRail = scheme.onSurfaceVariant,
+    onRail = onRail,
     sidebar = scheme.surfaceContainerLow,
-    titleBar = scheme.surfaceContainerLow,
+    titleBar = surfaces?.titleBar ?: scheme.surfaceContainerLow,
     selected = scheme.primaryContainer,
     onSelected = scheme.onPrimaryContainer,
     badge = palette.secondary.main,
@@ -105,3 +108,127 @@ val RailWidth = 68.dp
 
 /** The sidebar's width. */
 val SidebarWidth = 248.dp
+
+/**
+ * The shell's sizes for the kind of window it is in (the Figma Rail / Sidebar components' Size variant): Compact on the
+ * desktop (pointer, Mac-native sizes), Touch on tablets. Phones have no rail and keep their own sizes.
+ */
+@Immutable
+data class ShellMetrics(
+  val compact: Boolean,
+  val railWidth: androidx.compose.ui.unit.Dp,
+  /** A workspace tile, and its corner radius. */
+  val tile: androidx.compose.ui.unit.Dp,
+  val tileRadius: androidx.compose.ui.unit.Dp,
+  val badge: androidx.compose.ui.unit.Dp,
+  /** The rail's section labels (PINNED, RECENT), in caps. */
+  val railLabel: androidx.compose.ui.unit.TextUnit,
+  val tileGap: androidx.compose.ui.unit.Dp,
+  /** Create new and the account photo at the rail's foot. */
+  val utility: androidx.compose.ui.unit.Dp,
+  val sidebarWidth: androidx.compose.ui.unit.Dp,
+  /** A sidebar row: height, text, icon, its selected pill's radius and the inset around it. */
+  val row: androidx.compose.ui.unit.Dp,
+  val rowText: androidx.compose.ui.unit.TextUnit,
+  val rowIcon: androidx.compose.ui.unit.Dp,
+  val pillRadius: androidx.compose.ui.unit.Dp,
+  val rowInset: androidx.compose.ui.unit.Dp,
+  /** The workspace / site header's logo and its radius. */
+  val headerLogo: androidx.compose.ui.unit.Dp,
+  val headerLogoRadius: androidx.compose.ui.unit.Dp,
+  val titleBar: androidx.compose.ui.unit.Dp,
+  /** Controls (buttons, fields, the search box), cards, and sheets or popovers. */
+  val controlRadius: androidx.compose.ui.unit.Dp,
+  val cardRadius: androidx.compose.ui.unit.Dp,
+  val sheetRadius: androidx.compose.ui.unit.Dp,
+  /** A title-bar icon button and its icon. */
+  val barButton: androidx.compose.ui.unit.Dp,
+  val barIcon: androidx.compose.ui.unit.Dp,
+  /** The selected tile's ring box and radius, and the rail's left bar beside it. */
+  val ringBox: androidx.compose.ui.unit.Dp,
+  val ringRadius: androidx.compose.ui.unit.Dp,
+  val selectionBar: androidx.compose.ui.unit.Dp,
+  /** Create new's corner radius, and the account photo. */
+  val utilityRadius: androidx.compose.ui.unit.Dp,
+  val avatar: androidx.compose.ui.unit.Dp,
+  /** A sidebar group's heading row, and a tile's initials. */
+  val groupHeader: androidx.compose.ui.unit.Dp,
+  val tileInitial: androidx.compose.ui.unit.TextUnit,
+  /** The sidebar's own inset around its rows (Figma Sidebar's Header and Rows padding). */
+  val sidebarPad: androidx.compose.ui.unit.Dp = 8.dp,
+  /** A top-level row's leading padding and the gap between its icon and text (Figma Sidebar/Row). */
+  val rowPad: androidx.compose.ui.unit.Dp = 8.dp,
+  val rowGap: androidx.compose.ui.unit.Dp = 8.dp,
+  /** A group's rows sit this much further in than its heading, so what belongs to what reads at a glance. */
+  val groupIndent: androidx.compose.ui.unit.Dp = 12.dp,
+  /** A group heading's chevron, after its label. */
+  val groupChevron: androidx.compose.ui.unit.Dp = 12.dp,
+  /** A divider's room above and below its hairline. */
+  val dividerPad: androidx.compose.ui.unit.Dp = 4.dp,
+  /** A site's name in its own sidebar's title row, and a settings mode's title. */
+  val siteTitleText: androidx.compose.ui.unit.TextUnit = 15.sp,
+  val modeTitleText: androidx.compose.ui.unit.TextUnit = 17.sp,
+  /** The workspace header's logo and its radius (Figma Sidebar, Scope = Workspace: 20 r5 Compact, 28 r8 Touch). */
+  val workspaceLogo: androidx.compose.ui.unit.Dp = 20.dp,
+  val workspaceLogoRadius: androidx.compose.ui.unit.Dp = 5.dp,
+)
+
+val CompactShellMetrics = ShellMetrics(
+  compact = true, railWidth = 56.dp, tile = 32.dp, tileRadius = 8.dp, badge = 14.dp, railLabel = 9.sp, tileGap = 8.dp, utility = 28.dp,
+  sidebarWidth = 248.dp, row = 28.dp, rowText = 13.sp, rowIcon = 16.dp, pillRadius = 6.dp, rowInset = 8.dp, headerLogo = 20.dp,
+  headerLogoRadius = 5.dp, titleBar = 52.dp, controlRadius = 6.dp, cardRadius = 10.dp, sheetRadius = 12.dp, barButton = 28.dp, barIcon = 16.dp,
+  ringBox = 38.dp, ringRadius = 11.dp, selectionBar = 18.dp, utilityRadius = 6.dp, avatar = 24.dp, groupHeader = 24.dp, tileInitial = 13.sp,
+  sidebarPad = 8.dp, rowPad = 8.dp, rowGap = 8.dp, groupIndent = 12.dp, groupChevron = 12.dp, dividerPad = 4.dp, siteTitleText = 15.sp, modeTitleText = 17.sp,
+)
+
+val TouchShellMetrics = ShellMetrics(
+  compact = false, railWidth = 64.dp, tile = 40.dp, tileRadius = 10.dp, badge = 18.dp, railLabel = 10.sp, tileGap = 8.dp, utility = 36.dp,
+  sidebarWidth = 248.dp, row = 36.dp, rowText = 15.sp, rowIcon = 18.dp, pillRadius = 8.dp, rowInset = 8.dp, headerLogo = 20.dp,
+  headerLogoRadius = 6.dp, titleBar = 56.dp, controlRadius = 8.dp, cardRadius = 12.dp, sheetRadius = 16.dp, barButton = 40.dp, barIcon = 20.dp,
+  ringBox = 48.dp, ringRadius = 14.dp, selectionBar = 22.dp, utilityRadius = 10.dp, avatar = 32.dp, groupHeader = 28.dp, tileInitial = 16.sp,
+  sidebarPad = 12.dp, rowPad = 10.dp, rowGap = 10.dp, groupIndent = 12.dp, groupChevron = 14.dp, dividerPad = 6.dp, siteTitleText = 16.sp, modeTitleText = 18.sp,
+  workspaceLogo = 28.dp, workspaceLogoRadius = 8.dp,
+)
+
+val LocalShellMetrics = staticCompositionLocalOf { TouchShellMetrics }
+
+/**
+ * The shell's motion (Figma Motion 121:6163, timings 121:6714), the same on Apple and Android: drilling in and out of a scope
+ * is a slide with a fade on a ~250 ms spring, a group folds in 200 ms, the selection pill moves on a 250 ms spring, another
+ * workspace cross-fades in 150 ms. Reduce Motion keeps the cross-fades only.
+ */
+object ShellMotion {
+  const val DRILL_MS = 250
+  const val FOLD_MS = 200
+  const val PILL_MS = 250
+  const val CROSS_FADE_MS = 150
+  /** The drill's spring: about 250 ms with a little bounce (SwiftUI's `.spring(duration: 0.25, bounce: 0.1)`). */
+  fun <T> drill() = androidx.compose.animation.core.spring<T>(dampingRatio = 0.9f, stiffness = 632f)
+  /** The pill's spring (`.spring(duration: 0.25, bounce: 0.15)`). */
+  fun <T> pill() = androidx.compose.animation.core.spring<T>(dampingRatio = 0.85f, stiffness = 632f)
+  fun <T> fold() = androidx.compose.animation.core.tween<T>(FOLD_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+  fun <T> crossFade() = androidx.compose.animation.core.tween<T>(CROSS_FADE_MS)
+}
+
+/** The desktop's radii (Compact): fields and controls 6, cards 10, menus, sheets and dialogs 12. */
+val CompactShapes = androidx.compose.material3.Shapes(
+  extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+  small = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+  medium = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+  large = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+  extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+)
+
+/** The shell's sizes in effect. */
+val shellMetrics: ShellMetrics
+  @Composable @ReadOnlyComposable get() = LocalShellMetrics.current
+
+/**
+ * A button's shape in the window it is in: the Compact density's 6 dp corners on the desktop (Figma Button, Density =
+ * Compact), the Touch pill elsewhere.
+ */
+@Composable
+fun controlShape(): androidx.compose.ui.graphics.Shape {
+  val metrics = LocalShellMetrics.current
+  return if (metrics.compact) androidx.compose.foundation.shape.RoundedCornerShape(metrics.controlRadius) else androidx.compose.material3.ButtonDefaults.shape
+}

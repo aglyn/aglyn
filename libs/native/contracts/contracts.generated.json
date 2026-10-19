@@ -5044,8 +5044,11 @@
                 "id": "automation",
                 "label": "Automation",
                 "order": 60,
+                "params": {
+                  "scope": "org"
+                },
                 "pluginId": "workflows",
-                "screen": "workflows.org-automation"
+                "screen": "workflows.automation"
               },
               {
                 "console": {
@@ -5339,7 +5342,7 @@
                 },
                 "docs": "/commerce-and-bookings/commerce/overview",
                 "icon": {
-                  "android": "shopping_basket",
+                  "android": "shopping_bag",
                   "apple": "bag"
                 },
                 "id": "orders",
@@ -5863,7 +5866,7 @@
                 ],
                 "label": "Customer texts",
                 "order": 40,
-                "pluginId": "sms",
+                "pluginId": "commerce",
                 "screen": "sms.texts"
               },
               {
