@@ -307,6 +307,17 @@ export const FLAG_DOC_PAGES: Partial<
     },
   ],
 
+  // AGL-3975: optional fields on the guided start's Style step. The Start
+  // with AI guide documents them in their own section, which discloses the
+  // rollout in its first sentence until the flag is on.
+  release_ai_site_inspiration: [
+    {
+      path: 'docs/ai/start-with-ai.md',
+      disclosure: [/\*\*Sites you like\*\* \(rolling out, not yet available\) is an optional block/],
+      checkNoPriceClaim: true,
+    },
+  ],
+
   // AGL-3976. The flag closes "Bring my site": the ownership and crawl doors
   // (AGL-3974), the import job's admission and each of its waves, and the
   // choice card on Create site. The one page about it is ABOUT the feature,
@@ -358,10 +369,6 @@ export const FLAG_DOC_PAGES: Partial<
  * tree outside `docs/staff-console/` (where naming every flag is the point).
  */
 export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {
-  // AGL-3975. Off by default and documented nowhere yet: the Start with AI
-  // guide gains its Sites you like section in the change that turns it on.
-  release_ai_site_inspiration:
-    'Adds optional fields to the guided AI site start while it is off by default; no docs page describes them yet, and the Start with AI guide gains their section when the flag turns on.',
   // AGL-3520. The flag widens what a door already documented sends; it opens
   // no surface. The Privacy Policy and the subprocessor list were republished
   // with the whole-record wording on October 5, 2026 (legal v10), and the CRM
