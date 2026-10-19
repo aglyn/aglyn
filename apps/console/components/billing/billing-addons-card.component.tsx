@@ -22,6 +22,7 @@ import {
   aiAddonName,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  planSellsSiteCare,
   type OrgPlan,
 } from '@aglyn/aglyn'
 import { useConfirmationContext, useLoading } from '@aglyn/shared-ui-jsx'
@@ -56,6 +57,7 @@ export const ADDON_LABELS: Record<string, string> = {
   posRegisters: 'POS registers',
   eventCalendar: 'Event Calendar',
   aiAddon: aiAddonName(),
+  siteCare: 'Site Care',
 }
 
 /**
@@ -66,7 +68,35 @@ export const ADDON_LABELS: Record<string, string> = {
 export const TOGGLE_ADDON_KINDS: ReadonlySet<string> = new Set([
   'eventCalendar',
   'aiAddon',
+  'siteCare',
 ])
+
+/**
+ * The Site Care row's two sentences (AGL-3954): what staff do for the owner,
+ * and what the add-on never covers. The second line is there because the
+ * likeliest misreading of "we make your changes" is "so my plan's limits no
+ * longer apply" — a 26th page or a second site is still an upgrade.
+ */
+export const SITE_CARE_DESCRIPTION =
+  'We make your site changes for you: hours, prices, photos, a staff ' +
+  'member, a seasonal banner, a section on an existing page, up to about an ' +
+  'hour of work a month, done within 2 business days. Bigger jobs are ' +
+  'quoted first.'
+export const SITE_CARE_EXCLUSIONS =
+  'What it does not cover: plan limits, new pages or forms, redesigns, ' +
+  'brand work, photography, ads.'
+
+/**
+ * Why Site Care cannot be bought on a plan that does not sell it, or null
+ * where it is sold (AGL-3954). Free has no subscription to carry it, so the
+ * reason points at the plan grid; Enterprise arranges it in the agreement.
+ */
+export function siteCareUnavailableReason(plan: OrgPlan | null): string | null {
+  if (planSellsSiteCare(plan)) return null
+  return plan === 'enterprise'
+    ? 'Arranged in your Enterprise agreement rather than here.'
+    : 'Site Care is added to a paid plan, and Free has no subscription to carry it.'
+}
 
 /**
  * The AI add-on row's per-plan sentence (AGL-2899): what the add-on unlocks,
@@ -118,8 +148,16 @@ interface AddonRow {
   kind: string
   label: string
   description: string
+  /** A second line under the description: what the add-on leaves out. */
+  exclusions?: string
   /** Quantity toggle (0/1) rendered as a switch instead of a stepper. */
   toggle?: boolean
+  /**
+   * Price the row as the yearly charge on an annual subscription ("$588/yr")
+   * rather than the monthly figure, for a flat add-on whose yearly price is
+   * a number the customer is quoted elsewhere.
+   */
+  yearlyPrice?: boolean
 }
 
 const addonRows = (
@@ -166,7 +204,26 @@ const addonRows = (
     description: aiAddonDescription(plan),
     toggle: true,
   },
+  {
+    kind: 'siteCare',
+    label: 'Site Care',
+    description: SITE_CARE_DESCRIPTION,
+    exclusions: SITE_CARE_EXCLUSIONS,
+    toggle: true,
+    yearlyPrice: true,
+  },
 ]
+
+/** The row title's price suffix: " — $49/mo", " — $588/yr", " — $4/mo each". */
+function rowPriceSuffix(
+  row: AddonRow,
+  unitUsd: number | null | undefined,
+  interval: 'month' | 'year',
+): string {
+  if (unitUsd == null) return ''
+  if (row.yearlyPrice && interval === 'year') return ` — $${unitUsd * 12}/yr`
+  return ` — $${unitUsd}/mo${row.toggle ? '' : ' each'}`
+}
 
 interface AddonsCatalogEntry {
   unitUsd: number | null
@@ -541,6 +598,11 @@ export default function BillingAddonsCardComponent({
         // cannot — Enterprise already has it, Free upgrades to a plan that
         // sells it — where the catalog marks both `upgradeRequired`.
         const aiOffer = row.kind === 'aiAddon' ? aiAddonOffer(plan) : 'sold'
+        // Site Care on a plan that does not sell it keeps its switch, shown
+        // off and disabled, with the reason beside it: a prerequisite is
+        // shown, never hidden.
+        const siteCareBlocked =
+          row.kind === 'siteCare' ? siteCareUnavailableReason(plan) : null
         return (
           <Stack
             useFlexGap
@@ -552,15 +614,50 @@ export default function BillingAddonsCardComponent({
             <Box sx={{ flex: 1, minWidth: 220 }}>
               <Typography variant="subtitle2">
                 {row.label}
-                {entry?.unitUsd != null
-                  ? ` — $${entry.unitUsd}/mo${row.toggle ? '' : ' each'}`
-                  : ''}
+                {rowPriceSuffix(row, entry?.unitUsd, state.interval)}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {row.description}
               </Typography>
+              {row.exclusions ? (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: 'block', mt: 0.5 }}
+                >
+                  {row.exclusions}
+                </Typography>
+              ) : null}
             </Box>
-            {aiOffer === 'included' ? (
+            {siteCareBlocked ? (
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center', maxWidth: 360 }}
+              >
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    {siteCareBlocked}
+                  </Typography>
+                  {plan === 'enterprise' ? null : (
+                    <Link
+                      href="#plans"
+                      variant="caption"
+                      color="primary"
+                      underline="hover"
+                      sx={{ display: 'block' }}
+                    >
+                      {'Choose a paid plan'}
+                    </Link>
+                  )}
+                </Box>
+                <Switch
+                  checked={false}
+                  disabled
+                  slotProps={{ input: { 'aria-label': row.label } }}
+                />
+              </Stack>
+            ) : aiOffer === 'included' ? (
               <Typography variant="caption" color="text.secondary">
                 {'Included in your plan'}
               </Typography>
@@ -587,6 +684,7 @@ export default function BillingAddonsCardComponent({
                 disabled={!canManage || busy}
                 onChange={(event) =>
                   void applyChange(row, event.target.checked ? 1 : 0)}
+                slotProps={{ input: { 'aria-label': row.label } }}
               />
             ) : (
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
