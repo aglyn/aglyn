@@ -23,9 +23,11 @@
  * `supportTickets/{id}` carries the request's minutes, approval and charge;
  * `supportTickets/{id}/siteCareHistory` is the append-only record of every
  * minute, approval, charge, email and correction; `orgs/{orgId}/siteCareMonths`
- * holds goodwill minutes, with its own `siteCareHistory`. No rule names any of
+ * holds goodwill minutes, with its own `siteCareHistory`; and
+ * `orgs/{orgId}/siteCareProjects` holds each flat-quoted project (AGL-3970),
+ * with its own `siteCareHistory`. No rule names any of
  * them, so each is refused by default, and the console reads and writes them
- * only through `/api/site-care/*` and `/api/admin/site-care`. These rows prove
+ * only through `/api/site-care/*` and `/api/admin/site-care` (and `/projects`). These rows prove
  * that default reaches them, so a wildcard added one day cannot quietly let a
  * client rewrite history or the minutes a bill is computed from.
  *
@@ -45,6 +47,7 @@ const ADMIN = 'uid-site-care-admin'
 const STAFF = 'uid-site-care-staff'
 const TICKET = 'ticket-site-care-test'
 const MONTH = '2026-10'
+const PROJECT = 'project-site-care-test'
 
 const HISTORY_ROW = {
   atMs: 1_760_886_000_000,
@@ -94,6 +97,30 @@ const PATHS = [
     id: 'row-1',
     data: { ...HISTORY_ROW, kind: 'goodwill.added', subjectId: null },
     change: { reason: 'Rewritten' },
+  },
+  // A flat-quoted project (AGL-3970): its scope, price, the owner's yes and
+  // every invoice, and its append-only history. A client that could write
+  // the record could change the price after the yes, or mark an invoice paid.
+  {
+    label: 'orgs/{orgId}/siteCareProjects/{id}',
+    collection: ['orgs', ORG, 'siteCareProjects'],
+    id: PROJECT,
+    data: {
+      orgId: ORG,
+      title: 'Holiday sale page',
+      scope: ['A landing page'],
+      quote: { kind: 'landingPage', estimatedHours: 2, billedHours: 2, priceUsd: 249, split: 'full' },
+      status: 'invoiced',
+      invoices: [{ seq: 1, kind: 'full', status: 'open', amountCents: 24900 }],
+    },
+    change: { 'quote.priceUsd': 1 },
+  },
+  {
+    label: 'orgs/{orgId}/siteCareProjects/{id}/siteCareHistory',
+    collection: ['orgs', ORG, 'siteCareProjects', PROJECT, 'siteCareHistory'],
+    id: 'row-1',
+    data: { ...HISTORY_ROW, kind: 'invoice.paid', subjectId: PROJECT },
+    change: { summary: 'Rewritten' },
   },
 ]
 
