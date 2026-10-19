@@ -668,7 +668,7 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
       expect(wall(fivePlusThree)).toEqual([])
     })
 
-    // Three past the wall, where the trim (AGL-3737) leaves the plan to the re-ask.
+    // Three past the wall, which the trim settles too since AGL-3969.
     const sixPlusFive: AiBuildPlan = {
       ...AI_YOGA_SITE_PLAN_FIRST_ANSWER,
       screens: [
@@ -695,20 +695,32 @@ describe('a site start’s home page reads as a full website (AGL-3660)', () => 
       ])
     })
 
-    it('keeps the home’s five through the plan step: 6 + 5, then 5 + 3', async () => {
+    it('settles a 6 + 5 — three past the wall — to the home’s five and 3 in code, with no re-ask (AGL-3969)', async () => {
       mockRunAiRequest.mockReset()
-      mockRunAiRequest.mockResolvedValueOnce(toolAnswer(sixPlusFive)).mockResolvedValueOnce(toolAnswer(fivePlusThree))
+      mockRunAiRequest.mockResolvedValueOnce(toolAnswer(sixPlusFive))
       const outcome = await planStepFor(FREE_ORG, freeEmpty(), yogaJob(), empty)
-      const sent = mockRunAiRequest.mock.calls.map((call) => String((call[0] as SentRequest).messages.at(-1)?.content))
-      expect(sent).toHaveLength(2)
-      expect(sent[1]).toContain('Keep the home page at / at 5 or more sections')
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+      expect((outcome.plan as AiJobPlan).screens.map((screen) => screen.sections.length)).toEqual([5, 3])
+    })
+
+    // Past the page cap, which the trim leaves to the re-ask.
+    const threePages: AiBuildPlan = {
+      ...sixPlusFive,
+      screens: [...sixPlusFive.screens, { ...sixPlusFive.screens[1], title: 'About', slug: '/about' }],
+    }
+
+    it('keeps the home’s five through the plan step: 3 pages, then 5 + 3', async () => {
+      mockRunAiRequest.mockReset()
+      mockRunAiRequest.mockResolvedValueOnce(toolAnswer(threePages)).mockResolvedValueOnce(toolAnswer(fivePlusThree))
+      const outcome = await planStepFor(FREE_ORG, freeEmpty(), yogaJob(), empty)
+      expect(mockRunAiRequest).toHaveBeenCalledTimes(2)
       expect((outcome.plan as AiJobPlan).screens.map((screen) => screen.sections.length)).toEqual([5, 3])
     })
 
     it('keeps the recorded 4 + 2 redo rather than stopping the start: it is the loop’s last answer, and a third ask is past the plan’s two', async () => {
       mockRunAiRequest.mockReset()
       mockRunAiRequest
-        .mockResolvedValueOnce(toolAnswer(sixPlusFive))
+        .mockResolvedValueOnce(toolAnswer(threePages))
         .mockResolvedValueOnce(toolAnswer(AI_YOGA_SITE_PLAN_REDO_ANSWER))
         .mockResolvedValueOnce(toolAnswer(fivePlusThree))
       const outcome = await planStepFor(FREE_ORG, freeEmpty(), yogaJob(), empty)

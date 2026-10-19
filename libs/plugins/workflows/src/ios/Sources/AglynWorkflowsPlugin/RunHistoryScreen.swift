@@ -58,12 +58,12 @@ struct RunHistoryScreen: View {
       }
     }
     .aglynListBackground()
-    .searchable(text: $searchText, prompt: "Search what happened")
-    .onSubmit(of: .search) { filters.search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search what happened", onSubmit: { filters.search = searchText })
     .onChange(of: searchText) { _, text in
       if text.isEmpty { filters.search = "" }
     }
     .navigationTitle("Runs — \(params["name"] ?? "")")
+    .aglynScreenTitle("Runs — \(params["name"] ?? "")")
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
     #endif

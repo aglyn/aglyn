@@ -52,6 +52,7 @@ struct ListAssignmentSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Add to a marketing list")
+      .aglynScreenTitle("Add to a marketing list")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
         ToolbarItem(placement: .confirmationAction) {
@@ -102,6 +103,7 @@ struct PeopleScreen: View {
         "Leads are for data managers", systemImage: "lock",
         message: "Listing every site's leads needs a role that manages the workspace's data. Choose a site to see its members and leads.")
         .navigationTitle("Members & leads")
+        .aglynScreenTitle("Members & leads")
     } else {
       people
     }
@@ -116,17 +118,18 @@ struct PeopleScreen: View {
       .pickerStyle(.segmented)
       .labelsHidden()
       .frame(maxWidth: 420)
-      .padding(.horizontal, AglynSpace.two)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .aglynContentEdges()
       .padding(.top, AglynSpace.two)
       .disabled(wholeWorkspace)
       if wholeWorkspace {
         Text("Every site's leads, newest first. Members sign up to one site each — choose a site to list its members.")
           .font(AglynFont.subheadline).foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
       }
       Spacer().frame(height: AglynSpace.one)
-      if let error { AglynNotice(error, tone: .error) { self.error = nil }.padding(.horizontal, AglynSpace.two) }
+      if let error { AglynNotice(error, tone: .error) { self.error = nil }.aglynContentEdges() }
       // The rows, or the empty state centered in all the room under the picker (never a box floating mid-window).
       Group { if tab == "members" { membersList } else { leadsList } }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -134,13 +137,13 @@ struct PeopleScreen: View {
     .aglynListColumn()
     .background(AglynColor.page)
     .navigationTitle("Members & leads")
+    .aglynScreenTitle("Members & leads")
     .onDisappear {
       members.stop()
       leads.stop()
       site.stop()
     }
-    .searchable(text: $searchText, prompt: tab == "members" ? "Search members" : "Search leads")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: tab == "members" ? "Search members" : "Search leads", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .task(id: "\(tab)|\(search)|\(context.hostID ?? "")") {
       site.start(context)
@@ -266,6 +269,65 @@ struct InboxGlanceWidget: View {
       guard let hostID = context.hostID else { return }
       list.show(context.firestore) {
         submissionsPlan(formID: nil, read: nil, search: "").firestoreQuery(submissionsPath(hostID), limit: $0)
+      }
+    }
+    .onDisappear { list.stop() }
+  }
+}
+
+/// Home's "Needs you" line for the Inbox (`inbox.needs-you`): messages nobody has read, opening the Inbox on Unread.
+struct InboxNeedsYouWidget: View {
+  let context: NativePluginContext
+  @State private var list = LiveQueryList(pageSize: submissionsPageSize, map: Submission.init)
+
+  var body: some View {
+    // A stack, not a Group: a Group hands .task to its children, and with nothing drawn yet the read never starts.
+    VStack(spacing: 0) {
+      if list.ready && list.failure == nil && !list.rows.isEmpty {
+        let count = list.rows.count
+        AglynNeedsYouLine(
+          id: "inbox-unread", systemImage: "tray",
+          text: "\(list.hasMore ? "\(count)+" : "\(count)") \(count == 1 ? "message waiting" : "messages waiting") for a reply",
+          place: "Inbox"
+        ) {
+          context.navigate(inboxSubmissionsScreen, ["read": "false"])
+        }
+      }
+    }
+    .task(id: context.hostID) {
+      guard let hostID = context.hostID else { return }
+      list.show(context.firestore) {
+        submissionsPlan(formID: nil, read: "false", search: "").firestoreQuery(submissionsPath(hostID), limit: $0)
+      }
+    }
+    .onDisappear { list.stop() }
+  }
+}
+
+/// Inbox's count beside its sidebar row (Figma Sidebar: "Inbox 2"): the unread messages where the window stands, the
+/// site's, or every site's in the workspace. Nothing while none wait.
+struct InboxSidebarCount: View {
+  let context: NativePluginContext
+  @State private var list = LiveQueryList(pageSize: 99, map: Submission.init)
+
+  var body: some View {
+    // A stack, not a Group: a Group hands .task to its children, and with nothing drawn yet the read never starts.
+    VStack(spacing: 0) {
+      if list.ready && list.failure == nil && !list.rows.isEmpty {
+        AglynSidebarCount(list.rows.count, more: list.hasMore)
+      }
+    }
+    .task(id: "\(context.orgID ?? ""):\(context.hostID ?? "")") {
+      if let hostID = context.hostID {
+        list.show(context.firestore) {
+          submissionsPlan(formID: nil, read: "false", search: "").firestoreQuery(submissionsPath(hostID), limit: $0)
+        }
+      } else if let orgID = context.orgID {
+        list.show(context.firestore) {
+          var group = orgSubmissionsPlan(orgID: orgID, read: "false", search: "").firestoreQuery(orgSubmissionsGroup, limit: $0)
+          group.collectionGroup = true
+          return group
+        }
       }
     }
     .onDisappear { list.stop() }

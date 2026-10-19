@@ -38,7 +38,7 @@ struct AiSeoAuditCard: View {
   private var running: Bool { job != nil && !aiJobIsTerminal(job) }
 
   var body: some View {
-    Group {
+    VStack(spacing: 0) {
       if verdict == .ready, let zone, let hostID = context.hostID, let orgID = context.orgID {
         content(zone: zone, hostID: hostID, orgID: orgID)
       }

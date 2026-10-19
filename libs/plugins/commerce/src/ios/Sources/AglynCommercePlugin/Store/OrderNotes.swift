@@ -84,7 +84,8 @@ struct OrderAnnotationSections: View {
   let context: NativePluginContext
   let orderID: String
   let order: HostOrder
-  @State private var noting = false
+  /// The ⋯ menu's Add a note opens the note sheet.
+  @Binding var noting: Bool
   @State private var note = ""
   @State private var busy = false
   @State private var problem: String?
@@ -115,10 +116,10 @@ struct OrderAnnotationSections: View {
       }
     }
 
-    Section {
-      if let problem { AglynNotice(problem, tone: .error) { self.problem = nil } }
-      if let done { AglynNotice(done, tone: .success) { self.done = nil } }
-      let events = orderTimeline(order)
+    if let problem { Section { AglynNotice(problem, tone: .error) { self.problem = nil } } }
+    if let done { Section { AglynNotice(done, tone: .success) { self.done = nil } } }
+    let events = orderTimeline(order)
+    AglynFoldedSection("Timeline and notes", count: events.count, identifier: "order-fold-timeline") {
       if events.isEmpty {
         Text("Nothing has happened on this order yet.").foregroundStyle(.secondary)
       }
@@ -129,17 +130,9 @@ struct OrderAnnotationSections: View {
             .joined(separator: " · "),
           systemImage: event.event == "note" ? "note.text" : "clock")
       }
-      Button {
-        note = ""
-        noting = true
-      } label: {
-        Label("Add a note", systemImage: "square.and.pencil")
-      }
-      .accessibilityIdentifier("order-add-note")
-      .sheet(isPresented: $noting) { noteSheet }
-    } header: {
-      Text("Timeline")
     }
+    .sheet(isPresented: $noting) { noteSheet }
+    .onChange(of: noting) { _, open in if open { note = "" } }
   }
 
   private var noteSheet: some View {

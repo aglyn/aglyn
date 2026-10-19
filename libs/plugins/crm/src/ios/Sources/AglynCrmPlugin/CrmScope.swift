@@ -99,10 +99,14 @@ func crmSuiteCarried(_ org: [String: Any]?) -> Bool {
   return (crmPlans.contains(plan) && !lapsed.contains(status)) || (crmPlans.contains(comp) && (status.isEmpty || lapsed.contains(status)))
 }
 
-/// The CRM as this member sees it from the picked site.
+/// The CRM as this member sees it: from the picked site, or for the whole workspace (the console's org CRM page,
+/// `useCrmScope` with no host): every site's records, a new one filed under the site picked for new records.
 struct CrmScope: Equatable {
   let orgID: String
+  /// The site the CRM is read from; at the workspace's level the site new records are filed under.
   let hostID: String
+  /// The workspace's own CRM rather than one site's.
+  let orgLevel: Bool
   /// The holder a contact's own fields are kept under: the site's consent group.
   let groupID: String
   let uid: String
@@ -118,23 +122,29 @@ struct CrmScope: Equatable {
   var routeScope: [String: Any?] { ["hostId": hostID, "orgId": orgID] }
 
   static func == (a: CrmScope, b: CrmScope) -> Bool {
-    a.orgID == b.orgID && a.hostID == b.hostID && a.uid == b.uid && a.role == b.role && a.readTokens == b.readTokens
+    a.orgID == b.orgID && a.hostID == b.hostID && a.orgLevel == b.orgLevel && a.uid == b.uid && a.role == b.role && a.readTokens == b.readTokens
       && a.createTokens == b.createTokens && a.suite == b.suite && a.orgWide == b.orgWide
   }
 
+  /// `orgLevel`: the workspace's CRM, `hostID` then the site new records go to. An org-wide reader reads with no scope
+  /// clause (`readTokens` empty); anyone else reads what their own tokens reach.
   init(
-    orgID: String, hostID: String, uid: String, org: [String: Any]?, member: [String: Any]?
+    orgID: String, hostID: String, uid: String, org: [String: Any]?, member: [String: Any]?, orgLevel: Bool = false
   ) {
     let role = member?["role"] as? String
     let orgWide = ["owner", "admin"].contains(role ?? "") || member?["allHosts"] as? Bool == true
     let group = consentGroupForHost(org, hostID)
     var read = crmReadTokens(group)
-    if group.declared && !orgWide, let held = member?["scopeTokens"] as? [String] {
+    if orgLevel {
+      read = orgWide ? [] : Array(((member?["scopeTokens"] as? [String]) ?? [orgScopeToken]).prefix(maxScopeHosts))
+    } else if group.declared && !orgWide, let held = member?["scopeTokens"] as? [String] {
       read = read.filter { $0 == orgScopeToken || held.contains($0) }
     }
     self.orgID = orgID
     self.hostID = hostID
-    self.groupID = group.groupID
+    self.orgLevel = orgLevel
+    // At the workspace's level a contact shows its shared record, not one site's holder facet.
+    self.groupID = orgLevel ? "" : group.groupID
     self.uid = uid
     self.role = role
     self.orgWide = orgWide
@@ -155,7 +165,11 @@ final class CrmScopeModel {
   @ObservationIgnored private let member = ObservedDocument()
   @ObservationIgnored private var ids: (String, String, String)?
 
-  func start(_ reader: FirestoreReader, orgID: String, hostID: String, uid: String) {
+  @ObservationIgnored private var orgLevel = false
+
+  /// `orgLevel`: the workspace's CRM, `hostID` the site new records are filed under.
+  func start(_ reader: FirestoreReader, orgID: String, hostID: String, uid: String, orgLevel: Bool = false) {
+    self.orgLevel = orgLevel
     ids = (orgID, hostID, uid)
     org.start(reader, ["orgs", orgID])
     member.start(reader, ["orgs", orgID, "members", uid])
@@ -175,7 +189,8 @@ final class CrmScopeModel {
     guard let ids else { return }
     failed = org.failed
     if org.ready && member.ready {
-      scope = CrmScope(orgID: ids.0, hostID: ids.1, uid: ids.2, org: org.document?.data, member: member.document?.data)
+      scope = CrmScope(
+        orgID: ids.0, hostID: ids.1, uid: ids.2, org: org.document?.data, member: member.document?.data, orgLevel: orgLevel)
     }
   }
 

@@ -40,7 +40,7 @@ import {
   Typography,
 } from '@mui/material'
 import { QRCodeSVG } from 'qrcode.react'
-import { type FocusEvent, useCallback, useEffect, useRef, useState } from 'react'
+import { type FocusEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
 
 /** The folder `/api/media/photo-links` files a link's photos in. */
@@ -82,6 +82,54 @@ const shortDate = (at: number): string =>
   new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
 const photoCount = (count: number): string => `${count} ${count === 1 ? 'photo' : 'photos'}`
+
+/**
+ * A photo link's QR code and address, as it is handed over (AGL-3957): the
+ * code to scan, the address with a copy button, and a line under them. Drawn
+ * by the photo link dialog and by the one-screen client build (AGL-3958),
+ * which shows it inline while the owner scans it.
+ */
+export function PhotoLinkCode({ url, caption, size = 200 }: { url: string; caption?: ReactNode; size?: number }) {
+  const { enqueueSnackbar } = useSnackbar()
+  const copy = () => {
+    void navigator.clipboard?.writeText(url)
+    enqueueSnackbar('Link copied', { variant: 'success', persist: false })
+  }
+  return (
+    <Stack spacing={2} sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1, alignItems: 'stretch' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', bgcolor: 'common.white', borderRadius: 1, py: 1 }}>
+        <QRCodeSVG value={url} size={size} level="M" marginSize={2} title="Photo link QR code" role="img" />
+      </Box>
+      <TextField
+        size="small"
+        label="Link"
+        value={url}
+        fullWidth
+        slotProps={{
+          input: {
+            readOnly: true,
+            endAdornment: (
+              <InputAdornment position="end">
+                <Tooltip title="Copy link">
+                  <IconButton aria-label="Copy link" edge="end" onClick={copy}>
+                    <MdiIcon path={mdiContentCopy.path} fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </InputAdornment>
+            ),
+          },
+          htmlInput: { onFocus: (event: FocusEvent<HTMLInputElement>) => event.target.select() },
+        }}
+      />
+      {caption ? (
+        <Typography variant="caption" color="text.secondary">
+          {caption}
+        </Typography>
+      ) : null}
+    </Stack>
+  )
+}
+PhotoLinkCode.displayName = 'PhotoLinkCode'
 
 /**
  * A site's photo links (AGL-3957): an address and QR code a member hands to
@@ -199,12 +247,6 @@ export function PhotoLinkDialog(props: PhotoLinkDialogProps) {
     }
   }
 
-  const copy = () => {
-    if (!fresh) return
-    void navigator.clipboard.writeText(fresh.url)
-    enqueueSnackbar('Link copied', { variant: 'success', persist: false })
-  }
-
   const freshRow = fresh && list.kind === 'ready' ? list.links.find((link) => link.linkId === fresh.linkId) : undefined
   const freshDays = fresh ? Math.max(1, Math.round((fresh.expiresAt - Date.now()) / DAY_MS)) : 0
   const blocked = list.kind === 'error' && list.blocked
@@ -229,40 +271,14 @@ export function PhotoLinkDialog(props: PhotoLinkDialogProps) {
           </DialogContentText>
 
           {fresh ? (
-            <Stack
-              spacing={2}
-              sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1, alignItems: 'stretch' }}
-            >
-              <Box sx={{ display: 'flex', justifyContent: 'center', bgcolor: 'common.white', borderRadius: 1, py: 1 }}>
-                <QRCodeSVG value={fresh.url} size={200} level="M" marginSize={2} title="Photo link QR code" role="img" />
-              </Box>
-              <TextField
-                size="small"
-                label="Link"
-                value={fresh.url}
-                fullWidth
-                slotProps={{
-                  input: {
-                    readOnly: true,
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <Tooltip title="Copy link">
-                          <IconButton aria-label="Copy link" edge="end" onClick={copy}>
-                            <MdiIcon path={mdiContentCopy.path} fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </InputAdornment>
-                    ),
-                  },
-                  htmlInput: { onFocus: (event: FocusEvent<HTMLInputElement>) => event.target.select() },
-                }}
-              />
-              <Typography variant="caption" color="text.secondary">
-                {`Works for ${freshDays} ${freshDays === 1 ? 'day' : 'days'}` +
-                  (freshRow ? ` and takes up to ${photoCount(freshRow.remainingUploads)}` : '') +
-                  `. Photos land in the folder “${PHOTO_LINK_FOLDER_LABEL}”.`}
-              </Typography>
-            </Stack>
+            <PhotoLinkCode
+              url={fresh.url}
+              caption={
+                `Works for ${freshDays} ${freshDays === 1 ? 'day' : 'days'}` +
+                (freshRow ? ` and takes up to ${photoCount(freshRow.remainingUploads)}` : '') +
+                `. Photos land in the folder “${PHOTO_LINK_FOLDER_LABEL}”.`
+              }
+            />
           ) : null}
 
           <Divider />

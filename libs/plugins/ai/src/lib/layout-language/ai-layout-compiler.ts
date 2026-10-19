@@ -41,12 +41,14 @@ import {
   type AiLayoutSettlement,
 } from './ai-layout-language'
 import {
+  AI_LAYOUT_HALF_HEROES,
   aiLayoutDesignChoices,
   aiLayoutFamily,
   aiLayoutGroupVariant,
   type AiLayoutDesign,
   type AiLayoutDesignChoices,
   type AiLayoutGroupVariant,
+  type AiLayoutHeroVariant,
 } from './ai-layout-design'
 import {
   AI_LAYOUT_FEATURED_RECORDS,
@@ -61,6 +63,7 @@ import {
   type AiLayoutListingRole,
 } from './ai-layout-listings'
 import { aiStorefrontItemIcons } from './ai-layout-storefront'
+import { aiLayoutContactLabel, aiLayoutWithContactLines } from './ai-layout-contact'
 import { AI_LAYOUT_LABELS_EN, aiLayoutLabel } from './ai-layout-labels'
 import {
   aiLayoutRenamedLabel,
@@ -291,12 +294,16 @@ function formSectionOf(
 
 /** Compiles a page designed in the layout language into the tree it stores. */
 export function aiCompileLayoutPage(
-  sections: readonly AiLayoutSection[],
+  designed: readonly AiLayoutSection[],
   plan: AiLayoutPagePlan,
   targets: AiLayoutTargets,
   options: AiLayoutCompileOptions,
 ): AiLayoutCompiledPage {
   const tree = new AiLayoutTreeBuilder()
+  const formSection = formSectionOf(designed, plan, targets)
+  // The page a visitor opens to get in touch shows the phone and email the
+  // business gave, as links, wherever the design did not (AGL-3979).
+  const sections = aiLayoutWithContactLines(designed, formSection, targets.contact)
   const page: PageScope = {
     tree,
     plan,
@@ -306,7 +313,7 @@ export function aiCompileLayoutPage(
     scrollTo: {},
     images: 0,
     strong: { brand: 0, dark: 0 },
-    formSection: formSectionOf(sections, plan, targets),
+    formSection,
     pageIcon: pageIconOf(sections),
     formsPlaced: new Set(),
     itemIds: plan.sections.map(() => []),
@@ -458,7 +465,7 @@ function compileSection(
   // A row whose columns all say the same kind of thing, three or more across,
   // is a group of cards: one design, the words the columns gave.
   if (filled.length >= 3 && sameShape(filled.map((entry) => entry.column))) {
-    head.push(columnsAsCards(filled.map((entry) => entry.column)))
+    head.push(...columnsAsCards(filled.map((entry) => entry.column)))
     page.settled.push({
       at,
       what: `${filled.length} like columns drawn as cards`,
@@ -799,22 +806,36 @@ function shapeOf(column: readonly AiLayoutBlock[]): string {
   return column.map((block) => block.kind).join(',')
 }
 
+/** What a like column may hold and still be read as a card: its words, a picture and one button. */
+const CARD_COLUMN_KINDS: ReadonlySet<string> = new Set(['heading', 'text', 'lede', 'eyebrow', 'image', 'note', 'button'])
+
+/** The words of a column a card says: its heading, or its first words. */
+const WORDS_KINDS: ReadonlySet<string> = new Set(['heading', 'text', 'lede', 'note'])
+
+/**
+ * Whether a row's columns all say the same kind of thing (AGL-3660): the
+ * same blocks in the same order, words among them, one button at most. The
+ * beta.270 Sugar Hollow Galleries page (AGL-3988) was refused for rule 1,
+ * "The same Grid block appears 4 times": four like columns this read did not
+ * fold, each of them drawn as a Grid cell of its own.
+ */
 function sameShape(columns: readonly AiLayoutBlock[][]): boolean {
   const first = shapeOf(columns[0])
   return (
     columns.every((column) => shapeOf(column) === first) &&
-    columns[0].some((block) => block.kind === 'heading') &&
-    columns[0].every((block) =>
-      ['heading', 'text', 'lede', 'eyebrow', 'image', 'note'].includes(
-        block.kind,
-      ),
-    )
+    columns[0].some((block) => WORDS_KINDS.has(block.kind)) &&
+    columns[0].every((block) => CARD_COLUMN_KINDS.has(block.kind)) &&
+    columns[0].filter((block) => block.kind === 'button').length <= 1
   )
 }
 
-/** Like columns as one group of cards: each column's heading its title, its words its text. */
-function columnsAsCards(columns: readonly AiLayoutBlock[][]): AiLayoutBlock {
-  return {
+/**
+ * Like columns as one group of cards: each column's heading its title, its
+ * words its text. Their buttons follow the group (AGL-3988): one, where they
+ * all go to the same place, else a list of links, each named by its card.
+ */
+function columnsAsCards(columns: readonly AiLayoutBlock[][]): AiLayoutBlock[] {
+  const cards: AiLayoutBlock = {
     kind: 'cards',
     items: columns.map((column) => {
       const title = column.find((block) => block.kind === 'heading')?.text ?? ''
@@ -831,6 +852,27 @@ function columnsAsCards(columns: readonly AiLayoutBlock[][]): AiLayoutBlock {
       return { title, text: words, ...(icon ? { icon } : {}) }
     }),
   }
+  const buttons = columns.flatMap((column) => {
+    const button = column.find((block) => block.kind === 'button')
+    return button?.to?.trim() ? [{ button, column }] : []
+  })
+  if (!buttons.length) return [cards]
+  const places = new Set(buttons.map(({ button }) => (button.to ?? '').trim().toLowerCase()))
+  if (places.size === 1) {
+    const { button } = buttons[0] as { button: AiLayoutBlock }
+    return [cards, { kind: 'button', text: button.text ?? '', to: button.to, ...(button.style ? { style: button.style } : {}) }]
+  }
+  return [
+    cards,
+    {
+      kind: 'list',
+      items: buttons.map(({ button, column }) => ({
+        title: column.find((block) => block.kind === 'heading')?.text || button.text || '',
+        text: '',
+        to: button.to ?? '',
+      })),
+    },
+  ]
 }
 
 // ── A row of columns ──────────────────────────────────────────────────────
@@ -1082,7 +1124,10 @@ function compileButton(
   scope: SectionScope,
   block: AiLayoutBlock,
 ): string | null {
-  const asked = aiLayoutFitText(block.text, 'label', scope.page.options.language)
+  // Words that carry the phone or the email are kept whole (AGL-3979).
+  const asked =
+    aiLayoutContactLabel(block.text, scope.page.targets.contact) ||
+    aiLayoutFitText(block.text, 'label', scope.page.options.language)
   if (!asked) return null
   const destination = aiLayoutResolveLink(
     block.to,
@@ -1156,6 +1201,8 @@ export function destinationProps(
   if (destination.kind === 'href')
     return { href: destination.href, target: '_blank' }
   if (destination.kind === 'path') return { href: destination.href }
+  // A call or an email opens the phone or the mail app, never a new tab (AGL-3979).
+  if (destination.kind === 'contact') return { href: destination.href }
   return {}
 }
 
@@ -1835,7 +1882,9 @@ function list(scope: SectionScope, block: AiLayoutBlock): string | null {
   // resolves is a Page Link, and one that does not is left out (rule 10).
   if ((block.items ?? []).some((item) => item.to)) {
     const links = (block.items ?? []).flatMap((item) => {
-      const label = aiLayoutFitText(item.title || item.text, 'label', scope.page.options.language)
+      const label =
+        aiLayoutContactLabel(item.title || item.text, scope.page.targets.contact) ||
+        aiLayoutFitText(item.title || item.text, 'label', scope.page.options.language)
       const destination = label
         ? aiLayoutResolveLink(item.to, label, scope.link, scope.page.targets)
         : null
@@ -2131,12 +2180,11 @@ function designSection(scope: SectionScope, raw: AiLayoutSection, blocks: readon
     // page, it is the page's title size, so a long one still reads in a few lines.
     const lead = flow.findIndex((block) => speaksHeading(scope, block))
     const { style: _style, ...title } = flow[lead]
-    flow[lead] = design.choices.hero === 'split' ? title : { ...title, style: 'large' }
+    flow[lead] = AI_LAYOUT_HALF_HEROES.has(design.choices.hero) ? title : { ...title, style: 'large' }
     sellingHero(scope, flow)
     const given = images[0] ? aiLayoutFitText(images[0].text, 'alt', scope.page.options.language) : ''
     return hero(
       scope,
-      raw,
       flow,
       given ? { alt: given, given: true } : { alt: standInAlt(scope, words.find((block) => speaksHeading(scope, block))?.text), given: false },
     )
@@ -2169,7 +2217,11 @@ function designSection(scope: SectionScope, raw: AiLayoutSection, blocks: readon
     (group.items?.length ?? 0) < 2 ||
     (group.items?.length ?? 0) > 6 ||
     group.to ||
-    (group.kind === 'cards' && variant !== 'cards' && variant !== 'ruled')
+    (group.kind === 'cards' && variant !== 'cards' && variant !== 'ruled') ||
+    // A store's making is shown as pictures across the page (AGL-3676), never
+    // ruled words in half of it: set beside its heading, a seed that splits
+    // headings left a storefront's "how it is made" a band of text (AGL-3985).
+    (group.kind === 'steps' && aiLayoutFamily(design.input.kind) === 'retail')
   ) {
     return null
   }
@@ -2179,7 +2231,6 @@ function designSection(scope: SectionScope, raw: AiLayoutSection, blocks: readon
 /** The first section, in the site's hero arrangement. */
 function hero(
   scope: SectionScope,
-  raw: AiLayoutSection,
   flow: readonly AiLayoutBlock[],
   picture: { alt: string; given: boolean },
 ): string {
@@ -2187,13 +2238,28 @@ function hero(
   const tree = page.tree
   const design = page.design as NonNullable<PageScope['design']>
   const home = design.input.home
-  const variant = design.choices.hero
+  // A collage holds two pictures: on a page with room for one, it is drawn split.
+  const chosen: AiLayoutHeroVariant = design.choices.hero
+  const variant: AiLayoutHeroVariant = chosen === 'collage' && picturesLeft(page) < 2 ? 'split' : chosen
   page.settled.push({ at: scope.at, what: `drawn as a ${variant} hero` })
-  if (variant === 'cover') {
+  if (variant === 'cover' || variant === 'poster') {
     scope.band = 'dark'
-    scope.centered = raw.align === 'center'
-    return cover(scope, flow, picture, home ? { xs: '78vh', md: '86vh' } : { xs: '46vh', md: '54vh' })
+    // A cover sets its words at the start of the page; a poster centers them,
+    // taller, as a restaurant's or a band's opening does (AGL-3985).
+    scope.centered = variant === 'poster'
+    const tall = variant === 'poster'
+    return cover(
+      scope,
+      flow,
+      picture,
+      home ? (tall ? { xs: '84vh', md: '94vh' } : { xs: '78vh', md: '86vh' }) : tall ? { xs: '52vh', md: '62vh' } : { xs: '46vh', md: '54vh' },
+    )
   }
+  if (variant === 'bleed') return bleedHero(scope, flow, picture, home)
+  if (variant === 'column') return columnHero(scope, flow, picture, home)
+  if (variant === 'collage') return collageHero(scope, flow, picture, home)
+  if (variant === 'panel') return panelHero(scope, flow, picture, home)
+  if (variant === 'portrait') return portraitHero(scope, flow, picture)
   const band = scope.band
   scope.centered = false
   if (variant === 'split') {
@@ -2281,6 +2347,147 @@ function cover(
     { position: 'relative', overflow: 'hidden', display: 'flex', alignItems: { xs: 'flex-end', md: 'center' }, minHeight },
     true,
   )
+}
+
+/** The surface a band paints, as a palette role: what a picture laid over another is edged in. */
+function bandSurface(band: AiLayoutBand): string {
+  if (band === 'soft') return 'background.paper'
+  if (band === 'brand') return 'primary.main'
+  return 'background.default'
+}
+
+/**
+ * A bleed hero (AGL-3985): the band in two halves, a photo filling one of
+ * them edge to edge, top to bottom, and the words in the other, centered in
+ * its height. On a phone the photo sits over the words.
+ */
+function bleedHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: { alt: string; given: boolean }, home: boolean): string {
+  const { page } = scope
+  const tree = page.tree
+  const design = page.design as NonNullable<PageScope['design']>
+  const band = scope.band
+  scope.centered = false
+  const words = compileFlow(scope, flow, 'half') as string
+  const measure = tree.add('muiBox', null, { maxWidth: { xs: '100%', md: '88%' }, px: { xs: 3, sm: 6, md: 8 }, py: { xs: 6, md: 10 } }, [words], 'measure')
+  const photo = designPicture(scope, picture, { height: '100%', minHeight: home ? { xs: '46vh', md: '84vh' } : { xs: '36vh', md: '56vh' } }, 'bleedPhoto')
+  const right = design.choices.featureLeft
+  const row = tree.add(
+    'muiGrid',
+    { container: true, spacing: '0' },
+    { alignItems: 'stretch' },
+    [
+      tree.add('muiGrid', { size: 'xs:12 md:6' }, right ? { order: { xs: 0, md: 1 } } : null, [photo], 'column'),
+      tree.add('muiGrid', { size: 'xs:12 md:6' }, { display: 'flex', alignItems: 'center', justifyContent: right ? 'flex-end' : 'flex-start' }, [measure], 'column'),
+    ],
+    'row',
+  )
+  return designedRoot(scope, [row], bandSx(band), band === 'dark')
+}
+
+/**
+ * A masthead (AGL-3985): the words centered in a narrow column, as a journal
+ * or a quiet practice opens, and a wide photo under them.
+ */
+function columnHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: { alt: string; given: boolean }, home: boolean): string {
+  const tree = scope.page.tree
+  const band = scope.band
+  scope.centered = true
+  const words = compileFlow(scope, flow, 'full') as string
+  const measure = tree.add('muiBox', null, { maxWidth: { xs: '100%', md: '72%' }, mx: 'auto' }, [words], 'measure')
+  const photo = designPicture(scope, picture, {
+    aspectRatio: home ? { xs: '4 / 3', md: '16 / 7' } : { xs: '16 / 9', md: '3 / 1' },
+    borderRadius: 2,
+  })
+  const stack = tree.add('muiStack', { spacing: '8', useFlexGap: true }, null, [measure, photo], 'content')
+  const container = tree.add('muiContainer', { maxWidth: 'lg' }, { pt: { xs: 8, md: 12 }, pb: { xs: 6, md: 10 } }, [stack], 'container')
+  return designedRoot(scope, [container], bandSx(band), band === 'dark')
+}
+
+/**
+ * A collage hero (AGL-3985): the words beside two pictures, a tall one and a
+ * smaller one laid over its lower corner, edged in the band's own surface, as
+ * a shop shows two of its things or an event two moments of its day.
+ */
+function collageHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: { alt: string; given: boolean }, home: boolean): string {
+  const { page } = scope
+  const tree = page.tree
+  const design = page.design as NonNullable<PageScope['design']>
+  const band = scope.band
+  scope.centered = false
+  const words = compileFlow(scope, flow, 'half') as string
+  const tall = designPicture(scope, picture, { width: { xs: '78%', md: '76%' }, aspectRatio: home ? '4 / 5' : '1 / 1', borderRadius: 2 })
+  const small = designPicture(
+    scope,
+    { alt: standInAlt(scope, page.plan.sections[scope.index]?.name), given: false },
+    {
+      position: 'absolute',
+      right: 0,
+      bottom: 0,
+      width: { xs: '48%', md: '50%' },
+      aspectRatio: '1 / 1',
+      borderRadius: 2,
+      border: 6,
+      borderColor: bandSurface(band),
+    },
+    'collagePhoto',
+  )
+  const pictures = tree.add('muiBox', null, { position: 'relative', pb: { xs: 6, md: 10 } }, [tall, small], 'collage')
+  const right = design.choices.featureLeft
+  const row = designRow(
+    scope,
+    [
+      { id: words, size: 'xs:12 md:5', ...(right ? { sx: { order: { xs: 0, md: 1 } } } : {}) },
+      { id: pictures, size: 'xs:12 md:7' },
+    ],
+    '8',
+  )
+  const container = tree.add('muiContainer', { maxWidth: 'lg' }, { py: { xs: 6, md: 10 } }, [row], 'container')
+  return designedRoot(scope, [container], bandSx(band), band === 'dark')
+}
+
+/**
+ * A panel hero (AGL-3985): a full-bleed photo shown as it is, undimmed, and
+ * the words on a card of the page's own surface over its lower corner, as an
+ * agent's listing or a firm's office opens. The card carries its own colors,
+ * so the words read whatever the photo is.
+ */
+function panelHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: { alt: string; given: boolean }, home: boolean): string {
+  const tree = scope.page.tree
+  // The words sit on the card, never on the band the model chose.
+  scope.band = 'plain'
+  scope.centered = false
+  const photo = designPicture(scope, picture, { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }, 'panelPhoto')
+  const words = compileFlow(scope, flow, 'half') as string
+  const card = tree.add(
+    'muiBox',
+    null,
+    { bgcolor: 'background.paper', color: 'text.primary', borderRadius: 2, boxShadow: 3, p: { xs: 4, md: 6 }, maxWidth: { xs: '100%', md: '52%' } },
+    [words],
+    'panel',
+  )
+  const container = tree.add('muiContainer', { maxWidth: 'lg' }, { position: 'relative', zIndex: 1, pt: { xs: 28, md: 36 }, pb: { xs: 4, md: 8 } }, [card], 'container')
+  return designedRoot(
+    scope,
+    [photo, container],
+    { position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'flex-end', minHeight: home ? { xs: '72vh', md: '84vh' } : { xs: '48vh', md: '56vh' } },
+    false,
+  )
+}
+
+/**
+ * A portrait hero (AGL-3985): a person's own page opens on their round
+ * photo, the words centered under it.
+ */
+function portraitHero(scope: SectionScope, flow: readonly AiLayoutBlock[], picture: { alt: string; given: boolean }): string {
+  const tree = scope.page.tree
+  const band = scope.band
+  scope.centered = true
+  const photo = designPicture(scope, picture, { width: { xs: '44%', sm: '30%', md: '22%' }, aspectRatio: '1 / 1', borderRadius: '50%', flexShrink: 0 })
+  const words = compileFlow(scope, flow, 'full') as string
+  const measure = tree.add('muiBox', null, { maxWidth: { xs: '100%', md: '72%' }, mx: 'auto' }, [words], 'measure')
+  const stack = tree.add('muiStack', { spacing: '5', useFlexGap: true, alignItems: 'center' }, null, [photo, measure], 'content')
+  const container = tree.add('muiContainer', { maxWidth: 'lg' }, { py: { xs: 8, md: 12 } }, [stack], 'container')
+  return designedRoot(scope, [container], bandSx(band), band === 'dark')
 }
 
 /** A closing section of words over a photo. */

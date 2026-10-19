@@ -19,6 +19,7 @@ import {
   aiDanglingWord,
   detectOffVoiceCopy,
 } from '../runtime/ai-doctrine-validators'
+import { aiLayoutSpeaksOtherThanEnglish } from './ai-layout-labels'
 
 /**
  * The words of a layout language document, made to fit where they are shown
@@ -81,6 +82,37 @@ export function aiLayoutCleanText(value: unknown): string {
 }
 
 /**
+ * "a" and "an" made to agree with the word after them, in English copy
+ * (AGL-3988): the beta.270 Sugar Hollow packages said "A easygoing session"
+ * twice, in their records and on the home page's cards. Only where the
+ * letters settle it: "a" before a word opening a, e, i or o becomes "an" —
+ * never before "one" or "once", or "eu" ("a European"); "an" before a word
+ * opening a consonant other than h becomes "a". A word opening u or h, or
+ * one in capitals ("an FAQ"), is said as the model wrote it, and so is a
+ * capital "A" inside a sentence, a letter rather than an article ("Plan A
+ * is"). Any other language's text comes back as it is.
+ */
+export function aiLayoutArticles(text: string, language?: string | null): string {
+  if (!text || aiLayoutSpeaksOtherThanEnglish(language)) return text
+  return text.replace(
+    /(?<![\p{L}\p{N}'’-])(a|an|A|An)(\s+)([A-Za-z][\p{L}\p{N}'’-]*)/gu,
+    (whole, article: string, space: string, word: string, at: number) => {
+      // A capital opens a sentence; anywhere else "A" is a letter, never an article.
+      if (/^A/.test(article) && !/(?:^|[.!?:]["”’)]?\s*)$/.test(text.slice(0, at))) return whole
+      // An initialism is said by its letters, which the letters alone do not settle.
+      if (/^[A-Z]{2,}/.test(word)) return whole
+      const lower = word.toLowerCase()
+      const vowel = /^[aeio]/.test(lower) && !/^(?:one(?![a-z])|once|eu|ewe)/.test(lower)
+      const consonant = /^[bcdfgjklmnpqrstvwxyz]/.test(lower)
+      const an = article.toLowerCase() === 'an'
+      if (!an && vowel) return `${article === 'a' ? 'an' : 'An'}${space}${word}`
+      if (an && consonant) return `${article === 'an' ? 'a' : 'A'}${space}${word}`
+      return whole
+    },
+  )
+}
+
+/**
  * The line with every trailing dangling word taken off, as rule 14 reads one,
  * in the site's language (AGL-3828): a Spanish line cut to "…para la" loses
  * both words, as an English one cut to "…for the" does.
@@ -105,7 +137,7 @@ function withoutDanglingTail(line: string, language?: string): string {
  * line that fits is returned clean, with any dangling tail taken off.
  */
 function fitText(value: unknown, place: AiLayoutTextPlace, language?: string): string {
-  const text = aiLayoutCleanText(value)
+  const text = aiLayoutArticles(aiLayoutCleanText(value), language)
   const limit = AI_LAYOUT_TEXT_LIMITS[place]
   if (text.length <= limit) return withoutDanglingTail(text, language)
   const room = text.slice(0, limit + 1)
@@ -155,7 +187,12 @@ export function aiLayoutGuardContacts(line: string, facts: string): string {
       const digits = digitsOf(phone)
       // A year, a price or a count is not a phone number.
       if (digits.length < 7) return phone
-      return knownDigits.has(digits) ? phone : '[phone number]'
+      // One number with and without its country code is one number (AGL-3979):
+      // "+1 512 555 0142" given admits "(512) 555-0142" written.
+      const known = [...knownDigits].some(
+        (given) => given === digits || (Math.min(given.length, digits.length) >= 7 && (given.endsWith(digits) || digits.endsWith(given)) && Math.abs(given.length - digits.length) <= 3),
+      )
+      return known ? phone : '[phone number]'
     })
 }
 

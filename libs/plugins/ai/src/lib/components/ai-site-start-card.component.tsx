@@ -81,11 +81,17 @@ import {
 import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
 import {
   AI_SITE_START_ANSWERS,
+  aiSiteStartAnswersFromClientBuild,
   aiSiteStartBrief,
+  aiSiteStartClientBrief,
+  aiSiteStartClientInputs,
+  aiSiteStartClientNote,
+  aiSiteStartExtrasGiven,
   aiSiteStartInputs,
   aiSiteStartRefusal,
   type AiSiteStartAnswers,
 } from '../model/ai-site-start'
+import { aiSiteInspirationLimit } from '../model/ai-site-inspiration'
 import {
   aiSiteStartFieldErrors,
   aiSiteStartFirstInvalidStep,
@@ -93,6 +99,7 @@ import {
   aiSiteStartPreviousStep,
   aiSiteStartStepErrors,
   aiSiteStartStepIndex,
+  AI_SITE_START_STEPS,
   AI_SITE_START_STEP_FIELDS,
   type AiSiteStartField,
   type AiSiteStartStep,
@@ -104,6 +111,7 @@ import {
   AudienceStep,
   DetailsStep,
   KindStep,
+  MoreDetails,
   ReviewStep,
   StartProgress,
   StepHelp,
@@ -363,6 +371,7 @@ export function AiSiteStartCard({
   startBlank,
   leave,
   pendingSite,
+  clientBuild,
   initialAnswers = null,
 }: AiSiteStartCardProps) {
   const { data: user } = useUser()
@@ -378,11 +387,22 @@ export function AiSiteStartCard({
   // the site does not exist yet. It opens on the first question, where the
   // site's name and address are asked, with every answer after it filled in.
   const [handedOff] = useState(() => (pendingSite && !initialAnswers ? readAiSiteStartAnswers() : null))
+  // A site staff are building for a client (AGL-3958): the intake answered
+  // the questions already, so the start opens on the review with them, and
+  // stays on this screen once it has started. Read once, like a reopened start.
+  const [clientAnswers] = useState(() =>
+    clientBuild && !initialAnswers ? aiSiteStartAnswersFromClientBuild(clientBuild.intake) : null,
+  )
+  const [clientIntake] = useState(() => clientBuild?.intake ?? null)
+  const clientBuildRef = useRef(clientBuild)
+  clientBuildRef.current = clientBuild
   // Read once: a start reopened on its answers stays one while it is open.
-  const reopened = useRef(initialAnswers !== null || handedOff !== null)
+  const reopened = useRef(initialAnswers !== null || handedOff !== null || clientAnswers !== null)
   // A start reopened on its answers opens on the review, every answer there to change.
-  const [step, setStep] = useState<AiSiteStartStep>(initialAnswers ? 'review' : 'choose')
-  const [answers, setAnswers] = useState<AiSiteStartAnswers>(initialAnswers ?? handedOff ?? AI_SITE_START_ANSWERS)
+  const [step, setStep] = useState<AiSiteStartStep>(initialAnswers || clientAnswers ? 'review' : 'choose')
+  const [answers, setAnswers] = useState<AiSiteStartAnswers>(
+    initialAnswers ?? clientAnswers ?? handedOff ?? AI_SITE_START_ANSWERS,
+  )
   // The steps whose reasons not to go forward are shown: the ones Next was refused on.
   const [checked, setChecked] = useState<ReadonlySet<AiSiteStartStep>>(() => new Set())
   // A step opened from the review's Edit goes back to the review on Next.
@@ -401,6 +421,9 @@ export function AiSiteStartCard({
   const [started, setStarted] = useState<AiJobSummary | null>(null)
   // The Free taste's page band (AGL-3594), read off the verdict request.
   const [freeTaste, setFreeTaste] = useState(false)
+  // Whether the Style step asks for the sites the person likes (AGL-3975),
+  // read off the same verdict request: `release_ai_site_inspiration`.
+  const [siteInspiration, setSiteInspiration] = useState(false)
   // What the Free workspace has left this month (AGL-3660), as the same read
   // the create door refuses on: the less of its own band and its owner's
   // allowance across their Free workspaces. `null` when the route said none.
@@ -430,6 +453,7 @@ export function AiSiteStartCard({
         )
         const payload = response.ok ? await response.json().catch(() => null) : null
         if (active) {
+          setSiteInspiration(payload?.siteInspiration === true)
           if (payload?.freeTaste === true) {
             setFreeTaste(true)
             const credits = payload?.freeCredits as AiFreeCreditsLeft | undefined
@@ -445,11 +469,13 @@ export function AiSiteStartCard({
           setVerdict(shown ? 'ready' : 'hidden')
           // "Create site" shows its own dialog when this one will not draw.
           pendingRef.current?.ready(shown)
+          clientBuildRef.current?.ready?.(shown)
         }
       } catch {
         if (active) {
           setVerdict('hidden')
           pendingRef.current?.ready(false)
+          clientBuildRef.current?.ready?.(false)
         }
       }
     })()
@@ -509,10 +535,20 @@ export function AiSiteStartCard({
             orgId,
             hostId: siteId,
             kind: 'site',
-            brief: aiSiteStartBrief(asked),
+            // A client build's intake rides along (AGL-3958): the name and
+            // towns as the inputs the questions leave empty, and how to reach
+            // the business, its hours and the owner's words in the brief.
+            brief: [aiSiteStartBrief(asked), clientIntake ? aiSiteStartClientBrief(clientIntake) : '']
+              .filter(Boolean)
+              .join(' '),
             // The guided start confirms its own plan (AGL-3594): the build
             // follows the plan with no approval to make.
-            inputs: { ...aiSiteStartInputs(asked), [AI_JOB_AUTO_CONFIRM_INPUT]: true },
+            // The sites they like go only while the start asks for them (AGL-3975).
+            inputs: {
+              ...aiSiteStartInputs(siteInspiration ? asked : { ...asked, inspiration: [] }),
+              ...(clientIntake ? aiSiteStartClientInputs(clientIntake) : {}),
+              [AI_JOB_AUTO_CONFIRM_INPUT]: true,
+            },
             ...(pickedModel ? { model: pickedModel } : {}),
             ...(options.creditsConfirmed ? { creditsConfirmed: true } : {}),
             ...(check ? { check: true } : {}),
@@ -562,9 +598,23 @@ export function AiSiteStartCard({
       publishAiJob(created)
       // A removed start's answers have been used (AGL-3936).
       clearAiSiteStartAnswers()
+      // Which optional details the site was asked for with (AGL-3979), by id only.
+      tracker.detailsGiven(
+        aiSiteStartExtrasGiven(asked).map((field) => ({
+          field,
+          step: AI_SITE_START_STEPS.find((at) => AI_SITE_START_STEP_FIELDS[at].includes(field)) ?? 'details',
+        })),
+      )
       // The funnel's last step: the site is started, and nothing after is leaving it.
       tracker.complete()
       tracker.finish()
+      // A client build follows its job here, on the build's own screen, which
+      // goes on to send the owner the preview (AGL-3958).
+      if (clientIntake) {
+        clientBuildRef.current?.onStarted?.({ id: created.id })
+        setStarted(created)
+        return
+      }
       // Where the next step is (AGL-3594): the site's "Building your site"
       // page for this job. The zone closes without the starter first, so the
       // setup page does not ask again behind it.
@@ -580,7 +630,7 @@ export function AiSiteStartCard({
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel, pendingSite, siteKind, tracker])
+  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel, pendingSite, siteKind, tracker, clientIntake, siteInspiration])
 
   // The zone's `startBlank`. Before the site exists it creates it with the
   // starter, and answers `false` when it could not — most often a name or
@@ -698,6 +748,7 @@ export function AiSiteStartCard({
       answers.siteType.trim() ||
         answers.audience.trim() ||
         answers.kind !== null ||
+        aiSiteStartExtrasGiven(answers).length > 0 ||
         (creating && pendingSite?.dirty),
     )
   // Escape and the close control: a dismissal, never a choice. Escape that
@@ -776,7 +827,10 @@ export function AiSiteStartCard({
       title: 'Choose a style',
       lede: 'Each picture is an example home page in that style. Yours is written for your business, with its own colors and fonts within the style you pick.',
     },
-    details: { title: 'A few details', lede: 'Where messages go, how many pages, and what else to draft. All can be changed later.' },
+    details: {
+      title: 'A few details',
+      lede: 'How customers reach you, where messages go, how many pages, and what else to draft. All can be changed later.',
+    },
     review: {
       title: 'Review your site',
       lede: started
@@ -953,10 +1007,30 @@ export function AiSiteStartCard({
               <Box component="section">
                 {step === 'kind' && <KindStep {...stepProps} />}
                 {step === 'audience' && <AudienceStep {...stepProps} />}
-                {step === 'style' && <StyleStep {...stepProps} />}
+                {step === 'style' && (
+                  <StyleStep
+                    {...stepProps}
+                    inspiration={
+                      siteInspiration
+                        ? { limit: aiSiteInspirationLimit(freeTaste), upgradeHref: orgSlug ? aiCreditsBillingHref(orgSlug) : null }
+                        : null
+                    }
+                  />
+                )}
                 {step === 'details' && <DetailsStep {...stepProps} freeTaste={freeTaste} band={band} />}
+                {/* Each question step's optional extras, collapsed, after its own answers (AGL-3979). */}
+                {step !== 'review' && (
+                  <Box sx={{ mt: 3 }}>
+                    <MoreDetails key={step} step={step} {...stepProps} />
+                  </Box>
+                )}
                 {step === 'review' && (
-                  <ReviewStep answers={answers} freeTaste={freeTaste} onEdit={edit}>
+                  <ReviewStep answers={answers} freeTaste={freeTaste} onEdit={edit} inspiration={siteInspiration}>
+                    {clientIntake && (
+                      <Alert severity="info" variant="outlined" data-start-area="client-intake">
+                        {aiSiteStartClientNote(clientIntake)}
+                      </Alert>
+                    )}
                     {!noneLeft && prompt && (
                       <AiCreditsPromptNotice
                         prompt={prompt}

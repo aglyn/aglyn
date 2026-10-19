@@ -50,6 +50,8 @@ import {
   parseUnitRates,
   indexStripePrices,
   comparePlansToStripe,
+  compareAiTiersToStripe,
+  AI_TIER_IDS,
   compareFeeLadder,
   compareUnitRateTables,
   publishedMeteredRates,
@@ -139,8 +141,10 @@ function docsRestatingPrices() {
     ...Object.values(LOCKED.monthly), ...Object.values(LOCKED.annualPerMonth),
     // Add-on figures, from the same Stripe-verified set — the Aglyn AI
     // add-on's per-plan prices (AGL-2896) and the flat Site Care add-on,
-    // monthly and its ×12 yearly (AGL-3954), included.
-    10, 8, 5, 4, 3, 2, 1, 89, 9, 19, 39, 69, 99, 299, 49, 588,
+    // monthly and its ×12 yearly (AGL-3954), and its extra-time hourly rate
+    // (AGL-3959), and a project's starting prices (AGL-3970; the landing
+    // page's $249 is Scale's monthly figure, already above), included.
+    10, 8, 5, 4, 3, 2, 1, 89, 9, 19, 39, 69, 99, 299, 49, 588, 79, 749, 349,
   ].filter((n) => n > 0).map(String))
   // Only the DISTINCTIVE ones: single digits appear in prose constantly and a
   // guard that flags "$2" in an example is a guard people switch off.
@@ -299,7 +303,14 @@ if (metered && markupMatch && cdnMatch && feeMatch) {
 if (args.stripe) {
   const stripe = fetchStripePrices()
   if (!stripe.ok) note('unreadable', 'stripe', stripe.detail)
-  else verdicts.push(...comparePlansToStripe(planPricing, indexStripePrices(stripe.payload)))
+  else {
+    const prices = indexStripePrices(stripe.payload)
+    verdicts.push(...comparePlansToStripe(planPricing, prices))
+    // The Aglyn AI tiers (AGL-3965), and the per-plan prices they replace.
+    verdicts.push(
+      ...compareAiTiersToStripe(parsePlanRecord(entitlementsSrc, 'AI_TIERS', AI_TIER_IDS), prices),
+    )
+  }
 } else {
   note('unreadable', 'stripe', 'skipped with --no-stripe')
 }

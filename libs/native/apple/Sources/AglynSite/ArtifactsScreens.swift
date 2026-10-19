@@ -81,7 +81,7 @@ struct ArtifactsScreen: View {
             }
           } else {
             list(selectable: false, hostID: hostID)
-              .navigationDestination(item: $selection) { id in
+              .aglynPushDestination(item: $selection) { id in
                 ArtifactDetail(context: context, hostID: hostID, kind: kind, id: id, api: api, runner: runner, canEdit: canEdit) {
                   dialog = $0
                 }
@@ -104,14 +104,21 @@ struct ArtifactsScreen: View {
       }
     }
     .navigationTitle(kind.title)
-    .searchable(text: $searchText, prompt: "Search \(kind.title.lowercased())")
+    .aglynScreenTitle(kind.title)
+    .aglynSearchable(text: $searchText, prompt: "Search \(kind.title.lowercased())")
     .task(id: searchText) {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }
     }
-    .toolbar {
+    .aglynPrimaryAction(
+      id: "add-\(kind.singular)", "New \(kind.singular)", systemImage: "plus", enabled: canEdit, shortcut: KeyboardShortcut("n", modifiers: .command)
+    ) {
+      runner.clear()
+      dialog = .create
+    }
+    .aglynScreenToolbar(id: "artifacts-\(kind.singular)") {
       if kind != .template {
-        ToolbarItem(placement: .primaryAction) {
+        AglynSecondaryActions {
           Button {
             runner.clear()
             dialog = .gallery
@@ -122,21 +129,8 @@ struct ArtifactsScreen: View {
           .accessibilityIdentifier("from-template-\(kind.singular)")
         }
       }
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          runner.clear()
-          dialog = .create
-        } label: {
-          Label("New \(kind.singular)", systemImage: "plus")
-        }
-        .disabled(!canEdit)
-        .keyboardShortcut("n", modifiers: .command)
-        .accessibilityIdentifier("add-\(kind.singular)")
-      }
       // Create with AI and anything else a plugin puts beside New (the console's zone for this list).
-      ToolbarItemGroup(placement: .primaryAction) {
-        SlotWidgets(context: context, slot: kind.createZone, placement: .header)
-      }
+      SlotWidgets(context: context, slot: kind.createZone, placement: .header)
     }
     .onAppear {
       if !seeded {
@@ -162,7 +156,7 @@ struct ArtifactsScreen: View {
       Spacer()
       sortMenu
     }
-    .padding(.horizontal, AglynSpace.two)
+    .aglynContentEdges()
     .padding(.vertical, AglynSpace.one)
   }
 
@@ -199,7 +193,7 @@ struct ArtifactsScreen: View {
       ForEach(model.notices, id: \.self) { notice in
         Text(notice).font(AglynFont.caption).foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
       }
       if !kind.kindChoices.isEmpty {
         AglynChipRow(kind.kindChoices.map { AglynChipOption($0.value ?? "all", $0.label) }, selected: model.kindFilter ?? "all") {
@@ -207,7 +201,7 @@ struct ArtifactsScreen: View {
         }
       }
       if dialog == nil, let notice = runner.notice {
-        AglynNotice(notice, tone: .success) { runner.clear() }.padding(.horizontal, AglynSpace.two)
+        AglynNotice(notice, tone: .success) { runner.clear() }.aglynContentEdges()
       }
       rows(selectable: selectable)
     }
@@ -327,6 +321,7 @@ private struct ArtifactDetail: View {
       }
     }
     .navigationTitle(kind.title)
+    .aglynScreenTitle(kind.title)
     .task(id: id) { await live.bind(context.firestore, ["hosts", hostID, kind.collection, id]) }
     .task(id: id) {
       guard kind.versionKind != nil else { return }

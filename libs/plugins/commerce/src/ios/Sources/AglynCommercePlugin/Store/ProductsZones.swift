@@ -21,7 +21,7 @@ struct ProductsZone: View {
       VStack(spacing: AglynSpace.one) {
         ForEach(widgets) { $0.make(context) }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .accessibilityIdentifier("products-zone-\(slot)")
     }
   }

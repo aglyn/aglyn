@@ -74,7 +74,7 @@ struct AiSiteSeoStartCard: View {
   @State private var staged = false
 
   var body: some View {
-    Group {
+    VStack(spacing: 0) {
       if let zone, let found, staged || !aiSiteSeoAlreadySaid(found.proposal, seo: zone.seo) {
         Section {
           VStack(alignment: .leading, spacing: 2) {

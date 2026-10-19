@@ -39,9 +39,12 @@ import {
 } from '../layout-language/ai-layout-frame-hollows'
 import type { AiJob, AiJobOutput, AiJobSitePublish } from '../model/ai-jobs.types'
 import { AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
+import { aiSiteEntityUpdates, aiSiteEntityValues, aiSiteListingUpdates } from '../model/ai-site-entity'
+import { aiSiteSeoProposalForInputs } from '../model/ai-site-start-seo'
 import { aiLayoutWithStoreLinks, type AiStoreLayoutLinks } from '../model/ai-layout-store-links'
 import { aiLayoutWithMenuChanges, aiNoMenuChanges } from '../model/ai-layout-menus'
 import { AI_STORE_LINKS_SOURCE_FIELD as STORE_LINKS_SOURCE_FIELD } from './ai-job-store-links-layout'
+import { updateAiDraftNodes } from './ai-job-drafts'
 
 /**
  * A store's links a build drafted into the site's own layout (AGL-3676): the
@@ -209,6 +212,8 @@ export function aiLayoutWithNavigation(
     homeId?: string | null
     /** Paths whose links come out: a blog the start linked and never wrote (AGL-3660). */
     droppedHrefs?: readonly string[]
+    /** Pages whose links come out: a page the start planned and did not put live (AGL-3988). */
+    droppedScreenIds?: readonly string[]
   },
 ): NodesMap | null {
   const map: Record<string, MutableNode> = {}
@@ -218,12 +223,19 @@ export function aiLayoutWithNavigation(
   let changed = false
   // The header, the phone menu and the footer link a blog by its path before
   // its posts are written (AGL-3660); a start whose posts were not written
-  // publishes none of those links to a page that does not exist.
+  // publishes none of those links to a page that does not exist. Nor does a
+  // start link a page it planned and did not put live (AGL-3988): the
+  // beta.270 Sugar Hollow header linked its refused Galleries page.
   const dropped = new Set(input.droppedHrefs ?? [])
-  if (dropped.size) {
+  const unbuilt = new Set(input.droppedScreenIds ?? [])
+  if (dropped.size || unbuilt.size) {
     const gone = new Set(
       Object.entries(map)
-        .filter(([, node]) => node.componentId === 'muiScreenLink' && dropped.has(String(node.props?.['href'] ?? '')))
+        .filter(
+          ([, node]) =>
+            node.componentId === 'muiScreenLink' &&
+            (dropped.has(String(node.props?.['href'] ?? '')) || unbuilt.has(String(node.props?.['screenId'] ?? ''))),
+        )
         .map(([id]) => id),
     )
     if (gone.size) {
@@ -262,6 +274,57 @@ export function aiLayoutWithNavigation(
     if (added.nodes) return added.nodes as unknown as NodesMap
   }
   return changed ? (map as unknown as NodesMap) : null
+}
+
+/** Elements that only frame what they hold, which go once a link taken out leaves them nothing. */
+const LINK_FRAMES = new Set(['muiStack', 'muiBox', 'muiGrid', 'muiButtonGroup', 'muiCardActions'])
+
+/**
+ * A page's nodes with every link to a page the start did not put live taken
+ * out (AGL-3988), and every frame that held only such links with them, up to
+ * its section: a published site never links to a 404. The beta.270 Sugar
+ * Hollow home page linked its refused Galleries page from "See the
+ * galleries" and the dataset band's "View all galleries". A link is a Page
+ * Link to one of `screenIds`; anything else that opens one (a picture) keeps
+ * its place and loses the link. `null` when nothing links one. Pure.
+ */
+export function aiPageWithoutLinksTo(nodes: NodesMap, screenIds: readonly string[]): NodesMap | null {
+  const missing = new Set(screenIds.filter(Boolean))
+  if (!missing.size) return null
+  const map: Record<string, MutableNode> = {}
+  for (const [id, node] of Object.entries(nodes as unknown as Record<string, MutableNode>)) {
+    map[id] = { ...node, ...(node.props ? { props: { ...node.props } } : {}), ...(node.nodes ? { nodes: [...node.nodes] } : {}) }
+  }
+  const opensMissing = (node: MutableNode | undefined) => missing.has(String(node?.props?.['screenId'] ?? ''))
+  const ids = Object.keys(map).filter((id) => opensMissing(map[id]))
+  if (!ids.length) return null
+  const parentOf = (id: string) => Object.keys(map).find((key) => map[key]?.nodes?.includes(id)) ?? null
+  const removeTree = (id: string) => {
+    for (const child of [...(map[id]?.nodes ?? [])]) removeTree(child)
+    delete map[id]
+  }
+  for (const id of ids) {
+    const node = map[id]
+    if (!node) continue
+    if (node.componentId !== 'muiScreenLink') {
+      const props = { ...(node.props ?? {}) }
+      delete props['screenId']
+      node.props = props
+      continue
+    }
+    let parent = parentOf(id)
+    if (parent) map[parent] = { ...(map[parent] as MutableNode), nodes: (map[parent]?.nodes ?? []).filter((child) => child !== id) }
+    removeTree(id)
+    // The frames it leaves empty, never a section nor the page's root.
+    while (parent && map[parent] && !(map[parent]?.nodes ?? []).length && LINK_FRAMES.has(String(map[parent]?.componentId))) {
+      const above = parentOf(parent)
+      if (!above) break
+      map[above] = { ...(map[above] as MutableNode), nodes: (map[above]?.nodes ?? []).filter((child) => child !== parent) }
+      delete map[parent]
+      parent = above
+    }
+  }
+  return map as unknown as NodesMap
 }
 
 /** The blog a start writes, as its header entry links it (`aiSiteBlogNavPage`). */
@@ -374,13 +437,26 @@ export function aiMergeSitePublish(previous: AiJobSitePublish, retried: AiJobSit
 export async function aiPublishGuidedSite(
   firestore: Firestore,
   input: {
-    job: Pick<AiJob, '$id' | 'orgId' | 'hostId'>
+    job: Pick<AiJob, '$id' | 'orgId' | 'hostId'> & Partial<Pick<AiJob, 'inputs'>>
     outputs: readonly AiJobOutput[]
     now: Date
     /** The start owed its blog's posts and wrote none (AGL-3660): its links to the blog come out. */
     blogUnwritten?: boolean
     /** Paths the layout links that the start did not write, such as a store page (AGL-3676): their links come out. */
     unwrittenHrefs?: readonly string[]
+    /**
+     * The pages the start planned and did not build (AGL-3988): a page its
+     * checks refused. Every link to one — the header's, the footer's, a
+     * button's on a page going live — comes out, and so does every link to
+     * a page this publish leaves a draft.
+     */
+    unbuiltScreenIds?: readonly string[]
+    /**
+     * The start's pages in the order the site lists them (AGL-3988): a page
+     * going live with no place of its own in Pages takes its place there, so
+     * the 404 page's links follow the site's order, never the alphabet.
+     */
+    siteOrder?: readonly string[]
     /** A store's links a build drafted into the site's own layout (AGL-3676), which go live with its pages. */
     storeLinks?: AiSitePublishStoreLinks | null
     /**
@@ -424,7 +500,8 @@ export async function aiPublishGuidedSite(
   const placeholder = input.retry ? null : starter
   const routing = { ...before }
   const entries: Record<string, string> = {}
-  const accepted: Array<{ id: string; label: string; path: string; slug: string }> = []
+  const accepted: Array<{ id: string; label: string; path: string; slug: string; order?: number }> = []
+  const siteOrder = input.siteOrder ?? []
   for (const page of pages) {
     const snapshot = await hostRef.collection('screens').doc(page.id).get()
     const label = String(snapshot.get('displayName') ?? page.label ?? '') || page.label
@@ -444,9 +521,32 @@ export async function aiPublishGuidedSite(
     }
     routing[page.id] = slug
     entries[page.id] = slug
-    accepted.push({ id: page.id, label, path: slug, slug })
+    // Its place in Pages, where the owner has not given it one (AGL-3988).
+    const place = siteOrder.indexOf(page.id)
+    const placed = typeof snapshot.get('order') === 'number'
+    accepted.push({ id: page.id, label, path: slug, slug, ...(place >= 0 && !placed ? { order: place } : {}) })
   }
   if (!accepted.length) return result
+
+  // A page that is not live once this publish is done — planned and never
+  // built, or left a draft just now — is linked from nowhere (AGL-3988).
+  const live = new Set([...accepted.map((page) => page.id), ...Object.keys(before)])
+  const notLive = [...new Set([...(input.unbuiltScreenIds ?? []), ...result.drafts.map((page) => page.id)])].filter(
+    (id) => id && !live.has(id),
+  )
+  if (notLive.length) {
+    for (const page of accepted) {
+      await updateAiDraftNodes(firestore, {
+        kind: 'screen',
+        hostId,
+        id: page.id,
+        now,
+        update: (nodes) => aiPageWithoutLinksTo(nodes, notLive),
+      }).catch((error: unknown) => {
+        console.error('ai site publish: links to an unbuilt page not taken out', { hostId, jobId: job.$id, pageId: page.id, error })
+      })
+    }
+  }
 
   // The first real home page replaces the placeholder in the same write.
   const home = accepted.find((page) => page.path === SCREEN_ROOT_PATH) ?? null
@@ -466,6 +566,7 @@ export async function aiPublishGuidedSite(
     pageIds: accepted.map((page) => page.id),
     entries: navEntriesOf(pages).filter((entry) => entries[entry.screenId]),
     droppedHrefs: [...aiSiteUnwrittenBlogHrefs(input.blogUnwritten), ...(input.unwrittenHrefs ?? [])],
+    droppedScreenIds: notLive,
     retiredHomeId: releases,
     homeId: home?.id ?? null,
     jobId: job.$id,
@@ -522,10 +623,39 @@ export async function aiPublishGuidedSite(
     input.language,
   )
   if (language) Object.assign(hostUpdates, language)
-  const entireHost = layoutWrites.length > 0 || language !== null
+  // Who publishes the site, from the start's answers (AGL-3979): its Setup ->
+  // SEO -> Entity and AI agents fields and its Business details, each only
+  // where empty, so every page's structured data and the site's /llms.txt
+  // name its business type, phone, email, address, hours, areas, profiles and
+  // logo. Every page carries the entity, so the announce asks for the whole
+  // site when any of it changes.
+  const siteName = typeof host.get('displayName') === 'string' ? (host.get('displayName') as string) : null
+  const entity = aiSiteEntityUpdates(
+    host.get('seo'),
+    aiSiteEntityValues(job.inputs, { language: input.language ?? null, siteName }),
+    { logoUrl: host.get('logoUrl'), business: host.get('business') },
+  )
+  Object.assign(hostUpdates, entity)
+  // The site's own listing (AGL-3979): the start's, with the site's name,
+  // over the title and description its creation seeded and nowhere else. A
+  // listing the owner changed keeps their words, and the SEO section still
+  // offers the start's beside them. Every page falls back to it, and
+  // `og:site_name` and /llms.txt read it, so it asks for the whole site too.
+  const listing = aiSiteListingUpdates(
+    host.get('seo'),
+    siteName,
+    aiSiteSeoProposalForInputs(job.inputs, input.language ?? null, siteName),
+  )
+  Object.assign(hostUpdates, listing)
+  const entireHost =
+    layoutWrites.length > 0 || language !== null || Object.keys(entity).length > 0 || Object.keys(listing).length > 0
   batch.update(hostRef, hostUpdates)
   for (const page of accepted) {
-    batch.set(hostRef.collection('screens').doc(page.id), { slug: page.slug, publishedAt: now }, { merge: true })
+    batch.set(
+      hostRef.collection('screens').doc(page.id),
+      { slug: page.slug, publishedAt: now, ...(page.order !== undefined ? { order: page.order } : {}) },
+      { merge: true },
+    )
   }
   for (const write of layoutWrites) {
     if (write.version) batch.create(write.versionRef, write.version)
@@ -583,6 +713,7 @@ async function aiNavigationLayoutWrite(
     pageIds: readonly string[]
     entries: readonly NavEntry[]
     droppedHrefs: readonly string[]
+    droppedScreenIds: readonly string[]
     retiredHomeId: string | null
     homeId: string | null
     jobId: string
@@ -590,7 +721,7 @@ async function aiNavigationLayoutWrite(
     storeLinks?: AiSitePublishStoreLinks | null
   },
 ): Promise<LayoutWrite | null> {
-  if (!input.entries.length && !input.retiredHomeId && !input.droppedHrefs.length && !input.storeLinks) return null
+  if (!input.entries.length && !input.retiredHomeId && !input.droppedHrefs.length && !input.droppedScreenIds.length && !input.storeLinks) return null
   const layoutId = await aiPagesLayoutId(firestore, input.hostId, input.pageIds)
   if (!layoutId) return null
   return aiLayoutVersionWrite(firestore, {

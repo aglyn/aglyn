@@ -1113,6 +1113,69 @@ describe('after "Plan my site": where the next step is (AGL-3594)', () => {
 })
 
 /**
+ * A site staff are building for a client (AGL-3958): the one-screen build has
+ * asked the business details already, created the site and gathered the
+ * owner's photos. The start opens on its review with those answers, passes
+ * the rest of the intake to the job, and stays on the build's screen.
+ */
+describe('a site staff are building for a client (AGL-3958)', () => {
+  const intake = {
+    businessName: 'Harbor Plumbing',
+    whatTheyDo: 'a family plumbing business',
+    towns: 'Austin and Round Rock',
+    phone: '(512) 555-0123',
+    email: 'owner@example.com',
+    hours: 'Mon–Fri 8–5',
+    ownerWords: 'Three generations fixing pipes the right way.',
+  }
+  beforeEach(() => mockPush.mockReset())
+
+  it('opens on the review with the intake, starts the job with all of it, and stays on the screen', async () => {
+    const onStarted = jest.fn()
+    const ready = jest.fn()
+    const leave = jest.fn()
+    const Widget = widget()
+    mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
+    render(<Widget {...zoneProps({ leave, clientBuild: { intake, onStarted, ready } })} />)
+    await onStep('review')
+    expect(ready).toHaveBeenCalledWith(true)
+    expect(screen.getByText(/^Also from the client’s details: Harbor Plumbing, serving Austin and Round Rock/)).toBeTruthy()
+    // The follow that replaces the review reads the job from the same route.
+    mockFetch.mockResolvedValue(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ id: 'job-1' }))
+    const body = JSON.parse(postCall()[1].body)
+    expect(body.brief).toContain('a family plumbing business')
+    expect(body.brief).toContain('The business is called Harbor Plumbing.')
+    expect(body.brief).toContain('call (512) 555-0123 or email owner@example.com')
+    expect(body.brief).toContain('Its hours are Mon–Fri 8–5.')
+    expect(body.brief).toContain(`In the owner's own words: "${intake.ownerWords}"`)
+    expect(body.inputs).toEqual(
+      expect.objectContaining({
+        businessType: 'a family plumbing business',
+        businessName: 'Harbor Plumbing',
+        city: 'Austin and Round Rock',
+        autoConfirm: true,
+      }),
+    )
+    // It follows the job here instead of opening the site's build page.
+    expect(await screen.findByText(/Your site is being planned/)).toBeTruthy()
+    expect(mockPush).not.toHaveBeenCalled()
+    expect(leave).not.toHaveBeenCalled()
+    expect(mockStartBlank).not.toHaveBeenCalled()
+  })
+
+  it('tells the build when it will not draw', async () => {
+    const ready = jest.fn()
+    const Widget = widget()
+    mockFetch.mockResolvedValueOnce(json({ error: 'Not found' }, 404))
+    const { container } = render(<Widget {...zoneProps({ clientBuild: { intake, ready } })} />)
+    await waitFor(() => expect(ready).toHaveBeenCalledWith(false))
+    expectNothingDrawn(container)
+  })
+})
+
+/**
  * The takeover's surface (AGL-3596). A full-screen Dialog's paper is an
  * elevated paper, and in dark mode MUI lightens one with a white overlay — a
  * `background-image` over the paper color — which turned the guided start a
@@ -1603,5 +1666,91 @@ describe('the guided start reports where people get lost (AGL-3898)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
     const sent = JSON.stringify(mockTrack.mock.calls)
     expect(sent).not.toMatch(/Zelda|zelda|bakery|friends/)
+  })
+})
+
+/*
+ * How customers reach the business, and More details on every step
+ * (AGL-3979): the phone and email are asked on the Details step itself, the
+ * rest in a collapsed "More details" a step at a time; each is held to its
+ * rule beside its field, listed on the review, and carried on the job only
+ * where given.
+ */
+describe('the business details a start may be given (AGL-3979)', () => {
+  it('offers More details, collapsed, on every question step', async () => {
+    await openCard()
+    for (const step of ['kind', 'audience', 'style', 'details'] as const) {
+      await onStep(step)
+      const more = screen.getByRole('button', { name: /More details/ })
+      expect(more.getAttribute('aria-expanded')).toBe('false')
+      if (step === 'kind') typeAnswer(/What kind of site are you creating\?/, 'a family plumbing company')
+      pressNext()
+    }
+    await onStep('review')
+    expect(screen.queryByRole('button', { name: /More details/ })).toBeNull()
+  })
+
+  it('carries the phone, the email and what More details was given on the job, and lists them on the review', async () => {
+    await openCard({ host: null })
+    await answerTo('details', 'a family plumbing company')
+    typeAnswer(/Business phone/, '(512) 555-0142')
+    typeAnswer(/Business email/, 'hello@pipeworks.co')
+    fireEvent.click(screen.getByRole('button', { name: /More details/ }))
+    typeAnswer(/Street address/, '214 Main Street')
+    typeAnswer(/City or town/, 'Austin')
+    typeAnswer(/Social profiles/, 'instagram.com/pipeworks')
+    pressNext()
+    await onStep('review')
+    const review = screen.getByRole('list', { name: 'Your answers' })
+    expect(review.textContent).toContain('(512) 555-0142')
+    expect(review.textContent).toContain('hello@pipeworks.co')
+    expect(review.textContent).toContain('214 Main Street, Austin')
+    expect(review.textContent).toContain('instagram.com/pipeworks')
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await screen.findByText(/Your site is being planned/)
+    const [, init] = postCall()
+    expect(JSON.parse(init.body).inputs).toEqual(
+      expect.objectContaining({
+        phone: '(512) 555-0142',
+        email: 'hello@pipeworks.co',
+        street: '214 Main Street',
+        city: 'Austin',
+        social: 'instagram.com/pipeworks',
+      }),
+    )
+  })
+
+  it('says beside the field what is wrong with an email, and stays on the step', async () => {
+    await openCard()
+    await answerTo('details')
+    typeAnswer(/Business email/, 'hello at pipeworks')
+    pressNext()
+    expect(await screen.findByText(/Enter an email address, like hello@yourbusiness.com/)).toBeTruthy()
+    await onStep('details')
+  })
+
+  it('opens More details when a Next is refused on one of its fields', async () => {
+    await openCard()
+    await answerTo('details')
+    fireEvent.click(screen.getByRole('button', { name: /More details/ }))
+    typeAnswer(/Social profiles/, 'my instagram')
+    fireEvent.click(screen.getByRole('button', { name: /More details/ }))
+    expect(screen.getByRole('button', { name: /More details/ }).getAttribute('aria-expanded')).toBe('false')
+    pressNext()
+    await onStep('details')
+    expect(screen.getByRole('button', { name: /More details/ }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText(/Paste each profile’s address/)).toBeTruthy()
+  })
+
+  it('sends no detail it was not given', async () => {
+    await openCard({ host: null })
+    await answerTo('review')
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await screen.findByText(/Your site is being planned/)
+    const [, init] = postCall()
+    const inputs = JSON.parse(init.body).inputs
+    for (const key of ['phone', 'email', 'street', 'hours', 'social', 'tagline']) expect(inputs).not.toHaveProperty(key)
   })
 })

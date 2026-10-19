@@ -342,6 +342,16 @@ export function isHttpsUrl(value: string): boolean {
   }
 }
 
+/**
+ * A link that calls or writes (AGL-3979): `tel:` and a phone number's digits,
+ * a `+` only first, or `mailto:` and one address with nothing after it. The
+ * number or address itself is held to the facts the job was given by the
+ * layout's own contact check, which reads every prop.
+ */
+export function isContactHref(value: string): boolean {
+  return /^tel:\+?\d{7,15}$/.test(value) || /^mailto:[^\s@<>?#"]+@[^\s@<>?#"]+\.[^\s@<>?#".]{2,}$/i.test(value)
+}
+
 /** A path on this site: one leading slash, never a scheme-relative `//`. */
 export function isRootRelativePath(value: string): boolean {
   return /^\/(?!\/)[^\s<>"'`\\]*$/.test(value)
@@ -507,7 +517,7 @@ function sanitizeString(
     }
     case 'url': {
       if (bindingTokens?.has(value)) break
-      if (!isHttpsUrl(value) && !isRootRelativePath(value)) {
+      if (!isHttpsUrl(value) && !isRootRelativePath(value) && !isContactHref(value)) {
         repairs.push(
           `${nodeId}.${name} is neither an https: URL nor a path on this site; dropped`,
         )

@@ -902,9 +902,11 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // err low: the token counting endpoint puts the page's cached span at
       // 2,872 tokens and the frame's at 3,471 on the balanced tier, tools
       // and their system prompt included. Both up 10 at AGL-3717, which says
-      // an image block whose `to` is lightbox opens its picture large.
-      'layout-page': { prefixTokens: 1_841, minimum: 512, caches: true, toolsStable: true },
-      'layout-frame': { prefixTokens: 2_212, minimum: 512, caches: true, toolsStable: true },
+      // an image block whose `to` is lightbox opens its picture large. Up 19
+      // and 20 at AGL-3979, which names phone and email as where a link goes:
+      // a call or write button reaches the number or address the brief gives.
+      'layout-page': { prefixTokens: 1_860, minimum: 512, caches: true, toolsStable: true },
+      'layout-frame': { prefixTokens: 2_232, minimum: 512, caches: true, toolsStable: true },
       // 3,326 before AGL-3403 widened the components a theme may style and
       // gave a component leaf its theme-aware `sx` target.
       theme: { prefixTokens: 3_518, minimum: 512, caches: true, toolsStable: true },

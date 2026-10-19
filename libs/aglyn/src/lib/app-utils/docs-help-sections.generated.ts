@@ -70,12 +70,12 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#from-a-brief': 'Open Components for the site and choose Create with AI, beside Templates and Create Component.',
   },
   aiCreate: {
-    '#without-the-add-on': 'On a paid plan without the Aglyn AI add-on, the button is still there.',
+    '#without-the-add-on': 'On every paid plan, Create with AI runs on the AI credits your plan includes each month; nothing else needs to be bought.',
   },
   aiCredits: {
     '#before-a-job-starts': 'Every job tells you what it will cost before it spends anything: A plan shows Estimated cost: About N credits (up to M) beside Confirm plan: about what jobs like it cost on real builds, and the most it can cost.',
     '#past-the-band': 'On a paid plan, AI keeps working past the included band, and the extra credits are billed on your monthly invoice at your plan\'s rate per 1,000 credits.',
-    '#see-your-credits': 'Billing → Usage → AI credits shows the credits drawn this month against the included band, and what the add-on adds.',
+    '#see-your-credits': 'Billing → Usage → AI credits shows the credits drawn this month against the pool, and how many of them your tier adds.',
   },
   aiCrm: {
     '#draft-an-email': 'In the email composer on a contact, a deal or a lead, describe what the email should say (for example, "follow up on the quote and offer a call next week") and press Draft the message.',
@@ -143,10 +143,10 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   },
   aiStart: {
     '#audience': 'Who is it for? is optional. It is who every page and every search listing is written for, and it decides which questions the contact form asks.',
-    '#details': 'Where do form submissions go? decides where messages from the site\'s contact form land: You can change this on the form itself afterwards.',
+    '#details': 'Business phone and Business email come first. Both are optional.',
     '#how-do-you-want-to-start': 'The first step asks for the site\'s Site name and Subdomain, its free address on Aglyn.',
-    '#review': 'The last step lists every answer: the kind of site, who it is for, the style, where form submissions go, the pages and, on a paid plan, the welcome email.',
-    '#the-sites-search-listing': 'The site\'s own search title and description, the fallback for every page without its own, are not saved for you.',
+    '#review': 'The last step lists every answer: the kind of site, who it is for, the style, where form submissions go, the pages and, on a paid plan, the welcome email, then every detail you gave, such as the phone, the email, the…',
+    '#the-sites-search-listing': 'The site\'s own search title and description are the fallback for every page without its own, and what search results and AI assistants read about the site as a whole.',
     '#your-business': 'What kind of site are you creating? is the one required answer.',
   },
   aiTemplate: {
@@ -176,6 +176,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#crm-records': 'Your CRM — the contacts captured from forms, member sign-ups, buyers and bookings, and the companies and deals your team files beside them — is priced as one CRM records band, not a hard cap.',
     '#current-plan': 'The Current plan card at the top of the Plan tab names your plan, the state of its subscription and its price, with the plan\'s headline limits — sites, team seats and campaign emails a month — beside it.',
     '#if-you-would-rather-uploads-stopped': 'Set a monthly storage cap on the Storage cap card under Billing → Usage when you would rather new uploads stopped than pay for extra storage past a figure you choose.',
+    '#locked-features': 'A feature your plan doesn\'t include stays on screen, turned off, with Included from and the plan that has it, and an Upgrade link to the plans on this page; moving to that plan turns it on, with nothing else to set up.',
     '#made-with-badge': 'Published pages on the Free plan show a small Made with Aglyn badge; plans that include badge removal drop it automatically, with nothing to switch on.',
     '#metered-usage-estimate': 'The Metered usage estimate card prices this month\'s usage so far, using the same arithmetic as the invoice: only what goes past your plan\'s included amount is charged, at our cost plus 30% after card fees.',
     '#one-to-one-email': 'A one-to-one email is a message a teammate writes to one person from a CRM record — Send email on a contact\'s, a lead\'s or a deal\'s page, described under Activities & the timeline — as against a campaign, which is…',
@@ -599,6 +600,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#audit-log': 'A record of staff actions, newest first. Click an entry to read its reason, note and before/after below the list.',
     '#billing-insight': 'Every organization\'s Stripe invoice history and default payment method (with delinquency state) render on its detail page.',
     '#broadcast-announcements': 'Push a product announcement or maintenance notice as an in-app notification to every organization\'s owner/admins (optionally one plan tier), respecting each recipient\'s mute preferences; audited.',
+    '#bundle-link': 'The Bundle checkout link card on an organization\'s page, and the header of the Hand off dialog, make a link to the owner\'s Billing page with the plan, add-ons, billing interval and coupon already chosen.',
     '#contact-suppressions': 'The platform do-not-contact list for phone numbers — calls and texts.',
     '#coupons': 'Discount codes for Aglyn\'s own subscriptions. They live in Stripe — the console creates them there and reads them back, so a coupon made in the Stripe Dashboard shows up here and vice versa.',
     '#create-a-coupon': 'Make a discount code for Aglyn\'s own subscriptions here: give it a name, a type and a duration, read the cost warnings the form shows, then create it.',

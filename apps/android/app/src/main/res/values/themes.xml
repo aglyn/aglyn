@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <style name="Theme.Aglyn" parent="android:Theme.Material.Light.NoActionBar" />
+  <!-- The window behind the first Compose frame is the splash's own ground (light, or dark in values-night), so the
+       hand-over from the splash never shows a frame of another color (P14). -->
+  <style name="Theme.Aglyn" parent="android:Theme.Material.Light.NoActionBar">
+    <item name="android:windowBackground">@color/aglyn_splash_ground</item>
+  </style>
 
   <!-- The launch screen (AGL-3934): the sign-in ground (bg/canvas, dark in values-night) and the mark drawing in on Android
        12+ (drawable-v31/splash_icon), the still mark before it. MainActivity keeps it up until the auth state is known. -->

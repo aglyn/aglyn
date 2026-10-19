@@ -22,9 +22,16 @@ import {
   PLATFORM_BRAND_NAME,
   planSellsSiteCare,
   pluginRequestFromWeb,
+  type AiTierId,
   type AttemptClaim,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
+// The Aglyn AI tiers (AGL-3965) by their own module, not the server barrel
+// route specs stub with a partial object.
+import {
+  defaultAiTierForPlan,
+  isAiTierId,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   emailUnverifiedResponse,
   featureLockdownRefusal,
@@ -40,10 +47,19 @@ import {
 } from '../../../../utils/internal-traffic'
 import { configuredPriceFault } from '../../../../utils/stripe-price-fault'
 import {
+  ADDON_KINDS,
+  addonMaxForPlan,
+  addonPriceEnvName,
   addonPriceId,
   addonUnitUsd,
   meteredPriceId,
+  type AddonKind,
 } from '@aglyn/tenant-data-admin/server/billing-addons'
+import {
+  bundleAddonLabel,
+  parseBundleAddons,
+  type BundleAddons,
+} from '@aglyn/aglyn/app-utils/bundle-intent'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   describeDiscountFullUse,
@@ -257,20 +273,19 @@ export async function resolvePromotionCode(
 function promotionCodeFullUseMetadata(
   plan: OrgPlan,
   interval: 'month' | 'year',
-  addons: { aiAddon: boolean; siteCare: boolean },
+  addons: BundleAddons,
   promo: Awaited<ReturnType<typeof resolvePromotionCode>>,
+  /** The Aglyn AI tier the checkout sells (AGL-3965), when it sells one. */
+  aiTier: AiTierId | null = null,
 ): Record<string, string> {
   if (!promo.id) return {}
-  const { aiAddon, siteCare } = addons
   try {
     const assessed = orgDiscountFullUse(
       {
         plan,
         subscription: { status: 'active', interval },
-        seatAddons: {
-          ...(aiAddon ? { aiAddon: 1 } : {}),
-          ...(siteCare ? { siteCare: 1 } : {}),
-        },
+        seatAddons: { ...addons },
+        ...((addons.aiAddon ?? 0) > 0 && aiTier ? { aiTier } : {}),
       } as never,
       {
         percentOff: promo.percentOff ?? undefined,
@@ -283,8 +298,7 @@ function promotionCodeFullUseMetadata(
         code: promo.code,
         plan,
         interval,
-        aiAddon,
-        siteCare,
+        addons,
         verdict: describeDiscountFullUse(assessed),
       })
     }
@@ -297,6 +311,25 @@ function promotionCodeFullUseMetadata(
     console.error('[billing/checkout] full-use verdict unavailable', error)
     return {}
   }
+}
+
+/**
+ * The add-ons a checkout asks for (AGL-3955): the `addons` map or link form
+ * the bundle sends, read by the same parser the link and the proposal use,
+ * plus the two flags the Billing page sent before it (`aiAddon`, AGL-2897;
+ * `siteCare`, AGL-3954). An `ai:<tier>` entry names the Aglyn AI tier
+ * (AGL-3965), as `aiTier` does.
+ */
+function requestedAddons(body: any): {
+  addons: BundleAddons
+  dropped: string[]
+  aiTier: AiTierId | null
+} {
+  const parsed = parseBundleAddons(body?.addons)
+  const addons: BundleAddons = { ...parsed.addons }
+  if (body?.aiAddon === true) addons.aiAddon = 1
+  if (body?.siteCare === true) addons.siteCare = 1
+  return { addons, dropped: parsed.dropped, aiTier: parsed.aiTier ?? null }
 }
 
 /**
@@ -329,7 +362,20 @@ async function handler(request: Request): Promise<Response> {
   // nothing else. Refused here, ahead of the price lookup, so a Free request
   // reads as what it is rather than as the "billing is not configured" 501
   // that a plan with no price would otherwise answer.
-  const siteCareWanted = body?.siteCare === true
+  const requested = requestedAddons(body)
+  // An add-on nobody can name is refused, never silently left off: the
+  // Billing page drops what a link misspelled BEFORE it quotes, so anything
+  // unknown arriving here is a request that would bill less than it shows.
+  if (requested.dropped.length) {
+    return Response.json(
+      {
+        error: `Unknown add-on: ${requested.dropped.join(', ')}.`,
+        code: 'unknown_addon',
+      },
+      { status: 400 },
+    )
+  }
+  const siteCareWanted = (requested.addons.siteCare ?? 0) > 0
   if (siteCareWanted && !planSellsSiteCare(plan)) {
     return Response.json(
       {
@@ -358,22 +404,84 @@ async function handler(request: Request): Promise<Response> {
   // through `/api/billing/addons` would. Refused rather than dropped when it
   // cannot be priced: a checkout that quietly sold the plan without the
   // add-on the visitor clicked would bill less and deliver less than shown.
-  const aiAddonWanted = body?.aiAddon === true
-  if (aiAddonWanted && addonUnitUsd('aiAddon', plan as OrgPlan) === null) {
+  //
+  // Since AGL-3965 the add-on is a TIER chosen on its own: `aiTier` names it
+  // (`?ai=boost`), as does an `ai:<tier>` entry in the bundle's `addons`
+  // (AGL-3955; `aiTier` wins when both are sent), and `aiAddon: true` alone
+  // means the tier with the plan's old price and band
+  // (`defaultAiTierForPlan`), so a link published before tiers still sells
+  // what it quoted. An unknown tier is refused, not guessed.
+  if (body?.aiTier != null && !isAiTierId(body.aiTier)) {
+    return Response.json({ error: 'Unknown AI tier' }, { status: 400 })
+  }
+  const aiAddonWanted =
+    (requested.addons.aiAddon ?? 0) > 0 || isAiTierId(body?.aiTier)
+  const aiTier: AiTierId | null = aiAddonWanted
+    ? (isAiTierId(body?.aiTier)
+        ? body.aiTier
+        : (requested.aiTier ?? defaultAiTierForPlan(plan)))
+    : null
+  if (aiAddonWanted && addonUnitUsd('aiAddon', plan as OrgPlan, aiTier) === null) {
     return Response.json(
       { error: `This plan does not include the ${PLATFORM_BRAND_NAME} AI add-on.` },
       { status: 400 },
     )
   }
+  // Every other add-on Billing sells (AGL-3955), held to what the plan sells
+  // and to its ceiling — the same `addonMaxForPlan` the add-ons route sells
+  // against after the subscription exists, so the bundle cannot buy at
+  // checkout what the add-ons card would refuse a minute later.
+  for (const kind of ADDON_KINDS) {
+    if (kind === 'aiAddon' || kind === 'siteCare') continue
+    const quantity = Math.floor(Number(requested.addons[kind] ?? 0))
+    if (!(quantity > 0)) continue
+    const max = addonMaxForPlan(kind, plan as OrgPlan)
+    if (addonUnitUsd(kind, plan as OrgPlan) === null || max <= 0) {
+      return Response.json(
+        { error: `${bundleAddonLabel(kind)} is not sold on this plan.`, code: 'addon_not_sold' },
+        { status: 400 },
+      )
+    }
+    if (quantity > max) {
+      return Response.json(
+        {
+          error: `This plan sells at most ${max} of ${bundleAddonLabel(kind)}.`,
+          code: 'addon_over_max',
+        },
+        { status: 400 },
+      )
+    }
+  }
+  const otherAddonLines: Array<{
+    kind: AddonKind
+    quantity: number
+    priceId: string
+    envVar: string
+  }> = []
+  for (const kind of ADDON_KINDS) {
+    if (kind === 'aiAddon' || kind === 'siteCare') continue
+    const quantity = Math.floor(Number(requested.addons[kind] ?? 0))
+    if (!(quantity > 0)) continue
+    const envVar = addonPriceEnvName(kind, plan as OrgPlan, interval) ?? ''
+    const addonPrice = addonPriceId(kind, plan as OrgPlan, interval)
+    if (!addonPrice) {
+      return Response.json({
+        error:
+          `Billing is not configured: ${envVar || 'its price'} is unset, so ` +
+          `${bundleAddonLabel(kind)} cannot be sold on this plan yet.`,
+      }, { status: 501 })
+    }
+    otherAddonLines.push({ kind, quantity, priceId: addonPrice, envVar })
+  }
   const aiAddonPriceId = aiAddonWanted
-    ? addonPriceId('aiAddon', plan as OrgPlan, interval)
+    ? addonPriceId('aiAddon', plan as OrgPlan, interval, aiTier)
     : null
   if (aiAddonWanted && !aiAddonPriceId) {
     return Response.json({
       error:
-        'Billing is not configured: STRIPE_PRICE_' +
-        `${plan.toUpperCase()}_AI_ADDON${interval === 'year' ? '_YEARLY' : ''} ` +
-        `is unset, so the ${PLATFORM_BRAND_NAME} AI add-on cannot be sold on this plan yet.`,
+        'Billing is not configured: STRIPE_PRICE_AI_' +
+        `${String(aiTier).toUpperCase()}${interval === 'year' ? '_YEARLY' : ''} ` +
+        `is unset, so the ${PLATFORM_BRAND_NAME} AI add-on cannot be sold yet.`,
     }, { status: 501 })
   }
   // Site Care bought WITH the plan (AGL-3954), the way the AI add-on is: one
@@ -560,11 +668,14 @@ async function handler(request: Request): Promise<Response> {
       // the card is the total the card is charged. Quantity 1 is the whole
       // add-on, and each takes the next slot after the metered item.
       let nextPreviewItem = meteredPreview ? 2 : 1
-      for (const addonPrice of [aiAddonPriceId, siteCarePriceId]) {
-        if (!addonPrice) continue
+      for (const line of [
+        ...otherAddonLines,
+        ...(aiAddonPriceId ? [{ priceId: aiAddonPriceId, quantity: 1 }] : []),
+        ...(siteCarePriceId ? [{ priceId: siteCarePriceId, quantity: 1 }] : []),
+      ]) {
         const at = nextPreviewItem++
-        preview.set(`subscription_details[items][${at}][price]`, addonPrice)
-        preview.set(`subscription_details[items][${at}][quantity]`, '1')
+        preview.set(`subscription_details[items][${at}][price]`, line.priceId)
+        preview.set(`subscription_details[items][${at}][quantity]`, String(line.quantity))
       }
       const promo = await resolvePromotionCode(
         secretKey,
@@ -766,6 +877,15 @@ async function handler(request: Request): Promise<Response> {
     // Interval-matched through `addonPriceId`, for the reason the metered
     // item is: one `recurring.interval` per subscription.
     let nextItem = meteredNative ? 2 : 1
+    // The bundle's other add-ons (AGL-3955) first, each at its quantity, so
+    // the AI and Site Care items keep their order after them.
+    const otherAddonItems: Array<{ index: number; envVar: string }> = []
+    for (const line of otherAddonLines) {
+      const index = nextItem++
+      subParams.set(`items[${index}][price]`, line.priceId)
+      subParams.set(`items[${index}][quantity]`, String(line.quantity))
+      otherAddonItems.push({ index, envVar: line.envVar })
+    }
     let aiAddonItemIndex: number | null = null
     if (aiAddonPriceId) {
       aiAddonItemIndex = nextItem++
@@ -794,8 +914,13 @@ async function handler(request: Request): Promise<Response> {
       promotionCodeFullUseMetadata(
         plan as OrgPlan,
         interval,
-        { aiAddon: aiAddonWanted, siteCare: siteCareWanted },
+        {
+          ...Object.fromEntries(otherAddonLines.map((line) => [line.kind, line.quantity])),
+          ...(aiAddonWanted ? { aiAddon: 1 } : {}),
+          ...(siteCareWanted ? { siteCare: 1 } : {}),
+        },
         promo,
+        aiTier,
       ),
     )) {
       subParams.set(key, value)
@@ -826,6 +951,8 @@ async function handler(request: Request): Promise<Response> {
         interval,
         aiAddonItemIndex,
         siteCareItemIndex,
+        aiTier,
+        otherAddonItems,
       )
       if (missing) return Response.json({ error: missing }, { status: 501 })
       return Response.json(

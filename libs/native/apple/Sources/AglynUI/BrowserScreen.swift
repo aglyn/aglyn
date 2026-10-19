@@ -180,20 +180,34 @@ public struct AglynBrowserScreen: View {
         }
       }
       .navigationTitle(title)
-      #if os(macOS)
-        .navigationSubtitle(address)
-      #endif
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
+        .toolbar { toolbar }
+      #else
+        // The Mac window has no system toolbar: back, forward, reload and the page menu sit in the screen's head.
+        .aglynScreenTitle(title)
+        .aglynScreenToolbar(id: "browser") {
+          // The page's address beside its controls, as the subtitle the window's title bar used to carry.
+          Text(address)
+            .font(.system(size: AglynShellMetrics.rowText - 1))
+            .foregroundStyle(AglynColor.secondaryText)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .frame(maxWidth: 320, alignment: .trailing)
+            .accessibilityIdentifier("browser-address")
+          back
+          forward
+          reload
+          menu
+        }
       #endif
-      .toolbar { toolbar }
       .accessibilityIdentifier("browser-screen")
   }
 
-  @ToolbarContentBuilder
-  private var toolbar: some ToolbarContent {
-    #if os(iOS)
+  #if os(iOS)
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
       ToolbarItem(placement: .principal) { heading }
       if compact {
         ToolbarItemGroup(placement: .bottomBar) {
@@ -212,15 +226,8 @@ public struct AglynBrowserScreen: View {
           menu
         }
       }
-    #else
-      ToolbarItemGroup(placement: .primaryAction) {
-        back
-        forward
-        reload
-        menu
-      }
-    #endif
-  }
+    }
+  #endif
 
   /// The page's title over its address, in the middle of a phone's or iPad's bar.
   private var heading: some View {
@@ -234,28 +241,41 @@ public struct AglynBrowserScreen: View {
     .accessibilityIdentifier("browser-heading")
   }
 
+  /// A toolbar button's face: on the Mac the title bar's plain 6-point square (Figma Compact), elsewhere the system's.
+  @ViewBuilder
+  private func barLabel(_ title: String, systemImage: String) -> some View {
+    #if os(macOS)
+      AglynBarSymbol(systemImage: systemImage).accessibilityLabel(title)
+    #else
+      Label(title, systemImage: systemImage)
+    #endif
+  }
+
   private var back: some View {
-    Button { state.back() } label: { Label("Back", systemImage: "chevron.backward") }
+    Button { state.back() } label: { barLabel("Back", systemImage: "chevron.backward") }
       .disabled(!state.canGoBack)
       .help("Back to the previous page")
       .accessibilityLabel("Previous page")
       .accessibilityIdentifier("browser-back")
+      .aglynBarButtonStyle()
   }
 
   private var forward: some View {
-    Button { state.forward() } label: { Label("Forward", systemImage: "chevron.forward") }
+    Button { state.forward() } label: { barLabel("Forward", systemImage: "chevron.forward") }
       .disabled(!state.canGoForward)
       .help("Forward to the next page")
       .accessibilityLabel("Next page")
       .accessibilityIdentifier("browser-forward")
+      .aglynBarButtonStyle()
   }
 
   private var reload: some View {
     Button { state.reload() } label: {
-      Label(state.loading ? "Stop" : "Reload", systemImage: state.loading ? "xmark" : "arrow.clockwise")
+      barLabel(state.loading ? "Stop" : "Reload", systemImage: state.loading ? "xmark" : "arrow.clockwise")
     }
     .help(state.loading ? "Stop loading" : "Reload this page")
     .accessibilityIdentifier("browser-reload")
+    .aglynBarButtonStyle()
   }
 
   private var menu: some View {
@@ -277,8 +297,14 @@ public struct AglynBrowserScreen: View {
       }
       .accessibilityIdentifier("browser-share")
     } label: {
-      Label("More", systemImage: "ellipsis.circle")
+      barLabel("More", systemImage: "ellipsis.circle")
     }
+    #if os(macOS)
+      .menuStyle(.button)
+      .buttonStyle(.plain)
+      .menuIndicator(.hidden)
+      .fixedSize()
+    #endif
     .help("Open in browser, copy or share this page")
     .accessibilityIdentifier("browser-menu")
   }
@@ -417,5 +443,17 @@ public struct AglynBrowserStack<Content: View>: View {
           .toolbar(.hidden, for: .navigationBar)
         #endif
     }
+  }
+}
+
+extension View {
+  /// The Mac's plain title-bar button (the face draws itself); the system's elsewhere.
+  @ViewBuilder
+  func aglynBarButtonStyle() -> some View {
+    #if os(macOS)
+      buttonStyle(.plain)
+    #else
+      self
+    #endif
   }
 }

@@ -65,11 +65,12 @@ import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
 } from '../model/ai-site-start-seo'
+import { aiSiteDetailsBriefLines } from '../model/ai-site-details'
 import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
-import { AI_STOCK_PHOTO_AVOID_INPUT, AI_STOCK_PHOTO_PAGES_INPUT } from './ai-layout-stock-photos'
+import { AI_STOCK_PHOTO_AVOID_INPUT, AI_STOCK_PHOTO_JOB_PHOTOS_INPUT, AI_STOCK_PHOTO_PAGES_INPUT } from './ai-layout-stock-photos'
 import {
   AI_LAYOUT_SITE_ALIASES_INPUT,
   AI_LAYOUT_SITE_PAGES_INPUT,
@@ -109,6 +110,7 @@ import {
   aiSiteDatasetBriefLines,
   aiSiteDatasetInputOf,
   aiSiteDatasetListings,
+  aiSiteDatasetPlacedPhotoDetails,
   aiSiteDatasetPlacedPhotos,
   aiSiteDatasetRefusal,
   aiSitePlanDatasets,
@@ -150,6 +152,8 @@ import {
   type AiJobStepRunner,
 } from './ai-job-text-step'
 import { AI_JOB_PAGE_STEP_MINIMUM_MS } from './ai-job-page-budget'
+import { AI_SITE_INSPIRATION_SIGNALS_INPUT, aiSiteInspirationReleased } from './ai-site-inspiration'
+import { aiSiteInspirationRefusal } from '../model/ai-site-inspiration'
 import {
   aiJobStepRunMinimumMs,
   aiJobStepRunnerFor,
@@ -441,12 +445,11 @@ export function aiSitePendingUnits(
  * output by `aiSitePendingUnits` and cannot move where the scaffold thinks
  * it is.
  */
-export function aiSiteSeoOutputs(job: AiJob): AiJobOutput[] {
-  const outputs = job.outputs ?? []
-  if (outputs.some((output) => output.resource === 'seo' && output.id === AI_SITE_SEO_OUTPUT_ID)) {
-    return []
-  }
-  const proposal = aiSiteSeoProposalForInputs(job.inputs, job.plan?.language)
+export function aiSiteSeoOutputs(job: AiJob, siteName?: string | null): AiJobOutput[] {
+  if (!aiSiteSeoOutputOwed(job)) return []
+  // The site's own name leads it where the start named no business (AGL-3979):
+  // the same listing the publish writes over the seeded default.
+  const proposal = aiSiteSeoProposalForInputs(job.inputs, job.plan?.language, siteName)
   if (!proposal) return []
   return [
     {
@@ -457,6 +460,26 @@ export function aiSiteSeoOutputs(job: AiJob): AiJobOutput[] {
       proposal: proposal as unknown as Record<string, unknown>,
     },
   ]
+}
+
+/** Whether the scaffold has yet to report the site's listing. */
+export function aiSiteSeoOutputOwed(job: Pick<AiJob, 'outputs'>): boolean {
+  return !(job.outputs ?? []).some((output) => output.resource === 'seo' && output.id === AI_SITE_SEO_OUTPUT_ID)
+}
+
+/** The site's own name, which its listing leads with (AGL-3979); `null` when it cannot be read. */
+export async function aiSiteDisplayName(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string | null | undefined,
+): Promise<string | null> {
+  if (!hostId) return null
+  try {
+    const name = (await firestore.collection('hosts').doc(hostId).get()).get('displayName')
+    return typeof name === 'string' && name.trim() ? name.trim() : null
+  } catch {
+    // A listing without the name is the listing every start made before.
+    return null
+  }
 }
 
 /** A record an earlier unit created, as a later one references it. */
@@ -558,7 +581,22 @@ export function aiSiteBriefLines(
   ].filter(Boolean)
   lines.push(`Site — ${site.join('; ')}.`)
   if (inputs.businessName) lines.push(aiSiteNameSentence(inputs.businessName))
+  // The business details the person gave (AGL-3979): how to reach it, where
+  // and when, and that the pages show the phone and email as written.
+  lines.push(...aiSiteDetailsBriefLines(inputs, { city: inputs.city }))
   return lines
+}
+
+/**
+ * What a guided start's welcome email is called in Marketing (AGL-3988): the
+ * business's welcome email, else "Welcome email". The beta.270 Sugar Hollow
+ * start's was listed as "New email", the email step's name for one nothing
+ * named.
+ */
+export function aiSiteWelcomeEmailName(inputs: Readonly<Record<string, unknown>> | null | undefined): string {
+  const raw = inputs?.['businessName']
+  const business = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().slice(0, 100) : ''
+  return business ? `${business} welcome email` : 'Welcome email'
 }
 
 /**
@@ -718,6 +756,11 @@ export function aiSiteUnitJob(
   // The job the member started travels with every unit, so what the unit
   // writes names it (AGL-3596).
   const unitInputs: Record<string, unknown> = { ...job.inputs, originJobId: aiOriginJobId(job) }
+  // The look pins what the sites the person likes say of style (AGL-3975):
+  // the signals the plan step read, never the sites themselves.
+  if (unit.kind === 'theme' && plan.inspiration) unitInputs[AI_SITE_INSPIRATION_SIGNALS_INPUT] = plan.inspiration
+  // The welcome email is named for the business in Marketing, never "New email" (AGL-3988).
+  if (unit.kind === 'email' && typeof unitInputs['name'] !== 'string') unitInputs['name'] = aiSiteWelcomeEmailName(job.inputs)
   // A page is told the pages built before it, whose photos it does not place
   // again (AGL-3660): the maker's portrait in About is never a vase in Work.
   if (unit.screen) {
@@ -728,6 +771,9 @@ export function aiSiteUnitJob(
     // Nor a photo the site's datasets' records already show (AGL-3616).
     const records = aiSiteDatasetPlacedPhotos(job.outputs ?? [])
     if (records.length) unitInputs[AI_STOCK_PHOTO_AVOID_INPUT] = records
+    // Which a picture the library fails takes before any starter (AGL-3988).
+    const recordPhotos = aiSiteDatasetPlacedPhotoDetails(job.outputs ?? [])
+    if (recordPhotos.length) unitInputs[AI_STOCK_PHOTO_JOB_PHOTOS_INPUT] = recordPhotos
   }
   // The layout is built before the pages, so it is told them (AGL-3596): their
   // ids are minted on the plan, and the platform writes the header's links.
@@ -906,9 +952,15 @@ export function aiSiteSellsProducts(job: Pick<AiJob, 'items'>): boolean {
  * a scaffold whose pages nothing can build is not a scaffold.
  */
 export function createAiSiteJobAdmission(
-  deps: { freeCreditsLeft?: typeof readFreeAiCreditsLeft; now?: () => Date } = {},
+  deps: {
+    freeCreditsLeft?: typeof readFreeAiCreditsLeft
+    now?: () => Date
+    /** Whether `release_ai_site_inspiration` is on for a workspace (AGL-3975). */
+    inspirationReleased?: (orgId: string) => Promise<boolean>
+  } = {},
 ): AiJobAdmission {
   const freeCreditsLeft = deps.freeCreditsLeft ?? readFreeAiCreditsLeft
+  const inspirationReleased = deps.inspirationReleased ?? aiSiteInspirationReleased
   const now = deps.now ?? (() => new Date())
   return async (context) => {
     const inputs = parseAiSiteJobInputs(context.inputs)
@@ -918,6 +970,13 @@ export function createAiSiteJobAdmission(
     const freeTaste = aiSiteFreeTaste(context.org)
     const pages = aiSitePagesRefusal(inputs.pages, freeTaste)
     if (pages) return { status: 400, error: pages }
+    // The sites the person likes (AGL-3975): one on the Free taste, three on
+    // a paid plan — asked only while the release flag is on, since with it
+    // off they are never read.
+    if (inputs.inspiration?.length && (await inspirationReleased(context.orgId))) {
+      const inspiration = aiSiteInspirationRefusal(inputs.inspiration, freeTaste)
+      if (inspiration) return { status: 400, error: inspiration }
+    }
     // A Free start is admitted on its measured p90 (AGL-3722), not its worst
     // case: one that fits what is left of the month starts with no prompt;
     // one that does not is answered with the prompt — what it is likely to
@@ -1034,6 +1093,8 @@ export interface AiJobSiteStepDeps {
   readNodes?: typeof readAiDraftNodes
   /** The guided start's publish; specs hand in a fake. */
   publish?: typeof aiPublishGuidedSite
+  /** The site's own name, which its listing leads with (AGL-3979); specs hand in a fake. */
+  siteName?: typeof aiSiteDisplayName
   /** The look's pass (AGL-3660); specs hand in a fake. */
   look?: (context: AiJobStepContext, job: AiJob) => Promise<AiJobStepOutcome>
   /** The first posts' and first products' passes (AGL-3676); specs hand in fakes. */
@@ -1189,6 +1250,7 @@ export function createAiJobSiteStep(
   const runnerFor = deps.runnerFor ?? aiJobStepRunnerFor
   const readNodes = deps.readNodes ?? readAiDraftNodes
   const publish = deps.publish ?? aiPublishGuidedSite
+  const siteName = deps.siteName ?? aiSiteDisplayName
   const look = deps.look ?? aiRunSiteLook
   const contentRefusal = deps.contentRefusal ?? aiSiteContentRefusal
   const datasetRefusal = deps.datasetRefusal ?? aiSiteDatasetRefusal
@@ -1258,6 +1320,10 @@ export function createAiJobSiteStep(
         ...(postsRow ? { blogUnwritten: !aiBuildItemDelivered(postsRow) || !postsRow.outputs?.length } : {}),
         // The store's pages the header and footer link and the start did not write (AGL-3676).
         ...(rows.get('store') ? { unwrittenHrefs: unwrittenStoreHrefs(pages) } : {}),
+        // The pages it planned and did not build, which nothing it publishes links (AGL-3988).
+        unbuiltScreenIds: unbuiltPages(),
+        // And the order the site lists its pages in, which Pages and the 404 page follow.
+        siteOrder: plan.screens.flatMap((screen) => (screen.id ? [screen.id] : [])),
         ...(wasLive ? { retry: true } : {}),
         // The site publishes in the language its brief was written in (AGL-3750).
         ...(plan.language ? { language: plan.language } : {}),
@@ -1349,6 +1415,21 @@ export function createAiJobSiteStep(
       )
       return [...(job.outputs ?? []).filter((output) => output.resource === 'screen' && ids.has(output.id)), ...extra]
     }
+    /**
+     * The pages the start planned and has not built (AGL-3988): a page whose
+     * part failed or was refused. The beta.270 Sugar Hollow Galleries page
+     * failed its checks, and its home page, header and footer linked it
+     * anyway, to a 404.
+     */
+    const unbuiltPages = () =>
+      units.flatMap((unit) =>
+        unit.kind === 'page' &&
+        !templates.has(unit.slot) &&
+        unit.screen?.id &&
+        !aiBuildItemDelivered(rows.get(unit.slot) ?? { status: 'pending' })
+          ? [unit.screen.id]
+          : [],
+      )
 
     if (!next) return finish({ ...aiUnspentOutcome(model), ...init }, builtPages())
     const unit = units.find((one) => one.slot === next.slot) as AiSiteUnit
@@ -1375,7 +1456,7 @@ export function createAiJobSiteStep(
     // The site's own listing rides out beside the first unit's output, once
     // (AGL-2918): it is derived from the answers rather than generated, so it
     // is ready before anything is built and costs the pass nothing.
-    const listing = aiSiteSeoOutputs(job)
+    const listing = aiSiteSeoOutputOwed(job) ? aiSiteSeoOutputs(job, await siteName(context.firestore, job.hostId)) : []
     const settle = (item: AiJobItemOutcome, spent: AiJobStepOutcome = aiUnspentOutcome(model)): AiJobStepOutcome => ({
       ...spent,
       outputs: [...listing, ...spent.outputs],

@@ -419,7 +419,12 @@
         "NATIVE_CRM_REPORT_PERIODS",
         "NATIVE_CRM_ACTIVITY_DIRECTIONS",
         "NATIVE_CRM_PICKLISTS",
-        "NATIVE_CRM_ACTIVITY_KINDS"
+        "NATIVE_CRM_ACTIVITY_KINDS",
+        "NATIVE_CRM_FIELD_TYPES",
+        "NATIVE_CRM_FIELD_TYPE_LABELS",
+        "NATIVE_CRM_FIELD_CURRENCIES",
+        "NATIVE_CRM_FIELD_DEFAULT_CURRENCY",
+        "NATIVE_CURRENCY_FRACTION_DIGITS"
       ]
     },
     "libs/plugins/marketing/src/lib/model/native-vocabulary.ts": {
@@ -1038,6 +1043,8 @@
     "SeoAuditReport.skipped",
     "SeoPageReport.score",
     "StarredItem.starredAtMs",
+    "WhereUsedResult.legacyCount",
+    "WhereUsedResult.total",
     "ThemeDensity.controlHeight",
     "ThemeDensity.listRowHeight",
     "ThemeDensity.phoneRowHeight",
@@ -1062,9 +1069,7 @@
     "ThemeDensity.space6",
     "ThemeDensity.space64",
     "ThemeDensity.space8",
-    "ThemeDensity.titlebarHeight",
-    "WhereUsedResult.legacyCount",
-    "WhereUsedResult.total"
+    "ThemeDensity.titlebarHeight"
   ],
   "json": [
     "ListQueryFilter.value",
@@ -27973,13 +27978,13 @@
           "#00B0FF"
         ],
         [
-          "#e040fa"
-        ],
-        [
           "blue"
         ],
         [
           "#12345"
+        ],
+        [
+          "#e040fa"
         ]
       ]
     },
@@ -28149,6 +28154,168 @@
             "permissions": {
               "hosts.delete": false
             }
+          }
+        ]
+      ]
+    },
+    "currencyFractionDigits": {
+      "module": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
+      "args": [
+        [
+          "usd"
+        ],
+        [
+          "USD"
+        ],
+        [
+          "jpy"
+        ],
+        [
+          "krw"
+        ],
+        [
+          "vnd"
+        ],
+        [
+          "bhd"
+        ],
+        [
+          "kwd"
+        ],
+        [
+          "omr"
+        ],
+        [
+          "eur"
+        ],
+        [
+          "huf"
+        ],
+        [
+          "zzz"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "currencyMinorToMajor": {
+      "module": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
+      "args": [
+        [
+          125050,
+          "usd"
+        ],
+        [
+          1500,
+          "jpy"
+        ],
+        [
+          1250,
+          "bhd"
+        ],
+        [
+          -4000,
+          "usd"
+        ],
+        [
+          0,
+          "kwd"
+        ],
+        [
+          7,
+          "eur"
+        ]
+      ]
+    },
+    "parseCurrencyInput": {
+      "module": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
+      "args": [
+        [
+          "$1,250.50",
+          "usd"
+        ],
+        [
+          "1250.5",
+          "usd"
+        ],
+        [
+          "-40",
+          "usd"
+        ],
+        [
+          "1500",
+          "jpy"
+        ],
+        [
+          "¥1,500",
+          "jpy"
+        ],
+        [
+          "1500.6",
+          "jpy"
+        ],
+        [
+          "1.25",
+          "bhd"
+        ],
+        [
+          "BHD 1.2505",
+          "bhd"
+        ],
+        [
+          "abc",
+          "usd"
+        ],
+        [
+          "",
+          "usd"
+        ],
+        [
+          "-",
+          "usd"
+        ],
+        [
+          ".",
+          "usd"
+        ],
+        [
+          "1.2.3",
+          "usd"
+        ],
+        [
+          "12.",
+          "usd"
+        ]
+      ]
+    },
+    "customFieldCurrency": {
+      "module": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
+      "args": [
+        [
+          {
+            "currency": "JPY"
+          }
+        ],
+        [
+          {
+            "currency": " bhd "
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ],
+        [
+          {
+            "currency": "xx"
+          }
+        ],
+        [
+          {
+            "currency": "euro"
           }
         ]
       ]

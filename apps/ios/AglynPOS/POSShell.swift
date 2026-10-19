@@ -22,6 +22,7 @@ struct POSShell: View {
         }
       }
       .navigationDestination(for: Route.self) { RouteView(route: $0) }
+      .environment(\.aglynPush, AglynPushAction { [weak navigation] view in navigation?.push(.view(view)) })
       .toolbar {
         ToolbarItem(placement: .primaryAction) {
           Menu {
@@ -63,6 +64,10 @@ struct POSShell: View {
       navigation.picker = .workspace
     }
     .signOutConfirmation(isPresented: $confirmSignOut)
+    // Aglyn POS draws the same theme as the account's Aglyn.
+    .aglynAppTheme(nonce: navigation.themeNonce)
+    // The register keeps the system's navigation and toolbar on every device; it is not part of the shell redesign.
+    .environment(\.aglynWideChrome, false)
     .onAppear { DebugLaunch.route(navigation) }
   }
 }

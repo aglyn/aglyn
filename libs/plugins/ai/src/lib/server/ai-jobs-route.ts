@@ -49,6 +49,8 @@ import { aiJobsGate } from './ai-jobs-gate'
 import { withoutErasedSites } from './ai-jobs-live-sites'
 import { AI_JOB_ACTIVE_STATUSES } from '../model/ai-job-activity'
 import { reportServerError } from '@aglyn/tenant-data-admin/server/client-error-report'
+import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin/server/release-flags'
+import { AI_SITE_INSPIRATION_FLAG } from '../model/ai-site-inspiration'
 
 /**
  * A caught fault on this door, reported as well as logged (AGL-1921).
@@ -409,6 +411,9 @@ export async function GET(request: Request): Promise<Response> {
   const freeCredits = freeTaste
     ? await readFreeAiCreditsLeft(gate.firestore, { orgId: gate.orgId, org: gate.org as object | null, now })
     : null
+  // Whether the guided start asks for the sites the person likes (AGL-3975):
+  // the workspace's own verdict, the one its site job reads them by.
+  const siteInspiration = await isServerReleaseFlagOnForOrg(AI_SITE_INSPIRATION_FLAG, gate.orgId).catch(() => false)
   return Response.json(
     {
       jobs: jobs.map((job) => aiJobSummary(job, now)),
@@ -416,6 +421,7 @@ export async function GET(request: Request): Promise<Response> {
       // start offers the Free page band from the request it already makes.
       freeTaste,
       ...(freeCredits ? { freeCredits } : {}),
+      ...(siteInspiration ? { siteInspiration: true } : {}),
     },
     { status: 200, headers: { 'Cache-Control': 'no-store' } },
   )

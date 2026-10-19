@@ -197,11 +197,15 @@ struct DatasetsScreen: View {
       }
     }
     .navigationTitle("Data")
+    .aglynScreenTitle("Data")
   }
 
   private func layout(_ orgID: String) -> some View {
     WideLayoutReader { wide in
-      if wide {
+      if model.ready && !model.failed && model.rows.isEmpty {
+        // Empty = start here (Figma Data · Empty 122:7480): the one New dataset, across the whole content.
+        list(selectable: false)
+      } else if wide {
         AglynListDetailColumns(listWidth: 360) {
           list(selectable: true)
         } detail: {
@@ -215,20 +219,17 @@ struct DatasetsScreen: View {
         list(selectable: false)
       }
     }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
+    // The head's New dataset, except on the empty list, whose own New dataset is the one way in.
+    .aglynPrimaryAction(
+      model.ready && model.rows.isEmpty
+        ? nil
+        : AglynPrimaryAction(id: "add-dataset", title: "New dataset", systemImage: "plus", enabled: canWrite,
+          shortcut: KeyboardShortcut("n", modifiers: .command)
+        ) {
           runner.clear()
           sheet = .create
-        } label: {
-          Label("New dataset", systemImage: "plus")
-        }
-        .disabled(!canWrite)
-        .keyboardShortcut("n", modifiers: .command)
-        .accessibilityIdentifier("add-dataset")
-      }
-    }
-    .navigationDestination(item: $pushed) { id in detail(id, titled: true) }
+        })
+    .aglynPushDestination(item: $pushed) { id in detail(id, titled: true) }
     .safeAreaInset(edge: .bottom) {
       if sheet == nil, exporting == nil, let notice = runner.notice {
         AglynNotice(notice, tone: .success) { runner.clear() }
@@ -270,11 +271,9 @@ struct DatasetsScreen: View {
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       if sheet == nil, exporting == nil, let error = runner.error {
-        AglynNotice(error, tone: .error) { runner.clear() }.padding(.horizontal, AglynSpace.two)
+        AglynNotice(error, tone: .error) { runner.clear() }.aglynContentEdges()
       }
-      // The org Data page's note: a dataset made here names no site, so it starts on All sites.
-      AglynNotice(newDatasetSharingNote(siteOnly: false), tone: .neutral)
-        .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
+      // Calm rule 8: no banner at rest. Who a new dataset is shared with is said in New dataset itself.
       content(selectable: selectable)
     }
     .background(AglynColor.page)
@@ -294,7 +293,7 @@ struct DatasetsScreen: View {
         scoped ? "No datasets are shared with you" : "No datasets yet", systemImage: DataSymbols.dataset,
         message: scoped
           ? "Ask an owner or admin to share a dataset with one of your sites."
-          : "Create a dataset (e.g. Products) and repeat a component over its records with {{item.field}} bindings."
+          : "Create a dataset, like Products, then add a repeating section to any page to show one item per record."
       ) {
         if !scoped && canWrite { Button("New dataset") { sheet = .create }.buttonStyle(.borderedProminent) }
       }
@@ -503,6 +502,7 @@ struct DatasetDetailView: View {
       }
     }
     .navigationTitle(titled ? (dataset?.name ?? "Dataset") : "Data")
+    .aglynScreenTitle(titled ? (dataset?.name ?? "Dataset") : "Data")
   }
 
   private func content(_ dataset: DatasetRow) -> some View {

@@ -15,7 +15,22 @@
  * limitations under the License.
  */
 
+import type { ClientBuildIntake } from '@aglyn/aglyn/app-utils/client-build'
+import {
+  AI_SITE_DETAIL_KEYS,
+  AI_SITE_NO_DETAILS,
+  aiSiteDetailProblem,
+  type AiSiteDetailKey,
+  type AiSiteDetails,
+} from './ai-site-details'
 import { aiSiteKind, aiSiteKindFor, type AiSiteKind } from './ai-site-kinds'
+import {
+  AI_SITE_INSPIRATION_INPUT,
+  aiSiteInspirationInput,
+  aiSiteInspirationLimit,
+  aiSiteInspirationRefusal,
+  aiSiteInspirationUrl,
+} from './ai-site-inspiration'
 import {
   AI_SITE_INPUT_MAX_CHARS,
   AI_SITE_SUBMISSIONS,
@@ -125,8 +140,14 @@ export const AI_SITE_START_TYPES: readonly string[] = [
   'an event',
 ]
 
-/** What a person answered; the shape the card holds and the brief is built from. */
-export interface AiSiteStartAnswers {
+/**
+ * What a person answered; the shape the card holds and the brief is built from.
+ *
+ * Beside the answers each step asks, the business details its "More details"
+ * offers (AGL-3979, `AiSiteDetails`): every one optional and `''` until given,
+ * the phone number and email on the Details step itself.
+ */
+export interface AiSiteStartAnswers extends AiSiteDetails {
   /** What kind of site this is. The one answer with no default. */
   siteType: string
   /** Who the site is for; empty when they did not say. */
@@ -145,6 +166,15 @@ export interface AiSiteStartAnswers {
   submissions: AiSiteSubmissions
   /** Whether the scaffold also drafts a welcome email. */
   welcomeEmail: boolean
+  /** The city or town the business is in (AGL-3979); empty when they did not say. */
+  city: string
+  /** The brand color, as a six-digit hex (AGL-3979); empty for the style's own. */
+  brand: string
+  /**
+   * The sites they like (AGL-3975), as typed, one a field; absent or empty
+   * for none. Asked only while `release_ai_site_inspiration` is on.
+   */
+  inspiration?: string[]
 }
 
 /**
@@ -162,6 +192,49 @@ export const AI_SITE_START_ANSWERS: AiSiteStartAnswers = {
   pages: 5,
   submissions: 'inbox',
   welcomeEmail: true,
+  city: '',
+  brand: '',
+  ...AI_SITE_NO_DETAILS,
+}
+
+/** The answers a person may give beyond the ones each step asks, by key (AGL-3979). */
+export type AiSiteStartExtraKey = AiSiteDetailKey | 'city' | 'brand'
+
+/** Every extra, in the order the review lists them. */
+export const AI_SITE_START_EXTRA_KEYS: readonly AiSiteStartExtraKey[] = [
+  'phone',
+  'email',
+  'tagline',
+  'founded',
+  'serviceArea',
+  'priceRange',
+  'languages',
+  'brand',
+  'street',
+  'city',
+  'region',
+  'postalCode',
+  'country',
+  'hours',
+  'social',
+]
+
+/** What is wrong with one extra, worded for beside its field; `null` when it may be used. */
+export function aiSiteStartExtraProblem(
+  key: AiSiteStartExtraKey,
+  value: string,
+): { code: 'too_long' | 'invalid'; message: string } | null {
+  if (key === 'city' || key === 'brand') {
+    return value.trim().length > AI_SITE_INPUT_MAX_CHARS
+      ? { code: 'too_long', message: `Keep this under ${AI_SITE_INPUT_MAX_CHARS} characters.` }
+      : null
+  }
+  return aiSiteDetailProblem(key, value)
+}
+
+/** The extras a person gave, in the review's order: what "More details" was used for. */
+export function aiSiteStartExtrasGiven(answers: AiSiteStartAnswers): AiSiteStartExtraKey[] {
+  return AI_SITE_START_EXTRA_KEYS.filter((key) => (answers[key] ?? '').trim() !== '')
 }
 
 /** The kind of site the answers pick, else the one what the site is and who it is for suggest. */
@@ -207,7 +280,28 @@ export function aiSiteStartRefusal(
   if (!(AI_SITE_SUBMISSIONS as readonly string[]).includes(answers.submissions)) {
     return 'Say where the contact form’s submissions go.'
   }
-  return null
+  for (const key of AI_SITE_START_EXTRA_KEYS) {
+    const problem = aiSiteStartExtraProblem(key, answers[key] ?? '')
+    if (problem) return problem.message
+  }
+  return aiSiteStartInspirationRefusal(answers, options)
+}
+
+/** The sites they typed, without the empty fields. */
+export function aiSiteStartInspirationTyped(answers: Pick<AiSiteStartAnswers, 'inspiration'>): string[] {
+  return (answers.inspiration ?? []).map((entry) => entry.trim()).filter(Boolean)
+}
+
+/** Why the sites they like cannot go forward, as the door would refuse them; `null` when they can. */
+export function aiSiteStartInspirationRefusal(
+  answers: Pick<AiSiteStartAnswers, 'inspiration'>,
+  options: { freeTaste?: boolean } = {},
+): string | null {
+  const typed = aiSiteStartInspirationTyped(answers)
+  if (typed.some((entry) => !aiSiteInspirationUrl(entry))) {
+    return 'Give each site you like as its https address, like https://example.com.'
+  }
+  return aiSiteInspirationRefusal(typed, options.freeTaste)
 }
 
 /**
@@ -262,9 +356,20 @@ export function aiSiteStartBrief(answers: AiSiteStartAnswers): string {
  */
 export function aiSiteStartInputs(
   answers: AiSiteStartAnswers,
-): Omit<AiSiteJobInputs, 'batchId'> {
+): Omit<AiSiteJobInputs, 'batchId' | 'inspiration' | AiSiteDetailKey> & Partial<AiSiteDetails> & { inspiration?: string } {
   const example = aiSiteStartExample(answers)
   const kind = aiSiteStartKind(answers)
+  // The details are sent only where given (AGL-3979): the plan step lists
+  // every scalar input on a line of its own, and a start without them is
+  // asked exactly what it was asked before.
+  const details: Partial<AiSiteDetails> = {}
+  for (const key of AI_SITE_DETAIL_KEYS) {
+    const value = (answers[key] ?? '').trim()
+    if (value) details[key] = value
+  }
+  // The sites they like travel only when there are some (AGL-3975), so a
+  // start without them asks for exactly what it always did.
+  const inspiration = aiSiteInspirationInput(aiSiteStartInspirationTyped(answers))
   return {
     businessType: answers.siteType.trim(),
     audience: answers.audience.trim(),
@@ -272,10 +377,12 @@ export function aiSiteStartInputs(
     siteKind: kind.id,
     pages: answers.pages,
     businessName: '',
-    city: '',
-    brand: '',
+    city: (answers.city ?? '').trim(),
+    brand: (answers.brand ?? '').trim(),
     submissions: answers.submissions,
     welcomeEmail: answers.welcomeEmail,
+    ...details,
+    ...(inspiration ? { [AI_SITE_INSPIRATION_INPUT]: inspiration } : {}),
   }
 }
 
@@ -291,6 +398,8 @@ export const AI_SITE_START_INPUT_KEYS = [
   'brand',
   'submissions',
   'welcomeEmail',
+  ...AI_SITE_DETAIL_KEYS,
+  AI_SITE_INSPIRATION_INPUT,
 ] as const
 
 /** A site job's scalar inputs, and nothing else its inputs carry; `null` when it has none. */
@@ -334,5 +443,100 @@ export function aiSiteStartAnswersFromInputs(
       ? (submissions as AiSiteSubmissions)
       : AI_SITE_START_ANSWERS.submissions,
     welcomeEmail: options.freeTaste ? false : inputs?.['welcomeEmail'] !== false,
+    city: text('city'),
+    brand: text('brand'),
+    ...(Object.fromEntries(AI_SITE_DETAIL_KEYS.map((key) => [key, text(key)])) as unknown as AiSiteDetails),
+    // The sites they liked come back as typed, within the workspace's limit (AGL-3975).
+    ...(text(AI_SITE_INSPIRATION_INPUT)
+      ? { inspiration: text(AI_SITE_INSPIRATION_INPUT).split(/\s+/).filter(Boolean).slice(0, aiSiteInspirationLimit(options.freeTaste)) }
+      : {}),
   }
+}
+
+// ── A build staff run for a client (AGL-3958) ───────────────────────────────
+
+/** Shortens an answer to what a scalar input admits, on a word where it can. */
+function bounded(value: string, max: number): string {
+  const trimmed = value.trim().replace(/\s+/g, ' ')
+  if (trimmed.length <= max) return trimmed
+  const cut = trimmed.slice(0, max)
+  const space = cut.lastIndexOf(' ')
+  return (space > max / 2 ? cut.slice(0, space) : cut).trim()
+}
+
+/**
+ * The questions' answers for a site staff are building for a client: what
+ * the business does is the kind of site, and every other answer keeps its
+ * default, which the review shows to change. The rest of the intake is not an
+ * answer to these questions; it reaches the job through
+ * {@link aiSiteStartClientInputs} and {@link aiSiteStartClientBrief}.
+ */
+export function aiSiteStartAnswersFromClientBuild(intake: ClientBuildIntake): AiSiteStartAnswers {
+  return {
+    ...AI_SITE_START_ANSWERS,
+    siteType: bounded(intake.whatTheyDo, AI_SITE_INPUT_MAX_CHARS),
+  }
+}
+
+/**
+ * The per-site inputs the intake fills, which the guided start's own
+ * questions leave empty: the business's name for the header and footer, and
+ * the towns it serves as its place.
+ */
+export function aiSiteStartClientInputs(
+  intake: ClientBuildIntake,
+): Pick<AiSiteJobInputs, 'businessName' | 'city'> {
+  return {
+    businessName: bounded(intake.businessName, AI_SITE_INPUT_MAX_CHARS),
+    city: bounded(intake.towns, AI_SITE_INPUT_MAX_CHARS),
+  }
+}
+
+/**
+ * The intake as sentences added to the brief: how to reach the business and
+ * when it is open, which the site should say where a visitor looks for them,
+ * and the owner's own words, quoted, which the copy should sound like. Empty
+ * answers say nothing.
+ */
+export function aiSiteStartClientBrief(intake: ClientBuildIntake): string {
+  const name = intake.businessName.trim()
+  const towns = intake.towns.trim()
+  const phone = intake.phone.trim()
+  const email = intake.email.trim()
+  const hours = intake.hours.trim()
+  const words = intake.ownerWords.trim().replace(/\s+/g, ' ')
+  const sentences: string[] = []
+  if (name) sentences.push(`The business is called ${name}.`)
+  if (towns) sentences.push(`It serves ${towns}.`)
+  const contact = [phone ? `call ${phone}` : '', email ? `email ${email}` : ''].filter(Boolean)
+  if (contact.length) {
+    sentences.push(`Visitors reach it to ${contact.join(' or ')}; say so wherever the site tells them how to get in touch.`)
+  }
+  if (hours) sentences.push(`Its hours are ${hours}.`)
+  if (words) sentences.push(`In the owner's own words: "${words}" Write the copy so it sounds like them.`)
+  return sentences.join(' ')
+}
+
+/**
+ * What the review says the client build adds, so staff see the intake is
+ * used without it being asked again: "Also from the client's details:
+ * Harbor Plumbing, serving Austin, its phone, email and hours, and the
+ * owner's own words."
+ */
+export function aiSiteStartClientNote(intake: ClientBuildIntake): string {
+  const name = intake.businessName.trim()
+  const towns = intake.towns.trim()
+  const reach = [
+    intake.phone.trim() ? 'phone' : '',
+    intake.email.trim() ? 'email' : '',
+    intake.hours.trim() ? 'hours' : '',
+  ].filter(Boolean)
+  const parts = [
+    name && towns ? `${name}, serving ${towns}` : name || (towns ? `serving ${towns}` : ''),
+    reach.length ? `its ${reach.length > 1 ? `${reach.slice(0, -1).join(', ')} and ${reach[reach.length - 1]}` : reach[0]}` : '',
+    intake.ownerWords.trim() ? "the owner's own words" : '',
+  ].filter(Boolean)
+  if (!parts.length) return 'Built from the client’s details.'
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}` : parts[0]
+  return `Also from the client’s details: ${list}.`
 }

@@ -1361,7 +1361,7 @@
             },
             {
               "id": "propose",
-              "label": "Propose a plan",
+              "label": "Ask to upgrade",
               "icon": "sparkles|workspace_premium",
               "url": "/api/admin/org-upgrade-proposal",
               "prompt": [
@@ -1370,6 +1370,7 @@
                   "label": "Plan",
                   "kind": "select",
                   "required": true,
+                  "initial": "starter",
                   "options": [
                     {
                       "value": "starter",
@@ -1398,6 +1399,70 @@
                   ]
                 },
                 {
+                  "key": "interval",
+                  "label": "Billing",
+                  "kind": "select",
+                  "initial": "year",
+                  "options": [
+                    {
+                      "value": "year",
+                      "label": "Yearly"
+                    },
+                    {
+                      "value": "month",
+                      "label": "Monthly"
+                    }
+                  ]
+                },
+                {
+                  "key": "siteCare",
+                  "label": "Site Care",
+                  "kind": "toggle",
+                  "initial": "true"
+                },
+                {
+                  "key": "aiAddon",
+                  "label": "Aglyn AI",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "eventCalendar",
+                  "label": "Event Calendar",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "hosts",
+                  "label": "Extra sites",
+                  "kind": "number"
+                },
+                {
+                  "key": "managers",
+                  "label": "Extra manager seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "members",
+                  "label": "Extra collaborator seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "datasets",
+                  "label": "Extra datasets",
+                  "kind": "number"
+                },
+                {
+                  "key": "posRegisters",
+                  "label": "POS registers",
+                  "kind": "number",
+                  "help": "Add-ons the plan does not sell are left off."
+                },
+                {
+                  "key": "coupon",
+                  "label": "Coupon code (optional)",
+                  "kind": "text",
+                  "help": "A code from the staff Coupons page, applied at checkout."
+                },
+                {
                   "key": "note",
                   "label": "Note to the owner (optional)",
                   "kind": "multiline"
@@ -1407,6 +1472,18 @@
                 "orgId": "{params.orgId}",
                 "action": "propose",
                 "plan": "{form.plan}",
+                "addons": {
+                  "siteCare": "{form.siteCare}",
+                  "aiAddon": "{form.aiAddon}",
+                  "eventCalendar": "{form.eventCalendar}",
+                  "hosts": "{form.hosts}",
+                  "managers": "{form.managers}",
+                  "members": "{form.members}",
+                  "datasets": "{form.datasets}",
+                  "posRegisters": "{form.posRegisters}"
+                },
+                "interval": "{form.interval}",
+                "coupon": "{form.coupon}",
                 "note": "{form.note}"
               },
               "success": "Proposed; the owner is told",
@@ -1745,7 +1822,7 @@
             },
             {
               "id": "handoff",
-              "label": "Hand off to a new owner",
+              "label": "Hand off",
               "icon": "person.badge.plus|person_add",
               "url": "/api/orgs/invites",
               "prompt": [
@@ -1770,9 +1847,111 @@
                       "label": "Leave after the handoff"
                     }
                   ]
+                },
+                {
+                  "key": "plan",
+                  "label": "Plan",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "starter",
+                  "options": [
+                    {
+                      "value": "starter",
+                      "label": "Starter"
+                    },
+                    {
+                      "value": "pro",
+                      "label": "Pro"
+                    },
+                    {
+                      "value": "business",
+                      "label": "Business"
+                    },
+                    {
+                      "value": "scale",
+                      "label": "Scale"
+                    },
+                    {
+                      "value": "advanced",
+                      "label": "Advanced"
+                    },
+                    {
+                      "value": "agency",
+                      "label": "Agency"
+                    }
+                  ]
+                },
+                {
+                  "key": "interval",
+                  "label": "Billing",
+                  "kind": "select",
+                  "initial": "year",
+                  "options": [
+                    {
+                      "value": "year",
+                      "label": "Yearly"
+                    },
+                    {
+                      "value": "month",
+                      "label": "Monthly"
+                    }
+                  ]
+                },
+                {
+                  "key": "siteCare",
+                  "label": "Site Care",
+                  "kind": "toggle",
+                  "initial": "true"
+                },
+                {
+                  "key": "aiAddon",
+                  "label": "Aglyn AI",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "eventCalendar",
+                  "label": "Event Calendar",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "hosts",
+                  "label": "Extra sites",
+                  "kind": "number"
+                },
+                {
+                  "key": "managers",
+                  "label": "Extra manager seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "members",
+                  "label": "Extra collaborator seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "datasets",
+                  "label": "Extra datasets",
+                  "kind": "number"
+                },
+                {
+                  "key": "posRegisters",
+                  "label": "POS registers",
+                  "kind": "number",
+                  "help": "Add-ons the plan does not sell are left off."
+                },
+                {
+                  "key": "coupon",
+                  "label": "Coupon code (optional)",
+                  "kind": "text",
+                  "help": "A code from the staff Coupons page, applied at checkout."
+                },
+                {
+                  "key": "note",
+                  "label": "Note to the owner (optional)",
+                  "kind": "multiline"
                 }
               ],
-              "confirm": "They become the owner once they accept. Nothing changes until then, and the invitation reserves no seat.",
+              "confirm": "They become the owner once they accept, and the plan is proposed with the invitation: its email opens Billing with the plan, add-ons, billing and coupon already chosen. Nothing changes until they accept, and the invitation reserves no seat. A workspace that already pays is handed off without a proposal.",
               "body": {
                 "orgId": "{params.orgId}",
                 "action": "create",
@@ -1780,6 +1959,22 @@
                 "role": "owner",
                 "handoff": {
                   "previousOwner": "{form.previousOwner}"
+                },
+                "proposal": {
+                  "plan": "{form.plan}",
+                  "addons": {
+                    "siteCare": "{form.siteCare}",
+                    "aiAddon": "{form.aiAddon}",
+                    "eventCalendar": "{form.eventCalendar}",
+                    "hosts": "{form.hosts}",
+                    "managers": "{form.managers}",
+                    "members": "{form.members}",
+                    "datasets": "{form.datasets}",
+                    "posRegisters": "{form.posRegisters}"
+                  },
+                  "interval": "{form.interval}",
+                  "coupon": "{form.coupon}",
+                  "note": "{form.note}"
                 }
               },
               "success": "Handoff sent to {form.email}"
@@ -2685,7 +2880,7 @@
             },
             {
               "id": "handoff",
-              "label": "Hand off to a new owner",
+              "label": "Hand off",
               "icon": "person.badge.plus|person_add",
               "url": "/api/orgs/invites",
               "prompt": [
@@ -2710,32 +2905,13 @@
                       "label": "Leave after the handoff"
                     }
                   ]
-                }
-              ],
-              "confirm": "They become the owner once they accept. Nothing changes until then, and the invitation reserves no seat.",
-              "body": {
-                "orgId": "{data.site.sites.0.orgId}",
-                "action": "create",
-                "email": "{form.email}",
-                "role": "owner",
-                "handoff": {
-                  "previousOwner": "{form.previousOwner}"
-                }
-              },
-              "success": "Handoff sent to {form.email}",
-              "when": "data.site.sites.0.orgId"
-            },
-            {
-              "id": "propose",
-              "label": "Propose a plan",
-              "icon": "sparkles|workspace_premium",
-              "url": "/api/admin/org-upgrade-proposal",
-              "prompt": [
+                },
                 {
                   "key": "plan",
                   "label": "Plan",
                   "kind": "select",
                   "required": true,
+                  "initial": "starter",
                   "options": [
                     {
                       "value": "starter",
@@ -2764,6 +2940,208 @@
                   ]
                 },
                 {
+                  "key": "interval",
+                  "label": "Billing",
+                  "kind": "select",
+                  "initial": "year",
+                  "options": [
+                    {
+                      "value": "year",
+                      "label": "Yearly"
+                    },
+                    {
+                      "value": "month",
+                      "label": "Monthly"
+                    }
+                  ]
+                },
+                {
+                  "key": "siteCare",
+                  "label": "Site Care",
+                  "kind": "toggle",
+                  "initial": "true"
+                },
+                {
+                  "key": "aiAddon",
+                  "label": "Aglyn AI",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "eventCalendar",
+                  "label": "Event Calendar",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "hosts",
+                  "label": "Extra sites",
+                  "kind": "number"
+                },
+                {
+                  "key": "managers",
+                  "label": "Extra manager seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "members",
+                  "label": "Extra collaborator seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "datasets",
+                  "label": "Extra datasets",
+                  "kind": "number"
+                },
+                {
+                  "key": "posRegisters",
+                  "label": "POS registers",
+                  "kind": "number",
+                  "help": "Add-ons the plan does not sell are left off."
+                },
+                {
+                  "key": "coupon",
+                  "label": "Coupon code (optional)",
+                  "kind": "text",
+                  "help": "A code from the staff Coupons page, applied at checkout."
+                },
+                {
+                  "key": "note",
+                  "label": "Note to the owner (optional)",
+                  "kind": "multiline"
+                }
+              ],
+              "confirm": "They become the owner once they accept, and the plan is proposed with the invitation: its email opens Billing with the plan, add-ons, billing and coupon already chosen. Nothing changes until they accept, and the invitation reserves no seat. A workspace that already pays is handed off without a proposal.",
+              "body": {
+                "orgId": "{data.site.sites.0.orgId}",
+                "action": "create",
+                "email": "{form.email}",
+                "role": "owner",
+                "handoff": {
+                  "previousOwner": "{form.previousOwner}"
+                },
+                "proposal": {
+                  "plan": "{form.plan}",
+                  "addons": {
+                    "siteCare": "{form.siteCare}",
+                    "aiAddon": "{form.aiAddon}",
+                    "eventCalendar": "{form.eventCalendar}",
+                    "hosts": "{form.hosts}",
+                    "managers": "{form.managers}",
+                    "members": "{form.members}",
+                    "datasets": "{form.datasets}",
+                    "posRegisters": "{form.posRegisters}"
+                  },
+                  "interval": "{form.interval}",
+                  "coupon": "{form.coupon}",
+                  "note": "{form.note}"
+                }
+              },
+              "success": "Handoff sent to {form.email}",
+              "when": "data.site.sites.0.orgId"
+            },
+            {
+              "id": "propose",
+              "label": "Ask to upgrade",
+              "icon": "sparkles|workspace_premium",
+              "url": "/api/admin/org-upgrade-proposal",
+              "prompt": [
+                {
+                  "key": "plan",
+                  "label": "Plan",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "starter",
+                  "options": [
+                    {
+                      "value": "starter",
+                      "label": "Starter"
+                    },
+                    {
+                      "value": "pro",
+                      "label": "Pro"
+                    },
+                    {
+                      "value": "business",
+                      "label": "Business"
+                    },
+                    {
+                      "value": "scale",
+                      "label": "Scale"
+                    },
+                    {
+                      "value": "advanced",
+                      "label": "Advanced"
+                    },
+                    {
+                      "value": "agency",
+                      "label": "Agency"
+                    }
+                  ]
+                },
+                {
+                  "key": "interval",
+                  "label": "Billing",
+                  "kind": "select",
+                  "initial": "year",
+                  "options": [
+                    {
+                      "value": "year",
+                      "label": "Yearly"
+                    },
+                    {
+                      "value": "month",
+                      "label": "Monthly"
+                    }
+                  ]
+                },
+                {
+                  "key": "siteCare",
+                  "label": "Site Care",
+                  "kind": "toggle",
+                  "initial": "true"
+                },
+                {
+                  "key": "aiAddon",
+                  "label": "Aglyn AI",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "eventCalendar",
+                  "label": "Event Calendar",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "hosts",
+                  "label": "Extra sites",
+                  "kind": "number"
+                },
+                {
+                  "key": "managers",
+                  "label": "Extra manager seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "members",
+                  "label": "Extra collaborator seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "datasets",
+                  "label": "Extra datasets",
+                  "kind": "number"
+                },
+                {
+                  "key": "posRegisters",
+                  "label": "POS registers",
+                  "kind": "number",
+                  "help": "Add-ons the plan does not sell are left off."
+                },
+                {
+                  "key": "coupon",
+                  "label": "Coupon code (optional)",
+                  "kind": "text",
+                  "help": "A code from the staff Coupons page, applied at checkout."
+                },
+                {
                   "key": "note",
                   "label": "Note to the owner (optional)",
                   "kind": "multiline"
@@ -2773,6 +3151,18 @@
                 "orgId": "{data.site.sites.0.orgId}",
                 "action": "propose",
                 "plan": "{form.plan}",
+                "addons": {
+                  "siteCare": "{form.siteCare}",
+                  "aiAddon": "{form.aiAddon}",
+                  "eventCalendar": "{form.eventCalendar}",
+                  "hosts": "{form.hosts}",
+                  "managers": "{form.managers}",
+                  "members": "{form.members}",
+                  "datasets": "{form.datasets}",
+                  "posRegisters": "{form.posRegisters}"
+                },
+                "interval": "{form.interval}",
+                "coupon": "{form.coupon}",
                 "note": "{form.note}"
               },
               "success": "Proposed; the owner is told",
@@ -8205,9 +8595,23 @@
             "editable": true
           },
           {
+            "key": "org-owner-handoff-proposal",
+            "name": "Workspace handoff with a plan",
+            "description": "Sent when the platform team hands a workspace to a new owner and proposes its plan in the same step: the invitation, with a link to Billing where the plan, add-ons, cadence and coupon are already chosen.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
             "key": "org-upgrade-proposal",
             "name": "Upgrade proposal",
             "description": "Sent to a workspace's owner when the platform team proposes a paid plan for it, after the workspace has been evaluated.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "client-build-preview",
+            "name": "Client build preview",
+            "description": "Sent to a business owner when the platform team has built their website with them, at an event or on their doorstep, with the link to look at it and the address it will live at.",
             "deliveredBy": "resend",
             "editable": true
           },
@@ -8758,6 +9162,90 @@
             "editable": true
           },
           {
+            "key": "site-care-request-received",
+            "name": "Site Care: request received",
+            "description": "Sent to the person who asked when a Site Care request arrives, by email or from the console.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-request-done",
+            "name": "Site Care: request done",
+            "description": "Sent to the workspace owner when staff close a Site Care request: what changed, the time it took, the time left this month, or the extra time billed.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-request-corrected",
+            "name": "Site Care: time corrected",
+            "description": "Sent to the workspace owner when staff correct the minutes on a finished request, with the before and after.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-approval-confirmation",
+            "name": "Site Care: extra time approved",
+            "description": "Sent to the workspace owner the moment staff record their yes to extra time, and again, marked corrected, when the record is corrected. It is the written record of the approval.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-charge-reversed",
+            "name": "Site Care: charge removed, credited or refunded",
+            "description": "Sent to the workspace owner when staff void, credit or refund an extra-time charge from the request.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-statement",
+            "name": "Site Care: monthly statement",
+            "description": "Sent to the workspace owner when staff press Send statement: every request of the month, the minutes, the extra time billed and every correction.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-quote",
+            "name": "Site Care: bigger than Site Care covers",
+            "description": "Sent from a Site Care request by staff when the work adds something new (a page, a form, a design, a campaign): Site Care covers changes to what exists, so this is a flat quote.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-unknown-sender",
+            "name": "Site Care: sender not recognized",
+            "description": "Sent to someone who emailed the Site Care address from an address no Site Care workspace has as a member.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-project-acceptance",
+            "name": "Site Care project: quote accepted",
+            "description": "Sent to the workspace owner the moment staff record their yes to a flat project quote, and again, marked corrected, when the record is corrected. It is the written record of the scope and price they accepted, sent before anything is invoiced.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-project-invoice",
+            "name": "Site Care project: invoice to pay",
+            "description": "Sent to the workspace owner with each project invoice — the deposit, the balance at launch, or the whole price — and its secure pay link.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-project-paid",
+            "name": "Site Care project: payment received",
+            "description": "Sent to the workspace owner when a project invoice is paid: what was paid, and what happens next.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-project-reversed",
+            "name": "Site Care project: invoice voided, credited or refunded",
+            "description": "Sent to the workspace owner when staff void, credit or refund a project invoice from the project record.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
             "key": "domain-purchased",
             "name": "Domain purchased",
             "description": "Sent to a workspace's owners and admins when a domain bought for one of its sites is registered.",
@@ -8886,6 +9374,53 @@
               "sample": "https://app.aglyn.com/support"
             }
           ],
+          "org-owner-handoff-proposal": [
+            {
+              "name": "org.name",
+              "description": "Name of the workspace being handed over",
+              "sample": "Test Org"
+            },
+            {
+              "name": "handoff.previousOwner",
+              "description": "What happens to the current owner once the handoff is accepted",
+              "sample": "The current owner stays on as an admin."
+            },
+            {
+              "name": "plan.name",
+              "description": "The proposed plan",
+              "sample": "Starter"
+            },
+            {
+              "name": "proposal.summary",
+              "description": "The plan with the add-ons, cadence and coupon proposed with it",
+              "sample": "Starter with Site Care, billed yearly, code BOOTH25"
+            },
+            {
+              "name": "proposal.note",
+              "description": "A line from the team, or nothing when none was written",
+              "sample": "Great meeting you at the booth."
+            },
+            {
+              "name": "billingUrl",
+              "description": "Billing page with the bundle preselected; signing in with this address shows the invitation to accept first",
+              "sample": "https://app.aglyn.com/test-org/billing?plan=starter&interval=year&addons=siteCare"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
           "org-upgrade-proposal": [
             {
               "name": "org.name",
@@ -8903,9 +9438,46 @@
               "sample": "As we discussed on Tuesday."
             },
             {
+              "name": "proposal.summary",
+              "description": "The plan with the add-ons, cadence and coupon proposed with it, or nothing when only a plan was proposed",
+              "sample": "Starter with Site Care, billed yearly, code BOOTH25"
+            },
+            {
               "name": "billingUrl",
-              "description": "Billing page with the proposed plan preselected",
-              "sample": "https://app.aglyn.com/test-org/billing?plan=starter"
+              "description": "Billing page with the proposed plan, add-ons, cadence and coupon preselected",
+              "sample": "https://app.aglyn.com/test-org/billing?plan=starter&interval=year&addons=siteCare"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "client-build-preview": [
+            {
+              "name": "business.name",
+              "description": "Name of the business the website was built for",
+              "sample": "Harbor Plumbing"
+            },
+            {
+              "name": "preview.url",
+              "description": "Where the website can be seen now",
+              "sample": "https://harbor-plumbing.example.com"
+            },
+            {
+              "name": "site.address",
+              "description": "The address the website will live at: the domain the owner chose, or its free address",
+              "sample": "www.example.com"
             },
             {
               "name": "brand.productName",
@@ -13982,6 +14554,520 @@
               "name": "preferencesUrl",
               "description": "The product email switch in account settings",
               "sample": "https://app.aglyn.com/manage/user/emails"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-request-received": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "request.title",
+              "description": "The request, as the owner titled it",
+              "sample": "Update our holiday hours"
+            },
+            {
+              "name": "request.message",
+              "description": "What they asked for",
+              "sample": "Please change Saturday to 9 to 2 for December."
+            },
+            {
+              "name": "request.due",
+              "description": "When it will be done at the latest",
+              "sample": "Wednesday, October 21"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-request-done": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "request.title",
+              "description": "The request, as the owner titled it",
+              "sample": "Update our holiday hours"
+            },
+            {
+              "name": "request.changes",
+              "description": "What changed, from the request and the publish that shipped it",
+              "sample": "Published “Home” on Oct 19, 2026, 3:04 PM CDT"
+            },
+            {
+              "name": "request.minutes",
+              "description": "The time it took",
+              "sample": "35 min"
+            },
+            {
+              "name": "month.minutesLeft",
+              "description": "Included time left this month",
+              "sample": "25 min of this month’s included hour"
+            },
+            {
+              "name": "request.billing",
+              "description": "Whether anything bills, in one sentence",
+              "sample": "No extra charge: this fit in your included hour."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-request-corrected": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "request.title",
+              "description": "The request, as the owner titled it",
+              "sample": "Update our holiday hours"
+            },
+            {
+              "name": "correction.before",
+              "description": "The time before",
+              "sample": "75 min"
+            },
+            {
+              "name": "correction.after",
+              "description": "The time now",
+              "sample": "45 min"
+            },
+            {
+              "name": "correction.reason",
+              "description": "Why it changed",
+              "sample": "The timer ran while we waited for your photos."
+            },
+            {
+              "name": "request.billing",
+              "description": "What bills now, in one sentence",
+              "sample": "No extra charge: this now fits in your included hour."
+            },
+            {
+              "name": "month.minutesLeft",
+              "description": "Included time left this month",
+              "sample": "15 min of this month’s included hour"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-approval-confirmation": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "request.title",
+              "description": "The request, as the owner titled it",
+              "sample": "Update our holiday hours"
+            },
+            {
+              "name": "approval.heading",
+              "description": "“You approved extra time”, or “Corrected” on a correction",
+              "sample": "You approved extra time"
+            },
+            {
+              "name": "approval.sentence",
+              "description": "What was approved, how and when",
+              "sample": "You approved up to 2 hours of extra time at $79 an hour for “Update our holiday hours”, by phone on Oct 19, 2026, 2:10 PM CDT."
+            },
+            {
+              "name": "approval.correction",
+              "description": "What was corrected and why, on a correction; blank otherwise",
+              "sample": "Corrected from 1 hour to 2 hours: the owner asked for the gallery too."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-charge-reversed": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "request.title",
+              "description": "The request, as the owner titled it",
+              "sample": "Update our holiday hours"
+            },
+            {
+              "name": "charge.heading",
+              "description": "“Charge removed”, “Charge credited” or “Charge refunded”",
+              "sample": "Charge removed"
+            },
+            {
+              "name": "charge.sentence",
+              "description": "What happened to the money",
+              "sample": "The $79 for 1 hour of extra time will not be on your next invoice."
+            },
+            {
+              "name": "charge.reason",
+              "description": "Why",
+              "sample": "We took longer than we should have on this one."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-statement": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "month.label",
+              "description": "The month",
+              "sample": "October 2026"
+            },
+            {
+              "name": "statement.summary",
+              "description": "The month in one sentence",
+              "sample": "October 2026: 3 requests, 1 h 35 min of work, 60 of 60 included minutes used, 1 hour of extra time billed."
+            },
+            {
+              "name": "statement.lines",
+              "description": "One line per request",
+              "sample": "Update our holiday hours: 35 min, included\nNew staff photo: 1 h, 1 hour billed ($79), on your next invoice"
+            },
+            {
+              "name": "statement.history",
+              "description": "Everything recorded this month, one dated line each",
+              "sample": "Oct 19, 2026, 3:04 PM CDT: Finished “Update our holiday hours”: 35 min."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-quote": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "request.title",
+              "description": "The request, as the owner titled it",
+              "sample": "Update our holiday hours"
+            },
+            {
+              "name": "quote.amount",
+              "description": "The flat price",
+              "sample": "$249"
+            },
+            {
+              "name": "quote.scope",
+              "description": "What the price covers",
+              "sample": "A new landing page for the holiday sale, with a sign-up form."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-unknown-sender": [
+            {
+              "name": "sender.email",
+              "description": "The address the message came from",
+              "sample": "someone@example.com"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-project-acceptance": [
+            {
+              "name": "org.name",
+              "description": "The workspace the project is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "project.title",
+              "description": "The project, as staff named it",
+              "sample": "Holiday sale landing page"
+            },
+            {
+              "name": "project.scope",
+              "description": "What the price covers, one deliverable per line",
+              "sample": "- A landing page for the holiday sale\n- A sign-up form for the sale list"
+            },
+            {
+              "name": "acceptance.heading",
+              "description": "“You accepted our quote”, or “Corrected” on a correction",
+              "sample": "You accepted our quote"
+            },
+            {
+              "name": "acceptance.sentence",
+              "description": "The price, how it is billed, and how and when the owner said yes",
+              "sample": "You accepted our quote for “Holiday sale landing page”: $249, paid in full before work starts. You said yes in person on Oct 19, 2026, 2:10 PM CDT."
+            },
+            {
+              "name": "acceptance.correction",
+              "description": "What was corrected and why, on a correction; blank otherwise",
+              "sample": "This corrects the earlier record: the owner said yes by phone, not in person."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-project-invoice": [
+            {
+              "name": "org.name",
+              "description": "The workspace the project is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "project.title",
+              "description": "The project, as staff named it",
+              "sample": "Holiday sale landing page"
+            },
+            {
+              "name": "project.scope",
+              "description": "What the price covers, one deliverable per line",
+              "sample": "- A landing page for the holiday sale\n- A sign-up form for the sale list"
+            },
+            {
+              "name": "invoice.heading",
+              "description": "“Your deposit invoice”, “Your balance invoice” or “Your invoice”",
+              "sample": "Your invoice"
+            },
+            {
+              "name": "invoice.sentence",
+              "description": "What this invoice is for and what is left after it",
+              "sample": "This is the $249 for “Holiday sale landing page”, in full. Tax is added at checkout."
+            },
+            {
+              "name": "invoice.amount",
+              "description": "The invoice total, tax included",
+              "sample": "$269.54"
+            },
+            {
+              "name": "invoice.number",
+              "description": "The invoice number",
+              "sample": "A1B2C3D4-0001"
+            },
+            {
+              "name": "invoice.due",
+              "description": "When it is due",
+              "sample": "Nov 2, 2026"
+            },
+            {
+              "name": "invoice.payUrl",
+              "description": "The secure page the invoice is paid on",
+              "sample": "https://invoice.stripe.com/i/acct_test/test"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-project-paid": [
+            {
+              "name": "org.name",
+              "description": "The workspace the project is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "project.title",
+              "description": "The project, as staff named it",
+              "sample": "Holiday sale landing page"
+            },
+            {
+              "name": "payment.amount",
+              "description": "What was paid, tax included",
+              "sample": "$269.54"
+            },
+            {
+              "name": "payment.sentence",
+              "description": "What the payment was for",
+              "sample": "Thank you. We received your payment of $269.54 for “Holiday sale landing page”."
+            },
+            {
+              "name": "payment.next",
+              "description": "What happens next",
+              "sample": "The project is paid in full. We will let you know when it is live."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-project-reversed": [
+            {
+              "name": "org.name",
+              "description": "The workspace the project is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "project.title",
+              "description": "The project, as staff named it",
+              "sample": "Holiday sale landing page"
+            },
+            {
+              "name": "reversal.heading",
+              "description": "“Invoice canceled”, “Invoice credited” or “Payment refunded”",
+              "sample": "Invoice canceled"
+            },
+            {
+              "name": "reversal.sentence",
+              "description": "What happened to the money",
+              "sample": "We canceled the $124.50 deposit invoice for “Holiday sale landing page”. You do not owe it."
+            },
+            {
+              "name": "reversal.reason",
+              "description": "Why",
+              "sample": "The invoice went out with the wrong scope."
             },
             {
               "name": "brand.productName",
@@ -22518,6 +23604,28 @@
                 }
               ],
               "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_ai_site_inspiration",
+              "label": "Early access: AI site start: sites you like",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_ai_site_inspiration}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
             },
             {
               "key": "release.release_ad_audience_sync",

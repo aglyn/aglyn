@@ -298,6 +298,7 @@ struct ComposeSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(send == nil ? "Write an email" : "Edit email")
+      .aglynScreenTitle(send == nil ? "Write an email" : "Edit email")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

@@ -17,6 +17,7 @@
 
 import type {
   AglynOrgBilling,
+  AiTierId,
   CoreOrgEntitlements,
   CoreOrgFeatureFlags,
   OrgBrandingProfile,
@@ -481,7 +482,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       removeBranding: true,
       scheduledPublishing: false,
       aiAssist: true,
-      aiGenerative: false,
+      // One pool (AGL-3965): the plan's included credits pay for generation
+      // as well as assist on every paid plan, and an Aglyn AI tier adds
+      // credits on top rather than opening this door.
+      aiGenerative: true,
       workflows: true,
       dataStore: true,
       videoMedia: false,
@@ -600,7 +604,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       removeBranding: true,
       scheduledPublishing: false,
       aiAssist: true,
-      aiGenerative: false,
+      aiGenerative: true,
       workflows: true,
       dataStore: true,
       videoMedia: true,
@@ -671,7 +675,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       removeBranding: true,
       scheduledPublishing: true,
       aiAssist: true,
-      aiGenerative: false,
+      aiGenerative: true,
       workflows: true,
       dataStore: true,
       videoMedia: true,
@@ -745,7 +749,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       removeBranding: true,
       scheduledPublishing: true,
       aiAssist: true,
-      aiGenerative: false,
+      aiGenerative: true,
       workflows: true,
       dataStore: true,
       videoMedia: true,
@@ -816,7 +820,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       removeBranding: true,
       scheduledPublishing: true,
       aiAssist: true,
-      aiGenerative: false,
+      aiGenerative: true,
       workflows: true,
       dataStore: true,
       videoMedia: true,
@@ -891,7 +895,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       removeBranding: true,
       scheduledPublishing: true,
       aiAssist: true,
-      aiGenerative: false,
+      aiGenerative: true,
       workflows: true,
       dataStore: true,
       videoMedia: true,
@@ -1154,6 +1158,48 @@ export const EVENT_CALENDAR_ADDON_MONTHLY_USD = 9
 export const SITE_CARE_ADDON_MONTHLY_USD = 49
 
 /**
+ * Site Care's included time (AGL-3959): about an hour of staff work a month,
+ * no rollover. `SITE_CARE_INCLUDED_BLOCK_MINUTES` is the step each request is
+ * counted against it in, always rounded up — a 10-minute change uses one
+ * 15-minute block. The timer's actual minutes are still logged beside it.
+ */
+export const SITE_CARE_INCLUDED_MINUTES = 60
+
+/** The block a request counts against the included hour in (AGL-3959). */
+export const SITE_CARE_INCLUDED_BLOCK_MINUTES = 15
+
+/**
+ * Site Care extra time (AGL-3959): $79 per STARTED hour past the included
+ * hour in a month. Billed in whole hours, rounded up — any part of an hour is
+ * the full rate — and never less than the hours the owner approved. Only with
+ * the owner's recorded yes, as an invoice item on the next subscription
+ * invoice; never recurring. `site-care.ts` holds the arithmetic.
+ */
+export const SITE_CARE_EXTRA_HOUR_USD = 79
+
+/**
+ * Site Care projects (AGL-3970): work that adds a page, a form, a design or
+ * a campaign is a flat quote, never hourly. The quote is the estimated hours
+ * × `SITE_CARE_EXTRA_HOUR_USD`, rounded up to the whole hour, and never below
+ * the published starting price of the kind of project it is. These three are
+ * those starting prices, as `/pricing` publishes them.
+ */
+export const SITE_CARE_PROJECT_LANDING_PAGE_FROM_USD = 249
+
+/** A redesign's published starting price (AGL-3970). */
+export const SITE_CARE_PROJECT_REDESIGN_FROM_USD = 749
+
+/** A logo or brand kit's published starting price (AGL-3970). */
+export const SITE_CARE_PROJECT_BRAND_KIT_FROM_USD = 349
+
+/**
+ * A project priced ABOVE this is billed half up front and half at launch, on
+ * two invoices from the same record; at or below it, in full up front
+ * (AGL-3970). `site-care-project.ts` holds the arithmetic.
+ */
+export const SITE_CARE_PROJECT_SPLIT_ABOVE_USD = 500
+
+/**
  * POS Pro register add-on (AGL-329): $89/mo per extra register/location
  * (Shopify POS Pro parity). Purchased add-ons land as a per-org
  * `posRegisters` entitlement override, which
@@ -1162,45 +1208,189 @@ export const SITE_CARE_ADDON_MONTHLY_USD = 49
 export const POS_REGISTER_ADDON_MONTHLY_USD = 89
 
 /**
- * The Aglyn AI add-on's credit band (AGL-2896): the credits a month the
- * add-on ADDS to the plan's `assistCreditsPerMonth` when
- * `seatAddons.aiAddon` is set. One pool and one meter — the add-on widens
- * the band the assist meter already draws on rather than opening a second
- * one, so `resolveAssistCreditBudget`, the overage price and the hard-cap
- * switch all see one number.
+ * The Aglyn AI tiers (AGL-3965): credits sold on their own, to ANY paid
+ * plan, on top of what the plan includes.
  *
- * ## Sized against the add-on's own price
+ * ## One pool
  *
- * A credit is `ASSIST_CREDIT_COST_USD` of provider spend, so each band is a
- * cost figure: 1,000 credits are $1.00. Every band here costs at most 50% of
- * `PlanPricing.aiAddonMonthlyUsd` at full consumption — Starter $4 of $9,
- * Pro $9 of $19, Business $19 of $39, Scale $34 of $69, Advanced $49 of
- * $99, Agency $149 of $299 — which is the same line-margin floor
- * (`ASSIST_CREDIT_MIN_MARGIN_PCT`) every retail assist rate clears.
- * `tier-margin-floor.spec.ts` holds the whole tier non-negative with the
- * add-on band at 100% and the add-on's revenue counted, and pins each band's
- * share of its price.
+ * Every plan's `assistCreditsPerMonth` pays for ALL of Aglyn AI — the
+ * assistant and generation alike — and `features.aiGenerative` is on for
+ * every plan. A tier ADDS `credits` to that same band in
+ * `resolveOrgEntitlements`, so `resolveAssistCreditBudget`, the overage
+ * price and the hard-cap switch all still see one number. Past the pool the
+ * plan's `extraAssistCreditsUsdPer1k` bills per 1,000 credits unless the
+ * owner turned on `assistOverage.hardCap`; a tier changes neither.
  *
- * ## Free and Enterprise
+ * ## Sized against the tier's own price
  *
- * Free is 0: the plan sells no add-on (`aiAddonMonthlyUsd` is null), so a
- * quantity written onto a Free org adds nothing. Enterprise is finite at
- * twice Agency's, the rule every Enterprise fallback follows since the
- * 2026-09-07 decision (AGL-2654) — never `UNLIMITED`, for the reason
- * `ENTERPRISE_ASSIST_CREDITS_PER_MONTH` gives: an unbounded band reads back
- * as zero off the wire. Enterprise carries `aiGenerative` in the agreement
- * and its price is null too, so this figure is what a contract that names
- * the add-on starts from before its own number is written.
+ * A credit is `ASSIST_CREDIT_COST_USD` of provider spend, so `credits` is a
+ * cost figure: 1,000 credits are $1.00. Every tier costs at most 50% of its
+ * price at full consumption — Spark $4 of $9, Boost $9 of $19, Plus $19 of
+ * $39, Max $34 of $69, Ultra $49 of $99, Studio $149 of $299 — the same
+ * line-margin floor (`ASSIST_CREDIT_MIN_MARGIN_PCT`) every retail assist
+ * rate clears. The plan's included band is priced at 100% burn on its own
+ * tier, so a tier's margin never leans on the plan's; that is what
+ * `tier-margin-floor.spec.ts` holds, per tier.
+ *
+ * These are the six price/credit pairs the add-on was sold at per plan
+ * before AGL-3965 (Starter's $9 / 4,000 through Agency's $299 / 149,000),
+ * now chosen independently of the plan. `LEGACY_AI_ADDON_TIER_BY_PLAN` maps
+ * each old per-plan add-on to the tier with its price and band.
+ *
+ * Yearly is ×12 with no discount, as every add-on is. Studio is the top;
+ * more is an Enterprise contract. Free sells none (`planSellsAiTiers`).
  */
-export const AI_ADDON_CREDITS_PER_MONTH: Record<OrgPlan, number> = {
-  free: 0,
-  starter: 4_000,
-  pro: 9_000,
-  business: 19_000,
-  scale: 34_000,
-  advanced: 49_000,
-  agency: 149_000,
-  enterprise: 298_000,
+export interface AiTier {
+  /** The tier's name as a person sees it, after the product name. */
+  label: string
+  monthlyUsd: number
+  yearlyUsd: number
+  /** Credits a month the tier adds to the plan's included band. */
+  credits: number
+}
+
+/** The tiers, smallest first — the order every picker lists them in. */
+export const AI_TIER_IDS: readonly AiTierId[] = [
+  'spark',
+  'boost',
+  'plus',
+  'max',
+  'ultra',
+  'studio',
+]
+
+export const AI_TIERS: Readonly<Record<AiTierId, AiTier>> = {
+  spark: {
+    label: 'Spark',
+    monthlyUsd: 9,
+    yearlyUsd: 108,
+    credits: 4_000,
+  },
+  boost: {
+    label: 'Boost',
+    monthlyUsd: 19,
+    yearlyUsd: 228,
+    credits: 9_000,
+  },
+  plus: {
+    label: 'Plus',
+    monthlyUsd: 39,
+    yearlyUsd: 468,
+    credits: 19_000,
+  },
+  max: {
+    label: 'Max',
+    monthlyUsd: 69,
+    yearlyUsd: 828,
+    credits: 34_000,
+  },
+  ultra: {
+    label: 'Ultra',
+    monthlyUsd: 99,
+    yearlyUsd: 1188,
+    credits: 49_000,
+  },
+  studio: {
+    label: 'Studio',
+    monthlyUsd: 299,
+    yearlyUsd: 3588,
+    credits: 149_000,
+  },
+}
+
+/**
+ * The tier an add-on bought before AGL-3965 is (AGL-3965): the one with the
+ * same price and the same band the plan sold it at, so a workspace that
+ * held "the Pro add-on" holds Boost — $19, 9,000 credits — and neither its
+ * bill nor its credits move. Read when `aiTier` is absent and to classify a
+ * per-plan `STRIPE_PRICE_{PLAN}_AI_ADDON` item still on a subscription.
+ */
+export const LEGACY_AI_ADDON_TIER_BY_PLAN: Readonly<Partial<Record<OrgPlan, AiTierId>>> = {
+  starter: 'spark',
+  pro: 'boost',
+  business: 'plus',
+  scale: 'max',
+  advanced: 'ultra',
+  agency: 'studio',
+}
+
+/**
+ * The tier a purchase that names a plan and no tier means (AGL-3965): a
+ * `?plan=pro&ai=1` deep link, a checkout posting `aiAddon: true` alone. The
+ * tier with that plan's old price and band, so a link published before tiers
+ * existed still sells what it quoted. Null where the plan sells no tier.
+ */
+export function defaultAiTierForPlan(plan: OrgPlan | string | null | undefined): AiTierId | null {
+  if (!planSellsAiTiers(plan)) return null
+  return LEGACY_AI_ADDON_TIER_BY_PLAN[plan as OrgPlan] ?? null
+}
+
+/** Whether a value is one of the tier ids. */
+export function isAiTierId(value: unknown): value is AiTierId {
+  return typeof value === 'string' && (AI_TIER_IDS as readonly string[]).includes(value)
+}
+
+/**
+ * The add-on key an Aglyn AI tier travels under outside the billing routes
+ * (AGL-3965): `ai:<tier>`, e.g. `ai:boost`. The ONE spelling a bundle
+ * checkout link (AGL-3955) and a hand-off proposal's add-on list (AGL-3956)
+ * name a tier by, parsed and listed here, beside the tiers, so neither
+ * restates the ids.
+ */
+export type AiTierAddonKey = `ai:${AiTierId}`
+
+/** `ai:<tier>` for a tier. */
+export function aiTierAddonKey(tier: AiTierId): AiTierAddonKey {
+  return `ai:${tier}`
+}
+
+/**
+ * The tier an `ai:<tier>` key names, or null for anything else — another
+ * add-on's key, a bare `ai`, an unknown tier, a non-string. Exact and
+ * case-sensitive: a key is read off a link, and guessing is the expensive
+ * direction to be wrong in (`parseOnboardingPlanIntent` reads `?ai=` the
+ * same way).
+ */
+export function parseAiTierAddonKey(key: unknown): AiTierId | null {
+  if (typeof key !== 'string' || !key.startsWith('ai:')) return null
+  const tier = key.slice(3)
+  return isAiTierId(tier) ? tier : null
+}
+
+/** One tier as an add-on a bundle or a proposal can carry. */
+export interface AiTierAddonOption {
+  key: AiTierAddonKey
+  tier: AiTierId
+  label: string
+  monthlyUsd: number
+  yearlyUsd: number
+  credits: number
+}
+
+/**
+ * Every tier as an `ai:<tier>` add-on, smallest first — what a picker that
+ * offers "Aglyn AI" beside the other add-ons lists. Empty for a plan that
+ * sells no tier (Free, Enterprise) when a plan is given.
+ */
+export function listAiTierAddons(plan?: OrgPlan | string | null): AiTierAddonOption[] {
+  if (plan !== undefined && !planSellsAiTiers(plan)) return []
+  return AI_TIER_IDS.map((tier) => ({
+    key: aiTierAddonKey(tier),
+    tier,
+    label: AI_TIERS[tier].label,
+    monthlyUsd: AI_TIERS[tier].monthlyUsd,
+    yearlyUsd: AI_TIERS[tier].yearlyUsd,
+    credits: AI_TIERS[tier].credits,
+  }))
+}
+
+/**
+ * Whether a plan may buy an Aglyn AI tier (AGL-3965): every paid self-serve
+ * plan. Not Free, which has no subscription to carry it, and not Enterprise,
+ * whose AI is in the agreement.
+ */
+export function planSellsAiTiers(plan: OrgPlan | string | undefined | null): boolean {
+  return planSellsSiteCare(plan)
 }
 
 /**
@@ -1371,41 +1561,6 @@ export interface PlanPricing {
    */
   extraAssistCreditsUsdPer1k: number | null
   /**
-   * The Aglyn AI add-on, flat per organization per month (AGL-2896); null
-   * when the plan does not sell it.
-   *
-   * ## What it buys
-   *
-   * `features.aiGenerative` — generative building and automation, the rung
-   * no self-serve tier includes — plus `AI_ADDON_CREDITS_PER_MONTH[plan]`
-   * added to the plan's assist band. It also switches `aiAssist` on, so on
-   * Starter it brings the two rungs the tier does not carry — the copy
-   * assist and the generative one — on top of the 750 credits the plan
-   * already includes (AGL-3203). It ADDS to that band; it does not replace
-   * it, on Starter or on any tier.
-   *
-   * ## Where the ladder sits
-   *
-   * Priced as an uplift on the plan rather than on its own cost: the field
-   * charges roughly 30% of the base price for an AI tier (Zylo's 2025
-   * survey puts the AI uplift at 20–37% across SaaS; aissist.io's benchmark
-   * and the Framer, Webflow and HubSpot credit add-ons sit in the same
-   * band), and the share DESCENDS with the tier — 36% of Starter's $25, 34%
-   * of Pro's, 28% of Business's, 28% of Scale's, 25% of Advanced's, 23% of
-   * Agency's — because the larger the plan the more of its price is already
-   * carrying the bands the assistant builds against.
-   *
-   * Annual is x12 of this with no discount, as every other add-on is
-   * (`orgListPriceMonthlyUsd`). The band it funds costs at most 50% of it in
-   * provider spend, the `ASSIST_CREDIT_MIN_MARGIN_PCT` floor every retail
-   * assist figure holds.
-   *
-   * Null on Free, which sells no add-on of any kind, and on Enterprise,
-   * where every figure is the "not for sale" sentinel and generative
-   * building is in the agreement.
-   */
-  aiAddonMonthlyUsd: number | null
-  /**
    * Metered overage per 1,000 CRM records beyond `contactsPerHost` (AGL-890,
    * widened to contacts + companies + deals in AGL-2611): audience bands,
    * Ghost-style. Paid plans meter (a growing audience is never dropped);
@@ -1502,7 +1657,6 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
     extraAssistCreditsUsdPer1k: null,
-    aiAddonMonthlyUsd: null,
     extraContactsUsdPer1k: null,
     extraEmailSendsUsdPer1k: null,
     meteredInfraPassThrough: false,
@@ -1523,7 +1677,6 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     // the silent free overage, and this rate without the band is a fee
     // advertised on a quantity the plan never sold.
     extraAssistCreditsUsdPer1k: 3,
-    aiAddonMonthlyUsd: 9,
     extraContactsUsdPer1k: 1,
     // No email band to be "over" — see `emailSendsPerMonth` on the Starter
     // entitlements. `emailSendsOverage` returns 0 for any non-positive band,
@@ -1542,7 +1695,6 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: null,
     extraAssistCreditsUsdPer1k: 3,
-    aiAddonMonthlyUsd: 19,
     extraContactsUsdPer1k: 0.75,
     extraEmailSendsUsdPer1k: 2.25,
     meteredInfraPassThrough: true,
@@ -1557,7 +1709,6 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.5,
     extraAssistCreditsUsdPer1k: 2.75,
-    aiAddonMonthlyUsd: 39,
     extraContactsUsdPer1k: 0.5,
     extraEmailSendsUsdPer1k: 2,
     meteredInfraPassThrough: true,
@@ -1572,7 +1723,6 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.36,
     extraApiRequestsUsdPer1k: 0.35,
     extraAssistCreditsUsdPer1k: 2.5,
-    aiAddonMonthlyUsd: 69,
     extraContactsUsdPer1k: 0.4,
     extraEmailSendsUsdPer1k: 1.9,
     meteredInfraPassThrough: true,
@@ -1590,7 +1740,6 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     // or above $0.234 (AGL-3444).
     extraApiRequestsUsdPer1k: 0.25,
     extraAssistCreditsUsdPer1k: 2.25,
-    aiAddonMonthlyUsd: 99,
     // FLOORED at the 50% retail margin, not stepped down again. The ladder
     // above it descends $1.00 → $0.75 → $0.50 → $0.40, and one more step
     // would have reached $0.25 against a `perContactMonth` cost of $0.20 per
@@ -1624,7 +1773,6 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     // FLOORED at the 50% retail margin — see Advanced's.
     extraApiRequestsUsdPer1k: 0.25,
     extraAssistCreditsUsdPer1k: 2,
-    aiAddonMonthlyUsd: 299,
     // $0.40, because the band it meters is now FINITE.
     //
     // This row has been wrong in both directions. It shipped $0.20 against an
@@ -1667,7 +1815,6 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
     extraAssistCreditsUsdPer1k: null,
-    aiAddonMonthlyUsd: null,
     extraContactsUsdPer1k: null,
     extraEmailSendsUsdPer1k: null,
     meteredInfraPassThrough: false,
@@ -2201,9 +2348,14 @@ export function orgListPriceMonthlyUsd(
     seats(addons.eventCalendar, EVENT_CALENDAR_ADDON_MONTHLY_USD) +
     seats(siteCareUnits(addons), SITE_CARE_ADDON_MONTHLY_USD) +
     // A toggle, not a quantity: one purchase covers the org, so a stored
-    // quantity above one bills once.
-    seats(aiAddonUnits(addons), pricing.aiAddonMonthlyUsd)
+    // quantity above one bills once, at its tier's price (AGL-3965).
+    aiTierMonthlyUsd(aiTierOfPurchase(org))
   )
+}
+
+/** A tier's monthly price, or 0 for no tier. */
+function aiTierMonthlyUsd(tier: AiTierId | null): number {
+  return tier ? AI_TIERS[tier].monthlyUsd : 0
 }
 
 /**
@@ -3255,6 +3407,92 @@ export function hasAiAddon(
 }
 
 /**
+ * Which Aglyn AI tier the org's purchase map holds (AGL-3965), whether or
+ * not the subscription is still paying for it — `resolveAiTier` is the
+ * reading that drops a dead one. `org.aiTier` when it names a tier;
+ * otherwise, for an add-on bought before tiers existed, the tier with that
+ * plan's old price and band (`LEGACY_AI_ADDON_TIER_BY_PLAN`). Null when no
+ * add-on is held or the plan sells no tier (Free, Enterprise).
+ */
+export function aiTierOfPurchase(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): AiTierId | null {
+  if (aiAddonUnits(org?.seatAddons) !== 1) return null
+  if (!planSellsAiTiers(org?.plan)) return null
+  if (isAiTierId(org?.aiTier)) return org.aiTier
+  return LEGACY_AI_ADDON_TIER_BY_PLAN[org?.plan as OrgPlan] ?? null
+}
+
+/**
+ * The Aglyn AI tier that currently applies (AGL-3965): bought, on a
+ * subscription still paying for it, on a plan that sells tiers. The ONE
+ * reading every surface that shows or counts a tier goes through.
+ */
+export function resolveAiTier(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): AiTierId | null {
+  return hasAiAddon(org) ? aiTierOfPurchase(org) : null
+}
+
+/**
+ * What `seatAddons.aiAddon` adds on an Enterprise org (AGL-2896, kept by
+ * AGL-3965): twice Studio's band, the figure the per-plan table carried as
+ * twice Agency's (the rule every Enterprise fallback follows since AGL-2654),
+ * and still what a contract that names the add-on starts from before its own
+ * number is written. Enterprise buys no tier — its AI is in the agreement —
+ * so this is the contract figure kept, not a price; finite, never
+ * `UNLIMITED`, for the reason `ENTERPRISE_ASSIST_CREDITS_PER_MONTH` gives.
+ */
+export const ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH = AI_TIERS.studio.credits * 2
+
+/**
+ * The Aglyn AI add-on's per-unit quota as `resolveOrgEntitlements` folds it
+ * (AGL-3965): the purchased tier's credits, on a plan that sells tiers;
+ * Enterprise's contract figure (`ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH`);
+ * else 0 (Free). The AI plugin declares its seat add-on with this as
+ * `quota.perUnit`.
+ */
+export function aiTierQuotaPerUnit(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  plan: OrgPlan,
+): number {
+  if (plan === 'enterprise') return ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH
+  if (!planSellsAiTiers(plan)) return 0
+  const tier = aiTierOfPurchase(org)
+  return tier ? AI_TIERS[tier].credits : 0
+}
+
+/**
+ * The credits a month the org's Aglyn AI add-on adds to its plan's included
+ * band (AGL-3965) — 0 with none held. The SAME figure `resolveOrgEntitlements`
+ * folds into `assistCreditsPerMonth` (`aiTierQuotaPerUnit`), so a surface
+ * quoting "your tier adds" and the meter agree.
+ */
+export function aiTierCreditsPerMonth(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number {
+  if (!hasAiAddon(org)) return 0
+  return aiTierQuotaPerUnit(org, resolveEffectivePlan(org))
+}
+
+/**
+ * Whether this org can buy or change an Aglyn AI tier itself (AGL-3965): a
+ * plan that sells tiers, and not one a staff comp grants — a comp has no
+ * subscription to put the tier on (`compPricing`).
+ */
+export function orgCanBuyAiTier(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  return !resolvePlanComp(org) && planSellsAiTiers(resolveEffectivePlan(org))
+}
+
+/** "Aglyn AI Boost": the product name, then the tier's. */
+export const aiTierName = (
+  tier: AiTierId,
+  brand: string = PLATFORM_BRAND_NAME,
+): string => `${aiAddonName(brand)} ${AI_TIERS[tier].label}`
+
+/**
  * Whether the org's Site Care add-on currently applies (AGL-3954): bought,
  * and on a subscription that is still paying for it, so a dead subscription
  * reads false here exactly as it drops `features.siteCare`. The reader for
@@ -3486,7 +3724,7 @@ function resolveCappedOrgEntitlements(
   // `hostLimit` and purchased sites do. The per-unit figure is the PLAN's,
   // read off the effective plan rather than the stored one, so a dead
   // subscription that resolved to free adds free's figure.
-  const folded = foldPluginSeatAddons(resolved, purchased, resolvePlan(org))
+  const folded = foldPluginSeatAddons(resolved, purchased, resolvePlan(org), org ?? {})
   if (!extraHosts && !eventCalendar && !siteCare && folded === resolved) {
     return resolved
   }
@@ -3543,6 +3781,7 @@ function foldPluginSeatAddons(
   resolved: ResolvedOrgEntitlements,
   purchased: OrgSeatAddons,
   plan: OrgPlan,
+  org: Partial<AglynOrgBilling>,
 ): ResolvedOrgEntitlements {
   let out = resolved
   for (const addon of listPluginSeatAddons()) {
@@ -3550,7 +3789,9 @@ function foldPluginSeatAddons(
     if (!units) continue
     const next: ResolvedOrgEntitlements = { ...out, features: { ...out.features } }
     if (addon.quota) {
-      const perUnit = addon.quota.perUnitByPlan[plan] ?? 0
+      const perUnit = addon.quota.perUnit
+        ? addon.quota.perUnit(org, plan)
+        : (addon.quota.perUnitByPlan?.[plan] ?? 0)
       const bag = next as unknown as Record<string, unknown>
       const current = Number(bag[addon.quota.key] ?? 0)
       bag[addon.quota.key] = (Number.isFinite(current) ? current : 0) + perUnit * units

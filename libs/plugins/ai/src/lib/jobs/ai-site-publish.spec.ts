@@ -33,6 +33,9 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { siteLanguageCode } from '@aglyn/aglyn/app-utils/seo-locale'
 import { AI_BUILD_PLAN_TOOL, aiBuildPlanToolFor, parseAiBuildPlan } from '../model/ai-build-plan'
 import type { AiJobOutput } from '../model/ai-jobs.types'
+import { aiSiteSeoProposalOf } from '../model/ai-site-start-seo'
+import { defaultSiteSeo } from '@aglyn/aglyn/app-utils/default-site'
+import { aiSiteSeoOutputs } from './ai-job-site-step'
 import {
   AI_SITE_PUBLISH_DELETED,
   aiSiteLanguageUpdates,
@@ -40,6 +43,7 @@ import {
   aiLayoutWithBlogEntry,
   aiLayoutWithNavigation,
   aiMergeSitePublish,
+  aiPageWithoutLinksTo,
   aiPublishGuidedSite,
   aiRestoreGuidedBlogEntry,
   aiSiteUnwrittenBlogHrefs,
@@ -102,6 +106,12 @@ function collectionRef(path: string): Record<string, unknown> {
 let failCommit = false
 const firestore = {
   collection: (name: string) => collectionRef(name),
+  // A draft's tree changed in place, as `updateAiDraftNodes` asks (AGL-3988).
+  runTransaction: async (run: (tx: unknown) => Promise<unknown>) =>
+    run({
+      get: async (ref: { path: string }) => snapshot(ref.path),
+      update: (ref: { path: string }, data: Record<string, unknown>) => apply(ref.path, data, 'update'),
+    }),
   batch: () => {
     const writes: Array<() => void> = []
     return {
@@ -576,5 +586,219 @@ describe('the site publishes in the language its brief was written in (AGL-3750)
     docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), locales: ['en', 'fr'], defaultLocale: 'en' })
     await publishIn('es')
     expect(docs.get('hosts/host-1')).toMatchObject({ locales: ['en', 'fr'], defaultLocale: 'en' })
+  })
+})
+
+/*
+ * The beta.270 Sugar Hollow Photography start (AGL-3988): its Galleries page
+ * was refused by its checks, and the published home page still linked it
+ * from "See the galleries", from the "View all galleries" button under its
+ * gallery band and from the header, all to a 404; its 404 page listed the
+ * pages alphabetically.
+ */
+describe('a page the start did not build is linked from nowhere (AGL-3988)', () => {
+  const LAYOUT = {
+    root: { $id: 'root', componentId: 'div', nodes: ['h_bar'] },
+    h_bar: { $id: 'h_bar', componentId: 'muiAppBar', parentId: 'root', nodes: ['h_nav'] },
+    h_nav: { $id: 'h_nav', componentId: 'muiStack', parentId: 'h_bar', nodes: ['h_home', 'h_galleries', 'h_book'] },
+    h_home: { $id: 'h_home', componentId: 'muiScreenLink', parentId: 'h_nav', props: { children: 'Home', screenId: 'drft-home' }, nodes: [] },
+    h_galleries: { $id: 'h_galleries', componentId: 'muiScreenLink', parentId: 'h_nav', props: { children: 'Galleries', screenId: 'drft-galleries' }, nodes: [] },
+    h_book: { $id: 'h_book', componentId: 'muiScreenLink', parentId: 'h_nav', props: { children: 'Book Now', screenId: 'drft-book' }, nodes: [] },
+  }
+  const HOME = {
+    root: { $id: 'root', componentId: 'div', nodes: ['sec-0', 'sec-1'] },
+    'sec-0': { $id: 'sec-0', componentId: 'section', parentId: 'root', nodes: ['hero_title', 'hero_buttons'] },
+    hero_title: { $id: 'hero_title', componentId: 'muiTypography', parentId: 'sec-0', props: { children: 'Sugar Hollow Photography' }, nodes: [] },
+    hero_buttons: { $id: 'hero_buttons', componentId: 'muiStack', parentId: 'sec-0', nodes: ['hero_book', 'hero_galleries'] },
+    hero_book: { $id: 'hero_book', componentId: 'muiScreenLink', parentId: 'hero_buttons', props: { children: 'Book a session', screenId: 'drft-book' }, nodes: [] },
+    hero_galleries: { $id: 'hero_galleries', componentId: 'muiScreenLink', parentId: 'hero_buttons', props: { children: 'See the galleries', screenId: 'drft-galleries' }, nodes: [] },
+    'sec-1': { $id: 'sec-1', componentId: 'section', parentId: 'root', nodes: ['band_title', 'band_cover', 'band_more'] },
+    band_title: { $id: 'band_title', componentId: 'muiTypography', parentId: 'sec-1', props: { children: 'Galleries by subject' }, nodes: [] },
+    band_cover: { $id: 'band_cover', componentId: 'image', parentId: 'sec-1', props: { src: 'media:h/1', alt: 'A couple', screenId: 'drft-galleries' }, nodes: [] },
+    band_more: { $id: 'band_more', componentId: 'muiStack', parentId: 'sec-1', nodes: ['band_all'] },
+    band_all: { $id: 'band_all', componentId: 'muiScreenLink', parentId: 'band_more', props: { children: 'View all galleries', screenId: 'drft-galleries' }, nodes: [] },
+  }
+  const stored = (nodes: unknown) => Buffer.from(encodeStoredNodes(nodes as never) as Uint8Array)
+
+  function seedSugarHollow() {
+    seedSite()
+    docs.set('hosts/host-1/layouts/lay-site/versions/v-lay', { layoutId: 'lay-site', nodes: stored(LAYOUT) })
+    docs.set('hosts/host-1/screens/drft-home/versions/v-home', { layoutId: 'lay-site', aiJobId: 'job-1', nodes: stored(HOME) })
+    // The refused page's draft is on the site, never live.
+    docs.set('hosts/host-1/screens/drft-galleries', { displayName: 'Galleries', slug: 'galleries', versionId: 'v-gal' })
+    // The owner already placed Book Now in Pages.
+    docs.set('hosts/host-1/screens/drft-book', { ...docs.get('hosts/host-1/screens/drft-book'), order: 7 })
+  }
+  const publishSugarHollow = () =>
+    aiPublishGuidedSite(
+      firestore,
+      { job: JOB, outputs: OUTPUTS, now: NOW, unbuiltScreenIds: ['drft-galleries'], siteOrder: ['drft-home', 'drft-galleries', 'drft-book'] },
+      { sendSitePublished: sendSitePublished as never, dropCache },
+    )
+  const nodesAt = (path: string) => decodeStoredNodes<Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>>(docs.get(path)?.['nodes'] as never) ?? {}
+
+  it('takes every link to it out of the published pages, and the frames left holding none', async () => {
+    seedSugarHollow()
+    const result = await publishSugarHollow()
+    expect(result.published.map((page) => page.id)).toEqual(['drft-home', 'drft-book'])
+    const home = nodesAt('hosts/host-1/screens/drft-home/versions/v-home')
+    const links = Object.values(home).filter((node) => node.props?.['screenId'] === 'drft-galleries')
+    expect(links).toEqual([])
+    // "See the galleries" goes; "Book a session" beside it stays.
+    expect(home['hero_buttons']?.nodes).toEqual(['hero_book'])
+    // "View all galleries" was all its row held: the row goes with it, never the band.
+    expect(home['band_more']).toBeUndefined()
+    expect(home['sec-1']?.nodes).toEqual(['band_title', 'band_cover'])
+    // The cover keeps its place and its photo, and opens nothing.
+    expect(home['band_cover']?.props).toEqual({ src: 'media:h/1', alt: 'A couple' })
+  })
+
+  it('takes it out of the header every page shares', async () => {
+    seedSugarHollow()
+    await publishSugarHollow()
+    const layout = docs.get('hosts/host-1/layouts/lay-site') as Record<string, unknown>
+    const live = nodesAt(`hosts/host-1/layouts/lay-site/versions/${String(layout['versionId'])}`)
+    const header = live['h_nav']?.nodes ?? []
+    expect(header.map((id) => live[id]?.props?.['children'])).toEqual(['Home', 'Book Now'])
+  })
+
+  it('places each page in Pages in the site’s order, where the owner has not, for the 404 page’s links', async () => {
+    seedSugarHollow()
+    await publishSugarHollow()
+    expect(docs.get('hosts/host-1/screens/drft-home')).toMatchObject({ order: 0 })
+    expect(docs.get('hosts/host-1/screens/drft-book')).toMatchObject({ order: 7 })
+  })
+
+  it('changes nothing on a page that links none', () => {
+    expect(aiPageWithoutLinksTo(HOME as never, ['drft-unknown'])).toBeNull()
+    expect(aiPageWithoutLinksTo(HOME as never, [])).toBeNull()
+  })
+
+  it('takes out a link to a page this publish leaves a draft, too', async () => {
+    seedSugarHollow()
+    // Book Now's address is taken by another live page, so it stays a draft.
+    docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), screens: { 'scr-starter': '/', 'scr-other': 'book-now' } })
+    const result = await publishSugarHollow()
+    expect(result.drafts.map((page) => page.id)).toEqual(['drft-book'])
+    const home = nodesAt('hosts/host-1/screens/drft-home/versions/v-home')
+    expect(Object.values(home).some((node) => node.props?.['screenId'] === 'drft-book')).toBe(false)
+  })
+})
+
+/*
+ * Who publishes the site (AGL-3979): the start's answers fill the host's
+ * Setup -> SEO -> Entity and AI agents fields in the publish's own batch, only
+ * where empty, and the announce asks for the whole site, since every page
+ * carries the entity.
+ */
+describe('a guided start fills the site’s Entity and AI-agent fields (AGL-3979)', () => {
+  const DETAILED = {
+    ...JOB,
+    inputs: {
+      businessType: 'a family plumbing company',
+      siteKind: 'trades',
+      businessName: 'Pipeworks',
+      city: 'Austin',
+      phone: '(512) 555-0142',
+      email: 'hello@pipeworks.co',
+      hours: 'Mo-Fr 08:00-18:00',
+      social: 'https://instagram.com/pipeworks',
+    },
+  }
+
+  it('writes the business type, phone, email, hours, profiles and guidance, and announces the whole site', async () => {
+    seedSite()
+    docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), seo: { title: 'Pipeworks', entity: { telephone: '(512) 555-9999' } } })
+    dropCache.mockResolvedValueOnce({ dropped: 0, skipped: 0, complete: false })
+    await aiPublishGuidedSite(firestore, { job: DETAILED, outputs: OUTPUTS, now: NOW }, { sendSitePublished: sendSitePublished as never, dropCache })
+    const seo = (docs.get('hosts/host-1') as Record<string, Record<string, Record<string, unknown>>>)['seo']
+    expect(seo['title']).toBe('Pipeworks')
+    expect(seo['entity']).toMatchObject({
+      name: 'Pipeworks',
+      // The owner's own number is kept.
+      telephone: '(512) 555-9999',
+      email: 'hello@pipeworks.co',
+      businessType: 'Plumber',
+      areaServed: ['Austin'],
+      openingHours: 'Mo-Fr 08:00-18:00',
+      sameAs: ['https://instagram.com/pipeworks'],
+    })
+    expect(seo['entity']).toMatchObject({ contactType: 'customer support' })
+    expect(seo['agent']).toMatchObject({ whenToUse: expect.stringContaining('Pipeworks'), howToUse: expect.stringContaining('hello@pipeworks.co') })
+    // The Business details card's support email, which a form that cannot take a message names.
+    expect((docs.get('hosts/host-1') as Record<string, unknown>)['business']).toEqual({ supportEmail: 'hello@pipeworks.co' })
+    const outbox = [...docs.entries()].filter(([key]) => key.startsWith('publishOutbox/')).map(([, value]) => value)
+    expect(outbox).toEqual([expect.objectContaining({ entireHost: true })])
+  })
+
+  it('a job with no inputs writes no Entity field', async () => {
+    seedSite()
+    await publish()
+    expect((docs.get('hosts/host-1') as Record<string, unknown>)['seo']).toBeUndefined()
+    expect((docs.get('hosts/host-1') as Record<string, unknown>)['business']).toBeUndefined()
+  })
+
+  it('names the site’s own logo as the Entity logo', async () => {
+    seedSite()
+    docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), logoUrl: 'media:host-1/logo' })
+    await aiPublishGuidedSite(firestore, { job: DETAILED, outputs: OUTPUTS, now: NOW }, { sendSitePublished: sendSitePublished as never, dropCache })
+    const seo = (docs.get('hosts/host-1') as Record<string, Record<string, Record<string, unknown>>>)['seo']
+    expect(seo['entity']['logo']).toBe('media:host-1/logo')
+  })
+})
+
+/*
+ * The site's own listing (AGL-3979): the publish writes the start's title and
+ * description over the ones the site was created with, never over an owner's,
+ * and the SEO section's offer of the start's listing stays for a site whose
+ * owner changed theirs.
+ */
+describe('a guided start’s listing goes over the seeded default only (AGL-3979)', () => {
+  const NAME = 'Hillside Dog Grooming'
+  const STARTED = { ...JOB, inputs: { businessType: 'a neighborhood dog groomer', audience: 'busy dog owners', city: 'Austin', siteKind: 'business' } }
+  const seedNamed = (seo: Record<string, unknown>) => {
+    seedSite()
+    docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), displayName: NAME, seo })
+  }
+  const run = (retry = false) =>
+    aiPublishGuidedSite(
+      firestore,
+      { job: STARTED as never, outputs: OUTPUTS, now: NOW, ...(retry ? { retry: true } : {}) },
+      { sendSitePublished: sendSitePublished as never, dropCache },
+    )
+  const seoOf = () => (docs.get('hosts/host-1') as { seo: Record<string, unknown> }).seo
+  /** The listing the job reports, as the SEO section offers it. */
+  const reported = () => aiSiteSeoProposalOf(aiSiteSeoOutputs(STARTED as never, NAME))
+
+  it('writes the start’s listing, with the site’s name, over the default the site was created with', async () => {
+    seedNamed(defaultSiteSeo(NAME))
+    dropCache.mockResolvedValueOnce({ dropped: 0, skipped: 0, complete: false })
+    await run()
+    const listing = reported()
+    expect(seoOf()['title']).toBe(listing?.values['seo.title'])
+    expect(seoOf()['title']).toMatch(/^Hillside Dog Grooming — /)
+    expect(seoOf()['description']).toBe(listing?.values['seo.description'])
+    // The sharing image the site was created with stays.
+    expect(seoOf()['image']).toBe(defaultSiteSeo(NAME)['image'])
+    const outbox = [...docs.entries()].filter(([key]) => key.startsWith('publishOutbox/')).map(([, value]) => value)
+    expect(outbox).toEqual([expect.objectContaining({ entireHost: true })])
+  })
+
+  it('leaves a listing the owner changed as they wrote it, and the start’s is still offered', async () => {
+    seedNamed({ ...defaultSiteSeo(NAME), title: 'Hillside Grooming | Austin dog spa', description: 'Gentle grooming for nervous dogs since 2009.' })
+    await run()
+    expect(seoOf()).toMatchObject({ title: 'Hillside Grooming | Austin dog spa', description: 'Gentle grooming for nervous dogs since 2009.' })
+    const listing = reported()
+    expect(listing).not.toBeNull()
+    expect(listing?.values['seo.title']).not.toBe(seoOf()['title'])
+  })
+
+  it('is stable when Try again publishes again', async () => {
+    seedNamed(defaultSiteSeo(NAME))
+    await run()
+    const first = { ...seoOf() }
+    await run(true)
+    expect(seoOf()['title']).toBe(first['title'])
+    expect(seoOf()['description']).toBe(first['description'])
   })
 })

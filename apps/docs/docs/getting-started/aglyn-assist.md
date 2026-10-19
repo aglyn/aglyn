@@ -39,9 +39,9 @@ every change.
 
 ## When it builds instead of answering {#aglyn-ai}
 
-Everything above is the assistant explaining. With AI generation on your plan —
-the [Aglyn AI add-on](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai),
-or the AI credits a Free workspace gets — the same assistant also **builds**:
+Everything above is the assistant explaining. On every plan, from the AI credits it
+includes (and any [Aglyn AI tier](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai)
+on top), the same assistant also **builds**:
 whole pages, layouts, page templates, reusable components, forms, designed
 emails, campaigns, product copy, your search titles and descriptions, a change
 to your theme, and a small site from one brief. **AI jobs** in the panel is
@@ -92,10 +92,10 @@ those waits for you to apply it.
 
 With a page, a reusable component or a layout open in the Besigner, you can ask
 the assistant for a change: "make this hero darker", "add a testimonial band
-below", "point this button at the pricing page". When your plan includes AI
-generation — the
-[Aglyn AI add-on](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai),
-or the AI credits a Free workspace gets — it answers with a **Proposed change**
+below", "point this button at the pricing page". On every plan, from its included AI
+credits (and any
+[Aglyn AI tier](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai) on
+top), it answers with a **Proposed change**
 card listing what would change: elements added, removed, moved or restyled,
 settings changed, interactions added, and a page's search title or description
 filled in. Anything it could not match to your canvas is listed under **Left out**.

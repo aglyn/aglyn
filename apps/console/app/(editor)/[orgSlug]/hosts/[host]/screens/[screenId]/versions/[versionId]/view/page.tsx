@@ -69,6 +69,7 @@ import {
   useLoading,
 } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { PlanUpsellNotice } from '@aglyn/shared-ui-jsx/components/plan-upsell-notice.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { VariableTextField } from '@aglyn/shared-ui-jsx/components/variable-text-field.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -127,7 +128,7 @@ import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../../../../../../../../../../utils/revalidate-live-pages'
 import HostDisplayNameComponent from '../../../../../../../../../../components/host-display-name.component'
-import { hasEntitlement } from '../../../../../../../../../../constants/entitlements'
+import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import { buildScreenSeoUpdate } from '../../../../../../../../../../constants/screen-seo'
 import { buildRoute, Route } from '../../../../../../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
@@ -161,6 +162,7 @@ import {
 } from '../../../../../../../../../../constants/collection-templates'
 import useCollectionTemplates from '../../../../../../../../../../hooks/use-collection-templates'
 import useCurrentOrg from '../../../../../../../../../../hooks/use-current-org'
+import { usePlanFeatureLock } from '../../../../../../../../../../hooks/use-plan-feature-lock'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../../../../../hooks/use-host-activity-logger'
@@ -259,7 +261,11 @@ function ScreenDetails() {
   const { queueLoading, loading } = useLoading()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { org, orgId, ready: orgReady } = useCurrentOrg()
+  const { orgId, ready: orgReady } = useCurrentOrg()
+  // Scheduled publish and unpublish are Business: the buttons stay, disabled
+  // with the plan that includes them, on a plan without it.
+  const scheduling = usePlanFeatureLock('scheduledPublishing')
+  const schedulingReason = planLockReason('Scheduled publishing', scheduling.planLabel)
   const logActivity = useHostActivityLogger(hostId)
   /**
    * The `author` host role edits content and may NOT publish it (AGL-2334).
@@ -868,11 +874,11 @@ function ScreenDetails() {
           persist: false,
         })
       }
-      if (!hasEntitlement('scheduledPublishing', org)) {
-        return enqueueSnackbar(
-          'Scheduled publishing requires a Business plan — see Billing',
-          { variant: 'warning', persist: false },
-        )
+      if (scheduling.locked) {
+        return enqueueSnackbar(`${schedulingReason} See Billing to upgrade.`, {
+          variant: 'warning',
+          persist: false,
+        })
       }
       const initial = new Date(Date.now() + 60 * 60 * 1000)
       initial.setMinutes(0, 0, 0)
@@ -886,7 +892,7 @@ function ScreenDetails() {
           `${pad(initial.getDate())}T${pad(initial.getHours())}:${pad(initial.getMinutes())}`,
       })
     },
-    [org, orgReady, enqueueSnackbar, screen, versions],
+    [orgReady, scheduling.locked, schedulingReason, enqueueSnackbar, screen, versions],
   )
   const handleScheduleConfirm = useCallback(async () => {
     if (!scheduler?.at) return
@@ -1658,16 +1664,18 @@ function ScreenDetails() {
                         </Tooltip>
                         <Tooltip
                           title={
-                            canPublish
-                              ? 'Make a version live at a date/time'
-                              : publishBlock
+                            !canPublish
+                              ? publishBlock
+                              : scheduling.locked
+                                ? schedulingReason
+                                : 'Make a version live at a date/time'
                           }
                         >
                           <span>
                             <Button
                               size="small"
                               color="primary"
-                              disabled={!canPublish}
+                              disabled={!canPublish || scheduling.locked}
                               onClick={openScheduler('publish')}
                               startIcon={
                                 <MdiIcon
@@ -1680,12 +1688,18 @@ function ScreenDetails() {
                             </Button>
                           </span>
                         </Tooltip>
-                        <Tooltip title="Take the page offline at a date/time">
+                        <Tooltip
+                          title={
+                            scheduling.locked
+                              ? schedulingReason
+                              : 'Take the page offline at a date/time'
+                          }
+                        >
                           <span>
                             <Button
                               size="small"
                               color="primary"
-                              disabled={!isRoutePublished}
+                              disabled={!isRoutePublished || scheduling.locked}
                               onClick={openScheduler('unpublish')}
                               startIcon={
                                 <MdiIcon
@@ -1699,6 +1713,14 @@ function ScreenDetails() {
                           </span>
                         </Tooltip>
                       </Stack>
+                      {scheduling.locked ? (
+                        <PlanUpsellNotice
+                          planLabel={scheduling.planLabel}
+                          upgradeHref={scheduling.upgradeHref}
+                        >
+                          {'Schedule this page to go live, or come down, at a set date and time.'}
+                        </PlanUpsellNotice>
+                      ) : null}
                     </Stack>
                   </CardDisplay>
                 ),
@@ -2032,14 +2054,16 @@ function ScreenDetails() {
                                   title={
                                     isLive
                                       ? 'This version is already live'
-                                      : 'Make this version live at a date/time'
+                                      : scheduling.locked
+                                        ? schedulingReason
+                                        : 'Make this version live at a date/time'
                                   }
                                 >
                                   <span>
                                     <Button
                                       size="small"
                                       color="primary"
-                                      disabled={isLive}
+                                      disabled={isLive || scheduling.locked}
                                       onClick={openScheduler(
                                         'publish',
                                         version.$id,

@@ -96,6 +96,8 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
     'creates a version under a layout that exists; only reads screens to know what a menu may link (AGL-3728)',
   'libs/plugins/ai/src/lib/jobs/ai-site-publish.ts':
     'merge-sets the publish fields of screens the job wrote, and trashes the starter home; creates a layout version (AGL-3596)',
+  'tools/scripts/publish-pricing-ai-tiers.mjs':
+    'creates a version under the /pricing screen that exists and points the screen at it; the Site Care link it adds names the /managed screen that exists (AGL-3965)',
   'libs/plugins/redirects/src/lib/server/redirect-ai-writer.ts':
     'writes redirect rules; reads the host’s screens to refuse redirecting a published page (AGL-3745)',
   'libs/plugins/forms/src/lib/server/form-submit.ts':

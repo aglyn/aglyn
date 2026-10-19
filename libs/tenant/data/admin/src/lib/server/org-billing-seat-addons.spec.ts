@@ -34,7 +34,7 @@ import {
   ORG_BILLING_DOC_ID,
   ORG_BILLING_SUBCOLLECTION,
 } from '@aglyn/aglyn/server'
-import { hasAiAddon } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { hasAiAddon, resolveAiTier } from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 /** Every `set` the batch received: path, data, options. */
 let writes: Array<[string, Record<string, unknown>, { merge?: boolean } | undefined]>
@@ -149,5 +149,33 @@ describe('the add-on quantities a subscription carries land on the org doc (AGL-
     writes = []
     await writeOrgBilling('org-1', { stripeCustomerId: 'cus_live_1' })
     expect(writeTo('orgs/org-1')).toBeUndefined()
+  })
+})
+
+describe('the Aglyn AI tier travels with the quantities (AGL-3965)', () => {
+  it('lands on the org doc beside seatAddons, never on the billing doc', async () => {
+    await writeOrgBilling('org-1', {
+      stripeCustomerId: 'cus_live_1',
+      seatAddons: { ...NO_ADDONS, aiAddon: 1 },
+      aiTier: 'studio',
+      subscription: { status: 'active', priceId: 'price_starter', interval: 'month' },
+    } as never)
+    const orgWrite = writeTo('orgs/org-1')?.[1] ?? {}
+    expect(orgWrite['aiTier']).toBe('studio')
+    expect(writeTo(billingPath)?.[1]).not.toHaveProperty('aiTier')
+    // …and it is what the tier reader sees: Studio on Starter. (The credit
+    // fold needs the AI plugin's declaration; its own specs hold it.)
+    const org = { plan: 'starter', ...orgWrite } as never
+    expect(resolveAiTier(org)).toBe('studio')
+  })
+
+  it('a null tier lands as null, so a removed tier converges', async () => {
+    await writeOrgBilling('org-1', { seatAddons: NO_ADDONS, aiTier: null } as never)
+    expect(writeTo('orgs/org-1')?.[1]).toHaveProperty('aiTier', null)
+  })
+
+  it('THE CONTROL: a patch with no tier writes none', async () => {
+    await subscriptionSync({ ...NO_ADDONS, aiAddon: 1 })
+    expect(writeTo('orgs/org-1')?.[1]).not.toHaveProperty('aiTier')
   })
 })

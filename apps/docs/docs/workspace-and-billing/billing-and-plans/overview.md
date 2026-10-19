@@ -49,6 +49,13 @@ With **Manage billing** the card also carries the plan's controls:
 A sentence under the limits says when the current period renews or ends, and any
 [add-ons](add-ons.md) you hold are listed at the bottom.
 
+### Locked features {#locked-features}
+
+A feature your plan doesn't include stays on screen, turned off, with **Included from**
+and the plan that has it, and an **Upgrade** link to the plans on this page; moving to
+that plan turns it on, with nothing else to set up. A dashboard card from a higher plan
+shows its name, what it does and the plan that includes it in place of the card itself.
+
 ### Billing links in emails {#billing-link}
 
 A billing link in an email from Aglyn — a failed-payment notice, say — opens the
@@ -130,10 +137,16 @@ lower plan still goes through us, because there is no subscription to move down 
 
 When the Aglyn team proposes a plan for your workspace, the owner gets an email, and
 everyone who manages billing sees a card on the workspace's home and at the top of the
-Billing page: **"*Workspace*'s Aglyn team proposed the *Plan* plan"**. **Review the
-plan** opens Billing with that plan selected. Nothing is charged until you start the
-subscription yourself. The card goes away once a subscription is live, or when the team
-withdraws the proposal. Other members never see it.
+Billing page: **"*Workspace*'s Aglyn team proposed the *Plan* plan"**. A proposal can
+include add-ons (such as Site Care or Aglyn AI), monthly or yearly billing, and a
+promotion code, and the card names them. **Review the plan** opens Billing with all of
+it selected. Nothing is charged until you start the subscription yourself. The card
+goes away once a subscription is live, or when the team withdraws the proposal. Other
+members never see it.
+
+If the team built your site and handed the workspace to you, the plan comes with the
+invitation: the email's button opens Billing, and once you accept the invitation you
+land there with the plan and add-ons already chosen.
 
 ### Enterprise
 
@@ -340,8 +353,9 @@ of your allowance mean nobody first learns about overage from an invoice. The op
 
 Paid plans include a monthly band of **AI assist credits** — the **Aglyn Assist credits**
 meter on the billing page shows how much of it this month's assistant use has drawn. The
-[Aglyn AI add-on](add-ons.md#aglyn-ai) widens that band and opens generative building;
-it is one pool, so everything below applies to the widened band as a whole. What the
+included credits pay for every AI request, building included, and an
+[Aglyn AI tier](add-ons.md#aglyn-ai) adds credits on top; it is one pool, so everything
+below applies to the widened band as a whole. What the
 credits are spent on, and what each kind of request costs relative to the others, is
 under [Aglyn AI](../../ai/overview.md#credits-and-caps). On a plan that sells credits
 past the band, reaching it is not a wall:
@@ -380,7 +394,7 @@ applied unless you set one.
 :::info Plans that sell no overage
 Every paid plan includes AI assist credits and sells credits past them, so the switch
 and the ceiling are on every paid billing page — Starter included, at the same rate as
-Pro, with or without the [Aglyn AI add-on](add-ons.md#aglyn-ai).
+Pro, with or without an [Aglyn AI tier](add-ons.md#aglyn-ai).
 
 A workspace on a plan that sells no credits past its band — Enterprise, whose credits
 are set by agreement, or a Free workspace — stops at the band on its own: the assistant
@@ -610,6 +624,20 @@ The **What you will pay** card appears on the **Plan** tab once you pick a plan 
 to, and quotes that plan's total for the billing interval you chose, tax included,
 straight from Stripe. With **Manage billing** you can enter a promotion code on the card
 and see it applied before you confirm.
+
+When you arrive from a link the Aglyn team gave you (a QR code at an event, or the
+button in a handoff email), the card comes first on the page with everything the link
+chose: the plan, monthly or yearly billing, each add-on as a switch you can turn off,
+and the promotion code already applied. The button in the card's header shows the total,
+and pressing it pays with the card on file. If you have no card or billing address yet,
+it asks for them first. An add-on your plan does not include, or a code that has
+expired, is left off with a one-line note instead of an error.
+
+If the link also chose a domain name for your site, the card shows it with its
+first-year and renewal price. After you pay, you go to your site's **Custom Domain**
+page with the name filled in, and you buy it there yourself: you enter your contact
+details and accept the registration terms. Where buying domains is not available yet,
+the card says so, and your site starts on its free address.
 
 ### Billing history {#billing-history}
 

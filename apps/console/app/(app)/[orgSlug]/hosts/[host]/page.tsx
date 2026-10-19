@@ -33,6 +33,7 @@ import DashboardWidgetPrefsProvider, {
   useDashboardWidgetPrefs,
 } from '../../../../../components/dashboard-widget-prefs.context'
 import HostDisplayNameComponent from '../../../../../components/host-display-name.component'
+import SiteCareRequestButton from '../../../../../components/site-care/site-care-request-button.component'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../components/host-id-provider'
 import { useOrgSlug } from '../../../../../hooks/use-org-scope'
@@ -75,6 +76,8 @@ function HostDashboard() {
       headerRight={
         <Stack useFlexGap direction="row" spacing={1} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
           <DashboardCustomizeButton />
+          {/* Site Care (AGL-3959): disabled with the reason when the workspace lacks it. */}
+          <SiteCareRequestButton hostId={hostId ?? null} />
           {host ? (
             <AppLink
               componentVariant="button"

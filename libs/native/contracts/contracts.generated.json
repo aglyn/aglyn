@@ -4112,11 +4112,47 @@
     "note",
     "other"
   ],
+  "NATIVE_CRM_FIELD_CURRENCIES": [
+    "usd",
+    "eur",
+    "gbp",
+    "cad",
+    "aud",
+    "nzd",
+    "chf",
+    "jpy",
+    "sek",
+    "nok",
+    "dkk",
+    "mxn",
+    "brl",
+    "inr",
+    "sgd"
+  ],
+  "NATIVE_CRM_FIELD_DEFAULT_CURRENCY": "usd",
   "NATIVE_CRM_FIELD_OBJECTS": [
     "contact",
     "company",
     "deal",
     "lead"
+  ],
+  "NATIVE_CRM_FIELD_TYPE_LABELS": {
+    "checkbox": "Checkbox",
+    "currency": "Currency",
+    "date": "Date",
+    "number": "Number",
+    "select": "Choice",
+    "text": "Text",
+    "url": "Link"
+  },
+  "NATIVE_CRM_FIELD_TYPES": [
+    "text",
+    "number",
+    "date",
+    "select",
+    "checkbox",
+    "url",
+    "currency"
   ],
   "NATIVE_CRM_LEAD_OPEN_STATUSES": [
     "new",
@@ -4342,6 +4378,47 @@
     "meeting",
     "todo"
   ],
+  "NATIVE_CURRENCY_FRACTION_DIGITS": {
+    "afn": 0,
+    "all": 0,
+    "bhd": 3,
+    "bif": 0,
+    "clp": 0,
+    "cop": 0,
+    "djf": 0,
+    "gnf": 0,
+    "huf": 0,
+    "idr": 0,
+    "iqd": 0,
+    "irr": 0,
+    "isk": 0,
+    "jod": 3,
+    "jpy": 0,
+    "kmf": 0,
+    "kpw": 0,
+    "krw": 0,
+    "kwd": 3,
+    "lak": 0,
+    "lbp": 0,
+    "lyd": 3,
+    "mga": 0,
+    "mmk": 0,
+    "omr": 3,
+    "pkr": 0,
+    "pyg": 0,
+    "rwf": 0,
+    "sll": 0,
+    "sos": 0,
+    "syp": 0,
+    "tnd": 3,
+    "ugx": 0,
+    "vnd": 0,
+    "vuv": 0,
+    "xaf": 0,
+    "xof": 0,
+    "xpf": 0,
+    "yer": 0
+  },
   "NATIVE_NAV_MANIFEST": {
     "create": [
       {
@@ -4967,8 +5044,11 @@
                 "id": "automation",
                 "label": "Automation",
                 "order": 60,
+                "params": {
+                  "scope": "org"
+                },
                 "pluginId": "workflows",
-                "screen": "workflows.org-automation"
+                "screen": "workflows.automation"
               },
               {
                 "console": {
@@ -5262,7 +5342,7 @@
                 },
                 "docs": "/commerce-and-bookings/commerce/overview",
                 "icon": {
-                  "android": "shopping_basket",
+                  "android": "shopping_bag",
                   "apple": "bag"
                 },
                 "id": "orders",
@@ -5786,7 +5866,7 @@
                 ],
                 "label": "Customer texts",
                 "order": 40,
-                "pluginId": "sms",
+                "pluginId": "commerce",
                 "screen": "sms.texts"
               },
               {

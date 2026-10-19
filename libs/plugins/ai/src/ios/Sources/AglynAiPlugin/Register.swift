@@ -31,8 +31,15 @@ public func registerAINative(_ registrar: NativePluginRegistrar) {
   // Create with AI: the brief and the job it starts, and the entry in each list's create zone (the console's
   // `hostScreens`, `hostTemplates`, `hostLayouts`, `hostForms` and `hostComponents` widgets).
   registrar.screen(aiCreateScreen, title: "Create with AI", requiresSite: true, icon: "sparkles") { context, params in
-    AiCreateScreen(context: context, kind: params["kind"].flatMap(AiCreateKind.init(rawValue:)), initialJobID: params["jobId"])
+    AiCreateScreen(
+      context: context, kind: params["kind"].flatMap(AiCreateKind.init(rawValue:)), initialJobID: params["jobId"],
+      initialBrief: params["brief"])
   }
+  // Home's "Needs you" line, and the AI panel the shell docks beside every screen (a sheet on phones).
+  registrar.widget("ai.needs-you", title: "Needs you", order: 40, requiresSite: true, slot: "homeNeedsYou") {
+    AiNeedsYouWidget(context: $0)
+  }
+  registrar.widget("ai.assist-panel", title: "Assist", order: 10, slot: assistPanelSlot) { AiAssistPanel(context: $0) }
   for kind in AiCreateKind.allCases {
     registrar.widget(kind.widgetID, title: "Create with AI", icon: "sparkles", order: 10, requiresSite: true, slot: kind.slot) {
       AiCreateButton(context: $0, kind: kind)

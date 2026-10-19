@@ -31,16 +31,22 @@
  * own check and compiles it with the real compiler, in the design variants
  * the kind draws with (`ai-layout-design.ts`) and the look its look unit
  * builds (`aiSiteStyleFor` over an empty model answer); the seed is the first
- * that gives the kind the hero (and any other choice) its page is written
- * for. A kind whose shape is a grid opens on it: a first section with more
- * than one picture is drawn as written rather than as a designed hero.
+ * that gives the kind its SIGNATURE hero (`aiLayoutKindSignature`, the first
+ * of the two its pages open with, AGL-3985), any other design choice its
+ * page is written for and the look its `look` names (the header's
+ * arrangement). A kind whose shape is a grid (`opensOnGrid`) opens on it: a
+ * first section with more than one picture is drawn as written rather than
+ * as a designed hero. Each page's `nav` names the site's other pages, which
+ * its header links and its header's button goes to, as a built site's does.
  *
- * THE PHOTOS are the starter photos, never a download: whole, or a part of
- * one (`crop`), so the café's shelves and its owner can lead two different
- * pages. A kind none of them suits (a roofer, a gym, a band) opens on type
- * over its own band rather than on a photo that says the wrong thing.
- * `render-layout-shots.mts` renders each page with the real component
- * bundles in headless Chrome.
+ * THE PHOTOS are files in the repo, never fetched at render time: the
+ * starter photos, and the previews' own (`style-preview-photos/`, one of
+ * each kind's own business, each credited in the CREDITS.md beside them and
+ * read by nothing else), whole or a part of one (`crop`), so the café's
+ * shelves and its owner can lead two different pages. Every preview carries
+ * one (AGL-3985): a band of type with no photo read as a picture that failed
+ * to load. `render-layout-shots.mts` renders each page with the real
+ * component bundles in headless Chrome.
  *
  * WHAT IT WRITES, per kind, into `libs/plugins/ai/src/lib/assets/site-styles/`:
  * `<kind>.webp`, the top 1024 × 1024 of the page drawn in a 1024 × 480 window
@@ -89,15 +95,35 @@ function readAliases(): Record<string, string> {
 }
 
 /**
- * A part of a starter photo, as a picture given whole: `crop` is its left,
- * top, width and height in the photo's own pixels, so one photo can open two
- * kinds' pages on different subjects (the café's shelves, the owner).
+ * The photos only the previews draw (AGL-3985), each credited in the
+ * CREDITS.md beside them: render inputs, never a site's starter photo, so a
+ * new site starts as it always has.
+ */
+const PREVIEW_PHOTOS = join(ROOT, 'libs/plugins/ai/scripts/style-preview-photos')
+
+/** The photo a `{ photo }` or `{ file }` entry names: a starter's, or one of the previews' own, which must be credited. */
+function photoFile(photo: Dict): string {
+  if (typeof photo['file'] === 'string') {
+    const name = photo['file'] as string
+    const credits = existsSync(join(PREVIEW_PHOTOS, 'CREDITS.md')) ? readFileSync(join(PREVIEW_PHOTOS, 'CREDITS.md'), 'utf8') : ''
+    if (!credits.includes(`\`${name}\``)) throw new Error(`style-preview-photos/${name} is not credited in its CREDITS.md`)
+    return join(PREVIEW_PHOTOS, name)
+  }
+  if (!STARTER_FILES[photo['photo']]) throw new Error(`no starter photo named ${photo['photo']}`)
+  return join(STARTERS, STARTER_FILES[photo['photo']] as string)
+}
+
+/**
+ * A picture given whole: a starter photo or one of the previews' own
+ * (`file`), whole or a part of it (`crop`: its left, top, width and height in
+ * the photo's own pixels), so one photo can open two kinds' pages on
+ * different subjects (the café's shelves, the owner).
  */
 async function cropped(photo: Dict): Promise<Dict> {
   const sharp = require('sharp')
-  const [left, top, width, height] = photo['crop'] as number[]
-  const file = join(STARTERS, STARTER_FILES[photo['photo']] ?? '')
-  if (!STARTER_FILES[photo['photo']]) throw new Error(`no starter photo named ${photo['photo']}`)
+  const file = photoFile(photo)
+  const meta = await sharp(file).metadata()
+  const [left, top, width, height] = (photo['crop'] as number[] | undefined) ?? [0, 0, meta.width as number, meta.height as number]
   const scale = Math.min(1, 1200 / width)
   const out = { width: Math.round(width * scale), height: Math.round(height * scale) }
   const jpeg: Buffer = await sharp(file).extract({ left, top, width, height }).resize(out.width, out.height).jpeg({ quality: 82 }).toBuffer()
@@ -151,27 +177,40 @@ async function main(): Promise<void> {
     if (only && !only.has(kind.id)) continue
     const page = fixture.kinds[kind.id]
     if (!page) throw new Error(`site-style-previews.json has no page for ${kind.id}`)
-    // The first seed that draws this kind with the hero (and any other design choice) the page is written for.
+    // A style card shows the kind's signature hero, the first its signature names (AGL-3985).
+    const signature = design.aiLayoutKindSignature(kind.id) as Dict
+    if (page['hero'] && page['hero'] !== signature['heroes'][0] && !page['opensOnGrid']) {
+      throw new Error(`${kind.id}'s stand-in page is written for a ${page['hero']} hero; its style opens on ${signature['heroes'][0]}`)
+    }
+    // The first seed that draws this kind with the hero (and any other design
+    // choice), and the look (its header's arrangement), the page is written for.
     const wanted: Dict = { ...(page['choices'] ?? {}), hero: page['hero'] }
+    const wantedLook: Dict = page['look'] ?? {}
     let seed = 0
-    for (let attempt = 0; attempt < 2000; attempt += 1) {
+    for (let attempt = 0; attempt < 4000; attempt += 1) {
       const candidate = look.aiSiteSeed(`style-preview:${kind.id}:${attempt}`)
       const style = look.aiSiteStyleFor({ kind, answer: look.aiReadSiteLook({}), seed: candidate })
       const choices = design.aiLayoutDesignChoices({ kind: kind.id, seed: style.seed, home: true }) as Dict
-      if (Object.entries(wanted).every(([name, value]) => choices[name] === value)) {
+      if (Object.entries(wanted).every(([name, value]) => choices[name] === value) && Object.entries(wantedLook).every(([name, value]) => style[name] === value)) {
         seed = candidate
         break
       }
     }
-    if (!seed) throw new Error(`no seed draws ${kind.id} with ${JSON.stringify(wanted)}`)
+    if (!seed) throw new Error(`no seed draws ${kind.id} with ${JSON.stringify({ ...wanted, ...wantedLook })}`)
     const photos = await Promise.all(((page['photos'] ?? []) as (string | Dict)[]).map((photo) => (typeof photo === 'string' ? photo : cropped(photo))))
+    // A preview with no photo reads as one that failed to load (AGL-3985).
+    if (!photos.length || photos[0] === 'none') throw new Error(`${kind.id}'s stand-in page opens on no photo`)
     const sections = page['sections'] as Dict[]
+    // The site's other pages, which its header links (AGL-3985); the header's button goes to the last, or to the one it names.
+    const nav = ((page['nav'] ?? []) as string[]).map((title) => ({ id: `nav-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, title, slug: `/${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` }))
+    const ctaTo = nav.find((entry) => entry.title === page['ctaTo']) ?? nav[nav.length - 1]
     const run = {
       seed,
       look: {},
       photos,
+      nav,
       frame: {
-        header: section({ blocks: [{ kind: 'button', text: page['cta'], to: '#2', style: 'primary' }] }),
+        header: section({ blocks: page['cta'] && ctaTo ? [{ kind: 'button', text: page['cta'], to: `page:${ctaTo.id}`, style: 'primary' }] : [] }),
         footer: section({ band: 'soft', cols: [2, 1], blocks: [{ kind: 'text', col: 0, text: `${page['name']}.` }, { kind: 'list', col: 1, items: [{ title: 'Home', to: 'page:Home' }] }] }),
       },
       plans: [
@@ -223,7 +262,7 @@ async function main(): Promise<void> {
     await sharp(shot)
       .extract({ left: 0, top: 0, width: Math.round(CROP.width * scale), height: Math.min(meta.height ?? 0, Math.round(CROP.height * scale)) })
       .resize(SIZE.width, SIZE.height, { fit: 'cover', position: 'top' })
-      .webp({ quality: 74, effort: 6 })
+      .webp({ quality: 66, effort: 6, smartSubsample: true })
       .toFile(target)
     const bytes = statSync(target).size
     console.log(`PREVIEW   ${key}.webp ${(bytes / 1024).toFixed(1)} KB`)

@@ -44,25 +44,3 @@ func sortLabel(_ sort: ListQuerySort) -> String {
   let label = sort.label ?? sort.path
   return "\(label), \(sort.direction == .desc ? "descending" : "ascending")"
 }
-
-/// The header sorts as a menu; the first is the list's own order.
-struct ListSortMenu: View {
-  let sorts: [ListQuerySort]
-  let selected: ListQuerySort?
-  let pick: (ListQuerySort?) -> Void
-
-  var body: some View {
-    Menu {
-      ForEach(Array(sorts.enumerated()), id: \.offset) { index, sort in
-        Button {
-          pick(index == 0 ? nil : sort)
-        } label: {
-          if (selected ?? sorts.first) == sort { Label(sortLabel(sort), systemImage: "checkmark") } else { Text(sortLabel(sort)) }
-        }
-      }
-    } label: {
-      Label("Sort", systemImage: "arrow.up.arrow.down")
-    }
-    .accessibilityIdentifier("list-sort")
-  }
-}

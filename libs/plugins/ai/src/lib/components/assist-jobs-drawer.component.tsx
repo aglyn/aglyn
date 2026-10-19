@@ -48,6 +48,7 @@ import {
   type AiJobPhase,
 } from '../model/ai-job-activity'
 import type { AiInsightSurface } from '../model/ai-insight'
+import { AiJobInputForm } from './ai-job-input-form.component'
 import { resumeAiJobRequest, type AiJobResumeOptions } from './ai-job-requests'
 import { useAiJobCancel } from './ai-job-cancel.component'
 import { aiBuildCanRetry, aiBuildItemRows, aiBuildRetryCreditRange, aiSitePartialCopy } from '../model/ai-build-progress'
@@ -605,8 +606,11 @@ export function AssistJobsDrawer({
                     onBuildWhatFits={() => void resume(job, { retry: 'failed-items', creditsConfirmed: true })}
                   />
                 ) : null}
-                {/* Paused by the meter (AGL-3722): Resume carries on from where it stopped. */}
-                {job.status === 'needs_input' ? (
+                {/* Waiting for an ID only the person has (AGL-3978): asked here, answered onto the plan. */}
+                {job.status === 'needs_input' && job.input ? (
+                  <AiJobInputForm job={{ ...job, input: job.input }} orgId={orgId} user={user} onJob={patchJob} />
+                ) : /* Paused by the meter (AGL-3722): Resume carries on from where it stopped. */
+                job.status === 'needs_input' ? (
                   <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
                     <Button size="small" variant="contained" disabled={resuming === job.id} onClick={() => void resume(job)}>
                       {'Resume'}

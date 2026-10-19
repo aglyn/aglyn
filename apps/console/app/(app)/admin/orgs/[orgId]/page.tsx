@@ -18,8 +18,10 @@
 
 import {
   aiAddonName,
+  aiTierName,
   checkDiscountMargin,
   hasAiAddon,
+  resolveAiTier,
   hasSiteCare,
   MARGIN_SCOPE_NOTE,
   netMarginRating,
@@ -98,9 +100,13 @@ import StaffOrgActions from '../../../../../components/staff-org-actions.compone
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
 import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
+import StaffBundleLinkCard from '../../../../../components/staff-bundle-link.component'
+import { isLiveSubscriptionStatus } from '@aglyn/aglyn/app-utils/org-billing-doc'
 import { countManagerSeats, isStaffSeat } from '@aglyn/aglyn/app-utils/organizations'
 import { StaffSiteRowActions } from '../../../../../components/staff-site-row-actions.component'
 import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
+import StaffSiteCareMonthCard from '../../../../../components/site-care/staff-site-care-month-card.component'
+import StaffSiteCareProjectsCard from '../../../../../components/site-care/staff-site-care-projects-card.component'
 import StaffOrgSubscriptionCard from '../../../../../components/staff-org-subscription-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import StaffOrgUsageTable, {
@@ -315,6 +321,15 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       active = false
     }
   }, [isStaff, orgId, user])
+  // The sites a bundle link's domain can be for (AGL-3955).
+  const bundleSites = useMemo(
+    () =>
+      (hostDocs ?? []).map((host: any) => ({
+        hostId: String(host.$id),
+        name: String(host.displayName ?? host.subdomain ?? host.$id),
+      })),
+    [hostDocs],
+  )
   // Site names by id, for the tables that name the site a row came from.
   const siteNames = useMemo(
     () =>
@@ -1131,6 +1146,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
    * credit band, and the entitlements table names it beside that key.
    */
   const aiAddon = hasAiAddon(org)
+  // Which tier it is (AGL-3965), named on the chip beside the band it widens.
+  const aiTier = resolveAiTier(org)
   /*
    * Whether the org has Site Care in force (AGL-3954), through the same
    * dead-subscription rule as the AI add-on. It raises no quota, so it has no
@@ -1245,6 +1262,19 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   // Where the workspace came from: its creator's record,
                   // copied at creation (AGL-3289).
                   children: <StaffAcquisitionCard orgId={orgId} />,
+                },
+                {
+                  // The bundle checkout link and its QR, for an owner in
+                  // front of you (AGL-3955).
+                  children: (
+                    <StaffBundleLinkCard
+                      orgId={orgId}
+                      sites={bundleSites}
+                      subscriptionLive={isLiveSubscriptionStatus(
+                        (org as { billingStatus?: unknown } | null | undefined)?.billingStatus,
+                      )}
+                    />
+                  ),
                 },
                 {
                   children: (
@@ -1373,6 +1403,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                         <StaffOrgOwnerHandoff
                           orgId={orgId}
                           orgName={org?.name}
+                          org={org as never}
+                          sites={bundleSites}
                           onSent={() => setOrgNonce((nonce) => nonce + 1)}
                         />
                         {/* The separate step after the evaluation: ask the
@@ -1646,7 +1678,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                                       {key === 'assistCreditsPerMonth' &&
                                       aiAddon ? (
                                         <Chip
-                                          label={`${aiAddonName()} add-on`}
+                                          label={
+                                            aiTier
+                                              ? aiTierName(aiTier)
+                                              : `${aiAddonName()} add-on`
+                                          }
                                           size="small"
                                           variant="outlined"
                                           color="primary"
@@ -2439,6 +2475,17 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
               table a reader scans across, and full width is its shape.
             */}
             <Stack spacing={3} sx={{ mt: 3 }}>
+              {/*
+                Site Care's month (AGL-3959): every request with its minutes,
+                approvals, charges, corrections and emails, and Send
+                statement. Full width: one line per request, read across.
+              */}
+              <StaffSiteCareMonthCard orgId={orgId} siteCare={siteCare} />
+              {/*
+                "Charge for work" (AGL-3970): flat-quoted projects, the owner's
+                recorded yes, and the one-off invoices with their pay links.
+              */}
+              <StaffSiteCareProjectsCard orgId={orgId} />
               <StaffOrgAdminActionsCard
                 entries={orgAudit}
                 ready={orgReady}

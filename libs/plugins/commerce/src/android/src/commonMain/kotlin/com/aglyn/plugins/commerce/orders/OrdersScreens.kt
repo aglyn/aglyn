@@ -1,10 +1,15 @@
 package com.aglyn.plugins.commerce.orders
 
+import com.aglyn.ui.FoldedSection
+import com.aglyn.ui.PlainSection
+import com.aglyn.ui.RecordHeader
+import com.aglyn.ui.RecordAction
 import com.aglyn.plugins.commerce.lists.ListSortMenu
 import com.aglyn.plugins.commerce.lists.filterRefusals
 import com.aglyn.plugins.commerce.lists.orderFilterChoices
 import com.aglyn.pluginhost.ClauseFilterBar
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -44,6 +49,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.ShippingCostInput
 import com.aglyn.contracts.canTransitionOrder
@@ -131,14 +138,15 @@ private fun addressLines(address: OrderAddress?): List<String> = address?.let {
  * notification or a link to it does.
  */
 @Composable
-fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null) {
+fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null, startNew: Boolean = false, initialFilter: OrderFilter? = null) {
   val hostId = context.hostId ?: return
   val scope = rememberCoroutineScope()
   val model = remember(hostId, context.firestore) { OrdersListModel(hostId, context.firestore, scope) }
-  LaunchedEffect(model) { model.reload() }
+  // Opened from Home on a chip (to get ready, disputes): the list starts on it.
+  LaunchedEffect(model) { if (initialFilter != null) model.pick(initialFilter) else model.reload() }
   AglynListDetail(
     initialSelected = initialOrderId,
-    list = { selected, onSelect -> OrdersList(context, model, selected, onSelect) },
+    list = { selected, onSelect -> OrdersList(context, model, selected, onSelect, startNew) },
     detail = { selected ->
       if (selected == null) {
         SelectionPlaceholder("Pick an order to see it here", icon = AglynIcons.named("receipt"))
@@ -150,7 +158,7 @@ fun OrdersScreen(context: NativePluginContext, initialOrderId: String? = null) {
 }
 
 @Composable
-private fun OrdersList(context: NativePluginContext, model: OrdersListModel, selected: String?, onSelect: (String) -> Unit) {
+private fun OrdersList(context: NativePluginContext, model: OrdersListModel, selected: String?, onSelect: (String) -> Unit, startNew: Boolean = false) {
   val listState = rememberLazyListState()
   // A new chip, filter or sort is a new list: it starts at its first row, not at the row that was on top before.
   // Coming back to the list (from an order, or Back) keeps where it was.
@@ -163,9 +171,9 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
   var confirming by remember { mutableStateOf(false) }
   var running by remember { mutableStateOf(false) }
   var outcome by remember { mutableStateOf<BulkFulfillResult?>(null) }
-  var drafting by remember { mutableStateOf(false) }
+  // Opened from Create new: the draft order comes up at once.
+  var drafting by remember { mutableStateOf(startNew) }
   var exportPreset by remember { mutableStateOf<String?>(null) }
-  var presetMenu by remember { mutableStateOf(false) }
   var said by remember { mutableStateOf<String?>(null) }
   val hostId = context.hostId
   // Charges a shopper's bank is disputing, on their own query whatever the list is filtered to (the console's banner).
@@ -181,37 +189,66 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
     }
   }
   LaunchedEffect(nearEnd, model.hasMore) { if (nearEnd && model.hasMore) model.loadMore() }
-  Column(Modifier.fillMaxSize()) {
-    Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f)) { SearchField(model.search, model::type, placeholder = "Search by order number or customer") }
-        TextButton(
-          onClick = { selecting = !selecting; picked = emptySet() },
-          modifier = Modifier.testTag("orders-select"),
-        ) { Text(if (selecting) "Done" else "Select") }
-      }
+  // The shared list screen (Figma Mac Orders 13:483): "Orders" with ☆ and New order; search and one Filter (status and
+  // sort); Select, Export for shipping, Import tracking and More filters in ⋯.
+  var advanced by remember { mutableStateOf(model.clauses.isNotEmpty()) }
+  val sorts = Contracts.orderListQuery.sorts
+  // Calm rule (Figma 13:483 draws no tabs): Returns and Reservations are one Filter choice away, not a tab row.
+  val filterChoices = ORDERS_SHOW.map { (key, label) -> com.aglyn.ui.FilterChoice("Show", key, label) } +
+    OrderFilter.entries.map { com.aglyn.ui.FilterChoice("Status", it.name, it.label) } +
+    sorts.mapIndexed { index, sort -> com.aglyn.ui.FilterChoice("Sort", "sort-$index", com.aglyn.plugins.commerce.lists.sortLabel(sort)) }
+  val sortKey = sorts.indexOf(model.sort ?: sorts.firstOrNull()).takeIf { it >= 0 }?.let { "sort-$it" }
+  val moreActions = buildList {
+    add(com.aglyn.ui.MenuAction("orders-select", if (selecting) "Done selecting" else "Select orders", "fact_check") { selecting = !selecting; picked = emptySet() })
+    Contracts.orderShippingPresetChoices.forEach { preset ->
+      add(com.aglyn.ui.MenuAction("orders-export-${preset.id}", "Export for shipping: ${preset.label}", "local_shipping") {
+        val id = hostId ?: return@MenuAction
+        scope.launch {
+          prepareOrdersForShipping(context.api, id)
+          exportPreset = preset.id
+        }
+      })
+    }
+    if (com.aglyn.plugins.commerce.products.canImportProducts(context)) {
+      add(com.aglyn.ui.MenuAction("orders-import-tracking", "Import tracking", "upload") {
+        context.navigate(com.aglyn.plugins.commerce.products.CORE_DATA_IMPORT_SCREEN, trackingImportParams(hostId))
+      })
+    }
+    add(com.aglyn.ui.MenuAction("orders-more-filters", if (advanced) "Hide more filters" else "More filters", "tune") { advanced = !advanced })
+  }
+  com.aglyn.ui.ListScreenScaffold(
+    title = "Orders",
+    query = model.search,
+    onQuery = model::type,
+    placeholder = "Order, customer or email",
+    tag = "orders",
+    primary = com.aglyn.ui.PrimaryAction("orders-draft", "Draft order") { drafting = true },
+    inListColumn = true,
+    more = moreActions,
+    filters = filterChoices,
+    picked = mapOf("Show" to COMMERCE_ORDERS_SCREEN, "Status" to model.filter.name) + (sortKey?.let { mapOf("Sort" to it) } ?: emptyMap()),
+    onPick = { choice ->
+      if (choice.group == "Show") { if (choice.key != COMMERCE_ORDERS_SCREEN) context.navigate(choice.key, emptyMap()) }
+      else if (choice.group == "Status") model.pick(OrderFilter.valueOf(choice.key))
+      else choice.key.removePrefix("sort-").toIntOrNull()?.let { index -> model.sortBy(if (index == 0) null else sorts[index]) }
+    },
+  ) {
+    Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
       outcome?.let { done ->
         NoticeBanner(describeBulkFulfill(done), if (done.refused.isEmpty() && done.unknown.isEmpty()) StatusTone.SUCCESS else StatusTone.WARNING)
       }
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        ChoiceChipRow(
-          options = OrderFilter.entries.map { ChipOption(it.name, it.label) },
-          selected = model.filter.name,
-          onSelect = { key -> model.pick(OrderFilter.valueOf(key)) },
-          modifier = Modifier.weight(1f),
+      // Any filter the console's grid takes (status, channel, customer, date, product, disputes), once asked for.
+      if (advanced || model.clauses.isNotEmpty()) {
+        ClauseFilterBar(
+          fields = Contracts.orderListQuery.fields,
+          headers = Contracts.orderListHeaders,
+          choices = orderFilterChoices(),
+          clauses = model.clauses,
+          onChange = model::setFilters,
+          refused = model.plan?.let { filterRefusals(it, model.clauses) } ?: emptyList(),
+          notices = model.plan?.notices ?: emptyList(),
         )
-        ListSortMenu(Contracts.orderListQuery.sorts, model.sort, model::sortBy, Modifier.padding(start = space(1f)))
       }
-      // Any filter the console's grid takes: status, channel, customer, date, product, disputes.
-      ClauseFilterBar(
-        fields = Contracts.orderListQuery.fields,
-        headers = Contracts.orderListHeaders,
-        choices = orderFilterChoices(),
-        clauses = model.clauses,
-        onChange = model::setFilters,
-        refused = model.plan?.let { filterRefusals(it, model.clauses) } ?: emptyList(),
-        notices = model.plan?.notices ?: emptyList(),
-      )
       model.notice?.let { NoticeBanner(it, StatusTone.WARNING) }
       said?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { said = null }) { Text("Dismiss") } }) }
       if (disputes.count > 0) {
@@ -221,39 +258,6 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
           modifier = Modifier.testTag("orders-disputes"),
           action = if (model.filter == OrderFilter.DISPUTES) null else ({ TextButton(onClick = { model.pick(OrderFilter.DISPUTES) }) { Text("Show them") } }),
         )
-      }
-      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-        // Selling to someone directly: their order as a payment link (the console's Draft order).
-        OutlinedButton(onClick = { drafting = true }, modifier = Modifier.testTag("orders-draft")) { Text("Draft order") }
-        Box {
-          OutlinedButton(onClick = { presetMenu = true }, modifier = Modifier.testTag("orders-export-shipping")) { Text("Export for shipping") }
-          androidx.compose.material3.DropdownMenu(expanded = presetMenu, onDismissRequest = { presetMenu = false }) {
-            Contracts.orderShippingPresetChoices.forEach { preset ->
-              androidx.compose.material3.DropdownMenuItem(
-                text = {
-                  Column {
-                    Text(preset.label)
-                    preset.description?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                  }
-                },
-                onClick = {
-                  presetMenu = false
-                  val id = hostId ?: return@DropdownMenuItem
-                  scope.launch {
-                    prepareOrdersForShipping(context.api, id)
-                    exportPreset = preset.id
-                  }
-                },
-              )
-            }
-          }
-        }
-        if (com.aglyn.plugins.commerce.products.canImportProducts(context)) {
-          OutlinedButton(
-            onClick = { context.navigate(com.aglyn.plugins.commerce.products.CORE_DATA_IMPORT_SCREEN, trackingImportParams(hostId)) },
-            modifier = Modifier.testTag("orders-import-tracking"),
-          ) { Text("Import tracking") }
-        }
       }
     }
     if (drafting) {
@@ -284,7 +288,7 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
         "Could not load orders",
         body = rows.message,
         icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
-        action = { OutlinedButton(onClick = { model.reload() }) { Text("Try again") } },
+        action = { OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = { model.reload() }) { Text("Try again") } },
       )
       is Load.Ready -> if (rows.value.isEmpty()) {
         EmptyState(
@@ -307,14 +311,14 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
     }
     if (selecting) {
       Row(Modifier.fillMaxWidth().padding(space(2f)), horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-        Button(
+        Button(shape = com.aglyn.ui.controlShape(), 
           onClick = { confirming = true },
           enabled = picked.isNotEmpty() && !running,
           modifier = Modifier.weight(1f).testTag("orders-bulk-fulfill"),
         ) { Text("Mark ${picked.size} fulfilled") }
         // Whatever services are connected add what they can do to the ticked orders (buy their labels, say).
         if (ScreenCatalog.zone("ordersBulk").isNotEmpty()) {
-          OutlinedButton(
+          OutlinedButton(shape = com.aglyn.ui.controlShape(), 
             onClick = { context.navigate("commerce.ordersBulk", mapOf("orderIds" to picked.sorted().joinToString(","), "run" to newAttemptKey("bulk").filter { it.isLetterOrDigit() })) },
             enabled = picked.isNotEmpty() && picked.size <= 50,
             modifier = Modifier.testTag("orders-bulk-more"),
@@ -352,17 +356,17 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
 private fun OrderListRow(row: OrderRow, selected: Boolean, ticked: Boolean? = null, onClick: () -> Unit) {
   val now = nowMillis()
   val items = if (row.itemCount == 1L) "1 item" else "${row.itemCount} items"
-  AglynListItem(
+  // Figma List/Order row (11:329): the number and customer over items, channel and time; the total over the status.
+  com.aglyn.ui.ScaffoldListRow(
     title = "${row.label} · ${row.customer}",
-    supporting = listOfNotNull(
-      money(row.netCents),
-      items,
-      row.channelLabel,
-      row.createdAtMs.takeIf { it > 0 }?.let { relativeTime(it, now) },
-    ).joinToString(" · "),
-    icon = AglynIcons.named(if (ticked == true) "check_circle" else if (row.channelLabel == orderChannelLabel("pos")) "point_of_sale" else "receipt"),
+    detail = listOfNotNull(items, row.channelLabel, row.createdAtMs.takeIf { it > 0 }?.let { relativeTime(it, now) }).joinToString(" · "),
+    kind = com.aglyn.ui.ScaffoldRowKind.ORDER,
     selected = selected,
-    trailing = {
+    // The order's glyph is Orders' own (the manifest's bag), the register's for a sale rung up there.
+    // Every order wears the bag (Figma List/Order row, as on Apple); the channel is in its detail line.
+    leading = { com.aglyn.ui.ScaffoldRowTile(if (ticked == true) "check_circle" else "shopping_bag") },
+    figure = money(row.netCents),
+    status = {
       Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
         if (row.disputeOpen) StatusChip("Dispute", StatusTone.ERROR)
         if (row.testMode) StatusChip("Test")
@@ -460,6 +464,22 @@ private fun OrderDetailContent(
   val order = detail.order
   val totals = order.totals
   val uriHandler = LocalUriHandler.current
+  val offer = detail.actions
+  // One filled button, the next step for this order's state; every other act is in ⋯ and in the section it belongs to.
+  val primary = when {
+    offer.fulfill -> RecordAction("order-action-fulfill", "Fulfill", "local_shipping") { actions.open(OrderDialog.FULFILL) }
+    offer.markDelivered -> RecordAction("order-action-delivered", "Mark delivered", "done_all") { actions.open(OrderDialog.DELIVERED) }
+    else -> null
+  }
+  val more = buildList {
+    if (offer.resendReceipt) add(RecordAction("order-action-receipt", "Send receipt", "mail") { actions.open(OrderDialog.RECEIPT) })
+    OrderPrintKind.entries.forEach { kind -> add(RecordAction("order-print-${kind.raw}", kind.title, kind.icon, enabled = printing.busy == null) { onPrint(kind) }) }
+    add(RecordAction("order-add-note", "Add a note", "edit_note") { actions.open(OrderDialog.NOTE) })
+    openCustomer?.let { add(RecordAction("order-customer-crm", "View customer in CRM", "contact_mail", run = it)) }
+    add(RecordAction("order-more", "Pickup, returns and services", "extension", run = openServices))
+    if (offer.refund) add(RecordAction("order-action-refund", "Refund", "undo", destructive = true) { actions.open(OrderDialog.REFUND) })
+    if (offer.cancel) add(RecordAction("order-action-cancel", "Cancel order", "cancel", destructive = true) { actions.open(OrderDialog.CANCEL) })
+  }
   Column(
     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("order-detail"),
     verticalArrangement = Arrangement.spacedBy(space(2f)),
@@ -468,147 +488,131 @@ private fun OrderDetailContent(
       NoticeBanner(message, StatusTone.SUCCESS, action = { TextButton(onClick = { actions.done = null }) { Text("Dismiss") } })
     }
     if (actions.dialog == null) actions.error?.let { NoticeBanner(it, StatusTone.ERROR) }
-    SectionCard(null) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(detail.label, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
-        StatusChip(statusLabel(detail.status), statusTone(detail.status))
-      }
-      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
-        StatusChip(orderChannelLabel(order.channel?.raw))
-        if (detail.testMode) StatusChip("Test mode", StatusTone.WARNING)
-        if (detail.refundState != OrderRefundState.NONE) StatusChip(if (detail.refundState == OrderRefundState.FULL) "Refunded" else "Partly refunded", StatusTone.ERROR)
-      }
-      order.createdAtMs?.let {
-        Text(formatReceiptTime(it.toLong()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-      }
-      describeOrderDispute(order, nowMillis().toDouble())?.let { dispute ->
-        NoticeBanner(
-          "${dispute.label}. ${dispute.detail}",
-          if (dispute.tone == "open" || dispute.tone == "lost") StatusTone.ERROR else StatusTone.INFO,
-          modifier = Modifier.testTag("order-dispute"),
-        )
-      }
-      describePaymentRisk(order.paymentRisk)?.let { risk ->
-        NoticeBanner("${risk.label}. ${risk.detail}", StatusTone.WARNING, modifier = Modifier.testTag("order-payment-risk"))
-      }
-      if (canTransitionOrder(detail.status, OrderStatus.REFUNDED) && orderDisputeBlocksRefund(order)) {
-        NoticeBanner(Contracts.refundBlockedByDispute, StatusTone.INFO)
-      }
-      OrderActionButtons(detail.actions, actions)
+    printing.problem?.let { NoticeBanner(it, StatusTone.ERROR) }
+    RecordHeader(
+      detail.label,
+      status = {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+          StatusChip(statusLabel(detail.status), statusTone(detail.status))
+          if (detail.testMode) StatusChip("Test mode", StatusTone.WARNING)
+          if (detail.refundState != OrderRefundState.NONE) StatusChip(if (detail.refundState == OrderRefundState.FULL) "Refunded" else "Partly refunded", StatusTone.ERROR)
+        }
+      },
+      primary = primary,
+      more = more,
+    )
+    // What waits on the merchant comes first: a dispute, a risky payment, a refund the dispute blocks.
+    describeOrderDispute(order, nowMillis().toDouble())?.let { dispute ->
+      NoticeBanner(
+        "${dispute.label}. ${dispute.detail}",
+        if (dispute.tone == "open" || dispute.tone == "lost") StatusTone.ERROR else StatusTone.INFO,
+        modifier = Modifier.testTag("order-dispute"),
+      )
     }
+    describePaymentRisk(order.paymentRisk)?.let { risk ->
+      NoticeBanner("${risk.label}. ${risk.detail}", StatusTone.WARNING, modifier = Modifier.testTag("order-payment-risk"))
+    }
+    if (canTransitionOrder(detail.status, OrderStatus.REFUNDED) && orderDisputeBlocksRefund(order)) {
+      NoticeBanner(Contracts.refundBlockedByDispute, StatusTone.INFO)
+    }
+    // Who and when, in one line.
+    Text(
+      listOfNotNull(
+        order.customerName?.takeIf { it.isNotBlank() } ?: order.customerEmail?.takeIf { it.isNotBlank() } ?: "Guest",
+        orderChannelLabel(order.channel?.raw),
+        order.createdAtMs?.let { formatReceiptTime(it.toLong()) },
+      ).joinToString(" · "),
+      style = MaterialTheme.typography.bodyLarge,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier.testTag("order-summary-line"),
+    )
 
-    SectionCard("Items") {
+    // The lines, then the totals under a hairline and the notes under them, as the console's order says them
+    // (order-detail-dialog): there is no payments section; a refund is a caption in the error color.
+    val canRefundLines = canTransitionOrder(detail.status, OrderStatus.REFUNDED) && !orderDisputeBlocksRefund(order)
+    val beside = com.aglyn.ui.LocalShellMetrics.current.compact || com.aglyn.ui.currentWidthClass() != com.aglyn.ui.WidthClass.COMPACT
+    // The lines and the totals are one block: Figma keeps the 40 rhythm from the last line into the totals.
+    Column(Modifier.fillMaxWidth()) {
+    PlainSection("Items") {
       if (detail.lines.isEmpty()) Text("No items on this order.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-      val canRefundLines = canTransitionOrder(detail.status, OrderStatus.REFUNDED) && !orderDisputeBlocksRefund(order)
       order.lineItems.orEmpty().forEachIndexed { index, line ->
         val state = detail.lines.getOrNull(index)
-        // What this line is still entitled to (AGL-2454): a line refunded by itself is struck through.
         val withdrawn = orderLineRefunded(order, index)
-        Column(Modifier.fillMaxWidth().testTag("order-line-$index")) {
-          AmountRow("${line.quantity.toLong()} × ${line.name}", money(line.unitAmountCents * line.quantity), muted = withdrawn)
-          val notes = listOfNotNull(
-            line.variantLabel,
-            line.sku?.let { "SKU $it" },
-            line.modifiers?.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.name },
-          )
-          if (notes.isNotEmpty()) Text(notes.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
-            state?.takeIf { it.fulfilledQuantity > 0 }?.let { StatusChip("${it.fulfilledQuantity} of ${it.quantity} fulfilled") }
-            if (withdrawn) {
-              StatusChip("Refunded", StatusTone.ERROR)
-            } else if (canRefundLines) {
-              TextButton(
-                onClick = { actions.open(OrderDialog.REFUND_LINE, index.toString()) },
-                enabled = !actions.busy,
-                modifier = Modifier.testTag("order-refund-line-$index"),
-              ) { Text("Refund line") }
+        // A line refunded by itself (AGL-2454): beside a list, from the line's own menu (a long press), as Apple's
+        // context menu; on a phone, a button under it.
+        var lineMenu by remember { mutableStateOf(false) }
+        val refundable = canRefundLines && !withdrawn
+        Box {
+          Column(
+            Modifier.fillMaxWidth()
+              .then(if (beside && refundable) Modifier.combinedClickable(onClick = {}, onLongClick = { lineMenu = true }) else Modifier)
+              .padding(vertical = if (beside) 8.dp else space(0.5f)).testTag("order-line-$index"),
+          ) {
+            val quantity = line.quantity.toLong()
+            val amount = money(line.unitAmountCents * line.quantity)
+            if (beside) {
+              // Figma 13:483 / 13:2167's plain line: what was bought, its options, and how many, then its amount.
+              AmountRow(listOfNotNull(line.name, line.variantLabel).joinToString(", ") + if (quantity == 1L) "" else " × $quantity", amount, muted = withdrawn, size = 14.sp)
+            } else {
+              AmountRow("$quantity × ${line.name}", amount, muted = withdrawn)
             }
-          }
-        }
-      }
-    }
-
-    SectionCard("Payment") {
-      totals?.itemsCents?.let { AmountRow("Items", money(it), muted = true) }
-      totals?.discountCents?.takeIf { it > 0 }?.let { AmountRow("Discount", "−" + money(it), muted = true) }
-      totals?.shippingCents?.takeIf { it > 0 }?.let { AmountRow("Shipping", money(it), muted = true) }
-      totals?.taxCents?.takeIf { it > 0 }?.let { AmountRow("Tax", money(it), muted = true) }
-      // Optional lines the buyer took at checkout (AGL-3635), by name.
-      order.extras.orEmpty().forEach { extra -> AmountRow(extra.label, money(extra.amountCents), muted = true) }
-      HorizontalDivider()
-      AmountRow("Total", money(totals?.totalCents ?: order.amountCents ?: 0.0), emphasized = true)
-      if (detail.refundState != OrderRefundState.NONE) {
-        Text(orderRefundSummary(order), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-      }
-      // A merchant's refund and a lost chargeback are different doors (AGL-1787), said apart.
-      splitOrderReversal(order).chargedBackCents.takeIf { it > 0 }?.let { AmountRow("Charged back", money(it.toDouble()), muted = true) }
-      // How the tax was computed (AGL-2451); absent means not recorded, never "no tax".
-      Text(describeOrderTaxMode(order.taxMode?.raw), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-
-    SectionCard("Customer") {
-      val who = listOfNotNull(order.customerName, order.customerEmail, order.customerPhone).filter { it.isNotBlank() }
-      if (who.isEmpty()) Text("Guest", style = MaterialTheme.typography.bodyLarge)
-      who.forEach { Text(it, style = MaterialTheme.typography.bodyLarge) }
-      // Their CRM record, which the order fed (the console's "View customer in CRM").
-      openCustomer?.let { open ->
-        TextButton(onClick = open, modifier = Modifier.testTag("order-customer-crm")) { Text("View customer in CRM") }
-      }
-      val shipTo = addressLines(order.shippingAddress)
-      if (shipTo.isNotEmpty()) {
-        Text("Ship to", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        shipTo.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
-      }
-    }
-
-    if (detail.shipments.isNotEmpty()) {
-      SectionCard("Shipments") {
-        detail.shipments.forEach { shipment ->
-          Column(Modifier.fillMaxWidth().testTag("order-shipment-${shipment.id}")) {
-            AglynListItem(
-              title = shipment.summary,
-              supporting = listOf(
-                formatReceiptTime(shipment.atMs),
-                shipment.trackingNumber.takeIf { it.isNotBlank() }?.let { "${shipment.carrier.ifBlank { "Tracking" }} $it" }.orEmpty(),
-                shipment.trackingStatus,
-              ).filter { it.isNotBlank() }.joinToString(" · "),
-              icon = AglynIcons.named("local_shipping"),
-              trailing = if (shipment.active) null else ({ StatusChip("Canceled") }),
+            val notes = listOfNotNull(
+              line.variantLabel.takeIf { !beside },
+              line.sku?.takeIf { !beside }?.let { "SKU $it" },
+              line.modifiers?.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.name },
+              state?.takeIf { it.fulfilledQuantity > 0 }?.let { "${it.fulfilledQuantity} of ${it.quantity} fulfilled" },
+              if (withdrawn) "Refunded" else null,
             )
-            if (shipment.active) {
-              FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-                shipment.trackingUrl?.let { url -> TextButton(onClick = { uriHandler.openUri(url) }) { Text("Track") } }
-                if (shipment.labelUrl != null) {
-                  TextButton(
-                    onClick = { onPrintLabel(shipment) },
-                    enabled = printing.busy == null,
-                    modifier = Modifier.testTag("order-print-label-${shipment.id}"),
-                  ) { Text("Print label") }
-                }
-                if (shipment.editable) {
-                  TextButton(
-                    onClick = { actions.open(OrderDialog.EDIT_TRACKING, shipment.id) },
-                    enabled = !actions.busy,
-                    modifier = Modifier.testTag("order-edit-tracking-${shipment.id}"),
-                  ) { Text("Edit tracking") }
-                  TextButton(
-                    onClick = { actions.open(OrderDialog.CANCEL_SHIPMENT, shipment.id) },
-                    enabled = !actions.busy,
-                    modifier = Modifier.testTag("order-cancel-shipment-${shipment.id}"),
-                  ) { Text("Cancel shipment") }
-                }
+            if (notes.isNotEmpty()) Text(notes.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!beside && refundable) {
+              TextButton(onClick = { actions.open(OrderDialog.REFUND_LINE, index.toString()) }, enabled = !actions.busy, modifier = Modifier.testTag("order-refund-line-$index")) {
+                Text("Refund line", color = MaterialTheme.colorScheme.error)
               }
             }
           }
+          if (beside && refundable) {
+            androidx.compose.material3.DropdownMenu(lineMenu, onDismissRequest = { lineMenu = false }) {
+              androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Refund line", color = MaterialTheme.colorScheme.error) },
+                enabled = !actions.busy,
+                onClick = { lineMenu = false; actions.open(OrderDialog.REFUND_LINE, index.toString()) },
+                modifier = Modifier.testTag("order-refund-line-$index"),
+              )
+            }
+          }
         }
       }
+      if (detail.refundState != OrderRefundState.NONE) {
+        Text(orderRefundSummary(order), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("order-refund-state"))
+      }
+    }
+    Column(Modifier.fillMaxWidth().testTag("order-totals"), verticalArrangement = Arrangement.spacedBy(if (beside) 0.dp else space(0.5f))) {
+      // Beside a list each row is Figma's 40 (14/20 text, 10 above and below); a phone keeps its own rhythm.
+      val size = if (beside) 14.sp else null
+      val row = if (beside) Modifier.padding(vertical = 10.dp) else Modifier
+      totals?.itemsCents?.let { AmountRow("Items", money(it), row, size = size) }
+      totals?.discountCents?.takeIf { it > 0 }?.let { AmountRow("Discount", "−" + money(it), row, size = size) }
+      totals?.shippingCents?.takeIf { it > 0 }?.let { AmountRow("Shipping", money(it), row, size = size) }
+      totals?.taxCents?.takeIf { it > 0 }?.let { AmountRow("Tax", money(it), row, size = size) }
+      order.extras.orEmpty().forEach { extra -> AmountRow(extra.label, money(extra.amountCents), row, size = size) }
+      totals?.tipCents?.takeIf { it > 0 }?.let { AmountRow("Tip", money(it), row, size = size) }
+      HorizontalDivider(color = com.aglyn.ui.shellColors.divider)
+      AmountRow("Total", money(totals?.totalCents ?: order.amountCents ?: 0.0), row, emphasized = true, size = size)
+      Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        val reversal = splitOrderReversal(order)
+        val note = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp)
+        Text(describeOrderTaxMode(order.taxMode?.raw), style = note, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        reversal.refundedCents.takeIf { it > 0 }?.let { Text("Refunded ${money(it.toDouble())}", style = note, color = MaterialTheme.colorScheme.error) }
+        reversal.chargedBackCents.takeIf { it > 0 }?.let { Text("Charged back ${money(it.toDouble())}", style = note, color = MaterialTheme.colorScheme.error) }
+      }
+    }
     }
 
     if (detail.status == OrderStatus.PENDING) {
       order.paymentLinkUrl?.takeIf { it.isNotBlank() }?.let { link ->
         val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-        SectionCard(null) {
-          OutlinedButton(
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+          OutlinedButton(shape = com.aglyn.ui.controlShape(), 
             onClick = {
               clipboard.setText(androidx.compose.ui.text.AnnotatedString(link))
               actions.done = "Payment link copied"
@@ -620,50 +624,58 @@ private fun OrderDetailContent(
       }
     }
 
-    order.note?.takeIf { it.isNotBlank() }?.let { note -> SectionCard("Note") { Text(note) } }
-
     registerReceipt?.invoke()
+    detail.restock?.let { check -> RestockCard(detail, check, actions) }
 
-    // The console's Packing slip and Invoice: its own pages, on this device's print sheet.
-    SectionCard("Print") {
-      printing.problem?.let { NoticeBanner(it, StatusTone.ERROR) }
-      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-        OrderPrintKind.entries.forEach { kind ->
-          OutlinedButton(onClick = { onPrint(kind) }, enabled = printing.busy == null, modifier = Modifier.testTag("order-print-${kind.raw}")) {
-            Icon(AglynIcons.named(kind.icon), contentDescription = null)
-            Text(if (printing.busy == kind.raw) "Printing…" else kind.title, Modifier.padding(start = space(1f)))
+    Column {
+      FoldedSection("Customer details", tag = "order-fold-customer") {
+        val who = listOfNotNull(order.customerName, order.customerEmail, order.customerPhone).filter { it.isNotBlank() }
+        if (who.isEmpty()) Text("Guest", style = MaterialTheme.typography.bodyLarge)
+        who.forEach { Text(it, style = MaterialTheme.typography.bodyLarge) }
+        openCustomer?.let { open -> TextButton(onClick = open) { Text("View customer in CRM") } }
+        val shipTo = addressLines(order.shippingAddress)
+        if (shipTo.isNotEmpty()) {
+          Text("Ship to", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          shipTo.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        }
+      }
+      if (detail.shipments.isNotEmpty()) {
+        FoldedSection("Shipments", count = detail.shipments.size, tag = "order-fold-shipments") {
+          detail.shipments.forEach { shipment ->
+            Column(Modifier.fillMaxWidth().testTag("order-shipment-${shipment.id}")) {
+              AglynListItem(
+                title = shipment.summary,
+                supporting = listOf(
+                  formatReceiptTime(shipment.atMs),
+                  shipment.trackingNumber.takeIf { it.isNotBlank() }?.let { "${shipment.carrier.ifBlank { "Tracking" }} $it" }.orEmpty(),
+                  shipment.trackingStatus,
+                ).filter { it.isNotBlank() }.joinToString(" · "),
+                icon = AglynIcons.named("local_shipping"),
+                trailing = if (shipment.active) null else ({ StatusChip("Canceled") }),
+              )
+              if (shipment.active) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+                  shipment.trackingUrl?.let { url -> TextButton(onClick = { uriHandler.openUri(url) }) { Text("Track") } }
+                  if (shipment.labelUrl != null) {
+                    TextButton(onClick = { onPrintLabel(shipment) }, enabled = printing.busy == null, modifier = Modifier.testTag("order-print-label-${shipment.id}")) { Text("Print label") }
+                  }
+                  if (shipment.editable) {
+                    TextButton(onClick = { actions.open(OrderDialog.EDIT_TRACKING, shipment.id) }, enabled = !actions.busy, modifier = Modifier.testTag("order-edit-tracking-${shipment.id}")) { Text("Edit tracking") }
+                    TextButton(onClick = { actions.open(OrderDialog.CANCEL_SHIPMENT, shipment.id) }, enabled = !actions.busy, modifier = Modifier.testTag("order-cancel-shipment-${shipment.id}")) { Text("Cancel shipment") }
+                  }
+                }
+              }
+            }
           }
         }
       }
-    }
-
-    // Pickup and delivery steps, returns on this order, shipping labels and the services the store has connected.
-    SectionCard(null) {
-      AglynListItem(
-        title = "Pickup, returns and services",
-        supporting = "Pickup and delivery steps, returns, labels and connected services",
-        icon = AglynIcons.named("extension"),
-        trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
-        onClick = openServices,
-        modifier = Modifier.testTag("order-more"),
-      )
-    }
-
-    detail.restock?.let { check -> RestockCard(detail, check, actions) }
-
-    SectionCard("Timeline") {
-      if (detail.timeline.isEmpty()) Text("Nothing has happened on this order yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-      detail.timeline.forEachIndexed { index, event ->
-        Text(
-          timelineLine(event),
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.testTag("order-timeline-$index"),
-        )
-      }
-      OutlinedButton(onClick = { actions.open(OrderDialog.NOTE) }, modifier = Modifier.testTag("order-add-note")) {
-        Icon(AglynIcons.named("edit_note"), contentDescription = null)
-        Text("Add a note", Modifier.padding(start = space(1f)))
+      FoldedSection("Timeline and notes", count = detail.timeline.size + if (order.note.isNullOrBlank()) 0 else 1, tag = "order-fold-timeline") {
+        order.note?.takeIf { it.isNotBlank() }?.let { note -> Text(note, style = MaterialTheme.typography.bodyMedium) }
+        if (detail.timeline.isEmpty()) Text("Nothing has happened on this order yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        detail.timeline.forEachIndexed { index, event ->
+          Text(timelineLine(event), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("order-timeline-$index"))
+        }
+        TextButton(onClick = { actions.open(OrderDialog.NOTE) }) { Text("Add a note") }
       }
     }
   }
@@ -690,44 +702,10 @@ private fun RestockCard(detail: OrderDetail, check: OrderRestockCheck, actions: 
       RestockAnswerChoice.entries.forEachIndexed { index, choice ->
         val onClick = { actions.answerRestock(detail.id, choice, check.flaggedAtMs) }
         val tag = Modifier.testTag("order-restock-${choice.raw}")
-        if (index == 0) OutlinedButton(onClick = onClick, enabled = !actions.busy, modifier = tag) { Text(choice.label) }
+        if (index == 0) OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = onClick, enabled = !actions.busy, modifier = tag) { Text(choice.label) }
         else TextButton(onClick = onClick, enabled = !actions.busy, modifier = tag) { Text(choice.label) }
       }
     }
-  }
-}
-
-@Composable
-private fun OrderActionButtons(offer: OrderActions, actions: OrderActionsModel) {
-  val buttons = listOfNotNull(
-    if (offer.fulfill) Triple("Fulfill…", "local_shipping", OrderDialog.FULFILL) else null,
-    if (offer.markDelivered) Triple("Mark delivered", "done_all", OrderDialog.DELIVERED) else null,
-    if (offer.resendReceipt) Triple("Send receipt", "mail", OrderDialog.RECEIPT) else null,
-    if (offer.refund) Triple("Refund", "undo", OrderDialog.REFUND) else null,
-    if (offer.cancel) Triple("Cancel order", "cancel", OrderDialog.CANCEL) else null,
-  )
-  if (buttons.isEmpty()) return
-  // Three acts in view; Cancel order (and whatever else does not fit) in the ⋮ menu, in the error color.
-  val shown = buttons.filter { it.third != OrderDialog.CANCEL }.take(3)
-  val more = buttons.filter { it !in shown }
-  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-    FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-      shown.forEachIndexed { index, (label, icon, dialog) ->
-        val content: @Composable () -> Unit = {
-          Icon(AglynIcons.named(icon), contentDescription = null)
-          Text(label, Modifier.padding(start = space(1f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        val tag = Modifier.testTag("order-action-${dialog.name.lowercase()}")
-        if (index == 0) Button(onClick = { actions.open(dialog) }, modifier = tag) { content() }
-        else OutlinedButton(onClick = { actions.open(dialog) }, modifier = tag) { content() }
-      }
-    }
-    com.aglyn.ui.OverflowMenu(
-      more.map { (label, icon, dialog) ->
-        com.aglyn.ui.MenuAction("order-action-${dialog.name.lowercase()}", label, icon, destructive = dialog == OrderDialog.CANCEL) { actions.open(dialog) }
-      },
-      contentDescription = "More order actions",
-    )
   }
 }
 
@@ -1040,3 +1018,10 @@ private fun FulfillItemsDialog(detail: OrderDetail, actions: OrderActionsModel) 
     SwitchRow("Notify customer", notify, { notify = it })
   }
 }
+
+/** What the Orders list can show besides orders, as the console's Products hub sections name them. */
+private val ORDERS_SHOW = listOf(
+  COMMERCE_ORDERS_SCREEN to "Orders",
+  "commerce.returns" to "Returns",
+  "commerce.reservations" to "Reservations",
+)

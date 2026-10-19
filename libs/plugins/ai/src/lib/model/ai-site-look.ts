@@ -153,6 +153,31 @@ export type AiSiteLookAnswer = Partial<
   >
 >
 
+/**
+ * The dimensions the sites a person likes pin (AGL-3975,
+ * `jobs/ai-site-inspiration.ts`): each one present is KEPT, whatever the
+ * model or the seed would choose, and every other dimension is chosen as it
+ * always is. A brand the person gave in the brief still wins over a pinned
+ * brand color, and the hue pinned with it.
+ */
+export type AiSiteLookPins = Partial<
+  Pick<
+    AiSiteStyle,
+    | 'brand'
+    | 'hue'
+    | 'accent'
+    | 'ground'
+    | 'fonts'
+    | 'corners'
+    | 'buttons'
+    | 'cards'
+    | 'header'
+    | 'headerAlign'
+    | 'density'
+    | 'motion'
+  >
+>
+
 // ── The seed ─────────────────────────────────────────────────────────────
 
 /** A job's seed: FNV-1a over its id. */
@@ -345,6 +370,8 @@ export function aiSiteStyleFor(input: {
    * fewer than three tracked dimensions, is drawn again from the next seed.
    */
   avoid?: readonly AiSiteStyle[]
+  /** What the sites the person likes pin (AGL-3975): kept on every draw. */
+  pins?: AiSiteLookPins
 }): AiSiteStyle {
   const avoid = input.avoid ?? []
   if (!avoid.length) return styleOnce(input, input.seed)
@@ -374,6 +401,33 @@ export const AI_SITE_LOOK_LEAST_DIFFERENCES = 3
 const TUPLE = ['base', 'hueFamily', 'fonts', 'buttons'] as const
 
 function styleOnce(
+  input: { kind: AiSiteKind; answer: AiSiteLookAnswer; brand?: string | null; pins?: AiSiteLookPins },
+  seed: number,
+): AiSiteStyle {
+  return withPins(drawOnce(input, seed), input)
+}
+
+/**
+ * A drawn style with its pins laid over it (AGL-3975). Applied after the
+ * draw, so every dimension is drawn the same with or without pins and an
+ * unpinned job's look is exactly what it was.
+ */
+function withPins(style: AiSiteStyle, input: { brand?: string | null; pins?: AiSiteLookPins }): AiSiteStyle {
+  const pins = input.pins
+  if (!pins || !Object.keys(pins).length) return style
+  // The person's own brand color outranks the one their sites suggest.
+  const own = aiSiteBrandHex(input.brand)
+  const { brand, hue, ...rest } = pins
+  const pinned = Object.fromEntries(Object.entries(rest).filter(([, value]) => value !== undefined && value !== null))
+  return {
+    ...style,
+    ...pinned,
+    ...(!own && aiSiteBrandHex(brand) ? { brand: aiSiteBrandHex(brand) } : {}),
+    ...(!own && typeof hue === 'number' && Number.isFinite(hue) ? { hue: ((Math.round(hue) % 360) + 360) % 360 } : {}),
+  }
+}
+
+function drawOnce(
   input: { kind: AiSiteKind; answer: AiSiteLookAnswer; brand?: string | null },
   seed: number,
 ): AiSiteStyle {

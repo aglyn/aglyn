@@ -46,9 +46,9 @@ export const DOCS_HELP_EXCERPTS = {
   adTracking: 'Run your own Meta, TikTok, Pinterest, Google Ads and LinkedIn tags on your site — only for visitors who allow advertising.',
   agencySites: 'Run one brief across many client sites: each is its own build job with its own plan and drafts, per-site allotments keep spend separate, and nothing reaches a client\'s live site until your team publishes it.',
   aglynAssist: 'Ask the built-in AI helper how to do anything in Aglyn — it answers from these docs and links you straight to the right page.',
-  ai: 'Aglyn AI is an AI website builder inside your console: describe a page, form, email, product listing or theme change and it builds a draft you edit and publish yourself. An add-on on every paid plan, metered in credits.',
+  ai: 'Aglyn AI is an AI website builder inside your console: describe a page, form, email, product listing or theme change and it builds a draft you edit and publish yourself. Included on every plan, metered in credits.',
   aiAllotments: 'Give a member, a site collaborator or a whole site a monthly share of the workspace\'s AI credits, see your own usage while you work, and choose which model answers.',
-  aiCredits: 'Everything Aglyn AI does draws AI credits from one monthly pool: what each plan includes (300 on Free), what the add-on adds, what jobs cost, the check before a job starts, and when credits come back.',
+  aiCredits: 'Everything Aglyn AI does draws AI credits from one monthly pool: what each plan includes (300 on Free), what an Aglyn AI tier adds on top, what jobs cost, the check before a job starts, and when credits come back.',
   aiJobsAndActivity: 'Review what Aglyn AI did: a site\'s AI jobs page lists every job with its kind, brief, status and credits, each job has its own page, and the AI filter in your activity logs records who started, applied or canceled what.',
   aiMonitoring: 'How staff watch one organization\'s AI usage — add-on, credits, overage, refusals, jobs, tokens, cache hits and margin — read its AI conversations, and find those figures across the staff console.',
   aiPrivacy: 'What Aglyn AI sends to its AI providers, which provider handles what, what is never sent, and how long briefs and conversations are kept — with links to the legal pages that govern it.',
@@ -70,6 +70,7 @@ export const DOCS_HELP_EXCERPTS = {
   buildingFeaturePlugins: 'The console-extension + frontend-UI plugin pair pattern for shipping features as plugins.',
   bulkActions: 'Select rows in any CRM table — contacts, companies, deals, tasks or leads — and act on all of them at once, or export them as a CSV.',
   businessProfile: 'Tell Aglyn AI what your business does, who it is for and how it sounds. Every AI job for the site reads it, uses your real contact details only, and remembers the edits you keep.',
+  buyADomain: 'Search for a domain on your site\'s Custom Domain page, buy it, and your site goes live at it automatically — no DNS records, renewals handled for you.',
   catalog: 'Products with options and variants, categories, tags, and manual or smart collections.',
   comingSoonLaunch: 'Put a coming-soon page on your domain, keep the rest of the site out of search while you finish it, collect signups, and reverse all of it on launch day.',
   commerce: 'Sell physical, digital, and service products with a full catalog, orders pipeline, shipping, taxes, and your own Stripe account.',
@@ -292,6 +293,8 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   addOns: {
     '#assigning-collaborator-seats': 'Collaborator seats work exactly like register seats: a seat is bought once for your workspace and then assigned to one site.',
     '#assigning-register-seats': 'Unlike every other add-on, a POS register seat is bought once for your workspace and then assigned to one site.',
+    '#site-care-projects': 'A project is billed on its own invoice, separate from your plan.',
+    '#site-care-statement': 'The Site Care card on Billing is the month\'s statement, kept up to date as we work.',
     '#what-you-can-add': 'Buy extra capacity for the whole workspace on the Plan add-ons card under Billing → Plan: manager seats, datasets and extra sites apply straight away, while collaborator seats and POS registers become pools you then…',
   },
   adTracking: {
@@ -311,7 +314,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   aiCredits: {
     '#before-a-job-starts': 'Every job tells you what it will cost before it spends anything: A plan shows Estimated cost: About N credits (up to M) beside Confirm plan: about what jobs like it cost on real builds, and the most it can cost.',
     '#past-the-band': 'On a paid plan, AI keeps working past the included band, and the extra credits are billed on your monthly invoice at your plan\'s rate per 1,000 credits.',
-    '#see-your-credits': 'Billing → Usage → AI credits shows the credits drawn this month against the included band, and what the add-on adds.',
+    '#see-your-credits': 'Billing → Usage → AI credits shows the credits drawn this month against the pool, and how many of them your tier adds.',
   },
   aiJobsAndActivity: {
     '#the-ai-jobs-page': 'Each site has an AI jobs page: open it from AI jobs in the trail above a job\'s page, or from See this site\'s AI jobs.',
@@ -365,6 +368,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#crm-records': 'Your CRM — the contacts captured from forms, member sign-ups, buyers and bookings, and the companies and deals your team files beside them — is priced as one CRM records band, not a hard cap.',
     '#current-plan': 'The Current plan card at the top of the Plan tab names your plan, the state of its subscription and its price, with the plan\'s headline limits — sites, team seats and campaign emails a month — beside it.',
     '#if-you-would-rather-uploads-stopped': 'Set a monthly storage cap on the Storage cap card under Billing → Usage when you would rather new uploads stopped than pay for extra storage past a figure you choose.',
+    '#locked-features': 'A feature your plan doesn\'t include stays on screen, turned off, with Included from and the plan that has it, and an Upgrade link to the plans on this page; moving to that plan turns it on, with nothing else to set up.',
     '#made-with-badge': 'Published pages on the Free plan show a small Made with Aglyn badge; plans that include badge removal drop it automatically, with nothing to switch on.',
     '#metered-usage-estimate': 'The Metered usage estimate card prices this month\'s usage so far, using the same arithmetic as the invoice: only what goes past your plan\'s included amount is charged, at our cost plus 30% after card fees.',
     '#one-to-one-email': 'A one-to-one email is a message a teammate writes to one person from a CRM record — Send email on a contact\'s, a lead\'s or a deal\'s page, described under Activities & the timeline — as against a campaign, which is…',
@@ -945,6 +949,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#audit-log': 'A record of staff actions, newest first. Click an entry to read its reason, note and before/after below the list.',
     '#billing-insight': 'Every organization\'s Stripe invoice history and default payment method (with delinquency state) render on its detail page.',
     '#broadcast-announcements': 'Push a product announcement or maintenance notice as an in-app notification to every organization\'s owner/admins (optionally one plan tier), respecting each recipient\'s mute preferences; audited.',
+    '#bundle-link': 'The Bundle checkout link card on an organization\'s page, and the header of the Hand off dialog, make a link to the owner\'s Billing page with the plan, add-ons, billing interval and coupon already chosen.',
     '#contact-suppressions': 'The platform do-not-contact list for phone numbers — calls and texts.',
     '#coupons': 'Discount codes for Aglyn\'s own subscriptions. They live in Stripe — the console creates them there and reads them back, so a coupon made in the Stripe Dashboard shows up here and vice versa.',
     '#create-a-coupon': 'Make a discount code for Aglyn\'s own subscriptions here: give it a name, a type and a duration, read the cost warnings the form shows, then create it.',
@@ -1022,6 +1027,11 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   supportQueue: {
     '#support-queue-page': 'Admin → Support is the triage queue for every organization\'s support tickets.',
     '#triage': 'The list is filtered to Open by default, with Closed and All chips beside it and a count of what\'s still open.',
+  },
+  supportTriage: {
+    '#site-care-month': 'The Site Care card on the staff page for the workspace shows the month: every request with its minutes, billing and history, the totals, and the month\'s own records.',
+    '#site-care-projects': 'Work that adds something new (a page, a form, a redesign, logo or brand work, a campaign) is a project with one flat price, never hourly.',
+    '#site-care-working': 'The Site Care card in the ticket\'s thread is where every step is taken.',
   },
   tasks: {
     '#the-dashboard-card': 'The site dashboard shows a Tasks due card: how many of your tasks are overdue, how many are due today, and the next five assigned to you, each with its due date.',

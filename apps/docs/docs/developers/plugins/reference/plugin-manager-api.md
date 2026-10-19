@@ -1959,6 +1959,45 @@ A video is served from the provider only when the `release_video_delivery` flag,
 off by default, is on for its org and a copy of its current bytes exists;
 everything else serves from the platform exactly as before.
 
+## Domain search — `plugin-domain-search` (`/server`)
+
+A slot one plugin holds (`core.domain-search`, built on the service contracts
+above): searching for a domain name to register. Its one caller is the staff
+console's client build, whose Domain step shows the names found with the
+first-year and renewal price side by side and records the pick for the owner
+to buy after they subscribe. Core asks through the slot and never imports the
+plugin that talks to a registrar. Register it from a `consoleServerDeclarations`
+entry. Search only: nothing here buys, holds or reserves a name.
+
+```ts
+registerPluginDomainSearch({
+  async search(query) {
+    if (!registrarConfigured()) return null      // nothing to search with here
+    return (await registrar.check(query)).map((hit) => ({
+      name: hit.domain,                          // lower-cased by core
+      available: hit.available,
+      firstYearUsd: hit.firstYear,               // what the owner will be charged
+      renewalUsd: hit.renewal,
+      premium: hit.premium,
+    }))
+  },
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginDomainSearch(impl, { pluginId? })` | Fills the slot. A single-implementation contract: a second plugin's implementation throws naming both. |
+| `domainSearchRegistered()` | Whether a plugin offers search in this process. The Domain step shows **Find a domain to buy** only when it does; otherwise it offers the free address and a domain the owner already has. |
+| `searchDomains(query)` | `{ status: 'ok', results }`, `{ status: 'unavailable' }` (no plugin, or `search` answered `null`) or `{ status: 'failed' }` (`search` threw), never thrown. Results missing a name, an availability or a finite, non-negative price are dropped. |
+
+`impl.search(query)` returns the exact name when the query is one plus close
+alternatives, each `{ name, available, firstYearUsd, renewalUsd, premium? }`
+in US dollars, or `null` when no registrar is configured in this deployment.
+It may throw; the caller reports a failed search, never a partial one. The
+query is a business name said aloud at a booth, so core never logs it, and the
+staff route that calls the slot allows each staff account a limited number of
+searches a minute.
+
 ## Site analytics tags — `analytics-provider`
 
 A site can send its visitors' measurement to an analytics vendor it chose, by
@@ -2856,7 +2895,10 @@ registerPluginEntitlements({
       key: 'aiAddon', // org.seatAddons key
       label: 'AI add-on',
       maxUnits: 1, // org-wide: bought once
-      quota: { key: 'assistCreditsPerMonth', perUnitByPlan: AI_ADDON_CREDITS_PER_MONTH },
+      // The figure depends on what was bought (the tier), so `perUnit` reads
+      // it off the org; a plan-keyed figure would be `perUnitByPlan`.
+      quota: { key: 'assistCreditsPerMonth', perUnit: (org, plan) => tierCredits(org, plan) },
+      soldOn: planSellsAiTiers, // which plans sell it, since `perUnit` cannot say
       features: ['aiGenerative', 'aiAssist'],
     },
   ],
@@ -2890,7 +2932,7 @@ registerPluginEntitlements({
 | `registerPluginEntitlements(registration)` | Idempotent per plugin. A seat add-on, lockdown or catalog permission key another plugin owns refuses the registration. Permissions are forwarded to `registerPluginPermissions` with the owner filled in. |
 | `listPluginOrgPermissions()` | The keys plugins add to the org permission catalog, in catalog order, with their owner. `ORG_PERMISSIONS` and `ORG_PERMISSION_KEYS` list them after the core keys and are kept in step in place, so a module that imported them first still reads them. `resolveOrgPermissions` layers a declared key like a core one — role default, custom role, per-member override — the role editor lists it, and a member, role or collaborator write raises `org.permissions.changed` once per declared key it moved (`pluginPermissionChanges`). A declaration naming a core key is refused. |
 | `hostRoleDefaults` on a catalog key | Makes the key per-site for a site collaborator: `resolveCollaboratorHostPermissions` and `resolveMemberHostPermissions` decide it from the host role, refined by the per-site toggle on the member document, and `projectHostMemberPermissions` stamps the site's `memberPermissions` projection. On the server, `memberHasPermissionOnHost`, `permissionRefusal` and `setHostPermissions` are a door's rung, its 403 and the toggle write. |
-| `listPluginSeatAddons()` / `pluginSeatAddon(key)` | What `resolveOrgEntitlements` folds: the quota named gains `perUnitByPlan[plan] × units` and the features switch on, after the org's overrides and before nothing. `pluginSeatAddonUnits(org.seatAddons, key)` / `hasPluginSeatAddon(org, key)` in `plan-entitlements` are the readings every surface shares. |
+| `listPluginSeatAddons()` / `pluginSeatAddon(key)` | What `resolveOrgEntitlements` folds: the quota named gains `perUnit(org, plan) × units` (or `perUnitByPlan[plan] × units`) and the features switch on, after the org's overrides and before nothing. `pluginSeatAddonSoldOn(addon, plan)` answers whether a plan sells it: `soldOn`, else a `perUnitByPlan` figure above zero. `pluginSeatAddonUnits(org.seatAddons, key)` / `hasPluginSeatAddon(org, key)` in `plan-entitlements` are the readings every surface shares. |
 | `listPluginFeatures()` | A declared feature's `defaultByPlan` fills the plan tables where they are silent; a key the tables already carry keeps their answer. |
 | `listPluginLockdownFeatures()` / `pluginLockdownFeature(key)` | The staff lockdown checklist lists it, `lockdownFeatureLabel` / `lockdownFeatureStaffBypass` / the visitor notice read it, the owners' pause email names it by `customerName` (`lockdownFeatureCustomerName`) and never by the staff `label`, and `lockdownFeaturesForPluginApiPath` gates the declared paths (exact, or a prefix on a segment boundary) at the dispatcher — a door under a declared prefix is gated by existing. |
 

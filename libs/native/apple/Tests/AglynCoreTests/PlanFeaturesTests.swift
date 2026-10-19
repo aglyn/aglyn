@@ -55,4 +55,22 @@ final class PlanFeaturesTests: XCTestCase {
     }
     XCTAssertEqual(MarketplaceFeeDefaults.paid, (fee["paid"] as? NSNumber)?.doubleValue)
   }
+
+  /// The console's `upgradeNoticeMessage` / `blockedExtensionNotice` sentences (apps/console/utils/extension-entitlement.ts).
+  func testUpgradeNoticesAreTheConsoles() {
+    XCTAssertEqual(
+      upgradeNoticeMessage(title: "CRM", feature: "crm"),
+      "CRM is not included in your current plan. Manage your plan and add-ons from Billing. Included from Starter.")
+    XCTAssertEqual(
+      upgradeNoticeMessage(title: "Events", feature: "eventCalendar"),
+      "The Event Calendar is a paid add-on ($9/mo for your whole workspace, supported directly by Aglyn). Enable it from Billing → Add-ons.")
+    XCTAssertEqual(
+      upgradeNoticeMessage(title: "Sequences", feature: "outreach"),
+      "Sequences isn't included in any plan — it's a paid add-on. Manage your plan and add-ons from Billing.")
+    XCTAssertTrue(upgradeNoticeSellsAddOn("eventCalendar"))
+    XCTAssertFalse(upgradeNoticeSellsAddOn("crm"))
+    for feature in ["crm", "bookings", "dataStore", "redirects", "workflows"] {
+      XCTAssertNotNil(PlanFeatureDefaults.grantedFrom[feature], feature)
+    }
+  }
 }

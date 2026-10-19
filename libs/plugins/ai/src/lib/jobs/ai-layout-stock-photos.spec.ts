@@ -611,7 +611,7 @@ describe('a designed page’s pictures ask the stock photo library too (AGL-3660
   })
   afterEach(() => warn.mockRestore())
 
-  /** A yoga home the designer opens on a full-bleed photo cover the model never described. */
+  /** A yoga home the designer opens on a masthead over a wide photo the model never described (AGL-3985). */
   function designedHome(): {
     nodes: NodesMap
     sectionIds: string[]
@@ -619,7 +619,7 @@ describe('a designed page’s pictures ask the stock photo library too (AGL-3660
   } {
     let seed = 1
     while (
-      aiLayoutDesignChoices({ kind: 'yoga', seed, home: true }).hero !== 'cover'
+      aiLayoutDesignChoices({ kind: 'yoga', seed, home: true }).hero !== 'column'
     )
       seed += 1
     const sections: AiLayoutSection[] = [
@@ -705,7 +705,7 @@ describe('a designed page’s pictures ask the stock photo library too (AGL-3660
     // A stand-in no one described: decorative, and no source until it is filled.
     expect(props(hero?.imageId as string)?.['decorative']).toBe(true)
     expect(props(hero?.imageId as string)?.['src']).toBeUndefined()
-    // A cover fills a wide band, so its photo is searched for landscape.
+    // A masthead's photo fills a wide band, so it is searched for landscape.
     expect(hero?.aspect).toBeGreaterThan(1.15)
 
     const { provider, searches } = fakeProvider()

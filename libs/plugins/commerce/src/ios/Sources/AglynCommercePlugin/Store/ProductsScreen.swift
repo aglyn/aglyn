@@ -19,6 +19,7 @@ struct ProductsScreen: View {
   @State private var selection: ProductRow.ID?
   @State private var searchText = ""
   @State private var quota = ProductQuotaModel()
+  @State private var addingFilter = false
 
   var body: some View {
     WideLayoutReader { wide in
@@ -37,31 +38,26 @@ struct ProductsScreen: View {
       }
     }
     .navigationTitle("Products")
-    .searchable(text: $searchText, prompt: "Product name")
-    .onSubmit(of: .search) { model.search = searchText }
+    .aglynScreenTitle("Products")
+    .aglynSearchable(text: $searchText, prompt: "Product name", onSubmit: { model.search = searchText }) { filterMenu }
     .onChange(of: searchText) { _, text in if text.isEmpty { model.search = "" } }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          creating = .creating()
-        } label: {
-          Label("New product", systemImage: "plus")
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(!quota.hasRoom)
-        .accessibilityIdentifier("new-product")
-        .help(quota.hasRoom ? "Add a product to this site" : "Your plan includes \(Int(quota.limit ?? 0)) products — upgrade for more")
-      }
-      ToolbarItem(placement: .primaryAction) {
+    // New product is the list's one primary action; Scan and Import are in its More menu on the Mac and iPad, their own
+    // buttons on a phone.
+    .aglynPrimaryAction(
+      id: "new-product", "New product", systemImage: "plus", enabled: quota.hasRoom,
+      help: quota.hasRoom ? "Add a product to this site" : "Your plan includes \(Int(quota.limit ?? 0)) products — upgrade for more"
+    ) {
+      creating = .creating()
+    }
+    .aglynScreenToolbar(id: "products") {
+      AglynSecondaryActions {
         Button {
           context.navigate(commerceScanScreen)
         } label: {
           Label("Scan", systemImage: "barcode.viewfinder")
         }
         .help("Find a product by its barcode or SKU")
-      }
-      if canImportProducts(context) {
-        ToolbarItem(placement: .secondaryAction) {
+        if canImportProducts(context) {
           // The console's Import beside Add product: the data transfer hub's import, for this site's products.
           Button {
             context.navigate(coreDataImportScreen, productsImportParams(hostID: context.hostID))
@@ -88,48 +84,47 @@ struct ProductsScreen: View {
     }
   }
 
-  private var chips: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: AglynSpace.one) {
-        AglynChoiceChip("All", selected: model.status == nil) { model.status = nil }
-        ForEach(ContractValues.shared.productListOptions["status"] ?? [], id: \.value) { option in
-          AglynChoiceChip(option.label, selected: model.status == option.value) { model.status = option.value }
-        }
-        ListSortMenu(sorts: ContractValues.shared.productListQuery.sorts, selected: model.sort) { model.sort = $0 }
-      }
-      .padding(.horizontal, AglynSpace.two)
-      .padding(.vertical, AglynSpace.one)
-    }
-  }
-
-  /// Any filter the console's grid takes: name, status, type, slug, SKU, barcode.
-  private var filters: some View {
-    ClauseFilterBar(
+  /// The list's filters for the calm controls: the console's statuses, sorts and grid fields (name, status, type, slug,
+  /// SKU, barcode).
+  private var filterState: ListFilterState {
+    ListFilterState(
+      statuses: [FilterChoice("", "All")]
+        + (ContractValues.shared.productListOptions["status"] ?? []).map { FilterChoice($0.value, $0.label) },
+      status: model.status, sorts: ContractValues.shared.productListQuery.sorts, sort: model.sort,
       fields: ContractValues.shared.productListQuery.fields, headers: ContractValues.shared.productListHeaders,
       choices: filterChoices(ContractValues.shared.productListOptions), clauses: model.clauses,
-      refused: model.plan.map { filterRefusals($0, clauses: model.clauses) } ?? [], notices: model.plan?.notices ?? []
-    ) { model.clauses = $0 }
-    .padding(.horizontal, AglynSpace.two)
+      refused: model.plan.map { filterRefusals($0, clauses: model.clauses) } ?? [], notices: model.plan?.notices ?? [])
+  }
+
+  /// The list's one Filter control (in the list's toolbar on the Mac and iPad).
+  private var filterMenu: some View {
+    ListFilterMenu(filterState, setStatus: { model.status = $0 }, setSort: { model.sort = $0 }) { addingFilter = true }
+  }
+
+  /// The filters that are on, as chips; nothing at rest on the Mac and iPad (Calm rule 3).
+  private var chips: some View {
+    ListActiveFilters(
+      filterState, adding: $addingFilter, setStatus: { model.status = $0 }, setSort: { model.sort = $0 },
+      setClauses: { model.clauses = $0 })
   }
 
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       chips
-      filters
       ProductsZone(context: context, slot: commerceProductsCreateSlot)
       ProductsZone(context: context, slot: commerceProductsHubSlot)
       if created != nil {
         AglynNotice("Product added.", tone: .success) { created = nil }
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
       }
       // Products listed before they have a price (AGL-3676): the one step left before the store sells them.
       if let notice = comingSoonNotice(model.rows.filter { $0.status == "active" && $0.priceMissing }.map(\.name)) {
-        AglynNotice(notice, tone: .info).padding(.horizontal, AglynSpace.two)
+        AglynNotice(notice, tone: .info).aglynContentEdges()
       }
       content(selectable: selectable)
       // The cap, standing rather than only on refusal (AGL-2113).
       AglynQuotaReadout(ready: quota.ready, used: quota.used, limit: quota.limit, noun: "product")
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -179,7 +174,7 @@ struct ProductsScreen: View {
         if selectable {
           ProductListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
         } else {
-          NavigationLink {
+          AglynPushLink {
             ProductDetailView(context: context, productID: row.id, titled: true)
           } label: {
             ProductListRow(row: row)
@@ -250,90 +245,11 @@ struct ProductDetailView: View {
       }
     }
     .navigationTitle(titled ? (model.row?.name ?? "Product") : "Products")
+    .aglynScreenTitle(titled ? (model.row?.name ?? "Product") : "Products")
     #if os(iOS)
       // The header below already shows the name large.
       .navigationBarTitleDisplayMode(.inline)
     #endif
-    .toolbar {
-      if let doc = model.doc, let row = model.row {
-        // HIG toolbars: the two actions used most stay visible, every other one is in one labeled More menu.
-        ToolbarItemGroup(placement: .secondaryAction) {
-          Button {
-            editing = .editing(doc)
-          } label: {
-            Label("Edit", systemImage: "pencil")
-          }
-          .help("Edit this product's name, price and stock")
-          .accessibilityIdentifier("edit-product")
-          Button {
-            // The pictures, and a digital product's downloads and members videos.
-            context.navigate(commerceProductMediaScreen, ["productId": productID])
-          } label: {
-            Label("Images and files", systemImage: "photo.on.rectangle")
-          }
-          .help("This product's pictures and files")
-          .accessibilityIdentifier("product-media")
-        }
-        ToolbarItem(placement: .secondaryAction) {
-          AglynMoreMenu {
-            // The address, supplier, tags, categories, tax, billing and search listing: a spec screen on the shared renderer.
-            Button {
-              context.navigate("commerce.productDetails", ["productId": productID])
-            } label: {
-              Label("Details", systemImage: "slider.horizontal.3")
-            }
-            .accessibilityIdentifier("product-details")
-            Button {
-              adjusting = true
-            } label: {
-              Label("Adjust stock", systemImage: "plusminus")
-            }
-            .disabled(row.item.variants.isEmpty)
-            .accessibilityIdentifier("adjust-stock")
-            if row.type == "physical" {
-              // Shelf labels with a barcode the register scans back (the console's Labels).
-              Button {
-                labels = productLabelRows(JSONValue.from(doc.data))
-              } label: {
-                Label("Labels", systemImage: "barcode")
-              }
-              .accessibilityIdentifier("product-labels")
-            }
-            if row.type == "digital" {
-              Button {
-                keys = true
-              } label: {
-                Label("Keys", systemImage: "key")
-              }
-              .accessibilityIdentifier("product-keys")
-            }
-            Divider()
-            Button {
-              Task { await duplicate() }
-            } label: {
-              Label("Duplicate", systemImage: "plus.square.on.square")
-            }
-            .disabled(working)
-            .accessibilityIdentifier("product-duplicate")
-            Button {
-              Task { await setStatus(doc, row, row.status == "archived" ? "active" : "archived") }
-            } label: {
-              Label(row.status == "archived" ? "Activate" : "Archive", systemImage: row.status == "archived" ? "tray.and.arrow.up" : "archivebox")
-            }
-            .disabled(working)
-            .accessibilityIdentifier("product-archive")
-            Divider()
-            Button(role: .destructive) {
-              deleting = true
-            } label: {
-              Label("Delete", systemImage: "trash")
-            }
-            .disabled(working)
-            .accessibilityIdentifier("product-delete")
-          }
-        }
-      }
-    }
     .sheet(item: $editing) { editor in ProductEditorSheet(context: context, model: editor) }
     .sheet(isPresented: Binding(get: { labels != nil }, set: { if !$0 { labels = nil } })) {
       ProductLabelsSheet(productName: model.row?.name ?? "Product", rows: labels ?? [])
@@ -361,11 +277,38 @@ struct ProductDetailView: View {
       Section {
         // The product's main picture is a media reference (or a console path): served from the console's media CDN for
         // this site, as the register's tiles and the console's product editor show it.
-        AglynDetailHeader(
+        AglynRecordHeader(
           row.name, subtitle: row.price,
           imageURL: row.item.imageURL.flatMap { mediaPreviewURL($0, origin: context.api.origin, hostID: context.hostID) },
           systemImage: "shippingbox",
-          status: (row.statusLabel, row.status == "active" ? .success : .neutral))
+          status: (row.statusLabel, row.status == "active" ? .success : .neutral), primary: primaryAction(row),
+          more: moreActions(row))
+      }
+      // The address, supplier, tags, categories, tax and search listing, and the pictures and downloads: one step in,
+      // as rows rather than more buttons.
+      Section {
+        Button {
+          context.navigate("commerce.productDetails", ["productId": productID])
+        } label: {
+          AglynRow("Details", subtitle: "Address, supplier, tags, categories, tax and search listing", systemImage: "info.circle") {
+            Image(systemName: "chevron.forward").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+          }
+        }
+        .buttonStyle(.aglynRow)
+        .accessibilityIdentifier("product-details")
+        Button {
+          // The pictures, and a digital product's downloads and members videos.
+          context.navigate(commerceProductMediaScreen, ["productId": productID])
+        } label: {
+          AglynRow(
+            "Images and files", subtitle: row.type == "digital" ? "Pictures, downloads and members videos" : "Pictures",
+            systemImage: "photo.on.rectangle"
+          ) {
+            Image(systemName: "chevron.forward").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+          }
+        }
+        .buttonStyle(.aglynRow)
+        .accessibilityIdentifier("product-media")
       }
       Section("Pricing and stock") {
         LabeledContent("Price", value: row.price)
@@ -413,6 +356,58 @@ extension ProductDetailView {
     } catch {
       notice = (productWriteProblem(error).errorDescription ?? "Could not duplicate product", .warning)
     }
+  }
+
+  /// Every other act, in the head's ⋯ beside the filled button (as an order's are), so the product beside the list
+  /// never adds a second More to the screen's head; destructive ones last.
+  private func moreActions(_ row: ProductRow) -> [AglynRecordAction] {
+    guard let doc = model.doc else { return [] }
+    var actions: [AglynRecordAction] = []
+    if row.status == "draft" {
+      actions.append(AglynRecordAction("edit-product", "Edit product", systemImage: "pencil") { editing = .editing(doc) })
+    }
+    actions.append(
+      AglynRecordAction("adjust-stock", "Adjust stock", systemImage: "plusminus", enabled: !row.item.variants.isEmpty) {
+        adjusting = true
+      })
+    if row.type == "physical" {
+      // Shelf labels with a barcode the register scans back (the console's Labels).
+      actions.append(
+        AglynRecordAction("product-labels", "Labels", systemImage: "barcode") {
+          labels = productLabelRows(JSONValue.from(doc.data))
+        })
+    }
+    if row.type == "digital" {
+      actions.append(AglynRecordAction("product-keys", "Keys", systemImage: "key") { keys = true })
+    }
+    actions.append(
+      AglynRecordAction("product-duplicate", "Duplicate", systemImage: "plus.square.on.square", enabled: !working) {
+        Task { await duplicate() }
+      })
+    let archived = row.status == "archived"
+    actions.append(
+      AglynRecordAction(
+        "product-archive", archived ? "Activate" : "Archive", systemImage: archived ? "tray.and.arrow.up" : "archivebox",
+        enabled: !working
+      ) {
+        Task { await setStatus(doc, row, archived ? "active" : "archived") }
+      })
+    actions.append(
+      AglynRecordAction("product-delete", "Delete", systemImage: "trash", destructive: true, enabled: !working) {
+        deleting = true
+      })
+    return actions
+  }
+
+  /// The one filled button, the product's next step: a draft goes live; anything else is edited.
+  private func primaryAction(_ row: ProductRow) -> AglynRecordAction? {
+    guard let doc = model.doc else { return nil }
+    if row.status == "draft" {
+      return AglynRecordAction("activate-product", "Activate", systemImage: "checkmark.circle", enabled: !working, busy: working) {
+        Task { await setStatus(doc, row, "active") }
+      }
+    }
+    return AglynRecordAction("edit-product", "Edit", systemImage: "pencil") { editing = .editing(doc) }
   }
 
   fileprivate func setStatus(_ doc: FirestoreDocument, _ row: ProductRow, _ status: String) async {

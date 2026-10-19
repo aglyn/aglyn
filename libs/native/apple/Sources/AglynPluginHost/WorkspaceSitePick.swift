@@ -50,7 +50,7 @@ public struct WorkspaceSitePick<Content: View>: View {
         .accessibilityIdentifier("workspace-site-pick-\(key)")
         Spacer(minLength: 0)
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
       Divider()
       if let current {
@@ -71,3 +71,4 @@ public struct WorkspaceSitePick<Content: View>: View {
     UserDefaults.standard.set(hostID, forKey: storageKey)
   }
 }
+

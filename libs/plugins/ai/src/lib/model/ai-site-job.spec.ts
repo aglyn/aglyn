@@ -29,6 +29,7 @@
  */
 
 import { AI_JOB_STEP_RESERVE_CREDITS } from '../jobs/ai-jobs'
+import { AI_SITE_NO_DETAILS } from './ai-site-details'
 import type { AiBuildPlan, AiBuildPlanScreen } from './ai-build-plan'
 import {
   AI_SITE_DATASETS_MAX,
@@ -98,6 +99,7 @@ describe('a scaffold’s inputs', () => {
         batchId: 'b-1',
       }),
     ).toEqual({
+      ...AI_SITE_NO_DETAILS,
       businessType: 'dog groomer',
       audience: '',
       starter: '',
@@ -114,6 +116,7 @@ describe('a scaffold’s inputs', () => {
 
   it('defaults the variables, the welcome email and the batch', () => {
     expect(parseAiSiteJobInputs({ businessType: 'bakery', pages: 4 })).toEqual({
+      ...AI_SITE_NO_DETAILS,
       businessType: 'bakery',
       audience: '',
       starter: '',

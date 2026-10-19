@@ -59,11 +59,69 @@ export interface OptionCardGridProps<T extends string = string> {
 }
 
 /**
+ * How an option card sits on the page around it (AGL-3985). A grid of them is
+ * often drawn on a dialog's gray, where a transparent card with a divider
+ * outline melted into the page, so each card is:
+ *
+ *  - a surface of its own, `background.paper`;
+ *  - outlined as strongly as an outlined field (the text color at 23%, the
+ *    border MUI's OutlinedInput draws), the text color on hover;
+ *  - once picked, outlined 2px in the primary color, from a 1px ring laid
+ *    outside its 1px border so the grid never shifts, with a check in a disc
+ *    at its top corner ({@link OptionCardCheck});
+ *  - ringed in the primary color while it has the keyboard's focus.
+ *
+ * Theme values only, so it reads the same in light and dark mode.
+ */
+export function optionCardSx(selected: boolean) {
+  return (theme: Theme) => ({
+    position: 'relative' as const,
+    borderRadius: 2,
+    bgcolor: 'background.paper',
+    borderColor: selected ? theme.palette.primary.main : alpha(theme.palette.text.primary, 0.23),
+    boxShadow: selected ? `0 0 0 1px ${theme.palette.primary.main}` : 'none',
+    transition: theme.transitions.create(['border-color', 'box-shadow']),
+    '&:hover': { borderColor: selected ? theme.palette.primary.main : theme.palette.text.primary },
+    '&:has(.Mui-focusVisible)': {
+      outline: `2px solid ${theme.palette.primary.main}`,
+      outlineOffset: '2px',
+    },
+  })
+}
+
+/** The check a picked card carries in its top corner: over its picture, or beside its words. */
+export function OptionCardCheck() {
+  return (
+    <Box
+      aria-hidden
+      data-option-card-check=""
+      sx={{
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        zIndex: 1,
+        display: 'flex',
+        borderRadius: '50%',
+        bgcolor: 'background.paper',
+        color: 'primary.main',
+        boxShadow: 2,
+        pointerEvents: 'none',
+      }}
+    >
+      <MdiIcon path={mdiCheckCircle.path} sx={{ fontSize: 24 }} />
+    </Box>
+  )
+}
+
+/**
  * A grid of cards to pick one from (AGL-3660): a radio group drawn as cards,
- * each with an icon or a picture (AGL-3898), a title and a line under it. The
- * selected card carries the primary color, and a picture card a check over
- * its picture; the arrow keys move between cards and pick, as a radio group's
- * do, and only the picked card is in the tab order.
+ * each with an icon or a picture (AGL-3898), a title and a line under it. Each
+ * card is a surface with an outline that reads on a gray page, its title in
+ * the text color and its line in the secondary text color, both at AA on the
+ * card (AGL-3985). The picked card is outlined 2px in the primary color and
+ * carries a check; the arrow keys move between cards and pick, as a radio
+ * group's do, only the picked card is in the tab order, and the focused card
+ * is ringed.
  */
 export function OptionCardGrid<T extends string = string>({
   label,
@@ -99,7 +157,7 @@ export function OptionCardGrid<T extends string = string>({
       {...rest}
       sx={{
         display: 'grid',
-        gap: 1.5,
+        gap: 2,
         gridTemplateColumns: {
           xs: template(columns.xs ?? 1),
           sm: template(columns.sm),
@@ -110,15 +168,8 @@ export function OptionCardGrid<T extends string = string>({
       {options.map((option, index) => {
         const selected = option.id === value
         return (
-          <Card
-            key={option.id}
-            variant="outlined"
-            sx={(theme: Theme) => ({
-              borderRadius: 2,
-              borderColor: selected ? 'primary.main' : 'divider',
-              bgcolor: selected ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
-            })}
-          >
+          <Card key={option.id} variant="outlined" sx={optionCardSx(selected)}>
+            {selected && <OptionCardCheck />}
             <CardActionArea
               ref={(node: HTMLButtonElement | null) => {
                 refs.current[index] = node
@@ -131,6 +182,8 @@ export function OptionCardGrid<T extends string = string>({
               onKeyDown={(event) => onKeyDown(event, index)}
               sx={{
                 p: option.image ? 0 : 2,
+                // Room for the check beside a card's words, where no picture carries it.
+                pr: option.image ? 0 : 5,
                 height: '100%',
                 minHeight: 44,
                 display: 'flex',
@@ -140,58 +193,47 @@ export function OptionCardGrid<T extends string = string>({
               }}
             >
               {option.image && (
-                <Box sx={{ position: 'relative', width: '100%' }}>
-                  <Box
-                    component="img"
-                    src={option.image.src}
-                    alt={option.image.alt}
-                    width={option.image.width}
-                    height={option.image.height}
-                    loading="lazy"
-                    decoding="async"
-                    sx={{
-                      display: 'block',
-                      width: '100%',
-                      height: 'auto',
-                      aspectRatio: `${option.image.width} / ${option.image.height}`,
-                      objectFit: 'cover',
-                      objectPosition: 'top',
-                      borderBottom: 1,
-                      borderColor: 'divider',
-                      bgcolor: 'action.hover',
-                    }}
-                  />
-                  {selected && (
-                    <Box
-                      aria-hidden
-                      sx={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        display: 'flex',
-                        borderRadius: '50%',
-                        bgcolor: 'background.paper',
-                        color: 'primary.main',
-                        boxShadow: 2,
-                      }}
-                    >
-                      <MdiIcon path={mdiCheckCircle.path} sx={{ fontSize: 24 }} />
-                    </Box>
-                  )}
-                </Box>
+                <Box
+                  component="img"
+                  src={option.image.src}
+                  alt={option.image.alt}
+                  width={option.image.width}
+                  height={option.image.height}
+                  loading="lazy"
+                  decoding="async"
+                  sx={{
+                    display: 'block',
+                    width: '100%',
+                    height: 'auto',
+                    aspectRatio: `${option.image.width} / ${option.image.height}`,
+                    objectFit: 'cover',
+                    objectPosition: 'top',
+                    borderBottom: 1,
+                    borderColor: 'divider',
+                    bgcolor: 'action.hover',
+                  }}
+                />
               )}
-              <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start', width: '100%', p: option.image ? 1.5 : 0 }}>
+              <Stack
+                direction="row"
+                spacing={1.5}
+                sx={{ alignItems: 'flex-start', width: '100%', px: option.image ? 2 : 0, py: option.image ? 1.5 : 0 }}
+              >
                 {option.icon && (
                   <Box sx={{ color: selected ? 'primary.main' : 'text.secondary', display: 'flex', pt: 0.25 }} aria-hidden>
                     <MdiIcon path={option.icon} sx={{ fontSize: 22 }} />
                   </Box>
                 )}
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="subtitle2" component="span" sx={{ display: 'block' }}>
+                  <Typography
+                    variant="subtitle2"
+                    component="span"
+                    sx={{ display: 'block', color: 'text.primary', fontWeight: 600, lineHeight: 1.4 }}
+                  >
                     {option.title}
                   </Typography>
                   {option.description && (
-                    <Typography variant="body2" color="text.secondary" component="span" sx={{ display: 'block' }}>
+                    <Typography variant="body2" component="span" sx={{ display: 'block', color: 'text.secondary', mt: 0.25 }}>
                       {option.description}
                     </Typography>
                   )}

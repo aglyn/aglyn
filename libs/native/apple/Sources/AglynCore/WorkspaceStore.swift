@@ -27,15 +27,23 @@ public struct WorkspaceSite: Equatable, Hashable, Identifiable, Sendable {
   /// The site's favicon as the membership row mirrors it (`favicon`, the host's `seo.favicon`): a reference, a CDN path
   /// or an address, shown through `mediaPreviewURL` as the console's `HostIcon` resolves it.
   public let favicon: String?
+  /// The site's custom domain, as the membership row mirrors it (`cname`); older rows lack it.
+  public let cname: String?
 
-  public init(id: String, orgID: String, name: String, subdomain: String, role: String, favicon: String? = nil) {
+  public init(
+    id: String, orgID: String, name: String, subdomain: String, role: String, favicon: String? = nil, cname: String? = nil
+  ) {
     self.id = id
     self.orgID = orgID
     self.name = name
     self.subdomain = subdomain
     self.role = role
     self.favicon = favicon
+    self.cname = cname
   }
+
+  /// The address a person knows the site by: its custom domain, else its platform address (the Sites list's rule).
+  public var shownAddress: String { cname ?? HostStatus.siteAddress(subdomain) ?? subdomain }
 }
 
 /// What a workspace's own document says about how it looks: its logos (`logoUrl`, `logoDarkUrl`), its brand color
@@ -51,10 +59,17 @@ public struct WorkspaceOrgLogo: Equatable, Hashable, Sendable {
   /// The plugins the workspace turned on, as stored (`enabledPlugins`); nil when it never chose, which reads as the
   /// defaults (`resolveEnabledPlugins`).
   public let enabledPlugins: [String]?
+  /// The plan's payment failed and is owed (`past_due` or `unpaid`): Home says so and opens Billing.
+  public let paymentDue: Bool
+  /// The workspace's own release-flag overrides (`releaseFlags`), which staff set for one workspace.
+  public let releaseFlags: [String: Bool]
 
   public init(
-    light: String?, dark: String?, brandColor: String? = nil, plan: String? = nil, enabledPlugins: [String]? = nil
+    light: String?, dark: String?, brandColor: String? = nil, plan: String? = nil, enabledPlugins: [String]? = nil,
+    paymentDue: Bool = false, releaseFlags: [String: Bool] = [:]
   ) {
+    self.paymentDue = paymentDue
+    self.releaseFlags = releaseFlags
     self.light = light
     self.dark = dark
     self.brandColor = brandColor
@@ -70,7 +85,14 @@ public struct WorkspaceOrgLogo: Equatable, Hashable, Sendable {
       light: text("logoUrl"), dark: text("logoDarkUrl"),
       brandColor: brand.flatMap { $0.range(of: "^#[0-9A-Fa-f]{6}$", options: .regularExpression) != nil ? $0 : nil },
       plan: doc.map { effectivePlan($0.data) },
-      enabledPlugins: (doc?.data["enabledPlugins"] as? [Any])?.compactMap { $0 as? String })
+      enabledPlugins: (doc?.data["enabledPlugins"] as? [Any])?.compactMap { $0 as? String },
+      paymentDue: {
+        let mirrored = doc?.string("billingStatus")
+        let status = (mirrored?.isEmpty == false ? mirrored : nil)
+          ?? ((doc?.data["subscription"] as? [String: Any])?["status"] as? String)
+        return status == "past_due" || status == "unpaid"
+      }(),
+      releaseFlags: ((doc?.data["releaseFlags"] as? [String: Any]) ?? [:]).compactMapValues { $0 as? Bool })
   }
 
   /// The plan as the console names it ("Pro").
@@ -428,7 +450,8 @@ public final class WorkspaceStore {
       id: doc.id, orgID: doc.string("orgId") ?? "",
       name: doc.string("displayName") ?? (subdomain.isEmpty ? doc.id : subdomain),
       subdomain: subdomain, role: doc.string("role") ?? "",
-      favicon: doc.string("favicon").flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 })
+      favicon: doc.string("favicon").flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 },
+      cname: doc.string("cname").flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 })
   }
 
   /// Which org and site to show, given what is remembered and what exists.

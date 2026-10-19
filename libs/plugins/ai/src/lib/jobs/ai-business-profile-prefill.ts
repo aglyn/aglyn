@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import type { BusinessProfileValues } from '@aglyn/aglyn/app-utils/business-profile'
+import { BUSINESS_PROFILE_MAX_CHARS, type BusinessProfileValues } from '@aglyn/aglyn/app-utils/business-profile'
 import type { AiJob } from '../model/ai-jobs.types'
+import { aiSiteDetailsOf, aiSiteServiceAreas } from '../model/ai-site-details'
 import { prefillAiBusinessProfile } from '../runtime/site-context'
 import type { AiJobTransitionListener } from './ai-jobs'
 
@@ -27,7 +28,8 @@ import type { AiJobTransitionListener } from './ai-jobs'
  *
  * Two sources, each recorded as itself:
  * - `start`: the answers the owner gave the guided start — what the business
- *   is, who it is for, its city. Their words, given in another place.
+ *   is, who it is for, the areas it serves (else its city). Their words,
+ *   given in another place.
  * - `ai`: what the plan wrote for the home page's search description, used
  *   only where the start said nothing about what the business does.
  *
@@ -50,7 +52,15 @@ export function aiBusinessProfileStartValues(job: Pick<AiJob, 'kind' | 'inputs'>
   const city = text(inputs['city'])
   if (businessType) values.whatYouDo = sentence(businessType)
   if (audience) values.audience = audience
-  if (city) values.serviceArea = city
+  // The areas "More details" names (AGL-3979), as many whole ones as the field holds; else the city.
+  const max = BUSINESS_PROFILE_MAX_CHARS.serviceArea
+  let serviceArea = ''
+  for (const area of aiSiteServiceAreas(aiSiteDetailsOf(inputs).serviceArea)) {
+    const next = serviceArea ? `${serviceArea}, ${area}` : area
+    if (next.length > max) break
+    serviceArea = next
+  }
+  if (serviceArea || city) values.serviceArea = (serviceArea || city).slice(0, max)
   return Object.keys(values).length ? values : null
 }
 

@@ -64,6 +64,7 @@ import {
   aiFreeSitePrompt,
   aiFreeSiteCreditRange,
   aiFreeCreditsNoneLeftText,
+  parseAiSiteJobInputs,
 } from '../model/ai-site-job'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSiteAliases, aiLayoutSitePages, aiLayoutWithSitePages } from './ai-job-layout-site-pages'
 import { aiLayoutPageTargets } from './ai-job-page-language'
@@ -92,6 +93,7 @@ import {
   aiCreationUnit,
   aiRunJobUnit,
   aiSiteBuiltRefs,
+  aiSiteBriefLines,
   aiSiteInitialLedger,
   aiSiteJobRunMinimumMs,
   aiSiteJobUnits,
@@ -105,6 +107,8 @@ import {
   registerAiSiteJob,
   type AiSiteUnit,
 } from './ai-job-site-step'
+import { AI_SITE_INSPIRATION_SIGNALS_INPUT } from './ai-site-inspiration'
+import { aiSiteInspirationRefusal } from '../model/ai-site-inspiration'
 import {
   AI_SITE_FREE_POSTS,
   AI_SITE_POST_BUDGET,
@@ -520,6 +524,37 @@ describe('the job each unit is built under', () => {
     for (const unit of units) expect(aiSiteUnitJob(job, unit, built).$id).not.toContain('job-1')
   })
 
+  it('hands the look unit the signals of the sites the person likes, and no unit anything without them (AGL-3975)', () => {
+    const inspiration = {
+      v: 1 as const,
+      unread: 0,
+      sites: [
+        {
+          sections: ['hero' as const, 'gallery' as const],
+          density: 'airy' as const,
+          headerAlign: 'center' as const,
+          header: 'flat' as const,
+          colors: ['#8a6d3b'],
+          ground: 'white' as const,
+          fontMood: 'serif' as const,
+          buttons: 'square' as const,
+          buttonFill: 'outline' as const,
+          corners: 'sharp' as const,
+          cards: null,
+          motion: 'still' as const,
+          features: [],
+        },
+      ],
+    }
+    const look = aiSiteJobUnits(plan, { welcomeEmail: true })[0] as (typeof units)[number]
+    expect(look.kind).toBe('theme')
+    const inspired = siteJob({ plan: { ...plan, inspiration } })
+    expect(aiSiteUnitJob(inspired, look, built).inputs[AI_SITE_INSPIRATION_SIGNALS_INPUT]).toEqual(inspiration)
+    // A page is told nothing of them; a plan without them hands nothing on.
+    expect(aiSiteUnitJob(inspired, units[2] as (typeof units)[number], built).inputs).not.toHaveProperty(AI_SITE_INSPIRATION_SIGNALS_INPUT)
+    expect(aiSiteUnitJob(siteJob({ plan }), look, built).inputs).not.toHaveProperty(AI_SITE_INSPIRATION_SIGNALS_INPUT)
+  })
+
   it('names a unit whose plan and step recorded no id by the job’s id and its slot, as every such draft was written', () => {
     const unrecorded = confirmedPlan({
       create: plan.create.map((entry) => ({ ...entry, id: undefined })),
@@ -855,6 +890,16 @@ describe('what the welcome email is told', () => {
     }
   })
 
+  it('names it for the business in Marketing, never "New email" (AGL-3988)', () => {
+    // The beta.270 Sugar Hollow start's welcome email was listed as "New email".
+    expect(emailJob({ businessName: 'Sugar Hollow Photography' }).inputs?.['name']).toBe('Sugar Hollow Photography welcome email')
+    expect(emailJob().inputs?.['name']).toBe('Welcome email')
+    const job = siteJob({ inputs: { businessType: 'dog groomer', businessName: 'Waggle', pages: AI_SITE_PAGES.min, welcomeEmail: true } })
+    for (const unit of aiSiteJobUnits(confirmedPlan(), { welcomeEmail: true }).filter((each) => each.kind !== 'email')) {
+      expect(aiSiteUnitJob(job, unit, new Map()).inputs?.['name']).toBeUndefined()
+    }
+  })
+
   it('keeps the scaffold’s own answers on the email’s inputs beside the kind', () => {
     // The kind is added to the inputs, not swapped for them: the form's
     // routing and the audience are read off the same job.
@@ -933,6 +978,24 @@ describe('the site’s own listing, from the answers', () => {
       'seo.title': 'Neighborhood dog groomer',
       'seo.description': 'Neighborhood dog groomer for local dog owners.',
     })
+  })
+
+  it('leads with the site’s own name where the start named no business, as the publish writes it (AGL-3979)', async () => {
+    const siteName = jest.fn(async () => 'Hillside Dog Grooming')
+    const step = stepWith({ page: fakeRunner([], () => ({ outputs: [output('screen', 's')] })) }, { siteName })
+    const job = siteJob({
+      inputs: { businessType: 'a neighborhood dog groomer', audience: 'local dog owners', pages: AI_SITE_PAGES.min, welcomeEmail: false },
+    })
+    const outcome = await step(context(job))
+    expect(siteName).toHaveBeenCalledWith(expect.anything(), job.hostId)
+    expect(aiSiteSeoProposalOf(outcome.outputs)?.values).toEqual({
+      'seo.title': 'Hillside Dog Grooming — Neighborhood dog groomer',
+      'seo.description': 'Hillside Dog Grooming is a neighborhood dog groomer for local dog owners.',
+    })
+    // Once reported, no pass reads the name again.
+    siteName.mockClear()
+    await step(context(siteJob({ ...job, outputs: [LOOK, ...outcome.outputs] })))
+    expect(siteName).not.toHaveBeenCalled()
   })
 
   it('says it in the language the plan writes the site in, with no English around the answers (AGL-3792)', async () => {
@@ -1138,6 +1201,34 @@ describe('what a scaffold is admitted with', () => {
       status: 404,
       error: 'Unknown site',
     })
+  })
+
+  it('holds the sites a person likes to https and to their plan: one on Free, three paid, only while the flag is on (AGL-3975)', async () => {
+    const admit = (released: boolean) =>
+      createAiSiteJobAdmission({ inspirationReleased: async () => released, freeCreditsLeft: async () => null })
+    const context = (inspiration: string, org: object) => ({
+      firestore: {} as unknown as FirebaseFirestore.Firestore,
+      orgId: 'org-1',
+      hostId: 'host-1',
+      inputs: { ...good, pages: (org as { plan: string }).plan === 'free' ? 2 : AI_SITE_PAGES.min, inspiration },
+      org,
+    })
+    const one = 'https://one.example'
+    const three = 'https://one.example https://two.example https://three.example'
+    await expect(admit(true)(context(one, { plan: 'free' }))).resolves.toBeNull()
+    await expect(admit(true)(context('https://one.example https://two.example', { plan: 'free' }))).resolves.toEqual({
+      status: 400,
+      error: aiSiteInspirationRefusal(['a', 'b'], true),
+    })
+    await expect(admit(true)(context(three, { plan: 'pro' }))).resolves.toBeNull()
+    await expect(admit(true)(context(`${three} https://four.example`, { plan: 'pro' }))).resolves.toEqual({
+      status: 400,
+      error: 'Name at most 3 sites you like.',
+    })
+    // https only, for every workspace.
+    await expect(admit(true)(context('http://one.example', { plan: 'pro' }))).resolves.toMatchObject({ status: 400 })
+    // With the flag off they are never read, so a Free start's second site is no refusal either.
+    await expect(admit(false)(context('https://one.example https://two.example', { plan: 'free' }))).resolves.toBeNull()
   })
 
   it('refuses a scaffold where nothing can build a page', async () => {
@@ -1376,6 +1467,24 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
     }
     await step(context({ ...lastPass({ autoConfirm: true }), sitePublish: everyPage }))
     expect(publish).not.toHaveBeenCalled()
+  })
+
+  /*
+   * The beta.270 Sugar Hollow start (AGL-3988): its Galleries page failed its
+   * checks, and the pages it published still linked it, to a 404.
+   */
+  it('hands the publish the pages it planned and did not build, and the site’s order (AGL-3988)', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const refused = { reason: 'doctrine' as const, message: 'This could not be built within the building rules.', findings: [] }
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'drftPage03')], review: refused })) },
+      { publish },
+    )
+    await step(context(lastPass({ autoConfirm: true })))
+    expect(publish).toHaveBeenCalledTimes(1)
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { unbuiltScreenIds: string[]; siteOrder: string[] }]
+    expect(input.unbuiltScreenIds).toEqual(['drftPage03'])
+    expect(input.siteOrder).toEqual(confirmedPlan().screens.map((screen) => screen.id))
   })
 
   it('hands the publish the language its plan says the brief is in, and none where it says none (AGL-3750)', async () => {
@@ -2329,5 +2438,27 @@ describe('an event-led start’s first events (AGL-3755)', () => {
     const home = units.find((unit) => unit.slot === 'p0') as AiSiteUnit
     const job = aiSiteUnitJob(siteJob({ plan, outputs: [LOOK] }), home, new Map())
     expect(aiLayoutListingsOf(job.inputs).some((listing) => listing.kind === 'events')).toBe(false)
+  })
+})
+
+describe('what every unit is told about the business (AGL-3979)', () => {
+  const parsed = (inputs: Record<string, unknown>) => {
+    const value = parseAiSiteJobInputs({ businessType: 'a family plumber', pages: 5, businessName: 'Pipeworks', ...inputs })
+    if (typeof value === 'string') throw new Error(value)
+    return value
+  }
+
+  it('the phone, email, address and hours given, and that the pages show the phone and email as written', () => {
+    const lines = aiSiteBriefLines('A 5-page website.', parsed({ phone: '(512) 555-0142', email: 'hello@pipeworks.co', city: 'Austin', street: '214 Main Street' }))
+    expect(lines).toContain('Contact — phone: (512) 555-0142; email: hello@pipeworks.co; address: 214 Main Street, Austin.')
+    expect(lines.join('\n')).toContain('a link that calls goes to "phone"')
+  })
+
+  it('nothing new for a start that gave none', () => {
+    expect(aiSiteBriefLines('A 5-page website.', parsed({}))).toEqual([
+      'A 5-page website.',
+      'Site — name: Pipeworks; business: a family plumber.',
+      expect.stringContaining('“Pipeworks”'),
+    ])
   })
 })

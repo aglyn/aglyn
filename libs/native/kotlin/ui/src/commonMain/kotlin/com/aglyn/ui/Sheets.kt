@@ -122,7 +122,7 @@ fun FormSheet(
           Text(title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
           TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancel") }
           secondary?.invoke()
-          Button(
+          Button(shape = controlShape(), 
             onClick = onConfirm,
             enabled = confirmEnabled && !busy,
             colors = if (destructive) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) else ButtonDefaults.buttonColors(),

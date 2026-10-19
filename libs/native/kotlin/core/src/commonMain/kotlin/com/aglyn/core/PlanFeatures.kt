@@ -43,3 +43,16 @@ fun marketplaceFeePct(org: Map<String, Any?>?): Double {
   val rate = if (override != null) usable(override) else usable(MarketplaceFeeDefaults.byPlan[effectivePlan(org)])
   return rate ?: MarketplaceFeeDefaults.byPlan["free"] ?: 30.0
 }
+
+/**
+ * What a workspace reads where a feature its plan leaves out would be, as the console's `blockedExtensionNotice` words it
+ * (apps/console/utils/extension-entitlement.ts): it names the plan that includes the feature, or says no plan does.
+ */
+fun upgradeNoticeMessage(title: String, feature: String): String {
+  val plan = PlanFeatureDefaults.grantedFrom[feature]
+  return if (plan != null) {
+    "$title is not included in your current plan. Manage your plan and add-ons from Billing. Included from $plan."
+  } else {
+    "$title isn't included in any plan — it's a paid add-on. Manage your plan and add-ons from Billing."
+  }
+}

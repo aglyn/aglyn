@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlin.math.max
 
 /**
@@ -80,12 +81,23 @@ fun AmountRow(
   modifier: Modifier = Modifier,
   emphasized: Boolean = false,
   muted: Boolean = false,
+  /** A plain detail column's size (Figma 13:483 / 13:2167: 14/20 for every row, the total in semibold, not larger). */
+  size: androidx.compose.ui.unit.TextUnit? = null,
 ) {
-  val style = if (emphasized) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge
+  // The whole line height, not trimmed to the glyphs: Figma's row is the 20 line plus its padding.
+  val style = size?.let {
+    MaterialTheme.typography.bodyMedium.copy(
+      fontSize = it, lineHeight = (it.value + 6).sp,
+      lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
+        androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center, androidx.compose.ui.text.style.LineHeightStyle.Trim.None,
+      ),
+    )
+  }
+    ?: if (emphasized) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge
   val color = if (muted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
   Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
     Text(label, Modifier.weight(1f), style = style, color = color, fontWeight = if (emphasized) FontWeight.SemiBold else null)
-    Text(value, style = style, color = color, fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Medium, textAlign = TextAlign.End)
+    Text(value, style = style, color = color, fontWeight = if (emphasized) (if (size != null) FontWeight.SemiBold else FontWeight.Bold) else if (size != null) null else FontWeight.Medium, textAlign = TextAlign.End)
   }
 }
 

@@ -520,7 +520,8 @@ jobs:
       # spreads into chromium.launch. On macOS it switches off Chrome's
       # MacAppCodeSignClone (a ~1.4 GB app copy left in $TMPDIR by any run
       # that exits without closing) inside one --disable-features that also
-      # carries Playwright's list, read from the installed playwright-core.
+      # carries Playwright's list, read from the installed playwright-core,
+      # and removes the copies other Chromes left that no process has open.
       # A Playwright upgrade that moves that list fails here. Pure node.
       - run: npm run test:chrome-executable
 

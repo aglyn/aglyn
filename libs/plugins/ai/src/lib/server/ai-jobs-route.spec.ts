@@ -307,8 +307,12 @@ const ENTITLED_ORG = {
   billingStatus: 'active',
   seatAddons: { aiAddon: true },
 }
-/** Pro without the add-on: `aiAssist` yes, `aiGenerative` no. */
-const PLAIN_PRO_ORG = { plan: 'pro', billingStatus: 'active' }
+/**
+ * Below the generative rung. Since AGL-3965 every plan's included credits
+ * pay for generation (one pool), so no plan lacks `aiGenerative`; what does
+ * is a per-org override that closed it.
+ */
+const PLAIN_PRO_ORG = { plan: 'pro', billingStatus: 'active', entitlements: { features: { aiGenerative: false } } }
 
 const USAGE = {
   inputTokens: 1_000,
@@ -432,7 +436,7 @@ describe('POST /api/ai/jobs — the ladder', () => {
     expect((await createJob(post(VALID))).status).toBe(200)
   })
 
-  it('403 on a plan without aiGenerative — Pro without the add-on', async () => {
+  it('403 on an org without aiGenerative — a per-org override closed it', async () => {
     mockGetOrgForUser.mockResolvedValue({ orgId: ORG, org: PLAIN_PRO_ORG })
     const response = await createJob(post(VALID))
     expect(response.status).toBe(403)
@@ -1123,6 +1127,73 @@ describe('POST /api/ai/jobs/[jobId]/resume (AGL-2935)', () => {
     } finally {
       registerAiJobPauseReader(null)
     }
+  })
+
+  it('waits in needs_input for a pixel ID only the person has, refuses a wrong one by field, and builds once it is given and confirmed (AGL-3978)', async () => {
+    const message = 'What’s your Meta pixel ID? It’s the number (8–20 digits) shown for your pixel in Meta Events Manager.'
+    const field = { item: 'Meta pixel', arg: 'metaPixel', label: 'Meta pixel ID', shape: '8–20 digits', pattern: '^[0-9]{8,20}$' }
+    const key = 'Meta pixel/metaPixel'
+    const item = { slot: 'i0', op: 'tracking', name: 'Meta pixel', why: 'The request asks for the Meta pixel.', dependsOn: [], degrade: 'omit' }
+    planRunner.mockImplementation(async ({ now }: { now: Date }) => ({
+      outputs: [],
+      ...spend,
+      plan: {
+        reuse: [],
+        create: [],
+        screens: [],
+        items: [{ ...item, args: {} }],
+        status: 'proposed',
+        labels: {},
+        proposedAt: now,
+        confirmedAt: null,
+        confirmedBy: null,
+      },
+      review: { reason: 'plan', message: 'The plan is ready.', findings: [] },
+      input: { message, fields: [field] },
+    }))
+    const { job } = await (await createJob(post({ ...VALID, kind: 'site' }))).json()
+    // Paused for the person, never failed: the plan kept, nothing held, the question asked.
+    expect(job).toMatchObject({
+      status: 'needs_input',
+      error: message,
+      creditsReserved: 0,
+      input: { message, fields: [field] },
+      plan: { status: 'proposed' },
+      review: { reason: 'plan' },
+    })
+    expect(job.steps.map((step: { status: string }) => step.status)).toEqual(['done', 'pending'])
+    const spent = messages()
+
+    // An id of the wrong shape, or none, is refused by its field and moves nothing.
+    const wrong = await resume(job.id, { orgId: ORG, hostId: 'host-1', input: { [key]: 'fb-123' } })
+    expect(wrong.status).toBe(400)
+    expect(await wrong.json()).toMatchObject({
+      error: '“fb-123” is not a Meta pixel ID, which looks like 8–20 digits.',
+      fieldErrors: { [key]: '“fb-123” is not a Meta pixel ID, which looks like 8–20 digits.' },
+      job: { status: 'needs_input' },
+    })
+    expect((await resume(job.id)).status).toBe(400)
+    expect(mockDocs.get(`orgs/${ORG}/aiJobs/${job.id}`)?.['status']).toBe('needs_input')
+
+    // The id given: back on the plan card with it, spending nothing.
+    const answered = await resume(job.id, { orgId: ORG, hostId: 'host-1', input: { [key]: ' 123456789012345 ' } })
+    expect(answered.status).toBe(200)
+    const back = (await answered.json()).job
+    expect(back).toMatchObject({
+      status: 'needs_review',
+      error: null,
+      review: { reason: 'plan' },
+      plan: { status: 'proposed', items: [expect.objectContaining({ args: { metaPixel: '123456789012345' } })] },
+    })
+    expect(back.input).toBeUndefined()
+    expect(messages()).toBe(spent)
+    expect(siteRunner).not.toHaveBeenCalled()
+
+    // Confirmed as any plan: built with the id the person gave.
+    const confirmed = await resume(job.id)
+    expect((await confirmed.json()).job).toMatchObject({ status: 'done', plan: { status: 'confirmed' } })
+    expect(siteRunner).toHaveBeenCalledTimes(1)
+    expect(siteRunner.mock.calls[0][0].job.plan.items).toEqual([expect.objectContaining({ args: { metaPixel: '123456789012345' } })])
   })
 
   it('refuses another site, an unknown job and a job no longer waiting, handing the message back each time', async () => {

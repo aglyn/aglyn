@@ -910,7 +910,10 @@ round ends the run, and a red that recovers is reported, not acted on.
 
 `degraded` (failures that never span enough hosts), `inconclusive` (the canary
 could not see the deployment) and `not-serving` (no bypass, and READY but not
-promoted) also post and fail, without a rollback. Every verdict is recorded as
+promoted) also post and fail, without a rollback. `superseded` is quiet and
+passes: a newer READY production deployment, such as a redeploy of the same
+commit for an env change, took production before the candidate was served, and
+its own run grades it (AGL-3986). Every verdict is recorded as
 `canary <verdict> on <dpl_…> (candidate|serving)`, which is what the schedule
 reads.
 

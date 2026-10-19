@@ -35,6 +35,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.unit.dp
 
 /**
  * A list that refreshes when pulled (and from a refresh key on desktop, where
@@ -89,13 +96,34 @@ data class MenuAction(
 
 /** The ⋮ button and its menu: a row's or a detail pane's less common actions. */
 @Composable
-fun OverflowMenu(actions: List<MenuAction>, modifier: Modifier = Modifier, contentDescription: String = "More actions") {
+fun OverflowMenu(
+  actions: List<MenuAction>,
+  modifier: Modifier = Modifier,
+  contentDescription: String = "More actions",
+  /** Figma's list head "More" (Mac 13:483, iPad 13:2167): a horizontal ⋯ in a bordered 28 square after the primary. */
+  boxed: Boolean = false,
+  /** The boxed square's side: 28 beside a list head's buttons, 36 beside a record head's standard button. */
+  boxSize: androidx.compose.ui.unit.Dp = 28.dp,
+) {
   if (actions.isEmpty()) return
   var open by remember { mutableStateOf(false) }
   Box(modifier) {
     WithTooltip(contentDescription) {
-      IconButton(onClick = { open = true }, Modifier.testTag("overflow-menu")) {
-        Icon(AglynIcons.named("more_vert"), contentDescription = contentDescription)
+      if (boxed) {
+        val shape = androidx.compose.foundation.shape.RoundedCornerShape(LocalShellMetrics.current.controlRadius)
+        Box(
+          Modifier.size(boxSize).clip(shape).background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
+            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = { open = true })
+            .testTag("overflow-menu").semantics { this.contentDescription = contentDescription },
+          contentAlignment = Alignment.Center,
+        ) {
+          Icon(AglynIcons.named("more_horiz"), contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface)
+        }
+      } else {
+        IconButton(onClick = { open = true }, Modifier.testTag("overflow-menu")) {
+          Icon(AglynIcons.named("more_vert"), contentDescription = contentDescription)
+        }
       }
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -124,9 +152,11 @@ fun OverflowMenu(actions: List<MenuAction>, modifier: Modifier = Modifier, conte
 @Composable
 fun ListHeader(title: String, modifier: Modifier = Modifier, actions: @Composable () -> Unit = {}) {
   FlowRow(
-    modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1f)),
+    modifier.fillMaxWidth().padding(horizontal = LocalContentInset.current ?: space(2f), vertical = space(1f)),
     horizontalArrangement = Arrangement.spacedBy(space(1f), Alignment.End),
     verticalArrangement = Arrangement.spacedBy(space(1f)),
+    // A Compact 28 action sits centered beside the ⋯ button's taller touch box.
+    itemVerticalAlignment = Alignment.CenterVertically,
   ) {
     // The title keeps its whole width: actions that do not fit beside it wrap to the next line rather than squeezing it to "…".
     val style = MaterialTheme.typography.titleSmall
@@ -169,7 +199,7 @@ fun <T> LoadContent(
         failedTitle,
         body = load.message,
         icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
-        action = { androidx.compose.material3.OutlinedButton(onClick = onRetry) { Text("Try again") } },
+        action = { androidx.compose.material3.OutlinedButton(shape = controlShape(), onClick = onRetry) { Text("Try again") } },
       )
       is Load.Ready -> content(load.value)
     }

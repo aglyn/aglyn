@@ -25,6 +25,7 @@ import { registerPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site
 import { registerPluginSiteEraser } from '@aglyn/aglyn/plugin-manager/plugin-site-erase'
 import { registerPluginTrustSigner } from '@aglyn/aglyn/plugin-manager/plugin-trust-signing'
 import { registerPluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
+import { registerPurchaseGatePreclearance } from '@aglyn/aglyn/plugin-manager/purchase-gate-preclearance'
 
 /**
  * Server-side error reporting for the console runtime (AGL-1921).
@@ -180,6 +181,32 @@ export async function register(): Promise<void> {
       },
     },
     { pluginId: 'console' },
+  )
+
+  /*
+   * And the staff bundle link's one-time waiver of a purchase gate
+   * (AGL-3955): a link a staff member minted for one workspace stands in for
+   * the domains plugin's 72-hour paid-invoice gate for one purchase. The
+   * plugin asks `core.purchase-gate-preclearance` and never reads the
+   * `bundleLinks` records, which are this app's. Deferred by RELATIVE path
+   * for the reason the cache above is.
+   */
+  registerPurchaseGatePreclearance(
+    {
+      check: async (input) => {
+        const { consoleBundleLinkPreclearance } = await import(
+          './utils/server/bundle-link-preclearance'
+        )
+        return await consoleBundleLinkPreclearance.check(input)
+      },
+      consume: async (preclearanceId) => {
+        const { consoleBundleLinkPreclearance } = await import(
+          './utils/server/bundle-link-preclearance'
+        )
+        return await consoleBundleLinkPreclearance.consume(preclearanceId)
+      },
+    },
+    { pluginId: 'console', key: 'bundle-links' },
   )
 
   /*

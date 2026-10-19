@@ -123,6 +123,8 @@ enum PageConfirm {
 struct PagesScreen: View {
   let context: NativePluginContext
   var initialPageID: String?
+  /// Opens New page on arrival (Create new's Page, `new=1`).
+  var startNew = false
   @State private var model = SitePagesModel()
   @State private var runner = ActionRunner()
   @State private var selection: String?
@@ -161,10 +163,11 @@ struct PagesScreen: View {
           }
         }
         .task(id: hostID) {
+          if startNew && canEdit { sheet = .newPage }
           await model.bind(context.firestore, hostID: hostID)
           if let initialPageID { await model.reveal(initialPageID) }
         }
-        .searchable(text: $model.search, prompt: "Search pages")
+        .aglynSearchable(text: $model.search, prompt: "Search pages")
         .task(id: model.search) {
           // A search finds any page: the windows still unread are read, only while searching.
           guard !model.search.trimmingCharacters(in: .whitespaces).isEmpty else { return }
@@ -176,8 +179,11 @@ struct PagesScreen: View {
       }
     }
     .navigationTitle("Pages")
-    .toolbar {
-      ToolbarItemGroup(placement: .primaryAction) {
+    .aglynScreenTitle("Pages")
+    // New page is the one primary action; a template and a group are in the More menu on the Mac and iPad.
+    .aglynPrimaryAction(id: "add-page", "New page", systemImage: "plus", enabled: canEdit, shortcut: KeyboardShortcut("n", modifiers: .command), help: AglynRoleReason.site("creating pages")) { open(.newPage) }
+    .aglynScreenToolbar(id: "pages") {
+      AglynSecondaryActions {
         Button {
           open(.fromTemplate)
         } label: {
@@ -193,17 +199,9 @@ struct PagesScreen: View {
         .disabled(!canEdit)
         .keyboardShortcut("n", modifiers: [.command, .shift])
         .accessibilityIdentifier("add-group")
-        Button {
-          open(.newPage)
-        } label: {
-          Label("New page", systemImage: "plus")
-        }
-        .disabled(!canEdit)
-        .keyboardShortcut("n", modifiers: .command)
-        .accessibilityIdentifier("add-page")
-        // Create with AI and anything else a plugin puts beside New page (the console's `hostScreens` zone).
-        SlotWidgets(context: context, slot: ListCreateZone.pages, placement: .header)
       }
+      // Create with AI and anything else a plugin puts beside New page (the console's `hostScreens` zone).
+      SlotWidgets(context: context, slot: ListCreateZone.pages, placement: .header)
     }
     .safeAreaInset(edge: .bottom) { banner }
   }
@@ -266,12 +264,13 @@ struct PagesScreen: View {
         } else {
           List {
             ForEach(rows) { row in
-              NavigationLink {
+              AglynPushLink {
                 PageDetail(
                   context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner,
                   canEdit: canEdit, canPublish: canPublish, pushed: true
                 )
                 .navigationTitle(row.page.name)
+                .aglynScreenTitle(row.page.name)
               } label: {
                 PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
                   Task { await model.toggle(row.id) }
@@ -283,13 +282,14 @@ struct PagesScreen: View {
             moreRow
           }
           // A link to one page (a notification, a job's draft) opens it, as the wide layout selects it.
-          .navigationDestination(item: $linkedPage) { id in
+          .aglynPushDestination(item: $linkedPage) { id in
             if let row = rows.first(where: { $0.id == id }) {
               PageDetail(
                 context: context, hostID: hostID, pageID: id, model: model, api: api, runner: runner,
                 canEdit: canEdit, canPublish: canPublish, pushed: true
               )
               .navigationTitle(row.page.name)
+              .aglynScreenTitle(row.page.name)
             }
           }
           .onChange(of: rows, initial: true) { _, rows in
@@ -471,71 +471,56 @@ struct PageDetail: View {
     sheet = next
   }
 
-  @ViewBuilder
-  private func actionsMenu(_ row: PageTreeRow) -> some View {
+  /// The page's acts (the calmer screens): its next step as the one filled button (a page nobody can visit yet is
+  /// published; a live one is edited in the Besigner), and every other act in ⋯, Delete last.
+  private func actions(_ row: PageTreeRow) -> (primary: AglynRecordAction?, more: [AglynRecordAction]) {
     let page = row.page
-    Menu {
-      Button { open(.rename(page)) } label: {
-        Label(page.isGroup ? "Rename group" : "Rename", systemImage: "pencil")
-      }
-      .disabled(!canEdit)
-      if !page.isGroup {
-        Button { open(.duplicate(page)) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
-          .disabled(!canEdit)
-        Button { open(.saveTemplate(page)) } label: { Label("Save as template", systemImage: "bookmark") }
-          .disabled(!canEdit)
-        Button { open(.move(page)) } label: { Label("Move", systemImage: "folder") }
-          .disabled(!canPublish)
-        if row.livePath != nil {
-          Button { confirm = .unpublish(page) } label: { Label("Unpublish", systemImage: "eye.slash") }
-            .disabled(!canPublish)
-        }
-      }
-      Divider()
-      Button(role: .destructive) {
-        confirm = .delete(page, livePath: row.livePath)
-      } label: {
-        Label(page.isGroup ? "Delete group" : "Delete", systemImage: "trash")
-      }
-      .disabled(!canPublish)
-    } label: {
-      Label("More actions", systemImage: "ellipsis.circle").labelStyle(.iconOnly).imageScale(.large)
-    }
-    .menuIndicator(.hidden)
-    .buttonStyle(.borderless)
-    .fixedSize()
-    .accessibilityIdentifier("page-actions")
-  }
-
-  @ViewBuilder
-  private func primaryButtons(_ row: PageTreeRow) -> some View {
-    let page = row.page
-    Button {
+    let canPublishHere = canPublish && page.kind != screenKindTemplate
+    let edit = AglynRecordAction(
+      "page-edit-besigner", "Edit in the Besigner", systemImage: "paintbrush.pointed", enabled: page.versionID != nil
+    ) {
       if let version = page.versionID {
         context.openBesigner(DeepLinks.besignerScreen(page.id, versionID: version), scope: .site)
       }
-    } label: {
-      Label("Edit in the Besigner", systemImage: "paintbrush.pointed")
     }
-    .buttonStyle(.borderedProminent)
-    .disabled(page.versionID == nil)
-    .keyboardShortcut("e", modifiers: .command)
-    .accessibilityIdentifier("page-edit-besigner")
-    Button(row.livePath != nil ? "Change address" : "Publish") {
-      open(.publish(page, currentSlug: row.home ? "/" : page.slug ?? ""))
-    }
-    .buttonStyle(.bordered)
-    .disabled(!canPublish || page.kind == screenKindTemplate)
-    .accessibilityIdentifier("page-publish")
-    if let live = row.livePath, let link = livePageURL(model.routing, livePath: live), let url = URL(string: link) {
-      Button {
-        openURL(url)
-      } label: {
-        Label("Open live page", systemImage: "arrow.up.right.square")
+    let publish = AglynRecordAction(
+      "page-publish", row.livePath != nil ? "Change address" : "Publish", systemImage: "paperplane", enabled: canPublishHere
+    ) { open(.publish(page, currentSlug: row.home ? "/" : page.slug ?? "")) }
+    let primary: AglynRecordAction? = page.isGroup ? nil : row.livePath == nil && canPublishHere ? publish : edit
+    var more: [AglynRecordAction] = []
+    if !page.isGroup {
+      if primary?.id != edit.id { more.append(edit) }
+      if primary?.id != publish.id { more.append(publish) }
+      if let live = row.livePath, let link = livePageURL(model.routing, livePath: live), let url = URL(string: link) {
+        more.append(AglynRecordAction("page-open-live", "Open live page", systemImage: "arrow.up.right.square") { openURL(url) })
       }
-      .buttonStyle(.bordered)
-      .accessibilityIdentifier("page-open-live")
     }
+    more.append(
+      AglynRecordAction("page-rename", page.isGroup ? "Rename group" : "Rename", systemImage: "pencil", enabled: canEdit) {
+        open(.rename(page))
+      })
+    if !page.isGroup {
+      more.append(
+        AglynRecordAction("page-duplicate", "Duplicate", systemImage: "plus.square.on.square", enabled: canEdit) {
+          open(.duplicate(page))
+        })
+      more.append(
+        AglynRecordAction("page-save-template", "Save as template", systemImage: "bookmark", enabled: canEdit) {
+          open(.saveTemplate(page))
+        })
+      more.append(AglynRecordAction("page-move", "Move", systemImage: "folder", enabled: canPublish) { open(.move(page)) })
+      if row.livePath != nil {
+        more.append(
+          AglynRecordAction("page-unpublish", "Unpublish", systemImage: "eye.slash", enabled: canPublish) {
+            confirm = .unpublish(page)
+          })
+      }
+    }
+    more.append(
+      AglynRecordAction(
+        "page-delete", page.isGroup ? "Delete group" : "Delete", systemImage: "trash", destructive: true, enabled: canPublish
+      ) { confirm = .delete(page, livePath: row.livePath) })
+    return (primary, more)
   }
 
   private func content(_ row: PageTreeRow) -> some View {
@@ -543,23 +528,12 @@ struct PageDetail: View {
     let status = pageStatus(row)
     return Form {
       Section {
-        HStack(alignment: .firstTextBaseline) {
-          Text(page.name).font(AglynFont.title2).accessibilityAddTraits(.isHeader)
-          Spacer(minLength: AglynSpace.one)
-          actionsMenu(row)
-        }
-        HStack(spacing: AglynSpace.one) {
-          if row.home { StatusChip("Home page", tone: .info) }
-          StatusChip(status.label, tone: status.live ? .success : .neutral)
-        }
+        let acts = actions(row)
+        AglynRecordHeader(
+          page.name, subtitle: row.home ? "Home page" : nil, systemImage: page.isGroup ? "folder" : SiteSymbols.page,
+          status: (status.label, status.live ? .success : .neutral), primary: acts.primary, more: acts.more)
         if let description = page.description {
           Text(description).font(AglynFont.subheadline).foregroundStyle(.secondary)
-        }
-        if !page.isGroup {
-          ViewThatFits(in: .horizontal) {
-            HStack(spacing: AglynSpace.one) { primaryButtons(row) }
-            VStack(alignment: .leading, spacing: AglynSpace.one) { primaryButtons(row) }
-          }
         }
       }
       if !page.isGroup {
@@ -581,6 +555,10 @@ struct PageDetail: View {
     .onReceive(NotificationCenter.default.publisher(for: RestFirestoreReader.rereadNotification)) { _ in
       Task { await model.reread([pageID]) }
     }
+    #if os(iOS)
+      // The record's head already shows the page's name large.
+      .navigationBarTitleDisplayMode(.inline)
+    #endif
     .accessibilityIdentifier("page-detail")
   }
 }
@@ -596,8 +574,13 @@ struct PageVersionsSection: View {
   let canPublish: Bool
   @State private var versions = LiveQuery()
 
+  private var versionCount: Int? {
+    if case .ready(let docs) = versions.state { return docs.count }
+    return nil
+  }
+
   var body: some View {
-    Section("Versions") {
+    AglynFoldedSection("Versions", count: versionCount, identifier: "page-fold-versions") {
       switch versions.state {
       case .loading:
         SkeletonRows(count: 2)

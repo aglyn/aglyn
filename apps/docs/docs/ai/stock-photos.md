@@ -23,9 +23,17 @@ potter's bowl is never filled with a bowl of fruit or a bird at a feeder. When n
 the thing itself, the space gets a photo of your craft instead, such as *handmade ceramics*.
 One start never uses the same photo twice.
 
-When the search finds nothing at all, or stock photos are not available on the deployment
-your workspace runs on, the space gets one of the **starter photos** that come with every
-site.
+When a photo cannot be copied into your library, for example because Pixabay is busy and
+asks to wait, the job waits and tries again. If it still cannot, the space takes one of the
+photos the same start already placed on your site, on another page or on a dataset's
+records, chosen to suit the space and never the same one as the picture beside it. Only a
+start that has no photo of its own yet, or a deployment without stock photos, uses the
+**starter photos** that come with every site.
+
+When the search finds photos but none of them fits the space, the space is left without a
+picture: its section shows its own background, and the words take the space. A page whose
+every picture would be left out this way keeps one: its first picture takes one of the
+start's own photos, or a starter photo.
 
 ## In your media library {#in-your-media-library}
 

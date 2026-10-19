@@ -99,8 +99,9 @@ private fun hoursOf(draft: BookingServiceDraft): List<List<HoursWindow>> =
 private fun withHours(draft: BookingServiceDraft, days: List<List<HoursWindow>>): BookingServiceDraft =
   draft.copy(windowText = days.map { list -> formatBookingWindows(list.map { BookingWindow(end = it.end.toLong(), start = it.start.toLong()) }) })
 
+/** The site's bookable services; [startNew] (`new=1`, the "+" menu's Service) opens a new one's editor. */
 @Composable
-fun BookingServicesScreen(context: NativePluginContext) {
+fun BookingServicesScreen(context: NativePluginContext, startNew: Boolean = false) {
   val hostId = context.hostId ?: return
   val live = liveServices(context)
   val api = remember(hostId, context.api, context.writer) { BookingsApi(context.api, context.writer, hostId) }
@@ -128,6 +129,7 @@ fun BookingServicesScreen(context: NativePluginContext) {
 
   AglynListDetail(
     modifier = Modifier.testTag("booking-services"),
+    initialSelected = if (startNew) NEW else null,
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1f)), verticalAlignment = Alignment.CenterVertically) {
@@ -226,7 +228,7 @@ private fun ServiceEditor(
   val problem = bookingServiceDraftProblem(form.name)
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-      Modifier.widthIn(max = 760.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("service-editor"),
+      Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)).testTag("service-editor"),
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {
       Row(verticalAlignment = Alignment.CenterVertically) {

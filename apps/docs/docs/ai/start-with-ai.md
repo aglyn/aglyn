@@ -49,6 +49,11 @@ are kept either way. Pressing Enter in a text answer is the same as **Next**. If
 cannot move on, the reason shows under the field and the cursor goes to it. **Skip** and
 the close control stay in the bar at the top on every step.
 
+Every question step also has **More details**, a closed section under its answers with
+optional extras that fit the step. Open it to tell the site more about your business, or
+leave it closed. Everything in it can be changed later. If something in it cannot be used,
+**Next** opens it and says why under the field.
+
 ## Your site {#your-business}
 
 **What kind of site are you creating?** is the one required answer. A few words is
@@ -62,6 +67,9 @@ practice**, **Trades business**, **Shop**, **Nonprofit**, **Personal portfolio**
 What you write here picks the site's [style](./site-looks.md#choose-a-style), unless you
 choose one yourself, and decides which pages it usually has and what each page says.
 
+**More details** here: a **Tagline**, a short line about the business in your words, and
+the **Year founded**.
+
 ## Audience {#audience}
 
 **Who is it for?** is optional. It is who every page and every search listing is written
@@ -69,15 +77,22 @@ for, and it decides which questions the contact form asks. For example, *local d
 who want a regular groom booked online*.
 
 Both answers also fill your site's [business profile](./business-profile.md), which every
-later AI job for the site reads.
+later AI job for the site reads, and so do the areas you serve, from **More details**.
+
+**More details** here: the **Areas you serve** (cities, towns or neighborhoods, one a
+line), your **Price range** ($ to $$$$) and the **Languages you serve customers in**.
 
 ## Style {#style}
 
 The **Style** step shows each style as a card with a picture: an example home page of
-that kind of site, drawn in its style. A photographer's opens on a gallery, a café's on
-its menu, an online store's on its products, a blog's on its latest posts, an events
-site's on its program and a real estate site's on its listings, so you can see each
-style's colors, fonts, buttons and corners, and the shape of its pages, before you pick.
+that kind of site, drawn in its style, each with a photo. A photographer's opens on a
+gallery, a café's on its heading centered over a photo of the café with its menu under
+it, an online store's on two photos of what it sells, a blog's on a centered heading
+above a wide photo, an events site's on its dates beside two photos of the day and a real
+estate site's on a card over a photo of a home, so you can see each style's colors,
+fonts, buttons and corners, and the shape of its pages, before you pick. The picked card
+is outlined in color and carries a check. See
+[each style's layout](./site-looks.md#each-styles-layout).
 **Pick for me** comes first and is chosen unless you choose another. It names the style
 your first answer suggests, such as *From your answer: Home services & trades*. The style
 decides how the site looks and which pages it usually has: an online store, a portfolio,
@@ -85,10 +100,20 @@ a restaurant, a blog and so on. Each site gets its own variation, so two sites w
 same style still look different, and yours will not match the picture exactly. See
 [Looks and themes for AI sites](./site-looks.md).
 
+**More details** here: a **Brand color**, picked from the colors shown. It becomes your
+site's main color, kept readable everywhere it is used. **Let the style choose** leaves it
+to the style.
+
 ![The Style step: Pick for me chosen, naming the style the answer suggests, beside cards for Business & services, Home services & trades and more, each with a picture of an example home page of that kind and a line about the look](/img/ai/start-with-ai-style.png)
 
 ## Details {#details}
 
+- **Business phone** and **Business email** come first. Both are optional. When you give
+  them, your site shows them from the start: on the contact page, in the footer of every
+  page and on the buttons that ask a visitor to call or write, as links that open the
+  phone or the email app. Your site's search listing details and the information AI
+  assistants read carry them too. Without them, no page shows a phone or email row, and
+  nothing is made up.
 - **Where do form submissions go?** decides where messages from the site's contact form
   land:
   - **The Inbox** (the default): every message is one to read and reply to.
@@ -103,11 +128,18 @@ same style still look different, and yours will not match the picture exactly. S
   design. Nothing sends it until you put it in an automation or a campaign. Free starts
   do not draft one.
 
+**More details** here: the **Street address**, **City or town**, **State or region**,
+**ZIP or postal code** and **Country**; the **Opening hours**, picked a day at a time (a
+switch for each day, and its times from a list); and your **Social profiles**, one link a
+line, such as *instagram.com/yourbusiness*.
+
 ## Review {#review}
 
 The last step lists every answer: the kind of site, who it is for, the style, where form
-submissions go, the pages and, on a paid plan, the welcome email. **Edit** beside an answer
-opens its step, and **Back to review** returns here. **Plan my site** starts the site.
+submissions go, the pages and, on a paid plan, the welcome email, then every detail you
+gave, such as the phone, the email, the address and the opening hours. **Edit** beside an
+answer opens its step, and **Back to review** returns here. **Plan my site** starts the
+site.
 
 ![The Review step: each answer with Edit beside it, and at the bottom the estimate, the model switch, Back and Plan my site](/img/ai/start-with-ai-review.png)
 
@@ -132,7 +164,8 @@ builds, in this order:
 
 1. **A look**: a base theme, colors, fonts and the style of buttons, cards and forms, made
    for your kind of site. See [Looks and themes](./site-looks.md).
-2. **A header and footer**, as the layout every page sits in, with a link to each page.
+2. **A header and footer**, as the layout every page sits in, with a link to each page. The
+   footer shows the phone and email you gave, as links that call and write.
 3. **A contact form**, saved on the Forms page, routed the way you chose, and placed on the
    page that needs it.
 4. **Your first posts or products**, when the site is a blog or, on paid plans, a store.
@@ -143,12 +176,14 @@ builds, in this order:
 5. **Your pages**, each with its sections, its address and its own search title and
    description. A home page opens with a hero and has several bands below it, such as
    services, about, social proof and a closing call to action. Photos come from your media
-   library or a [stock photo](./stock-photos.md).
+   library or a [stock photo](./stock-photos.md), and every photo gets a description for
+   screen readers and search engines. The page with your contact form also shows the
+   phone and email you gave.
 6. **A welcome email draft**, if you asked for one.
 7. **Publishing**: see [Published, and found by search engines](#published-and-indexable).
 
-Contact details are never made up. A phone number, address or opening hours appear only
-when you have entered them in your site settings.
+Contact details are never made up. A phone number, email, address or opening hours appear
+only when you gave them on the **Details** step or entered them in your site settings.
 
 ## Building your site {#building-your-site}
 
@@ -212,9 +247,16 @@ A guided start **publishes** the site when it finishes, so it is live at its add
 
 - the new home page takes the site's address, and an untouched starter home page is moved
   to the trash;
-- each page gets an entry in the header's navigation;
+- each page gets an entry in the header's navigation, and takes its place in **Pages** in
+  the order the plan lists it, which the
+  [built-in error page](../building-sites/site-protection/error-screens.md)'s links follow too;
 - a page that cannot be published stays a draft, and **Building your site** names it with
-  the reason, for you to fix in **Edit your pages** and publish.
+  the reason, for you to fix in **Edit your pages** and publish;
+- a page that **Couldn't be built**, or stayed a draft, is linked from nowhere on the
+  published site: its header and footer entries, and the buttons on other pages that went
+  to it, are taken out, so no visitor follows a link to a missing page. **Try again what
+  failed** adds the page's header entry back once it is built; a button you want on
+  another page, add in the Besigner.
 
 The site is **open to search engines from the start**. A guided start never hides a site
 from search. If you want to keep it out of search results for now, use the site's
@@ -225,10 +267,38 @@ name, which search engines are asked not to index.
 
 ## The site's search listing {#the-sites-search-listing}
 
-The site's own search title and description, the fallback for every page without its own,
-are not saved for you. The site's **SEO** section shows them in a card, **The listing your
-answers describe**. **Put in the form** stages them in the SEO form below as unsaved
-changes, and the form's **Update** saves them.
+The site's own search title and description are the fallback for every page without its
+own, and what search results and AI assistants read about the site as a whole. When the
+site is published, your answers become them, led by the site's name, as long as the site
+still has the title and description it was created with (its name and *Welcome to …*).
+
+A title or description you changed yourself is never replaced. Instead, the site's **SEO**
+section shows the start's in a card, **The listing your answers describe**. **Put in the
+form** stages them in the SEO form below as unsaved changes, and the form's **Update** saves
+them.
+
+## Your business, for search engines and AI assistants {#business-details}
+
+When the site is published, your answers also fill the site's
+[structured data](../building-sites/seo/overview.md#entity-card) in **Setup** → **SEO**, so search
+engines and AI assistants can tell who runs the site and how to reach you:
+
+- **Entity**: the business's name and description, its phone and email (with **Contact is
+  for** set to *customer support*), its address, and what kind of business it is, from the
+  style you picked (a plumber, a restaurant, a salon), with the areas it serves, its
+  opening hours, its price range and its social profiles where you gave them. A personal
+  site is published as a person.
+- **Entity logo**: your site logo, when the site already has one.
+- **AI agents**: when an assistant should use the site, and how to reach a person there.
+  These open the site's guide for AI assistants, so an assistant asked about your business
+  finds what it does, where it works and how to reach you.
+
+The email and the street address also fill **Setup** → **Details** →
+[**Business details**](../building-sites/bindings/overview.md#site-details), as the site's
+support email and postal address.
+
+Only empty fields are filled, so nothing you already entered there is replaced. Change any
+of it in **Setup** → **SEO** at any time.
 
 ## A store from the start {#a-store-from-the-start}
 

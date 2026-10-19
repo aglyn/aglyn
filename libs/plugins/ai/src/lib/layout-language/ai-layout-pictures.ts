@@ -28,13 +28,19 @@ import { aiLayoutLabel, aiLayoutSpeaksOtherThanEnglish } from './ai-layout-label
  * stored page — it finds each empty slot, decides what kind of picture the
  * slot is, and fills it with a photo the site can serve from its own origin.
  *
- * Two sources fill a slot, in order:
+ * Three sources fill a slot, in order:
  *
  * 1. A stock photo searched for by the slot's own description and copied into
  *    the site's media library (`jobs/ai-layout-stock-photos.ts`), when the
  *    deployment has a stock-photo key.
- * 2. Where the library cannot be asked at all — no stock-photo key, the
- *    library down, refusing or out of time before it answered — one of the
+ * 2. Where the library failed the slot — down, refusing, out of time, or its
+ *    photo not copied — one of the photos the same job already placed on
+ *    this site, on its other pages or its datasets' records
+ *    ({@link aiLayoutJobPhotoPicks}, AGL-3988): each was found for the
+ *    site's own world, so a wedding photographer's home page shows a wedding
+ *    and never an office.
+ * 3. Where the job has no photo of its own — no stock-photo key, or the
+ *    library failed it from the start — one of the
  *    STARTER PHOTOS every new site is born with (`DEFAULT_SITE_IMAGES`,
  *    served at `/_static/starter/` by the tenant and the console alike,
  *    credited in the CREDITS file beside them). They are the platform's own
@@ -343,6 +349,21 @@ export function aiLayoutStarterPhotos(
 const NEUTRAL_STARTERS: readonly StarterName[] = ['hero', 'desk']
 
 /**
+ * A neutral starter for each of a list's records (AGL-3988), where the site
+ * has a library and the job has no photo of its own: the two taken in turn
+ * from the seed, so no record shows the photo of the one beside it. A card
+ * of a listing cannot drop its frame as a page's picture does, so every
+ * record takes one. Pure.
+ */
+export function aiLayoutNeutralStarterRun(count: number, seed: string): AiLayoutPicturePhoto[] {
+  const pool = rotate(NEUTRAL_STARTERS, aiLayoutSeedNumber(seed))
+  return Array.from({ length: Math.max(0, count) }, (_, index) => {
+    const photo = AI_LAYOUT_STARTER_PHOTOS[pool[index % pool.length] as StarterName]
+    return { src: photo.src, width: photo.width, height: photo.height, alt: photo.alt }
+  })
+}
+
+/**
  * A neutral starter for each slot a library could not fill, where the site
  * has a library (AGL-3923): each at most once on a page, the hero served
  * first and each pool turned by the seed, and none for a portrait of the
@@ -367,6 +388,80 @@ export function aiLayoutNeutralStarterPhotos(
     photos[index] = { src: photo.src, width: photo.width, height: photo.height, alt: photo.alt }
   })
   return photos
+}
+
+/** A text's words a photo's own words may share: lowercase, four letters or more. */
+const wordsOf = (text: string): Set<string> =>
+  new Set(
+    text
+      .toLowerCase()
+      .split(/[^a-zÀ-ɏ]+/)
+      .filter((word) => word.length >= 4),
+  )
+
+/**
+ * The job's own photos for the slots a library could not fill (AGL-3988):
+ * the photos THIS job already placed on this site — on its other pages, on
+ * its datasets' records, and on this page — which were each found for the
+ * site's own world, before any starter. The beta.270 Sugar Hollow
+ * Photography start (2026-10-19) opened a wedding photographer's home page
+ * on the starters' desk and an office team, and filed five wedding galleries
+ * under a workbench, a windowsill and the same office, while the library
+ * had already given the job three wedding and family photos.
+ *
+ * Each slot `need` names takes the one that fits it best: one this page does
+ * not show yet before one it does, a wide photo for a hero, the shape
+ * nearest its frame, and the most words shared with what the slot says it
+ * shows; never the photo of the slot beside it. A product's photo and a
+ * portrait of the business's people are of one named thing, which no other
+ * photo is, so they take none. Among equals the seed picks, so one job
+ * always picks the same. `null` for a slot given none. Pure.
+ */
+export function aiLayoutJobPhotoPicks(
+  slots: readonly AiLayoutPictureSlot[],
+  need: readonly boolean[],
+  jobPhotos: readonly AiLayoutPicturePhoto[],
+  placed: ReadonlyArray<AiLayoutPicturePhoto | null | undefined>,
+  seed: string,
+): Array<AiLayoutPicturePhoto | null> {
+  const seen = new Set<string>()
+  const pool = jobPhotos.filter((photo) => {
+    if (!photo.src || !(photo.width > 0) || !(photo.height > 0) || seen.has(photo.src)) return false
+    seen.add(photo.src)
+    return true
+  })
+  const picks: Array<AiLayoutPicturePhoto | null> = slots.map(() => null)
+  if (!pool.length) return picks
+  const shown = slots.map((_slot, index) => placed[index]?.src || '')
+  const order: AiLayoutPictureRole[] = ['hero', 'about', 'gallery']
+  const served = slots
+    .map((slot, index) => ({ slot, index }))
+    .filter(({ slot, index }) => need[index] && !slot.product && !slot.people)
+    .sort((a, b) => order.indexOf(a.slot.role) - order.indexOf(b.slot.role) || a.index - b.index)
+  const turn = aiLayoutSeedNumber(seed)
+  for (const { slot, index } of served) {
+    const beside = new Set([shown[index - 1], shown[index + 1]].filter(Boolean))
+    const says = wordsOf(slot.alt)
+    let best: { photo: AiLayoutPicturePhoto; score: number; rank: number } | null = null
+    for (const [at, photo] of pool.entries()) {
+      if (beside.has(photo.src)) continue
+      const aspect = photo.width / photo.height
+      const uses = shown.filter((src) => src === photo.src).length
+      const shared = [...wordsOf(photo.alt ?? '')].filter((word) => says.has(word)).length
+      const score =
+        -100 * uses +
+        (slot.role === 'hero' && aspect >= 1.3 ? 20 : 0) -
+        10 * Math.abs(Math.log(aspect / (slot.aspect > 0 ? slot.aspect : 1))) +
+        4 * shared
+      // The seed turns the pool, so equals are taken in a per-job order.
+      const rank = (at - (turn % pool.length) + pool.length) % pool.length
+      if (!best || score > best.score || (score === best.score && rank < best.rank)) best = { photo, score, rank }
+    }
+    if (!best) continue
+    picks[index] = { ...best.photo }
+    shown[index] = best.photo.src
+  }
+  return picks
 }
 
 /**
@@ -395,7 +490,11 @@ export function aiLayoutPlacePictures(
     delete props['loading']
     // A photo placed is described by its words, never hidden from a screen
     // reader: a stand-in was decorative only while it showed nothing (AGL-3856).
-    if (photo.alt?.trim()) delete props['decorative']
+    // One that brings no words of its own, such as an owner's upload with no
+    // alt text, keeps the slot's (AGL-3979): a picture a visitor sees always
+    // has a description.
+    const alt = photo.alt?.trim() || (typeof props['alt'] === 'string' ? props['alt'].trim() : '')
+    if (alt) delete props['decorative']
     next[slot.imageId] = {
       ...node,
       props: {
@@ -403,7 +502,7 @@ export function aiLayoutPlacePictures(
         src: photo.src,
         intrinsicWidth: photo.width,
         intrinsicHeight: photo.height,
-        ...(photo.alt?.trim() ? { alt: photo.alt.trim() } : {}),
+        ...(alt ? { alt } : {}),
         ...(index === lead && slot.role === 'hero' ? { loading: 'eager' } : {}),
       },
     }
@@ -509,9 +608,13 @@ export type AiLayoutPictureSource = (
 /**
  * Fills a stored page's empty picture slots (AGL-3660): from `source` where
  * one is given and it answers; a slot it answers with nothing fitting stays
- * without a photo and is taken out ({@link aiLayoutDropEmptyPictures}); every
- * other slot takes a starter photo, described by its own words (AGL-3831). Never throws, and never leaves a page worse than it
- * came: a picture is decoration, and a job never fails over one.
+ * without a photo and is taken out ({@link aiLayoutDropEmptyPictures}). A
+ * slot it could not answer — the library down, out of time, or its photo not
+ * copied — takes one of the photos the job already placed on this site
+ * (`jobPhotos`, {@link aiLayoutJobPhotoPicks}, AGL-3988), and only where the
+ * job has none of its own, a starter photo described by its own words
+ * (AGL-3831). Never throws, and never leaves a page worse than it came: a
+ * picture is decoration, and a job never fails over one.
  */
 export async function aiResolveLayoutPictures(
   nodes: NodesMap,
@@ -522,6 +625,12 @@ export async function aiResolveLayoutPictures(
     /** A per-job word, so two sites do not open with the same photo. */
     seed: string
     source?: AiLayoutPictureSource | null
+    /**
+     * The photos this job already placed on this site (AGL-3988): its other
+     * pages' and its datasets' records', each found for the site's world.
+     * Taken before any starter where `source` could not fill a slot.
+     */
+    jobPhotos?: readonly AiLayoutPicturePhoto[]
     /** The site's language (AGL-3750); a starter photo's English words are not its own. */
     language?: string
   },
@@ -537,7 +646,7 @@ export async function aiResolveLayoutPictures(
       try {
         found = await input.source(slots)
       } catch (error) {
-        console.warn('ai layout pictures: the stock source failed; starter photos fill the page', { error })
+        console.warn('ai layout pictures: the stock source failed; the job’s own photos or starters fill the page', { error })
         found = []
       }
     }
@@ -546,25 +655,39 @@ export async function aiResolveLayoutPictures(
     const otherLanguage = aiLayoutSpeaksOtherThanEnglish(input.language)
     const said = (photo: AiLayoutPicturePhoto): AiLayoutPicturePhoto =>
       otherLanguage ? { ...photo, alt: aiLayoutLabel('illustrativePhoto', input.language) } : photo
-    // With a library, a starter is only ever a neutral one (AGL-3923): the
-    // beta.267 Brightvale start, whose library refused its copies, showed a
-    // pottery bench and a coffee shop's owner as a marketer's pictures.
-    const starters = (input.source ? aiLayoutNeutralStarterPhotos(slots, input.seed) : aiLayoutStarterPhotos(slots, input.seed)).map(
-      (photo) => (photo ? said(photo) : null),
-    )
-    const photos = slots.map((_slot, index) => {
+    /** The slots the source could not answer: no library, or it failed them. */
+    const unanswered = slots.map((_slot, index) => !found[index])
+    const photos: Array<AiLayoutPicturePhoto | null> = slots.map((_slot, index) => {
       const answer = found[index]
-      if (answer) return answer.src ? answer : null
-      return starters[index] ?? null
+      return answer?.src ? answer : null
     })
+    // With a library, the job's own photos come before any starter (AGL-3988),
+    // and a starter is only ever a neutral one (AGL-3923): the beta.267
+    // Brightvale start, whose library refused its copies, showed a pottery
+    // bench and a coffee shop's owner as a marketer's pictures.
+    const own = input.source ? (input.jobPhotos ?? []).filter((photo) => photo.src && photo.width > 0 && photo.height > 0) : []
+    if (own.length) {
+      aiLayoutJobPhotoPicks(slots, unanswered, own, photos, input.seed).forEach((pick, index) => {
+        if (pick && unanswered[index]) photos[index] = pick
+      })
+    } else {
+      const starters = input.source ? aiLayoutNeutralStarterPhotos(slots, input.seed) : aiLayoutStarterPhotos(slots, input.seed)
+      starters.forEach((photo, index) => {
+        if (photo && unanswered[index]) photos[index] = said(photo)
+      })
+    }
     // The page floor (AGL-3923; Zach, 2026-10-12: a starter photo before no
     // photo at all): a page the library answered that would show no picture
-    // keeps one neutral starter, in its hero, else its first slot.
+    // keeps one, in its hero, else its first slot: one of the job's own
+    // photos where it has any (AGL-3988), else a neutral starter.
     if (input.source && !photos.some((photo) => photo?.src)) {
       const at = Math.max(0, slots.findIndex((slot) => slot.role === 'hero'))
+      const lead = { ...(slots[at] as AiLayoutPictureSlot), product: undefined, people: undefined }
+      const [pick] = aiLayoutJobPhotoPicks([lead], [true], own, [null], input.seed)
       const [floor] = rotate(NEUTRAL_STARTERS, aiLayoutSeedNumber(input.seed))
-      const photo = floor ? AI_LAYOUT_STARTER_PHOTOS[floor] : null
-      if (photo) photos[at] = said({ src: photo.src, width: photo.width, height: photo.height, alt: photo.alt })
+      const starter = floor ? AI_LAYOUT_STARTER_PHOTOS[floor] : null
+      if (pick) photos[at] = pick
+      else if (starter) photos[at] = said({ src: starter.src, width: starter.width, height: starter.height, alt: starter.alt })
     }
     return aiLayoutDropEmptyPictures(aiLayoutPlacePictures(nodes, slots, photos), slots, photos, input.sectionIds)
   } catch (error) {
