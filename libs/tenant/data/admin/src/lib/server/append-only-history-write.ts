@@ -19,6 +19,7 @@ import {
   type AppendOnlyHistoryRow,
   sortHistoryRows,
 } from '@aglyn/aglyn/app-utils/append-only-history'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { setAdminAudit } from './admin-audit-write'
 
@@ -58,7 +59,9 @@ export function appendHistoryRow(
   row: AppendOnlyHistoryRow,
   audit?: HistoryAudit | null,
 ): FirebaseFirestore.DocumentReference {
-  const ref = history.doc()
+  // Minted once, before the write: the id is what the row's Stripe
+  // idempotency key is built from, so it never changes once written.
+  const ref = history.doc(createResourceUid())
   ;(writer as Pick<FirebaseFirestore.WriteBatch, 'create'>).create(ref, row)
   if (audit) {
     setAdminAudit(writer as Pick<FirebaseFirestore.WriteBatch, 'set'>, firestore, {

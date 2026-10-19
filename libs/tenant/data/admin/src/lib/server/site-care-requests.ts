@@ -21,6 +21,7 @@ import {
   type AppendOnlyHistoryRow,
   type HistoryStripeRef,
 } from '@aglyn/aglyn/app-utils/append-only-history'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import {
   describeHours,
   ownerApprovalSentence,
@@ -353,7 +354,7 @@ export async function openSiteCareRequest(
   const dueAtMs = addBusinessDays(nowMs, SITE_CARE_RESPONSE_BUSINESS_DAYS)
   const ref = input.dedupeKey
     ? firestore.collection(TICKETS).doc(siteCareMessageDocId('care', input.dedupeKey))
-    : firestore.collection(TICKETS).doc()
+    : firestore.collection(TICKETS).doc(createResourceUid())
   if (input.dedupeKey && (await ref.get()).exists) return { ticketId: ref.id, dueAtMs, duplicate: true }
   const now = FieldValue.serverTimestamp()
   const batch = firestore.batch()
@@ -380,7 +381,7 @@ export async function openSiteCareRequest(
     createdAt: now,
     updatedAt: now,
   })
-  batch.create(ref.collection('messages').doc(), {
+  batch.create(ref.collection('messages').doc(createResourceUid()), {
     authorId: input.requester.uid,
     authorEmail: input.requester.email,
     staff: false,
@@ -455,7 +456,7 @@ export async function appendSiteCareReply(
   const now = FieldValue.serverTimestamp()
   const messageRef = input.dedupeKey
     ? ticket.ref.collection('messages').doc(siteCareMessageDocId('mail', input.dedupeKey))
-    : ticket.ref.collection('messages').doc()
+    : ticket.ref.collection('messages').doc(createResourceUid())
   if (input.dedupeKey && (await messageRef.get()).exists) return { appended: false }
   const batch = firestore.batch()
   batch.create(messageRef, {
@@ -1687,7 +1688,7 @@ export async function sendSiteCareQuote(
   })
   const nowMs = nowOf(deps)
   const batch = firestore.batch()
-  batch.create(ticket.ref.collection('messages').doc(), {
+  batch.create(ticket.ref.collection('messages').doc(createResourceUid()), {
     authorId: input.actor.uid,
     authorEmail: input.actor.email,
     staff: true,
