@@ -26,7 +26,7 @@ import { render, screen } from '@testing-library/react'
 import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import { AI_BUILD_STORE_PRODUCTS_TEXT, aiStoreFinishLinks } from './ai-job-links'
+import { AI_BUILD_STORE_PRODUCTS_TEXT, aiStoreFinishHostId, aiStoreFinishLinks } from './ai-job-links'
 import { AiStoreFinishCard } from './ai-store-finish-card.component'
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
@@ -36,6 +36,13 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
       {children as string}
     </a>
   ),
+}))
+
+/** Swapped per case: what the store's Stripe account can do. */
+let mockPayments: Record<string, unknown> = { state: 'pending', settled: false, ready: false, blocked: false, reason: null, href: null }
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  __esModule: true,
+  useMerchantPayments: () => mockPayments,
 }))
 
 /** The commerce plugin's addresses as it publishes them (`commerce-record-routes.ts`). */
@@ -90,6 +97,55 @@ describe('what is left to finish an AI-built store', () => {
     render(<AiStoreFinishCard steps={steps ?? []} />)
     expect(screen.getByText('Connect payments')).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Set up payments' })).toBeNull()
+  })
+})
+
+describe('the Payments step reads the workspace’s Stripe account (AGL-3982)', () => {
+  beforeEach(standInCommerceRoutes)
+  afterEach(() => unregisterPluginServices('commerce'))
+
+  const settled = (state: string, reason: string | null) => ({
+    state,
+    settled: true,
+    ready: state === 'ready',
+    blocked: state !== 'ready',
+    reason,
+    href: '/acme/hosts/ember/products/payments',
+  })
+
+  it('finds the store’s site on the job', () => {
+    expect(aiStoreFinishHostId(storeJob('succeeded'))).toBe('host-1')
+    expect(aiStoreFinishHostId({ outputs: [] })).toBeNull()
+  })
+
+  it('marks payments done once Stripe takes payments', () => {
+    mockPayments = settled('ready', null)
+    const steps = aiStoreFinishLinks(storeJob('succeeded'), 'acme') ?? []
+    render(<AiStoreFinishCard steps={steps} hostId="host-1" />)
+    expect(screen.getByText('Payments connected')).toBeTruthy()
+    expect(screen.getByText('Done')).toBeTruthy()
+    expect(screen.queryByText('Connect payments')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Open Payments' }).getAttribute('href')).toBe('/acme/hosts/ember/products/payments')
+  })
+
+  it('says what Stripe still needs on an account that is connected but not finished', () => {
+    mockPayments = settled('charges-disabled', 'Finish setting up Stripe to take card payments.')
+    render(<AiStoreFinishCard steps={aiStoreFinishLinks(storeJob('succeeded'), 'acme') ?? []} hostId="host-1" />)
+    expect(screen.getByText('Finish setting up Stripe to take card payments.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open Payments' })).toBeTruthy()
+    expect(screen.queryByText('Done')).toBeNull()
+  })
+
+  it('keeps the step to do while nothing is connected, or while the answer is pending', () => {
+    mockPayments = settled('not-connected', 'Connect Stripe to take card payments.')
+    const { unmount } = render(<AiStoreFinishCard steps={aiStoreFinishLinks(storeJob('succeeded'), 'acme') ?? []} hostId="host-1" />)
+    expect(screen.getByText('Connect payments')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Set up payments' })).toBeTruthy()
+    unmount()
+    mockPayments = { state: 'pending', settled: false, ready: false, blocked: false, reason: null, href: null }
+    render(<AiStoreFinishCard steps={aiStoreFinishLinks(storeJob('succeeded'), 'acme') ?? []} hostId="host-1" />)
+    expect(screen.getByText('Connect payments')).toBeTruthy()
+    expect(screen.queryByText('Done')).toBeNull()
   })
 })
 

@@ -59,12 +59,14 @@ silently dropped, so you can dismiss it or upgrade and reschedule.
 
 ## Plan requirements
 
-Gating is enforced where you click:
+On a plan without a feature its buttons stay on screen, disabled, with a note naming the
+plan that includes it and an **Upgrade** button to the plans on Billing:
 
-- **Creating versions** requires **Pro or above** — on a lower tier the editor answers
-  *"Versioning requires a Pro plan — see Billing to upgrade"* instead of opening the
-  name dialog.
-- **Scheduled publishing** requires **Business or above**.
+- **Creating versions** requires **Pro or above** — on a lower tier **New version** is
+  disabled and the Versions dialog says *"Included from Pro"*.
+- **Scheduled publishing** requires **Business or above** — on a lower tier every
+  **Schedule** button is disabled and says *"Scheduled publishing is included from
+  Business."*
 - A version is snapshotted from the **saved** document, so the editor asks you to save
   the canvas first rather than silently capturing (or losing) unsaved edits.
 

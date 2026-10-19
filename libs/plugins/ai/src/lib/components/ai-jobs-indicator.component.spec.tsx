@@ -200,7 +200,15 @@ describe('its gates', () => {
       { permissionsOnHost: { loaded: false, granted: {} } },
       { releaseVerdict: (key: string) => (key === 'release_ai_generative' ? off : released) },
       { releaseVerdict: (key: string) => (key === 'release_assist' ? off : released) },
-      { org: { plan: 'pro', billingStatus: 'active' } },
+      // Below the generative rung: since AGL-3965 only a per-org override
+      // closes generation.
+      {
+        org: {
+          plan: 'pro',
+          billingStatus: 'active',
+          entitlements: { features: { aiGenerative: false } },
+        },
+      },
       { scopedOrgId: undefined },
     ]
     for (const patch of cases) {

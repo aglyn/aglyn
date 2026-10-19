@@ -41,6 +41,8 @@ import { aiModelForStep } from '../providers/routing'
 import { runValidatedGeneration, type AiGenerationCheck } from '../runtime/ai-doctrine'
 import type { AiSystemBlock } from '../runtime/ai-runtime'
 import { aiJobStepBudget } from './ai-job-budget'
+import { AI_SITE_INSPIRATION_SIGNALS_INPUT, aiSiteInspirationLookPins } from './ai-site-inspiration'
+import { aiReadSiteInspiration } from './ai-site-inspiration-signals'
 import { aiGenerationSpent, aiUnspentOutcome } from './ai-job-generation'
 import { AI_JOB_BRIEF_MAX_CHARS, type AiJobStepContext, type AiJobStepOutcome } from './ai-job-text-step'
 
@@ -308,7 +310,14 @@ export async function aiRunSiteLook(
   const brand = typeof job.inputs?.['brand'] === 'string' ? (job.inputs['brand'] as string) : null
   const others = deps.others ?? aiWorkspaceSiteStyles
   const avoid = await others(context.firestore, { orgId: job.orgId, hostId: job.hostId })
-  const style = aiSiteStyleFor({ kind, answer, seed: aiSiteSeed(origin), brand, avoid })
+  // What the sites the person likes pin (AGL-3975), read off the plan's
+  // signals the scaffold hands its look unit; none on a start without them.
+  const pins = aiSiteInspirationLookPins(aiReadSiteInspiration(job.inputs?.[AI_SITE_INSPIRATION_SIGNALS_INPUT]), {
+    kind,
+    seed: aiSiteSeed(origin),
+  })
+  const pinned = Object.keys(pins)
+  const style = aiSiteStyleFor({ kind, answer, seed: aiSiteSeed(origin), brand, avoid, ...(pinned.length ? { pins } : {}) })
   const saved = await save(context.firestore, { hostId: job.hostId, jobId: origin, style })
   if (saved.write === 'missing') throw new Error(`site ${job.hostId} vanished while its look was chosen`)
   const output: AiJobOutput = {
@@ -319,7 +328,7 @@ export async function aiRunSiteLook(
       saved.write === 'kept'
         ? 'Kept the theme you chose for this site'
         : lookLabel(style, saved.baseName),
-    proposal: JSON.parse(JSON.stringify({ style, write: saved.write })) as Record<string, unknown>,
+    proposal: JSON.parse(JSON.stringify({ style, write: saved.write, ...(pinned.length ? { inspired: pinned } : {}) })) as Record<string, unknown>,
   }
   return { ...spent, outputs: [output] }
 }

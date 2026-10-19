@@ -347,16 +347,16 @@
                   "text": " No tax applies to this charge in your location."
                 },
                 {
-                  "when": "data.org.seatAddons.aiAddon && !const.aiPrice[@item.id]",
-                  "text": " Your Aglyn AI add-on is not sold on {item.label}, so it is removed with this change and its AI credits go with it."
+                  "when": "data.org.seatAddons.aiAddon && !const.aiTiersSold[@item.id]",
+                  "text": " Your Aglyn AI tier is not sold on {item.label}, so it is removed with this change and its AI credits go with it."
                 },
                 {
-                  "when": "data.org.seatAddons.aiAddon && const.aiPrice[@item.id] && preview.droppedAddons ~= aiAddon",
-                  "text": " Your Aglyn AI add-on is not sold on {item.label}, so it is removed with this change and its AI credits go with it."
+                  "when": "data.org.seatAddons.aiAddon && const.aiTiersSold[@item.id] && preview.droppedAddons ~= aiAddon",
+                  "text": " Your Aglyn AI tier cannot move to {item.label} with this change, so it is removed and its AI credits go with it. You can choose a tier again under Plan add-ons afterwards."
                 },
                 {
-                  "when": "data.org.seatAddons.aiAddon && const.aiPrice[@item.id] && preview.droppedAddons !~= aiAddon",
-                  "text": " Your Aglyn AI add-on carries over at ${const.aiPrice[@item.id]}/mo on {item.label}, billed with the plan."
+                  "when": "data.org.seatAddons.aiAddon && const.aiTiersSold[@item.id] && preview.droppedAddons !~= aiAddon",
+                  "text": " Your Aglyn AI tier carries over at the same price on {item.label}, billed with the plan."
                 },
                 {
                   "when": "data.billing.subscription.cancelAtPeriodEnd",
@@ -547,13 +547,13 @@
             "datasetsPerOrg": 100
           }
         },
-        "aiPrice": {
-          "starter": 9,
-          "pro": 19,
-          "business": 39,
-          "scale": 69,
-          "advanced": 99,
-          "agency": 299
+        "aiTiersSold": {
+          "starter": true,
+          "pro": true,
+          "business": true,
+          "scale": true,
+          "advanced": true,
+          "agency": true
         }
       },
       "load": {
@@ -1688,6 +1688,11 @@
               "tone": "success"
             },
             {
+              "text": "+{data.addons.catalog[@item.kind].credits:number} credits/mo",
+              "when": "item.kind == aiAddon && data.addons.catalog[@item.kind].credits",
+              "tone": "neutral"
+            },
+            {
               "text": "Included in your plan",
               "when": "item.kind == aiAddon && data.addons.plan == enterprise",
               "tone": "success"
@@ -2034,7 +2039,7 @@
           {
             "kind": "aiAddon",
             "label": "Aglyn AI",
-            "description": "Generate pages, components, emails, campaigns, products and more, then edit anything. Adds {const.aiCredits[@data.addons.plan]:number} AI credits a month to your workspace's pool.",
+            "description": "Questions, copy, generated pages, emails, campaigns and products all draw on one pool of AI credits. Your plan includes some; an Aglyn AI tier adds more on top.",
             "toggle": true,
             "icon": "sparkles|auto_awesome"
           },
@@ -2045,17 +2050,7 @@
             "toggle": true,
             "icon": "hammer|construction"
           }
-        ],
-        "aiCredits": {
-          "free": 0,
-          "starter": 4000,
-          "pro": 9000,
-          "business": 19000,
-          "scale": 34000,
-          "advanced": 49000,
-          "agency": 149000,
-          "enterprise": 298000
-        }
+        ]
       }
     },
     {

@@ -115,44 +115,39 @@ add-ons.
 
 ## Aglyn AI {#aglyn-ai}
 
-**Aglyn AI** is the generative add-on: with it on, the assistant builds for you —
-pages, components, emails, campaigns, products and more — rather than only answering
-questions about them. It is bought once for the workspace, on any paid plan, and
-applies to every member who has the permission to generate. What each door does is
-under [Aglyn AI](../../ai/overview.md).
+Every plan's included **AI credits** pay for all of **Aglyn AI**: the assistant's
+answers and building for you — pages, components, emails, campaigns, products and more.
+An **Aglyn AI tier** adds more credits on top, every month. Choose it in the **Aglyn AI**
+row of the **Plan add-ons** card under **Billing → Plan**: the **Aglyn AI tier** field
+lists every tier with the credits it adds and its price, and marks the one you have as
+**Current**. Pick one and choose **Apply**, or pick **No tier** and choose **Remove**; the
+change is shown with what it costs before you confirm it. What each AI door does is under
+[Aglyn AI](../../ai/overview.md).
 
-- **Everything it builds is a draft.** The add-on cannot publish a page, change a live
+- **Six tiers, chosen on their own.** Spark, Boost, Plus, Max, Ultra and Studio, from
+  4,000 to 149,000 extra credits a month (see [AI credits](../../ai/ai-credits.md#the-aglyn-ai-add-on)).
+  Any paid plan can have any tier, at the same price, and changing your plan keeps your
+  tier. Prices are on [aglyn.com/pricing](https://aglyn.com/pricing) and in **Billing**
+  before you confirm; on annual billing a tier bills yearly with the plan, like every
+  add-on. Enterprise workspaces carry more AI in their agreement instead.
+- **Everything it builds is a draft.** Aglyn AI cannot publish a page, change a live
   one or send an email. It writes drafts and unpublished versions, which a person
   reviews and publishes through the buttons that already exist — see
   [the draft rule](../../ai/overview.md#drafts-only).
 
-- **One pool, one meter.** The add-on adds a band of **AI credits** to the band your
-  plan already includes, every month. There is no second meter: the AI credits meter
-  on **Billing → Usage** shows your plan's credits and the add-on's as one figure, and
-  the same overage rate, stop switch and monthly ceiling apply to the whole band — see
+- **One pool, one meter.** A tier adds its credits to the credits your plan already
+  includes. There is no second meter: the AI credits meter on **Billing → Usage** shows
+  your plan's credits and your tier's as one figure, and the same overage rate, stop
+  switch and monthly ceiling apply to the whole pool — see
   [AI credits and overage](overview.md#assist-overage).
-- **Priced by plan.** The add-on's monthly price and the credits it adds both rise with
-  the plan. The figures are on [aglyn.com/pricing](https://aglyn.com/pricing) and in
-  **Billing** before you confirm; on annual billing it bills yearly with the plan, like
-  every add-on. Enterprise workspaces carry generative building in their agreement
-  instead of buying it.
-- **Starter widens a band it already has.** Starter includes its own monthly AI
-  credits, and credits past them are sold at the same rate as Pro — so the stop switch
-  and the ceiling are on its billing page with or without the add-on. Adding Aglyn AI
-  increases the band and opens generative building.
-- **You can see where it is used before you buy it.** On a paid plan without it,
-  **Create with AI** still shows on the Pages, Templates, Layouts, Forms, Components,
-  Automation, Functions & Variables and email Templates pages, on Products, and on
-  Marketing's Campaigns and Overlays — and **Ask AI about these numbers** on your
-  dashboards and Marketing reports. Each opens a short note on what it would do there
-  with a link to **Billing → Add-ons** — or, for a member without the **Manage billing**
-  permission, a note to ask a workspace owner or admin.
-- **Free workspaces** do not buy it. They generate against the
+- **Moving up** to a bigger tier is charged now, prorated for the rest of the period,
+  like a plan upgrade. **Moving down** or **removing** the tier takes effect at the end of
+  the period you already paid for, like a plan downgrade. Then the pool shrinks back to
+  your plan's own credits plus the new tier's; what the assistant already built stays
+  exactly as it is.
+- **Free workspaces** have no tiers. They generate against the
   [monthly taste](overview.md#free-ai-credits) instead, which stops at its band and
   never bills.
-- **Removing it** takes effect at the end of the period you already paid for, like every
-  add-on removal. Then the band shrinks back to your plan's own credits and generative
-  building turns off; what the assistant already built stays exactly as it is.
 
 ### Common questions {#aglyn-ai-questions}
 
@@ -171,7 +166,7 @@ out never touches another. See [AI allotments](overview.md#ai-allotments).
 **Can I keep it off for one site?** Yes, but it is a site setting rather than a billing
 one. A site admin switches AI off for that site under **Admin → Plugins → AI**, which
 removes the assistant and every **Create with AI** door from it while the rest of the
-workspace carries on. It does not pause the add-on or its charge — see
+workspace carries on. It does not pause your tier or its charge — see
 [Switch AI off for one site](../../ai/overview.md#switch-ai-off-for-one-site).
 
 **Who can see what it cost?** Anyone with the **View billing** permission. Beneath the
@@ -180,8 +175,8 @@ and how often the assistant refused them. It names who drew from the pool, never
 dollar figure per person — the share is of the workspace's own credits. See
 [who is generating what](overview.md#who-is-generating-what).
 
-**What happens when the band runs out?** Whatever your plan already does when its own
-credits run out, because the add-on widens one band rather than adding a second. On a
+**What happens when the pool runs out?** Whatever your plan already does when its own
+credits run out, because a tier widens one pool rather than adding a second. On a
 plan that sells credits past it the assistant keeps going and the extra is metered,
 unless you turn on the stop switch or set a monthly ceiling. See
 [AI credits and overage](overview.md#assist-overage).

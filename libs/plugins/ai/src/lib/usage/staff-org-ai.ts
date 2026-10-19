@@ -19,7 +19,7 @@
 // serves it — so it may import neither entry barrel, for the reason
 // `margin-utilization.ts` states at its own head.
 import type { AiJobStatus } from '../model/ai-jobs.types'
-import type { AglynOrgBilling, OrgPlan } from '@aglyn/aglyn/foundation'
+import type { AglynOrgBilling, AiTierId, OrgPlan } from '@aglyn/aglyn/foundation'
 import {
   ASSIST_PROVIDER_COST_FIELD,
   assistBandRefuses,
@@ -33,12 +33,13 @@ import {
   resolveAssistOverageCapUsd,
 } from './assist-credits'
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
+  AI_TIERS,
+  aiTierCreditsPerMonth,
   hasAiAddon,
   isUncappedPlanComp,
   PLAN_ENTITLEMENTS,
+  resolveAiTier,
   resolveEffectivePlan,
-  resolvePlanPricing,
   type DiscountMarginRating,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AssistRefusalCounts } from './assist-refusals'
@@ -69,7 +70,9 @@ export type StaffOrgAiRefusals = AssistRefusalCounts
 export interface StaffOrgAiAddon {
   /** Bought and on a subscription still paying for it — `hasAiAddon`. */
   on: boolean
-  /** The add-on's list price on this plan, or null where the plan sells none. */
+  /** The Aglyn AI tier held (AGL-3965), or null for none. */
+  tier: AiTierId | null
+  /** The held tier's list price, or null with no tier. */
   priceUsd: number | null
   /** ISO instant the subscription item was created, when Stripe could say. */
   since: string | null
@@ -334,7 +337,6 @@ export function composeStaffOrgAiPool(
   now: Date,
 ): StaffOrgAiPool {
   const plan = resolveEffectivePlan(org) as OrgPlan
-  const addon = hasAiAddon(org)
   // Two questions, two figures (AGL-3015). What the workspace DREW is the
   // billed figure, because that is what its credits came out of and what its
   // band is measured in. What the month COST US is the provider figure, and
@@ -355,7 +357,7 @@ export function composeStaffOrgAiPool(
   return {
     planCredits: finite(PLAN_ENTITLEMENTS[plan]?.assistCreditsPerMonth),
     overrideCredits: assistBandOverride(org),
-    addonCredits: addon ? AI_ADDON_CREDITS_PER_MONTH[plan] : 0,
+    addonCredits: aiTierCreditsPerMonth(org),
     totalCredits,
     uncapped: isUncappedPlanComp(org),
     usedCredits,
@@ -427,11 +429,13 @@ export function composeStaffOrgAiAddon(
   org: Partial<AglynOrgBilling> | null | undefined,
   since: Pick<StaffOrgAiAddon, 'since' | 'sinceSource'>,
 ): StaffOrgAiAddon {
+  // The tier held and what it is charged at (AGL-3965); a staff comp has
+  // no subscription to carry one (AGL-3034), so it reads none.
+  const tier = resolveAiTier(org)
   return {
     on: hasAiAddon(org),
-    // What this workspace would be charged — none for a staff comp, which
-    // has no subscription to carry the item (AGL-3034).
-    priceUsd: resolvePlanPricing(org).aiAddonMonthlyUsd ?? null,
+    tier,
+    priceUsd: tier ? AI_TIERS[tier].monthlyUsd : null,
     ...since,
   }
 }

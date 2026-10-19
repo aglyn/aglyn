@@ -56,7 +56,9 @@ import {
   resolveAssistOverageCapUsd,
 } from './assist-credits'
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
+  AI_TIER_IDS,
+  AI_TIERS,
+  ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH,
   hasAiAddon,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
@@ -196,13 +198,16 @@ describe('the bands', () => {
     expect(assistBandRefuses({ plan: 'starter' })).toBe(false)
     // Each tier has a door its band can be spent through, which is the
     // AGL-3207 rule: Free's is `aiGenerative`, the door its taste exists
-    // for; Starter's is `aiAssist`, the shape of every paid rung above it.
-    // A band with neither flag is a quantity sold and not deliverable, and
-    // Starter was exactly that for one release.
+    // for. A band with neither flag is a quantity sold and not deliverable,
+    // and Starter was exactly that for one release. Since AGL-3965 every paid
+    // plan's band pays for generation and assist alike (one pool), so both
+    // doors are open from Starter up.
     expect(PLAN_ENTITLEMENTS.free.features.aiAssist).toBe(false)
     expect(PLAN_ENTITLEMENTS.free.features.aiGenerative).toBe(true)
-    expect(PLAN_ENTITLEMENTS.starter.features.aiAssist).toBe(true)
-    expect(PLAN_ENTITLEMENTS.starter.features.aiGenerative).toBe(false)
+    for (const plan of ['starter', ...PAID_TIERS] as const) {
+      expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].features.aiAssist}`).toBe(`${plan}: true`)
+      expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].features.aiGenerative}`).toBe(`${plan}: true`)
+    }
     // The ladder is unbroken from Free upward now, so it is walked from Free
     // THROUGH Starter rather than around it.
     expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBeLessThan(
@@ -601,7 +606,7 @@ describe('the overage is SOLD past the band at the plan rate, unless the org ask
   })
 })
 
-describe('the Aglyn AI add-on widens the ONE pool and sells past it (AGL-2896)', () => {
+describe('an Aglyn AI tier widens the ONE pool and sells past it (AGL-2896, AGL-3965)', () => {
   const starterWithAddon = { plan: 'starter' as const, seatAddons: { aiAddon: 1 } }
 
   it('ADDS to the band Starter already has, and leaves the rate where it is', () => {
@@ -610,8 +615,9 @@ describe('the Aglyn AI add-on widens the ONE pool and sells past it (AGL-2896)',
     // carries both, so the add-on does here exactly what it does on every
     // other tier — it widens the one pool and changes no rate.
     expect(resolveAssistCreditBudget({ plan: 'starter' })).toBe(750)
+    // No `aiTier` written: Starter's old add-on, which is Spark.
     expect(resolveAssistCreditBudget(starterWithAddon)).toBe(
-      PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth + AI_ADDON_CREDITS_PER_MONTH.starter,
+      PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth + AI_TIERS.spark.credits,
     )
     expect(resolveAssistCreditBudget(starterWithAddon)).toBe(4_750)
     expect(resolveAssistBudgetUsd(starterWithAddon)).toBe(4.75)
@@ -639,6 +645,29 @@ describe('the Aglyn AI add-on widens the ONE pool and sells past it (AGL-2896)',
     expect(resolveAssistOverageRateUsdPer1k({ plan: 'agency', seatAddons: { aiAddon: 1 } })).toBe(2)
   })
 
+  it('adds the TIER bought, whatever the plan, at the plan rate (AGL-3965)', () => {
+    // Studio on Starter and Spark on Agency: the decoupling.
+    expect(
+      resolveAssistCreditBudget({ plan: 'starter', seatAddons: { aiAddon: 1 }, aiTier: 'studio' }),
+    ).toBe(750 + 149_000)
+    expect(
+      resolveAssistOverageRateUsdPer1k({ plan: 'starter', seatAddons: { aiAddon: 1 }, aiTier: 'studio' }),
+    ).toBe(3)
+    expect(
+      resolveAssistCreditBudget({ plan: 'agency', seatAddons: { aiAddon: 1 }, aiTier: 'spark' }),
+    ).toBe(58_000 + 4_000)
+    // Every tier on every paid plan is the plan's band plus the tier's.
+    for (const plan of ['starter', ...PAID_TIERS] as const) {
+      for (const tier of AI_TIER_IDS) {
+        expect(
+          resolveAssistCreditBudget({ plan, seatAddons: { aiAddon: 1 }, aiTier: tier }),
+        ).toBe(PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth + AI_TIERS[tier].credits)
+      }
+    }
+    // A tier written with no add-on held adds nothing.
+    expect(resolveAssistCreditBudget({ plan: 'pro', aiTier: 'studio' })).toBe(2_750)
+  })
+
   it('leaves Free and Enterprise with no rate, add-on or not', () => {
     // Free sells no add-on: a quantity written onto it adds free's zero, so
     // the budget stays the taste and nothing widens it.
@@ -648,9 +677,11 @@ describe('the Aglyn AI add-on widens the ONE pool and sells past it (AGL-2896)',
     expect(resolveAssistOverageRateUsdPer1k({ plan: 'free', seatAddons: { aiAddon: 1 } })).toBeNull()
     // Enterprise: the band widens by the fallback figure, and the usage is
     // still in the contract — no rate, so the band stays a wall.
+    // Enterprise buys no tier; the contract figure is kept (AGL-3965).
     expect(resolveAssistCreditBudget({ plan: 'enterprise', seatAddons: { aiAddon: 1 } })).toBe(
-      ENTERPRISE_ASSIST_CREDITS_PER_MONTH + AI_ADDON_CREDITS_PER_MONTH.enterprise,
+      ENTERPRISE_ASSIST_CREDITS_PER_MONTH + ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH,
     )
+    expect(ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH).toBe(298_000)
     expect(
       resolveAssistOverageRateUsdPer1k({ plan: 'enterprise', seatAddons: { aiAddon: 1 } }),
     ).toBeNull()
@@ -724,26 +755,20 @@ describe('the Aglyn AI add-on widens the ONE pool and sells past it (AGL-2896)',
     expect(assistBandRefuses(dead)).toBe(true)
   })
 
-  it('every band costs at most 50% of the add-on price in provider spend', () => {
-    // The `ASSIST_CREDIT_MIN_MARGIN_PCT` floor, applied to the add-on line
-    // itself: what the band costs at 100% against what the add-on charges.
-    // Free and Enterprise sell no add-on and are asserted separately.
-    for (const plan of ['starter', ...PAID_TIERS] as const) {
-      const price = PLAN_PRICING[plan].aiAddonMonthlyUsd
-      if (price === null) throw new Error(`${plan} must price the add-on`)
-      const cost = assistUsdFromCredits(AI_ADDON_CREDITS_PER_MONTH[plan])
-      expect(`${plan}: ${cost / price <= 1 - ASSIST_CREDIT_MIN_MARGIN_PCT}`).toBe(`${plan}: true`)
+  it('every tier band costs at most 50% of the tier price in provider spend', () => {
+    // The `ASSIST_CREDIT_MIN_MARGIN_PCT` floor, applied to each tier line
+    // itself: what the band costs at 100% against what the tier charges.
+    for (const tier of AI_TIER_IDS) {
+      const price = AI_TIERS[tier].monthlyUsd
+      const cost = assistUsdFromCredits(AI_TIERS[tier].credits)
+      expect(`${tier}: ${cost / price <= 1 - ASSIST_CREDIT_MIN_MARGIN_PCT}`).toBe(`${tier}: true`)
       // …and it is a real band, not a token one hiding under the floor.
       expect(cost / price).toBeGreaterThan(0.4)
+      expect(Number.isFinite(AI_TIERS[tier].credits)).toBe(true)
     }
-    expect(PLAN_PRICING.free.aiAddonMonthlyUsd).toBeNull()
-    expect(AI_ADDON_CREDITS_PER_MONTH.free).toBe(0)
-    expect(PLAN_PRICING.enterprise.aiAddonMonthlyUsd).toBeNull()
-    // Enterprise's band follows the Agency x 2 rule and is finite.
-    expect(AI_ADDON_CREDITS_PER_MONTH.enterprise).toBe(AI_ADDON_CREDITS_PER_MONTH.agency * 2)
-    for (const band of Object.values(AI_ADDON_CREDITS_PER_MONTH)) {
-      expect(Number.isFinite(band)).toBe(true)
-    }
+    // Enterprise's contract figure follows the x 2 rule and is finite.
+    expect(ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH).toBe(AI_TIERS.studio.credits * 2)
+    expect(Number.isFinite(ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH)).toBe(true)
   })
 })
 

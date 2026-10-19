@@ -616,11 +616,16 @@ allow create, delete: if false;
 
 
 
+
+
+
+
+
 allow update: if (isSuperStaff() &&
 !request.resource.data.diff(resource.data).affectedKeys().hasAny(
 ['slug', 'ownerUid', 'createdByUid', 'hosts', 'sso',
 'plan', 'entitlements', 'releaseFlags',
-'seatAddons', 'registerAllocations', 'collaboratorAllocations',
+'seatAddons', 'aiTier', 'registerAllocations', 'collaboratorAllocations',
 'storageOverage', 'assistOverage',
 'bandwidthCap', 'stripeCustomerId', 'subscription',
 'billingStatus', 'brandingProfile', 'discount', 'enterprise',
@@ -634,7 +639,7 @@ allow update: if (isSuperStaff() &&
 ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
 'sso',
 'plan', 'entitlements', 'releaseFlags',
-'seatAddons', 'registerAllocations', 'collaboratorAllocations',
+'seatAddons', 'aiTier', 'registerAllocations', 'collaboratorAllocations',
 'storageOverage', 'assistOverage',
 'bandwidthCap', 'stripeCustomerId', 'subscription',
 'billingStatus', 'brandingProfile', 'discount', 'enterprise',
@@ -651,7 +656,7 @@ allow update: if (isSuperStaff() &&
 !request.resource.data.diff(resource.data).affectedKeys().hasAny(
 ['slug', 'ownerUid', 'createdByUid', 'hosts', 'plan',
 'entitlements', 'releaseFlags',
-'enabledPlugins', 'seatAddons', 'registerAllocations',
+'enabledPlugins', 'seatAddons', 'aiTier', 'registerAllocations',
 'collaboratorAllocations', 'storageOverage', 'assistOverage',
 'bandwidthCap', 'stripeCustomerId', 'subscription',
 'billingStatus', 'brandingProfile', 'sso', 'discount',
