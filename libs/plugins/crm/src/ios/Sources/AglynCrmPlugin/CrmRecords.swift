@@ -162,13 +162,17 @@ func crmListQuery(_ kind: CrmKind, _ scope: CrmScope, _ filter: CrmFilter, searc
 
 // MARK: Fields
 
-enum Stored { case text, cents, millis, day, number, bool }
+/// How a field's value is stored. `minor` is a currency field's whole number of its own currency's minor unit
+/// (AGL-3971): cents for USD, yen for JPY, fils for BHD; `cents` is always hundredths (a deal's amount).
+enum Stored { case text, cents, minor, millis, day, number, bool }
 
 struct CrmField: Identifiable {
   let spec: FieldSpec
   var path: String
   var stored: Stored = .text
   var editable = true
+  /// A currency field's lowercase ISO 4217 code (`stored == .minor`).
+  var currency: String?
   var id: String { spec.key }
 
   init(_ spec: FieldSpec, path: String? = nil, stored: Stored = .text, editable: Bool = true) {
@@ -278,6 +282,8 @@ struct CustomFieldDefinition: Identifiable, Equatable {
   let order: Int
   let retired: Bool
   let object: String
+  /// A currency field's lowercase ISO 4217 code, fixed once the field exists (AGL-3756).
+  var currency: String? = nil
 }
 
 func customField(_ doc: FirestoreDocument) -> CustomFieldDefinition {
@@ -286,7 +292,8 @@ func customField(_ doc: FirestoreDocument) -> CustomFieldDefinition {
     type: doc.string("type") ?? "text",
     options: (doc.data["options"] as? [Any] ?? []).compactMap { ($0 as? String) ?? (($0 as? [String: Any])?["label"] as? String) },
     required: doc.bool("required") == true, order: doc.int("order") ?? 0,
-    retired: doc.data["retiredAt"] != nil && !(doc.data["retiredAt"] is NSNull), object: doc.string("object") ?? "contact")
+    retired: doc.data["retiredAt"] != nil && !(doc.data["retiredAt"] is NSNull), object: doc.string("object") ?? "contact",
+    currency: doc.string("type") == "currency" ? customFieldCurrency(doc.string("currency")) : nil)
 }
 
 func customFieldsOf(_ kind: CrmKind, _ definitions: [CustomFieldDefinition]) -> [CrmField] {
@@ -294,7 +301,7 @@ func customFieldsOf(_ kind: CrmKind, _ definitions: [CustomFieldDefinition]) -> 
     let fieldKind: FieldKind =
       switch def.type {
       case "number": .number
-      // An amount in minor units, as a deal's (AGL-3756).
+      // An amount in its own currency's minor units (AGL-3756, AGL-3971).
       case "currency": .money
       case "date": .date
       case "select": .select
@@ -305,14 +312,19 @@ func customFieldsOf(_ kind: CrmKind, _ definitions: [CustomFieldDefinition]) -> 
     let stored: Stored =
       switch def.type {
       case "number": .number
-      case "currency": .cents
+      case "currency": .minor
       case "date": .day
       case "checkbox": .bool
       default: .text
       }
-    return CrmField(
-      FieldSpec("custom.\(def.key)", def.label, kind: fieldKind, required: def.required, options: def.options.map { FieldOption($0, $0) }),
+    let code = def.type == "currency" ? customFieldCurrency(def.currency) : nil
+    var field = CrmField(
+      FieldSpec(
+        "custom.\(def.key)", def.label, kind: fieldKind, required: def.required, options: def.options.map { FieldOption($0, $0) },
+        currency: code.map { FieldCurrency(code: $0, digits: currencyFractionDigits($0)) }),
       path: "custom.\(def.key)", stored: stored)
+    field.currency = code
+    return field
   }
 }
 
@@ -324,6 +336,9 @@ func displayValue(_ field: CrmField, _ raw: Any?) -> String {
     guard let cents = (raw as? NSNumber)?.doubleValue else { return "" }
     let value = cents / 100
     return value.rounded() == value ? String(Int64(value)) : String(value)
+  case .minor:
+    guard let minor = (raw as? NSNumber)?.doubleValue else { return "" }
+    return currencyInputText(minor, field.currency ?? customFieldCurrency(nil))
   case .millis:
     return millis(raw).map { isoDayString(Date(timeIntervalSince1970: Double($0) / 1000)) } ?? ""
   case .day: return raw as? String ?? ""
@@ -360,6 +375,7 @@ func storedValue(_ field: CrmField, _ value: String) -> Any? {
   case .text, .day: return text
   case .cents:
     return Double(text.replacingOccurrences(of: "$", with: "").replacingOccurrences(of: ",", with: "")).map { Int64(($0 * 100).rounded()) }
+  case .minor: return parseCurrencyInput(text, field.currency ?? customFieldCurrency(nil))
   case .millis: return isoDay(text).map { Int64($0.timeIntervalSince1970 * 1000) + 12 * 3_600_000 }
   case .number: return Int64(text) as Any? ?? Double(text)
   case .bool: return text == "true"

@@ -61,6 +61,10 @@ let mockCompanies: Record<string, Record<string, unknown>> = {}
 const mockLogActivity = jest.fn(async () => undefined)
 /** The site's org document; Starter is the lowest plan carrying the CRM suite. */
 let mockOrg: Record<string, unknown> = { plan: 'starter' }
+/** The org's custom field definitions, as `orgs/{orgId}/contactFields` holds them. */
+let mockDefinitions: Record<string, unknown>[] = []
+/** Which collections the route read a definition list from, in order. */
+let mockDefinitionReads: string[] = []
 
 jest.mock('firebase-admin/firestore', () => ({
   FieldValue: {
@@ -88,16 +92,27 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     app: () => ({
       auth: () => ({ verifyIdToken: async () => mockDecoded }),
       // `orgs/{orgId}/companies/{companyId}` — the one document the route
-      // reads before it writes anything.
+      // reads before it writes anything — and `orgs/{orgId}/contactFields`,
+      // the definitions a `custom` map is judged against (AGL-3971).
       firestore: () => ({
         collection: () => ({
           doc: () => ({
-            collection: () => ({
+            collection: (name: string) => ({
               doc: (id: string) => ({
                 get: async () => ({
                   exists: id in mockCompanies,
                   get: (field: string) => mockCompanies[id]?.[field],
                 }),
+              }),
+              limit: () => ({
+                get: async () => {
+                  mockDefinitionReads.push(name)
+                  return {
+                    docs: (name === 'contactFields' ? mockDefinitions : []).map(
+                      (definition) => ({ data: () => definition }),
+                    ),
+                  }
+                },
               }),
             }),
           }),
@@ -180,6 +195,8 @@ beforeEach(() => {
   mockHasPermission = true
   mockUpsertResult = { contactId: 'con-new', created: true }
   mockOrg = { plan: 'starter' }
+  mockDefinitions = []
+  mockDefinitionReads = []
   mockCompanies = {
     'co-acme': { name: 'Acme Corporation', visibleTo: ['host:host-1'] },
     'co-hidden': { name: 'Other client', visibleTo: ['host:host-9'] },
@@ -219,6 +236,77 @@ describe('the company', () => {
     await post(GOOD)
     const [options] = mockUpsert.mock.calls[0] as unknown as [Record<string, any>]
     expect(options.facet).not.toHaveProperty('companyId')
+  })
+})
+
+/**
+ * The org's own fields, in the SAME call (AGL-3971). The route used to read
+ * every body key but `custom`, so the native apps' create sheets — which
+ * offer the custom fields, as the console's record page does — stored the
+ * person and silently dropped every value typed into them. Judged exactly
+ * as `crm/contact-update` judges them: the definitions read only when a map
+ * was sent, a currency amount kept as that field's minor units, and a key
+ * that is unknown, retired or the wrong type refused before anything is
+ * written.
+ */
+describe('the custom values', () => {
+  const FIELDS = [
+    { key: 'budget', label: 'Budget', type: 'currency', currency: 'jpy', object: 'contact', order: 0 },
+    { key: 'deposit', label: 'Deposit', type: 'currency', currency: 'bhd', object: 'contact', order: 1 },
+    { key: 'tier', label: 'Tier', type: 'select', options: ['Gold', 'Silver'], object: 'contact', order: 2 },
+    { key: 'legacy', label: 'Legacy', type: 'text', object: 'contact', order: 3, retiredAt: 1 },
+    { key: 'region', label: 'Region', type: 'text', object: 'company', order: 4 },
+  ]
+
+  beforeEach(() => {
+    mockDefinitions = FIELDS
+  })
+
+  it('hands the upsert the judged values in the facet, currency in minor units', async () => {
+    const { status } = await post({
+      ...GOOD,
+      custom: { budget: '¥1,500', deposit: '1.250', tier: 'Gold' },
+    })
+    expect(status).toBe(201)
+    expect(mockDefinitionReads).toEqual(['contactFields'])
+    const [options] = mockUpsert.mock.calls[0] as unknown as [Record<string, any>]
+    // ¥1,500 is 1500 minor units; BD 1.250 is 1250 (three digits).
+    expect(options.facet.custom).toEqual({ budget: 1500, deposit: 1250, tier: 'Gold' })
+  })
+
+  it('reads no definitions when the body carried no map', async () => {
+    await post(GOOD)
+    expect(mockDefinitionReads).toEqual([])
+    const [options] = mockUpsert.mock.calls[0] as unknown as [Record<string, any>]
+    expect(options.facet).not.toHaveProperty('custom')
+  })
+
+  it('refuses a currency value that is not an amount, before the upsert', async () => {
+    const { status, payload } = await post({ ...GOOD, custom: { budget: 'lots' } })
+    expect(status).toBe(400)
+    expect(payload.field).toBe('custom.budget')
+    expect(payload.error).toMatch(/JPY minor units/)
+    expect(mockUpsert).not.toHaveBeenCalled()
+  })
+
+  it('refuses a key the org has not defined, rather than dropping it', async () => {
+    const { status, payload } = await post({ ...GOOD, custom: { tier: 'Gold', budjet: 1 } })
+    expect(status).toBe(400)
+    expect(payload).toEqual({ error: 'No such contact field', field: 'custom.budjet' })
+    expect(mockUpsert).not.toHaveBeenCalled()
+  })
+
+  it("refuses a retired field and another object's field", async () => {
+    expect((await post({ ...GOOD, custom: { legacy: 'x' } })).status).toBe(400)
+    expect((await post({ ...GOOD, custom: { region: 'north' } })).status).toBe(400)
+    expect(mockUpsert).not.toHaveBeenCalled()
+  })
+
+  it('refuses a custom value that is not a map, before touching auth', async () => {
+    const { status, payload } = await post({ ...GOOD, custom: ['Gold'] }, {})
+    expect(status).toBe(400)
+    expect(payload.error).toMatch(/keyed by field key/)
+    expect(mockDefinitionReads).toEqual([])
   })
 })
 
