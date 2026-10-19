@@ -16,10 +16,14 @@ final class TabsUITests: XCTestCase {
     // Tab A: the seeded site's orders, scrolled down.
     let picker = app.descendants(matching: .any)["sidebar-site-picker"]
     if !picker.waitForExistence(timeout: 10) {
-      app.buttons["titlebar-search"].tap()
+      let field = app.textFields["onebox-field"]
+      XCTAssertTrue(field.waitForExistence(timeout: 10), "No search field in the title bar")
+      field.tap()
       app.typeText("Juniper Street Bakery\n")
     }
     let orders = app.descendants(matching: .any)["sidebar-starred-orders"]
+    // The Starred group may be folded on this device.
+    if !orders.waitForExistence(timeout: 8) { app.descendants(matching: .any)["sidebar-group-starred"].tap() }
     XCTAssertTrue(orders.waitForExistence(timeout: 20), "The starred Orders row is not in the site's sidebar")
     orders.tap()
     let list = app.descendants(matching: .any)["orders-list"].firstMatch
@@ -38,6 +42,10 @@ final class TabsUITests: XCTestCase {
     XCTAssertTrue(newTab.waitForExistence(timeout: 5))
     newTab.tap()
     XCTAssertTrue(app.descendants(matching: .any)["tab-1"].waitForExistence(timeout: 5), "No second tab opened")
+    // Tab B goes to another workspace; tab A must not follow it, nor reload when it is in front again.
+    let other = app.descendants(matching: .any)["rail-org-nav-aglyn-llc"]
+    if other.waitForExistence(timeout: 5) { other.tap() }
+    sleep(3)
     app.descendants(matching: .any)["tab-0"].tap()
 
     let again = app.descendants(matching: .any)[shownID]

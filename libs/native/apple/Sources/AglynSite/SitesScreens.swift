@@ -166,6 +166,7 @@ struct SiteListRow: View {
         mediaPreviewURL(favicon, origin: context.api.origin, hostID: row.id, width: 96), size: 36, cornerRadius: 8
       ) {
         AglynWorkspaceTile(name: row.name, logoURL: nil, colorHex: siteBrandColor(doc), selected: false, size: 36)
+          .padding(-3)
       }
       VStack(alignment: .leading, spacing: 2) {
         Text(row.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)

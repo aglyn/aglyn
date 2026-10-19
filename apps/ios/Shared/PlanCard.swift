@@ -75,7 +75,9 @@ struct PlanCard: View {
 
   var body: some View {
     let site = model.scopedSite(navigation)
-    Group {
+    // A stack, never a bare Group: a Group with nothing in it hands its task to no view, so the limits were never read.
+    VStack(spacing: 0) {
+      Color.clear.frame(height: 0)
       if let near = limits.near, let orgID = model.workspace?.org?.id, !dismissed,
         !UserDefaults.standard.bool(forKey: PlanLimits.dismissKey(orgID: orgID, near: near))
       {

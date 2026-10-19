@@ -229,15 +229,50 @@ struct ShellChrome: View {
   enum MacWindowControls {
     private static var watched: Set<ObjectIdentifier> = []
 
+    /// The buttons' own changes: SwiftUI hides the title bar's views again when it re-applies the hidden toolbar
+    /// (typing in a field did, P1), and the window lays the buttons out again on its own.
+    private static var observations: [ObjectIdentifier: [NSKeyValueObservation]] = [:]
+    private static var pending: Set<ObjectIdentifier> = []
+
     static func attach(_ window: NSWindow) {
       place(window)
       guard watched.insert(ObjectIdentifier(window)).inserted else { return }
+      var watching: [NSKeyValueObservation] = []
+      for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+        var view: NSView? = window.standardWindowButton(kind)
+        while let current = view, current !== window.contentView?.superview {
+          watching.append(current.observe(\.isHidden, options: [.new]) { [weak window] _, change in
+            if change.newValue == true { MainActor.assumeIsolated { soon(window) } }
+          })
+          watching.append(current.observe(\.alphaValue, options: [.new]) { [weak window] _, change in
+            if (change.newValue ?? 1) < 1 { MainActor.assumeIsolated { soon(window) } }
+          })
+          view = current.superview
+        }
+        if let button = window.standardWindowButton(kind) {
+          watching.append(button.observe(\.frame, options: [.new]) { [weak window] _, _ in
+            MainActor.assumeIsolated { soon(window) }
+          })
+        }
+      }
+      observations[ObjectIdentifier(window)] = watching
       let center = NotificationCenter.default
       for name in [NSWindow.didResizeNotification, NSWindow.didEndLiveResizeNotification, NSWindow.didExitFullScreenNotification,
         NSWindow.didBecomeKeyNotification]
       {
         center.addObserver(forName: name, object: window, queue: .main) { [weak window] _ in
           MainActor.assumeIsolated { if let window { place(window) } }
+        }
+      }
+    }
+
+    /// Places the buttons again on the next turn of the run loop, once per burst of changes.
+    private static func soon(_ window: NSWindow?) {
+      guard let window, pending.insert(ObjectIdentifier(window)).inserted else { return }
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated {
+          pending.remove(ObjectIdentifier(window))
+          place(window)
         }
       }
     }
@@ -256,7 +291,8 @@ struct ShellChrome: View {
         guard let bar = button.superview else { continue }
         let row = ShellChrome.tabRow
         let y = bar.isFlipped ? (row - button.frame.height) / 2 : bar.bounds.height - row / 2 - button.frame.height / 2
-        button.setFrameOrigin(NSPoint(x: 14 + CGFloat(index) * 20, y: y))
+        let origin = NSPoint(x: 14 + CGFloat(index) * 20, y: y)
+        if button.frame.origin != origin { button.setFrameOrigin(origin) }
       }
     }
   }
@@ -599,25 +635,24 @@ struct ShellStack: View {
 extension View {
   /// On iPad, as on the Mac, the window's drawn chrome and the screen's head replace the system navigation bar (Figma
   /// iPad frames): a screen's title, way back and actions are in its head.
-  @ViewBuilder
-  func wideBarHidden() -> some View {
+  func wideBarHidden() -> some View { modifier(WideBarHidden()) }
+}
+
+/// No system bar where the shell draws its own chrome: the navigation bar on iPad, and on the Mac the window toolbar a
+/// pushed screen would bring back (its back chevron and a screen's own items floated over the tab row).
+private struct WideBarHidden: ViewModifier {
+  @Environment(\.aglynWideChrome) private var wide
+
+  func body(content: Content) -> some View {
     #if os(iOS)
-      modifier(WideBarHidden())
+      content.toolbar(wide ? .hidden : .automatic, for: .navigationBar)
     #else
-      self
+      content
+        .navigationBarBackButtonHidden(wide)
+        .toolbar(wide ? .hidden : .automatic, for: .windowToolbar)
     #endif
   }
 }
-
-#if os(iOS)
-  private struct WideBarHidden: ViewModifier {
-    @Environment(\.aglynWideChrome) private var wide
-
-    func body(content: Content) -> some View {
-      content.toolbar(wide ? .hidden : .automatic, for: .navigationBar)
-    }
-  }
-#endif
 
 /// A screen pushed over a section's list, with its head on the Mac and iPad (the window has no toolbar there): the way
 /// back to the list, its title, and its actions (`aglynScreenTitle`, `aglynPrimaryAction`, `aglynScreenToolbar`).

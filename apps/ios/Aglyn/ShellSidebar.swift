@@ -159,6 +159,7 @@ private struct WorkspaceButton: View {
           AglynWorkspaceTile(
             name: org?.name ?? "Workspace", logoURL: nil, colorHex: model.workspaceColor(org?.id).color, selected: false,
             size: AglynShellMetrics.workspaceLogo)
+            .padding(-3)
         }
         VStack(alignment: .leading, spacing: 2) {
           HStack(spacing: 4) {
@@ -209,6 +210,7 @@ private struct SiteTitleRow: View {
             name: site.name, logoURL: nil, colorHex: model.workspaceColor(model.workspace?.org?.id).color, selected: false,
             size: AglynShellMetrics.headerLogo
           )
+          .padding(-3)
         }
         HStack(spacing: 4) {
           Text(site.name).font(.system(size: AglynShellMetrics.siteName, weight: .semibold)).lineLimit(1)
@@ -418,8 +420,11 @@ struct SidebarList: View {
       if push {
         PhoneMenuRow(title: item.label, action: { activate(.section(section)) }) { dot }
       } else {
+        // One row is selected: a starred place shows it only when no row of the list stands for the same place.
+        let rowHolds = scope.currentList.groups.flatMap(\.rows).contains { ShellScope.row($0, holds: section) }
         AglynSidebarRow(
-          item.label, selected: navigation.section == section, indent: 1, pill: pill, action: { activate(.section(section)) }
+          item.label, selected: navigation.section == section && !rowHolds, indent: 1, pill: pill,
+          action: { activate(.section(section)) }
         ) { dot }
       }
     }

@@ -167,7 +167,20 @@ struct OneBoxCatalog {
               detail: "Site in \(model.workspace?.org?.name ?? "this workspace")", hostID: site.id, action: .site(site.id))
           }))
     }
-    for group in box.remote where !group.rows.isEmpty {
+    // The server's workspaces and sites join the ones matched on the device, never as a second group of the same name.
+    for group in box.remote where ["sites", "workspaces"].contains(group.group) {
+      guard let index = out.firstIndex(where: { $0.id == group.group }) else { continue }
+      let known = Set(out[index].items.map { String($0.id.split(separator: ":", maxSplits: 1).last ?? "") })
+      out[index].items += group.rows.filter { !known.contains($0.hostId ?? $0.orgId ?? $0.id) && !known.contains($0.id) }
+        .prefix(max(0, perGroup - out[index].items.count)).map { row in
+          OneBoxItem(
+            id: "\(group.group):\(row.id)", label: row.label, detail: row.detail, icon: Self.icon(group.group),
+            action: row.link.map { .link($0, orgID: row.orgId, hostID: row.hostId) }
+              ?? row.screen.map { .screen($0, row.params ?? [:]) } ?? .screen("", [:]))
+        }
+    }
+    let merged = Set(out.map(\.id))
+    for group in box.remote where !group.rows.isEmpty && !merged.contains(group.group) {
       out.append(
         OneBoxSection(
           id: "remote:\(group.group)", heading: group.heading,
@@ -234,6 +247,8 @@ struct OneBoxCatalog {
     case "bookings": "calendar.badge.clock"
     case "events": "calendar"
     case "forms": "list.bullet.rectangle"
+    case "sites": "globe"
+    case "workspaces": "building.2"
     default: "magnifyingglass"
     }
   }
@@ -347,6 +362,7 @@ struct OneBoxRowView: View {
         AglynWorkspaceTile(
           name: site.name, logoURL: nil, colorHex: model.workspaceColor(model.workspace?.org?.id).color, selected: false,
           size: 28)
+        .padding(-3)
       }
     } else {
       Image(systemName: item.icon).font(.system(size: 14)).foregroundStyle(AglynColor.secondaryText)
