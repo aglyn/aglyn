@@ -84,7 +84,7 @@ internal fun keyboardShortcuts(): List<Pair<String, String>> = listOf(
   (if (isMacPlatform) "⌘-click" else "Ctrl+click") to "Open a sidebar row in a new tab",
   shortcutText("/") to "Keyboard shortcuts",
   shortcutText("S", shift = true) to "Show or hide the sidebar",
-  shortcutText("R", shift = true) to "Show or hide the workspace rail",
+  (if (isMacPlatform) "⌃⌘S" else "Ctrl+Alt+S") to "Show or hide the workspace switcher",
   "↑ ↓ ↵" to "Move and open in search and menus",
   "Esc" to "Close a box or a menu",
 )

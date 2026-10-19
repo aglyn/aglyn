@@ -49,7 +49,7 @@ class NavShellUiTest {
     onNodeWithTag("nav-site-media").assertIsDisplayed()
     onNodeWithTag("nav-site-pages").performClick()
     waitUntil(timeoutMillis = 3_000) { navigator.top == NavKeys.of("site.pages") }
-    onNode(androidx.compose.ui.test.hasText("Pages", substring = true) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("title-bar"))).assertIsDisplayed()
+    onNode(androidx.compose.ui.test.hasText("Pages", substring = true) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("tab-strip"))).assertIsDisplayed()
     // The old drawer's double site heading is gone.
     assertEquals(0, onAllNodesWithTextCount("Site · Acme Shop"))
   }

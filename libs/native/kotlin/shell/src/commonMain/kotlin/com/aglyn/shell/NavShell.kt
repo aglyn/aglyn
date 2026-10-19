@@ -1,6 +1,7 @@
 package com.aglyn.shell
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -48,6 +49,7 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
@@ -260,6 +262,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       pin >= 0 -> prefs.pinned.getOrNull(pin)?.let { services.workspace.selectOrg(it); true } ?: false
       event.key == Key.K -> { chrome.oneBox = true; true }
       event.key == Key.Slash -> { chrome.shortcuts = true; true }
+      // ⌃⌘S (Ctrl+Alt+S) shows or hides the workspace switcher; the desktop's menu bar owns it there.
+      event.key == Key.S && !hasMenuBar && (if (isMacPlatform) event.isCtrlPressed else event.isAltPressed) -> { chrome.toggleRail(); true }
       event.key == Key.LeftBracket -> navigator.back()
       event.key == Key.Comma && !event.isShiftPressed -> { actions.enterSettings(if (inSite) NativeNavListId.SITE_SETTINGS else NativeNavListId.WORKSPACE_SETTINGS); true }
       // Tabs: the desktop's menu bar owns these keys there, so only a window without one handles them here.
@@ -424,10 +428,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       // One continuous title bar over the rail, the sidebar and the content (as Figma draws the window), then the flush
       // columns under it. A tablet draws edge to edge: the status bar and the taskbar keep their space.
       Column(Modifier.fillMaxSize().background(shellColors.titleBar).windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing).then(shortcuts)) {
-        WideTitleBar(
-          services, navigator, chrome, tabs, onSelectTab = ::selectTab, onCloseTab = { closeTab(it) }, onNewTab = { newTab() },
-          pushed = route != null, uid = uid, here = here, prefs = prefs,
-        ) {
+        WindowTabStrip(tabs, onSelectTab = ::selectTab, onCloseTab = { closeTab(it) }, onNewTab = { newTab() })
+        WideToolbar(services, navigator, chrome, pushed = route != null, uid = uid) {
           HelpButton(help)
           if (assist != null) TitleBarButton(if (chrome.aiPanel) "Close the AI panel" else "AI", "auto_awesome", "ai-panel-toggle") { chrome.toggleAiPanel() }
         }
@@ -691,58 +693,66 @@ internal fun SectionTabs(sections: List<NavSectionItem>, selected: String, onSel
  * The title bar over the main area on tablets and desktops: hide or show the sidebar, back, the title, "Search or jump to"
  * (Ctrl/⌘K) and the bell.
  */
+/**
+ * The window's tab strip (the first of the two chrome rows, Figma Mac/Titlebar 12:910): the window controls' room, the
+ * tabs (each up to its natural width, ellipsized), and +; a hairline under it.
+ */
 @Composable
-private fun WideTitleBar(
-  services: ShellServices,
-  navigator: ShellNavigator,
-  chrome: NavChromeState,
-  tabs: ShellTabs,
-  onSelectTab: (ShellTab) -> Unit,
-  onCloseTab: (ShellTab) -> Unit,
-  onNewTab: () -> Unit,
-  pushed: Boolean,
-  uid: String,
-  here: com.aglyn.contracts.AccountItemRef?,
-  prefs: com.aglyn.core.AccountPreferences,
-  trailing: @Composable () -> Unit = {},
-) {
+private fun WindowTabStrip(tabs: ShellTabs, onSelectTab: (ShellTab) -> Unit, onCloseTab: (ShellTab) -> Unit, onNewTab: () -> Unit) {
   val m = com.aglyn.ui.shellMetrics
-  // The Mac's traffic lights sit at the bar's left edge (a transparent, full-size title bar).
+  // The Mac's traffic lights sit at this row's left edge (a transparent, full-size title bar).
   val lights = if (LocalTitleBarInset.current > 0.dp) 76.dp else 8.dp
   Row(
-    Modifier.fillMaxWidth().background(shellColors.titleBar).height(m.titleBar).padding(start = lights, end = 8.dp).testTag("title-bar"),
+    Modifier.fillMaxWidth().background(shellColors.titleBar).height(if (m.compact) 34.dp else 40.dp).padding(start = lights, end = 8.dp).testTag("tab-strip"),
     verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(2.dp),
+    horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {
-    TitleBarButton(if (chrome.sidebarHidden) "Show sidebar" else "Hide sidebar", "view_sidebar", "toggle-sidebar") { chrome.toggleSidebar() }
-    if (pushed) {
-      TitleBarButton("Back", "arrow_back", "title-back") { navigator.back() }
-    } else {
-      // Back and forward through the places visited, and what was opened recently.
-      TitleBarButton("Back", "arrow_back", "history-back", enabled = navigator.canGoBackInHistory) { navigator.historyBack() }
-    }
-    TitleBarButton("Forward", "arrow_forward", "history-forward", enabled = !pushed && navigator.canGoForwardInHistory) { navigator.historyForward() }
-    val openRecent = LocalOpenRecent.current
-    RecentHistoryButton(prefs) { item -> openRecent?.invoke(item) }
-    Spacer(Modifier.width(6.dp))
-    // The window's tabs, in the bar itself as Figma draws them: the pinned Home tab first, then +.
-    Row(
-      Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()).testTag("tab-strip"),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
+    Row(Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
       for (tab in tabs.tabs) TitleTab(tab, selected = tab.id == tabs.activeId, closable = !tab.pinned, onSelect = { onSelectTab(tab) }, onClose = { onCloseTab(tab) })
     }
     TitleBarButton("New tab  ${shortcutText("T")}", "add", "tab-new", onClick = onNewTab)
-    if (tabs.tabs.size > 1) TitleBarButton("All tabs", "grid_view", "tab-overview") { tabs.overview = true }
-    here?.let { StarButton(services, it, prefs) }
-    Spacer(Modifier.weight(0.001f))
+    // A tablet has no menu bar (Tab ▸ Show all tabs), so its strip offers the overview.
+    if (!hasMenuBar && tabs.tabs.size > 1) TitleBarButton("All tabs", "grid_view", "tab-overview") { tabs.overview = true }
+  }
+  HorizontalDivider(color = shellColors.divider.copy(alpha = shellColors.divider.alpha * 0.6f))
+}
+
+/**
+ * The toolbar (the second chrome row): the workspace switcher's toggle, back and forward; "Search or jump to ⌘K" centered
+ * on the window (up to 480 wide); then the bell, help and AI. Nothing of a screen's own sits here.
+ */
+@Composable
+private fun WideToolbar(
+  services: ShellServices,
+  navigator: ShellNavigator,
+  chrome: NavChromeState,
+  pushed: Boolean,
+  uid: String,
+  trailing: @Composable () -> Unit = {},
+) {
+  val m = com.aglyn.ui.shellMetrics
+  Box(Modifier.fillMaxWidth().background(shellColors.titleBar).height(if (m.compact) 44.dp else 48.dp).padding(horizontal = 8.dp).testTag("title-bar")) {
+    Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+      TitleBarButton(
+        (if (chrome.railHidden) "Show workspace switcher  " else "Hide workspace switcher  ") + railToggleShortcut(),
+        "view_sidebar",
+        "toggle-rail",
+      ) { chrome.toggleRail() }
+      if (pushed) {
+        TitleBarButton("Back", "arrow_back", "title-back") { navigator.back() }
+      } else {
+        // Back and forward through the places visited.
+        TitleBarButton("Back", "arrow_back", "history-back", enabled = navigator.canGoBackInHistory) { navigator.historyBack() }
+      }
+      TitleBarButton("Forward", "arrow_forward", "history-forward", enabled = !pushed && navigator.canGoForwardInHistory) { navigator.historyForward() }
+    }
     Surface(
       onClick = { chrome.oneBox = true },
       shape = RoundedCornerShape(m.controlRadius),
       color = MaterialTheme.colorScheme.surfaceContainerHigh,
       border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-      modifier = Modifier.widthIn(min = 180.dp, max = 340.dp).height(if (m.compact) 30.dp else 40.dp).testTag("search-or-jump").semantics { contentDescription = "Search or jump to" },
+      modifier = Modifier.align(Alignment.Center).fillMaxWidth(0.42f).widthIn(min = 220.dp, max = 480.dp).height(if (m.compact) 30.dp else 36.dp)
+        .testTag("search-or-jump").semantics { contentDescription = "Search or jump to" },
     ) {
       Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(AglynIcons.named("search"), null, Modifier.size(m.rowIcon), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -751,15 +761,19 @@ private fun WideTitleBar(
           shortcutText("K"),
           style = MaterialTheme.typography.labelSmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainerLowest).padding(horizontal = 5.dp, vertical = 1.dp),
+          modifier = Modifier.clip(RoundedCornerShape(4.dp)).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
         )
       }
     }
-    Spacer(Modifier.width(6.dp))
-    BellButton(services, uid) { navigator.select(ShellNavigator.NOTIFICATIONS) }
-    trailing()
+    Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+      BellButton(services, uid) { navigator.select(ShellNavigator.NOTIFICATIONS) }
+      trailing()
+    }
   }
 }
+
+/** The workspace switcher's shortcut: ⌃⌘S on a Mac, Ctrl+Alt+S elsewhere. */
+internal fun railToggleShortcut(): String = if (isMacPlatform) "⌃⌘S" else "Ctrl+Alt+S"
 
 /** One step of the breadcrumbs, and where it leads (none for a group heading or the page on screen). */
 private data class Crumb(val label: String, val open: (() -> Unit)?)
@@ -848,20 +862,6 @@ internal fun StarButton(services: ShellServices, here: com.aglyn.contracts.Accou
       text = { Text("You can star ${com.aglyn.contracts.Contracts.starredMax} places. Unstar one from the sidebar's Starred group to make room.") },
       confirmButton = { androidx.compose.material3.TextButton(onClick = { full = false }) { Text("OK") } },
     )
-  }
-}
-
-/** The clock in the title bar: what was opened recently, across workspaces. */
-@Composable
-private fun RecentHistoryButton(prefs: com.aglyn.core.AccountPreferences, open: (com.aglyn.contracts.AccountItemRef) -> Unit) {
-  var expanded by remember { mutableStateOf(false) }
-  Box {
-    TitleBarButton("Recent", "history", "history-recent", enabled = prefs.recents.isNotEmpty()) { expanded = true }
-    androidx.compose.material3.DropdownMenu(expanded, onDismissRequest = { expanded = false }, modifier = Modifier.testTag("history-menu")) {
-      for (item in prefs.recents.take(12)) {
-        MenuRow(item.label, oneBoxIcon(item.kind), tag = "history-${item.id}") { expanded = false; open(item.toRef()) }
-      }
-    }
   }
 }
 

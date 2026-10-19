@@ -30,6 +30,10 @@ private val isMac = System.getProperty("os.name").orEmpty().startsWith("Mac")
 fun shortcut(key: Key, shift: Boolean = false) =
   KeyShortcut(key, meta = isMac, ctrl = !isMac, shift = shift)
 
+/** The workspace switcher's toggle: ⌃⌘ on macOS, Ctrl+Alt elsewhere. */
+fun switcherShortcut(key: Key) =
+  if (isMac) KeyShortcut(key, meta = true, ctrl = true) else KeyShortcut(key, ctrl = true, alt = true)
+
 /** The first window's size during the launch intro (spec 53:1638), and the size it grows to once the app is ready. */
 private val INTRO_SIZE = DpSize(960.dp, 640.dp)
 private val WINDOW_SIZE = DpSize(1280.dp, 840.dp)
@@ -54,8 +58,11 @@ fun ApplicationScope.AglynWindow(
       val background = (if (dark) AglynTokens.dark else AglynTokens.light).background
       window.background = Color(background.red, background.green, background.blue)
       window.contentPane.background = window.background
-      // macOS: the content runs under a transparent title bar in the app's own color.
+      // macOS: full-size content under a transparent, title-less title bar and no toolbar, so the traffic lights sit in
+      // the app's own tab row and macOS gives the window its plain (smaller) corner radius. Windows keeps its own frame.
+      window.rootPane.putClientProperty("apple.awt.fullWindowContent", true)
       window.rootPane.putClientProperty("apple.awt.transparentTitleBar", true)
+      window.rootPane.putClientProperty("apple.awt.windowTitleVisible", false)
       window.rootPane.putClientProperty("apple.awt.windowAppearance", if (dark) "NSAppearanceNameDarkAqua" else "NSAppearanceNameAqua")
       window.minimumSize = java.awt.Dimension(420, 560)
     }

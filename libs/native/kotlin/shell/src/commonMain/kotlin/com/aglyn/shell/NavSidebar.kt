@@ -44,7 +44,6 @@ import com.aglyn.contracts.StarredItem
 import com.aglyn.contracts.accountItemKey
 import com.aglyn.core.WorkspaceState
 import com.aglyn.ui.AglynIcons
-import com.aglyn.ui.AglynLogo
 import com.aglyn.ui.SidebarWidth
 import com.aglyn.ui.WorkspaceTile
 import com.aglyn.ui.shellColors
@@ -78,14 +77,9 @@ internal fun NavSidebar(
 ) {
   val shell = shellColors
   val m = com.aglyn.ui.shellMetrics
-  // One flush, full-height column under the title bar (no inset card): the lockup, a hairline, then the scope's lists.
+  // One flush, full-height column under the toolbar (no inset card): the workspace's header at the top (the brand's
+  // mark sits small at the top of the rail instead), then the scope's lists.
   Column(modifier.width(m.sidebarWidth).fillMaxHeight().background(tint ?: shell.sidebar).testTag("nav-sidebar")) {
-    // The logo kit's lockup with the mark's height of clear space around it.
-    AglynLogo(
-      Modifier.padding(horizontal = 20.dp, vertical = if (m.compact) 14.dp else 18.dp).height(if (m.compact) 20.dp else 24.dp).semantics { heading() },
-      contentDescription = services.config.brandName,
-    )
-    HorizontalDivider(color = shell.divider)
     Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 10.dp)) {
       if (content.modeTitle != null) {
         BackLink(content.modeTitle, tag = "settings-mode-back", onClick = content.onExitMode)
@@ -116,30 +110,47 @@ internal fun NavSidebar(
 @Composable
 internal fun ScopeHeader(services: ShellServices, workspace: WorkspaceState, chrome: NavChromeState) {
   val org = workspace.org ?: return
+  val site = workspace.site
+  if (site == null) {
+    // With the workspace switcher (the rail) hidden, the header opens the switcher; otherwise the workspace's menu.
+    WorkspaceHeaderRow(
+      services, workspace, chrome,
+      onClick = { if (chrome.railHidden) chrome.picker = PickerStep.WORKSPACE else chrome.workspaceMenu = true },
+      tag = "workspace-menu-button",
+      description = if (chrome.railHidden) "${org.name}. Switch workspace" else "${org.name} menu",
+    )
+    workspaceMenuAnchor(services, workspace, chrome)
+  } else {
+    // In a site: the workspace's header (its name leads back to the whole workspace), then the site's picker under it.
+    WorkspaceHeaderRow(services, workspace, chrome, onClick = { services.workspace.selectWholeWorkspace() }, tag = "scope-back-to-workspace", description = "Back to ${org.name}")
+    workspaceMenuAnchor(services, workspace, chrome)
+    Spacer(Modifier.height(4.dp))
+    SiteButton(services, workspace, site.id) { chrome.picker = PickerStep.SITE }
+  }
+}
+
+/** The workspace's header: its logo (20, radius 5), name and plan, and ▾ for its menu. */
+@Composable
+private fun WorkspaceHeaderRow(services: ShellServices, workspace: WorkspaceState, chrome: NavChromeState, onClick: () -> Unit, tag: String, description: String) {
+  val org = workspace.org ?: return
   val prefs = services.accountPrefs.state.collectAsState().value
   val (light, dark) = orgLogoUrls(workspace, org.id, services.api.origin)
   val (color) = rememberWorkspaceColor(org.id, workspace, prefs, services.api.origin)
-  val site = workspace.site
-  if (site == null) {
-    Surface(
-      onClick = { chrome.workspaceMenu = true },
-      shape = RoundedCornerShape(com.aglyn.ui.shellMetrics.controlRadius),
-      color = Color.Transparent,
-      modifier = Modifier.fillMaxWidth().testTag("workspace-menu-button").semantics { contentDescription = "${org.name} menu" },
-    ) {
-      Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        WorkspaceTile(org.name, light, dark, color, size = com.aglyn.ui.shellMetrics.headerLogo + 4.dp, cornerRadius = com.aglyn.ui.shellMetrics.headerLogoRadius + 1.dp)
-        Column(Modifier.weight(1f)) {
-          Text(org.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-          workspace.orgLogo?.plan?.let { PlanChip(it) }
-        }
-        Icon(AglynIcons.named("expand_more"), null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-      }
+  val m = com.aglyn.ui.shellMetrics
+  Row(
+    Modifier.fillMaxWidth().clip(RoundedCornerShape(m.controlRadius)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 6.dp)
+      .testTag(tag).semantics(mergeDescendants = true) { role = Role.Button; contentDescription = description },
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
+  ) {
+    WorkspaceTile(org.name, light, dark, color, size = m.headerLogo, cornerRadius = m.headerLogoRadius, initialSize = m.rowText * 0.8f)
+    Column(Modifier.weight(1f)) {
+      Text(org.name, style = MaterialTheme.typography.titleSmall.copy(fontSize = m.rowText), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      workspace.orgLogo?.plan?.let { PlanChip(it) }
     }
-    workspaceMenuAnchor(services, workspace, chrome)
-  } else {
-    BackLink(org.name, tag = "scope-back-to-workspace") { services.workspace.selectWholeWorkspace() }
-    SiteButton(services, workspace, site.id) { chrome.picker = PickerStep.SITE }
+    androidx.compose.material3.IconButton(onClick = { chrome.workspaceMenu = true }, modifier = Modifier.size(m.barButton).testTag("workspace-menu-chevron")) {
+      Icon(AglynIcons.named("expand_more"), "${org.name} menu", Modifier.size(m.rowIcon), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
   }
 }
 

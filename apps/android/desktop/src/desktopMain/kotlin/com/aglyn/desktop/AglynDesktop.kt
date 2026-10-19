@@ -42,8 +42,9 @@ fun main(args: Array<String>) {
           Item("Settings", shortcut = shortcut(Key.Comma), onClick = { navigator.command = ShellCommand.SETTINGS })
         }
         Menu("View", mnemonic = 'V') {
+          // The toolbar's toggle shows and hides the workspace switcher (the rail); the sidebar has its own item.
+          Item("Show or hide the workspace switcher", shortcut = switcherShortcut(Key.S), onClick = { navigator.command = ShellCommand.TOGGLE_RAIL })
           Item("Show or hide the sidebar", shortcut = shortcut(Key.S, shift = true), onClick = { navigator.command = ShellCommand.TOGGLE_SIDEBAR })
-          Item("Show or hide the workspace rail", shortcut = shortcut(Key.R, shift = true), onClick = { navigator.command = ShellCommand.TOGGLE_RAIL })
           Item("Show or hide the AI panel", onClick = { navigator.command = ShellCommand.AI_PANEL })
         }
         // Each tab keeps its own workspace, site and place; the first, Home, stays pinned.
