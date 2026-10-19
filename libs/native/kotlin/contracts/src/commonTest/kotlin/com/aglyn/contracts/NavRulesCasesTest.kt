@@ -111,6 +111,14 @@ class NavRulesCasesTest {
   }
 
   @Test
+  fun createMenus() = cases("resolveCreateList").forEach { (args, result) ->
+    val scope = NativeNavCreateScope.entries.first { it.raw == text(args[0]) }
+    val flags = MapSerializer(String.serializer(), Boolean.serializer())
+    val actual = resolveCreateList(Contracts.nativeNavManifest, scope, ids(args[1]), decode(flags, args[2]), decode(flags, args[3]), nullableString(args[4]))
+    same(result, actual, ListSerializer(ResolvedCreateItem.serializer()), args.toString())
+  }
+
+  @Test
   fun screensInTheOneBox() = cases("searchNavScreens").forEach { (args, result) ->
     val scope = OneBoxScope.valueOf(text(args[1]).uppercase())
     val actual = searchNavScreens(Contracts.nativeNavManifest, text(args[0]), scope, ids(args[2]), args[3].jsonPrimitive.booleanOrNull == true)

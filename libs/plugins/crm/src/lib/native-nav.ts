@@ -16,11 +16,12 @@
  */
 
 import {
+  type NativeNavContribution,
+  type NativeNavCreateContribution,
+  type NativeNavRow,
   nativeNavHubSection,
   nativeNavIcon,
   nativeNavRef,
-  type NativeNavContribution,
-  type NativeNavRow,
 } from '@aglyn/aglyn/app-utils/native-nav'
 
 /**
@@ -56,6 +57,7 @@ function row(scope: 'org' | 'host', order: number): NativeNavRow {
       nativeNavHubSection(scope, '/crm', 'fields', 'Fields', 'crm.fields'),
       nativeNavHubSection(scope, '/crm', 'settings', 'Settings', 'crm.settings'),
     ],
+    docs: scope === 'org' ? '/content-and-data/crm/overview#at-the-organization-level' : '/content-and-data/crm/overview',
     console: nativeNavRef(scope === 'org' ? 'orgPluginTab' : 'hostPluginTab', '/crm'),
   }
 }
@@ -63,4 +65,25 @@ function row(scope: 'org' | 'host', order: number): NativeNavRow {
 export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
   { list: 'workspace', group: 'workspace', row: row('org', 20) },
   { list: 'site', group: 'customers', row: row('host', 20) },
+]
+
+/** A contact, at either scope: the console's "New contact" on the CRM's Contacts. */
+function contact(scope: 'org' | 'host', order: number): NativeNavCreateContribution['item'] {
+  return {
+    id: 'contact',
+    label: 'Contact',
+    icon: nativeNavIcon('person.badge.plus', 'person_add'),
+    screen: 'crm.contacts',
+    params: { new: '1' },
+    pluginId: 'crm',
+    permission: 'data.manage',
+    planFeature: 'crm',
+    order,
+    console: nativeNavRef(scope === 'org' ? 'orgPluginSection' : 'hostPluginSection', '/crm/contacts'),
+  }
+}
+
+export const NATIVE_NAV_CREATE: readonly NativeNavCreateContribution[] = [
+  { scope: 'workspace', item: contact('org', 20) },
+  { scope: 'site', item: contact('host', 70) },
 ]

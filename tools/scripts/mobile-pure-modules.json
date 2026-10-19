@@ -702,6 +702,10 @@
       "why": "Artifact type labels, install targets, categories, a plugin's install state and each type's install route and message; the native marketplace screens install from it (AGL-3668); type-only imports."
     },
     {
+      "path": "libs/plugins/marketplace/src/lib/model/marketplace-section-ids.ts",
+      "why": "Reached by the marketplace's native-nav module: the hub's Licenses section id, a stored value; no imports at all."
+    },
+    {
       "path": "libs/plugins/marketplace/src/lib/model/payout-readiness.ts",
       "why": "Whether a publisher's Stripe account can take charges and release payouts, as the seller panel says it (AGL-3668). No imports."
     },

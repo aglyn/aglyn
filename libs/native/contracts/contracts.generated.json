@@ -4081,6 +4081,9 @@
     "evangelist",
     "other"
   ],
+  "NATIVE_CREATE_PERMISSION_REASON": "Your role can't create this here. Ask an owner or admin of the workspace.",
+  "NATIVE_CREATE_PLAN_REASON": "Your plan doesn't include this. See the plans in Billing.",
+  "NATIVE_CREATE_SITE_ROLE_REASON": "Your role on this site can't create this. Ask a site admin.",
   "NATIVE_CRM_ACTIVITY_DIRECTIONS": {
     "call": [
       "outbound",
@@ -4330,6 +4333,211 @@
     "todo"
   ],
   "NATIVE_NAV_MANIFEST": {
+    "create": [
+      {
+        "items": [
+          {
+            "console": {
+              "id": "nav-tab-org-sites",
+              "surface": "orgTab"
+            },
+            "icon": {
+              "android": "public",
+              "apple": "globe"
+            },
+            "id": "site",
+            "label": "Site",
+            "order": 10,
+            "params": {
+              "new": "1"
+            },
+            "permission": "hosts.create",
+            "screen": "site.sites"
+          },
+          {
+            "console": {
+              "id": "/crm/contacts",
+              "surface": "orgPluginSection"
+            },
+            "icon": {
+              "android": "person_add",
+              "apple": "person.badge.plus"
+            },
+            "id": "contact",
+            "label": "Contact",
+            "order": 20,
+            "params": {
+              "new": "1"
+            },
+            "permission": "data.manage",
+            "planFeature": "crm",
+            "pluginId": "crm",
+            "screen": "crm.contacts"
+          },
+          {
+            "console": {
+              "id": "/emails/templates",
+              "surface": "orgPluginSection"
+            },
+            "icon": {
+              "android": "mail",
+              "apple": "envelope"
+            },
+            "id": "emailTemplate",
+            "label": "Email template",
+            "order": 30,
+            "params": {
+              "new": "1"
+            },
+            "permission": "data.manage",
+            "pluginId": "email",
+            "screen": "email.templates"
+          }
+        ],
+        "scope": "workspace"
+      },
+      {
+        "items": [
+          {
+            "console": {
+              "id": "nav-tab-screens",
+              "surface": "hostTab"
+            },
+            "hostRoles": [
+              "admin",
+              "editor",
+              "author"
+            ],
+            "icon": {
+              "android": "description",
+              "apple": "doc.text"
+            },
+            "id": "page",
+            "label": "Page",
+            "order": 10,
+            "params": {
+              "new": "1"
+            },
+            "screen": "site.pages"
+          },
+          {
+            "console": {
+              "id": "/products/catalog",
+              "surface": "hostPluginSection"
+            },
+            "icon": {
+              "android": "sell",
+              "apple": "tag"
+            },
+            "id": "product",
+            "label": "Product",
+            "order": 20,
+            "params": {
+              "new": "1"
+            },
+            "planFeature": "commerce",
+            "pluginId": "commerce",
+            "screen": "commerce.product"
+          },
+          {
+            "console": {
+              "id": "/products/orders",
+              "surface": "hostPluginSection"
+            },
+            "icon": {
+              "android": "link",
+              "apple": "link.badge.plus"
+            },
+            "id": "draftOrder",
+            "label": "Draft order",
+            "order": 30,
+            "params": {
+              "new": "1"
+            },
+            "planFeature": "commerce",
+            "pluginId": "commerce",
+            "screen": "commerce.orders"
+          },
+          {
+            "console": {
+              "id": "/bookings",
+              "surface": "hostPluginTab"
+            },
+            "icon": {
+              "android": "event_available",
+              "apple": "calendar.badge.clock"
+            },
+            "id": "service",
+            "label": "Service",
+            "order": 40,
+            "params": {
+              "new": "1"
+            },
+            "planFeature": "bookings",
+            "pluginId": "bookings",
+            "screen": "bookings.services"
+          },
+          {
+            "console": {
+              "id": "/events",
+              "surface": "hostPluginTab"
+            },
+            "icon": {
+              "android": "event",
+              "apple": "calendar"
+            },
+            "id": "event",
+            "label": "Event",
+            "order": 50,
+            "params": {
+              "new": "1"
+            },
+            "planFeature": "eventCalendar",
+            "pluginId": "events-calendar",
+            "screen": "events-calendar.events"
+          },
+          {
+            "console": {
+              "id": "/forms",
+              "surface": "hostPluginTab"
+            },
+            "icon": {
+              "android": "dynamic_form",
+              "apple": "list.bullet.rectangle"
+            },
+            "id": "form",
+            "label": "Form",
+            "order": 60,
+            "params": {
+              "new": "1"
+            },
+            "pluginId": "forms",
+            "screen": "forms.list"
+          },
+          {
+            "console": {
+              "id": "/crm/contacts",
+              "surface": "hostPluginSection"
+            },
+            "icon": {
+              "android": "person_add",
+              "apple": "person.badge.plus"
+            },
+            "id": "contact",
+            "label": "Contact",
+            "order": 70,
+            "params": {
+              "new": "1"
+            },
+            "permission": "data.manage",
+            "planFeature": "crm",
+            "pluginId": "crm",
+            "screen": "crm.contacts"
+          }
+        ],
+        "scope": "site"
+      }
+    ],
     "elsewhere": [
       {
         "console": {
@@ -4427,6 +4635,7 @@
                   "id": "nav-tab-org-sites",
                   "surface": "orgTab"
                 },
+                "docs": "/getting-started/console-tour#the-sites-list",
                 "icon": {
                   "android": "public",
                   "apple": "globe"
@@ -4441,6 +4650,7 @@
                   "id": "/crm",
                   "surface": "orgPluginTab"
                 },
+                "docs": "/content-and-data/crm/overview#at-the-organization-level",
                 "icon": {
                   "android": "contact_mail",
                   "apple": "person.text.rectangle"
@@ -4462,6 +4672,7 @@
                       "id": "/crm/contacts",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview#at-the-organization-level",
                     "id": "contacts",
                     "label": "Contacts",
                     "screen": "crm.contacts"
@@ -4471,6 +4682,7 @@
                       "id": "/crm/leads",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview#at-the-organization-level",
                     "id": "leads",
                     "label": "Leads",
                     "screen": "crm.leads"
@@ -4480,6 +4692,7 @@
                       "id": "/crm/companies",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview#at-the-organization-level",
                     "id": "companies",
                     "label": "Companies",
                     "screen": "crm.companies"
@@ -4489,6 +4702,7 @@
                       "id": "/crm/deals",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview#at-the-organization-level",
                     "id": "deals",
                     "label": "Deals",
                     "screen": "crm.deals"
@@ -4498,6 +4712,7 @@
                       "id": "/crm/tasks",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview#at-the-organization-level",
                     "id": "tasks",
                     "label": "Tasks",
                     "screen": "crm.tasks"
@@ -4507,6 +4722,7 @@
                       "id": "/crm/reports",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview#at-the-organization-level",
                     "id": "reports",
                     "label": "Reports",
                     "screen": "crm.reports"
@@ -4516,6 +4732,7 @@
                       "id": "/crm/fields",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview#at-the-organization-level",
                     "id": "fields",
                     "label": "Fields",
                     "screen": "crm.fields"
@@ -4525,6 +4742,7 @@
                       "id": "/crm/settings",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview#at-the-organization-level",
                     "id": "settings",
                     "label": "Settings",
                     "screen": "crm.settings"
@@ -4536,6 +4754,7 @@
                   "id": "/inbox",
                   "surface": "orgPluginTab"
                 },
+                "docs": "/content-and-data/forms/overview",
                 "icon": {
                   "android": "inbox",
                   "apple": "tray"
@@ -4551,6 +4770,7 @@
                       "id": "/inbox/submissions",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/content-and-data/forms/overview",
                     "id": "submissions",
                     "label": "Submissions",
                     "screen": "inbox.submissions"
@@ -4560,6 +4780,7 @@
                       "id": "/inbox/contacts",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/content-and-data/forms/overview",
                     "id": "contacts",
                     "label": "Members & leads",
                     "screen": "inbox.people"
@@ -4569,6 +4790,7 @@
                       "id": "/inbox/campaigns",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/content-and-data/forms/overview",
                     "id": "campaigns",
                     "label": "Campaigns",
                     "pluginId": "marketing",
@@ -4581,6 +4803,7 @@
                   "id": "/emails",
                   "surface": "orgPluginTab"
                 },
+                "docs": "/marketing-and-automation/email-campaigns/overview",
                 "icon": {
                   "android": "mail",
                   "apple": "envelope"
@@ -4596,6 +4819,7 @@
                       "id": "/emails/messages",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
                     "id": "messages",
                     "label": "Messages",
                     "screen": "email.messages"
@@ -4605,6 +4829,7 @@
                       "id": "/emails/templates",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
                     "id": "templates",
                     "label": "Templates",
                     "screen": "email.templates"
@@ -4614,6 +4839,7 @@
                       "id": "/emails/audiences",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
                     "id": "audiences",
                     "label": "Audiences",
                     "screen": "email.audiences"
@@ -4623,6 +4849,7 @@
                       "id": "/emails/topics",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
                     "id": "topics",
                     "label": "Topics",
                     "screen": "email.topics"
@@ -4632,6 +4859,7 @@
                       "id": "/emails/sending",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
                     "id": "sending",
                     "label": "Sending",
                     "screen": "email.sending"
@@ -4641,6 +4869,7 @@
                       "id": "/emails/suppressions",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
                     "id": "suppressions",
                     "label": "Suppressions",
                     "screen": "email.suppressions"
@@ -4652,6 +4881,7 @@
                   "id": "/marketing",
                   "surface": "orgPluginTab"
                 },
+                "docs": "/marketing-and-automation/marketing-overlays/overview",
                 "icon": {
                   "android": "campaign",
                   "apple": "megaphone"
@@ -4667,6 +4897,7 @@
                       "id": "/marketing/overview",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/marketing-and-automation/marketing-overlays/overview",
                     "id": "overview",
                     "label": "Overview",
                     "screen": "marketing.overview"
@@ -4676,6 +4907,7 @@
                       "id": "/marketing/campaigns",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/marketing-and-automation/marketing-overlays/overview",
                     "id": "campaigns",
                     "label": "Campaigns",
                     "screen": "marketing.campaigns"
@@ -4685,6 +4917,7 @@
                       "id": "/marketing/conversions",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/marketing-and-automation/marketing-overlays/overview",
                     "id": "conversions",
                     "label": "Conversions",
                     "screen": "marketing.conversions"
@@ -4694,6 +4927,7 @@
                       "id": "/marketing/overlays",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/marketing-and-automation/marketing-overlays/overview",
                     "id": "overlays",
                     "label": "Overlays",
                     "screen": "marketing.overlays"
@@ -4703,6 +4937,7 @@
                       "id": "/marketing/experiments",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/marketing-and-automation/marketing-overlays/overview",
                     "id": "experiments",
                     "label": "A/B testing",
                     "screen": "marketing.experiments"
@@ -4714,6 +4949,7 @@
                   "id": "/automation",
                   "surface": "orgPluginTab"
                 },
+                "docs": "/marketing-and-automation/workflows-and-actions/overview",
                 "icon": {
                   "android": "bolt",
                   "apple": "bolt"
@@ -4744,6 +4980,7 @@
                   "id": "/outreach",
                   "surface": "orgPluginTab"
                 },
+                "docs": "/content-and-data/crm/sequences",
                 "icon": {
                   "android": "send",
                   "apple": "paperplane"
@@ -4788,6 +5025,7 @@
                   "id": "/marketplace",
                   "surface": "orgPluginTab"
                 },
+                "docs": "/developers/plugins/overview",
                 "icon": {
                   "android": "storefront",
                   "apple": "storefront"
@@ -4803,6 +5041,7 @@
                       "id": "/marketplace/browse",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/developers/plugins/overview",
                     "id": "browse",
                     "label": "Browse All",
                     "screen": "marketplace.browse"
@@ -4812,6 +5051,7 @@
                       "id": "/marketplace/installed",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/developers/plugins/overview",
                     "id": "installed",
                     "label": "Installed",
                     "screen": "marketplace.installed"
@@ -4821,6 +5061,7 @@
                       "id": "/marketplace/licences",
                       "surface": "orgPluginSection"
                     },
+                    "docs": "/developers/plugins/overview",
                     "id": "licences",
                     "label": "Licenses",
                     "screen": "marketplace.licenses"
@@ -4966,6 +5207,7 @@
                   "id": "/forms",
                   "surface": "hostPluginTab"
                 },
+                "docs": "/content-and-data/forms/overview",
                 "icon": {
                   "android": "dynamic_form",
                   "apple": "list.bullet.rectangle"
@@ -4981,6 +5223,7 @@
                   "id": "/logic",
                   "surface": "hostPluginTab"
                 },
+                "docs": "/building-sites/bindings/overview",
                 "icon": {
                   "android": "functions",
                   "apple": "function"
@@ -5007,6 +5250,7 @@
                   "id": "/products/orders",
                   "surface": "hostPluginSection"
                 },
+                "docs": "/commerce-and-bookings/commerce/overview",
                 "icon": {
                   "android": "shopping_basket",
                   "apple": "bag"
@@ -5022,6 +5266,7 @@
                       "id": "/products/orders",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/commerce-and-bookings/commerce/overview",
                     "id": "orders",
                     "label": "Orders",
                     "screen": "commerce.orders"
@@ -5031,6 +5276,7 @@
                       "id": "/products/returns",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/commerce-and-bookings/commerce/overview",
                     "id": "returns",
                     "label": "Returns",
                     "screen": "commerce.returns"
@@ -5040,6 +5286,7 @@
                       "id": "/products/reservations",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/commerce-and-bookings/commerce/overview",
                     "id": "reservations",
                     "label": "Reservations",
                     "screen": "commerce.reservations"
@@ -5074,6 +5321,7 @@
                   "id": "/products",
                   "surface": "hostPluginTab"
                 },
+                "docs": "/commerce-and-bookings/commerce/overview",
                 "icon": {
                   "android": "sell",
                   "apple": "tag"
@@ -5094,6 +5342,7 @@
                       "id": "/products/catalog",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/commerce-and-bookings/commerce/overview",
                     "id": "catalog",
                     "label": "Catalog",
                     "screen": "commerce.products"
@@ -5103,6 +5352,7 @@
                       "id": "/products/promotions",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/commerce-and-bookings/commerce/overview",
                     "id": "promotions",
                     "label": "Promotions",
                     "screen": "commerce.promotions"
@@ -5112,6 +5362,7 @@
                       "id": "/products/analytics",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/commerce-and-bookings/commerce/overview",
                     "id": "analytics",
                     "label": "Analytics",
                     "screen": "commerce.sales"
@@ -5123,6 +5374,7 @@
                   "id": "/bookings",
                   "surface": "hostPluginTab"
                 },
+                "docs": "/commerce-and-bookings/bookings/overview",
                 "icon": {
                   "android": "event_available",
                   "apple": "calendar.badge.clock"
@@ -5138,6 +5390,7 @@
                   "id": "/events",
                   "surface": "hostPluginTab"
                 },
+                "docs": "/content-and-data/events/overview",
                 "icon": {
                   "android": "event",
                   "apple": "calendar"
@@ -5160,6 +5413,7 @@
                   "id": "/inbox",
                   "surface": "hostPluginTab"
                 },
+                "docs": "/content-and-data/forms/overview",
                 "icon": {
                   "android": "inbox",
                   "apple": "tray"
@@ -5175,6 +5429,7 @@
                       "id": "/inbox/submissions",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/content-and-data/forms/overview",
                     "id": "submissions",
                     "label": "Submissions",
                     "screen": "inbox.submissions"
@@ -5184,6 +5439,7 @@
                       "id": "/inbox/contacts",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/content-and-data/forms/overview",
                     "id": "contacts",
                     "label": "Members & leads",
                     "screen": "inbox.people"
@@ -5193,6 +5449,7 @@
                       "id": "/inbox/campaigns",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/content-and-data/forms/overview",
                     "id": "campaigns",
                     "label": "Campaigns",
                     "pluginId": "marketing",
@@ -5205,6 +5462,7 @@
                   "id": "/crm",
                   "surface": "hostPluginTab"
                 },
+                "docs": "/content-and-data/crm/overview",
                 "icon": {
                   "android": "contact_mail",
                   "apple": "person.text.rectangle"
@@ -5226,6 +5484,7 @@
                       "id": "/crm/contacts",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview",
                     "id": "contacts",
                     "label": "Contacts",
                     "screen": "crm.contacts"
@@ -5235,6 +5494,7 @@
                       "id": "/crm/leads",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview",
                     "id": "leads",
                     "label": "Leads",
                     "screen": "crm.leads"
@@ -5244,6 +5504,7 @@
                       "id": "/crm/companies",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview",
                     "id": "companies",
                     "label": "Companies",
                     "screen": "crm.companies"
@@ -5253,6 +5514,7 @@
                       "id": "/crm/deals",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview",
                     "id": "deals",
                     "label": "Deals",
                     "screen": "crm.deals"
@@ -5262,6 +5524,7 @@
                       "id": "/crm/tasks",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview",
                     "id": "tasks",
                     "label": "Tasks",
                     "screen": "crm.tasks"
@@ -5271,6 +5534,7 @@
                       "id": "/crm/reports",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview",
                     "id": "reports",
                     "label": "Reports",
                     "screen": "crm.reports"
@@ -5280,6 +5544,7 @@
                       "id": "/crm/fields",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview",
                     "id": "fields",
                     "label": "Fields",
                     "screen": "crm.fields"
@@ -5289,6 +5554,7 @@
                       "id": "/crm/settings",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/content-and-data/crm/overview",
                     "id": "settings",
                     "label": "Settings",
                     "screen": "crm.settings"
@@ -5300,6 +5566,7 @@
                   "id": "/emails",
                   "surface": "hostPluginTab"
                 },
+                "docs": "/marketing-and-automation/email-campaigns/overview",
                 "icon": {
                   "android": "mail",
                   "apple": "envelope"
@@ -5315,6 +5582,7 @@
                       "id": "/emails/messages",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
                     "id": "messages",
                     "label": "Messages",
                     "screen": "email.messages"
@@ -5324,6 +5592,7 @@
                       "id": "/emails/templates",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
                     "id": "templates",
                     "label": "Templates",
                     "screen": "email.templates"
@@ -5333,6 +5602,7 @@
                       "id": "/emails/audiences",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
                     "id": "audiences",
                     "label": "Audiences",
                     "screen": "email.audiences"
@@ -5342,6 +5612,7 @@
                       "id": "/emails/topics",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
                     "id": "topics",
                     "label": "Topics",
                     "screen": "email.topics"
@@ -5351,6 +5622,7 @@
                       "id": "/emails/sending",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
                     "id": "sending",
                     "label": "Sending",
                     "screen": "email.sending"
@@ -5360,6 +5632,7 @@
                       "id": "/emails/suppressions",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/marketing-and-automation/email-campaigns/overview",
                     "id": "suppressions",
                     "label": "Suppressions",
                     "screen": "email.suppressions"
@@ -5371,6 +5644,7 @@
                   "id": "/marketing",
                   "surface": "hostPluginTab"
                 },
+                "docs": "/marketing-and-automation/marketing-overlays/overview",
                 "icon": {
                   "android": "campaign",
                   "apple": "megaphone"
@@ -5386,6 +5660,7 @@
                       "id": "/marketing/overview",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/marketing-and-automation/marketing-overlays/overview",
                     "id": "overview",
                     "label": "Overview",
                     "screen": "marketing.overview"
@@ -5395,6 +5670,7 @@
                       "id": "/marketing/campaigns",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/marketing-and-automation/marketing-overlays/overview",
                     "id": "campaigns",
                     "label": "Campaigns",
                     "screen": "marketing.campaigns"
@@ -5404,6 +5680,7 @@
                       "id": "/marketing/conversions",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/marketing-and-automation/marketing-overlays/overview",
                     "id": "conversions",
                     "label": "Conversions",
                     "screen": "marketing.conversions"
@@ -5413,6 +5690,7 @@
                       "id": "/marketing/overlays",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/marketing-and-automation/marketing-overlays/overview",
                     "id": "overlays",
                     "label": "Overlays",
                     "screen": "marketing.overlays"
@@ -5422,6 +5700,7 @@
                       "id": "/marketing/experiments",
                       "surface": "hostPluginSection"
                     },
+                    "docs": "/marketing-and-automation/marketing-overlays/overview",
                     "id": "experiments",
                     "label": "A/B testing",
                     "screen": "marketing.experiments"
@@ -5440,6 +5719,7 @@
                   "id": "/automation",
                   "surface": "hostPluginTab"
                 },
+                "docs": "/marketing-and-automation/workflows-and-actions/overview",
                 "icon": {
                   "android": "bolt",
                   "apple": "bolt"
@@ -5455,6 +5735,7 @@
                   "id": "/redirects",
                   "surface": "hostPluginTab"
                 },
+                "docs": "/building-sites/redirects/overview",
                 "icon": {
                   "android": "alt_route",
                   "apple": "arrow.triangle.branch"
@@ -5518,6 +5799,7 @@
                   "id": "/data",
                   "surface": "hostPluginTab"
                 },
+                "docs": "/content-and-data/datasets/overview",
                 "icon": {
                   "android": "dataset",
                   "apple": "tablecells"
@@ -5565,6 +5847,7 @@
                   "id": "MANAGE_TEAM_MEMBERS",
                   "surface": "teamSection"
                 },
+                "docs": "/workspace-and-billing/teams-and-roles/overview#team-page",
                 "icon": {
                   "android": "group",
                   "apple": "person.2"
@@ -5584,6 +5867,7 @@
                   "id": "MANAGE_TEAM_ROLES",
                   "surface": "teamSection"
                 },
+                "docs": "/workspace-and-billing/teams-and-roles/overview#team-page",
                 "icon": {
                   "android": "admin_panel_settings",
                   "apple": "person.badge.key"
@@ -5601,6 +5885,7 @@
                   "id": "MANAGE_TEAM_ACTIVITY",
                   "surface": "teamSection"
                 },
+                "docs": "/workspace-and-billing/teams-and-roles/overview#team-page",
                 "icon": {
                   "android": "history",
                   "apple": "clock.arrow.circlepath"
@@ -5625,6 +5910,7 @@
                   "id": "MANAGE_BILLING",
                   "surface": "billingSection"
                 },
+                "docs": "/workspace-and-billing/billing-and-plans/overview#billing-page",
                 "icon": {
                   "android": "credit_card",
                   "apple": "creditcard"
@@ -5644,6 +5930,7 @@
                   "id": "MANAGE_BILLING_USAGE",
                   "surface": "billingSection"
                 },
+                "docs": "/workspace-and-billing/billing-and-plans/overview#billing-page",
                 "icon": {
                   "android": "data_usage",
                   "apple": "gauge.with.dots.needle.33percent"
@@ -5680,6 +5967,7 @@
                   "id": "MANAGE_BILLING_INVOICES",
                   "surface": "billingSection"
                 },
+                "docs": "/workspace-and-billing/billing-and-plans/overview#billing-page",
                 "icon": {
                   "android": "receipt_long",
                   "apple": "doc.plaintext"
@@ -5698,6 +5986,7 @@
                   "id": "MANAGE_BILLING_SETTINGS",
                   "surface": "billingSection"
                 },
+                "docs": "/workspace-and-billing/billing-and-plans/overview#billing-page",
                 "icon": {
                   "android": "tune",
                   "apple": "slider.horizontal.3"
@@ -5738,6 +6027,7 @@
                   "id": "ORG_SETTINGS_BRANDING",
                   "surface": "orgSettingsSection"
                 },
+                "docs": "/getting-started/console-tour#organization-settings",
                 "icon": {
                   "android": "brush",
                   "apple": "paintbrush"
@@ -5757,6 +6047,7 @@
                   "id": "ORG_SETTINGS_SSO",
                   "surface": "orgSettingsSection"
                 },
+                "docs": "/getting-started/console-tour#organization-settings",
                 "icon": {
                   "android": "vpn_key",
                   "apple": "key.viewfinder"
@@ -5775,6 +6066,7 @@
                   "id": "ORG_SETTINGS_PROFILE",
                   "surface": "orgSettingsSection"
                 },
+                "docs": "/getting-started/console-tour#organization-settings",
                 "icon": {
                   "android": "apartment",
                   "apple": "building.2"
@@ -5789,6 +6081,7 @@
                   "id": "ORG_SETTINGS_API_KEYS",
                   "surface": "orgSettingsSection"
                 },
+                "docs": "/getting-started/console-tour#organization-settings",
                 "icon": {
                   "android": "key",
                   "apple": "key"
@@ -5803,6 +6096,7 @@
                   "id": "ORG_SETTINGS_INTEGRATIONS",
                   "surface": "orgSettingsSection"
                 },
+                "docs": "/getting-started/console-tour#organization-settings",
                 "icon": {
                   "android": "hub",
                   "apple": "point.3.connected.trianglepath.dotted"
@@ -5817,6 +6111,7 @@
                   "id": "ORG_SETTINGS_GENERAL",
                   "surface": "orgSettingsSection"
                 },
+                "docs": "/getting-started/console-tour#organization-settings",
                 "icon": {
                   "android": "settings",
                   "apple": "gearshape"
@@ -5842,6 +6137,7 @@
                   "id": "ORG_SETTINGS_PRIVACY",
                   "surface": "orgSettingsSection"
                 },
+                "docs": "/getting-started/console-tour#organization-settings",
                 "icon": {
                   "android": "privacy_tip",
                   "apple": "hand.raised"
@@ -5860,6 +6156,7 @@
                   "id": "ORG_SETTINGS_HOLDS",
                   "surface": "orgSettingsSection"
                 },
+                "docs": "/getting-started/console-tour#organization-settings",
                 "icon": {
                   "android": "warning",
                   "apple": "exclamationmark.triangle"
@@ -5874,6 +6171,7 @@
                   "id": "ORG_SETTINGS_DATA",
                   "surface": "orgSettingsSection"
                 },
+                "docs": "/getting-started/console-tour#organization-settings",
                 "icon": {
                   "android": "sync",
                   "apple": "arrow.up.arrow.down"
@@ -5899,6 +6197,7 @@
                   "id": "ORG_SETTINGS_OWNERSHIP",
                   "surface": "orgSettingsSection"
                 },
+                "docs": "/getting-started/console-tour#organization-settings",
                 "icon": {
                   "android": "manage_accounts",
                   "apple": "person.crop.circle.badge.checkmark"
@@ -5916,6 +6215,7 @@
                   "id": "ORG_SETTINGS_DELETE",
                   "surface": "orgSettingsSection"
                 },
+                "docs": "/getting-started/console-tour#organization-settings",
                 "icon": {
                   "android": "delete_forever",
                   "apple": "trash"
@@ -6108,6 +6408,7 @@
                   "id": "HOST_ADMIN_GENERAL",
                   "surface": "hostAdminSection"
                 },
+                "docs": "/getting-started/create-a-site#site-admin",
                 "icon": {
                   "android": "settings",
                   "apple": "gearshape"
@@ -6123,6 +6424,7 @@
                   "id": "HOST_ADMIN_PLUGINS",
                   "surface": "hostAdminSection"
                 },
+                "docs": "/getting-started/create-a-site#site-admin",
                 "icon": {
                   "android": "extension",
                   "apple": "puzzlepiece.extension"
@@ -6138,6 +6440,7 @@
                   "id": "HOST_ADMIN_DOMAIN",
                   "surface": "hostAdminSection"
                 },
+                "docs": "/getting-started/create-a-site#site-admin",
                 "icon": {
                   "android": "domain",
                   "apple": "link"
@@ -6153,6 +6456,7 @@
                   "id": "HOST_ADMIN_SECURITY",
                   "surface": "hostAdminSection"
                 },
+                "docs": "/getting-started/create-a-site#site-admin",
                 "icon": {
                   "android": "security",
                   "apple": "lock"
@@ -6168,6 +6472,7 @@
                   "id": "HOST_ADMIN_ERROR_PAGES",
                   "surface": "hostAdminSection"
                 },
+                "docs": "/getting-started/create-a-site#site-admin",
                 "icon": {
                   "android": "error_outline",
                   "apple": "exclamationmark.circle"
@@ -6183,6 +6488,7 @@
                   "id": "HOST_ADMIN_ACTIVITY",
                   "surface": "hostAdminSection"
                 },
+                "docs": "/getting-started/create-a-site#site-admin",
                 "icon": {
                   "android": "history",
                   "apple": "clock.arrow.circlepath"
@@ -6198,6 +6504,7 @@
                   "id": "HOST_ADMIN_BACKUP",
                   "surface": "hostAdminSection"
                 },
+                "docs": "/getting-started/create-a-site#site-admin",
                 "icon": {
                   "android": "backup",
                   "apple": "square.and.arrow.down"
@@ -6213,6 +6520,7 @@
                   "id": "HOST_ADMIN_DANGER",
                   "surface": "hostAdminSection"
                 },
+                "docs": "/getting-started/create-a-site#site-admin",
                 "icon": {
                   "android": "delete_forever",
                   "apple": "trash"
