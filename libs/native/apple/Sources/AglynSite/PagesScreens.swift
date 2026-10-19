@@ -297,9 +297,10 @@ struct PagesScreen: View {
             linkSeeded = true
             linkedPage = initialPageID
           }
+          // The pushed list's look; the selectable one keeps its own (its rows already sit on the content edges).
+          .aglynListBackground()
         }
       }
-      .aglynListBackground()
       .accessibilityIdentifier("pages-list")
     }
   }
