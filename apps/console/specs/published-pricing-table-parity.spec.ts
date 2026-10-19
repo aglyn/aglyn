@@ -42,8 +42,9 @@
  * `ZqxHI66ATZ`, then `4goVJMQCh9`), and those three with the API bands and
  * the API overage rates from the republish of **2026-10-02** (version
  * `-jejSg7GLa`), and every allowance and metered rate AGL-3469 and AGL-3476
- * moved from the second republish that day (version `qE5PwfZM-K`) — and their
- * whole job is to be a fixed point that does NOT move when the constants do.
+ * moved from the second republish that day (version `qE5PwfZM-K`), and the
+ * Site Care card and the Managed sentence from the AGL-3954 republish of
+ * **2026-10-19** (version `4OlwBbptBB`) — and their whole job is to be a fixed point that does NOT move when the constants do.
  * Deriving them from `PLAN_ENTITLEMENTS` would make the file assert `x === x`
  * and prove nothing at all.
  *
@@ -82,6 +83,7 @@ import {
   PLAN_PRICING,
   RELEASE_FLAGS,
   SELF_SERVE_PLANS,
+  SITE_CARE_ADDON_MONTHLY_USD,
   UNLIMITED,
 } from '@aglyn/aglyn'
 import type { OrgPlan } from '@aglyn/aglyn'
@@ -1110,6 +1112,31 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         const PUBLISHED = [4000, 9000, 19000, 34000, 49000, 149000]
         expect(PAID.map((p) => AI_ADDON_CREDITS_PER_MONTH[p])).toEqual(PUBLISHED)
         expect(AI_ADDON_CREDITS_PER_MONTH.free).toBe(0)
+      })
+    })
+
+    /**
+     * THE SITE CARE CARD (AGL-3954), transcribed from the republish of
+     * **2026-10-19** (screen `v0clP6xQl-`, version `4OlwBbptBB`). The card
+     * prints one flat "$49 / mo" for every paid plan, and the "Managed"
+     * sentence under the add-ons grid prices Managed Starter as Starter plus
+     * the add-on: "$74 a month, or $65 a month billed yearly".
+     *
+     * The card's other figures — $79 per started hour of extra work, and the
+     * $249 / $749 / $349 starting prices of landing pages, redesigns and a
+     * logo or brand kit — have no constant to pin yet: extra time bills as
+     * invoice items and projects as one-off invoices (AGL-3959, AGL-3970).
+     */
+    describe('Site Care add-on card', () => {
+      it('$49 / mo — flat, on every paid plan', () => {
+        expect(SITE_CARE_ADDON_MONTHLY_USD).toBe(49)
+      })
+
+      it('Managed Starter is $74 a month, or $65 a month billed yearly', () => {
+        expect(PLAN_PRICING.starter.basePriceMonthlyUsd + SITE_CARE_ADDON_MONTHLY_USD).toBe(74)
+        expect(
+          PLAN_PRICING.starter.basePriceAnnualMonthlyUsd + SITE_CARE_ADDON_MONTHLY_USD,
+        ).toBe(65)
       })
     })
   })

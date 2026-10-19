@@ -48638,7 +48638,8 @@
             "weglot",
             "music",
             "help-desks",
-            "ad-conversions"
+            "ad-conversions",
+            "domains"
           ]
         },
         {
@@ -48685,7 +48686,8 @@
             "weglot",
             "music",
             "help-desks",
-            "ad-conversions"
+            "ad-conversions",
+            "domains"
           ]
         },
         {
@@ -48718,7 +48720,8 @@
             "review-platforms",
             "music",
             "help-desks",
-            "ad-conversions"
+            "ad-conversions",
+            "domains"
           ]
         },
         {
@@ -48756,6 +48759,7 @@
             "music",
             "help-desks",
             "ad-conversions",
+            "domains",
             "crm",
             "commerce"
           ]
@@ -48795,6 +48799,7 @@
             "music",
             "help-desks",
             "ad-conversions",
+            "domains",
             "accounts",
             "commerce",
             "bookings"
@@ -48847,7 +48852,8 @@
             "review-platforms",
             "music",
             "help-desks",
-            "ad-conversions"
+            "ad-conversions",
+            "domains"
           ]
         },
         {
@@ -48885,6 +48891,7 @@
             "music",
             "help-desks",
             "ad-conversions",
+            "domains",
             "commerce",
             "crm"
           ]
@@ -48928,6 +48935,7 @@
             "music",
             "help-desks",
             "ad-conversions",
+            "domains",
             "commerce",
             "accounts",
             "crm"
@@ -48976,6 +48984,7 @@
             "music",
             "help-desks",
             "ad-conversions",
+            "domains",
             "commerce",
             "accounts"
           ]
@@ -49029,7 +49038,8 @@
             "review-platforms",
             "music",
             "help-desks",
-            "ad-conversions"
+            "ad-conversions",
+            "domains"
           ]
         }
       ]

@@ -2099,17 +2099,12 @@ const ADDONS_STALE: Record<string, Divergence> = Object.fromEntries(
 )
 
 /**
- * Cards we publish that the page carries nowhere. Empty since AGL-2900 put
- * the AI card on every breakpoint; the AI card was declared here from the
- * day AGL-2896 priced it until then, which is the shape a new card takes
- * between the code selling it and the page stating it.
+ * Cards we publish that the page carries nowhere. Empty since AGL-3954 put
+ * the Site Care card on every breakpoint. A new card is declared here between
+ * the code selling it and the page stating it: the AI card from AGL-2896 to
+ * AGL-2900, Site Care from its pricing until the breakpoints carried it.
  */
-const ADDONS_EXPECTED_ABSENT: Record<string, string> = {
-  'Site Care':
-    'priced by AGL-3954 and published to /pricing by ' +
-    '`publish-pricing-site-care-card.mjs` once the figure is confirmed; the ' +
-    'Figma breakpoints get the card after that, which is when this entry goes',
-}
+const ADDONS_EXPECTED_ABSENT: Record<string, string> = {}
 
 const addonCards = reconciler('add-on cards', ADDONS_STALE, ADDONS_EXPECTED_ABSENT)
 /**

@@ -2102,6 +2102,20 @@ a container they are absent and the code handles it.
 | `VERCEL`, `VERCEL_ENV`, `VERCEL_REGION`, `VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_PROJECT_PRODUCTION_URL`, `VERCEL_GIT_COMMIT_SHA` | Aglyn-only | Injected by Vercel, never present on a container. |
 | `VERCEL_LOG_DRAIN_SECRET`, `VERCEL_LOG_DRAIN_VERIFY` | Aglyn-only | Signature and ownership-verification values for a Vercel log drain. |
 
+### Selling domains {#domains-registrar}
+
+The site's **Custom Domain** page can sell domains: an owner searches, buys,
+and the site goes live at the name with no DNS step, because the name is
+registered in the account that hosts the site. Renewals, refunds and expiry
+run unattended from the console's plugin cron. Leave either variable unset and
+the **Get a domain** card draws nothing, and nothing is sent to a registrar or
+charged. Set them on the **console only**.
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `DOMAINS_REGISTRAR` | Feature | Runtime, console | `vercel`, the registrar driver to sell through, or unset or `none` to sell nothing. The Vercel driver uses the same `VERCEL_TOKEN` and `VERCEL_TEAM_ID` as the `vercel` domain provider, so a name lands in the team whose tenant project serves it. A plugin may offer another driver through the `domains.registrar` service, named here by its id. |
+| `STRIPE_PRODUCT_DOMAIN_REGISTRATION` | Feature | Runtime, console | The Stripe product domain registrations and renewals are billed against; `setup-stripe.mjs` creates it and prints the id. It carries the tax code automatic tax computes the line from. |
+
 ---
 
 ## Documentation site build {#docs-build}

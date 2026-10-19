@@ -33,8 +33,9 @@
  *  - the card is a clone of the Event Calendar card — the other flat,
  *    org-wide add-on — so it carries the section's own border, spacing, type
  *    and dark-scheme colors. Its title, price and first sentence replace the
- *    clone's, and three more sentences are cloned from that first one: what
- *    is quoted instead, "Any paid plan", and nothing else;
+ *    clone's, and three more sentences are cloned from that first one: the
+ *    rate for extra work past the included hour, the starting prices of
+ *    projects quoted flat, and "Any paid plan";
  *  - the grid holding the cards goes from three columns to two at `md`, so
  *    four cards sit two by two rather than three and an orphan;
  *  - the section heading's count moves from three to four;
@@ -46,6 +47,12 @@
  * because a plain script cannot import the TypeScript module. Managed Starter
  * is that plan plus the add-on: $25 + $49 a month, and $16 + $49 a month
  * billed yearly.
+ *
+ * The extra-time rate and the project floors restate the Pricing Decision Log
+ * entries of 2026-10-18 and 2026-10-19 (`docs/DECISION_LOG.md`), because
+ * neither has a constant in `plan-entitlements.ts` yet: extra time bills as
+ * invoice items and projects as one-off invoices (AGL-3959, AGL-3970). Extra
+ * time is billed per started hour, only after the owner has said yes.
  *
  * Safety:
  *  - dry run by default; `--write` is required to write anything;
@@ -70,6 +77,8 @@ const SCREEN = 'v0clP6xQl-' // /pricing
 const SITE_CARE_MONTHLY_USD = 49
 const STARTER_MONTHLY_USD = 25
 const STARTER_YEARLY_PER_MONTH_USD = 16
+const SITE_CARE_EXTRA_HOUR_USD = 79
+const PROJECT_FLOORS_USD = { landingPage: 249, redesign: 749, brandKit: 349 }
 
 /** The card the new one is cloned from, found by its title and price. */
 const TEMPLATE_TITLE = 'Event Calendar'
@@ -83,6 +92,14 @@ const GRID_COLUMNS_TO = { xs: '1fr', md: 'repeat(2, 1fr)' }
 
 const SUBHEAD_PREFIX = 'Flat monthly prices per workspace'
 
+const EXTRA_HOUR_SENTENCE =
+  `Extra work past the hour is $${SITE_CARE_EXTRA_HOUR_USD} per started hour, once you've said yes.`
+const PROJECTS_SENTENCE =
+  'Bigger jobs are quoted flat up front: ' +
+  `landing pages from $${PROJECT_FLOORS_USD.landingPage}, ` +
+  `redesigns from $${PROJECT_FLOORS_USD.redesign}, ` +
+  `logo or brand kit from $${PROJECT_FLOORS_USD.brandKit}.`
+
 const CARD = {
   title: 'Site Care',
   price: `$${SITE_CARE_MONTHLY_USD} / mo`,
@@ -90,8 +107,8 @@ const CARD = {
     'We make your site changes for you: hours, prices, photos, a staff ' +
       'member, a seasonal banner, a section on an existing page. Up to about ' +
       'an hour of work a month, done within 2 business days.',
-    'Bigger jobs are quoted first at a flat price: a new page or form, a ' +
-      'redesign, brand work, photography, ads. Plan limits still apply.',
+    EXTRA_HOUR_SENTENCE,
+    `${PROJECTS_SENTENCE} Plan limits still apply.`,
     'Any paid plan.',
   ],
 }
@@ -99,7 +116,8 @@ const CARD = {
 const MANAGED_SENTENCE =
   'Managed: your plan plus Site Care, one price. Managed Starter is ' +
   `$${STARTER_MONTHLY_USD + SITE_CARE_MONTHLY_USD} a month, or ` +
-  `$${STARTER_YEARLY_PER_MONTH_USD + SITE_CARE_MONTHLY_USD} a month billed yearly.`
+  `$${STARTER_YEARLY_PER_MONTH_USD + SITE_CARE_MONTHLY_USD} a month billed yearly. ` +
+  `${EXTRA_HOUR_SENTENCE} ${PROJECTS_SENTENCE}`
 
 const WRITE = process.argv.includes('--write')
 
@@ -228,11 +246,12 @@ header.nodes = [
   cloneText(priceId, header.$id, CARD.price),
 ]
 nodes[header.$id] = header
-const [firstSentence, quotedSentence, plansSentence] = CARD.sentences
+const [firstSentence, extraHourSentence, projectsSentence, plansSentence] = CARD.sentences
 card.nodes = [
   header.$id,
   cloneText(templateBodyId, card.$id, firstSentence),
-  cloneText(templateBodyId, card.$id, quotedSentence),
+  cloneText(templateBodyId, card.$id, extraHourSentence),
+  cloneText(templateBodyId, card.$id, projectsSentence),
   cloneText(templateBodyId, card.$id, plansSentence, {
     fontWeight: 'semiBold',
     color: 'text.primary',
