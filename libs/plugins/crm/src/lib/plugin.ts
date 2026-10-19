@@ -47,6 +47,17 @@ const CrmTasksDueCard = lazy(
 )
 
 /**
+ * What a plan without the CRM sees where the glance card would be (AGL-3977):
+ * the suite named, with the plan that includes it. One card, not two — the
+ * tasks card has nothing to sell that this one does not.
+ */
+const CRM_GLANCE_LOCKED_PREVIEW = {
+  description:
+    'Follow every person your site captures as a lead, contact or deal, ' +
+    'with tasks and reports, from one place.',
+} as const
+
+/**
  * CRM feature plugin (AGL-395, the hub since AGL-2595). Console-only — its
  * records live in Firestore and have no canvas element, so there is no UI
  * bundle. The console half declares the CRM nav + hub through the
@@ -158,8 +169,10 @@ export function registerCrmConsole(): void {
      * card is four server-counted figures, each a link into the hub.
      *
      * Both name `features.crm`, as the extension does (AGL-2611, AGL-2851):
-     * the slot composes the two, so a plan without the CRM gets neither card
-     * — absent, not upsold, the treatment every gated card gets.
+     * the slot composes the two, so a plan without the CRM gets neither card.
+     * The glance card declares a `lockedPreview` (AGL-3977), so in its place
+     * the shell draws one locked card naming the plan that includes the CRM;
+     * the tasks card stays absent.
      *
      * The same two cards again on the organization's `orgDashboard` slot
      * (AGL-2636) — the org's sites page — under the same flag, with the same
@@ -194,6 +207,7 @@ export function registerCrmConsole(): void {
         widgetId: 'crm-glance',
         title: 'CRM at a glance',
         featureFlag: 'crm',
+        lockedPreview: CRM_GLANCE_LOCKED_PREVIEW,
         Component: CrmGlanceCard,
       },
       {
@@ -208,6 +222,7 @@ export function registerCrmConsole(): void {
         widgetId: 'crm-glance',
         title: 'CRM at a glance',
         featureFlag: 'crm',
+        lockedPreview: CRM_GLANCE_LOCKED_PREVIEW,
         Component: withCrmOrgMount(CrmGlanceCard),
       },
     ],

@@ -40,8 +40,13 @@ import { useReleaseFlags } from '../hooks/use-release-flags'
 import {
   composeExtensionEntitlements,
   entitlementPurchasable,
+  lockedPreviewPlanLabel,
   resolveExtensionEntitlement,
 } from '../utils/extension-entitlement'
+import {
+  PlanLockedWidget,
+  type PlanLockedWidgetContent,
+} from './plan-locked-widget.component'
 import {
   requiredExtensionPermissions,
   resolveExtensionPermission,
@@ -238,6 +243,12 @@ export interface EntitledSlotWidget {
    * own upsell. Absent for every other widget, whose props stay the zone's.
    */
   entitlementProps?: ConsoleWidgetEntitlementProps
+  /**
+   * Present when the shell drew a locked card in this widget's place
+   * (`lockedPreview`, AGL-3977): `Component` is then `PlanLockedWidget`, and
+   * this is what it says.
+   */
+  lockedProps?: { lockedWidget: PlanLockedWidgetContent }
   Component: ComponentType<any>
 }
 
@@ -358,6 +369,14 @@ export function useSlotWidgets(slots: readonly string[]): {
           entitlement === 'blocked' &&
           upgrade !== undefined &&
           entitlementPurchasable([extension.featureFlag, widget.featureFlag], org)
+        // A card that declared a locked preview (AGL-3977) is drawn locked,
+        // by the shell, where a higher plan would include what it lacks —
+        // never mounted itself, so nothing the plan refuses is read.
+        const lockedPlanLabel =
+          !staff && !optedIn && widget.lockedPreview && entitlement === 'blocked'
+            ? lockedPreviewPlanLabel([extension.featureFlag, widget.featureFlag], org)
+            : undefined
+        const title = widget.title ?? extension.displayName ?? widget.widgetId
         // A widget behind a release flag (AGL-3601) is withheld until the
         // flags settle and absent while its flag is off: the same verdict
         // `useReleaseFlag(...).visible` gives a page, from the flags every
@@ -373,7 +392,8 @@ export function useSlotWidgets(slots: readonly string[]): {
         return {
           staff,
           release,
-          entitlement: upsell ? ('entitled' as const) : entitlement,
+          entitlement:
+            upsell || lockedPlanLabel ? ('entitled' as const) : entitlement,
           // The extension's requirement AND the widget's own, exactly as a nav
           // item composes with its extension's: a card cannot escape its
           // extension's gate by declaring a key its reader happens to hold.
@@ -390,7 +410,7 @@ export function useSlotWidgets(slots: readonly string[]): {
           widget: {
             slot,
             widgetId: widget.widgetId,
-            title: widget.title ?? extension.displayName ?? widget.widgetId,
+            title,
             column: widget.column,
             ...(widget.itemKinds ? { itemKinds: widget.itemKinds } : {}),
             ...(optedIn
@@ -400,7 +420,21 @@ export function useSlotWidgets(slots: readonly string[]): {
                     : { entitled: true },
                 }
               : {}),
-            Component: widget.Component,
+            ...(lockedPlanLabel && widget.lockedPreview
+              ? {
+                  lockedProps: {
+                    lockedWidget: {
+                      title,
+                      description: widget.lockedPreview.description,
+                      planLabel: lockedPlanLabel,
+                      upgradeHref: orgSlug
+                        ? `${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#plans`
+                        : undefined,
+                    },
+                  },
+                }
+              : {}),
+            Component: lockedPlanLabel ? PlanLockedWidget : widget.Component,
           },
         }
       },
@@ -531,6 +565,7 @@ export default function PluginWidgetSlot({
       key={widget.widgetId}
       {...props}
       {...widget.entitlementProps}
+      {...widget.lockedProps}
     />
   ))
   if (widgetZoneLayout(slot) === 'bare') return <>{rendered}</>

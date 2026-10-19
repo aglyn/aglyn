@@ -19,9 +19,11 @@ import {
   checkEntitlement,
   listPluginSeatAddons,
   orgSubscriptionState,
+  PLAN_LABELS,
   planGrantingFeature,
   resolveEffectivePlan,
   planLabelGrantingFeature,
+  SELF_SERVE_PLANS,
   type ConsoleUpgradeNotice,
   type OrgFeatureFlags,
 } from '@aglyn/aglyn'
@@ -121,6 +123,36 @@ export function entitlementPurchasable(
   return missing.every((flag) =>
     sold.some((addon) => addon.features?.includes(flag)),
   )
+}
+
+/**
+ * The plan to name on a widget's locked card (`ConsoleWidget.lockedPreview`,
+ * AGL-3977): the cheapest plan that includes EVERY flag among `featureFlags`
+ * the workspace lacks, as its label ("Starter").
+ *
+ * `undefined` when nothing is missing, or when a missing flag is one no plan
+ * carries (an add-on, a per-org grant): a locked card with no plan to name
+ * would be a dead end, so the widget stays absent there.
+ */
+export function lockedPreviewPlanLabel(
+  featureFlags: readonly (string | undefined)[],
+  org: unknown,
+): string | undefined {
+  const billing = org as Parameters<typeof checkEntitlement>[0]
+  const missing = featureFlags.filter(
+    (flag): flag is string =>
+      typeof flag === 'string' && !checkEntitlement(billing, flag),
+  )
+  if (missing.length === 0) return undefined
+  const ladder = [...SELF_SERVE_PLANS, 'enterprise' as const]
+  const plans = missing.map((flag) =>
+    planGrantingFeature(flag as keyof OrgFeatureFlags),
+  )
+  if (plans.some((plan) => plan === undefined)) return undefined
+  const highest = plans.reduce((top, plan) =>
+    ladder.indexOf(plan as never) > ladder.indexOf(top as never) ? plan : top,
+  )
+  return highest ? PLAN_LABELS[highest] : undefined
 }
 
 /**
