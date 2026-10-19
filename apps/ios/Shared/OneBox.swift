@@ -525,7 +525,7 @@ struct TitleBarSearch: View {
     .padding(.horizontal, 10)
     // Centered on the window, 240 to 480 points wide (Figma Mac/Titlebar 12:910).
     .frame(minWidth: 240, maxWidth: 480)
-    .frame(height: AglynShellMetrics.barButton)
+    .frame(height: AglynShellMetrics.searchField)
     .background(
       RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
         .fill(open ? AglynColor.paper : AglynColor.sunken))
