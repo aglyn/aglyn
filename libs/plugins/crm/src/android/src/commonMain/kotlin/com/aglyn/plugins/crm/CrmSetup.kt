@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.Contracts
+import com.aglyn.contracts.customFieldCurrency
 import com.aglyn.core.FirestoreDelete
 import com.aglyn.core.firestoreNow
 import com.aglyn.core.listquery.nameSearchTokens
@@ -63,7 +64,16 @@ import kotlinx.coroutines.launch
  */
 
 private val FIELD_KEY = Regex("^[a-z][a-z0-9_]{0,39}$")
-private val FIELD_TYPES = listOf("text" to "Text", "number" to "Number", "date" to "Date", "select" to "Choice", "checkbox" to "Checkbox", "url" to "Web address")
+/** The field types the console's field drawer offers, in its order and words (`CONTACT_FIELD_TYPES`, AGL-3971). */
+private val FIELD_TYPES: List<Pair<String, String>>
+  get() = Contracts.nativeCrmFieldTypes.map { it to (Contracts.nativeCrmFieldTypeLabels[it] ?: it) }
+
+/** A field's line in the Fields list: its key, its type, a currency field's code, Required. */
+fun fieldSubtitle(def: CustomFieldDefinition): String {
+  val type = Contracts.nativeCrmFieldTypeLabels[def.type] ?: def.type
+  val typed = if (def.type == "currency") "$type · ${customFieldCurrency(def.currency).uppercase()}" else type
+  return listOfNotNull(def.key, typed, if (def.required) "Required" else null).joinToString(" · ")
+}
 
 /** A label as a field key, the way the console's drawer suggests one. */
 fun fieldKeyOf(label: String): String {
@@ -105,7 +115,7 @@ fun FieldsSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, re
         definitions.forEach { def ->
           AglynListItem(
             title = def.label,
-            supporting = listOf(def.key, FIELD_TYPES.firstOrNull { it.first == def.type }?.second ?: def.type, if (def.required) "Required" else null).filterNotNull().joinToString(" · "),
+            supporting = fieldSubtitle(def),
             icon = AglynIcons.named("tune"),
             trailing = { if (def.retired) StatusChip("Retired") },
             onClick = if (scope.canWrite) ({ editing = def }) else null,
@@ -129,6 +139,7 @@ fun FieldsSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, re
     var label by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("text") }
     var options by remember { mutableStateOf("") }
+    var currency by remember { mutableStateOf(Contracts.nativeCrmFieldDefaultCurrency) }
     var required by remember { mutableStateOf(false) }
     val key = fieldKeyOf(label)
     val taken = reference.customFields.any { it.key == key && it.obj == obj }
@@ -159,6 +170,8 @@ fun FieldsSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, re
               "updatedAt" to now,
             ).apply {
               if (type == "select") put("options", options.split(',').map { it.trim() }.filter { it.isNotEmpty() })
+              // A currency field's amounts are in one currency, fixed once it exists (the console writes it lowercase).
+              if (type == "currency") put("currency", customFieldCurrency(currency))
               putAll(fieldListFields(key, label.trim(), required, obj))
             },
           )
@@ -168,6 +181,16 @@ fun FieldsSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, re
       OutlinedTextField(label, { label = it.take(60) }, label = { Text("Label") }, singleLine = true, supportingText = { Text("Key: $key") }, modifier = Modifier.fillMaxWidth().testTag("field-label"))
       FieldEditor(FieldSpec("type", "Type", FieldKind.SELECT, required = true, options = FIELD_TYPES.map { FieldOption(it.first, it.second) }, emptyLabel = null), type, { type = it })
       if (type == "select") OutlinedTextField(options, { options = it }, label = { Text("Choices, separated by commas") }, modifier = Modifier.fillMaxWidth())
+      if (type == "currency") {
+        FieldEditor(
+          FieldSpec(
+            "currency", "Currency", FieldKind.SELECT, required = true, emptyLabel = null,
+            options = Contracts.nativeCrmFieldCurrencies.map { FieldOption(it, it.uppercase()) },
+            help = "Every amount in this field is in this currency.",
+          ),
+          currency, { currency = it },
+        )
+      }
       SwitchRow("Required", required, { required = it })
     }
   }
@@ -178,7 +201,10 @@ fun FieldsSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, re
     var confirmDelete by remember(def.id) { mutableStateOf(false) }
     ActionDialog(
       title = def.label,
-      body = "Key ${def.key} · ${FIELD_TYPES.firstOrNull { it.first == def.type }?.second ?: def.type}. The key and the type stay as they are.",
+      body = "Key ${def.key} · ${FIELD_TYPES.firstOrNull { it.first == def.type }?.second ?: def.type}" +
+        (if (def.type == "currency") " · ${customFieldCurrency(def.currency).uppercase()}" else "") +
+        ". The key and the type stay as they are." +
+        (if (def.type == "currency") " Amounts are stored in this currency, so it is fixed once the field exists." else ""),
       icon = "tune",
       confirmLabel = "Save",
       confirmEnabled = label.isNotBlank(),
