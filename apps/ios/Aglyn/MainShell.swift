@@ -762,8 +762,9 @@ struct AreaView: View {
     let row = ShellScope(model: model, navigation: navigation).row(for: ShellSection.opening(screen, params))
     let sections = (row?.sections ?? []).filter { model.registry.screen($0.screen) != nil }
     let actions = (row?.actions ?? []).filter { model.registry.screen($0.screen) != nil }
-    // A screen that heads its own list column (Figma Orders 13:483) gets the head's parts instead of the head.
-    let columnHead = wide && AglynListColumnHead.screens.contains(screen)
+    // A screen that heads its own list column (Figma Orders 13:483; on a phone its own title row, 22:499) gets the head's
+    // parts instead of the head, the section chips and the phone's star and actions.
+    let columnHead = AglynListColumnHead.screens.contains(screen)
     PluginScreenView(screenID: screen, params: params)
       .environment(\.aglynAreaHead, columnHead ? row.map { areaHead($0, sections: sections) } : nil)
       .safeAreaInset(edge: .top, spacing: 0) {
@@ -813,7 +814,7 @@ struct AreaView: View {
       }
       .toolbar {
         // On a phone the star and the area's actions stay in the navigation bar.
-        if !wide, let row, let item = model.itemRef(for: row, navigation: navigation) {
+        if !wide, !columnHead, let row, let item = model.itemRef(for: row, navigation: navigation) {
           ToolbarItem(placement: .primaryAction) {
             let starred = model.preferences?.isStarred(item) == true
             Button {
@@ -825,7 +826,7 @@ struct AreaView: View {
             .accessibilityIdentifier("titlebar-star")
           }
         }
-        if !wide, !actions.isEmpty {
+        if !wide, !columnHead, !actions.isEmpty {
           ToolbarItemGroup(placement: .primaryAction) {
             ForEach(actions, id: \.id) { action in
               Button(action.label, systemImage: action.icon.apple) {

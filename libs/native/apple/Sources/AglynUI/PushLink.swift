@@ -39,14 +39,19 @@ extension EnvironmentValues {
   }
 }
 
-/// A row that opens a detail screen: pushed onto the shell's path, else a `NavigationLink`.
+/// A row that opens a detail screen: pushed onto the shell's path, else a `NavigationLink`. `disclosure: false` leaves
+/// out the trailing chevron, for a record row whose design draws none (Figma List/Order row, Size=Phone).
 public struct AglynPushLink<Destination: View, Label: View>: View {
   @Environment(\.aglynPush) private var push
   let destination: () -> Destination
+  let disclosure: Bool
   let label: Label
 
-  public init(@ViewBuilder destination: @escaping () -> Destination, @ViewBuilder label: () -> Label) {
+  public init(
+    disclosure: Bool = true, @ViewBuilder destination: @escaping () -> Destination, @ViewBuilder label: () -> Label
+  ) {
     self.destination = destination
+    self.disclosure = disclosure
     self.label = label()
   }
 
@@ -57,9 +62,11 @@ public struct AglynPushLink<Destination: View, Label: View>: View {
       } label: {
         HStack {
           label
-          Spacer(minLength: 0)
-          Image(systemName: "chevron.forward").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
-            .accessibilityHidden(true)
+          if disclosure {
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.forward").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+              .accessibilityHidden(true)
+          }
         }
         .contentShape(Rectangle())
       }

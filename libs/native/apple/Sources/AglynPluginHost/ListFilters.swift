@@ -126,13 +126,17 @@ public struct ListActiveFilters: View {
   let setStatus: (String?) -> Void
   let setSort: (ListQuerySort?) -> Void
   let setClauses: ([ListFilterRequest]) -> Void
+  /// The Filter control already sits in the list's toolbar (a phone list with its own search row, Figma 22:499): the
+  /// chips show only once a filter is on, as on the Mac and iPad.
+  let filterInToolbar: Bool
   @Binding var adding: Bool
 
   public init(
-    _ state: ListFilterState, adding: Binding<Bool>, setStatus: @escaping (String?) -> Void,
+    _ state: ListFilterState, adding: Binding<Bool>, filterInToolbar: Bool = false, setStatus: @escaping (String?) -> Void,
     setSort: @escaping (ListQuerySort?) -> Void, setClauses: @escaping ([ListFilterRequest]) -> Void
   ) {
     self.state = state
+    self.filterInToolbar = filterInToolbar
     _adding = adding
     self.setStatus = setStatus
     self.setSort = setSort
@@ -142,12 +146,13 @@ public struct ListActiveFilters: View {
   private var inset: CGFloat { wide ? AglynContentInsets.horizontal : AglynSpace.two }
 
   public var body: some View {
-    let showing = state.filtering || !wide || !state.refused.isEmpty
+    let leadsWithFilter = !wide && !filterInToolbar
+    let showing = state.filtering || leadsWithFilter || !state.refused.isEmpty
     VStack(alignment: .leading, spacing: 0) {
       if showing {
         ScrollView(.horizontal, showsIndicators: false) {
           HStack(spacing: AglynSpace.one) {
-            if !wide { ListFilterMenu(state, setStatus: setStatus, setSort: setSort) { adding = true } }
+            if leadsWithFilter { ListFilterMenu(state, setStatus: setStatus, setSort: setSort) { adding = true } }
             if let status = state.status {
               let label = state.statuses.first { $0.value == status }?.label ?? status
               AglynFilterChip("\(state.statusName): \(label)") { setStatus(nil) }

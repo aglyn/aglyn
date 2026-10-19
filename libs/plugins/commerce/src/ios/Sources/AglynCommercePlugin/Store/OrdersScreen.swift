@@ -41,9 +41,10 @@ struct OrdersScreen: View {
   @State private var exporting: TransferExportRequest?
   @State private var notice: String?
   @State private var addingFilter = false
-  /// On the Mac and iPad the shell hands Orders its head's parts: the title and create action head the list column, the
-  /// breadcrumbs head the detail (Figma Orders 13:483).
+  /// The shell hands Orders its head's parts: on the Mac and iPad the title and create action head the list column, the
+  /// breadcrumbs head the detail (Figma Orders 13:483); on a phone they are the screen's own title row (22:499).
   @Environment(\.aglynAreaHead) private var areaHead
+  @Environment(\.aglynWideChrome) private var wideChrome
 
   var body: some View {
     searchable(
@@ -69,17 +70,10 @@ struct OrdersScreen: View {
     )
     .navigationTitle("Orders")
     .aglynScreenTitle("Orders")
-    // Draft order is the list's primary action; Select and the shipping tools sit beside it (in the head on the Mac
-    // and iPad, the navigation bar on a phone).
-    .aglynPrimaryAction(id: "orders-draft", "Draft order", systemImage: "link.badge.plus") { drafting = true }
-    .aglynScreenToolbar(id: "orders") {
-      Button(selecting ? "Done" : "Select") {
-        selecting.toggle()
-        picked = []
-      }
-      .accessibilityIdentifier("orders-select")
+    .aglynListColumnHead(areaHead)
+    .modifier(BarActions(shown: areaHead == nil, selecting: $selecting, picked: $picked, drafting: $drafting) {
       moreMenu(select: false)
-    }
+    })
     .onAppear {
       guard startNew, !startedNew else { return }
       startedNew = true
@@ -155,13 +149,13 @@ struct OrdersScreen: View {
     }
   }
 
-  /// The list column under its head on the Mac and iPad: the title with its star, Draft order and More, then the search
-  /// and the one Filter. Elsewhere the list as it is.
+  /// The list column under its head: the title with its star, Draft order and More, then the search and the one Filter
+  /// (Mac and iPad: Figma 13:483; a phone: its title row and toolbar, 22:499). Without a head, the list as it is.
   @ViewBuilder
   private func headed<V: View>(_ list: V) -> some View {
     if let areaHead {
       VStack(spacing: 0) {
-        AglynListColumnHeader(areaHead) {
+        AglynListColumnHeader(areaHead, primary: selecting ? nil : draftOrder) {
           if selecting {
             Button("Done") {
               selecting = false
@@ -169,13 +163,6 @@ struct OrdersScreen: View {
             }
             .accessibilityIdentifier("orders-select")
           } else {
-            Button {
-              drafting = true
-            } label: {
-              Label("Draft order", systemImage: "plus").labelStyle(.titleAndIcon)
-            }
-            .keyboardShortcut("n", modifiers: .command)
-            .accessibilityIdentifier("orders-draft")
             moreMenu(select: true, iconOnly: true)
           }
         }
@@ -190,6 +177,13 @@ struct OrdersScreen: View {
     } else {
       list
     }
+  }
+
+  /// The list's one create action: a draft order to send as a payment link (the console's Draft order).
+  private var draftOrder: AglynPrimaryAction {
+    AglynPrimaryAction(
+      id: "orders-draft", title: "Draft order", systemImage: "plus", shortcut: KeyboardShortcut("n", modifiers: .command)
+    ) { drafting = true }
   }
 
   /// Orders' other actions in one More menu: Select (in the list column's head), the shipping export and the tracking
@@ -276,10 +270,11 @@ struct OrdersScreen: View {
     }
   }
 
-  /// The filters that are on, as chips; nothing at rest on the Mac and iPad.
+  /// The filters that are on, as chips; nothing at rest when the Filter sits in the list's toolbar.
   private var chips: some View {
     ListActiveFilters(
-      filterState, adding: $addingFilter, setStatus: setStatus, setSort: { model.sort = $0 }, setClauses: { model.clauses = $0 })
+      filterState, adding: $addingFilter, filterInToolbar: areaHead != nil, setStatus: setStatus, setSort: { model.sort = $0 },
+      setClauses: { model.clauses = $0 })
   }
 
   @ViewBuilder
@@ -320,7 +315,7 @@ struct OrdersScreen: View {
   @ViewBuilder
   private func content(selectable: Bool) -> some View {
     if !model.ready {
-      List { SkeletonRows(count: 6) }.aglynListBackground()
+      List { SkeletonRows(count: 6) }.modifier(OrderListLook(flush: flush))
     } else if model.failed {
       AglynEmptyState("Could not load orders", systemImage: "exclamationmark.triangle") {
         Button("Try again") { model.start(context.firestore, hostID: context.hostID) }
@@ -343,14 +338,15 @@ struct OrdersScreen: View {
             }
           }
           .buttonStyle(.aglynRow)
-          .aglynListRow()
+          .modifier(OrderRowLook(flush: flush))
           .accessibilityIdentifier("order-select-\(row.id)")
         }
         if model.hasMore {
           Button("Show more orders") { model.loadMore() }.frame(maxWidth: .infinity)
+            .modifier(OrderRowLook(flush: flush))
         }
       }
-      .aglynListBackground()
+      .modifier(OrderListLook(flush: flush))
       .accessibilityIdentifier("orders-list")
     } else if selectable {
       List {
@@ -364,10 +360,13 @@ struct OrdersScreen: View {
       .accessibilityIdentifier("orders-list")
     } else {
       List { rows(selectable: false) }
-        .aglynListBackground()
+        .modifier(OrderListLook(flush: flush))
         .accessibilityIdentifier("orders-list")
     }
   }
+
+  /// A phone list under Orders' own title row draws Figma 22:499's flush rows; otherwise the kit's grouped list.
+  private var flush: Bool { areaHead != nil && !wideChrome }
 
   @ViewBuilder
   private func rows(selectable: Bool) -> some View {
@@ -376,21 +375,67 @@ struct OrdersScreen: View {
         if selectable {
           OrderListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
         } else {
-          AglynPushLink {
+          AglynPushLink(disclosure: !flush) {
             OrderDetailView(context: context, orderID: row.id, titled: true)
           } label: {
             OrderListRow(row: row)
           }
         }
       }
-      .aglynListRow()
+      .modifier(OrderRowLook(flush: flush && !selectable))
       .accessibilityIdentifier("order-\(row.id)")
     }
     if model.hasMore {
       Button("Show more orders") { model.loadMore() }
         .frame(maxWidth: .infinity)
+        .modifier(OrderRowLook(flush: flush && !selectable))
         .accessibilityIdentifier("orders-more")
     }
+  }
+}
+
+/// Orders' navigation-bar actions where it has no head of its own (opened outside its area): Draft order as the
+/// primary, Select and More beside it.
+private struct BarActions<More: View>: ViewModifier {
+  let shown: Bool
+  @Binding var selecting: Bool
+  @Binding var picked: Set<OrderRow.ID>
+  @Binding var drafting: Bool
+  @ViewBuilder let more: () -> More
+
+  func body(content: Content) -> some View {
+    if shown {
+      content
+        .aglynPrimaryAction(id: "orders-draft", "Draft order", systemImage: "link.badge.plus") { drafting = true }
+        .aglynScreenToolbar(id: "orders") {
+          Button(selecting ? "Done" : "Select") {
+            selecting.toggle()
+            picked = []
+          }
+          .accessibilityIdentifier("orders-select")
+          more()
+        }
+    } else {
+      content
+    }
+  }
+}
+
+/// A row of the orders list: flush on a phone under Orders' own head (Figma 22:499), on the paper surface otherwise.
+private struct OrderRowLook: ViewModifier {
+  let flush: Bool
+
+  func body(content: Content) -> some View {
+    if flush { content.aglynFlushRow() } else { content.aglynListRow() }
+  }
+}
+
+/// The orders list on a phone: flush under Orders' own head, the kit's grouped list otherwise.
+private struct OrderListLook: ViewModifier {
+  let flush: Bool
+
+  func body(content: Content) -> some View {
+    if flush { content.aglynFlushList() } else { content.aglynListBackground() }
   }
 }
 

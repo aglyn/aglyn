@@ -69,8 +69,10 @@ private struct AglynSearchableModifier: ViewModifier {
   }
 }
 
-/// A list's toolbar (Figma List toolbar): its search field, then its one Filter control.
+/// A list's toolbar (Figma List toolbar): its search field, then its one Filter control. On a phone (a screen that heads
+/// its own list there, Figma 22:499's Toolbar) the field and the Filter are 40 points tall on the page.
 public struct AglynListToolbar<Filter: View>: View {
+  @Environment(\.aglynWideChrome) private var wide
   @Binding var text: String
   let prompt: String
   let onSubmit: (() -> Void)?
@@ -90,13 +92,15 @@ public struct AglynListToolbar<Filter: View>: View {
   }
 
   public var body: some View {
+    let touch = !wide
     HStack(spacing: 8) {
-      HStack(spacing: 6) {
-        Image(systemName: "magnifyingglass").font(.system(size: AglynShellMetrics.rowText - 1))
+      HStack(spacing: 8) {
+        Image(systemName: "magnifyingglass").font(.system(size: touch ? 17 : AglynShellMetrics.rowText - 1))
           .foregroundStyle(AglynColor.textTertiary)
         TextField(prompt, text: $text)
           .textFieldStyle(.plain)
-          .font(.system(size: AglynShellMetrics.rowText))
+          .font(.system(size: touch ? 17 : AglynShellMetrics.rowText))
+          .submitLabel(.search)
           .onSubmit { onSubmit?() }
           .accessibilityIdentifier("list-search")
         if !text.isEmpty {
@@ -110,22 +114,33 @@ public struct AglynListToolbar<Filter: View>: View {
           .accessibilityLabel("Clear search")
         }
       }
-      .padding(.horizontal, 10)
-      .frame(height: AglynShellMetrics.barButton)
-      .background(RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).fill(AglynColor.sunken))
-      .overlay(
-        RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).strokeBorder(AglynColor.divider))
-      filter
+      .padding(.horizontal, touch ? 12 : 10)
+      .frame(height: touch ? 40 : AglynShellMetrics.barButton)
+      .background(
+        RoundedRectangle(cornerRadius: touch ? 12 : AglynShellMetrics.controlRadius, style: .continuous).fill(AglynColor.sunken)
+      )
+      .overlay {
+        if !touch {
+          RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).strokeBorder(AglynColor.divider)
+        }
+      }
+      filter.environment(\.aglynTouchToolbar, touch)
     }
-    .padding(.horizontal, inset ?? AglynContentInsets.horizontal)
-    .padding(.bottom, 10)
-    .background(AglynColor.paper)
+    .padding(.horizontal, touch ? 16 : (inset ?? AglynContentInsets.horizontal))
+    .padding(.bottom, touch ? 12 : 10)
+    .background(touch ? AglynColor.page : AglynColor.paper)
   }
+}
+
+extension EnvironmentValues {
+  /// A Filter control in a phone's list toolbar: drawn at the toolbar's 40 points.
+  @Entry var aglynTouchToolbar: Bool = false
 }
 
 /// A Filter control for a list toolbar: one bordered "Filter" menu holding the list's filters; it reads as on (tinted,
 /// with the filter's name) once one is picked.
 public struct AglynFilterMenu<Content: View>: View {
+  @Environment(\.aglynTouchToolbar) private var touch
   let active: String?
   let content: Content
 
@@ -138,18 +153,22 @@ public struct AglynFilterMenu<Content: View>: View {
     Menu {
       content
     } label: {
-      HStack(spacing: 6) {
-        Image(systemName: "line.3.horizontal.decrease").font(.system(size: AglynShellMetrics.rowText - 1))
-        Text(active ?? "Filter").font(.system(size: AglynShellMetrics.rowText, weight: .medium)).lineLimit(1)
+      // Figma Button, Secondary: Small (28, radius 6) in a Mac or iPad list toolbar; Medium Touch (40, radius 8, 14
+      // semibold) in a phone's (22:499).
+      let radius = touch ? 8 : AglynShellMetrics.controlRadius
+      HStack(spacing: touch ? 8 : 6) {
+        Image(systemName: "line.3.horizontal.decrease").font(.system(size: touch ? 15 : AglynShellMetrics.rowText - 1))
+        Text(active ?? "Filter").font(.system(size: touch ? 14 : AglynShellMetrics.rowText, weight: touch ? .semibold : .medium))
+          .lineLimit(1)
       }
       .foregroundStyle(active == nil ? AglynColor.textPrimary : AglynColor.tint)
-      .padding(.horizontal, 10)
-      .frame(height: AglynShellMetrics.barButton)
+      .padding(.horizontal, touch ? 14 : 10)
+      .frame(height: touch ? 40 : AglynShellMetrics.barButton)
       .background(
-        RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
           .fill(active == nil ? AglynColor.paper : AglynColor.accentSoft))
       .overlay(
-        RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
           .strokeBorder(active == nil ? AglynColor.divider : .clear))
       .contentShape(Rectangle())
     }
@@ -526,17 +545,26 @@ public enum AglynListColumnHead {
 }
 
 /// A list column's head (Figma Orders 13:483): the area's title with its star, then its create action and its other
-/// actions as bordered buttons (the detail beside it holds the filled one).
+/// actions as bordered buttons (the detail beside it holds the filled one). On a phone it is the screen's own title row
+/// (Figma iPhone / Site / Orders 22:499): the large title with its star, the other actions as 40-point bordered icons,
+/// and the create action as the filled 40-point "+" at the trailing edge.
 public struct AglynListColumnHeader<Actions: View>: View {
+  @Environment(\.aglynWideChrome) private var wide
   let head: AglynAreaHead
+  let primary: AglynPrimaryAction?
   let actions: Actions
 
-  public init(_ head: AglynAreaHead, @ViewBuilder actions: () -> Actions) {
+  public init(_ head: AglynAreaHead, primary: AglynPrimaryAction? = nil, @ViewBuilder actions: () -> Actions) {
     self.head = head
+    self.primary = primary
     self.actions = actions()
   }
 
   public var body: some View {
+    if wide { column } else { phone }
+  }
+
+  private var column: some View {
     HStack(alignment: .center, spacing: 10) {
       Text(head.title)
         .font(.system(size: 22, weight: .semibold))
@@ -545,10 +573,15 @@ public struct AglynListColumnHeader<Actions: View>: View {
         .accessibilityAddTraits(.isHeader)
       head.star
       Spacer(minLength: 8)
-      HStack(spacing: 8) { actions }
-        .buttonStyle(AglynHeaderButtonStyle())
-        .menuStyle(.button)
-        .fixedSize()
+      HStack(spacing: 8) {
+        if let primary {
+          AglynBlockableButton(primary) { Label(primary.title, systemImage: primary.systemImage).labelStyle(.titleAndIcon) }
+        }
+        actions
+      }
+      .buttonStyle(AglynHeaderButtonStyle())
+      .menuStyle(.button)
+      .fixedSize()
     }
     // Figma's title row is the height of its small buttons (28), 20 below the column's top and 12 above the search.
     .frame(height: 28)
@@ -559,9 +592,113 @@ public struct AglynListColumnHeader<Actions: View>: View {
     .background(AglynColor.paper)
   }
 
+  private var phone: some View {
+    HStack(alignment: .center, spacing: 8) {
+      Text(head.title)
+        .font(.system(size: 34, weight: .bold))
+        .foregroundStyle(AglynColor.textPrimary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .accessibilityAddTraits(.isHeader)
+      head.star
+      Spacer(minLength: 8)
+      HStack(spacing: 8) {
+        actions
+          .buttonStyle(AglynTouchIconButtonStyle(filled: false))
+          .menuStyle(.button)
+        if let primary {
+          AglynBlockableButton(primary) { Label(primary.title, systemImage: primary.systemImage).labelStyle(.iconOnly) }
+            .buttonStyle(AglynTouchIconButtonStyle(filled: true))
+        }
+      }
+      .fixedSize()
+    }
+    // Figma 22:499's Title row: 16 at the sides, 4 above and 8 below a 41-point line (the 34-point title; the
+    // 40-point buttons).
+    .frame(minHeight: 41)
+    .padding(.horizontal, 16)
+    .padding(.top, 4)
+    .padding(.bottom, 8)
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
   /// The list column's side margins (Figma: 20 from the column's edges).
   public static var inset: CGFloat { 20 }
 }
+
+/// A phone title row's 40-point button (Figma 22:499): the create action filled with the accent, any other action
+/// bordered on the surface; an icon alone keeps it square, a word (Done) widens it.
+public struct AglynTouchIconButtonStyle: ButtonStyle {
+  let filled: Bool
+
+  public init(filled: Bool) { self.filled = filled }
+
+  public func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(.system(size: filled ? 20 : 17, weight: .semibold))
+      .foregroundStyle(filled ? AglynColor.primaryContrast : AglynColor.textPrimary)
+      .padding(.horizontal, 10)
+      .frame(minWidth: 40, minHeight: 40)
+      .background(
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+          .fill(filled ? AglynColor.primary : AglynColor.paper))
+      .overlay {
+        if !filled { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(AglynColor.divider) }
+      }
+      .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+      .opacity(configuration.isPressed ? 0.8 : 1)
+  }
+}
+
+extension View {
+  /// A screen that draws its own title row on a phone (`AglynListColumnHeader`): the navigation bar keeps the scope
+  /// chip and the shell's buttons and draws no second title. The title stays the screen's name for the back button.
+  /// Nothing changes on the Mac and iPad, or without a head.
+  @ViewBuilder
+  public func aglynListColumnHead(_ head: AglynAreaHead?) -> some View {
+    #if os(iOS)
+      modifier(AglynListColumnHeadModifier(head: head))
+    #else
+      self
+    #endif
+  }
+
+  /// A record row in a phone's flush list (Figma List/Order row, Size=Phone): edge to edge on the surface, 16 at the
+  /// sides, the row's own height, a hairline under it across the whole width.
+  public func aglynFlushRow() -> some View {
+    listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+      .listRowBackground(AglynColor.paper)
+      .listRowSeparatorTint(AglynColor.divider)
+      .alignmentGuide(.listRowSeparatorLeading) { _ in -16 }
+  }
+
+  /// A phone's flush list of record rows (Figma 22:499's Order rows): no inset card, rows on the surface.
+  public func aglynFlushList() -> some View {
+    listStyle(.plain)
+      .scrollContentBackground(.hidden)
+      .background(AglynColor.page)
+      .environment(\.defaultMinListRowHeight, 1)
+  }
+}
+
+#if os(iOS)
+  private struct AglynListColumnHeadModifier: ViewModifier {
+    @Environment(\.aglynWideChrome) private var wide
+    let head: AglynAreaHead?
+
+    func body(content: Content) -> some View {
+      if head != nil, !wide {
+        content
+          .navigationBarTitleDisplayMode(.inline)
+          .toolbar {
+            ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1).accessibilityHidden(true) }
+          }
+      } else {
+        content
+      }
+    }
+  }
+#endif
 
 /// The breadcrumbs over the detail column of a screen that heads its own list column (Figma Orders 13:483).
 public struct AglynDetailCrumbs: View {
