@@ -141,12 +141,6 @@
       "reason": "To fix: a support ticket; its id is in the staff link /admin/support?ticketId=, the success manager's email and the staff page's URL."
     },
     {
-      "site": "apps/console/app/api/hosts/members/route.ts: firestore.collection('orgs').doc(orgId).collection('invites').add(…)",
-      "class": "RESOURCE",
-      "issue": "AGL-3086",
-      "reason": "To fix: an org invite from a site's members page; accept, revoke and resend address it by id, and the org invite route already names invites with createResourceUid()."
-    },
-    {
       "site": "apps/console/components/media/media-library.component.tsx: doc(collection(firestore, scopeCollection, scopeId, 'mediaFolders'))",
       "class": "RESOURCE",
       "issue": "AGL-3087",

@@ -553,7 +553,17 @@ describe('Host Admin details save (AGL-1358)', () => {
 
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
     const [payload, options] = withoutSiteWideEntry(mockSetDoc.mock.calls[0])
-    expect(payload.displayName).toEqual('Renamed')
+    // The name goes to the server, which writes it and re-fans every
+    // member's site list row in the same request (AGL-3972) — never a
+    // browser write the lists only catch up with if a later ping lands.
+    expect(payload.displayName).toBeUndefined()
+    const renamed = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith('/api/hosts/sync-memberships'),
+    )
+    expect(JSON.parse(String(renamed?.[1]?.body))).toEqual({
+      hostId: 'host-1',
+      displayName: 'Renamed',
+    })
     // Every seeded field rides along, which is why `merge: true` is not
     // protection here.
     expect(payload.theme).toBeTruthy()
