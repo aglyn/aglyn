@@ -95,11 +95,15 @@ public struct AglynWorkspaceTile: View {
   let selected: Bool
   let unread: Int
   let size: CGFloat
+  /// The letters drawn without a logo: a workspace's one initial (`workspaceInitial`, Figma Type=Initial); nil draws
+  /// `aglynInitials` of the name, as a site's tile does.
+  let initials: String?
 
   public init(
     name: String, logoURL: URL?, darkLogoURL: URL? = nil, colorHex: String?, selected: Bool, unread: Int = 0,
-    size: CGFloat = AglynShellMetrics.tile
+    size: CGFloat = AglynShellMetrics.tile, initials: String? = nil
   ) {
+    self.initials = initials
     self.name = name
     self.logoURL = logoURL
     self.darkLogoURL = darkLogoURL
@@ -125,7 +129,7 @@ public struct AglynWorkspaceTile: View {
 
   public var body: some View {
     ZStack(alignment: .topTrailing) {
-      AglynBrandPicture(logoURL, darkURL: darkLogoURL, size: logoBox, cornerRadius: radius * logoBox / size) { initials }
+      AglynBrandPicture(logoURL, darkURL: darkLogoURL, size: logoBox, cornerRadius: radius * logoBox / size) { initialsTile }
         .frame(width: size, height: size)
         .background(
           RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -146,13 +150,15 @@ public struct AglynWorkspaceTile: View {
     .accessibilityAddTraits(selected ? [.isSelected, .isButton] : [.isButton])
   }
 
-  private var initials: some View {
+  private var letters: String { initials ?? aglynInitials(name) }
+
+  private var initialsTile: some View {
     let fill = Color(aglynHex: colorHex) ?? AglynColor.neutralTile
-    return Text(aglynInitials(name))
+    return Text(letters)
       .font(
         .system(
           size: size == AglynShellMetrics.tile
-            ? AglynShellMetrics.tileInitials : size * (aglynInitials(name).count > 1 ? 0.36 : 0.44),
+            ? AglynShellMetrics.tileInitials : size * (letters.count > 1 ? 0.36 : 0.44),
           weight: .semibold))
       .foregroundStyle(colorHex == nil || Color.aglynPrefersLightText(colorHex) ? AglynTokens.light.primary.contrastText : AglynTokens.light.text.primary)
       .frame(width: size, height: size)
@@ -161,6 +167,10 @@ public struct AglynWorkspaceTile: View {
 }
 
 /// A square rail button (All workspaces, Admin): a symbol on a faint tile, with a caption under it.
+///
+/// At a tile's size it is Figma's All workspaces tile (Rail 97:14737 / 12:279): the grid on the sunken ground inside a
+/// border/subtle hairline, its total under it in the secondary text, in a box as tall as Figma's. At the utility size it
+/// is a foot button (Admin).
 public struct AglynRailButton: View {
   let systemImage: String
   let caption: String?
@@ -174,23 +184,39 @@ public struct AglynRailButton: View {
     self.size = size
   }
 
+  private var utility: Bool { size == AglynShellMetrics.utility }
+  private var radius: CGFloat {
+    utility ? AglynShellMetrics.controlRadius : size * AglynShellMetrics.tileRadius / AglynShellMetrics.tile
+  }
+
   public var body: some View {
-    VStack(spacing: 3) {
-      Image(systemName: systemImage)
-        .font(.system(size: size == AglynShellMetrics.utility ? AglynShellMetrics.rowIcon - 2 : size * 0.42, weight: .semibold))
-        .foregroundStyle(filled ? AglynColor.primaryContrast : AglynColor.railText)
-        .frame(width: size, height: size)
+    if utility {
+      symbol
         .background(
-          RoundedRectangle(
-            cornerRadius: size == AglynShellMetrics.utility
-              ? AglynShellMetrics.controlRadius : size * AglynShellMetrics.tileRadius / AglynShellMetrics.tile,
-            style: .continuous)
+          RoundedRectangle(cornerRadius: radius, style: .continuous)
             .fill(filled ? AglynColor.primary : AglynColor.paper.opacity(0.7)))
-      if let caption {
-        Text(caption).font(.system(size: AglynShellMetrics.railCaption + 1, weight: .medium)).monospacedDigit()
-          .foregroundStyle(AglynColor.railText).lineLimit(1)
+    } else {
+      VStack(spacing: AglynShellMetrics.allTileGap) {
+        symbol
+          .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(AglynColor.sunken))
+          .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(AglynColor.divider, lineWidth: 1))
+        if let caption {
+          Text(caption)
+            .font(.system(size: AglynShellMetrics.allTileTotal, weight: AglynShellMetrics.allTileTotalWeight))
+            .monospacedDigit()
+            .foregroundStyle(AglynColor.secondaryText)
+            .lineLimit(1)
+        }
       }
+      .frame(height: AglynShellMetrics.allTileHeight)
     }
+  }
+
+  private var symbol: some View {
+    Image(systemName: systemImage)
+      .font(.system(size: AglynShellMetrics.rowIcon - (utility ? 2 : 0), weight: utility ? .semibold : .regular))
+      .foregroundStyle(filled ? AglynColor.primaryContrast : utility ? AglynColor.railText : AglynColor.secondaryText)
+      .frame(width: size, height: size)
   }
 }
 
