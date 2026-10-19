@@ -147,6 +147,8 @@ describe('minting a bundle link (AGL-3955)', () => {
       'https://app.aglyn.test/acme/billing?plan=starter&interval=year&addons=ai,siteCare&coupon=BOOTH25',
     )
     expect(minted.droppedAddons).toEqual(['jetpack'])
+    // Named by createResourceUid(), never a Firestore auto-id (check:id-minting).
+    expect(minted.id).not.toMatch(/^auto-/)
     expect(links()).toEqual([
       expect.objectContaining({
         id: minted.id,

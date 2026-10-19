@@ -51,6 +51,7 @@ import {
   type AddonKind,
   type BundleAddons,
 } from '@aglyn/aglyn/app-utils/bundle-intent'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { onboardingDestination } from '@aglyn/aglyn/app-utils/onboarding-deep-link'
 import {
   isUpgradeProposalPlan,
@@ -238,7 +239,7 @@ export async function mintBundleLink(options: MintBundleLinkOptions): Promise<Mi
     domain = { name, firstYearCents, renewalCents, hostId }
   }
 
-  const ref = db.collection(BUNDLE_LINKS_COLLECTION).doc()
+  const ref = db.collection(BUNDLE_LINKS_COLLECTION).doc(createResourceUid())
   const doc: BundleLinkDoc = {
     mintedBy: actor.uid,
     mintedByEmail: actor.email ?? null,
