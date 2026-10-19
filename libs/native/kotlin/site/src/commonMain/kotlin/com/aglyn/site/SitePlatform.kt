@@ -53,11 +53,11 @@ val SITE_PLATFORM_CONTRIBUTES: Map<String, List<String>> = mapOf(
  */
 fun registerSitePlatformNative(r: NativePluginRegistrar) {
   r.screen(SITE_SITES_SCREEN, title = "Sites", icon = "public", layout = ScreenLayout.LIST_DETAIL) { context, params ->
-    SitesScreen(context, initialSiteId = params["site"])
+    SitesScreen(context, initialSiteId = params["site"], startNew = params["new"] == "1")
   }
   r.screen(SITE_SITE_SCREEN, title = "Site", requiresSite = true, icon = "public") { context, params -> CurrentSiteScreen(context, params) }
   r.screen(SITE_PAGES_SCREEN, title = "Pages", requiresSite = true, icon = "description", layout = ScreenLayout.LIST_DETAIL) { context, params ->
-    PagesScreen(context, initialPageId = params["page"] ?: params["screenId"])
+    PagesScreen(context, initialPageId = params["page"] ?: params["screenId"], startNew = params["new"] == "1")
   }
 
   r.screen(SITE_MEDIA_SCREEN, title = "Media", icon = "photo_library", layout = ScreenLayout.LIST_DETAIL) { context, params -> MediaScreen(context, params) }

@@ -28,6 +28,7 @@ struct AudioRightsSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Confirm your rights to this audio")
+      .aglynScreenTitle("Confirm your rights to this audio")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

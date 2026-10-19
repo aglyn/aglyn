@@ -370,11 +370,12 @@ fun AiCreateButton(context: NativePluginContext, kind: AiCreateKind) {
  * requests. Leaving stops following; the job carries on in AI jobs.
  */
 @Composable
-fun AiCreateScreen(context: NativePluginContext, kind: AiCreateKind?, initialJobId: String?) {
+fun AiCreateScreen(context: NativePluginContext, kind: AiCreateKind?, initialJobId: String?, initialBrief: String? = null) {
   val scope = rememberCoroutineScope()
   var door by remember { mutableStateOf<AiCreateDoor?>(null) }
   var loadError by remember { mutableStateOf<String?>(null) }
-  var brief by remember { mutableStateOf("") }
+  // Home's one-line prompt hands over what was typed; nothing starts until it is sent from here.
+  var brief by remember { mutableStateOf(initialBrief.orEmpty()) }
   val picks = remember { mutableStateMapOf<String, String>() }
   var collectionId by remember { mutableStateOf<String?>(null) }
   var busy by remember { mutableStateOf(false) }
@@ -495,7 +496,7 @@ fun AiCreateScreen(context: NativePluginContext, kind: AiCreateKind?, initialJob
 
   Box(Modifier.fillMaxSize().testTag("ai-create"), contentAlignment = Alignment.TopCenter) {
     Column(
-      Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(2f)),
+      Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)),
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {
       val currentJob = jobId
@@ -514,16 +515,17 @@ fun AiCreateScreen(context: NativePluginContext, kind: AiCreateKind?, initialJob
         current == null -> SkeletonList(rows = 4)
         current.door == "upsell" && current.upsell != null -> {
           val upsell = current.upsell
-          SectionCard(upsell.title) {
-            Text(upsell.does, style = MaterialTheme.typography.bodyMedium)
-            Text(upsell.offer, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-              upsell.action?.let { action ->
-                Button(onClick = { context.navigate("core.billing.addons") }, modifier = Modifier.testTag("ai-create-add-on")) { Text(action) }
-              }
-              TextButton(onClick = { context.back() }, modifier = Modifier.testTag("ai-create-dismiss")) { Text(upsell.dismiss) }
-            }
-          }
+          // The console's AiUpsellDialog as the add-on's promo card (Figma Promo/Add-on card 121:18655): its title, what the
+          // entry does, the offer, then the dismissal (Close for a member who cannot buy it) and the add-on's action.
+          com.aglyn.ui.AddOnPromoCard(
+            title = upsell.title,
+            does = upsell.does,
+            offer = upsell.offer,
+            dismissTitle = upsell.dismiss,
+            actionTitle = upsell.action,
+            onDismiss = { context.back() },
+            onAction = { context.navigate("core.billing.addons") },
+          )
         }
         current.door == "create" && current.copy != null -> {
           val copy = current.copy

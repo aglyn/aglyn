@@ -128,6 +128,7 @@ public struct TransferExportSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(request.title)
+      .aglynScreenTitle(request.title)
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

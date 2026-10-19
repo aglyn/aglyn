@@ -82,9 +82,9 @@ struct ProviderSignInButtons: View {
         .frame(maxWidth: .infinity, minHeight: AglynAuthTokens.Metrics.buttonHeight)
         .background(
           colorScheme == .dark ? Color.white : Color.black,
-          in: RoundedRectangle(cornerRadius: AglynAuthTokens.Metrics.buttonRadius, style: .continuous)
+          in: RoundedRectangle(cornerRadius: AglynAuthDensity.buttonRadius(AglynAuthTokens.Metrics.buttonRadius), style: .continuous)
         )
-        .contentShape(RoundedRectangle(cornerRadius: AglynAuthTokens.Metrics.buttonRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: AglynAuthDensity.buttonRadius(AglynAuthTokens.Metrics.buttonRadius), style: .continuous))
       }
       .buttonStyle(.plain)
       .disabled(busy || !enabled)
@@ -98,7 +98,7 @@ struct ProviderSignInButtons: View {
       }
       .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
       .frame(height: AglynAuthTokens.Metrics.buttonHeight)
-      .clipShape(RoundedRectangle(cornerRadius: AglynAuthTokens.Metrics.buttonRadius, style: .continuous))
+      .clipShape(RoundedRectangle(cornerRadius: AglynAuthDensity.buttonRadius(AglynAuthTokens.Metrics.buttonRadius), style: .continuous))
       .disabled(busy || !enabled)
       .opacity(busy || !enabled ? AglynAuthTokens.Metrics.disabledOpacity : 1)
       // The agreement is checked before Apple's sheet opens: without it, a tap shows the reminder instead.

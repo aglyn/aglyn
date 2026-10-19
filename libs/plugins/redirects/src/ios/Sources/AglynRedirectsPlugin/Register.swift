@@ -13,7 +13,9 @@ public let redirectsListScreen = "redirects.list"
 @MainActor
 public func registerRedirectsNative(_ r: NativePluginRegistrar) {
   r.screen(redirectsListScreen, title: "Redirects", requiresSite: true, icon: RedirectsSymbols.rule) { ctx, _ in
-    RedirectsListScreen(context: ctx)
+    AglynFeatureGate(context: ctx, feature: "redirects", title: "Redirects") {
+      RedirectsListScreen(context: ctx)
+    }
   }
   r.widget("redirects.summary", title: "Redirects", icon: RedirectsSymbols.rule, order: 900, size: .half, requiresSite: true) {
     RedirectsSummaryWidget(context: $0)

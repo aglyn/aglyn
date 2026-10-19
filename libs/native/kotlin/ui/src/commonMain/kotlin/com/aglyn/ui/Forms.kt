@@ -28,8 +28,18 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.sp
 
-/** A list's quick search: a search icon, the words, and a clear button once there are any. */
+/**
+ * A list's quick search: a search icon, the words, and a clear button once there are any. On the desktop (Compact) it is
+ * Figma's list toolbar Search: 28 tall, radius 6, the sunken ground with a subtle border, a 14 icon and 13 text.
+ */
 @Composable
 fun SearchField(
   query: String,
@@ -38,6 +48,12 @@ fun SearchField(
   modifier: Modifier = Modifier,
   onSearch: (() -> Unit)? = null,
 ) {
+  val metrics = LocalShellMetrics.current
+  // The desktop and the tablet draw Figma's 28 list search (Mac 13:483, iPad 13:2167); phones keep the touch field.
+  if (metrics.compact || currentWidthClass() != WidthClass.COMPACT) {
+    CompactListSearch(query, onQuery, placeholder, modifier, onSearch, metrics)
+    return
+  }
   OutlinedTextField(
     value = query,
     onValueChange = onQuery,
@@ -53,6 +69,50 @@ fun SearchField(
     shape = MaterialTheme.shapes.extraLarge,
     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
     keyboardActions = KeyboardActions(onSearch = { onSearch?.invoke() }),
+  )
+}
+
+@Composable
+private fun CompactListSearch(
+  query: String,
+  onQuery: (String) -> Unit,
+  placeholder: String,
+  modifier: Modifier,
+  onSearch: (() -> Unit)?,
+  metrics: ShellMetrics,
+) {
+  val shape = androidx.compose.foundation.shape.RoundedCornerShape(metrics.controlRadius)
+  val muted = MaterialTheme.colorScheme.onSurfaceVariant
+  androidx.compose.foundation.text.BasicTextField(
+    value = query,
+    onValueChange = onQuery,
+    singleLine = true,
+    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurface),
+    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+    keyboardActions = KeyboardActions(onSearch = { onSearch?.invoke() }),
+    modifier = modifier.fillMaxWidth().testTag("search-field"),
+    decorationBox = { field ->
+      Row(
+        Modifier.fillMaxWidth().heightIn(min = 28.dp).clip(shape).background(MaterialTheme.colorScheme.surfaceVariant)
+          .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape).padding(start = 10.dp, end = if (query.isEmpty()) 10.dp else 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Icon(AglynIcons.named("search"), contentDescription = null, modifier = Modifier.size(14.dp), tint = muted)
+        Box(Modifier.weight(1f)) {
+          if (query.isEmpty()) Text(placeholder, fontSize = 13.sp, lineHeight = 18.sp, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          field()
+        }
+        if (query.isNotEmpty()) {
+          WithTooltip("Clear search") {
+            IconButton(onClick = { onQuery("") }, modifier = Modifier.size(24.dp)) {
+              Icon(AglynIcons.named("close"), contentDescription = "Clear search", modifier = Modifier.size(14.dp), tint = muted)
+            }
+          }
+        }
+      }
+    },
   )
 }
 

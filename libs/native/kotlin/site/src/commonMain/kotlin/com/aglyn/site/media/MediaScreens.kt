@@ -257,11 +257,13 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
             runner.error?.let { NoticeBanner(it, StatusTone.ERROR) }
             runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = runner::clear) { Text("Dismiss") } }) }
           }
-          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-            SearchField(model.search, model::type, placeholder = "Search files", modifier = Modifier.weight(1f))
-            FiltersButton(model.filters.count) { filtersOpen = true }
-            SortMenu(model.sort, model::order)
-          }
+          com.aglyn.ui.ListToolbar(
+            model.search, model::type, placeholder = "Search files", tag = "media",
+            filterCount = model.filters.count, onFilters = { filtersOpen = true },
+            sorts = Contracts.mediaSorts.map { com.aglyn.ui.SortOption(it.raw, Contracts.mediaSortLabels[it.raw] ?: it.raw) },
+            sort = model.sort.raw,
+            onSort = { key -> Contracts.mediaSorts.firstOrNull { it.raw == key }?.let(model::order) },
+          )
           model.notices.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("media-filter-notice")) }
           if (scopeTokens != null && model.search.isNotBlank()) {
             Text(Contracts.mediaScopedSearchNotice, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -352,14 +354,6 @@ internal fun AudioRightsDialog(files: List<PickedFile>, onAnswer: (Boolean) -> U
 }
 
 /** The Filters button, with how many are set. */
-@Composable
-private fun FiltersButton(count: Int, onClick: () -> Unit) {
-  OutlinedButton(onClick = onClick, modifier = Modifier.testTag("media-filters").semantics { contentDescription = if (count == 0) "Filters" else "Filters, $count set" }) {
-    Icon(AglynIcons.named("filter_list"), contentDescription = null)
-    if (count > 0) Text("$count", Modifier.padding(start = space(0.5f)))
-  }
-}
-
 /**
  * The library's other filters, the console's Filters panel in a dialog:
  * orientation, alt text, a tag (not for a reader limited to some sites, whose
@@ -430,25 +424,6 @@ private fun UploadButton(sources: List<PickSource>, enabled: Boolean, onPick: (P
           leadingIcon = { Icon(AglynIcons.named(icon), null) },
           onClick = { open = false; onPick(source) },
           modifier = Modifier.testTag("media-upload-${source.name.lowercase()}"),
-        )
-      }
-    }
-  }
-}
-
-@Composable
-private fun SortMenu(sort: MediaSort, onSort: (MediaSort) -> Unit) {
-  var open by remember { mutableStateOf(false) }
-  Box {
-    OutlinedButton(onClick = { open = true }, modifier = Modifier.testTag("media-sort").semantics { contentDescription = "Sort: ${Contracts.mediaSortLabels[sort.raw]}" }) {
-      Icon(AglynIcons.named("sort"), contentDescription = null)
-    }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-      for (option in Contracts.mediaSorts) {
-        DropdownMenuItem(
-          text = { Text(Contracts.mediaSortLabels[option.raw] ?: option.raw) },
-          trailingIcon = { if (option == sort) Icon(AglynIcons.named("check"), null) },
-          onClick = { open = false; onSort(option) },
         )
       }
     }

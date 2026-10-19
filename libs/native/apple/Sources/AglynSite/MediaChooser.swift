@@ -77,7 +77,7 @@ public struct MediaChooserSheet: View {
           }
           .pickerStyle(.segmented)
           .labelsHidden()
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
           .padding(.vertical, AglynSpace.one)
         }
         if let scope {
@@ -94,6 +94,7 @@ public struct MediaChooserSheet: View {
       }
       .background(AglynColor.page)
       .navigationTitle("Choose from media")
+      .aglynScreenTitle("Choose from media")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
@@ -203,7 +204,7 @@ private struct MediaChooserGrid: View {
           AglynNotice(error, tone: .error) { runner.clear() }.accessibilityIdentifier("chooser-upload-error")
         }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
     }
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
@@ -243,7 +244,7 @@ private struct MediaChooserGrid: View {
       self.uploaded = nil
       choose(item)
     }
-    .searchable(text: $searchText, prompt: "Search files")
+    .aglynSearchable(text: $searchText, prompt: "Search files")
     .task(id: searchText) {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }

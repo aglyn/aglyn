@@ -47,8 +47,7 @@ struct MarketingHubScreen: View {
       AglynSectionBar(MarketingSection.allCases, selection: $section, label: \.label, systemImage: \.symbol)
       Group {
         if context.hostID == nil {
-          // The workspace's Marketing page: its sections read one site at a time, the site picked here.
-          WorkspaceSitePick(context: context, key: "marketing", prompt: "Marketing of") { site in sections(site) }
+          orgSections
         } else {
           sections(context)
         }
@@ -57,8 +56,60 @@ struct MarketingHubScreen: View {
     }
     .background(AglynColor.page)
     .navigationTitle(section == .overview ? "Marketing" : section.label)
+    .aglynScreenTitle(section == .overview ? "Marketing" : section.label)
     .task(id: context.hostID) { access.start(context) }
     .onDisappear { access.stop() }
+  }
+
+  /// The site new campaigns go to at the workspace's level (the console's org page asks the same).
+  @AppStorage("aglyn.marketing.createSite") private var storedCreateHost = ""
+
+  /// The workspace's Marketing page (`MARKETING_ORG_CONSOLE_SECTIONS`): Overview and Campaigns read the workspace's
+  /// own collections, Conversions reads the site picked, and Overlays and A/B testing list site by site, each opening
+  /// on its site to edit.
+  @ViewBuilder
+  private var orgSections: some View {
+    let createHost = context.sites.contains { $0.id == storedCreateHost } ? storedCreateHost : (context.sites.first?.id ?? "")
+    if let orgID = context.orgID {
+      let actions = MarketingActions(context: context, orgID: orgID, hostID: createHost, orgLevel: true)
+      switch section {
+      case .overview: OverviewSection(context: context, actions: actions) { section = $0 }
+      case .campaigns:
+        VStack(spacing: 0) {
+          if context.sites.count > 1 {
+            HStack(spacing: AglynSpace.one) {
+              Text("Every site's campaigns. New ones go to").font(AglynFont.subheadline).foregroundStyle(.secondary)
+              Menu {
+                ForEach(context.sites) { site in Button(site.name) { storedCreateHost = site.id } }
+              } label: {
+                Label(context.siteName(createHost), systemImage: "globe").font(AglynFont.strongSubheadline)
+              }
+              .fixedSize()
+              Spacer(minLength: 0)
+            }
+            .aglynContentEdges()
+            .padding(.vertical, AglynSpace.one)
+          }
+          CampaignsSection(context: context, actions: actions, access: access, initial: initial)
+        }
+      case .conversions:
+        WorkspaceSitePick(context: context, key: "marketing.conversions", prompt: "Conversions of") { site in
+          ConversionsSection(context: site, actions: MarketingActions(context: site, orgID: orgID, hostID: site.hostID ?? ""))
+        }
+      case .overlays:
+        if access.org.ready && !access.carries("marketingOverlays") {
+          MarketingUpgradeNotice(context: context, title: "Overlays", feature: "marketingOverlays")
+        } else {
+          SiteBySiteList(context: context, collection: "overlays", noun: "overlays", screen: MarketingSection.overlays.screen)
+        }
+      case .experiments:
+        if access.org.ready && !access.carries("abTesting") {
+          MarketingUpgradeNotice(context: context, title: "A/B testing", feature: "abTesting")
+        } else {
+          SiteBySiteList(context: context, collection: "experiments", noun: "experiments", screen: MarketingSection.experiments.screen)
+        }
+      }
+    }
   }
 
   @ViewBuilder
@@ -71,17 +122,13 @@ struct MarketingHubScreen: View {
       case .conversions: ConversionsSection(context: context, actions: actions)
       case .overlays:
         if access.org.ready && !access.carries("marketingOverlays") {
-          AglynEmptyState(
-            "Overlays come with Starter", systemImage: "rectangle.on.rectangle",
-            message: "Announcement bars and popups are included from the Starter plan. Change the plan under Billing to use them.")
+          MarketingUpgradeNotice(context: context, title: "Overlays", feature: "marketingOverlays")
         } else {
           OverlaysSection(context: context, actions: actions, access: access)
         }
       case .experiments:
         if access.org.ready && !access.carries("abTesting") {
-          AglynEmptyState(
-            "A/B testing comes with Business", systemImage: "flask",
-            message: "Testing two versions of a page or an email is included from the Business plan.")
+          MarketingUpgradeNotice(context: context, title: "A/B testing", feature: "abTesting")
         } else {
           ExperimentsSection(context: context, actions: actions, access: access)
         }
@@ -109,9 +156,11 @@ struct OverviewSection: View {
     let more = sends.hasMore ? "+" : ""
     ScrollView {
       AglynCardGrid {
+        if !actions.orgLevel {
         MetricCard("Live overlays", systemImage: "rectangle.on.rectangle", tone: .info, value: overlays.ready ? "\(live.count)\(overlays.hasMore ? "+" : "")" : nil,
           caption: "\(grouped(overlays.rows.reduce(0) { $0 + $1.impressions })) views · \(grouped(overlays.rows.reduce(0) { $0 + $1.clicks })) clicks",
           actionLabel: "Open overlays") { open(.overlays) }
+        }
         MetricCard("Emails sent", systemImage: "paperplane", tone: .success, value: sends.ready ? "\(grouped(sum("sent")))\(more)" : nil,
           caption: "\(grouped(sum("opens"))) opens · \(grouped(sum("clicks"))) clicks", actionLabel: "Open campaigns") { open(.campaigns) }
         if scheduled > 0 {
@@ -119,21 +168,28 @@ struct OverviewSection: View {
             open(.campaigns)
           }
         }
+        if !actions.orgLevel {
         MetricCard("Experiments", systemImage: "flask", tone: .neutral,
           value: experiments.ready ? "\(experiments.rows.filter { $0.status == "running" }.count)" : nil,
           caption: "running · \(experiments.rows.filter { $0.winnerVariantID != nil }.count) decided", actionLabel: "Open A/B testing") { open(.experiments) }
+        }
       }
       .padding(AglynSpace.two)
     }
     .task {
-      let hostID = actions.hostID, orgID = actions.orgID
-      overlays.show(context.firestore) { FirestoreQuery(["hosts", hostID, "overlays"], order: [.init("name")], limit: $0) }
+      let hostID = actions.hostID, orgID = actions.orgID, orgLevel = actions.orgLevel
+      // The workspace's Overview reads its email figures from the one org collection; overlays and experiments are
+      // one site's each, listed site by site in their own sections.
+      if !orgLevel {
+        overlays.show(context.firestore) { FirestoreQuery(["hosts", hostID, "overlays"], order: [.init("name")], limit: $0) }
+        experiments.show(context.firestore) { FirestoreQuery(["hosts", hostID, "experiments"], limit: $0) }
+      }
       sends.show(context.firestore) {
         FirestoreQuery(
-          ["orgs", orgID, "campaigns"], filters: [ListQueryConstraint(path: "visibleTo", op: .arrayContainsAny, value: ["host:\(hostID)"])],
+          ["orgs", orgID, "campaigns"],
+          filters: orgLevel ? [] : [ListQueryConstraint(path: "visibleTo", op: .arrayContainsAny, value: ["host:\(hostID)"])],
           order: [.init("createdAtMs", descending: true)], limit: $0)
       }
-      experiments.show(context.firestore) { FirestoreQuery(["hosts", hostID, "experiments"], limit: $0) }
     }
     .onDisappear {
       overlays.stop()
@@ -182,18 +238,13 @@ struct CampaignsSection: View {
         pane(rollups, selectable: false)
       }
     }
-    .searchable(text: $searchText, prompt: "Search campaigns")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search campaigns", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      if access.canEdit {
-        ToolbarItem(placement: .primaryAction) { Button("New campaign", systemImage: "plus") { creating = true }.accessibilityIdentifier("campaign-new") }
-      }
-    }
+    .aglynPrimaryAction(id: "campaign-new", "New campaign", systemImage: "plus", enabled: access.canEdit, help: AglynRoleReason.site("creating campaigns")) { creating = true }
     .task(id: search) {
       if selection == nil { selection = initial }
-      let orgID = actions.orgID, hostID = actions.hostID, search = search
-      list.show(context.firestore) { campaignsQuery(orgID: orgID, hostID: hostID, search: search, limit: $0) }
+      let orgID = actions.orgID, hostID = actions.hostID, search = search, orgLevel = actions.orgLevel
+      list.show(context.firestore) { campaignsQuery(orgID: orgID, hostID: hostID, search: search, limit: $0, orgLevel: orgLevel) }
       lists.show(context.firestore) { _ in FirestoreQuery(["orgs", orgID, "lists"], limit: 50) }
     }
     .task(id: list.rows.map(\.id)) {
@@ -234,7 +285,7 @@ struct CampaignsSection: View {
         emptyMessage: "A campaign gathers the emails that go to the same lists over a window of time.", systemImage: "megaphone",
         onMore: { list.loadMore() }, onRetry: { list.retry() }
       ) { row in
-        NavigationLink {
+        AglynPushLink {
           CampaignDetail(context: context, actions: actions, access: access, campaignID: row.id)
         } label: {
           CampaignRowView(row: row, rollup: rollups[row.id], listNames: listNames)
@@ -317,15 +368,14 @@ struct CampaignDetail: View {
         .formStyle(.grouped)
         .aglynListBackground()
         .navigationTitle(row.name)
-        .toolbar {
+        .aglynScreenTitle(row.name)
+        .aglynScreenToolbar(id: "campaign") {
           if access.canEdit {
-            ToolbarItem(placement: .primaryAction) {
-              Menu {
-                Button("Edit", systemImage: "pencil") { editing = true }
-                Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
-              } label: {
-                Label("Campaign", systemImage: "ellipsis.circle")
-              }
+            Menu {
+              Button("Edit", systemImage: "pencil") { editing = true }
+              Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
+            } label: {
+              Label("Campaign", systemImage: "ellipsis.circle")
             }
           }
         }
@@ -472,7 +522,7 @@ struct ConversionsSection: View {
             AglynChoiceChip("From the web", selected: channel == "web") { channel = "web" }
           }
         }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
       }
       AglynLiveList(
@@ -511,7 +561,7 @@ struct OverlaysSection: View {
   var body: some View {
     let rows = list.rows.filter { $0.data["deletedAt"] == nil }.sorted { ($0.order, $0.title.lowercased()) < ($1.order, $1.title.lowercased()) }
     VStack(spacing: 0) {
-      if let notice { AglynNotice(notice, tone: .error) { self.notice = nil }.padding(.horizontal, AglynSpace.two) }
+      if let notice { AglynNotice(notice, tone: .error) { self.notice = nil }.aglynContentEdges() }
       AglynLiveList(
         rows: rows, ready: list.ready, failure: list.failure, hasMore: false, failedTitle: "Could not load overlays",
         emptyTitle: "No overlays yet", emptyMessage: "An announcement bar across the top, or a popup, shown on the pages you pick.",
@@ -542,17 +592,15 @@ struct OverlaysSection: View {
         }
       }
     }
-    .toolbar {
+    .aglynScreenToolbar(id: "overlays") {
       if access.canEdit {
-        ToolbarItem(placement: .primaryAction) {
-          Menu {
-            Button("Announcement bar") { creatingKind = "bar" }
-            Button("Popup") { creatingKind = "popup" }
-          } label: {
-            Label("New overlay", systemImage: "plus")
-          }
-          .accessibilityIdentifier("overlay-new")
+        Menu {
+          Button("Announcement bar") { creatingKind = "bar" }
+          Button("Popup") { creatingKind = "popup" }
+        } label: {
+          Label("New overlay", systemImage: "plus")
         }
+        .accessibilityIdentifier("overlay-new")
       }
     }
     .task {
@@ -750,7 +798,7 @@ struct ExperimentsSection: View {
       emptyMessage: "Show two versions of a page or an email and keep the one that converts better.", systemImage: "flask",
       onMore: { list.loadMore() }, onRetry: { list.retry() }
     ) { row in
-      NavigationLink {
+      AglynPushLink {
         ExperimentDetail(context: context, actions: actions, access: access, experimentID: row.id)
       } label: {
         AglynRow(row.name, subtitle: "\(row.variants.count) versions · \(row.target == "email" ? "Email" : "Page")", systemImage: "flask") {
@@ -759,14 +807,9 @@ struct ExperimentsSection: View {
       }
       .accessibilityIdentifier("experiment-\(row.id)")
     }
-    .searchable(text: $searchText, prompt: "Search experiments")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search experiments", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      if access.canEdit {
-        ToolbarItem(placement: .primaryAction) { Button("New experiment", systemImage: "plus") { creating = true }.accessibilityIdentifier("experiment-new") }
-      }
-    }
+    .aglynPrimaryAction(id: "experiment-new", "New experiment", systemImage: "plus", enabled: access.canEdit, help: AglynRoleReason.site("creating experiments")) { creating = true }
     .task(id: search) {
       let hostID = actions.hostID, search = search
       list.show(context.firestore) { experimentsQuery(hostID, search: search, limit: $0) }
@@ -831,11 +874,10 @@ struct ExperimentDetail: View {
         .formStyle(.grouped)
         .aglynListBackground()
         .navigationTitle(row.name)
-        .toolbar {
+        .aglynScreenTitle(row.name)
+        .aglynScreenToolbar(id: "experiment") {
           if access.canEdit {
-            ToolbarItem(placement: .primaryAction) {
-              Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
-            }
+            Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
           }
         }
         .confirmationDialog("Delete experiment?", isPresented: $confirmDelete, titleVisibility: .visible) {
@@ -935,5 +977,82 @@ struct ExperimentSheet: View {
       screens.show(context.firestore) { _ in FirestoreQuery(["hosts", hostID, "screens"], limit: 200) }
     }
     .onDisappear { screens.stop() }
+  }
+}
+
+/// One site's records of a kind, site by site, a page of sites at a time (the console's org Overlays and A/B testing):
+/// each site's rows read-only, with the way to that site's own section to edit them.
+struct SiteBySiteList: View {
+  let context: NativePluginContext
+  /// The site's collection (`hosts/{id}/<collection>`).
+  let collection: String
+  let noun: String
+  /// The section's screen, opened on a site to edit.
+  let screen: String
+  @State private var shown = 5
+
+  var body: some View {
+    List {
+      if context.sites.isEmpty {
+        Text("This workspace has no sites you can open.").foregroundStyle(.secondary)
+      }
+      ForEach(context.sites.prefix(shown)) { site in
+        Section {
+          SiteRows(context: context, hostID: site.id, collection: collection, noun: noun)
+          Button("Open \(noun) on \(site.name)") {
+            context.selectSite(site.id)
+            context.navigate(screen)
+          }
+          .accessibilityIdentifier("site-by-site-open-\(site.id)")
+        } header: {
+          Text(site.name)
+        }
+      }
+      if context.sites.count > shown {
+        AglynLoadMoreRow("Show more sites") { shown += 5 }
+      }
+    }
+    .aglynListBackground()
+  }
+}
+
+private struct SiteRows: View {
+  let context: NativePluginContext
+  let hostID: String
+  let collection: String
+  let noun: String
+  @State private var list = LiveQueryList(pageSize: 10) { $0 }
+
+  var body: some View {
+    Group {
+      if !list.ready {
+        SkeletonRows(count: 1)
+      } else if list.rows.isEmpty {
+        Text("No \(noun) yet.").foregroundStyle(.secondary)
+      } else {
+        ForEach(list.rows, id: \.id) { doc in
+          AglynRow(doc.string("name") ?? doc.string("title") ?? doc.id, subtitle: doc.string("status"), systemImage: collection == "overlays" ? "rectangle.on.rectangle" : "flask")
+        }
+      }
+    }
+    .task(id: hostID) {
+      let path = ["hosts", hostID, collection]
+      list.show(context.firestore) { FirestoreQuery(path, limit: $0) }
+    }
+    .onDisappear { list.stop() }
+  }
+}
+
+/// A section the plan leaves out, as the console's hub draws it: the console's notice naming the plan, with View plans.
+private struct MarketingUpgradeNotice: View {
+  let context: NativePluginContext
+  let title: String
+  let feature: String
+
+  var body: some View {
+    AglynUpgradeNotice(upgradeNoticeMessage(title: title, feature: feature), kind: .plan) {
+      context.navigate("core.billing.plans")
+    }
+    .asScreen()
   }
 }

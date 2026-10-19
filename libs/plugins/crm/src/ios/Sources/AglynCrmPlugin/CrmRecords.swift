@@ -62,7 +62,9 @@ enum CrmKind: String, CaseIterable, Identifiable {
 func crmPath(_ orgID: String, _ collection: String) -> [String] { ["orgs", orgID, collection] }
 
 func scopeBase(_ scope: CrmScope) -> [ListQueryFilter] {
-  [ListQueryFilter(op: .arrayContainsAny, path: "visibleTo", value: .array(scope.readTokens.map { .string($0) }))]
+  // The workspace's CRM read by an org-wide member has no scope clause: every record of every site.
+  if scope.orgLevel && scope.readTokens.isEmpty { return [] }
+  return [ListQueryFilter(op: .arrayContainsAny, path: "visibleTo", value: .array(scope.readTokens.map { .string($0) }))]
 }
 
 /// A scoped collection read, as every CRM listener asks it.
@@ -72,7 +74,8 @@ func scopedQuery(
 ) -> FirestoreQuery {
   FirestoreQuery(
     crmPath(scope.orgID, collection),
-    filters: [ListQueryConstraint(path: "visibleTo", op: .arrayContainsAny, value: scope.readTokens)] + filters,
+    filters: (scope.orgLevel && scope.readTokens.isEmpty
+      ? [] : [ListQueryConstraint(path: "visibleTo", op: .arrayContainsAny, value: scope.readTokens)]) + filters,
     order: order, limit: limit)
 }
 
@@ -114,6 +117,8 @@ func crmFilters(_ kind: CrmKind, _ scope: CrmScope) -> [CrmFilter] {
     ] + leadStatuses.map { CrmFilter(id: $0, label: leadStatusLabel($0), clauses: [ListFilterRequest(field: "status", op: "equals", value: $0)]) }
       + [CrmFilter(id: "mine", label: "Mine", clauses: [mine])]
   case .contact:
+    // A holder's facet keys belong to one site: the workspace's CRM lists every contact, unfiltered.
+    if scope.orgLevel { return [CrmFilter(id: "all", label: "All")] }
     return [
       CrmFilter(id: "all", label: "All"),
       CrmFilter(

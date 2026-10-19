@@ -11,7 +11,7 @@ import com.aglyn.pluginhost.ScreenLayout
  */
 fun registerFormsNative(r: NativePluginRegistrar) {
   r.screen(FORMS_LIST_SCREEN, title = "Forms", requiresSite = true, icon = "dynamic_form", layout = ScreenLayout.LIST_DETAIL) { context, params ->
-    FormsScreen(context, initialFormId = params["form"])
+    FormsScreen(context, initialFormId = params["form"], startNew = params["new"] == "1")
   }
   r.screen(FORMS_FORM_SCREEN, title = "Form", requiresSite = true, icon = "dynamic_form", layout = ScreenLayout.LIST_DETAIL) { context, params ->
     FormsScreen(context, initialFormId = params["form"] ?: params["formId"])

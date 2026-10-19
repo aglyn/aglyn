@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -129,13 +128,14 @@ private sealed interface PageDialog {
  * make a saved version live, and delete.
  */
 @Composable
-fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
+fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, startNew: Boolean = false) {
   val hostId = context.hostId ?: return
   val live = sitePages(context, hostId)
   val scope = rememberCoroutineScope()
   val runner = remember(hostId) { ActionRunner(scope) }
   val api = remember(hostId, context.api, context.writer) { PagesApi(context.api, context.writer, hostId) }
-  var dialog by remember { mutableStateOf<PageDialog?>(null) }
+  // Opened from Create new: the new-page form comes up at once.
+  var dialog by remember { mutableStateOf<PageDialog?>(if (startNew) PageDialog.NewPage else null) }
   val canEdit = context.siteRole in CONTENT_ROLES
   val canPublish = context.siteRole in PUBLISH_ROLES
 
@@ -145,17 +145,30 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null) {
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
         ListHeader("Pages") {
-          OverflowMenu(listOf(MenuAction("new-group", "New group", "folder", enabled = canEdit) { dialog = PageDialog.NewGroup }))
-          OutlinedButton(onClick = { dialog = PageDialog.Gallery }, enabled = canEdit, modifier = Modifier.testTag("page-from-template")) { Text("From a template") }
-          Button(onClick = { dialog = PageDialog.NewPage }, enabled = canEdit, modifier = Modifier.testTag("add-page")) {
-            Icon(AglynIcons.named("add"), contentDescription = null)
-            Text("New page", Modifier.padding(start = space(1f)))
-          }
+          OverflowMenu(
+            listOf(
+              MenuAction("new-group", "New group", "folder", enabled = canEdit) { dialog = PageDialog.NewGroup },
+              MenuAction("page-from-template", "From a template", "widgets", enabled = canEdit) { dialog = PageDialog.Gallery },
+            ),
+          )
+          com.aglyn.ui.ListHeaderAction("New page", "add", { dialog = PageDialog.NewPage }, Modifier.testTag("add-page"), enabled = canEdit)
           // Create with AI and anything else a plugin puts beside New page (the console's `hostScreens` zone).
           SlotWidgets(context, ListCreateZone.PAGES, SlotPlacement.HEADER)
         }
         if (dialog == null) {
           Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) { RunnerBanners(runner) }
+        }
+        // "Start from a template", until it is dismissed on this device; the ⋯ menu keeps the way in.
+        val stripKey = "aglyn.pages.templateStrip.dismissed.$hostId"
+        var stripShown by remember(hostId) { mutableStateOf(context.deviceStore.get(stripKey) == null) }
+        if (stripShown && canEdit) {
+          com.aglyn.ui.TemplateStrip(
+            "Start a page from one of this site's templates.",
+            "Browse templates",
+            onOpen = { dialog = PageDialog.Gallery },
+            onDismiss = { context.deviceStore.set(stripKey, "1"); stripShown = false },
+            modifier = Modifier.padding(horizontal = space(2f), vertical = space(0.5f)),
+          )
         }
         // Collapsed like the console's hub; what is open is kept per site for as long as the app runs.
         var expanded by remember(hostId) { mutableStateOf(PagesTreeMemory.expanded(hostId)) }
@@ -299,54 +312,53 @@ private fun PageDetail(
     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("page-detail"),
     verticalArrangement = Arrangement.spacedBy(space(2f)),
   ) {
-    SectionCard(null) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(page.name, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
-        val actions = buildList {
-          add(MenuAction("rename", if (page.isGroup) "Rename group" else "Rename", "edit", enabled = canEdit) { open(PageDialog.Rename(page)) })
-          if (!page.isGroup) {
-            add(MenuAction("duplicate", "Duplicate", "content_copy", enabled = canEdit) { open(PageDialog.Duplicate(page)) })
-            add(MenuAction("save-template", "Save as template", "bookmark", enabled = canEdit) { open(PageDialog.SaveTemplate(page)) })
-            add(MenuAction("move", "Move", "drive_file_move", enabled = canPublish) { open(PageDialog.Move(page)) })
-            if (row.livePath != null) add(MenuAction("unpublish", "Unpublish", "visibility_off", enabled = canPublish) { open(PageDialog.Unpublish(page, row.childCount > 0)) })
-          }
-          add(MenuAction("delete", if (page.isGroup) "Delete group" else "Delete", "delete", destructive = true, enabled = canPublish) { open(PageDialog.Delete(page, row.livePath, row.childCount > 0)) })
-        }
-        OverflowMenu(actions)
-      }
-      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
-        val status = pageStatus(row)
-        if (row.home) StatusChip("Home page", StatusTone.INFO)
-        StatusChip(status.label, if (status.live) StatusTone.SUCCESS else StatusTone.NEUTRAL)
-      }
-      page.description?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-      if (!page.isGroup) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-          Button(
-            onClick = { page.versionId?.let { context.openBesigner(BesignerPaths.screen(page.id, it), ConsoleScope.SITE) } },
-            enabled = page.versionId != null,
-            modifier = Modifier.testTag("page-edit-besigner"),
-          ) {
-            Icon(AglynIcons.named("design_services"), contentDescription = null)
-            Text("Edit in the Besigner", Modifier.padding(start = space(1f)))
-          }
-          OutlinedButton(
-            onClick = { open(PageDialog.Publish(page, if (row.home) "/" else page.slug.orEmpty())) },
-            enabled = canPublish && page.kind != SCREEN_KIND_TEMPLATE,
-            modifier = Modifier.testTag("page-publish"),
-          ) { Text(if (row.livePath != null) "Change address" else "Publish") }
-          val liveUrl = row.livePath?.let { livePageUrl(routing, it) }
-          if (liveUrl != null) {
-            OutlinedButton(onClick = { uri.openUri(liveUrl) }, modifier = Modifier.testTag("page-open-live")) {
-              Icon(AglynIcons.named("open_in_new"), contentDescription = null)
-              Text("Open live page", Modifier.padding(start = space(1f)))
-            }
-          }
-        }
-      }
+    val liveUrl = row.livePath?.let { livePageUrl(routing, it) }
+    val canPublishHere = canPublish && page.kind != SCREEN_KIND_TEMPLATE
+    val edit = com.aglyn.ui.RecordAction("page-edit-besigner", "Edit in the Besigner", "design_services", enabled = page.versionId != null) {
+      page.versionId?.let { context.openBesigner(BesignerPaths.screen(page.id, it), ConsoleScope.SITE) }
     }
+    val publish = com.aglyn.ui.RecordAction("page-publish", if (row.livePath != null) "Change address" else "Publish", "publish", enabled = canPublishHere) {
+      open(PageDialog.Publish(page, if (row.home) "/" else page.slug.orEmpty()))
+    }
+    // The next step for the page: a page nobody can visit yet is published; a live one is edited.
+    val primary = when {
+      page.isGroup -> null
+      row.livePath == null && canPublishHere -> publish
+      else -> edit
+    }
+    val more = buildList {
+      if (!page.isGroup) {
+        if (primary != edit) add(edit)
+        if (primary != publish) add(publish)
+        liveUrl?.let { url -> add(com.aglyn.ui.RecordAction("page-open-live", "Open live page", "open_in_new") { uri.openUri(url) }) }
+      }
+      if (!page.isGroup) {
+        add(com.aglyn.ui.RecordAction("duplicate", "Duplicate", "content_copy", enabled = canEdit) { open(PageDialog.Duplicate(page)) })
+        add(com.aglyn.ui.RecordAction("save-template", "Save as template", "bookmark", enabled = canEdit) { open(PageDialog.SaveTemplate(page)) })
+        if (row.livePath != null) add(com.aglyn.ui.RecordAction("unpublish", "Unpublish", "visibility_off", enabled = canPublish) { open(PageDialog.Unpublish(page, row.childCount > 0)) })
+      }
+      add(com.aglyn.ui.RecordAction("delete", if (page.isGroup) "Delete group" else "Delete", "delete", destructive = true, enabled = canPublish) { open(PageDialog.Delete(page, row.livePath, row.childCount > 0)) })
+    }
+    com.aglyn.ui.RecordHeader(
+      page.name,
+      status = {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+          val status = pageStatus(row)
+          if (row.home) StatusChip("Home page", StatusTone.INFO)
+          StatusChip(status.label, if (status.live) StatusTone.SUCCESS else StatusTone.NEUTRAL)
+        }
+      },
+      primary = primary,
+      more = more,
+      // The page's own settings, from its title ▾: its name and where it sits.
+      settings = buildList {
+        add(com.aglyn.ui.RecordAction("rename", if (page.isGroup) "Rename group" else "Rename", "edit", enabled = canEdit) { open(PageDialog.Rename(page)) })
+        if (!page.isGroup) add(com.aglyn.ui.RecordAction("move", "Move", "drive_file_move", enabled = canPublish) { open(PageDialog.Move(page)) })
+      },
+    )
+    page.description?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     if (!page.isGroup) {
-      SectionCard("Details") {
+      com.aglyn.ui.PlainSection(null) {
         DetailRow("Address", row.livePath ?: page.slug?.let { "/$it (not published)" }, placeholder = "No address yet")
         DetailRow("Published", page.publishedAt?.let { relativeTime(it.epochMillis, now) }, placeholder = "Not published")
         DetailRow("Updated", page.updatedAt?.let { relativeTime(it.epochMillis, now) })
@@ -361,7 +373,7 @@ private fun PageVersions(context: NativePluginContext, hostId: String, page: Pag
   val versions by remember(hostId, page.id, context.firestore) {
     context.firestore.observe(FirestoreQuery("hosts/$hostId/screens/${page.id}/versions", orderBy = listOf(FirestoreOrder("createdAt", descending = true)), limit = 20))
   }.collectAsState(Live.Loading)
-  SectionCard("Versions") {
+  com.aglyn.ui.FoldedSection("Versions", count = (versions as? Live.Ready)?.value?.size, tag = "page-fold-versions") {
     when (val live = versions) {
       Live.Loading -> SkeletonList(rows = 2)
       is Live.Failed -> Text("Versions could not be loaded.", color = MaterialTheme.colorScheme.onSurfaceVariant)

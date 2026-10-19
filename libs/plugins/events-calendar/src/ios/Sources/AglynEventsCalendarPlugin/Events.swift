@@ -156,6 +156,9 @@ final class HostEvents {
 /// The site's events, the picked one's editor beside the list on iPad and Mac.
 struct EventsScreen: View {
   let context: NativePluginContext
+  /// Opened from Create new (`new=1`): its create form comes up on arrival.
+  var startNew = false
+  @State private var startedNew = false
   @State private var events = HostEvents()
   @State private var selection: String?
   @State private var adding = false
@@ -178,17 +181,16 @@ struct EventsScreen: View {
       }
     }
     .navigationTitle("Events")
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          if sizeClass == .compact { adding = true } else { selection = Self.newID }
-        } label: {
-          Label("Add event", systemImage: "plus")
-        }
-        .accessibilityIdentifier("add-event")
-      }
+    .aglynScreenTitle("Events")
+    .aglynPrimaryAction(id: "add-event", "Add event", systemImage: "plus") {
+      if sizeClass == .compact { adding = true } else { selection = Self.newID }
     }
     .sheet(isPresented: $adding) { NavigationStack { editor(for: nil) } }
+    .onAppear {
+      guard startNew, !startedNew else { return }
+      startedNew = true
+      if sizeClass == .compact { adding = true } else { selection = Self.newID }
+    }
     .task(id: context.hostID) { events.start(context.firestore, hostID: context.hostID) }
     .onDisappear { events.stop() }
     .confirmationDialog(
@@ -223,7 +225,7 @@ struct EventsScreen: View {
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       if let (text, tone) = notice { AglynNotice(text, tone: tone) { notice = nil }.padding(AglynSpace.two) }
-      if events.full { AglynNotice("Showing the newest \(eventCeiling) events.", tone: .info).padding(.horizontal, AglynSpace.two) }
+      if events.full { AglynNotice("Showing the newest \(eventCeiling) events.", tone: .info).aglynContentEdges() }
       if let rows = events.rows {
         if events.failed && rows.isEmpty {
           AglynEmptyState("Could not load this site's events", systemImage: "exclamationmark.triangle")
@@ -238,7 +240,7 @@ struct EventsScreen: View {
             .accessibilityIdentifier("events-list")
         } else {
           List(rows) { row in
-            NavigationLink {
+            AglynPushLink {
               editor(for: row)
             } label: {
               EventListRow(row: row)
@@ -365,16 +367,12 @@ struct EventEditor: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(draft.id == nil ? "New event" : draft.title.isEmpty ? "Event" : draft.title)
+    .aglynScreenTitle(draft.id == nil ? "New event" : draft.title.isEmpty ? "Event" : draft.title)
     .onAppear { if draft.startsAt == nil { draft.startsAt = Self.nextHour } }
-    .toolbar {
-      ToolbarItem(placement: .confirmationAction) {
-        Button("Save") {
-          onSave(draft)
-          if draft.id == nil { dismiss() }
-        }
-        .disabled(problem != nil)
-        .accessibilityIdentifier("event-save")
-      }
+    // Beside the list on the Mac and iPad, Save sits in the head as a bordered button; the list keeps Add event.
+    .aglynEditorActions(id: "event-save", save: "Save", enabled: problem == nil, primary: false) {
+      onSave(draft)
+      if draft.id == nil { dismiss() }
     }
     .accessibilityIdentifier("event-editor")
   }
@@ -391,7 +389,12 @@ struct EventEditor: View {
 /// natively from a link. The Kotlin registrar is the same list.
 @MainActor
 public func registerEventsCalendarNative(_ r: NativePluginRegistrar) {
-  r.screen(eventsScreen, title: "Events", requiresSite: true, icon: "calendar") { ctx, _ in EventsScreen(context: ctx) }
+  r.screen(eventsScreen, title: "Events", requiresSite: true, icon: "calendar") { ctx, params in
+    // Sold only as an add-on: a workspace without it reads the add-on's own sentence and View add-ons.
+    AglynFeatureGate(context: ctx, feature: "eventCalendar", title: "Events") {
+      EventsScreen(context: ctx, startNew: params["new"] == "1")
+    }
+  }
   r.quickAction("events-calendar.open", title: "Events", icon: "calendar", order: 320, screen: eventsScreen, requiresSite: true)
   r.deepLink("events-calendar.page", path: "/events", screen: eventsScreen)
 }

@@ -38,6 +38,33 @@ final class SiteTests: XCTestCase {
     }
   }
 
+  /// Create site says first what stops it, in the console's own words (`create-host-dialog`).
+  func testCreateSiteSaysWhatStopsItAsTheConsole() {
+    XCTAssertEqual(
+      CreateSiteBlock.limit(3).message,
+      "Your plan includes 3 sites, and this workspace is using all of them. Upgrade or add extra sites from Billing.")
+    XCTAssertEqual(
+      CreateSiteBlock.limit(1).message,
+      "Your plan includes one site, and this workspace is using all of them. Upgrade or add extra sites from Billing.")
+    XCTAssertEqual(
+      CreateSiteBlock.role.message,
+      "Your role in this workspace does not allow creating sites. Ask a workspace owner or admin to create it, or to "
+        + "change your role.")
+  }
+
+  /// The plan's site limit is said before the click, counted as the console's create-site dialog counts it: the set
+  /// entries of the org's `hosts` directory against `hostLimit`.
+  func testTheSiteLimitCountsAsTheConsolesDialogDoes() {
+    let three: [String: Any] = ["a": true, "b": true, "c": "host-c"]
+    XCTAssertEqual(siteLimitBlock(limit: 3, directory: three), .limit(3))
+    XCTAssertEqual(siteLimitBlock(limit: 1, directory: ["a": ["at": 1]]), .limit(1))
+    // Removed sites (null, false) and empty entries do not count, as `filter(Boolean)` does not.
+    XCTAssertNil(siteLimitBlock(limit: 3, directory: ["a": true, "b": NSNull(), "c": false, "d": 0, "e": ""]))
+    XCTAssertNil(siteLimitBlock(limit: 3, directory: ["a": true, "b": true]))
+    // No directory yet counts none.
+    XCTAssertNil(siteLimitBlock(limit: 3, directory: [:]))
+  }
+
   func testRegistersEveryDeclaredContribution() {
     let registry = registry()
     XCTAssertEqual(registry.screen("site.pages")?.requiresSite, true)

@@ -27,3 +27,6 @@ fun relativeTime(thenMillis: Long, nowMillis: Long): String {
     else -> "${days / 365} yr ago"
   }
 }
+
+/** An ISO-8601 instant (`2026-10-18T21:55:00.000Z`, as the console's routes answer) as epoch milliseconds; null when it is not one. */
+fun isoInstantMillis(iso: String): Long? = com.aglyn.core.listquery.parseIsoInstant(iso)

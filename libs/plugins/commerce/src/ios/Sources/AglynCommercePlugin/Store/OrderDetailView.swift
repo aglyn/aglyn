@@ -35,7 +35,9 @@ struct OrderDetailView: View {
   @State private var refundingLine: Int?
   @State private var lineRefundKey: String?
   @State private var working = false
+  @State private var noting = false
   @Environment(\.openURL) private var openURL
+  @Environment(\.aglynWideChrome) private var wide
 
   var body: some View {
     Group {
@@ -50,6 +52,11 @@ struct OrderDetailView: View {
       }
     }
     .navigationTitle(titled ? (model.row?.number ?? "Order") : "Orders")
+    .aglynScreenTitle(titled ? (model.row?.number ?? "Order") : "Orders")
+    #if os(iOS)
+      // The record's head below already shows the number large.
+      .navigationBarTitleDisplayMode(.inline)
+    #endif
     .task(id: "\(context.hostID ?? ""):\(orderID)") {
       model.start(context.firestore, hostID: context.hostID, orderID: orderID)
     }
@@ -58,14 +65,21 @@ struct OrderDetailView: View {
 
   private func form(_ row: OrderRow) -> some View {
     let order = row.order
-    return Form {
+    // The Mac and iPad detail column is Figma's plain one (Orders 13:483); a phone keeps its grouped form.
+    return AglynRecordForm {
       Section {
-        // The kit's detail head (spec 7): the order number, its channel and time, its status.
-        AglynDetailHeader(
+        // The record's head (the calmer screens): the next step for its state as the one filled button, every other
+        // act in the ⋯ menu.
+        // Beside the list the head's line names the customer first, as Figma's customer line does.
+        AglynRecordHeader(
           row.number,
-          subtitle: [orderChannelLabel(order.channel?.rawValue), row.createdAt.map { $0.formatted(date: .abbreviated, time: .shortened) }]
-            .compactMap { $0 }.joined(separator: " · "),
-          systemImage: "bag", status: (row.statusLabel, orderStatusTone(row.status).tone))
+          subtitle: [
+            wide ? row.customer : nil, orderChannelLabel(order.channel?.rawValue),
+            row.createdAt.map { $0.formatted(date: .abbreviated, time: .shortened) },
+          ]
+          .compactMap { $0 }.joined(separator: " · "),
+          systemImage: "bag", status: (row.statusLabel, orderStatusTone(row.status).tone),
+          primary: primaryAction(row), more: moreActions(row))
         if let dispute = describeOrderDispute(order) {
           AglynNotice("\(dispute.label). \(dispute.detail)", tone: dispute.tone == "open" || dispute.tone == "lost" ? .error : .info)
             .accessibilityIdentifier("order-dispute")
@@ -78,47 +92,13 @@ struct OrderDetailView: View {
         }
         if let problem { AglynNotice(problem, tone: .error) { self.problem = nil } }
         if let done { AglynNotice(done, tone: .success) { self.done = nil } }
-        let actions = OrderAction.available(for: row.status)
-        if !actions.isEmpty {
-          // One row when the labels fit whole, otherwise one button per line:
-          // a phone never breaks "Refund" into "Ref / und".
-          let buttons = Group {
-            if orderCanRefund(order) {
-              Button(role: .destructive) { refundingSheet = true } label: {
-                Label("Refund", systemImage: "arrow.uturn.backward")
-              }
-              .buttonStyle(.bordered)
-              .disabled(busy != nil)
-              .accessibilityIdentifier("order-action-refund")
-            }
-            ForEach(actions) { action in
-              Button(role: action == .cancel ? .destructive : nil) {
-                switch action {
-                case .cancel: confirming = action
-                case .fulfill: fulfilling = true
-                default: Task { await run(action) }
-                }
-              } label: {
-                if busy == action { ProgressView() } else { Label(action.title, systemImage: action.systemImage) }
-              }
-              .buttonStyle(.bordered)
-              .disabled(busy != nil)
-              .accessibilityIdentifier("order-action-\(action.rawValue)")
-            }
-          }
-          .lineLimit(1)
-          .fixedSize(horizontal: true, vertical: false)
-          ViewThatFits(in: .horizontal) {
-            HStack { buttons }
-            VStack(alignment: .leading) { buttons }
-          }
-        }
       }
 
-      Section("Items") {
+      Section {
         let lines = order.lineItems ?? []
         let states = orderLineFulfillmentStates(order)
         let canRefundLines = canTransitionOrder(from: row.status, to: .refunded) && !orderDisputeBlocksRefund(order)
+        if wide { AglynRecordSectionTitle("Items") }
         if lines.isEmpty {
           Text("No items").foregroundStyle(.secondary)
         }
@@ -127,29 +107,68 @@ struct OrderDetailView: View {
           // What this line is still entitled to (AGL-2454): a line refunded by itself is struck through.
           let withdrawn = orderLineRefunded(order, index)
           let fulfilled = states.indices.contains(index) ? states[index].fulfilledQuantity : 0
-          VStack(alignment: .leading, spacing: AglynSpace.one) {
-            AglynRow(
-              line.name, subtitle: [line.variantLabel, quantity == 1 ? nil : "\(quantity) × \(formatOrderMoney(Int(line.unitAmountCents)))"]
-                .compactMap { $0 }.joined(separator: " · "),
-              systemImage: "shippingbox"
-            ) {
-              Text(formatOrderMoney(Int(line.unitAmountCents) * quantity)).monospacedDigit()
-                .strikethrough(withdrawn)
-                .foregroundStyle(withdrawn ? .secondary : .primary)
+          if wide {
+            // Figma 13:483's plain line: what was bought and how many, then its amount; the line's own refund is in
+            // its context menu, the order's in the head's ⋯.
+            VStack(alignment: .leading, spacing: 4) {
+              HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(
+                  [line.name, line.variantLabel].compactMap { $0 }.joined(separator: ", ")
+                    + (quantity == 1 ? "" : " × \(quantity)")
+                )
+                .font(.system(size: 14)).foregroundStyle(AglynColor.textPrimary)
+                Spacer(minLength: 12)
+                Text(formatOrderMoney(Int(line.unitAmountCents) * quantity)).font(.system(size: 14)).monospacedDigit()
+                  .strikethrough(withdrawn)
+                  .foregroundStyle(withdrawn ? AglynColor.secondaryText : AglynColor.textPrimary)
+              }
+              if fulfilled > 0 || withdrawn {
+                HStack {
+                  if fulfilled > 0 { StatusChip("\(fulfilled) of \(quantity) fulfilled") }
+                  if withdrawn { StatusChip("Refunded", tone: .warning) }
+                }
+              }
             }
-            HStack {
-              if fulfilled > 0 { StatusChip("\(fulfilled) of \(quantity) fulfilled") }
-              if withdrawn {
-                StatusChip("Refunded", tone: .warning)
-              } else if canRefundLines {
+            .padding(.vertical, 10)
+            .contextMenu {
+              if !withdrawn && canRefundLines {
                 Button("Refund line", role: .destructive) { refundingLine = index }
-                  .buttonStyle(.borderless)
                   .disabled(busy != nil || working)
-                  .accessibilityIdentifier("order-refund-line-\(index)")
+              }
+            }
+            .accessibilityIdentifier("order-line-\(index)")
+          } else {
+            VStack(alignment: .leading, spacing: AglynSpace.one) {
+              AglynRow(
+                line.name, subtitle: [line.variantLabel, quantity == 1 ? nil : "\(quantity) × \(formatOrderMoney(Int(line.unitAmountCents)))"]
+                  .compactMap { $0 }.joined(separator: " · "),
+                systemImage: "shippingbox"
+              ) {
+                Text(formatOrderMoney(Int(line.unitAmountCents) * quantity)).monospacedDigit()
+                  .strikethrough(withdrawn)
+                  .foregroundStyle(withdrawn ? .secondary : .primary)
+              }
+              HStack {
+                if fulfilled > 0 { StatusChip("\(fulfilled) of \(quantity) fulfilled") }
+                if withdrawn {
+                  StatusChip("Refunded", tone: .warning)
+                } else if canRefundLines {
+                  Button("Refund line", role: .destructive) { refundingLine = index }
+                    .buttonStyle(.borderless)
+                    .disabled(busy != nil || working)
+                    .accessibilityIdentifier("order-refund-line-\(index)")
+                }
               }
             }
           }
         }
+        if orderRefundState(order) != .none {
+          // The refund's state in words, as the console says it under the lines (AGL-2454).
+          Text(orderRefundSummary(order)).font(AglynFont.caption).foregroundStyle(AglynColor.error)
+            .accessibilityIdentifier("order-refund-state")
+        }
+      } header: {
+        if !wide { Text("Items") }
       }
 
       Section {
@@ -168,73 +187,20 @@ struct OrderDetailView: View {
         }
         if let tip = totals?.tipCents, tip != 0 { AglynAmountRow("Tip", amount: formatOrderMoney(Int(tip))) }
         AglynAmountRow("Total", amount: row.total, emphasized: true)
-        if orderRefundState(order) != .none {
-          AglynAmountRow("Refunded", amount: orderRefundSummary(order), tone: .warning)
-        }
-        // A merchant's refund and a lost chargeback are different doors (AGL-1787), said apart.
-        let reversal = splitOrderReversal(order)
-        if reversal.chargedBackCents > 0 {
-          AglynAmountRow("Charged back", amount: formatOrderMoney(reversal.chargedBackCents), tone: .warning)
-        }
+          // Figma 13:483: the total sits under a hairline in the plain column.
+          .overlay(alignment: .top) { if wide { AglynHairline() } }
+        // In the plain column the notes are a row, so they line up with the totals (a footer ignores the row insets).
+        if wide { totalsNotes(order).font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText) }
       } header: {
-        Text("Totals")
+        // In the plain column the totals follow the items directly, under the total's hairline (Figma 13:483).
+        if !wide { Text("Totals") }
       } footer: {
-        // How the tax on this order was computed (AGL-2451); absent means not recorded, never "no tax".
-        Text(describeOrderTaxMode(order.taxMode?.rawValue))
-      }
-
-      Section("Customer") {
-        LabeledContent("Name", value: row.customer)
-        if let email = order.customerEmail, !email.isEmpty { LabeledContent("Email", value: email) }
-        // Their CRM record, which the order fed (the console's "View customer in CRM").
-        if let link = customerCrmLink(orgSlug: context.orgSlug, hostSlug: context.hostSlug, email: order.customerEmail) {
-          Button("View customer in CRM", systemImage: "person.crop.circle") { context.openLink(link) }
-            .accessibilityIdentifier("order-customer-crm")
-        }
-        if let phone = order.customerPhone, !phone.isEmpty { LabeledContent("Phone", value: phone) }
-        if let address = order.shippingAddress, let text = addressText(address) {
-          LabeledContent("Ships to") { Text(text).multilineTextAlignment(.trailing) }
-        }
-        if let note = order.note, !note.isEmpty { LabeledContent("Note", value: note) }
-      }
-
-      if row.status != .pending {
-        Section {
-          Button {
-            receiptSheet = true
-          } label: {
-            Label("Send the receipt", systemImage: "envelope")
-          }
-          .accessibilityIdentifier("order-receipt")
-        } header: {
-          Text("Receipt")
-        } footer: {
-          Text("Sends the receipt again, by email or text.")
-        }
-      }
-
-      // The console's Packing slip and Invoice: its own pages, on this device's print sheet.
-      Section {
-        ForEach(OrderPrintKind.allCases) { kind in
-          Button {
-            Task { await printPage(kind) }
-          } label: {
-            HStack {
-              Label(kind.title, systemImage: kind.systemImage)
-              Spacer()
-              if printing == kind.rawValue { ProgressView() }
-            }
-          }
-          .disabled(printing != nil)
-          .accessibilityIdentifier("order-print-\(kind.rawValue)")
-        }
-      } header: {
-        Text("Print")
+        if !wide { totalsNotes(order) }
       }
 
       let shipments = order.fulfillments ?? []
       if !shipments.isEmpty {
-        Section("Shipments") {
+        AglynFoldedSection("Shipments", count: shipments.count, identifier: "order-fold-shipments") {
           ForEach(shipments, id: \.id) { shipment in shipmentRow(shipment, order: order, number: row.number) }
         }
       }
@@ -263,39 +229,20 @@ struct OrderDetailView: View {
         }
       }
 
-      if let payments = order.payments, !payments.isEmpty {
-        Section("Payments") {
-          ForEach(payments, id: \.id) { payment in
-            AglynRow(
-              paymentLabel(payment), subtitle: payment.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized,
-              systemImage: payment.method == .cash ? "banknote" : "creditcard"
-            ) {
-              Text(formatOrderMoney(Int(payment.amountCents))).monospacedDigit()
-            }
-          }
+      // Figma 13:483's folded rows: Customer details, then Timeline and notes. The console's order has no payments
+      // section; its refunds are captions under the totals (above).
+      AglynFoldedSection("Customer details", identifier: "order-fold-customer") {
+        LabeledContent("Name", value: row.customer)
+        if let email = order.customerEmail, !email.isEmpty { LabeledContent("Email", value: email) }
+        if let phone = order.customerPhone, !phone.isEmpty { LabeledContent("Phone", value: phone) }
+        if let address = order.shippingAddress, let text = addressText(address) {
+          LabeledContent("Ships to") { Text(text).multilineTextAlignment(.trailing) }
         }
+        if let note = order.note, !note.isEmpty { LabeledContent("Note", value: note) }
       }
 
-      // Pickup and delivery steps, returns on this order, shipping labels and the services the store has connected.
-      Section {
-        Button {
-          context.navigate("commerce.orderServices", ["orderId": orderID])
-        } label: {
-          AglynRow(
-            "Pickup, returns and services", subtitle: "Pickup and delivery steps, returns, labels and connected services",
-            systemImage: "puzzlepiece.extension"
-          ) {
-            Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
-          }
-        }
-        .buttonStyle(.aglynRow)
-        .accessibilityIdentifier("order-more")
-      }
-
-      OrderAnnotationSections(context: context, orderID: orderID, order: order)
+      OrderAnnotationSections(context: context, orderID: orderID, order: order, noting: $noting)
     }
-    .formStyle(.grouped)
-    .aglynListBackground()
     .confirmationDialog(
       "Cancel this order?", isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
       titleVisibility: .visible
@@ -335,6 +282,66 @@ struct OrderDetailView: View {
     .sheet(isPresented: $receiptSheet) {
       ReceiptSheet(context: context, order: order, orderID: orderID, number: row.number) { done = "The receipt is on its way." }
     }
+  }
+
+  /// The one filled button: the order's next step (Fulfill, then Mark delivered), none once it has none.
+  private func primaryAction(_ row: OrderRow) -> AglynRecordAction? {
+    let offer = OrderAction.available(for: row.status)
+    if offer.contains(.fulfill) {
+      return AglynRecordAction("order-action-fulfill", "Fulfill", systemImage: OrderAction.fulfill.systemImage, enabled: busy == nil) {
+        fulfilling = true
+      }
+    }
+    if offer.contains(.deliver) {
+      return AglynRecordAction(
+        "order-action-deliver", OrderAction.deliver.title, systemImage: OrderAction.deliver.systemImage, enabled: busy == nil,
+        busy: busy == .deliver
+      ) { Task { await run(.deliver) } }
+    }
+    return nil
+  }
+
+  /// Every other act on the order, in the ⋯ menu: the receipt, its printouts, a note, the customer's CRM record, the
+  /// order's services, then Refund and Cancel order.
+  private func moreActions(_ row: OrderRow) -> [AglynRecordAction] {
+    let order = row.order
+    var out: [AglynRecordAction] = []
+    if row.status != .pending {
+      out.append(AglynRecordAction("order-receipt", "Send receipt", systemImage: "envelope") { receiptSheet = true })
+    }
+    // The console's Packing slip and Invoice: its own pages, on this device's print sheet.
+    for kind in OrderPrintKind.allCases {
+      out.append(
+        AglynRecordAction(
+          "order-print-\(kind.rawValue)", kind.title, systemImage: kind.systemImage, enabled: printing == nil,
+          busy: printing == kind.rawValue
+        ) { Task { await printPage(kind) } })
+    }
+    out.append(AglynRecordAction("order-add-note", "Add a note", systemImage: "square.and.pencil") { noting = true })
+    // Their CRM record, which the order fed (the console's "View customer in CRM").
+    if let link = customerCrmLink(orgSlug: context.orgSlug, hostSlug: context.hostSlug, email: order.customerEmail) {
+      out.append(AglynRecordAction("order-customer-crm", "View customer in CRM", systemImage: "person.crop.circle") {
+        context.openLink(link)
+      })
+    }
+    // Pickup and delivery steps, returns on this order, shipping labels and the services the store has connected.
+    out.append(AglynRecordAction("order-more", "Pickup, returns and services", systemImage: "puzzlepiece.extension") {
+      context.navigate("commerce.orderServices", ["orderId": orderID])
+    })
+    if orderCanRefund(order) {
+      out.append(
+        AglynRecordAction("order-action-refund", "Refund", systemImage: "arrow.uturn.backward", destructive: true, enabled: busy == nil) {
+          refundingSheet = true
+        })
+    }
+    if OrderAction.available(for: row.status).contains(.cancel) {
+      out.append(
+        AglynRecordAction(
+          "order-action-cancel", OrderAction.cancel.title, systemImage: OrderAction.cancel.systemImage, destructive: true,
+          enabled: busy == nil, busy: busy == .cancel
+        ) { confirming = .cancel })
+    }
+    return out
   }
 
   private func run(_ action: OrderAction) async {
@@ -478,10 +485,20 @@ struct OrderDetailView: View {
     }
   }
 
-  private func paymentLabel(_ payment: OrderPayment) -> String {
-    let method = payment.method.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
-    if let brand = payment.cardBrand, let last4 = payment.last4 { return "\(brand.capitalized) •••• \(last4)" }
-    return method
+  /// Under the totals, as the console's order says it: how the tax was computed (AGL-2451; absent means not recorded,
+  /// never "no tax"), then what was refunded and what a lost chargeback took, two doors said apart (AGL-1787), in the
+  /// error color.
+  private func totalsNotes(_ order: HostOrder) -> some View {
+    let reversal = splitOrderReversal(order)
+    return VStack(alignment: .leading, spacing: 2) {
+      Text(describeOrderTaxMode(order.taxMode?.rawValue))
+      if reversal.refundedCents > 0 {
+        Text("Refunded \(formatOrderMoney(reversal.refundedCents))").foregroundStyle(AglynColor.error)
+      }
+      if reversal.chargedBackCents > 0 {
+        Text("Charged back \(formatOrderMoney(reversal.chargedBackCents))").foregroundStyle(AglynColor.error)
+      }
+    }
   }
 
   private func addressText(_ address: OrderAddress) -> String? {

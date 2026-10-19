@@ -17,8 +17,8 @@ struct AglynApp: App {
   init() {
     AglynFonts.register()
     #if os(macOS)
-      // The main windows are tabs of one group: ⌘T opens one, the system's tab overview lists them.
-      PushAppDelegate.windowTabs = true
+      // Tabs are the window's own tab strip (Figma Mac/Titlebar), not the system's window tabs.
+      PushAppDelegate.windowTabs = false
     #endif
     #if DEBUG && os(macOS)
       DebugSnapshot.scheduleIfAsked()
@@ -31,7 +31,12 @@ struct AglynApp: App {
       RootView { navigation in MainShell(navigation: navigation, seed: seed) }
         .environment(model)
     }
-    .defaultSize(width: 1180, height: 780)
+    // Figma's Mac frames are 1440 × 900.
+    .defaultSize(width: 1440, height: 900)
+    #if os(macOS)
+      // No system title bar: the tab strip and toolbar are drawn by the shell, the window's buttons in the tab strip.
+      .windowStyle(.hiddenTitleBar)
+    #endif
     .commands {
       AglynCommands(model: model)
       #if os(macOS)

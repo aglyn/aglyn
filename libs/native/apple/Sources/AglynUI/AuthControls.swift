@@ -24,7 +24,7 @@ public enum AglynButtonSize: Sendable {
   }
 
   var radius: CGFloat {
-    self == .large ? AglynAuthTokens.Metrics.buttonRadius : AglynAuthTokens.Metrics.buttonMediumRadius
+    self == .large ? AglynAuthDensity.buttonRadius(AglynAuthTokens.Metrics.buttonRadius) : AglynAuthDensity.buttonRadius(AglynAuthTokens.Metrics.buttonMediumRadius)
   }
 
   var padding: CGFloat {
@@ -193,7 +193,7 @@ public struct AglynGoogleButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
 
     var body: some View {
-      let shape = RoundedRectangle(cornerRadius: AglynAuthTokens.Metrics.buttonRadius, style: .continuous)
+      let shape = RoundedRectangle(cornerRadius: AglynAuthDensity.buttonRadius(AglynAuthTokens.Metrics.buttonRadius), style: .continuous)
       HStack(spacing: AglynAuthTokens.Metrics.buttonIconGap) {
         AglynGoogleGlyph()
           .frame(width: AglynAuthTokens.Metrics.googleGlyph, height: AglynAuthTokens.Metrics.googleGlyph)
@@ -288,7 +288,7 @@ public struct AglynAuthFieldFrame<Input: View>: View {
   }
 
   public var body: some View {
-    let shape = RoundedRectangle(cornerRadius: M.fieldRadius, style: .continuous)
+    let shape = RoundedRectangle(cornerRadius: AglynAuthDensity.fieldRadius, style: .continuous)
     VStack(alignment: .leading, spacing: M.fieldLabelGap) {
       Text(label)
         .font(AglynAuthFont.smallStrong)
@@ -346,7 +346,7 @@ public struct AglynAuthNotice: View {
     }
     .foregroundStyle(ink.color)
     .padding(12)
-    .background(fill.color, in: RoundedRectangle(cornerRadius: AglynAuthTokens.Metrics.fieldRadius, style: .continuous))
+    .background(fill.color, in: RoundedRectangle(cornerRadius: AglynAuthDensity.fieldRadius, style: .continuous))
     .accessibilityElement(children: .combine)
   }
 }
@@ -362,5 +362,33 @@ public struct AglynAuthLinkStyle: ButtonStyle {
       .foregroundStyle(AglynAuthTokens.Colors.textPrimary.color)
       .opacity(configuration.isPressed ? 0.6 : 1)
       .contentShape(Rectangle())
+  }
+}
+
+/// The sign-in screens' rounding per density (Figma Button and Field "Density"): Compact on the Mac, radius 6 on every
+/// button and field and 12 on the card; Touch elsewhere, the tokens' own.
+public enum AglynAuthDensity {
+  public static func buttonRadius(_ touch: CGFloat) -> CGFloat {
+    #if os(macOS)
+      6
+    #else
+      touch
+    #endif
+  }
+
+  public static var fieldRadius: CGFloat {
+    #if os(macOS)
+      6
+    #else
+      AglynAuthTokens.Metrics.fieldRadius
+    #endif
+  }
+
+  public static var cardRadius: CGFloat {
+    #if os(macOS)
+      12
+    #else
+      AglynAuthTokens.Metrics.cardRadius
+    #endif
   }
 }

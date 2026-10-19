@@ -15,6 +15,7 @@ public func registerMarketingNative(_ r: NativePluginRegistrar) {
       if section == .conversions, let campaign = params["campaign"], let orgID = ctx.orgID, let hostID = ctx.hostID {
         ConversionsSection(context: ctx, actions: MarketingActions(context: ctx, orgID: orgID, hostID: hostID), campaignID: campaign)
           .navigationTitle("Conversions")
+          .aglynScreenTitle("Conversions")
       } else {
         MarketingHubScreen(context: ctx, section: section, initial: params["campaign"] ?? params["id"])
       }

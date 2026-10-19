@@ -78,21 +78,13 @@ struct EmailsScreen: View {
       }
     }
     .navigationTitle("Emails")
-    .searchable(text: $searchText, prompt: "Search subjects")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynScreenTitle("Emails")
+    .aglynSearchable(text: $searchText, prompt: "Search subjects", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      if role.canSend {
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-            composing = true
-          } label: {
-            Label("Write an email", systemImage: "square.and.pencil")
-          }
-          .keyboardShortcut("n", modifiers: .command)
-          .accessibilityIdentifier("email-compose")
-        }
-      }
+    .aglynPrimaryAction(
+      id: "email-compose", "Write an email", systemImage: "square.and.pencil", enabled: role.canSend, shortcut: KeyboardShortcut("n", modifiers: .command)
+    ) {
+      composing = true
     }
     .sheet(isPresented: $composing) { ComposeSheet(context: context, send: nil, siteName: role.siteName, campaignID: composeCampaign) }
     .task(id: composeCampaign) { if composeCampaign != nil { composing = true } }
@@ -115,7 +107,7 @@ struct EmailsScreen: View {
             AglynChoiceChip(label, selected: status == value) { status = value }
           }
         }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
       }
       if !list.ready {
@@ -142,7 +134,7 @@ struct EmailsScreen: View {
         if selectable {
           EmailRow(send: send).aglynSelectableRow(send.id, selection: $selection)
         } else if let orgID = context.orgID, let hostID = context.hostID {
-          NavigationLink {
+          AglynPushLink {
             EmailDetail(context: context, orgID: orgID, hostID: hostID, sendID: send.id, canSend: role.canSend)
           } label: {
             EmailRow(send: send)
@@ -293,6 +285,7 @@ struct EmailDetail: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(send.subject)
+    .aglynScreenTitle(send.subject)
     .sheet(item: $sheet) { kind in sendSheet(kind, send) }
   }
 
@@ -370,6 +363,7 @@ struct CountedConfirmSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(title)
+      .aglynScreenTitle(title)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Not now") { dismiss() }.disabled(busy) }
         ToolbarItem(placement: .confirmationAction) {

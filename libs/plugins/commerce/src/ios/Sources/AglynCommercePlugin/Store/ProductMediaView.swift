@@ -137,6 +137,7 @@ struct ProductMediaScreen: View {
       }
     }
     .navigationTitle("Images and files")
+    .aglynScreenTitle("Images and files")
     .task(id: "\(hostID):\(productID)") { model.start(context.firestore, hostID: context.hostID, productID: productID) }
     .onDisappear { model.stop() }
     .aglynMediaPicker($source, multiple: true) { files in upload(files) }

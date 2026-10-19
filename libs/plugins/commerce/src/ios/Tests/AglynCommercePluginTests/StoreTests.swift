@@ -10,6 +10,17 @@ import XCTest
 @testable import AglynCommercePlugin
 
 final class StoreOrdersTests: XCTestCase {
+  /// The status chips take the console's colors (ORDER_STATUS_COLOR), as the Kotlin app does: refunded is the alarm.
+  func testStatusTonesAreTheConsoles() {
+    XCTAssertEqual(orderStatusTone(.paid), .success)
+    XCTAssertEqual(orderStatusTone(.partiallyFulfilled), .warning)
+    XCTAssertEqual(orderStatusTone(.fulfilled), .info)
+    XCTAssertEqual(orderStatusTone(.delivered), .info)
+    XCTAssertEqual(orderStatusTone(.refunded), .error)
+    XCTAssertEqual(orderStatusTone(.pending), .neutral)
+    XCTAssertEqual(orderStatusTone(.cancelled), .neutral)
+  }
+
   func testAStoredOrderDecodesAndAMalformedLineIsLeftOut() {
     let doc = FirestoreDocument(
       id: "o1",

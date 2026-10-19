@@ -76,7 +76,8 @@ public struct AglynRow<Trailing: View>: View {
         .accessibilityHidden(true)
       }
       VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(AglynFont.body).lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+        // One line, cut at the end, at every width (Figma list rows).
+        Text(title).font(AglynFont.body).lineLimit(typeSize.isAccessibilitySize ? nil : 1).truncationMode(.tail)
         if let subtitle, !subtitle.isEmpty {
           Text(subtitle).font(AglynFont.subheadline).foregroundStyle(.secondary)
             .lineLimit(typeSize.isAccessibilitySize ? nil : 2)

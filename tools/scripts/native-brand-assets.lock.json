@@ -3,6 +3,8 @@
   "sources": {
     "apps/console/public/_static/images/brand/aglyn-logo-mark-multi.svg": "e69ccc7fca1dbf11ba3221897e1175b824624ec387ceda1bf8851633fb3a4f51",
     "apps/console/public/_static/images/brand/aglyn-logo-mark-white.svg": "964182125eaa6202a9a4d7baf82c6ae70c07ba64ef8b5dd7b9b1817ae810a65a",
+    "apps/console/public/_static/images/brand/app-icon/native-icon-ground-dark.svg": "3d558a47dc44f351283c156f28931fd737664c546382d1f37c5842456cf83d0b",
+    "apps/console/public/_static/images/brand/app-icon/native-icon-ground-light.svg": "86a3fd987419448eec9098fc85f46369b0811fd3787058c886b607d47375e4c0",
     "apps/console/public/_static/images/brand/app-icon/native-icon-ground.svg": "e88e2b1a06bdd223af2fa8d4189bb1f411621807d68d5e384c87f3ead23ba5c0",
     "apps/console/public/_static/images/brand/app-icon/native-pos-receipt.svg": "00e48d7f40790d07c5ca0489bb30fad8f19ee36c1c4138cd04a138b7bee2cafe"
   },
@@ -25,6 +27,8 @@
     "apps/ios/AglynPOS/Assets.xcassets/AppIcon.appiconset/AppIcon-mac-512.png": 512,
     "apps/ios/AglynPOS/Assets.xcassets/AppIcon.appiconset/AppIcon-mac-1024.png": 1024,
     "apps/android/pos/src/main/ic_launcher-playstore.png": 512,
+    "apps/ios/Aglyn/Assets.xcassets/AppIcon-Light.appiconset/AppIcon-1024.png": 1024,
+    "apps/ios/Aglyn/Assets.xcassets/AppIcon-Dark.appiconset/AppIcon-1024.png": 1024,
     "apps/android/desktop/icons/aglyn.ico": [
       16,
       24,

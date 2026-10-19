@@ -81,7 +81,7 @@ struct AuthCard<Content: View, Footer: View, Accessory: View>: View {
   }
 
   private func card(compact: Bool) -> some View {
-    let shape = RoundedRectangle(cornerRadius: M.cardRadius, style: .continuous)
+    let shape = RoundedRectangle(cornerRadius: AglynAuthDensity.cardRadius, style: .continuous)
     return VStack(alignment: .leading, spacing: compact ? M.cardSpacingCompact : M.cardSpacingRegular) {
       if let systemImage {
         Image(systemName: systemImage)
@@ -92,17 +92,30 @@ struct AuthCard<Content: View, Footer: View, Accessory: View>: View {
           .frame(maxWidth: .infinity)
           .accessibilityHidden(true)
       }
-      HStack(alignment: .firstTextBaseline, spacing: 12) {
-        VStack(alignment: .leading, spacing: 6) {
-          Text(title).font(AglynAuthFont.title).accessibilityAddTraits(.isHeader)
-          if let subtitle {
-            Text(subtitle).font(AglynAuthFont.body).foregroundStyle(C.textSecondary.color)
-              .fixedSize(horizontal: false, vertical: true)
+      VStack(alignment: .leading, spacing: 6) {
+        // The title keeps one line beside the accessory ("Create account") while both fit; a longer title ("Sign in to
+        // Aglyn POS" on a phone) takes the whole width, the accessory above it at the top right, rather than wrapping.
+        ViewThatFits(in: .horizontal) {
+          HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(title).font(AglynAuthFont.title).lineLimit(1).fixedSize().accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 0)
+            accessory()
+          }
+          VStack(alignment: .leading, spacing: 6) {
+            HStack {
+              Spacer(minLength: 0)
+              accessory()
+            }
+            Text(title).font(AglynAuthFont.title).fixedSize(horizontal: false, vertical: true)
+              .accessibilityAddTraits(.isHeader)
           }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        accessory()
+        if let subtitle {
+          Text(subtitle).font(AglynAuthFont.body).foregroundStyle(C.textSecondary.color)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
+      .frame(maxWidth: .infinity, alignment: .leading)
       content()
     }
     .foregroundStyle(C.textPrimary.color)

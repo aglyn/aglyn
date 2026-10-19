@@ -107,11 +107,12 @@ private fun messageError(error: Throwable): String = error.message?.takeIf { it.
  * hands the shown filter to the console's transfer route.
  */
 @Composable
-fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? = null, scopedForm: String? = null, scopedFormName: String? = null) {
+fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? = null, scopedForm: String? = null, scopedFormName: String? = null, initialRead: ReadFilter = ReadFilter.ALL) {
   val hostId = context.hostId ?: return WorkspaceSubmissionsScreen(context)
   val scope = rememberCoroutineScope()
   val list = remember(hostId, context.firestore) { LiveQueryList(context.firestore, scope, SUBMISSIONS_PAGE_SIZE, ::submissionOf) }
-  var read by rememberSaveable { mutableStateOf(ReadFilter.ALL) }
+  // Opened from Home's line: Unread.
+  var read by rememberSaveable { mutableStateOf(initialRead) }
   var formId by rememberSaveable { mutableStateOf<String?>(null) }
   var search by rememberSaveable { mutableStateOf("") }
   var asked by rememberSaveable { mutableStateOf("") }
@@ -723,3 +724,50 @@ fun WorkspaceLeadsScreen(context: NativePluginContext) {
     }
   }
 }
+
+/** Home's "Needs you" line for the Inbox (`inbox.needs-you`): messages nobody has read, opening the Inbox on Unread. */
+@Composable
+fun InboxNeedsYouWidget(context: NativePluginContext) {
+  val hostId = context.hostId ?: return
+  val flow = remember(hostId, context.firestore) { context.firestore.observe(submissionsQuery(hostId, ReadFilter.UNREAD, null, "", SUBMISSIONS_PAGE_SIZE)) }
+  val live by flow.collectAsState(Live.Loading)
+  val count = (live as? Live.Ready)?.value?.size?.takeIf { it > 0 } ?: return
+  val shown = if (count >= SUBMISSIONS_PAGE_SIZE) "$SUBMISSIONS_PAGE_SIZE+" else count.toString()
+  com.aglyn.ui.NeedsYouLine(
+    "inbox-unread", "inbox", "$shown ${if (count == 1) "message waiting" else "messages waiting"} for a reply", "Inbox",
+    onClick = { context.navigate(INBOX_SCREEN, mapOf("read" to "false")) },
+  )
+}
+
+/**
+ * The Inbox row's count in the sidebar (`inbox.sidebar-count`, slot `sidebarCount.inbox`): messages nobody has read,
+ * in the site, or across the workspace's sites in the workspace's own scope; nothing while there are none.
+ */
+@Composable
+fun InboxSidebarCount(context: NativePluginContext) {
+  val hostId = context.hostId
+  val orgId = context.orgId
+  val query = when {
+    hostId != null -> submissionsQuery(hostId, ReadFilter.UNREAD, null, "", SIDEBAR_COUNT_LIMIT)
+    orgId != null -> workspaceSubmissionsQuery(orgId, ReadFilter.UNREAD, "", SIDEBAR_COUNT_LIMIT)
+    else -> return
+  }
+  val flow = remember(query, context.firestore) { context.firestore.observe(query) }
+  val live by flow.collectAsState(Live.Loading)
+  val count = (live as? Live.Ready)?.value?.size?.takeIf { it > 0 } ?: return
+  val shown = if (count >= SIDEBAR_COUNT_LIMIT) "${SIDEBAR_COUNT_LIMIT - 1}+" else count.toString()
+  Text(
+    shown,
+    style = MaterialTheme.typography.labelSmall,
+    color = MaterialTheme.colorScheme.onPrimary,
+    modifier = Modifier
+      .clip(CircleShape)
+      .background(MaterialTheme.colorScheme.primary)
+      .padding(horizontal = 6.dp)
+      .semantics { contentDescription = "$count unread" }
+      .testTag("inbox-sidebar-count"),
+  )
+}
+
+/** One more than the most the sidebar counts (99+, as the Apple app shows it). */
+private const val SIDEBAR_COUNT_LIMIT = 100
