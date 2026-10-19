@@ -67,3 +67,16 @@ internal fun AccountSwitchReset(navigator: ShellNavigator, uid: String) {
     navigator.shownUid = uid
   }
 }
+
+/**
+ * A tapped push names the account it was sent to (`MobilePushData.uid`): when another signed-in account on this device
+ * holds it, that account comes on screen first, so the push's link opens where it belongs. Returns whether it switched.
+ */
+suspend fun ShellServices.showAccountOfPush(uid: String?): Boolean {
+  val sessions = accounts ?: return false
+  if (uid.isNullOrEmpty()) return false
+  val account = sessions.accounts.value.firstOrNull { it.uid == uid } ?: return false
+  if (account.slot == sessions.active.value) return false
+  sessions.switchTo(account.slot)
+  return true
+}

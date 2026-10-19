@@ -16,9 +16,10 @@
  */
 
 import {
+  type NativeNavContribution,
+  type NativeNavCreateContribution,
   nativeNavIcon,
   nativeNavRef,
-  type NativeNavContribution,
 } from '@aglyn/aglyn/app-utils/native-nav'
 
 /**
@@ -41,6 +42,24 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       screen: 'forms.list',
       pluginId: 'forms',
       order: 30,
+      docs: '/content-and-data/forms/overview',
+      console: nativeNavRef('hostPluginTab', '/forms'),
+    },
+  },
+]
+
+/** A form, the console's "Create Form" on Forms. */
+export const NATIVE_NAV_CREATE: readonly NativeNavCreateContribution[] = [
+  {
+    scope: 'site',
+    item: {
+      id: 'form',
+      label: 'Form',
+      icon: nativeNavIcon('list.bullet.rectangle', 'dynamic_form'),
+      screen: 'forms.list',
+      params: { new: '1' },
+      pluginId: 'forms',
+      order: 60,
       console: nativeNavRef('hostPluginTab', '/forms'),
     },
   },

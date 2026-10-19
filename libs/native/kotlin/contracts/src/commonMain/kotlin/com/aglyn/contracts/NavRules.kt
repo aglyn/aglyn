@@ -31,6 +31,50 @@ fun resolveNavList(manifest: NativeNavManifest, listId: NativeNavListId, enabled
 fun resolveNavList(listId: NativeNavListId, enabledPluginIds: Collection<String>, hostAdmin: Boolean): ResolvedNavList =
   resolveNavList(NativeNavManifestValue, listId, enabledPluginIds, hostAdmin)
 
+// ── Create menus (native-nav.ts) ────────────────────────────────────────────
+
+/**
+ * The "+" menu for a scope: items of a plugin that is off, and admin-only items for a non-admin, left out; an item the
+ * person lacks the permission, the site role or the plan for stays, blocked with why (`resolveCreateList`).
+ */
+fun resolveCreateList(
+  manifest: NativeNavManifest,
+  scope: NativeNavCreateScope,
+  enabledPluginIds: Collection<String>,
+  permissions: Map<String, Boolean>,
+  features: Map<String, Boolean>,
+  hostRole: String?,
+): List<ResolvedCreateItem> {
+  val on = enabledPluginIds.toSet()
+  val items = manifest.create?.firstOrNull { it.scope == scope }?.items.orEmpty()
+  return items
+    .filter { (it.pluginId == null || it.pluginId in on) && (it.requiresHostAdmin != true || hostRole == "admin") }
+    .map { item ->
+      val reason = when {
+        item.permission != null && permissions[item.permission] != true -> Contracts.nativeCreatePermissionReason
+        item.hostRoles != null && (hostRole ?: "") !in item.hostRoles -> Contracts.nativeCreateSiteRoleReason
+        item.planFeature != null && features[item.planFeature] != true -> item.blockedReason ?: Contracts.nativeCreatePlanReason
+        else -> null
+      }
+      item.resolved(blocked = reason != null, reason = reason)
+    }
+}
+
+/** [resolveCreateList] on the manifest this build carries. */
+fun resolveCreateList(
+  scope: NativeNavCreateScope,
+  enabledPluginIds: Collection<String>,
+  permissions: Map<String, Boolean>,
+  features: Map<String, Boolean>,
+  hostRole: String?,
+): List<ResolvedCreateItem> = resolveCreateList(NativeNavManifestValue, scope, enabledPluginIds, permissions, features, hostRole)
+
+private fun NativeNavCreateItem.resolved(blocked: Boolean, reason: String?) = ResolvedCreateItem(
+  blocked = blocked, blockedReason = blockedReason, console = console, hostRoles = hostRoles, icon = icon, id = id, label = label,
+  order = order, params = params, permission = permission, planFeature = planFeature, pluginId = pluginId, reason = reason,
+  requiresHostAdmin = requiresHostAdmin, screen = screen,
+)
+
 // ── Name matching (name-match.ts) ───────────────────────────────────────────
 
 object MatchScore {

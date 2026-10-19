@@ -27,6 +27,10 @@ public struct MobilePushData: Equatable, Sendable {
   public let link: String?
   public let orgID: String?
   public let hostID: String?
+  /// The account the push was sent to (AGL-3943): an app signed in to several
+  /// accounts opens the tap in that one. Nil on a push sent before the field,
+  /// which opens in the account in use, as before.
+  public let uid: String?
 
   /// Reads a push's payload back, refusing anything that is not ours. The
   /// link is kept only when it is a console path or an `https` URL, never a
@@ -42,6 +46,7 @@ public struct MobilePushData: Equatable, Sendable {
     self.link = link.flatMap { $0.hasPrefix("/") || $0.hasPrefix("https://") ? $0 : nil }
     orgID = text("orgId")
     hostID = text("hostId")
+    uid = text("uid")
   }
 }
 

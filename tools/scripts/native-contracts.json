@@ -875,11 +875,19 @@
         "NativeNavConsoleSurface",
         "NativeNavElsewhere",
         "ResolvedNavList",
-        "NativeNavContribution"
+        "NativeNavContribution",
+        "NativeNavCreateScope",
+        "NativeNavCreateItem",
+        "NativeNavCreateList",
+        "NativeNavCreateContribution",
+        "ResolvedCreateItem"
       ],
       "values": [
         "NATIVE_NAV_MANIFEST",
-        "NATIVE_NAV_SHELL_SCREENS"
+        "NATIVE_NAV_SHELL_SCREENS",
+        "NATIVE_CREATE_PERMISSION_REASON",
+        "NATIVE_CREATE_SITE_ROLE_REASON",
+        "NATIVE_CREATE_PLAN_REASON"
       ]
     },
     "libs/aglyn/src/lib/app-utils/one-box-search.ts": {
@@ -904,7 +912,8 @@
       "with": "assembleNativeNav",
       "collect": [
         "NATIVE_NAV_ROWS",
-        "NATIVE_NAV_ELSEWHERE"
+        "NATIVE_NAV_ELSEWHERE",
+        "NATIVE_NAV_CREATE"
       ],
       "parts": [
         "libs/plugins/accounting/src/lib/native-nav.ts",
@@ -2776,6 +2785,20 @@
         ],
         [
           "text"
+        ],
+        [
+          {
+            "type": "content.order",
+            "link": "/h1/orders",
+            "orgId": "o1",
+            "uid": "u-2"
+          }
+        ],
+        [
+          {
+            "type": "content.order",
+            "uid": 7
+          }
         ]
       ]
     },
@@ -27718,6 +27741,111 @@
         ],
         [
           "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ]
+      ]
+    },
+    "resolveCreateList": {
+      "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "leadingValue": "NATIVE_NAV_MANIFEST",
+      "args": [
+        [
+          "workspace",
+          [
+            "crm",
+            "email"
+          ],
+          {
+            "hosts.create": true,
+            "data.manage": true
+          },
+          {
+            "crm": true
+          },
+          null
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "email"
+          ],
+          {
+            "hosts.create": false,
+            "data.manage": true
+          },
+          {
+            "crm": false
+          },
+          null
+        ],
+        [
+          "workspace",
+          [],
+          {},
+          {},
+          null
+        ],
+        [
+          "site",
+          [
+            "forms",
+            "commerce",
+            "bookings",
+            "events-calendar",
+            "crm"
+          ],
+          {
+            "data.manage": true
+          },
+          {
+            "commerce": true,
+            "bookings": true,
+            "eventCalendar": true,
+            "crm": true
+          },
+          "admin"
+        ],
+        [
+          "site",
+          [
+            "forms",
+            "commerce",
+            "bookings",
+            "events-calendar",
+            "crm"
+          ],
+          {
+            "data.manage": true
+          },
+          {
+            "commerce": false,
+            "bookings": true,
+            "eventCalendar": false,
+            "crm": true
+          },
+          "editor"
+        ],
+        [
+          "site",
+          [
+            "forms",
+            "commerce",
+            "bookings",
+            "events-calendar",
+            "crm"
+          ],
+          {},
+          {},
+          "viewer"
+        ],
+        [
+          "site",
+          [
+            "forms"
+          ],
+          {},
+          {},
+          "author"
         ]
       ]
     }

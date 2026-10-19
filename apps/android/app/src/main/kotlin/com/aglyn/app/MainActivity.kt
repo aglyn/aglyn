@@ -22,6 +22,8 @@ import com.aglyn.shell.handleConsoleHandoffReturn
 import com.aglyn.core.AuthState
 import com.aglyn.shell.AglynMessagingService
 import com.aglyn.shell.EXTRA_LINK
+import com.aglyn.shell.EXTRA_UID
+import com.aglyn.shell.showAccountOfPush
 import com.aglyn.shell.AglynShell
 import kotlinx.coroutines.launch
 
@@ -37,7 +39,7 @@ class MainActivity : ComponentActivity() {
     enableEdgeToEdge()
     val services = (application as AglynApplication).services
     // Single sign-on's console page handing the code back finishes the sign-in here; anything else opens in the shell.
-    pendingLink = linkOf(intent)?.takeUnless { services.handleConsoleHandoffReturn(it, lifecycleScope) }
+    openLink(intent, linkOf(intent)?.takeUnless { services.handleConsoleHandoffReturn(it, lifecycleScope) })
     // Debug builds only: `adb shell am start … --ez autoSignIn true` signs the seeded member in.
     val autoSignIn = BuildConfig.DEBUG && intent.getBooleanExtra("autoSignIn", false)
     AglynMessagingService.ensureChannel(this)
@@ -67,7 +69,21 @@ class MainActivity : ComponentActivity() {
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     val services = (application as AglynApplication).services
-    linkOf(intent)?.takeUnless { services.handleConsoleHandoffReturn(it, lifecycleScope) }?.let { pendingLink = it }
+    linkOf(intent)?.takeUnless { services.handleConsoleHandoffReturn(it, lifecycleScope) }?.let { openLink(intent, it) }
+  }
+
+  /** A tapped push sent to another signed-in account brings that account on screen first; its link then opens there. */
+  private fun openLink(intent: Intent?, link: String?) {
+    val uid = intent?.getStringExtra(EXTRA_UID)
+    if (uid == null) {
+      pendingLink = link
+      return
+    }
+    val services = (application as AglynApplication).services
+    lifecycleScope.launch {
+      services.showAccountOfPush(uid)
+      pendingLink = link
+    }
   }
 
   private fun linkOf(intent: Intent?): String? = intent?.getStringExtra(EXTRA_LINK) ?: intent?.dataString

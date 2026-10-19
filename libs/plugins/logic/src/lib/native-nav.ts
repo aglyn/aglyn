@@ -42,6 +42,7 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       pluginId: 'logic',
       order: 40,
       keywords: ['functions', 'variables'],
+      docs: '/building-sites/bindings/overview',
       console: nativeNavRef('hostPluginTab', '/logic'),
     },
   },

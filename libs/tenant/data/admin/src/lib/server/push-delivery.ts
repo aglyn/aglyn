@@ -168,7 +168,10 @@ export async function deliverNativePush(
   }
   try {
     const { db } = deps
-    const groups = new Map<MobilePushTransport, Array<{ target: PushTarget; ref: DocumentReference }>>()
+    const groups = new Map<
+      MobilePushTransport,
+      Array<{ target: PushTarget; ref: DocumentReference; uid: string }>
+    >()
     const seen = new Set<string>()
     let total = 0
     for (const uid of uids) {
@@ -206,7 +209,7 @@ export async function deliverNativePush(
             : {}),
         }
         const group = groups.get(transport) ?? []
-        group.push({ target, ref: device.ref })
+        group.push({ target, ref: device.ref, uid })
         groups.set(transport, group)
       }
     }
@@ -223,22 +226,31 @@ export async function deliverNativePush(
         result.skipped += entries.length
         continue
       }
-      let outcomes: PushOutcome[]
-      try {
-        outcomes = await transport.send(
-          entries.map((entry) => entry.target),
-          message,
-        )
-      } catch (error) {
-        console.error(`push transport ${kind} failed`, error)
-        result.failed += entries.length
-        continue
+      // One send per recipient, each carrying that account's uid
+      // (`MobilePushData.uid`, AGL-3943), so an app signed in to several
+      // accounts opens the tap in the account it was sent to.
+      const byRecipient = new Map<string, typeof entries>()
+      for (const entry of entries) {
+        byRecipient.set(entry.uid, [...(byRecipient.get(entry.uid) ?? []), entry])
       }
-      for (const [index, entry] of entries.entries()) {
-        const outcome = outcomes[index] ?? 'failed'
-        if (outcome === 'sent') result.sent += 1
-        else if (outcome === 'prune') await prune(entry.ref)
-        else result.failed += 1
+      for (const [uid, recipientEntries] of byRecipient) {
+        let outcomes: PushOutcome[]
+        try {
+          outcomes = await transport.send(
+            recipientEntries.map((entry) => entry.target),
+            { ...message, data: { ...message.data, uid } },
+          )
+        } catch (error) {
+          console.error(`push transport ${kind} failed`, error)
+          result.failed += recipientEntries.length
+          continue
+        }
+        for (const [index, entry] of recipientEntries.entries()) {
+          const outcome = outcomes[index] ?? 'failed'
+          if (outcome === 'sent') result.sent += 1
+          else if (outcome === 'prune') await prune(entry.ref)
+          else result.failed += 1
+        }
       }
     }
   } catch (error) {

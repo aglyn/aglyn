@@ -19,6 +19,13 @@ import kotlinx.coroutines.launch
 /** The extra a notification's tap carries: the console link it points at. */
 const val EXTRA_LINK = "link"
 
+/**
+ * The extra naming the account a push was sent to (`MobilePushData.uid`,
+ * AGL-3943), so an app signed in to several accounts opens the tap in that
+ * one. Absent on a push sent before the field, which opens as before.
+ */
+const val EXTRA_UID = "uid"
+
 /** The channel every Aglyn notification posts to. */
 const val NOTIFICATION_CHANNEL = "aglyn"
 
@@ -54,6 +61,7 @@ abstract class AglynMessagingService : FirebaseMessagingService() {
     val tap = Intent(this, launchActivity).apply {
       flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
       message.data[EXTRA_LINK]?.let { putExtra(EXTRA_LINK, it) }
+      message.data[EXTRA_UID]?.takeIf { it.isNotEmpty() }?.let { putExtra(EXTRA_UID, it) }
     }
     val pending = PendingIntent.getActivity(
       this,

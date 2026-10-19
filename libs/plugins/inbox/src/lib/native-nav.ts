@@ -50,6 +50,7 @@ function row(scope: 'org' | 'host', order: number): NativeNavRow {
       nativeNavHubSection(scope, '/inbox', 'contacts', 'Members & leads', 'inbox.people'),
       nativeNavHubSection(scope, '/inbox', 'campaigns', 'Campaigns', 'marketing.campaigns', { pluginId: 'marketing' }),
     ],
+    docs: '/content-and-data/forms/overview',
     console: nativeNavRef(scope === 'org' ? 'orgPluginTab' : 'hostPluginTab', '/inbox'),
   }
 }

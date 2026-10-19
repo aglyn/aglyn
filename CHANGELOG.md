@@ -9,6 +9,32 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.269 — 2026-10-18
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.268...v1.0.0-beta.269)
+
+### Added
+
+- **native:** in-app browser is a pushed screen, not a sheet ([AGL-3935](https://linear.app/aglyn/issue/AGL-3935))
+- **ai:** each site's look chooses its motion style ([AGL-3941](https://linear.app/aglyn/issue/AGL-3941), [AGL-3838](https://linear.app/aglyn/issue/AGL-3838))
+
+### Fixed
+
+- **native:** leave the tab bar to the system on the iPhone browser screen ([AGL-3935](https://linear.app/aglyn/issue/AGL-3935))
+- **plugins:** eleven registries the boot fills are one per process ([AGL-3947](https://linear.app/aglyn/issue/AGL-3947), [AGL-3412](https://linear.app/aglyn/issue/AGL-3412), [AGL-3868](https://linear.app/aglyn/issue/AGL-3868))
+- **console,e2e:** home page never drops the plan-intent read; launch smoke green ([AGL-3948](https://linear.app/aglyn/issue/AGL-3948), [AGL-1514](https://linear.app/aglyn/issue/AGL-1514), [AGL-2590](https://linear.app/aglyn/issue/AGL-2590), [AGL-3594](https://linear.app/aglyn/issue/AGL-3594), [AGL-2575](https://linear.app/aglyn/issue/AGL-2575))
+- **ai:** "about" as a preposition is no portrait; typed-world words held to the kind ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923))
+- **ai:** a page with a library keeps one neutral starter, never another business's ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923), [AGL-3831](https://linear.app/aglyn/issue/AGL-3831))
+- **ai:** every kind's own common photos, no placeholder search words ([AGL-3923](https://linear.app/aglyn/issue/AGL-3923), [AGL-3831](https://linear.app/aglyn/issue/AGL-3831))
+
+<details>
+<summary>Also in this release: 2 test</summary>
+
+- **console:** exempt the nonprofit kind's 'community' photo words from AGL-975 ([AGL-975](https://linear.app/aglyn/issue/AGL-975), [AGL-3923](https://linear.app/aglyn/issue/AGL-3923))
+- **ai:** live layout eval hands pages the look's motion style ([AGL-3941](https://linear.app/aglyn/issue/AGL-3941))
+
+</details>
+
 ## v1.0.0-beta.268 — 2026-10-18
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.267...v1.0.0-beta.268)
