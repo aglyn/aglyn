@@ -179,6 +179,9 @@ describe('the build as stored (AGL-3958)', () => {
     expect(clientBuildResumeStep({ domain: { choice: 'free' }, hostId: null, jobId: null })).toBe('photos')
     expect(clientBuildResumeStep({ domain: { choice: 'free' }, hostId: 'h1', jobId: null })).toBe('photos')
     expect(clientBuildResumeStep({ domain: { choice: 'free' }, hostId: 'h1', jobId: 'j1' })).toBe('send')
+    // "Use the starter site" finishes the build step without a job.
+    expect(clientBuildResumeStep({ domain: { choice: 'free' }, hostId: 'h1', jobId: null, starter: true })).toBe('send')
+    expect(clientBuildResumeStep({ domain: { choice: 'free' }, hostId: null, jobId: null, starter: true })).toBe('photos')
   })
 
   it('tells the owner the address it will live at', () => {

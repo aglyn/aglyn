@@ -522,6 +522,9 @@ function ClientBuildFlow({
                   onStarted={async (jobId) => {
                     await save({ jobId })
                   }}
+                  onStarter={async () => {
+                    await save({ starter: true })
+                  }}
                   onDone={() => setStep('send')}
                   onBack={() => setStep('photos')}
                 />
@@ -855,11 +858,22 @@ function BuildStep(props: {
   host: string | null
   intake: ClientBuildIntake
   onStarted: (jobId: string) => Promise<void>
+  /** The starter site was given instead: recorded, so a reload resumes at send. */
+  onStarter: () => Promise<void>
   onDone: () => void
   onBack: () => void
 }) {
-  const { orgId, orgSlug, hostId, host, intake, onStarted, onDone, onBack } =
-    props
+  const {
+    orgId,
+    orgSlug,
+    hostId,
+    host,
+    intake,
+    onStarted,
+    onStarter,
+    onDone,
+    onBack,
+  } = props
   const { data: user } = useUser()
   const userRef = useRef(user)
   userRef.current = user
@@ -877,11 +891,13 @@ function BuildStep(props: {
     setStarting(true)
     try {
       await requestStarterSite(userRef.current, hostId)
+      // Recorded either way: the send step itself waits on a published page.
+      await onStarter()
     } finally {
       setStarting(false)
       onDone()
     }
-  }, [hostId, onDone])
+  }, [hostId, onDone, onStarter])
 
   const clientBuild = useMemo<ConsoleClientBuildStart>(
     () => ({

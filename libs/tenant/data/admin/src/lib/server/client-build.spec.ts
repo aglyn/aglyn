@@ -140,6 +140,7 @@ describe('saving a client build (AGL-3958)', () => {
       intent: { plan: 'pro', addons: ['siteCare'], interval: 'month' },
       hostId: null,
       jobId: null,
+      starter: false,
       updatedAt: 5,
       updatedBy: 'staff-1',
     })
@@ -162,6 +163,16 @@ describe('saving a client build (AGL-3958)', () => {
     const free = await saveClientBuild({ orgId: 'org-1', actorUid: 'staff-1', patch: { domain: { choice: 'free' } } })
     expect(free.intent).not.toHaveProperty('domain')
     expect(await loadClientBuild('org-1')).toEqual(free)
+  })
+
+  it('records the starter site given instead of a guided start, and refuses anything but a yes or no', async () => {
+    await saveClientBuild({ orgId: 'org-1', actorUid: 'staff-1', patch: { intake: INTAKE } })
+    const record = await saveClientBuild({ orgId: 'org-1', actorUid: 'staff-1', patch: { starter: true } })
+    expect(record).toMatchObject({ starter: true, jobId: null })
+    expect((await loadClientBuild('org-1'))?.starter).toBe(true)
+    await expect(
+      saveClientBuild({ orgId: 'org-1', actorUid: 'staff-1', patch: { starter: 'yes' } }),
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   it('refuses an unknown workspace, an intake that does not validate, and a site from another workspace', async () => {

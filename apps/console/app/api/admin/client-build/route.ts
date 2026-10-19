@@ -102,6 +102,7 @@ async function handler(request: Request): Promise<Response> {
           ...(body?.['domain'] !== undefined ? { domain: body['domain'] } : {}),
           ...(body?.['hostId'] !== undefined ? { hostId: body['hostId'] } : {}),
           ...(body?.['jobId'] !== undefined ? { jobId: body['jobId'] } : {}),
+          ...(body?.['starter'] !== undefined ? { starter: body['starter'] } : {}),
         },
       })
       return Response.json({ record }, { status: 200 })

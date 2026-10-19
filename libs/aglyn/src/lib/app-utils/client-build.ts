@@ -312,6 +312,11 @@ export interface ClientBuildRecord {
   host: string | null
   /** The guided start's job, once it is started. */
   jobId: string | null
+  /**
+   * The starter site was given instead of a guided start (no AI on the
+   * workspace, or staff chose it), so the build step is finished without a job.
+   */
+  starter: boolean
   /** When the preview was last sent to the owner, ms; `null` before. */
   previewSentAt: number | null
   updatedAt: number
@@ -331,12 +336,15 @@ export type ClientBuildStep = (typeof CLIENT_BUILD_STEPS)[number]
  * Where a stored build resumes: the first step it has not finished. A phone
  * that reloads mid-build, or a second phone, opens where the first left off.
  */
-export function clientBuildResumeStep(record: Pick<ClientBuildRecord, 'domain' | 'hostId' | 'jobId'> | null): ClientBuildStep {
+export function clientBuildResumeStep(
+  record: Pick<ClientBuildRecord, 'domain' | 'hostId' | 'jobId'> & { starter?: boolean } | null,
+): ClientBuildStep {
   if (!record) return 'details'
   if (!record.domain) return 'domain'
   // The site exists before its photos are asked for, and the guided start
-  // waits on them: until a job is started, the build is at the photos.
-  if (!record.hostId || !record.jobId) return 'photos'
+  // waits on them: until a job is started, or the starter site was given
+  // instead, the build is at the photos.
+  if (!record.hostId || (!record.jobId && !record.starter)) return 'photos'
   return 'send'
 }
 

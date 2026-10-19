@@ -87,6 +87,7 @@ export function readClientBuildRecord(raw: unknown): ClientBuildRecord | null {
     hostId: text(source['hostId']),
     host: text(source['host']),
     jobId: text(source['jobId']),
+    starter: source['starter'] === true,
     previewSentAt: time(source['previewSentAt']),
     updatedAt: time(source['updatedAt']) ?? 0,
     updatedBy: text(source['updatedBy']) ?? '',
@@ -114,6 +115,8 @@ export interface ClientBuildPatch {
   hostId?: unknown
   host?: unknown
   jobId?: unknown
+  /** `true` once the starter site was given instead of a guided start. */
+  starter?: unknown
 }
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
@@ -174,6 +177,12 @@ export async function saveClientBuild(options: {
     jobId = id
   }
 
+  let starter = stored?.starter ?? false
+  if (patch.starter !== undefined) {
+    if (typeof patch.starter !== 'boolean') throw new ClientBuildError('Unknown starter choice', 400)
+    starter = patch.starter
+  }
+
   const record: ClientBuildRecord = {
     intake,
     domain,
@@ -186,6 +195,7 @@ export async function saveClientBuild(options: {
     hostId,
     host,
     jobId,
+    starter,
     previewSentAt: stored?.previewSentAt ?? null,
     updatedAt: options.now ?? Date.now(),
     updatedBy: actorUid,

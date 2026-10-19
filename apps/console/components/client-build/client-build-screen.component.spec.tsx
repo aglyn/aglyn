@@ -105,6 +105,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
           hostId: null,
           host: null,
           jobId: null,
+          starter: false,
           previewSentAt: null,
           intent: { plan: 'starter', addons: ['siteCare'], interval: 'month' },
           ...(mockRecord ?? {}),
@@ -299,7 +300,7 @@ describe('the client build screen (AGL-3958)', () => {
       previewSentAt: null,
       intent: { plan: 'starter', addons: ['siteCare'], interval: 'month' },
     }
-    render(<ClientBuildScreen />)
+    const view = render(<ClientBuildScreen />)
     fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
     const note = await screen.findByRole('note')
     expect(note.textContent).toMatch(/needs Aglyn AI/)
@@ -310,6 +311,12 @@ describe('the client build screen (AGL-3958)', () => {
     })
     expect(mockStarter).toHaveBeenCalledWith(mockUserObject, 'host-1')
     expect(await screen.findByRole('button', { name: /Email the preview/ })).toBeTruthy()
+    // Recorded, so a reload (or a second phone) resumes at the send step.
+    expect(posts('/api/admin/client-build', 'save').at(-1)?.body).toMatchObject({ starter: true })
+    view.unmount()
+    render(<ClientBuildScreen />)
+    expect(await screen.findByRole('button', { name: /Email the preview/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Use the starter site' })).toBeNull()
   })
 
   it('holds the preview until the site is published, then texts and emails it, beside the hand-off', async () => {
