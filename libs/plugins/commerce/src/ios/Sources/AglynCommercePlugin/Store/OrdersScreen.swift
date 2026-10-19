@@ -11,10 +11,11 @@ import SwiftUI
 extension OrderTone {
   var tone: AglynTone {
     switch self {
-    case .attention: .warning
-    case .done: .success
-    case .waiting: .info
-    case .closed: .neutral
+    case .neutral: .neutral
+    case .info: .info
+    case .success: .success
+    case .warning: .warning
+    case .error: .error
     }
   }
 }
