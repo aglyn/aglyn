@@ -29,6 +29,7 @@ import {
 import { useCallback, useState, type ReactNode } from 'react'
 import * as CommerceModel from '../../../model'
 import { posDisplayCall, PosRequestError } from './pos-api'
+import { PosKioskReadiness } from './pos-kiosk-readiness.component'
 
 type User = Parameters<typeof posDisplayCall>[0]
 
@@ -72,10 +73,20 @@ export interface PosPairingDialogProps {
   pairing: PosPairingState | null
   onModeChange: (mode: CommerceModel.PosDeviceMode) => void
   onClose: () => void
+  /**
+   * Who is pairing, and for which site: a kiosk code then also says what the
+   * kiosk still needs to take payment (AGL-3982). Without them it shows the
+   * code alone.
+   */
+  user?: User | null
+  hostId?: string
 }
 
-/** The code, the address to enter it at, and the display-or-kiosk choice. */
-export function PosPairingDialog({ pairing, onModeChange, onClose }: PosPairingDialogProps) {
+/**
+ * The code, the address to enter it at, and the display-or-kiosk choice; for
+ * a kiosk, what it still needs to take payment.
+ */
+export function PosPairingDialog({ pairing, onModeChange, onClose, user, hostId }: PosPairingDialogProps) {
   const mode = pairing?.mode ?? 'display'
   return (
     <Dialog open={Boolean(pairing)} onClose={onClose} maxWidth="xs" fullWidth>
@@ -101,6 +112,14 @@ export function PosPairingDialog({ pairing, onModeChange, onClose }: PosPairingD
           <ToggleButton value="display">{'Customer display'}</ToggleButton>
           <ToggleButton value="kiosk">{'Self-service kiosk'}</ToggleButton>
         </ToggleButtonGroup>
+        {mode === 'kiosk' && pairing && hostId ? (
+          <PosKioskReadiness
+            user={user}
+            hostId={hostId}
+            registerId={pairing.registerId}
+            {...(pairing.registerName ? { registerName: pairing.registerName } : {})}
+          />
+        ) : null}
         <Typography variant="body2" color="text.secondary">
           {(mode === 'kiosk'
             ? 'On the tablet customers order from, open this address and enter the code. '
@@ -159,6 +178,8 @@ export function usePosPairing({ user, hostId, onError }: UsePosPairingOptions): 
   const dialog = (
     <PosPairingDialog
       pairing={pairing}
+      user={user}
+      hostId={hostId}
       onClose={close}
       onModeChange={(mode) => {
         if (pairing) void open(pairing.registerId, mode, pairing.registerName)

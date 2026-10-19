@@ -25,7 +25,7 @@ import { useEffect, useRef, useState } from 'react'
 import { aiBuildCanRetry, aiBuildItemRows, aiBuildOutcomeLine, aiBuildRetryCreditRange } from '../model/ai-build-progress'
 import { aiCreditRangeText, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
-import { aiCreditsBillingHref, aiStoreFinishLinks } from './ai-job-links'
+import { aiCreditsBillingHref, aiStoreFinishHostId, aiStoreFinishLinks } from './ai-job-links'
 import { AiStoreFinishCard } from './ai-store-finish-card.component'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import type { AssistBuildProposal } from '../model/assist-build'
@@ -207,7 +207,7 @@ export function AssistBuildCard({
       )}
       {storeFinish && (
         <Box sx={{ mt: 1 }}>
-          <AiStoreFinishCard steps={storeFinish} />
+          <AiStoreFinishCard steps={storeFinish} hostId={job ? aiStoreFinishHostId(job) : null} />
         </Box>
       )}
       {job && (

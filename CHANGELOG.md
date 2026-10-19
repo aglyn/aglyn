@@ -15,6 +15,9 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **legal:** v17, Terms, Privacy and Subprocessors: domain names and Site Care ([AGL-3964](https://linear.app/aglyn/issue/AGL-3964), [AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
+- **commerce:** publish its order events and order history as contracts ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
+- **plugins:** a contracts entry point per plugin, a uses field and the boundary guard ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
 - **marketing:** managed landing page, campaign and per-event utm ([AGL-3960](https://linear.app/aglyn/issue/AGL-3960))
 - **pricing:** site care is live on /pricing with the extra-time rate and project floors ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954), [AGL-3959](https://linear.app/aglyn/issue/AGL-3959), [AGL-3970](https://linear.app/aglyn/issue/AGL-3970))
 - **domains:** one-click DNS through Domain Connect ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963), [AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
@@ -45,6 +48,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **marketing-platforms:** send no Stripe test-mode order to a merchant's email platform ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
+- **print-on-demand:** take commerce's order shape, and read test mode from livemode ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
 - **domains:** punctuate the registrations export note ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
 - **domains:** the export note names no brand ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
 - **domains:** self-hosts link their own terms; the export names both collections ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
@@ -68,10 +73,13 @@ content on the marketing site and is written separately.
 
 ### Changed
 
+- **plugins:** fourteen plugins take commerce's shapes from its contracts ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
 - **native:** plugins declare their nav rows, the generator assembles them ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
 
 ### Documentation
 
+- **legal:** v17 was published at 08:07 Central, not 08:35 ([AGL-3964](https://linear.app/aglyn/issue/AGL-3964))
+- **marketing:** managed campaign routing is on, env 16 recorded ([AGL-3960](https://linear.app/aglyn/issue/AGL-3960))
 - **decision-log:** the owner confirmed every site care figure on 2026-10-19 ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
 - **domains:** connect a domain automatically, unlisted until it is live ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
 - site care add-on decision of 2026-10-18 in the decision log index ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954), [AGL-3960](https://linear.app/aglyn/issue/AGL-3960))

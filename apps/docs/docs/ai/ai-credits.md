@@ -159,7 +159,8 @@ does not come out is never charged in the first place.
 ## See your credits {#see-your-credits}
 
 - **Billing → Usage → AI credits** shows the credits drawn this month against the
-  pool, and how many of them your tier adds.
+  pool, and how many of them your tier adds. A workspace whose plan includes no AI
+  credits sees that said here instead, with **See plans** linking to Billing.
 - **Who is generating what**, on the same page, lists each member's credits by month.
   See [Billing & Plans](../workspace-and-billing/billing-and-plans/overview.md#who-is-generating-what).
 - **The usage line** in the assistant and the AI dialogs shows your own credits, the

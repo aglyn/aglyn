@@ -305,13 +305,30 @@ describe('an Aglyn AI tier widens the one meter (AGL-2899, AGL-3965)', () => {
   })
 
   it('an org that sells no band keeps today\'s wording: no meter, no link', async () => {
-    // A band of zero renders nothing at all — no meter, and no upsell caption
-    // against a band that does not exist. Since AGL-3203 that org is one an
+    // A band of zero renders no meter, and no upsell caption against a band
+    // that does not exist (the plan notice is the next case's). Since AGL-3203 that org is one an
     // override zeroed, never a plan row.
     mockCredits = null
     render(<AiCreditsCard orgId="org-1" org={NO_BAND} billingHref="/acme/billing" />)
     await waitFor(() => expect(screen.queryAllByText(METER)).toHaveLength(0))
     expect(screen.queryByRole('link', { name: 'Choose a tier' })).toBeNull()
+  })
+
+  it('says a band of zero is the plan’s, and links to Billing’s plans (AGL-3982)', async () => {
+    // No meter, but not nothing: a missing card reads as AI not existing here.
+    mockCredits = null
+    render(<AiCreditsCard orgId="org-1" org={NO_BAND} billingHref="/acme/billing" />)
+    expect(screen.getByText(/Your plan includes no AI credits\./)).toBeTruthy()
+    // The notice's action is a link drawn as a button (`AppLink` variant "button").
+    expect(screen.getByText('See plans').closest('a')?.getAttribute('href')).toBe('/acme/billing#plans')
+    expect(screen.queryAllByText(METER)).toHaveLength(0)
+  })
+
+  it('THE CONTROL: a plan with a band never says it has none', async () => {
+    mockCredits = { used: 200, limit: 750, remaining: 550 }
+    render(<AiCreditsCard orgId="org-1" org={STARTER} billingHref="/acme/billing" />)
+    await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
+    expect(screen.queryByText(/Your plan includes no AI credits/)).toBeNull()
   })
 
   it('THE CONTROL: bare Starter has a band, so it gets the meter AND the link', async () => {

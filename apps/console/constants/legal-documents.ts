@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v16'
+export const LEGAL_DOCUMENT_VERSION = 'v17'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -853,6 +853,58 @@ export interface LegalDocumentManifestEntry {
  * `v14` pin (45676 bytes / `c2e6ef…`) byte for byte before and after
  * publication, and keeps that pin.
  *
+ * v17 (2026-10-19): domain names bought through Aglyn, and Site Care
+ * (AGL-3964, AGL-3954).
+ *
+ *   - Terms §2 defines a "Registered Domain" (a name bought or renewed
+ *     through the Services and registered through the Registrar, until it
+ *     expires or transfers out). §4.2 adds domain registration and renewal
+ *     fees. §4.8 excepts the refund §4.16 gives when a registration fails
+ *     after the charge. New §4.12–§4.20 cover domain names (`libs/plugins/
+ *     domains`): the registrar and its registration terms, the customer as
+ *     registrant, prices and renewals, refunds, failed charges and
+ *     expiration, transfers out, what happens when a Host or subscription
+ *     ends, use and disputes, and one-click DNS (Domain Connect) for names
+ *     registered elsewhere. §13.1 says canceling a subscription does not stop
+ *     a Registered Domain renewing until its auto-renew is turned off; §13.3
+ *     says a Registered Domain stays registered after termination.
+ *   - Terms §4.21–§4.25 (new): Site Care, the managed-website add-on. What
+ *     it is and who can buy it, what the included hour a month covers, extra
+ *     time billed in whole hours only after the owner approves, projects as a
+ *     flat quote paid by invoice, and how charges are questioned, corrected
+ *     and canceled. Written into the same Terms master and published in the
+ *     same version, so members accept one change, not two.
+ *   - Privacy §1.1 lists what domain registration collects (the names
+ *     searched, and the registrant contact details given when buying); §2
+ *     says what they are used for; §3 names the registrar partner, Vercel,
+ *     and the registries it passes registrant details to; §5 says the
+ *     telephone number and postal address are not kept once the registration
+ *     is placed; §10 says one-click DNS for a domain registered elsewhere
+ *     sends the domain name to that domain's DNS provider.
+ *   - Subprocessors (not acceptance-pinned): Vercel Inc.'s purpose and data
+ *     add domain registration, the notes cover registrars, registries and
+ *     Domain Connect providers, and a change-log entry is added. The AUP,
+ *     DMCA, DPA, Cookie Policy, EULA and Marketplace Publisher Agreement are
+ *     unchanged.
+ *
+ * Terms, Privacy, Subprocessors and their `/legal` index cards move "Last
+ * updated" to October 19, 2026 (the Terms keep "Effective date: August 5,
+ * 2026"), published from the console's Publish now at 08:07 Central that day.
+ * The wording, and publishing it with re-acceptance, were approved on
+ * 2026-10-19; the record is
+ * `Platform Docs/Legal/Proposed/2026-10-19-domain-registration/`.
+ *
+ * Publication-first: the Google Doc masters were edited and verified through
+ * the Docs API, the pages were published, the live pages confirmed serving
+ * the new text, and only then were both documents captured: terms 58794 bytes
+ * (`b77ce8…`), privacy 31383 bytes (`4209f2…`), each identical across two
+ * requests and a cache-busting query in two rounds, and archived in
+ * `Acceptance-Snapshots/v17`. Both pinned documents changed, so neither could
+ * be the control. The method was proven before publication instead: minutes
+ * before it, the live pages reproduced their `v16` pins (terms 45676 bytes /
+ * `c2e6ef…`, privacy 28594 bytes / `d3d51f…`) byte for byte across the same
+ * three requests.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -912,14 +964,14 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      'c2e6ef1df3da83b1a6d7e44f113ff3887bd832c20748b9a9559ff696f3cf3f81',
-    bytes: 45676,
+      'b77ce88836cb6e89949f0071db3c3d77a464e19f3c9c70dbfa0bac99e99507e4',
+    bytes: 58794,
   },
   {
     key: 'privacy',
     url: LEGAL_URLS.PRIVACY,
     sha256:
-      'd3d51f7304e8c45fe8696824ccd592bc3f824414ed7390f3e95ab4d1a976c587',
-    bytes: 28594,
+      '4209f2eca0ba0dda57e1b3c003e37ebaba05d125d4c814cf8816cdfba814799b',
+    bytes: 31383,
   },
 ]
