@@ -27,6 +27,8 @@ final class PushCenter: NSObject {
   var pendingLink: String?
   /// The workspace and site the tapped push is about, followed before its link (AGL-3911).
   var pendingOrgID: String?
+  /// The account the tapped push was sent to: another one signed in on this device is switched to first.
+  var pendingUID: String?
   var pendingHostID: String?
   /// What the person answered when asked; nil until known.
   private(set) var authorization: UNAuthorizationStatus?
@@ -44,12 +46,27 @@ final class PushCenter: NSObject {
     UNUserNotificationCenter.current().delegate = self
   }
 
-  /// Follows the signed-in person: asks for permission (the system asks only
-  /// once) and registers with APNs. A token APNs already handed out is
-  /// written for the new person at once.
+  /// Follows the signed-in person. Nothing is asked here: a launch can restore a session that the sign-in screen then
+  /// replaces, so the system's permission sheet waits for `askPermission`, once the signed-in shell is on screen. A
+  /// device that already allows notifications registers with APNs at once, and a token APNs already handed out is
+  /// written for the new person.
   func signedIn(uid: String?, reader: FirestoreReader?) {
     self.uid = uid
     self.reader = reader
+    guard uid != nil, receivesPushes else { return }
+    Task {
+      let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+      authorization = status
+      guard status == .authorized || status == .provisional else { return }
+      registerWithAPNs()
+      if let token { await write(token) }
+    }
+  }
+
+  /// Asks for permission (the system asks only once) and registers with APNs: called by the signed-in shell, never
+  /// from the signed-out screens.
+  func askPermission(for uid: String?) {
+    // The person's own id, not `self.uid`: the shell can appear before `signedIn` has run for them.
     guard uid != nil, receivesPushes else { return }
     #if DEBUG
       // Screenshot and UI-test runs keep the system's permission sheet away.
@@ -60,13 +77,17 @@ final class PushCenter: NSObject {
       let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
       authorization = await center.notificationSettings().authorizationStatus
       guard granted else { return }
-      #if os(iOS)
-        UIApplication.shared.registerForRemoteNotifications()
-      #elseif os(macOS)
-        NSApplication.shared.registerForRemoteNotifications()
-      #endif
+      registerWithAPNs()
       if let token { await write(token) }
     }
+  }
+
+  private func registerWithAPNs() {
+    #if os(iOS)
+      UIApplication.shared.registerForRemoteNotifications()
+    #elseif os(macOS)
+      NSApplication.shared.registerForRemoteNotifications()
+    #endif
   }
 
   /// Drops this install's row while the person can still write it.
@@ -110,6 +131,7 @@ extension PushCenter: UNUserNotificationCenterDelegate {
     await MainActor.run {
       guard let data, let link = data.link else { return }
       self.pendingOrgID = data.orgID
+      self.pendingUID = data.uid
       self.pendingHostID = data.hostID
       self.pendingLink = link
     }
@@ -132,11 +154,13 @@ extension PushCenter: UNUserNotificationCenterDelegate {
 #elseif os(macOS)
   final class PushAppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static var push: PushCenter?
+    /// Whether the app's main windows are tabs of one group (Aglyn; Aglyn POS keeps one window).
+    @MainActor static var windowTabs = false
 
-    /// A second window is opened on purpose (File › New Window) and stands on its own: macOS never folds the app's
-    /// windows into a tab bar, so a restored or extra window never shows as a duplicate tab under the toolbar.
+    /// Aglyn's main windows are tabs of one group (AGL-3945); Aglyn POS keeps its windows apart, so a restored or
+    /// extra register window never shows as a duplicate tab under the toolbar.
     func applicationWillFinishLaunching(_ notification: Notification) {
-      MainActor.assumeIsolated { NSWindow.allowsAutomaticWindowTabbing = false }
+      MainActor.assumeIsolated { NSWindow.allowsAutomaticWindowTabbing = Self.windowTabs }
     }
 
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {

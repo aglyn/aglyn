@@ -242,6 +242,8 @@ struct EmailHubScreen: View {
   var initial: String?
   /// Opens the composer on arrival, filing the new email under this campaign (a campaign's "Write an email").
   var composeCampaign: String?
+  /// Opened from Create new (`new=1`): the section opens its create sheet.
+  var startNew = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -258,6 +260,7 @@ struct EmailHubScreen: View {
     }
     .background(AglynColor.page)
     .navigationTitle(section == .messages ? "Emails" : section.label)
+    .aglynScreenTitle(section == .messages ? "Emails" : section.label)
   }
 
   @ViewBuilder
@@ -266,7 +269,7 @@ struct EmailHubScreen: View {
       let actions = EmailActions(context: context, orgID: orgID, hostID: hostID)
       switch section {
       case .messages: EmailsScreen(context: context, initial: initial, composeCampaign: composeCampaign)
-      case .templates: TemplatesSection(context: context, actions: actions)
+      case .templates: TemplatesSection(context: context, actions: actions, startNew: startNew)
       case .audiences: AudiencesSection(context: context, actions: actions, initial: initial)
       case .topics: TopicsSection(context: context, actions: actions)
       case .sending: SendingSection(context: context, actions: actions)
@@ -294,6 +297,9 @@ func templateRow(_ doc: FirestoreDocument) -> TemplateRow {
 struct TemplatesSection: View {
   let context: NativePluginContext
   let actions: EmailActions
+  /// Opened from Create new (`new=1`): the new-design sheet comes up once the person's role is known to allow it.
+  var startNew = false
+  @State private var startedNew = false
   @State private var list = LiveQueryList(pageSize: 25, map: templateRow)
   @State private var role = EmailRoleModel()
   @State private var searchText = ""
@@ -305,7 +311,7 @@ struct TemplatesSection: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.padding(.horizontal, AglynSpace.two) }
+      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.aglynContentEdges() }
       AglynLiveList(
         rows: list.rows, ready: list.ready, failure: list.failure, hasMore: list.hasMore, failedTitle: "Could not load templates",
         emptyTitle: search.isEmpty ? "No email designs yet" : "No templates match",
@@ -333,22 +339,20 @@ struct TemplatesSection: View {
         }
       }
     }
-    .searchable(text: $searchText, prompt: "Search templates")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search templates", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      if role.canEdit {
-        ToolbarItem(placement: .primaryAction) {
-          Button("New design", systemImage: "plus") { creating = true }.accessibilityIdentifier("template-new")
-        }
-      }
-    }
+    .aglynPrimaryAction(id: "template-new", "New design", systemImage: "plus", enabled: role.canEdit, help: AglynRoleReason.site("creating email designs")) { creating = true }
     .task(id: search) {
       role.start(context)
       let search = search, hostID = actions.hostID
       list.show(context.firestore) { templatesQuery(hostID, search: search, limit: $0) }
     }
     .onDisappear { list.stop() }
+    .onChange(of: role.canEdit, initial: true) { _, canEdit in
+      guard startNew, !startedNew, canEdit else { return }
+      startedNew = true
+      creating = true
+    }
     .sheet(isPresented: $creating) {
       NameSheet(title: "New email design", label: "Name", initial: "Untitled email", confirm: "Create") { name in
         let ids = try await actions.createDesign(name)
@@ -440,14 +444,9 @@ struct AudiencesSection: View {
         pane(selectable: false)
       }
     }
-    .searchable(text: $searchText, prompt: "Search lists")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search lists", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button("New list", systemImage: "plus") { creating = true }.accessibilityIdentifier("list-new")
-      }
-    }
+    .aglynPrimaryAction(id: "list-new", "New list", systemImage: "plus") { creating = true }
     .task(id: "\(kind)|\(search)") {
       if selection == nil { selection = initial }
       let kind = kind, search = search, orgID = actions.orgID
@@ -468,7 +467,7 @@ struct AudiencesSection: View {
         AglynChoiceChip("Rule", selected: kind == "dynamic") { kind = "dynamic" }
         Spacer()
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
       if selectable {
         if list.ready && list.failure == nil && !list.rows.isEmpty {
@@ -486,7 +485,7 @@ struct AudiencesSection: View {
           emptyTitle: "No lists yet", emptyMessage: "A list is who an email goes to: people you add, or everyone a rule matches.",
           systemImage: "person.3", onMore: { list.loadMore() }, onRetry: { list.retry() }
         ) { row in
-          NavigationLink { ListDetail(context: context, actions: actions, listID: row.id) } label: { ListRowView(row: row) }
+          AglynPushLink { ListDetail(context: context, actions: actions, listID: row.id) } label: { ListRowView(row: row) }
         }
       }
     }
@@ -530,6 +529,7 @@ struct ListDetail: View {
   let actions: EmailActions
   let listID: String
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.aglynWideChrome) private var wide
   @State private var doc = ObservedDocument()
   @State private var members = LiveQueryList(pageSize: 25, map: listMemberRow)
   @State private var searchText = ""
@@ -543,15 +543,15 @@ struct ListDetail: View {
   var body: some View {
     let row = doc.document.map(emailListRow)
     VStack(spacing: 0) {
-      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.padding(.horizontal, AglynSpace.two) }
+      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.aglynContentEdges() }
       if let row, row.dynamic {
         AglynNotice("Everyone the list's rule matches is on it. The rule is edited on the website for now; its members are listed here.", tone: .info)
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
       }
       TextField("Search members", text: $searchText)
         .textFieldStyle(.roundedBorder)
         .onSubmit { search = searchText }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
       AglynLiveList(
         rows: members.rows, ready: members.ready, failure: members.failure, hasMore: members.hasMore,
@@ -569,22 +569,23 @@ struct ListDetail: View {
       }
     }
     .navigationTitle(row?.name ?? "List")
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Menu {
-          Button("Add people", systemImage: "person.badge.plus") { adding = true }
-          // The console's Import and Export on a list's page: the records wizard and export sheet, on this list.
-          Button("Import and export", systemImage: "arrow.up.arrow.down") {
-            context.navigate("email.list.transfer", ["list": listID, "name": row?.name ?? "this list", "resource": "email.list-members:\(listID)"])
-          }
-          .accessibilityIdentifier("list-transfer")
-          Button("Rename", systemImage: "pencil") { renaming = true }
-          Button("Delete list", systemImage: "trash", role: .destructive) { confirmDelete = true }
-        } label: {
-          Label("List", systemImage: "ellipsis.circle")
+    .aglynScreenTitle(row?.name ?? "List")
+    // Add people is the head's one primary action on the Mac and iPad; on a phone it stays first in the list's menu.
+    .aglynWidePrimaryAction(id: "list-add-people", "Add people", systemImage: "person.badge.plus") { adding = true }
+    .aglynScreenToolbar(id: "email-list") {
+      Menu {
+        if !wide { Button("Add people", systemImage: "person.badge.plus") { adding = true } }
+        // The console's Import and Export on a list's page: the records wizard and export sheet, on this list.
+        Button("Import and export", systemImage: "arrow.up.arrow.down") {
+          context.navigate("email.list.transfer", ["list": listID, "name": row?.name ?? "this list", "resource": "email.list-members:\(listID)"])
         }
-        .accessibilityIdentifier("list-actions")
+        .accessibilityIdentifier("list-transfer")
+        Button("Rename", systemImage: "pencil") { renaming = true }
+        Button("Delete list", systemImage: "trash", role: .destructive) { confirmDelete = true }
+      } label: {
+        Label(wide ? "More" : "List", systemImage: "ellipsis.circle")
       }
+      .accessibilityIdentifier("list-actions")
     }
     .task(id: "\(listID)|\(search)") {
       doc.start(context.firestore, ["orgs", actions.orgID, "lists", listID])
@@ -668,6 +669,7 @@ struct AddPeopleSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Add people")
+      .aglynScreenTitle("Add people")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
         ToolbarItem(placement: .confirmationAction) {
@@ -728,7 +730,7 @@ struct TopicsSection: View {
   var body: some View {
     let rows = list.rows.sorted { ($0.archived ? 1 : 0, $0.name.lowercased()) < ($1.archived ? 1 : 0, $1.name.lowercased()) }
     VStack(spacing: 0) {
-      if let error { AglynNotice(error, tone: .error) { self.error = nil }.padding(.horizontal, AglynSpace.two) }
+      if let error { AglynNotice(error, tone: .error) { self.error = nil }.aglynContentEdges() }
       AglynLiveList(
         rows: rows, ready: list.ready, failure: list.failure, hasMore: false, failedTitle: "Could not load topics",
         emptyTitle: "No topics yet",
@@ -746,9 +748,7 @@ struct TopicsSection: View {
         }
       }
     }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) { Button("Add topic", systemImage: "plus") { adding = true } }
-    }
+    .aglynPrimaryAction(id: "topic-add", "Add topic", systemImage: "plus") { adding = true }
     .task {
       let orgID = actions.orgID
       list.show(context.firestore) { _ in FirestoreQuery(["orgs", orgID, "emailTopics"], limit: 100) }
@@ -794,7 +794,7 @@ struct SuppressionsSection: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.padding(.horizontal, AglynSpace.two) }
+      if let notice { AglynNotice(notice.0, tone: notice.1) { self.notice = nil }.aglynContentEdges() }
       AglynLiveList(
         rows: list.rows, ready: list.ready, failure: list.failure, hasMore: list.hasMore, failedTitle: "Could not load suppressions",
         emptyTitle: search.isEmpty ? "Nobody is suppressed" : "No address matches",
@@ -806,12 +806,9 @@ struct SuppressionsSection: View {
           .contextMenu { Button("Put back on your list", systemImage: "arrow.uturn.backward") { removing = row } }
       }
     }
-    .searchable(text: $searchText, prompt: "Search addresses")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search addresses", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) { Button("Suppress", systemImage: "plus") { adding = true }.accessibilityIdentifier("suppression-add") }
-    }
+    .aglynPrimaryAction(id: "suppression-add", "Suppress", systemImage: "plus") { adding = true }
     .task(id: search) {
       let search = search, hostID = actions.hostID
       list.show(context.firestore) { suppressionsQuery(hostID, search: search, limit: $0) }

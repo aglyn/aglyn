@@ -20,6 +20,7 @@ import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
   mediaFilterFields,
   mediaFolderDescendants,
+  mediaIdSearch,
   mediaQuery,
   type MediaQueryInput,
   mediaSortOf,
@@ -236,5 +237,47 @@ describe('including subfolders', () => {
     ]
     expect(mediaFolderDescendants('a', folders)).toEqual(['a', 'b', 'c'])
     expect(mediaFolderDescendants('x', folders)).toEqual(['x', 'y'])
+  })
+})
+
+describe('searching by ID', () => {
+  it('takes the ID the File info shows, and leaves the name search running', () => {
+    expect(mediaIdSearch(['FsZiR8vTA3'])).toEqual({ mediaId: 'FsZiR8vTA3', exact: false })
+    expect(mediaIdSearch([' ylQl8v2_Cn '])).toEqual({ mediaId: 'ylQl8v2_Cn', exact: false })
+  })
+
+  it('takes a link in every form Copy URL and the settings fields hold', () => {
+    const named = { mediaId: 'FsZiR8vTA3', scope: 'org:jWmGooWE3L', exact: true }
+    expect(mediaIdSearch(['/api/media/cdn/org:jWmGooWE3L/FsZiR8vTA3'])).toEqual(named)
+    expect(
+      mediaIdSearch(['https://app.aglyn.com/api/media/cdn/org:jWmGooWE3L/FsZiR8vTA3?w=320']),
+    ).toEqual(named)
+    expect(
+      mediaIdSearch(['https://aglyn.com/api/media/cdn/org:jWmGooWE3L/FsZiR8vTA3/abc123#top']),
+    ).toEqual(named)
+    expect(mediaIdSearch(['/api/media/cdn/org:jWmGooWE3L:DXnRbPH4CQ/19G8Ipyfb1'])).toEqual({
+      mediaId: '19G8Ipyfb1',
+      scope: 'org:jWmGooWE3L:DXnRbPH4CQ',
+      exact: true,
+    })
+    expect(mediaIdSearch(['media:h1/19G8Ipyfb1@abc'])).toEqual({
+      mediaId: '19G8Ipyfb1',
+      scope: 'h1',
+      exact: true,
+    })
+  })
+
+  it('reads ordinary words of a name as words', () => {
+    expect(mediaIdSearch(['background'])).toBeNull()
+    expect(mediaIdSearch(['logo'])).toBeNull()
+    expect(mediaIdSearch(['hero', 'banner'])).toBeNull()
+    expect(mediaIdSearch(['FsZiR8vTA3', 'logo'])).toBeNull()
+    expect(mediaIdSearch(['hero.png'])).toBeNull()
+    expect(mediaIdSearch([])).toBeNull()
+  })
+
+  it('refuses a link the CDN would refuse', () => {
+    expect(mediaIdSearch(['/api/media/cdn/org:a:b:c/FsZiR8vTA3'])).toBeNull()
+    expect(mediaIdSearch(['https://example.com/images/FsZiR8vTA3.png'])).toBeNull()
   })
 })

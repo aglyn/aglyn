@@ -346,9 +346,8 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
             }
           }
                 }
-        fun toggleArchive() {
+        fun setStatus(next: String) {
           working = true
-          val next = if (archived) "active" else "archived"
           scope.launch {
             notice = try {
               ConsoleProductWriteApi(context.api, hostId).save(productId, false, productStatusSaveJson(doc.data, next), com.aglyn.plugins.commerce.pos.newAttemptKey("status"))
@@ -362,6 +361,7 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
             }
           }
                 }
+        fun toggleArchive() = setStatus(if (archived) "active" else "archived")
         val picture = product.mediaUrls.orEmpty().firstOrNull()?.let { mediaPreviewUrl(it, context.api.origin, hostId, 160) }
         SectionCard(null) {
           // The product's picture, name and state at the top; the less common actions in the ⋮ menu beside them.
@@ -381,6 +381,7 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
               {
                 OverflowMenu(
                   buildList {
+                    if (status == ProductStatus.DRAFT) add(MenuAction("product-edit", "Edit product", "tune") { editor.edit(productId, doc.data) })
                     add(MenuAction("product-duplicate", "Duplicate", "content_copy", enabled = !working) { duplicate() })
                     add(MenuAction("product-archive", if (archived) "Activate" else "Archive", if (archived) "unarchive" else "archive", enabled = !working) { toggleArchive() })
                     if (product.type == ProductType.DIGITAL) add(MenuAction("product-keys", "Keys", "key") { keys = true })
@@ -397,20 +398,36 @@ fun ProductDetailPane(context: NativePluginContext, productId: String, editor: P
           Text(stockLabel(productInventory(product)), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
           product.description?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
           if (editor != null) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+            // One filled button, the next step for the product: a draft goes live; anything else is edited.
+            if (status == ProductStatus.DRAFT) {
+              Button(onClick = { setStatus("active") }, enabled = !working, modifier = Modifier.testTag("activate-product")) {
+                Icon(AglynIcons.named("check_circle"), contentDescription = null)
+                Text("Activate", Modifier.padding(start = space(1f)))
+              }
+            } else {
               Button(onClick = { editor.edit(productId, doc.data) }, Modifier.testTag("edit-product")) {
                 Icon(AglynIcons.named("tune"), contentDescription = null)
                 Text("Edit product", Modifier.padding(start = space(1f)))
               }
-              // The address, supplier, tags, categories, tax, billing and search listing: a spec screen on the shared renderer.
-              OutlinedButton(onClick = { context.navigate("commerce.productDetails", mapOf("productId" to productId)) }, Modifier.testTag("product-details")) {
-                Text("Details")
-              }
-              // The pictures, and a digital product's downloads and members videos.
-              OutlinedButton(onClick = { context.navigate(COMMERCE_PRODUCT_MEDIA_SCREEN, mapOf("productId" to productId)) }, Modifier.testTag("product-media-link")) {
-                Text("Images and files")
-              }
             }
+            // The address, supplier, tags, categories, tax, billing and search listing, and the pictures and downloads:
+            // one step in, as rows rather than more buttons.
+            AglynListItem(
+              title = "Details",
+              supporting = "Address, supplier, tags, categories, tax and search listing",
+              icon = AglynIcons.named("info"),
+              trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+              onClick = { context.navigate("commerce.productDetails", mapOf("productId" to productId)) },
+              modifier = Modifier.testTag("product-details"),
+            )
+            AglynListItem(
+              title = "Images and files",
+              supporting = if (product.type == ProductType.DIGITAL) "Pictures, downloads and members videos" else "Pictures",
+              icon = AglynIcons.named("photo_library"),
+              trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+              onClick = { context.navigate(COMMERCE_PRODUCT_MEDIA_SCREEN, mapOf("productId" to productId)) },
+              modifier = Modifier.testTag("product-media-link"),
+            )
           }
         }
         SectionCard(if (product.variants.orEmpty().size > 1) "Variants" else "Price and stock") {

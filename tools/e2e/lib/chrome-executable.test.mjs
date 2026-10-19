@@ -21,7 +21,7 @@
 // Chrome honors only the last `--disable-features` it is given.
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
@@ -30,7 +30,9 @@ import {
   CODE_SIGN_CLONE_FEATURE,
   chromeExecutable,
   noCodeSignCloneArgs,
+  openCodeSignClones,
   playwrightDisabledFeatures,
+  reapCodeSignClones,
 } from './chrome-executable.mjs'
 
 describe('playwrightDisabledFeatures', () => {
@@ -78,6 +80,81 @@ describe('noCodeSignCloneArgs', () => {
     } finally {
       console.warn = warn
     }
+  })
+})
+
+const BETA = '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta'
+
+describe('openCodeSignClones', () => {
+  const lsof = 'p64314\nftxt\nn/var/folders/x/T/../X/com.google.Chrome.beta.code_sign_clone/code_sign_clone.o0MACF/Google Chrome Beta.app.bundle/Contents/MacOS/Google Chrome Beta\n'
+
+  it('names the copies lsof saw open', () => {
+    assert.deepEqual([...openCodeSignClones(lsof, `${BETA}\n`)], ['code_sign_clone.o0MACF'])
+  })
+
+  it('answers null when a running Chrome made a copy lsof did not see', () => {
+    assert.equal(openCodeSignClones('', `${BETA} --flag-switches-begin\n`), null)
+  })
+
+  it('counts neither helpers nor a Chrome launched with the copy switched off', () => {
+    const ps = [
+      `${BETA} --headless --disable-features=Translate,${CODE_SIGN_CLONE_FEATURE}`,
+      '/Applications/Google Chrome Beta.app/Contents/Frameworks/Google Chrome Framework.framework/Helpers/Google Chrome Beta Helper (Renderer).app/Contents/MacOS/Google Chrome Beta Helper (Renderer) --type=renderer',
+    ].join('\n')
+    assert.deepEqual([...openCodeSignClones('', ps)], [])
+  })
+})
+
+describe('reapCodeSignClones', () => {
+  const now = Date.now()
+  const copies = () => {
+    const root = mkdtempSync(join(tmpdir(), 'chrome-executable-'))
+    const flavor = join(root, 'com.google.Chrome.beta.code_sign_clone')
+    const make = (name, ageMinutes) => {
+      const path = join(flavor, name)
+      mkdirSync(path, { recursive: true })
+      const at = new Date(now - ageMinutes * 60_000)
+      utimesSync(path, at, at)
+      return path
+    }
+    return {
+      root,
+      left: make('code_sign_clone.left', 60),
+      open: make('code_sign_clone.open', 60),
+      fresh: make('code_sign_clone.fresh', 2),
+      other: make('unrelated', 60),
+    }
+  }
+  const quietly = (run) => {
+    const warn = console.warn
+    console.warn = () => {}
+    try {
+      return run()
+    } finally {
+      console.warn = warn
+    }
+  }
+
+  it('removes only old copies nothing has open', () => {
+    const { root, left, open, fresh, other } = copies()
+    const removed = quietly(() =>
+      reapCodeSignClones({ root, readOpen: () => new Set(['code_sign_clone.open']), now }),
+    )
+    assert.deepEqual(removed, [left])
+    assert.equal(existsSync(left), false)
+    for (const kept of [open, fresh, other]) assert.ok(existsSync(kept), kept)
+  })
+
+  it('removes nothing when it cannot tell which copies are open', () => {
+    const { root, left } = copies()
+    assert.deepEqual(reapCodeSignClones({ root, readOpen: () => null, now }), [])
+    assert.ok(existsSync(left))
+  })
+
+  it('does not ask lsof when no copy is old enough', () => {
+    const root = mkdtempSync(join(tmpdir(), 'chrome-executable-'))
+    const readOpen = () => assert.fail('lsof was asked')
+    assert.deepEqual(reapCodeSignClones({ root, readOpen, now }), [])
   })
 })
 

@@ -14,7 +14,8 @@ import com.aglyn.pluginhost.NativePluginRegistry
  */
 
 /** A section inside a row's area (Deals inside CRM), shown as the area's own tabs. */
-data class NavSectionItem(val key: String, val id: String, val label: String, val screen: String, val params: Map<String, String>)
+/** One section of a row; [docs] is its help page on the docs site (path and anchor), when it has its own. */
+data class NavSectionItem(val key: String, val id: String, val label: String, val screen: String, val params: Map<String, String>, val docs: String? = null)
 
 /** One row: its key on the navigator, its words and icon, what it opens and what sits inside it. */
 data class NavItem(
@@ -31,7 +32,14 @@ data class NavItem(
   val actions: List<NativeNavAction>,
   val pluginId: String?,
   val keywords: List<String>,
+  /** Where the row's twin lives in the console, for the page the AI panel says it is reading. */
+  val console: com.aglyn.contracts.NativeNavConsoleRef? = null,
+  /** The row's help page on the docs site (path and anchor), which Help docs opens while it is on screen. */
+  val docs: String? = null,
 ) {
+  /** The help page for [key] on screen: its section's own, else the row's. */
+  fun docsFor(key: String): String? = sections.firstOrNull { it.key == key }?.docs ?: docs
+
   /** Every navigator key that belongs to this row: its own and its sections'. */
   val keys: Set<String> get() = setOf(key) + sections.map { it.key }
 
@@ -80,6 +88,22 @@ object NavKeys {
 fun isHostAdmin(siteRole: String?, orgRole: String?): Boolean =
   siteRole in setOf("owner", "admin") || orgRole in setOf("owner", "admin")
 
+/**
+ * The plugins the platform has released to the workspace: a plugin whose catalog entry names a release flag stays only
+ * while that flag is on for it (`isReleaseFlagOnForOrg`: its override, the plan targeting, the published value, the
+ * rollout). The console's shell hides such a plugin's tab and its routes answer 404 (Accounting until a deployment has
+ * its ledger credentials), so a row for it would only open "This did not load". Staff see every plugin, as the console's
+ * staff session does.
+ */
+fun releasedPlugins(ids: List<String>, orgId: String?, logo: com.aglyn.core.WorkspaceOrgLogo?, staff: Boolean): List<String> {
+  if (staff) return ids
+  return ids.filter { id ->
+    val flag = com.aglyn.contracts.Contracts.firstPartyPlugins.firstOrNull { it.id == id }?.releaseFlag ?: return@filter true
+    val value = com.aglyn.core.ReleaseFlagDefaults.byKey[flag] ?: com.aglyn.core.ReleaseFlagValue(false, 0, emptyList())
+    com.aglyn.core.isReleaseFlagOn(flag, value, orgId, logo?.plan, logo?.releaseFlags)
+  }
+}
+
 /** The plugins on for the scope: the site's effective set inside a site, the workspace's otherwise. */
 fun enabledPluginsFor(orgEnabled: List<String>?, host: Map<String, Any?>?, inSite: Boolean): List<String> {
   if (!inSite) return resolveEnabledPlugins(orgEnabled)
@@ -107,7 +131,7 @@ fun navGroups(
   return resolveNavList(listId, enabledPluginIds, hostAdmin).groups.mapNotNull { group ->
     val rows = group.rows.filter { available(it.screen) }.map { row ->
       val sections = row.sections.orEmpty().filter { available(it.screen) }.map {
-        NavSectionItem(NavKeys.of(it.screen, it.params), it.id, it.label, it.screen, it.params.orEmpty())
+        NavSectionItem(NavKeys.of(it.screen, it.params), it.id, it.label, it.screen, it.params.orEmpty(), it.docs)
       }
       NavItem(
         key = NavKeys.of(row.screen, row.params),
@@ -122,14 +146,24 @@ fun navGroups(
         actions = row.actions.orEmpty().filter { available(it.screen) },
         pluginId = row.pluginId,
         keywords = row.keywords.orEmpty(),
+        console = row.console,
+        docs = row.docs,
       )
     }
     if (rows.isEmpty() && group.dynamic == null) null else NavGroupItem(group.id, group.label, group.foldable, group.dynamic, rows)
   }
 }
 
-/** The row that holds [key] (its own key or one of its sections'), if any. */
-fun List<NavGroupItem>.rowFor(key: String): NavItem? = asSequence().flatMap { it.rows }.firstOrNull { key in it.keys }
+/**
+ * The row that holds [key] (its own key or one of its sections'), if any. A place opened with params of its own (an order
+ * picked from Recents or a link, `screen:commerce.orders?order=o-1042`) still sits under the row that opens its screen.
+ */
+fun List<NavGroupItem>.rowFor(key: String): NavItem? {
+  val rows = asSequence().flatMap { it.rows }
+  rows.firstOrNull { key in it.keys }?.let { return it }
+  val screen = NavKeys.parse(key)?.first ?: return null
+  return rows.firstOrNull { it.screen == screen } ?: rows.firstOrNull { row -> row.sections.any { it.screen == screen } }
+}
 
 /** The group holding [key]. */
 fun List<NavGroupItem>.groupFor(key: String): NavGroupItem? = firstOrNull { group -> group.rows.any { key in it.keys } }
@@ -143,4 +177,23 @@ fun phoneTabRows(groups: List<NavGroupItem>, inSite: Boolean): Pair<NavItem?, Na
   val busiest = if (inSite) rows.firstOrNull { it.rowId == "orders" } ?: rows.firstOrNull { it.rowId == "pages" } else rows.firstOrNull { it.rowId == "sites" }
   val inbox = rows.firstOrNull { it.rowId == "inbox" }
   return busiest to inbox
+}
+
+/**
+ * The console path of the page on screen (`/acme/hosts/bakery/products/orders`), what the AI panel's context says it is
+ * reading: the workspace (and site) prefix, then the row's console href where its twin is a plugin tab or section.
+ */
+fun consolePathOf(orgSlug: String?, hostSlug: String?, row: NavItem?): String {
+  val base = buildString {
+    orgSlug?.let { append("/").append(it) }
+    if (orgSlug != null && hostSlug != null) append("/hosts/").append(hostSlug)
+  }
+  val ref = row?.console ?: return base
+  val href = when (ref.surface) {
+    com.aglyn.contracts.NativeNavConsoleSurface.HOST_PLUGIN_TAB, com.aglyn.contracts.NativeNavConsoleSurface.ORG_PLUGIN_TAB,
+    com.aglyn.contracts.NativeNavConsoleSurface.HOST_PLUGIN_SECTION, com.aglyn.contracts.NativeNavConsoleSurface.ORG_PLUGIN_SECTION,
+    -> ref.id
+    else -> ""
+  }
+  return base + href
 }

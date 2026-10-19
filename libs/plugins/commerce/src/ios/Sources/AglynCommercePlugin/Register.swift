@@ -5,6 +5,7 @@ import AglynContracts
 import AglynHardware
 import AglynPluginHost
 import AglynScreens
+import AglynUI
 import SwiftUI
 
 public let commerceRegisterScreen = "commerce.register"
@@ -64,8 +65,12 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   // a spec screen drawn by AglynScreens (Resources/commerce.screens.json).
   SpecScreens.register(ScreenCatalog.load(from: .module), into: r)
 
+  // Orders heads its own list column on the Mac and iPad (Figma Orders 13:483).
+  AglynListColumnHead.register(commerceOrdersScreen)
   r.screen(commerceOrdersScreen, title: "Orders", requiresSite: true, icon: "bag") { context, params in
-    OrdersScreen(context: context, initialFilter: params["filter"].flatMap(OrderFilter.init(rawValue:)) ?? .all)
+    OrdersScreen(
+      context: context, initialFilter: params["filter"].flatMap(OrderFilter.init(rawValue:)) ?? .all,
+      startNew: params["new"] == "1")
   }
   r.screen(commerceOrderScreen, title: "Order", requiresSite: true, icon: "bag") { context, params in
     OrderScreen(context: context, orderID: params["orderId"] ?? "")
@@ -95,6 +100,9 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
 
   r.tab("commerce.orders-tab", title: "Orders", icon: "bag", screen: commerceOrdersScreen, order: 100)
   r.tab("commerce.products-tab", title: "Products", icon: "shippingbox", screen: commerceProductsScreen, order: 110)
+  r.widget("commerce.needs-you", title: "Needs you", order: 10, requiresSite: true, slot: "homeNeedsYou") { context in
+    OrdersNeedsYouWidget(context: context)
+  }
   r.widget("commerce.to-ship", title: "To ship", order: 90, size: .half, requiresSite: true) { context in
     OrdersToShipWidget(context: context)
   }

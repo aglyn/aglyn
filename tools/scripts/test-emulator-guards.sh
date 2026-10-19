@@ -97,12 +97,20 @@ set +m
 echo "==> waiting for emulators"
 ready=0
 for _ in $(seq 1 60); do
-  # No `-f`. This asks "is something listening and speaking HTTP", and the
-  # emulators answer their bare root with a 404, which `-f` turns into a
-  # failure — the probe then times out against three healthy emulators.
+  # No `-f` on the bare roots. This asks "is something listening and speaking
+  # HTTP", and the emulators answer their bare root with a 404, which `-f`
+  # turns into a failure — the probe then times out against three healthy
+  # emulators.
+  #
+  # A listening port is not a ready suite, though: a run on 2026-10-19 passed
+  # these three probes and then had the console's first Auth calls refused
+  # (ECONNREFUSED 127.0.0.1:9099) for a minute. So the gate also waits for the
+  # CLI's own "All emulators ready" line, and for the Auth emulator to answer
+  # its project config route with a 200 (its API, not just its socket).
   if curl -s -o /dev/null "http://127.0.0.1:${FIRESTORE_PORT}/" &&
-    curl -s -o /dev/null "http://127.0.0.1:${AUTH_PORT}/" &&
-    curl -s -o /dev/null "http://127.0.0.1:${DATABASE_PORT}/"; then
+    curl -s -o /dev/null "http://127.0.0.1:${DATABASE_PORT}/" &&
+    curl -sf -o /dev/null "http://127.0.0.1:${AUTH_PORT}/emulator/v1/projects/${PROJECT_ID}/config" &&
+    grep -q "All emulators ready" "$EMULATOR_LOG"; then
     ready=1
     break
   fi
@@ -194,6 +202,13 @@ for project in "${PROJECTS[@]}"; do
     $in_band \
     --json --outputFile "$REPORT_DIR/$slug.json"; then
     status=1
+    # A failed project shows what the emulators said, so a refused connection
+    # names its cause (an emulator that exited or restarted) in the same log.
+    if ! curl -sf -o /dev/null "http://127.0.0.1:${AUTH_PORT}/emulator/v1/projects/${PROJECT_ID}/config"; then
+      echo "!! the Auth emulator is not answering after $project" >&2
+    fi
+    echo "--- emulator log (last 60 lines) after $project" >&2
+    tail -n 60 "$EMULATOR_LOG" >&2 || true
   fi
 done
 

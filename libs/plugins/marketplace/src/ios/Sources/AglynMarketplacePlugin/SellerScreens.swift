@@ -49,7 +49,7 @@ struct SellScreen: View {
           }
           .pickerStyle(.segmented)
           .labelsHidden()
-          .padding(.horizontal, AglynSpace.two)
+          .aglynContentEdges()
           .padding(.vertical, AglynSpace.one)
           .accessibilityIdentifier("sell-sections")
           Form {
@@ -75,6 +75,7 @@ struct SellScreen: View {
       }
     }
     .navigationTitle("Selling")
+    .aglynScreenTitle("Selling")
   }
 }
 

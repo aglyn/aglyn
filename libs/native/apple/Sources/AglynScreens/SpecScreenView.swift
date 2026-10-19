@@ -59,16 +59,16 @@ public struct SpecScreenView: View {
           WideLayoutReader { wide in
             if wide {
               ListDetailLayout(listWidth: 380, showsDetail: splitListHasRows(model)) {
-                SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: true)
+                SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: true, embedded: embedded)
               } detail: {
                 detail
               }
             } else {
-              SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: false)
+              SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: false, embedded: embedded)
             }
           }
         } else {
-          SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: false)
+          SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: false, embedded: embedded)
         }
       } else {
         Form { SkeletonRows(count: 6) }.formStyle(.grouped)
@@ -77,6 +77,7 @@ public struct SpecScreenView: View {
     .environment(\.aglynPluginContext, plugin)
     .onChange(of: session.claims) { _, _ in model?.rebase(baseContext) }
     .navigationTitle(ScreenValues.render(spec.title, in: model?.context ?? baseContext))
+    .aglynScreenTitle(ScreenValues.render(spec.title, in: model?.context ?? baseContext))
     .task(id: "\(plugin.orgID ?? ""):\(plugin.hostID ?? ""):\(params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" })") {
       let fresh = ScreenModel(
         spec: spec, context: baseContext, api: plugin.api, reader: plugin.firestore, writer: plugin.writer,
@@ -158,12 +159,16 @@ struct SpecScreenBody: View {
   let plugin: NativePluginContext
   @Binding var selection: ListSelection?
   let splitting: Bool
+  /// Shown in another screen's detail column (or a sheet): its actions sit at the top of its own column, never in the
+  /// head, which already holds the list's (one More per head).
+  var embedded = false
 
   @Environment(\.aglynScreenSession) private var session
   @Environment(\.webAuthenticationSession) private var webAuthentication
   @Environment(\.openURL) private var openURL
   @Environment(\.dismiss) private var dismiss
   @Environment(\.aglynGateResolve) private var gateResolve
+  @Environment(\.aglynWideChrome) private var wide
   @State private var confirming: PendingAction?
   @State private var prompting: PendingAction?
   @State private var reauthing: PendingAction?
@@ -177,8 +182,51 @@ struct SpecScreenBody: View {
   @State private var running: String?
   @State private var searchText = ""
   @State private var started = false
+  /// Each conditional zone screen's own read (its `showWhen`), keyed by screen and params. It is loaded here, by the
+  /// screen that is always on screen, never by the row: a row that draws nothing until its read is in has no view for
+  /// the read to run on, so it never appeared (GroupTaskTests).
+  @State private var zoneReads: [String: ScreenModel] = [:]
 
   private var context: JSONValue { model.context }
+
+  /// The zone screens listed only while their own condition holds, with the params they open with.
+  private var conditionalZoneScreens: [(key: String, spec: ScreenSpec, params: NativeParams)] {
+    guard isReady else { return [] }
+    return model.spec.blocks
+      .filter { $0.type == "zone" && ScreenValues.condition($0.when, in: context) }
+      .flatMap { block -> [(key: String, spec: ScreenSpec, params: NativeParams)] in
+        let params = renderParams(block["params"], in: context)
+        return ScreenCatalog.shared.zone(block["name"]?.stringValue ?? "")
+          .filter { $0.showWhen != nil && ScreenValues.condition($0.requires, in: context) }
+          .map { (key: Self.zoneKey($0, params), spec: $0, params: params) }
+      }
+  }
+
+  private static func zoneKey(_ spec: ScreenSpec, _ params: NativeParams) -> String {
+    spec.id + "?" + params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+  }
+
+  /// Whether a zone lists this screen: at once without a condition, else once its read is in and the condition holds.
+  private func zoneShows(_ spec: ScreenSpec, _ params: NativeParams) -> Bool {
+    guard spec.showWhen != nil else { return true }
+    guard let read = zoneReads[Self.zoneKey(spec, params)], read.phase == .ready else { return false }
+    return ScreenValues.condition(spec.showWhen, in: read.context)
+  }
+
+  /// Reads every conditional zone screen not read yet, side by side.
+  private func loadZoneReads() async {
+    let pending = conditionalZoneScreens.filter { zoneReads[$0.key] == nil }
+    guard !pending.isEmpty else { return }
+    await withTaskGroup(of: Void.self) { group in
+      for zone in pending {
+        let read = ScreenModel(
+          spec: zone.spec, context: session.context(plugin, params: zone.params), api: plugin.api,
+          reader: plugin.firestore, writer: nil, account: session.account)
+        zoneReads[zone.key] = read
+        group.addTask { @MainActor in await read.load() }
+      }
+    }
+  }
 
   private var isReady: Bool {
     if case .ready = model.phase { return true }
@@ -190,12 +238,19 @@ struct SpecScreenBody: View {
       .safeAreaInset(edge: .top) {
         if let notice {
           AglynNotice(notice.text, tone: notice.tone) { self.notice = nil }
-            .padding(.horizontal).padding(.top, AglynSpace.one)
+            .aglynContentEdges().padding(.top, AglynSpace.one)
             .transition(.move(edge: .top).combined(with: .opacity))
         }
       }
       .animation(.default, value: notice?.text)
-      .toolbar { toolbar }
+      // On the Mac and iPad the screen's first action is its head's one primary button and the rest are in More; a
+      // phone keeps them in its navigation bar.
+      .toolbar { if !wide { toolbar } }
+      .aglynPrimaryAction(wide && !embedded ? headPrimary : nil)
+      .aglynScreenToolbar(id: "spec-\(model.spec.id)") { if wide && !embedded { headMore } }
+      .safeAreaInset(edge: .top, spacing: 0) { if wide && embedded { embeddedHead } }
+      // The zones' conditional screens are read here, where the screen always is (`zoneReads`).
+      .task(id: conditionalZoneScreens.map(\.key)) { await loadZoneReads() }
       // A screen that names a `start` action runs it once, as soon as its data is in: the action's own `when` decides
       // whether there is anything to do (a link's `?notice=` that names a notice that cannot be reviewed does nothing).
       .task(id: isReady) {
@@ -281,15 +336,20 @@ struct SpecScreenBody: View {
     case .loading:
       Form { SkeletonRows(count: 6) }.formStyle(.grouped)
     case .failed(let message):
+      // On the page's own ground, as the loaded screen is: a bare state shows the window behind it (black in dark).
       AglynEmptyState("This did not load", systemImage: "exclamationmark.triangle", message: message) {
         Button("Try again") { Task { await model.load() } }
       }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(AglynColor.page)
     case .planRefused(let message):
       AglynUpsellState(
         "Add this to your plan", message: message, systemImage: "sparkles", actionTitle: "See add-ons"
       ) {
         plugin.navigate("core.billing.addons", [:])
       }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(AglynColor.page)
     case .ready:
       let blocks = model.spec.blocks.filter { ScreenValues.condition($0.when, in: context) }
       Form {
@@ -313,10 +373,66 @@ struct SpecScreenBody: View {
     model.spec.blocks.first { $0.type == "list" && $0["search"] == .bool(true) }?["load"]?.stringValue
   }
 
+  /// The screen's actions that apply now.
+  private var actions: [ActionSpec] {
+    model.spec.raw["actions"].array.compactMap(ActionSpec.init).filter { ScreenValues.condition($0.when, in: context) }
+  }
+
+  /// The head's primary button: the screen's first action, unless it is destructive.
+  private var headPrimary: AglynPrimaryAction? {
+    guard let first = actions.first, !first.destructive else { return nil }
+    let scope = context
+    return AglynPrimaryAction(
+      id: "spec-action-\(first.id)", title: first.label, systemImage: first.icon ?? "plus", enabled: running == nil
+    ) { trigger(first, scope: scope) }
+  }
+
+  /// A detail column's own actions on the Mac and iPad, at its top right as Figma draws a detail's (Orders 13:483):
+  /// its first action as the filled button, the rest and Refresh in its More.
+  @ViewBuilder
+  private var embeddedHead: some View {
+    HStack(spacing: 8) {
+      Spacer(minLength: 0)
+      headMore
+        .buttonStyle(AglynHeaderButtonStyle())
+        .menuStyle(.button)
+        .fixedSize()
+      if let primary = headPrimary { AglynPrimaryHeaderButton.blockable(primary) }
+    }
+    .padding(.horizontal, AglynContentInsets.horizontal)
+    .padding(.top, 16)
+    .padding(.bottom, 4)
+  }
+
+  /// The head's More menu: the other actions, and Refresh on the Mac.
+  @ViewBuilder
+  private var headMore: some View {
+    let rest = headPrimary == nil ? actions : Array(actions.dropFirst())
+    #if os(macOS)
+      let refresh = true
+    #else
+      let refresh = false
+    #endif
+    if !rest.isEmpty || refresh {
+      AglynMoreMenu {
+        ForEach(rest) { action in
+          Button(role: action.destructive ? .destructive : nil) { trigger(action, scope: context) } label: {
+            Label(action.label, systemImage: action.icon ?? "circle")
+          }
+          .disabled(running != nil)
+        }
+        if refresh {
+          if !rest.isEmpty { Divider() }
+          Button { Task { await model.load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+            .keyboardShortcut("r", modifiers: .command)
+        }
+      }
+    }
+  }
+
   @ToolbarContentBuilder
   private var toolbar: some ToolbarContent {
-    let actions = model.spec.raw["actions"].array.compactMap(ActionSpec.init)
-      .filter { ScreenValues.condition($0.when, in: context) }
+    let actions = actions
     if let first = actions.first {
       ToolbarItem(placement: .primaryAction) {
         if actions.count == 1 {
@@ -412,9 +528,13 @@ struct SpecScreenBody: View {
       // Native widgets other plugins put in the same slot sit beside the spec screens.
       let widgets = plugin.slotWidgets(name)
       if !contributions.isEmpty {
-        section(title, footer) {
-          ForEach(contributions) { spec in
-            ZoneRow(spec: spec, plugin: plugin, params: renderParams(block["params"], in: context)) { openScreen(spec.id, $0) }
+        let params = renderParams(block["params"], in: context)
+        let listed = contributions.filter { zoneShows($0, params) }
+        if !listed.isEmpty {
+          section(title, footer) {
+            ForEach(listed) { spec in
+              ZoneRow(spec: spec, params: params) { openScreen(spec.id, $0) }
+            }
           }
         }
       }
@@ -679,7 +799,7 @@ struct SearchModifier: ViewModifier {
   func body(content: Content) -> some View {
     if enabled {
       content
-        .searchable(text: $text)
+        .aglynSearchable(text: $text, prompt: "Search")
         .onSubmit(of: .search, submit)
         .onChange(of: text) { _, now in if now.isEmpty { submit() } }
     } else {
@@ -710,44 +830,22 @@ struct ExportedDocument: FileDocument {
   func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }
 
-/// One screen's row in a zone. A screen with a `showWhen` reads its own loads first and is listed only while the condition holds,
-/// so a widget with nothing to say to this store leaves no row; one without is listed at once.
+/// One screen's row in a zone: it opens the screen. Whether a conditional one is listed is the zone's to decide
+/// (`SpecScreenBody.zoneReads`), so the row never waits on a read of its own.
 struct ZoneRow: View {
   let spec: ScreenSpec
-  let plugin: NativePluginContext
   let params: NativeParams
   let open: (NativeParams) -> Void
 
-  @Environment(\.aglynScreenSession) private var session
-  @State private var model: ScreenModel?
-
-  private var shown: Bool {
-    guard spec.showWhen != nil else { return true }
-    guard let model, model.phase == .ready else { return false }
-    return ScreenValues.condition(spec.showWhen, in: model.context)
-  }
-
   var body: some View {
-    Group {
-      if shown {
-        Button {
-          open(params)
-        } label: {
-          AglynRow(spec.label, subtitle: spec.subtitle, systemImage: spec.icon) {
-            Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
-          }
-        }
-        .buttonStyle(.aglynRow)
-        .accessibilityIdentifier("zone-\(spec.id)")
+    Button {
+      open(params)
+    } label: {
+      AglynRow(spec.label, subtitle: spec.subtitle, systemImage: spec.icon) {
+        Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
       }
     }
-    .task(id: params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }) {
-      guard spec.showWhen != nil else { return }
-      let fresh = ScreenModel(
-        spec: spec, context: session.context(plugin, params: params), api: plugin.api, reader: plugin.firestore, writer: nil,
-        account: session.account)
-      model = fresh
-      await fresh.load()
-    }
+    .buttonStyle(.aglynRow)
+    .accessibilityIdentifier("zone-\(spec.id)")
   }
 }

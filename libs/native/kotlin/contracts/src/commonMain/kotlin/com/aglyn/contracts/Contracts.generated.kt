@@ -3340,12 +3340,17 @@ internal data class ContractValuesPart4(
     @SerialName("NATIVE_CREATE_SITE_ROLE_REASON") val nativeCreateSiteRoleReason: String,
     @SerialName("NATIVE_CRM_ACTIVITY_DIRECTIONS") val nativeCrmActivityDirections: Map<String, List<String>>,
     @SerialName("NATIVE_CRM_ACTIVITY_KINDS") val nativeCrmActivityKinds: List<String>,
+    @SerialName("NATIVE_CRM_FIELD_CURRENCIES") val nativeCrmFieldCurrencies: List<String>,
+    @SerialName("NATIVE_CRM_FIELD_DEFAULT_CURRENCY") val nativeCrmFieldDefaultCurrency: String,
     @SerialName("NATIVE_CRM_FIELD_OBJECTS") val nativeCrmFieldObjects: List<String>,
+    @SerialName("NATIVE_CRM_FIELD_TYPE_LABELS") val nativeCrmFieldTypeLabels: Map<String, String>,
+    @SerialName("NATIVE_CRM_FIELD_TYPES") val nativeCrmFieldTypes: List<String>,
     @SerialName("NATIVE_CRM_LEAD_OPEN_STATUSES") val nativeCrmLeadOpenStatuses: List<String>,
     @SerialName("NATIVE_CRM_LEAD_STATUSES") val nativeCrmLeadStatuses: List<String>,
     @SerialName("NATIVE_CRM_PICKLISTS") val nativeCrmPicklists: List<NativeCrmPicklist>,
     @SerialName("NATIVE_CRM_REPORT_PERIODS") val nativeCrmReportPeriods: List<String>,
     @SerialName("NATIVE_CRM_TASK_KINDS") val nativeCrmTaskKinds: List<String>,
+    @SerialName("NATIVE_CURRENCY_FRACTION_DIGITS") val nativeCurrencyFractionDigits: Map<String, Double>,
     @SerialName("NATIVE_NAV_MANIFEST") val nativeNavManifest: NativeNavManifest,
     @SerialName("NATIVE_NAV_SHELL_SCREENS") val nativeNavShellScreens: List<String>,
     @SerialName("NATIVE_SITE_CAMPAIGNS_QUERY") val nativeSiteCampaignsQuery: ListQueryDeclaration,
@@ -3377,15 +3382,15 @@ internal data class ContractValuesPart4(
     @SerialName("ORDERS_TO_SHIP_FILTER_LABEL") val ordersToShipFilterLabel: String,
     @SerialName("ORDERS_TO_SHIP_FILTER_VALUE") val ordersToShipFilterValue: JsonElement,
     @SerialName("ORG_ROLE_GRANTS") val orgRoleGrants: OrgRoleGrants,
+)
+
+@Serializable
+internal data class ContractValuesPart5(
     @SerialName("ORG_ROLE_NAMES") val orgRoleNames: List<OrgRoleName>,
     @SerialName("ORG_SUBMISSION_LIST_QUERY") val orgSubmissionListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_DEFAULT_ALLOWED_COUNTRIES") val outreachDefaultAllowedCountries: List<String>,
     @SerialName("OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY") val outreachDoNotContactDomainListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_ENROLLMENT_LIST_QUERY") val outreachEnrollmentListQuery: ListQueryDeclaration,
-)
-
-@Serializable
-internal data class ContractValuesPart5(
     @SerialName("OUTREACH_MAX_EMAIL_STEPS") val outreachMaxEmailSteps: Long,
     @SerialName("OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS") val outreachMaxStepDelayBusinessDays: Long,
     @SerialName("OUTREACH_MAX_STEPS") val outreachMaxSteps: Long,
@@ -3429,15 +3434,15 @@ internal data class ContractValuesPart5(
     @SerialName("PRODUCT_LIST_BASE") val productListBase: List<ListQueryFilter>,
     @SerialName("PRODUCT_LIST_HEADERS") val productListHeaders: Map<String, String>,
     @SerialName("PRODUCT_LIST_OPTIONS") val productListOptions: Map<String, List<ListFilterOption>>,
+)
+
+@Serializable
+internal data class ContractValuesPart6(
     @SerialName("PRODUCT_LIST_QUERY") val productListQuery: ListQueryDeclaration,
     @SerialName("PRODUCT_LIST_SELECT_FIELDS") val productListSelectFields: List<String>,
     @SerialName("RAIL_ALL_WORKSPACES_AT_MOST") val railAllWorkspacesAtMost: Long,
     @SerialName("RAIL_RECENT_ORGS") val railRecentOrgs: Long,
     @SerialName("RECENT_ORGS_FIELD") val recentOrgsField: String,
-)
-
-@Serializable
-internal data class ContractValuesPart6(
     @SerialName("RECENT_ORGS_MAX") val recentOrgsMax: Long,
     @SerialName("RECENTS_FIELD") val recentsField: String,
     @SerialName("RECENTS_MAX") val recentsMax: Long,
@@ -3481,15 +3486,15 @@ internal data class ContractValuesPart6(
     @SerialName("THEME_ACCENTS") val themeAccents: List<ThemeNamedAccent>,
     @SerialName("THEME_CONSOLE_FIELDS") val themeConsoleFields: List<String>,
     @SerialName("THEME_DARK_RAIL_SEEDS") val themeDarkRailSeeds: Map<String, String>,
+)
+
+@Serializable
+internal data class ContractValuesPart7(
     @SerialName("THEME_DENSITIES") val themeDensities: List<ThemeDensity>,
     @SerialName("THEME_FIGMA_BASE") val themeFigmaBase: ThemeColorsPair,
     @SerialName("THEME_NON_TEXT_CONTRAST") val themeNonTextContrast: Long,
     @SerialName("THEME_PALETTES") val themePalettes: List<ThemePalette>,
     @SerialName("THEME_PREVIEWS") val themePreviews: Map<String, ThemePreview>,
-)
-
-@Serializable
-internal data class ContractValuesPart7(
     @SerialName("THEME_TEXT_CONTRAST") val themeTextContrast: Double,
     @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
     @SerialName("TIME_ZONE_DEFAULT_LABEL") val timeZoneDefaultLabel: String,
@@ -3662,12 +3667,17 @@ class ContractValues internal constructor(
     val nativeCreateSiteRoleReason: String get() = part4.nativeCreateSiteRoleReason
     val nativeCrmActivityDirections: Map<String, List<String>> get() = part4.nativeCrmActivityDirections
     val nativeCrmActivityKinds: List<String> get() = part4.nativeCrmActivityKinds
+    val nativeCrmFieldCurrencies: List<String> get() = part4.nativeCrmFieldCurrencies
+    val nativeCrmFieldDefaultCurrency: String get() = part4.nativeCrmFieldDefaultCurrency
     val nativeCrmFieldObjects: List<String> get() = part4.nativeCrmFieldObjects
+    val nativeCrmFieldTypeLabels: Map<String, String> get() = part4.nativeCrmFieldTypeLabels
+    val nativeCrmFieldTypes: List<String> get() = part4.nativeCrmFieldTypes
     val nativeCrmLeadOpenStatuses: List<String> get() = part4.nativeCrmLeadOpenStatuses
     val nativeCrmLeadStatuses: List<String> get() = part4.nativeCrmLeadStatuses
     val nativeCrmPicklists: List<NativeCrmPicklist> get() = part4.nativeCrmPicklists
     val nativeCrmReportPeriods: List<String> get() = part4.nativeCrmReportPeriods
     val nativeCrmTaskKinds: List<String> get() = part4.nativeCrmTaskKinds
+    val nativeCurrencyFractionDigits: Map<String, Double> get() = part4.nativeCurrencyFractionDigits
     val nativeNavManifest: NativeNavManifest get() = part4.nativeNavManifest
     val nativeNavShellScreens: List<String> get() = part4.nativeNavShellScreens
     val nativeSiteCampaignsQuery: ListQueryDeclaration get() = part4.nativeSiteCampaignsQuery
@@ -3699,11 +3709,11 @@ class ContractValues internal constructor(
     val ordersToShipFilterLabel: String get() = part4.ordersToShipFilterLabel
     val ordersToShipFilterValue: JsonElement get() = part4.ordersToShipFilterValue
     val orgRoleGrants: OrgRoleGrants get() = part4.orgRoleGrants
-    val orgRoleNames: List<OrgRoleName> get() = part4.orgRoleNames
-    val orgSubmissionListQuery: ListQueryDeclaration get() = part4.orgSubmissionListQuery
-    val outreachDefaultAllowedCountries: List<String> get() = part4.outreachDefaultAllowedCountries
-    val outreachDoNotContactDomainListQuery: ListQueryDeclaration get() = part4.outreachDoNotContactDomainListQuery
-    val outreachEnrollmentListQuery: ListQueryDeclaration get() = part4.outreachEnrollmentListQuery
+    val orgRoleNames: List<OrgRoleName> get() = part5.orgRoleNames
+    val orgSubmissionListQuery: ListQueryDeclaration get() = part5.orgSubmissionListQuery
+    val outreachDefaultAllowedCountries: List<String> get() = part5.outreachDefaultAllowedCountries
+    val outreachDoNotContactDomainListQuery: ListQueryDeclaration get() = part5.outreachDoNotContactDomainListQuery
+    val outreachEnrollmentListQuery: ListQueryDeclaration get() = part5.outreachEnrollmentListQuery
     val outreachMaxEmailSteps: Long get() = part5.outreachMaxEmailSteps
     val outreachMaxStepDelayBusinessDays: Long get() = part5.outreachMaxStepDelayBusinessDays
     val outreachMaxSteps: Long get() = part5.outreachMaxSteps
@@ -3747,11 +3757,11 @@ class ContractValues internal constructor(
     val productListBase: List<ListQueryFilter> get() = part5.productListBase
     val productListHeaders: Map<String, String> get() = part5.productListHeaders
     val productListOptions: Map<String, List<ListFilterOption>> get() = part5.productListOptions
-    val productListQuery: ListQueryDeclaration get() = part5.productListQuery
-    val productListSelectFields: List<String> get() = part5.productListSelectFields
-    val railAllWorkspacesAtMost: Long get() = part5.railAllWorkspacesAtMost
-    val railRecentOrgs: Long get() = part5.railRecentOrgs
-    val recentOrgsField: String get() = part5.recentOrgsField
+    val productListQuery: ListQueryDeclaration get() = part6.productListQuery
+    val productListSelectFields: List<String> get() = part6.productListSelectFields
+    val railAllWorkspacesAtMost: Long get() = part6.railAllWorkspacesAtMost
+    val railRecentOrgs: Long get() = part6.railRecentOrgs
+    val recentOrgsField: String get() = part6.recentOrgsField
     val recentOrgsMax: Long get() = part6.recentOrgsMax
     val recentsField: String get() = part6.recentsField
     val recentsMax: Long get() = part6.recentsMax
@@ -3795,11 +3805,11 @@ class ContractValues internal constructor(
     val themeAccents: List<ThemeNamedAccent> get() = part6.themeAccents
     val themeConsoleFields: List<String> get() = part6.themeConsoleFields
     val themeDarkRailSeeds: Map<String, String> get() = part6.themeDarkRailSeeds
-    val themeDensities: List<ThemeDensity> get() = part6.themeDensities
-    val themeFigmaBase: ThemeColorsPair get() = part6.themeFigmaBase
-    val themeNonTextContrast: Long get() = part6.themeNonTextContrast
-    val themePalettes: List<ThemePalette> get() = part6.themePalettes
-    val themePreviews: Map<String, ThemePreview> get() = part6.themePreviews
+    val themeDensities: List<ThemeDensity> get() = part7.themeDensities
+    val themeFigmaBase: ThemeColorsPair get() = part7.themeFigmaBase
+    val themeNonTextContrast: Long get() = part7.themeNonTextContrast
+    val themePalettes: List<ThemePalette> get() = part7.themePalettes
+    val themePreviews: Map<String, ThemePreview> get() = part7.themePreviews
     val themeTextContrast: Double get() = part7.themeTextContrast
     val timeZoneChoices: List<String> get() = part7.timeZoneChoices
     val timeZoneDefaultLabel: String get() = part7.timeZoneDefaultLabel

@@ -51,6 +51,7 @@ import {
   embeddedDraftValue,
   embeddedPatchFromDrafts,
   groupEmbeddedFields,
+  type MediaFileFact,
   mediaStoredFacts,
 } from './media-file-info-copy'
 
@@ -90,6 +91,23 @@ const ROWS_SX = {
   rowGap: 0.75,
   alignItems: 'start',
 } as const
+
+/**
+ * What the platform measured about a stored file, as label and value rows:
+ * the Details drawer's File info and the media picker's details panel draw
+ * the same list the same way.
+ */
+export function MediaFactRows({ facts }: { facts: readonly MediaFileFact[] }) {
+  return (
+    <Box sx={ROWS_SX}>
+      {facts.map((fact) => (
+        <FactRow key={fact.label} label={fact.label}>
+          {fact.value}
+        </FactRow>
+      ))}
+    </Box>
+  )
+}
 
 /**
  * The Details drawer's "File info" section (AGL-3331): what the platform
@@ -171,7 +189,10 @@ export function MediaFileInfo(props: MediaFileInfoProps) {
     }
   }, [loading, signedIn, mediaId])
 
-  const facts = useMemo(() => mediaStoredFacts(media), [media])
+  const facts = useMemo(
+    () => mediaStoredFacts({ ...media, $id: mediaId }),
+    [media, mediaId],
+  )
   const fields = useMemo(() => record?.fields ?? [], [record])
   const format = record?.format
   const canEdit = Boolean(record?.writable && format)
@@ -338,13 +359,7 @@ export function MediaFileInfo(props: MediaFileInfoProps) {
       >
         {'File info'}
       </Typography>
-      <Box sx={ROWS_SX}>
-        {facts.map((fact) => (
-          <FactRow key={fact.label} label={fact.label}>
-            {fact.value}
-          </FactRow>
-        ))}
-      </Box>
+      <MediaFactRows facts={facts} />
 
       {record === undefined ? (
         <Box sx={{ mt: 1.5 }}>

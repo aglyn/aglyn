@@ -1,0 +1,59 @@
+name: Native Windows chrome
+
+# The Windows desktop app draws its own caption (Zach 2026-10-19: the tab row
+# carries minimize, maximize and close, with Snap Layouts, snapping and the
+# resize edges rebuilt through the window procedure). Nobody here has a Windows
+# machine, so this asks Windows itself: a real undecorated window gets the
+# subclassed procedure and WM_NCHITTEST is sent to it (WindowsFrameTest), beside
+# the pure hit-test cases (CaptionHitTestTest). Not a required check; it runs
+# only when the caption's own files change, so it never queues for a Windows
+# runner on unrelated work.
+
+on:
+  pull_request:
+    branches: [main, production]
+    paths:
+      - 'apps/android/desktop/src/desktopMain/kotlin/com/aglyn/desktop/WindowsCaption.kt'
+      - 'apps/android/desktop/src/desktopMain/kotlin/com/aglyn/desktop/DesktopWindow.kt'
+      - 'apps/android/desktop/src/desktopTest/kotlin/com/aglyn/desktop/WindowsFrameTest.kt'
+      - 'libs/native/kotlin/shell/src/commonMain/kotlin/com/aglyn/shell/WindowCaption.kt'
+      - 'libs/native/kotlin/shell/src/desktopTest/kotlin/com/aglyn/shell/CaptionHitTestTest.kt'
+      - '.github/workflows/native-windows-chrome.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: native-windows-chrome-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: native windows chrome
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: The caption on a real Windows window
+        working-directory: apps/android
+        shell: bash
+        run: ./gradlew --no-daemon :native-shell:desktopTest --tests com.aglyn.shell.CaptionHitTestTest :desktop:desktopTest --tests com.aglyn.desktop.WindowsFrameTest
+
+      - name: Test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-windows-chrome-test-reports
+          path: |
+            apps/android/desktop/build/reports/tests/
+            libs/native/kotlin/shell/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 7

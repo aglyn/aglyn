@@ -18,11 +18,18 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
+import kotlin.math.sqrt
 import kotlinx.coroutines.CancellationException
 import org.jetbrains.compose.resources.decodeToImageBitmap
 
@@ -95,15 +102,121 @@ internal fun rememberRemoteBitmap(url: String?): ImageBitmap? {
 /**
  * A brand picture in a small square: a workspace's logo or a site's favicon, its dark-theme art in dark mode when there
  * is one, and [fallback] (the kit's icon) while there is none, while it loads, or when it fails.
+ *
+ * Opaque art (a photo, a solid tile) fills the [shape] and loses its corners to it, which costs nothing. Art on a
+ * transparent ground (a logo mark) is drawn whole: fitted, and shrunk only as far as the shape needs for every visible
+ * pixel to clear its edges ([brandArtScale]). A favicon is drawn edge to edge for a browser tab, so filling a circle
+ * with it cuts its corners off.
  */
 @Composable
 fun BrandPicture(url: String?, darkUrl: String? = null, size: Dp, shape: Shape, fallback: @Composable () -> Unit) {
   val shown = (if (isSystemInDarkTheme()) darkUrl else null) ?: url
   val image = rememberRemoteBitmap(shown)
   if (image != null) {
-    Image(image, contentDescription = null, modifier = Modifier.size(size).clip(shape), contentScale = ContentScale.Crop)
+    val art = remember(image) { brandArtOf(image) }
+    if (art.opaqueCorners) {
+      Image(image, contentDescription = null, modifier = Modifier.size(size).clip(shape), contentScale = ContentScale.Crop)
+    } else {
+      val corner = shapeCornerFraction(shape, size)
+      val scale = remember(art, corner) { brandArtScale(art.ink, corner) }
+      Box(Modifier.size(size).clip(shape), contentAlignment = Alignment.Center) {
+        Image(image, contentDescription = null, modifier = Modifier.size(size * scale), contentScale = ContentScale.Fit)
+      }
+    }
   } else {
     fallback()
+  }
+}
+
+/** The room a brand mark keeps from its badge's edge, as a fraction of the badge's side. */
+internal const val BRAND_ART_MARGIN = 0.06f
+
+/**
+ * Where a brand picture's art has ink. [ink] holds, for each row of pixels that has any, the outer corner of its
+ * outermost visible pixel on each side, as `x, y` pairs measured from the picture's center in units of its longer
+ * side. The badge's shape is convex and symmetric, so those are the only points that can cross its edge.
+ */
+internal class BrandArt(val ink: FloatArray, val opaqueCorners: Boolean)
+
+/** Pixels at or below this opacity are ground, not art: anti-aliasing haze, not a visible edge. */
+private const val INK_ALPHA = 0.06f
+
+/** Reads [image]'s ink; a picture whose pixels cannot be read is treated as opaque, so it fills as it always has. */
+internal fun brandArtOf(image: ImageBitmap): BrandArt = try {
+  val pixels = image.toPixelMap()
+  brandArtOf(image.width, image.height) { x, y -> pixels[x, y].alpha }
+} catch (error: CancellationException) {
+  throw error
+} catch (_: Throwable) {
+  BrandArt(FloatArray(0), opaqueCorners = true)
+}
+
+/** [BrandArt] of a [width] × [height] picture whose opacity at a pixel is [alphaAt]. */
+internal fun brandArtOf(width: Int, height: Int, alphaAt: (x: Int, y: Int) -> Float): BrandArt {
+  if (width <= 0 || height <= 0) return BrandArt(FloatArray(0), opaqueCorners = false)
+  val opaque = listOf(0 to 0, width - 1 to 0, 0 to height - 1, width - 1 to height - 1).all { (x, y) -> alphaAt(x, y) >= 0.95f }
+  val unit = maxOf(width, height).toFloat()
+  val points = ArrayList<Float>()
+  for (y in 0 until height) {
+    val left = (0 until width).firstOrNull { alphaAt(it, y) > INK_ALPHA } ?: continue
+    val right = (width - 1 downTo left).first { alphaAt(it, y) > INK_ALPHA }
+    // The pixel's edge farthest from the center, on each axis.
+    val top = y / unit - height / (2 * unit)
+    val bottom = (y + 1) / unit - height / (2 * unit)
+    val rowY = maxOf(abs(top), abs(bottom))
+    points += abs(left / unit - width / (2 * unit))
+    points += rowY
+    points += abs((right + 1) / unit - width / (2 * unit))
+    points += rowY
+  }
+  return BrandArt(points.toFloatArray(), opaque)
+}
+
+/**
+ * How far to shrink art fitted to a badge (its longer side the badge's side) so that every point of [ink] lies inside
+ * the badge's shape, [margin] in from its edge: 1 when it already does, since art is never enlarged past its fit.
+ * [cornerFraction] is the shape's corner radius as a fraction of its side: 0 for a square, 0.5 for a circle.
+ */
+internal fun brandArtScale(ink: FloatArray, cornerFraction: Float, margin: Float = BRAND_ART_MARGIN): Float {
+  val half = 0.5f - margin
+  val radius = (cornerFraction.coerceIn(0f, 0.5f) - margin).coerceAtLeast(0f)
+  val straight = half - radius
+  var scale = 1f
+  var i = 0
+  while (i + 1 < ink.size) {
+    val x = abs(ink[i])
+    val y = abs(ink[i + 1])
+    i += 2
+    val far = maxOf(x, y)
+    if (far <= 0f) continue
+    var limit = half / far
+    // Past the straight part of both edges the point meets the corner's arc instead: the larger root of
+    // |k·(x, y) − (straight, straight)| = radius.
+    if (radius > 0f && limit * minOf(x, y) > straight) {
+      val norm = x * x + y * y
+      val reach = -straight * straight * (x - y) * (x - y) + radius * radius * norm
+      limit = minOf(limit, (straight * (x + y) + sqrt(reach.coerceAtLeast(0f))) / norm)
+    }
+    scale = minOf(scale, limit)
+  }
+  return scale
+}
+
+/** [shape]'s corner radius as a fraction of a [size] square's side; an outline that is not a rounded box counts as round. */
+@Composable
+private fun shapeCornerFraction(shape: Shape, size: Dp): Float {
+  val density = LocalDensity.current
+  val direction = LocalLayoutDirection.current
+  return remember(shape, size, density, direction) {
+    val side = with(density) { size.toPx() }
+    if (side <= 0f) return@remember 0.5f
+    when (val outline = shape.createOutline(Size(side, side), direction, density)) {
+      is Outline.Rectangle -> 0f
+      is Outline.Rounded -> with(outline.roundRect) {
+        maxOf(topLeftCornerRadius.x, topRightCornerRadius.x, bottomLeftCornerRadius.x, bottomRightCornerRadius.x) / side
+      }
+      is Outline.Generic -> 0.5f
+    }
   }
 }
 

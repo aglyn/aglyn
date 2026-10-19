@@ -3,30 +3,34 @@
 
 import SwiftUI
 
-/// The launch intro's clock (Figma "Intro timeline", spec 53:1638). Frame 1 equals the static launch screen: the Facets
-/// ground a step out from rest with the mark centered. The planes settle (0–240 ms), the mark travels to the lockup's
-/// place and cross-fades into the lockup (360–600 ms), and the destination rises in (220 ms) once the app is ready.
-/// Never a fixed wait: an app that is not ready at 600 ms holds there while the soft light breathes, and one that is
-/// ready sooner still finishes the 600 ms of motion, so the whole intro stays under a second. Reduce Motion is a 200 ms
-/// cross-fade from the launch frame to the destination. It plays once per process: a warm start, a second window and a
-/// sign-out skip it.
+/// The launch intro's clock (Figma "Intro timeline", spec 53:1638), one continuous motion. Frame 1 equals the static
+/// launch screen: the Facets ground a step out from rest with the mark centered. The planes settle (0–240 ms) while the
+/// mark holds; then the wordmark is revealed beside it by a mask wipe from the mark's edge, the lockup recentring as it
+/// grows (360–800 ms), so the mark never leaves the lockup it becomes part of. Once the app is ready the lockup hands
+/// over: to the sign-in screens it docks at their lockup's place and size and the card rises in under it; to the shell
+/// it fades as the shell rises in (220 ms). Nothing cross-fades two different pictures and no layer disappears while it
+/// is still visible, so no frame flashes. Never a fixed wait: an app that is not ready when the wipe ends holds the
+/// lockup while the soft light breathes. Reduce Motion is a 200 ms cross-fade from the launch frame to the destination.
+/// It plays once per process: a warm start, a second window and a sign-out skip it.
 @MainActor
 @Observable
 public final class AglynLaunchIntro {
   /// The planes are at rest.
   public private(set) var settled = false
-  /// The mark has travelled to the lockup's place.
-  public private(set) var markAtLockup = false
-  /// The lockup has cross-faded in over the mark.
-  public private(set) var lockupVisible = false
+  /// The wordmark has been wiped in beside the mark: the full lockup shows, centered.
+  public private(set) var wiped = false
+  /// The lockup has docked at the sign-in screens' lockup place (only when the destination shows its own lockup).
+  public private(set) var docked = false
   /// The soft light is at its low point while the intro waits for the app.
   public private(set) var dimmed = false
   /// The destination is shown.
   public private(set) var revealed = false
-  /// The intro's own layer (the travelling mark) is gone.
+  /// The intro's own layer (the lockup) is gone.
   public private(set) var finished = false
   /// Reduce Motion was on when the intro played: the ground and mark cross-fade instead of moving.
   public private(set) var crossFades = false
+  /// The destination draws its own lockup where the intro docks (the sign-in screens); otherwise the lockup fades out.
+  public private(set) var docks = false
 
   private static var played = false
 
@@ -38,14 +42,16 @@ public final class AglynLaunchIntro {
   /// Everything at its end state, without motion.
   private func skip() {
     settled = true
-    markAtLockup = true
-    lockupVisible = true
+    wiped = true
     revealed = true
     finished = true
   }
 
-  /// Plays the intro until `isReady` answers true; `reduceMotion` makes it the cross-fade.
-  public func run(reduceMotion: Bool, isReady: @escaping @MainActor () -> Bool) async {
+  /// Plays the intro until `isReady` answers true; `docksToLockup` says whether the destination then shows the
+  /// lockup at the sign-in screens' place; `reduceMotion` makes it the cross-fade.
+  public func run(
+    reduceMotion: Bool, isReady: @escaping @MainActor () -> Bool, docksToLockup: @escaping @MainActor () -> Bool = { false }
+  ) async {
     guard !finished else { return }
     typealias T = AglynAuthTokens.Intro
     if reduceMotion {
@@ -53,7 +59,6 @@ public final class AglynLaunchIntro {
       await wait(until: isReady)
       withAnimation(.easeInOut(duration: T.reduceMotionFadeMs / 1000)) {
         settled = true
-        lockupVisible = true
         revealed = true
       }
       await pause(T.reduceMotionFadeMs)
@@ -62,15 +67,20 @@ public final class AglynLaunchIntro {
     }
     withAnimation(.timingCurve(0.2, 0, 0, 1, duration: T.settleMs / 1000)) { settled = true }
     await pause(T.lockupStartMs)
-    withAnimation(.spring(response: T.springResponse, dampingFraction: T.springDamping)) { markAtLockup = true }
-    await pause(T.lockupEndMs - T.crossFadeMs - T.lockupStartMs)
-    withAnimation(.easeInOut(duration: T.crossFadeMs / 1000)) { lockupVisible = true }
-    await pause(T.crossFadeMs)
+    let wipeMs = T.lockupEndMs - T.lockupStartMs + T.crossFadeMs
+    withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: wipeMs / 1000)) { wiped = true }
+    await pause(wipeMs)
     if !isReady() {
-      // Hold frame 4; the soft light breathes between its low point and full until the app is ready.
+      // Hold the lockup; the soft light breathes between its low point and full until the app is ready.
       withAnimation(.easeInOut(duration: T.breathePeriodMs / 2000).repeatForever(autoreverses: true)) { dimmed = true }
       await wait(until: isReady)
       withAnimation(.easeInOut(duration: 0.2)) { dimmed = false }
+    }
+    docks = docksToLockup()
+    if docks {
+      // Travel to the sign-in lockup's place first, so the destination's own lockup appears under an identical one.
+      withAnimation(.spring(response: T.springResponse, dampingFraction: T.springDamping)) { docked = true }
+      await pause(T.springResponse * 1000)
     }
     withAnimation(.easeOut(duration: T.destinationMs / 1000)) { revealed = true }
     await pause(T.destinationMs)
@@ -84,6 +94,10 @@ public final class AglynLaunchIntro {
   /// How far below its place the destination's card sits, and how visible it is.
   public var destinationOffset: CGFloat { revealed || crossFades ? 0 : AglynAuthTokens.Intro.destinationRise }
   public var destinationOpacity: Double { revealed ? 1 : 0 }
+
+  /// The intro lockup's own opacity: it stays while it docks (the destination's lockup appears under it) and fades as
+  /// any other destination rises in.
+  public var lockupOpacity: Double { docks ? 1 : (revealed ? 0 : 1) }
 
   private func pause(_ milliseconds: CGFloat) async {
     try? await Task.sleep(for: .milliseconds(Int(milliseconds)))
@@ -131,8 +145,9 @@ public enum AglynAuthLayout {
   }
 }
 
-/// The intro's travelling mark over the Facets ground: centered at the launch screen's size, then at the lockup's place
-/// and height, where the logo-kit lockup cross-fades in over it.
+/// The intro's lockup over the Facets ground: the logo-kit lockup, masked to its mark at the launch screen's size and
+/// place, then unmasked from the mark's edge while it recentres (the wipe), then docked at the sign-in lockup's place
+/// or faded as the destination rises. One picture throughout, so the mark is the same pixels from frame 1 to the end.
 public struct AglynLaunchMark: View {
   let intro: AglynLaunchIntro
   let name: String
@@ -142,35 +157,34 @@ public struct AglynLaunchMark: View {
     self.name = name
   }
 
+  /// The lockup's width for its height: the logo kit's 79 × 24 artboard, the mark being its first 24 × 24.
+  static let lockupAspect: CGFloat = 79 / 24
+
   public var body: some View {
     GeometryReader { proxy in
       let compact = AglynAuthLayout.isCompact(width: proxy.size.width)
-      let height = AglynAuthTokens.Metrics.lockupHeight
-      let launch = AglynAuthLayout.launchMark(compact: compact)
-      let leading = AglynAuthLayout.lockupLeading(compact: compact)
-      let top = AglynAuthLayout.lockupTop(compact: compact)
       // The launch screen centers the mark on the whole screen, safe area included.
       let insets = proxy.safeAreaInsets
       let center = CGPoint(
         x: (proxy.size.width + insets.trailing - insets.leading) / 2,
         y: (proxy.size.height + insets.bottom - insets.top) / 2)
-      let markSize = intro.markAtLockup ? height : launch
-      ZStack(alignment: .topLeading) {
-        AglynArtwork.mark
-          .resizable()
-          .scaledToFit()
-          .frame(width: markSize, height: markSize)
-          .position(intro.markAtLockup ? CGPoint(x: leading + height / 2, y: top + height / 2) : center)
-          .opacity(intro.lockupVisible ? 0 : 1)
-        AglynArtwork.logo
-          .resizable()
-          .scaledToFit()
-          .frame(height: height)
-          .fixedSize()
-          .offset(x: leading, y: top)
-          .opacity(intro.lockupVisible ? 1 : 0)
-      }
-      .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+      let launch = AglynAuthLayout.launchMark(compact: compact)
+      let docked = intro.docked
+      let height = docked ? AglynAuthTokens.Metrics.lockupHeight : launch
+      let fullWidth = height * Self.lockupAspect
+      let shown = intro.wiped || docked ? fullWidth : height
+      let origin =
+        docked
+        ? CGPoint(x: AglynAuthLayout.lockupLeading(compact: compact), y: AglynAuthLayout.lockupTop(compact: compact))
+        : CGPoint(x: center.x - shown / 2, y: center.y - height / 2)
+      AglynArtwork.logo
+        .resizable()
+        .scaledToFit()
+        .frame(width: fullWidth, height: height)
+        .mask(alignment: .leading) { Rectangle().frame(width: shown, height: height) }
+        .offset(x: origin.x, y: origin.y)
+        .opacity(intro.crossFades ? (intro.revealed ? 0 : 1) : intro.lockupOpacity)
+        .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
     }
     .accessibilityElement()
     .accessibilityLabel(name)

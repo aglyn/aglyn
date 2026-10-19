@@ -27,6 +27,17 @@ public struct FieldOption: Hashable, Sendable, Identifiable {
   }
 }
 
+/// The currency a money field is in, and its minor unit's decimals (2 for USD, 0 for JPY, 3 for BHD).
+public struct FieldCurrency: Hashable, Sendable {
+  /// The ISO 4217 code, upper case.
+  public let code: String
+  public let digits: Int
+  public init(code: String, digits: Int) {
+    self.code = code.uppercased()
+    self.digits = digits
+  }
+}
+
 public struct FieldSpec: Hashable, Sendable, Identifiable {
   public let key: String
   public let label: String
@@ -36,11 +47,13 @@ public struct FieldSpec: Hashable, Sendable, Identifiable {
   public let help: String?
   /// What an unpicked choice reads as ("No owner"); nil when one is needed.
   public let emptyLabel: String?
+  /// A money field's own currency (a CRM currency field, AGL-3971); nil reads it as US dollars.
+  public let currency: FieldCurrency?
   public var id: String { key }
 
   public init(
     _ key: String, _ label: String, kind: FieldKind = .text, required: Bool = false, options: [FieldOption] = [],
-    help: String? = nil, emptyLabel: String? = "None"
+    help: String? = nil, emptyLabel: String? = "None", currency: FieldCurrency? = nil
   ) {
     self.key = key
     self.label = label
@@ -49,7 +62,14 @@ public struct FieldSpec: Hashable, Sendable, Identifiable {
     self.options = options
     self.help = help
     self.emptyLabel = emptyLabel
+    self.currency = currency
   }
+}
+
+/// A typed amount with its symbol, code, spaces and separators dropped ("$1,250.50" → 1250.5), or nil.
+func typedAmount(_ text: String) -> Double? {
+  let cleaned = String(text.filter { "0123456789.-".contains($0) })
+  return cleaned.isEmpty ? nil : Double(cleaned)
 }
 
 /// What a filled-in form says is wrong with it, by field key; empty when it can be saved.
@@ -67,7 +87,10 @@ public func fieldProblems(_ specs: [FieldSpec], _ values: [String: String]) -> [
     case .phone where !matches(value, #"^\+?[\d\s().-]{5,}$"#): problems[spec.key] = "Enter a phone number"
     case .url where !matches(value, #"^(https?://)?[^\s.]+\.[^\s]+$"#): problems[spec.key] = "Enter a web address"
     case .number where Double(value) == nil: problems[spec.key] = "Enter a number"
-    case .money where Double(value.replacingOccurrences(of: "$", with: "").replacingOccurrences(of: ",", with: "")) == nil:
+    case .money where spec.currency != nil && typedAmount(value) == nil:
+      problems[spec.key] = "Enter an amount"
+    case .money where spec.currency == nil
+      && Double(value.replacingOccurrences(of: "$", with: "").replacingOccurrences(of: ",", with: "")) == nil:
       problems[spec.key] = "Enter an amount"
     case .date where !matches(value, #"^\d{4}-\d{2}-\d{2}$"#): problems[spec.key] = "Pick a date"
     default: break
@@ -87,6 +110,11 @@ public func fieldDisplay(_ spec: FieldSpec, _ value: String?) -> String? {
       .map { part in spec.options.first { $0.value == part }?.label ?? part }.joined(separator: ", ")
   case .toggle: return raw == "true" ? "Yes" : "No"
   case .money:
+    // A field with its own currency reads at that currency's decimals, as the console's Intl prints it.
+    if let currency = spec.currency {
+      guard let amount = typedAmount(raw) else { return raw }
+      return amount.formatted(.currency(code: currency.code).precision(.fractionLength(currency.digits)))
+    }
     guard let amount = Double(raw.replacingOccurrences(of: "$", with: "")) else { return raw }
     return amount.formatted(.currency(code: "USD").precision(.fractionLength(amount.rounded() == amount ? 0 : 2)))
   default: return raw
@@ -184,6 +212,16 @@ public struct FieldEditor: View {
       DateFieldRow(spec: spec, label: label, value: $value)
     case .multiline:
       TextField(label, text: $value, axis: .vertical).lineLimit(3...10)
+    case .money where spec.currency != nil:
+      // Typed in major units with the code beside it, as the console's currency box.
+      HStack(spacing: 6) {
+        TextField(label, text: $value)
+          #if os(iOS)
+            .keyboardType(.decimalPad)
+          #endif
+          .autocorrectionDisabled()
+        Text(spec.currency?.code ?? "").foregroundStyle(.secondary).accessibilityHidden(true)
+      }
     default:
       TextField(label, text: $value)
         .textContentType(contentType)

@@ -13,9 +13,18 @@ import SwiftUI
  * the org's values, and the org document's `crm` settings.
  */
 
-private let fieldTypes: [(String, String)] = [
-  ("text", "Text"), ("number", "Number"), ("date", "Date"), ("select", "Choice"), ("checkbox", "Checkbox"), ("url", "Web address"),
-]
+/// The field types the console's field drawer offers, in its order and words (`CONTACT_FIELD_TYPES`, AGL-3971).
+private var fieldTypes: [(String, String)] {
+  let values = ContractValues.shared
+  return values.nativeCrmFieldTypes.map { ($0, values.nativeCrmFieldTypeLabels[$0] ?? $0) }
+}
+
+/// A field's line in the Fields list: its key, its type, a currency field's code, Required.
+func fieldSubtitle(_ def: CustomFieldDefinition) -> String {
+  let type = ContractValues.shared.nativeCrmFieldTypeLabels[def.type] ?? def.type
+  let typed = def.type == "currency" ? "\(type) · \(customFieldCurrency(def.currency).uppercased())" : type
+  return [def.key, typed, def.required ? "Required" : nil].compactMap { $0 }.joined(separator: " · ")
+}
 
 func fieldKey(_ label: String) -> String {
   let lowered = label.lowercased().map { ($0.isLetter && $0.isASCII) || $0.isNumber ? String($0) : "_" }.joined()
@@ -53,11 +62,7 @@ struct FieldsSection: View {
           Button {
             if scope.canWrite { editing = def }
           } label: {
-            AglynRow(
-              def.label,
-              subtitle: [def.key, fieldTypes.first { $0.0 == def.type }?.1 ?? def.type, def.required ? "Required" : nil].compactMap { $0 }
-                .joined(separator: " · "), systemImage: "slider.horizontal.3"
-            ) {
+            AglynRow(def.label, subtitle: fieldSubtitle(def), systemImage: "slider.horizontal.3") {
               if def.retired { StatusChip("Retired") }
             }
           }
@@ -95,6 +100,7 @@ private struct NewFieldSheet: View {
   @State private var label = ""
   @State private var type = "text"
   @State private var options = ""
+  @State private var currency = ContractValues.shared.nativeCrmFieldDefaultCurrency
   @State private var required = false
 
   var body: some View {
@@ -111,6 +117,8 @@ private struct NewFieldSheet: View {
           "createdAt": FirestoreSentinel.serverTimestamp, "updatedAt": FirestoreSentinel.serverTimestamp,
         ]
         if type == "select" { fields["options"] = options.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
+        // A currency field's amounts are in one currency, fixed once it exists (the console writes it lowercase).
+        if type == "currency" { fields["currency"] = customFieldCurrency(currency) }
         for (k, v) in fieldListFields(key: key, label: label.trimmingCharacters(in: .whitespaces), required: required, object: object) { fields[k] = v }
         try await context.firestore.setDocument(crmPath(scope.orgID, "contactFields") + [newRecordID()], fields, merge: true)
       }
@@ -121,7 +129,15 @@ private struct NewFieldSheet: View {
         if taken { Text("A field with this key exists.").foregroundStyle(AglynColor.error) }
         Picker("Type", selection: $type) { ForEach(fieldTypes, id: \.0) { Text($0.1).tag($0.0) } }
         if type == "select" { TextField("Choices, separated by commas", text: $options) }
+        if type == "currency" {
+          Picker("Currency", selection: $currency) {
+            ForEach(ContractValues.shared.nativeCrmFieldCurrencies, id: \.self) { Text($0.uppercased()).tag($0) }
+          }
+          .accessibilityIdentifier("field-currency")
+        }
         Toggle("Required", isOn: $required)
+      } footer: {
+        if type == "currency" { Text("Every amount in this field is in this currency.") }
       }
     }
   }
@@ -147,9 +163,16 @@ private struct EditFieldSheet: View {
       Section {
         TextField("Label", text: $label)
         if definition.type == "select" { TextField("Choices, separated by commas", text: $options) }
+        if definition.type == "currency" {
+          LabeledContent("Currency", value: customFieldCurrency(definition.currency).uppercased())
+        }
         Toggle("Required", isOn: $required)
       } footer: {
-        Text("Key \(definition.key). The key and the type stay as they are.")
+        if definition.type == "currency" {
+          Text("Key \(definition.key). The key and the type stay as they are. Amounts are stored in this currency, so it is fixed once the field exists.")
+        } else {
+          Text("Key \(definition.key). The key and the type stay as they are.")
+        }
       }
       Section {
         Button(definition.retired ? "Restore" : "Retire") {

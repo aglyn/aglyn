@@ -34,17 +34,19 @@ struct FunnelsScreen: View {
       if !access.org.ready {
         List { SkeletonRows(count: 4) }.aglynListBackground()
       } else if !access.state.entitled {
-        AglynEmptyState(
-          "Funnels come with analytics", systemImage: FunnelsSymbols.funnel,
-          message:
-            "Funnels come with per-page analytics, included from \(planGranting(ContractValues.shared.funnelFeature) ?? "a paid plan"). Change the plan under Billing to use them."
-        )
+        // The console card's sentence, as the upgrade notice with View plans (Figma Notice/Upgrade).
+        AglynUpgradeNotice(
+          "Funnels come with per-page analytics, included from \(planGranting(ContractValues.shared.funnelFeature) ?? "a paid plan").",
+          kind: .plan
+        ) { context.navigate("core.billing.plans") }
+        .asScreen()
         .accessibilityIdentifier("funnels-locked")
       } else {
         content
       }
     }
     .navigationTitle("Funnels")
+    .aglynScreenTitle("Funnels")
     .task(id: context.hostID) {
       access.start(context)
       editor = context.hostID.map {
@@ -77,16 +79,18 @@ struct FunnelsScreen: View {
         list(selectable: false)
       }
     }
-    .toolbar {
+    .aglynPrimaryAction(
+      id: "funnels-add", "New funnel", systemImage: "plus",
+      enabled: access.state.canManage && editor != nil && model.rows.count < ContractValues.shared.funnelsMaxPerSite
+        && editor?.busy != true
+    ) {
+      Task { await editor?.add() }
+    }
+    .aglynScreenToolbar(id: "funnels") {
       if access.state.canManage, let editor {
-        ToolbarItemGroup(placement: .primaryAction) {
-          Button { editor.askPropose() } label: { Label("Create with AI", systemImage: FunnelsSymbols.ai) }
-            .disabled(model.rows.count >= ContractValues.shared.funnelsMaxPerSite)
-            .accessibilityIdentifier("funnels-propose")
-          Button { Task { await editor.add() } } label: { Label("New funnel", systemImage: "plus") }
-            .disabled(model.rows.count >= ContractValues.shared.funnelsMaxPerSite || editor.busy)
-            .accessibilityIdentifier("funnels-add")
-        }
+        Button { editor.askPropose() } label: { Label("Create with AI", systemImage: FunnelsSymbols.ai) }
+          .disabled(model.rows.count >= ContractValues.shared.funnelsMaxPerSite)
+          .accessibilityIdentifier("funnels-propose")
       }
     }
     .safeAreaInset(edge: .bottom) {
@@ -96,7 +100,7 @@ struct FunnelsScreen: View {
           if let notice = editor.notice { AglynNotice(notice, tone: .success) { editor.notice = nil } }
         }
       }
-      .padding(.horizontal, AglynSpace.two)
+      .aglynContentEdges()
     }
     .sheet(isPresented: Binding(get: { editor?.draft != nil }, set: { if !$0 { editor?.close() } })) {
       if let editor { FunnelEditorSheet(editor: editor) }
@@ -149,7 +153,7 @@ struct FunnelsScreen: View {
       .accessibilityIdentifier("funnels-list")
     } else {
       List(model.rows) { row in
-        NavigationLink {
+        AglynPushLink {
           if let editor { FunnelDetail(row: row, editor: editor, canManage: access.state.canManage) }
         } label: {
           FunnelListRow(row: row)
@@ -202,6 +206,7 @@ struct FunnelDetail: View {
     }
     .background(AglynColor.page)
     .navigationTitle(row.name)
+    .aglynScreenTitle(row.name)
     .task(id: "\(row.id)|\(row.version)|\(days)|\(editor.refreshKey)") {
       guard !row.draft else { return }
       state = .loading
@@ -392,6 +397,7 @@ struct FunnelEditorSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(editor.draft?.id == nil ? "New funnel" : "Edit funnel")
+      .aglynScreenTitle(editor.draft?.id == nil ? "New funnel" : "Edit funnel")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
@@ -502,6 +508,7 @@ struct FunnelProposeSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Create a funnel with AI")
+      .aglynScreenTitle("Create a funnel with AI")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
@@ -548,6 +555,7 @@ struct DropOffSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Act on this drop-off")
+      .aglynScreenTitle("Act on this drop-off")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

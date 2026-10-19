@@ -1605,3 +1605,89 @@ describe('the guided start reports where people get lost (AGL-3898)', () => {
     expect(sent).not.toMatch(/Zelda|zelda|bakery|friends/)
   })
 })
+
+/*
+ * How customers reach the business, and More details on every step
+ * (AGL-3979): the phone and email are asked on the Details step itself, the
+ * rest in a collapsed "More details" a step at a time; each is held to its
+ * rule beside its field, listed on the review, and carried on the job only
+ * where given.
+ */
+describe('the business details a start may be given (AGL-3979)', () => {
+  it('offers More details, collapsed, on every question step', async () => {
+    await openCard()
+    for (const step of ['kind', 'audience', 'style', 'details'] as const) {
+      await onStep(step)
+      const more = screen.getByRole('button', { name: /More details/ })
+      expect(more.getAttribute('aria-expanded')).toBe('false')
+      if (step === 'kind') typeAnswer(/What kind of site are you creating\?/, 'a family plumbing company')
+      pressNext()
+    }
+    await onStep('review')
+    expect(screen.queryByRole('button', { name: /More details/ })).toBeNull()
+  })
+
+  it('carries the phone, the email and what More details was given on the job, and lists them on the review', async () => {
+    await openCard({ host: null })
+    await answerTo('details', 'a family plumbing company')
+    typeAnswer(/Business phone/, '(512) 555-0142')
+    typeAnswer(/Business email/, 'hello@pipeworks.co')
+    fireEvent.click(screen.getByRole('button', { name: /More details/ }))
+    typeAnswer(/Street address/, '214 Main Street')
+    typeAnswer(/City or town/, 'Austin')
+    typeAnswer(/Social profiles/, 'instagram.com/pipeworks')
+    pressNext()
+    await onStep('review')
+    const review = screen.getByRole('list', { name: 'Your answers' })
+    expect(review.textContent).toContain('(512) 555-0142')
+    expect(review.textContent).toContain('hello@pipeworks.co')
+    expect(review.textContent).toContain('214 Main Street, Austin')
+    expect(review.textContent).toContain('instagram.com/pipeworks')
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await screen.findByText(/Your site is being planned/)
+    const [, init] = postCall()
+    expect(JSON.parse(init.body).inputs).toEqual(
+      expect.objectContaining({
+        phone: '(512) 555-0142',
+        email: 'hello@pipeworks.co',
+        street: '214 Main Street',
+        city: 'Austin',
+        social: 'instagram.com/pipeworks',
+      }),
+    )
+  })
+
+  it('says beside the field what is wrong with an email, and stays on the step', async () => {
+    await openCard()
+    await answerTo('details')
+    typeAnswer(/Business email/, 'hello at pipeworks')
+    pressNext()
+    expect(await screen.findByText(/Enter an email address, like hello@yourbusiness.com/)).toBeTruthy()
+    await onStep('details')
+  })
+
+  it('opens More details when a Next is refused on one of its fields', async () => {
+    await openCard()
+    await answerTo('details')
+    fireEvent.click(screen.getByRole('button', { name: /More details/ }))
+    typeAnswer(/Social profiles/, 'my instagram')
+    fireEvent.click(screen.getByRole('button', { name: /More details/ }))
+    expect(screen.getByRole('button', { name: /More details/ }).getAttribute('aria-expanded')).toBe('false')
+    pressNext()
+    await onStep('details')
+    expect(screen.getByRole('button', { name: /More details/ }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText(/Paste each profile’s address/)).toBeTruthy()
+  })
+
+  it('sends no detail it was not given', async () => {
+    await openCard({ host: null })
+    await answerTo('review')
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await screen.findByText(/Your site is being planned/)
+    const [, init] = postCall()
+    const inputs = JSON.parse(init.body).inputs
+    for (const key of ['phone', 'email', 'street', 'hours', 'social', 'tagline']) expect(inputs).not.toHaveProperty(key)
+  })
+})

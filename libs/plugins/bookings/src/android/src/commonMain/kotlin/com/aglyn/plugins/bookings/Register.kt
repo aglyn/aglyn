@@ -26,8 +26,8 @@ fun registerBookingsNative(r: NativePluginRegistrar) {
   r.screen(BOOKING_SCREEN, title = "Booking", requiresSite = true, apps = setOf(NativeApp.AGLYN, NativeApp.POS), icon = "event") { context, params ->
     BookingScreen(context, params)
   }
-  r.screen(SERVICES_SCREEN, title = "Services", requiresSite = true, icon = "design_services") { context, _ ->
-    BookingServicesScreen(context)
+  r.screen(SERVICES_SCREEN, title = "Services", requiresSite = true, icon = "design_services") { context, params ->
+    BookingServicesScreen(context, startNew = params["new"] == "1")
   }
   r.screen(
     BOOKINGS_COUNTER_SCREEN,
@@ -37,6 +37,7 @@ fun registerBookingsNative(r: NativePluginRegistrar) {
     icon = "event",
     placement = PosPlacement.MENU,
   ) { context, _ -> CounterBookingsScreen(context) }
+  r.widget("bookings.needs-you", title = "Needs you", order = 30, requiresSite = true, slot = "homeNeedsYou") { context -> BookingsNeedsYouWidget(context) }
   r.widget("bookings.today", title = "Today's bookings", order = 300, size = WidgetSize.HALF, requiresSite = true) { context ->
     BookingsTodayWidget(context)
   }

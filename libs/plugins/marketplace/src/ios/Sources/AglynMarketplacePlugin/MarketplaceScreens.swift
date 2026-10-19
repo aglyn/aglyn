@@ -40,6 +40,9 @@ struct BrowseScreen: View {
   var initialListingID: String?
 
   @State private var list = LiveQueryList(pageSize: browsePageSize) { ListingRow($0) }
+  /// The marketplace home's two shelves (AGL-3945): the newest and the most installed.
+  @State private var newest = LiveQueryList(pageSize: 8) { ListingRow($0) }
+  @State private var popular = LiveQueryList(pageSize: 8) { ListingRow($0) }
   @State private var search = ""
   @State private var category: String?
   @State private var sort = BrowseSort.newest
@@ -63,9 +66,9 @@ struct BrowseScreen: View {
         // The sections span the window over both columns, so the browse list keeps its column to itself.
         VStack(spacing: 0) {
           SectionTabs(context: context, current: marketplaceBrowseScreen)
-            .frame(maxWidth: 640)
-            .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: 640, alignment: .leading)
+            .aglynContentEdges().padding(.vertical, AglynSpace.one)
+            .frame(maxWidth: .infinity, alignment: .leading)
           Divider()
           AglynListDetailColumns(listWidth: 400, showsDetail: !(list.ready && list.rows.isEmpty)) {
             shelf(selectable: true)
@@ -83,8 +86,9 @@ struct BrowseScreen: View {
       }
     }
     .navigationTitle("Marketplace")
-    .navigationDestination(item: $pushed) { id in ListingDetail(context: context, listingID: id).navigationTitle("Listing") }
-    .searchable(text: $search, prompt: "Search the marketplace")
+    .aglynScreenTitle("Marketplace")
+    .aglynPushDestination(item: $pushed) { id in ListingDetail(context: context, listingID: id).navigationTitle("Listing") }
+    .aglynSearchable(text: $search, prompt: "Search the marketplace")
     .task(id: "\(search)|\(category ?? "")|\(sort.rawValue)|\(context.orgID ?? "")") {
       // The search waits for a pause in the typing, as the console's does.
       if !search.isEmpty { try? await Task.sleep(nanoseconds: 300_000_000) }
@@ -99,7 +103,16 @@ struct BrowseScreen: View {
         if !isWide { pushed = initialListingID }
       }
     }
-    .onDisappear { list.stop() }
+    .task(id: context.orgID) {
+      let orgID = context.orgID
+      newest.show(context.firestore) { browseQuery(viewerOrgID: orgID, category: nil, search: "", sort: .newest, limit: $0) }
+      popular.show(context.firestore) { browseQuery(viewerOrgID: orgID, category: nil, search: "", sort: .installed, limit: $0) }
+    }
+    .onDisappear {
+      list.stop()
+      newest.stop()
+      popular.stop()
+    }
   }
 
   @ViewBuilder
@@ -107,7 +120,7 @@ struct BrowseScreen: View {
     VStack(spacing: 0) {
       if !selectable {
         SectionTabs(context: context, current: marketplaceBrowseScreen)
-          .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
+          .aglynContentEdges().padding(.vertical, AglynSpace.one)
       }
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: AglynSpace.one) {
@@ -126,13 +139,41 @@ struct BrowseScreen: View {
           .help("Order the listings")
           .accessibilityIdentifier("marketplace-sort")
         }
-        .padding(.horizontal, AglynSpace.two)
+        .aglynContentEdges()
         .padding(.vertical, AglynSpace.one)
+      }
+      // The home: New and Popular as preview cards, while nothing is searched or picked.
+      if search.isEmpty && category == nil && (!newest.rows.isEmpty || !popular.rows.isEmpty) {
+        VStack(alignment: .leading, spacing: AglynSpace.one) {
+          shelfRow("New", newest.rows)
+          shelfRow("Popular", popular.rows)
+          Text("All listings").font(AglynFont.headline).aglynContentEdges().padding(.top, AglynSpace.one)
+        }
+        .accessibilityIdentifier("marketplace-home")
       }
       content(selectable: selectable)
     }
     .aglynListColumn()
     .background(AglynColor.page)
+  }
+
+  @ViewBuilder
+  private func shelfRow(_ title: String, _ rows: [ListingRow]) -> some View {
+    if !rows.isEmpty {
+      VStack(alignment: .leading, spacing: 6) {
+        Text(title).font(AglynFont.headline).aglynContentEdges()
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: AglynSpace.oneAndHalf) {
+            ForEach(rows) { row in
+              ListingCard(row: row) {
+                if isWide { selection = row.id } else { pushed = row.id }
+              }
+            }
+          }
+          .aglynContentEdges()
+        }
+      }
+    }
   }
 
   @ViewBuilder
@@ -175,6 +216,36 @@ struct BrowseScreen: View {
       .accessibilityIdentifier("listing-\(row.id)")
     }
     if list.hasMore { AglynLoadMoreRow("Show more listings") { list.loadMore() } }
+  }
+}
+
+/// A listing as a preview card on the marketplace home: its picture, name, type, rating and price, and Get or Buy,
+/// which opens the listing where it installs.
+private struct ListingCard: View {
+  let row: ListingRow
+  let open: () -> Void
+
+  var body: some View {
+    Button(action: open) {
+      VStack(alignment: .leading, spacing: 6) {
+        AglynRemoteImage(row.imageURL.flatMap(URL.init(string:)), systemImage: row.artifactType == "plugin" ? "puzzlepiece.extension" : "square.grid.2x2")
+          .frame(width: 180, height: 104)
+          .clipShape(RoundedRectangle(cornerRadius: AglynRadius.card, style: .continuous))
+        Text(row.name).font(AglynFont.strongSubheadline).lineLimit(1)
+        Text([artifactLabel(row.artifactType), ratingLabel(row)].joined(separator: " · ")).font(AglynFont.caption)
+          .foregroundStyle(.secondary).lineLimit(1)
+        HStack {
+          StatusChip(priceLabel(row.priceUSD), tone: row.paid ? .info : .success)
+          Spacer()
+          Text(row.paid ? "Buy" : "Get").font(AglynFont.button).foregroundStyle(AglynColor.tint)
+        }
+      }
+      .frame(width: 180, alignment: .leading)
+      .padding(10)
+      .aglynCardSurface()
+    }
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("listing-card-\(row.id)")
   }
 }
 
@@ -260,26 +331,24 @@ private struct ListingDetail: View {
         EditListingSheet(context: context, listing: listing, runner: editRunner, api: SellerAPI(api: context.api, orgID: orgID)) { editing = nil }
       }
     }
-    .toolbar {
+    .aglynScreenToolbar(id: "listing") {
       // The owner's actions on the listing itself: a plugin ships a new version from here, and any listing is edited here.
       if let owned, installRoles.contains(context.orgRole ?? "") {
-        ToolbarItemGroup(placement: .primaryAction) {
-          if owned.isPlugin {
-            Button {
-              context.navigate("marketplace.publishPlugin", ["listing": owned.id])
-            } label: {
-              Label("Publish new version", systemImage: "square.and.arrow.up")
-            }
-            .accessibilityIdentifier("listing-publish-version")
-          }
+        if owned.isPlugin {
           Button {
-            editRunner.clear()
-            editing = owned
+            context.navigate("marketplace.publishPlugin", ["listing": owned.id])
           } label: {
-            Label("Edit listing", systemImage: "pencil")
+            Label("Publish new version", systemImage: "square.and.arrow.up")
           }
-          .accessibilityIdentifier("listing-edit")
+          .accessibilityIdentifier("listing-publish-version")
         }
+        Button {
+          editRunner.clear()
+          editing = owned
+        } label: {
+          Label("Edit listing", systemImage: "pencil")
+        }
+        .accessibilityIdentifier("listing-edit")
       }
     }
     .task(id: "\(listingID)-\(context.hostID ?? "")-\(context.orgID ?? "")") {
@@ -609,6 +678,7 @@ struct InstalledScreen: View {
       }
     }
     .navigationTitle("Installed")
+    .aglynScreenTitle("Installed")
     .sheet(item: $removing) { pin in
       AglynActionSheet(
         "Remove \(pin.name)?",
@@ -630,10 +700,10 @@ struct InstalledScreen: View {
     let site = sitePins.state.value.map { $0.map { InstallPinRow($0, scope: .host) } }
     let org = orgPins.state.value.map { $0.map { InstallPinRow($0, scope: .org) } }
     VStack(spacing: 0) {
-      SectionTabs(context: context, current: marketplaceInstalledScreen).padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
+      SectionTabs(context: context, current: marketplaceInstalledScreen).aglynContentEdges().padding(.vertical, AglynSpace.one)
       if removing == nil {
-        if let notice = runner.notice { AglynNotice(notice, tone: .success) { runner.clear() }.padding(.horizontal, AglynSpace.two) }
-        if let error = runner.error { AglynNotice(error, tone: .error) { runner.clear() }.padding(.horizontal, AglynSpace.two) }
+        if let notice = runner.notice { AglynNotice(notice, tone: .success) { runner.clear() }.aglynContentEdges() }
+        if let error = runner.error { AglynNotice(error, tone: .error) { runner.clear() }.aglynContentEdges() }
       }
       if let site, let org {
         if site.isEmpty && org.isEmpty {
@@ -706,6 +776,7 @@ struct LicencesScreen: View {
       }
     }
     .navigationTitle("Licenses")
+    .aglynScreenTitle("Licenses")
   }
 
   private func name(_ licence: LicenceRow) -> String { listingNames[licence.listingID] ?? licence.listingID }
@@ -724,7 +795,7 @@ struct LicencesScreen: View {
     let heldRows = held.state.value.map { $0.map(LicenceRow.init) }
     let mineRows = mine.state.value.map { $0.map(LicenceRow.init) }
     VStack(spacing: 0) {
-      SectionTabs(context: context, current: marketplaceLicencesScreen).padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
+      SectionTabs(context: context, current: marketplaceLicencesScreen).aglynContentEdges().padding(.vertical, AglynSpace.one)
       List {
         Section {
           AglynNotice(

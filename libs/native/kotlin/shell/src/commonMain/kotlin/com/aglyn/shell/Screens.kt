@@ -145,6 +145,12 @@ internal fun shellPlaces(registry: com.aglyn.pluginhost.NativePluginRegistry, ap
   return tabs + actions
 }
 
+/**
+ * The plan feature each plugin's screens need, as the console gates the plugin's page (`featureFlag`), for the plugins
+ * whose plan the console's notice can name.
+ */
+internal val PLUGIN_PLAN_FEATURES = mapOf("crm" to "crm", "commerce" to "commerce", "bookings" to "bookings")
+
 @Composable
 internal fun PluginScreenHost(
   services: ShellServices,
@@ -155,14 +161,25 @@ internal fun PluginScreenHost(
   onExit: () -> Unit = {},
 ) {
   val screen = services.registry.screen(screenId)
+  // A plugin the plan leaves out shows the console's upgrade notice where its screen would be (the console's blocked
+  // plugin page), from the console's own settled answer; while that is read, or if it cannot be, the screen shows.
+  val feature = screen?.pluginId?.let { PLUGIN_PLAN_FEATURES[it] }
+  val orgId = services.workspace.state.collectAsState().value.org?.id
+  val entitlements = if (feature != null && orgId != null) services.entitlements.state(orgId).collectAsState().value else null
+  if (feature != null && orgId != null) LaunchedEffect(orgId) { services.entitlements.load(orgId) }
   when {
     screen == null -> EmptyState("This page is not available", body = "Update the app to open it.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
+    feature != null && entitlements != null && !entitlements.has(feature) -> com.aglyn.ui.UpgradeNoticeScreen(
+      com.aglyn.core.upgradeNoticeMessage(screen.title, feature),
+      com.aglyn.ui.UpgradeKind.PLAN,
+      tag = "feature-gate-$feature",
+    ) { context.navigate("core.billing") }
     screen.requiresSite && !hasSite -> EmptyState("Pick a site first", body = "This page shows one site's data.", icon = AglynIcons.named("public"))
     screen.upcoming -> EmptyState(
       "${screen.title} is coming to the app",
       body = "This part of ${services.config.brandName} is on its way to the app.",
       icon = AglynIcons.named(screen.icon ?: "extension"),
-      action = { OutlinedButton(onClick = onExit) { Text("Back") } },
+      action = { OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = onExit) { Text("Back") } },
       modifier = Modifier.testTag("upcoming-${screen.id}"),
     )
     else -> screen.content(context, params)
@@ -199,6 +216,7 @@ internal fun SettingsScreen(
   services: ShellServices,
   context: NativePluginContext? = null,
   staff: Boolean = false,
+  onTheme: () -> Unit = {},
   onNotificationSettings: () -> Unit = {},
 ) {
   val auth by services.auth.state.collectAsState()
@@ -240,6 +258,15 @@ internal fun SettingsScreen(
     }
     HorizontalDivider()
     SectionHeader("Preferences")
+    val theme = services.accountPrefs.state.collectAsState().value.theme
+    AglynListItem(
+      title = "Theme",
+      supporting = "${themeLabel(theme.theme, services.config.brandName)} · ${appearanceLabel(theme.appearance)} · ${densityLabel(theme.density)}",
+      icon = AglynIcons.named("palette"),
+      trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
+      onClick = onTheme,
+      modifier = Modifier.testTag("settings-theme"),
+    )
     AglynListItem(
       title = "Notifications",
       supporting = "What reaches you in the app, by email and as push",
@@ -252,7 +279,7 @@ internal fun SettingsScreen(
     HelpSection(services.config)
     HorizontalDivider()
     Column(Modifier.padding(space(2f)).widthIn(max = 480.dp).fillMaxWidth()) {
-      OutlinedButton(onClick = { scope.launch { services.signOut() } }, modifier = Modifier.fillMaxWidth().testTag("sign-out")) {
+      OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = { scope.launch { services.signOut() } }, modifier = Modifier.fillMaxWidth().testTag("sign-out")) {
         Text("Sign out")
       }
     }

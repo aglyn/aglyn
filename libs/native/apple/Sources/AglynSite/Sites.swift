@@ -59,6 +59,8 @@ public struct SiteRow: Identifiable, Equatable, Sendable {
   public let hasCustomDomain: Bool
   public let favicon: String?
   public let createdAt: Date?
+  /// The site's custom domain, as the membership row mirrors it (`cname`); older rows lack it.
+  public let cname: String?
 
   public init(_ doc: FirestoreDocument) {
     let subdomain = doc.string("subdomain").flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
@@ -70,7 +72,12 @@ public struct SiteRow: Identifiable, Equatable, Sendable {
     hasCustomDomain = doc.bool("hasCustomDomain") == true
     favicon = doc.string("favicon").flatMap { $0.isEmpty ? nil : $0 }
     createdAt = doc.date("createdAt")
+    cname = doc.string("cname").flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
   }
+
+  /// The address a list shows under the name, as the console's Sites list does: the custom domain, else the platform
+  /// address.
+  public var shownAddress: String? { cname ?? HostStatus.siteAddress(subdomain) }
 }
 
 /// The workspace's sites: the search, the chip, the rows read so far and

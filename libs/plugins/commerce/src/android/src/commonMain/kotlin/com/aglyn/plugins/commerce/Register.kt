@@ -11,6 +11,8 @@ import com.aglyn.plugins.commerce.orders.COMMERCE_ORDERS_SCREEN
 import com.aglyn.plugins.commerce.orders.COMMERCE_ORDER_SCREEN
 import com.aglyn.plugins.commerce.orders.OrdersScreen
 import com.aglyn.plugins.commerce.orders.OrdersToShipWidget
+import com.aglyn.plugins.commerce.orders.OrdersNeedsYouWidget
+import com.aglyn.plugins.commerce.orders.orderFilterOf
 import com.aglyn.plugins.commerce.products.COMMERCE_PRODUCTS_SCREEN
 import com.aglyn.plugins.commerce.products.COMMERCE_PRODUCT_MEDIA_SCREEN
 import com.aglyn.plugins.commerce.products.COMMERCE_PRODUCT_SCREEN
@@ -90,7 +92,7 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
   SpecScreens.register(CommerceScreenJson.files.flatMap { ScreenSpec.parseFile(it) }, r)
 
   r.screen(COMMERCE_ORDERS_SCREEN, title = "Orders", requiresSite = true, icon = "receipt", layout = ScreenLayout.LIST_DETAIL) { context, params ->
-    OrdersScreen(context, initialOrderId = params["order"])
+    OrdersScreen(context, initialOrderId = params["order"], startNew = params["new"] == "1", initialFilter = orderFilterOf(params["filter"]))
   }
   r.screen(COMMERCE_ORDER_SCREEN, title = "Order", requiresSite = true, icon = "receipt", layout = ScreenLayout.LIST_DETAIL) { context, params ->
     OrdersScreen(context, initialOrderId = params["order"] ?: params["orderId"])
@@ -115,6 +117,7 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
   r.widget("commerce.today", title = "Today", order = 80, size = WidgetSize.HALF, requiresSite = true) { context -> TodaySalesWidget(context) }
   r.widget("commerce.sales-trend", title = "Last 7 days", order = 110, size = WidgetSize.FULL, requiresSite = true) { context -> SalesTrendWidget(context) }
   r.widget("commerce.to-ship", title = "To ship", order = 90, size = WidgetSize.HALF, requiresSite = true) { context -> OrdersToShipWidget(context) }
+  r.widget("commerce.needs-you", title = "Needs you", order = 10, requiresSite = true, slot = "homeNeedsYou") { context -> OrdersNeedsYouWidget(context) }
   r.widget("commerce.glance", title = "At a glance", order = 120, size = WidgetSize.FULL, requiresSite = true) { context -> GlanceWidget(context) }
   r.quickAction("commerce.orders-to-ship", "Ship orders", "local_shipping", 100, requiresSite = true, screen = COMMERCE_ORDERS_SCREEN)
   r.quickAction("commerce.new-product", "New product", "add", 110, requiresSite = true, screen = COMMERCE_PRODUCT_SCREEN, params = mapOf("new" to "1"))

@@ -20,10 +20,6 @@
       android:launchMode="singleTop"
       android:windowSoftInputMode="adjustResize">
       <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LAUNCHER" />
-      </intent-filter>
-      <intent-filter>
         <action android:name="android.intent.action.VIEW" />
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
@@ -44,6 +40,41 @@
         <data android:path="/account-recovery" />
       </intent-filter>
     </activity>
+    <!-- The home-screen icon (Theme ▸ App icon, LauncherIconSwitcher): one alias of the main activity per icon of the logo
+         kit, exactly one enabled. The app's own icon is on until the person picks another. -->
+    <activity-alias
+      android:name=".LauncherAglyn"
+      android:enabled="true"
+      android:exported="true"
+      android:icon="@mipmap/ic_launcher"
+      android:targetActivity=".MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias
+      android:name=".LauncherLight"
+      android:enabled="false"
+      android:exported="true"
+      android:icon="@mipmap/ic_launcher_light"
+      android:targetActivity=".MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
+    <activity-alias
+      android:name=".LauncherDark"
+      android:enabled="false"
+      android:exported="true"
+      android:icon="@mipmap/ic_launcher_dark"
+      android:targetActivity=".MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity-alias>
     <service
       android:name=".MessagingService"
       android:exported="false">

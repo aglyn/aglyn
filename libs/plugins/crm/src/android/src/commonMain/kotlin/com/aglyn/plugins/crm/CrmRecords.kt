@@ -6,12 +6,17 @@ import com.aglyn.contracts.ListQueryDeclaration
 import com.aglyn.contracts.ListQueryFilter
 import com.aglyn.contracts.ListQueryOp
 import com.aglyn.contracts.ListQueryRequest
+import com.aglyn.contracts.currencyFractionDigits
+import com.aglyn.contracts.currencyInputText
+import com.aglyn.contracts.customFieldCurrency
+import com.aglyn.contracts.parseCurrencyInput
 import com.aglyn.core.FirestoreDelete
 import com.aglyn.core.FirestoreDoc
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.FirestoreTimestamp
 import com.aglyn.core.listquery.planListQuery
 import com.aglyn.core.listquery.toFirestoreQuery
+import com.aglyn.ui.FieldCurrency
 import com.aglyn.ui.FieldKind
 import com.aglyn.ui.FieldOption
 import com.aglyn.ui.FieldSpec
@@ -143,11 +148,21 @@ fun crmListQuery(kind: CrmKind, scope: CrmScope, filter: CrmFilter, search: Stri
 
 /*---------- fields ----------*/
 
-/** How a field's string value is stored on the record. */
-enum class Stored { TEXT, CENTS, MILLIS, DAY, NUMBER, BOOL }
+/**
+ * How a field's string value is stored on the record. MINOR is a currency field's whole number of its own currency's
+ * minor unit (AGL-3971): cents for USD, yen for JPY, fils for BHD; CENTS is always hundredths (a deal's amount).
+ */
+enum class Stored { TEXT, CENTS, MINOR, MILLIS, DAY, NUMBER, BOOL }
 
 /** One field: what the sheet shows, and where and how the record keeps it. */
-data class CrmField(val spec: FieldSpec, val path: String = spec.key, val stored: Stored = Stored.TEXT, val editable: Boolean = true)
+data class CrmField(
+  val spec: FieldSpec,
+  val path: String = spec.key,
+  val stored: Stored = Stored.TEXT,
+  val editable: Boolean = true,
+  /** A currency field's lowercase ISO 4217 code (`stored == MINOR`). */
+  val currency: String? = null,
+)
 
 private fun text(key: String, label: String, kind: FieldKind = FieldKind.TEXT, required: Boolean = false) =
   CrmField(FieldSpec(key, label, kind, required))
@@ -250,6 +265,8 @@ data class CustomFieldDefinition(
   val order: Long,
   val retired: Boolean,
   val obj: String,
+  /** A currency field's lowercase ISO 4217 code, fixed once the field exists (AGL-3756). */
+  val currency: String? = null,
 )
 
 fun customFieldOf(doc: FirestoreDoc) = CustomFieldDefinition(
@@ -262,16 +279,18 @@ fun customFieldOf(doc: FirestoreDoc) = CustomFieldDefinition(
   order = doc.long("order") ?: 0L,
   retired = doc.data["retiredAt"] != null,
   obj = doc.string("object") ?: "contact",
+  currency = if (doc.string("type") == "currency") customFieldCurrency(doc.string("currency")) else null,
 )
 
 fun customFields(kind: CrmKind, definitions: List<CustomFieldDefinition>): List<CrmField> =
   definitions.filter { !it.retired && it.obj == kind.fieldObject }.sortedBy { it.order }.map { def ->
+    val code = if (def.type == "currency") customFieldCurrency(def.currency) else null
     val spec = FieldSpec(
       "custom.${def.key}",
       def.label,
       when (def.type) {
         "number" -> FieldKind.NUMBER
-        // An amount in minor units, as a deal's (AGL-3756).
+        // An amount in its own currency's minor units (AGL-3756, AGL-3971).
         "currency" -> FieldKind.MONEY
         "date" -> FieldKind.DATE
         "select" -> FieldKind.SELECT
@@ -281,17 +300,19 @@ fun customFields(kind: CrmKind, definitions: List<CustomFieldDefinition>): List<
       },
       required = def.required,
       options = def.options.map { FieldOption(it, it) },
+      currency = code?.let { FieldCurrency(it.uppercase(), currencyFractionDigits(it)) },
     )
     CrmField(
       spec,
       "custom.${def.key}",
       when (def.type) {
         "number" -> Stored.NUMBER
-        "currency" -> Stored.CENTS
+        "currency" -> Stored.MINOR
         "date" -> Stored.DAY
         "checkbox" -> Stored.BOOL
         else -> Stored.TEXT
       },
+      currency = code,
     )
   }
 
@@ -301,6 +322,7 @@ fun displayValue(field: CrmField, raw: Any?): String = when (field.stored) {
     val value = cents.toDouble() / 100
     if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
   }.orEmpty()
+  Stored.MINOR -> (raw as? Number)?.let { currencyInputText(it.toDouble(), field.currency ?: customFieldCurrency(null)) }.orEmpty()
   Stored.MILLIS -> millisOf(raw)?.let(::isoDayOf).orEmpty()
   Stored.DAY -> (raw as? String).orEmpty()
   Stored.NUMBER -> (raw as? Number)?.let { if (it.toDouble() % 1.0 == 0.0) it.toLong().toString() else it.toString() }.orEmpty()
@@ -337,6 +359,7 @@ fun storedValue(field: CrmField, value: String): Any? {
   return when (field.stored) {
     Stored.TEXT -> text
     Stored.CENTS -> text.removePrefix("$").replace(",", "").toDoubleOrNull()?.let { kotlin.math.round(it * 100).toLong() }
+    Stored.MINOR -> parseCurrencyInput(text, field.currency ?: customFieldCurrency(null))
     Stored.MILLIS -> isoDayMillis(text)?.plus(12 * 3_600_000L)
     Stored.DAY -> text
     Stored.NUMBER -> text.toLongOrNull() ?: text.toDoubleOrNull()

@@ -14,6 +14,7 @@ class AiNativeTest {
     "widgets" to listOf(
       "ai.seo-audit", "ai.seo-start", "ai.site-memory",
       "ai.create-page", "ai.create-template", "ai.create-layout", "ai.create-form", "ai.create-component",
+      "ai.needs-you", "ai.assist-panel",
     ),
     "quickActions" to listOf("ai.open"),
     "deepLinks" to listOf("ai.jobs.link", "ai.job.link", "ai.signals.link"),

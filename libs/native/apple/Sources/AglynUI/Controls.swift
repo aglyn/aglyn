@@ -90,6 +90,7 @@ public struct AglynQuantityStepper: View {
 
 /// A label and an amount on one line, for totals; `emphasized` for the grand total.
 public struct AglynAmountRow: View {
+  @Environment(\.aglynPlainRecord) private var plain
   let title: String
   let amount: String
   let emphasized: Bool
@@ -103,13 +104,25 @@ public struct AglynAmountRow: View {
   }
 
   public var body: some View {
-    HStack(alignment: .firstTextBaseline) {
-      Text(title).foregroundStyle(emphasized ? .primary : .secondary)
-      Spacer(minLength: AglynSpace.one)
-      Text(amount).monospacedDigit().foregroundStyle(tone?.color ?? .primary)
+    if plain {
+      // A detail column's totals (Figma 13:483): the same 14-point rows as the items, the total in semibold.
+      HStack(alignment: .firstTextBaseline) {
+        Text(title).foregroundStyle(AglynColor.textPrimary)
+        Spacer(minLength: AglynSpace.one)
+        Text(amount).monospacedDigit().foregroundStyle(tone?.color ?? AglynColor.textPrimary)
+      }
+      .font(.system(size: 14, weight: emphasized ? .semibold : .regular))
+      .padding(.vertical, 10)
+      .accessibilityElement(children: .combine)
+    } else {
+      HStack(alignment: .firstTextBaseline) {
+        Text(title).foregroundStyle(emphasized ? .primary : .secondary)
+        Spacer(minLength: AglynSpace.one)
+        Text(amount).monospacedDigit().foregroundStyle(tone?.color ?? .primary)
+      }
+      .font(emphasized ? AglynFont.title2 : AglynFont.body)
+      .accessibilityElement(children: .combine)
     }
-    .font(emphasized ? AglynFont.title2 : AglynFont.body)
-    .accessibilityElement(children: .combine)
   }
 }
 

@@ -128,7 +128,7 @@ import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inv
 import { aiSitePlanIsHome } from '../model/ai-site-job'
 import { aiSiteKind, aiSiteStyleTokens } from '../model/ai-site-kinds'
 import { aiSiteSeed, type AiSiteStyle } from '../model/ai-site-look'
-import { aiSiteStartBrief, aiSiteStartInputs, type AiSiteStartAnswers } from '../model/ai-site-start'
+import { AI_SITE_START_ANSWERS, aiSiteStartBrief, aiSiteStartInputs, type AiSiteStartAnswers } from '../model/ai-site-start'
 import { aiProviderRatesForModel, estimateAiProviderCostUsd } from '../providers/catalog'
 import { aiCacheWriteHourSurchargeUsd } from '../providers/cache-write-hour'
 import { aiModelForStep } from '../providers/routing'
@@ -395,6 +395,8 @@ function planOf(entry: Case): Promise<Planned> {
   const planned = mockCaseTag.run(entry.key, async (): Promise<Planned> => {
     const org = orgOf(entry)
     const answers: AiSiteStartAnswers = {
+      // The business details (AGL-3979) left as the defaults hold them: none given.
+      ...AI_SITE_START_ANSWERS,
       siteType: entry.siteType,
       audience: entry.audience,
       example: null,

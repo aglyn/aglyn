@@ -69,8 +69,7 @@ struct RegisterScreen: View {
     }
     .navigationTitle(model.storeName)
     .toolbar { toolbar }
-    .searchable(text: $query, prompt: "Search products")
-    .onSubmit(of: .search) { model.search(query) }
+    .aglynSearchable(text: $query, prompt: "Search products", onSubmit: { model.search(query) })
     .onChange(of: query) { _, text in if text.isEmpty { model.search("") } }
     .sheet(item: $model.sheet) { _ in ItemSheetView(model: model) }
     .sheet(isPresented: $showOps) { RegisterOpsSheet(model: model) }
