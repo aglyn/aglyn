@@ -24,8 +24,8 @@ abstract class EmbedScreenSpecs : DefaultTask() {
     val body = StringBuilder("// Embedded at build time from screens/.\npackage com.aglyn.plugins.loyalty\n\n")
     body.append("internal object LoyaltyScreenJson {\n  val files: List<String> by lazy {\n    listOf(\n")
     for (file in files) {
-      val chunks = file.readText().chunked(16_000).joinToString(" +\n      ") { chunk ->
-        "\"" + chunk.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$").replace("\n", "\\n") + "\""
+      val chunks = file.readText().replace("\r\n", "\n").chunked(16_000).joinToString(" +\n      ") { chunk ->
+        "\"" + chunk.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$").replace("\n", "\\n").replace("\r", "\\r") + "\""
       }
       body.append("      $chunks,\n")
     }
