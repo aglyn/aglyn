@@ -1048,7 +1048,7 @@ struct PhoneShell: View {
             #if os(iOS)
               if tab.section == PhoneShell.createTab, let tile = PhoneShell.createTile {
                 // The centre tab is the filled accent "+" tile (Figma Phone/Tab bar, Create), drawn as it is.
-                Image(uiImage: tile).renderingMode(.original).accessibilityLabel("Create")
+                Image(uiImage: tile.withRenderingMode(.alwaysOriginal)).renderingMode(.original).accessibilityLabel("Create")
               } else {
                 Label(tab.title, systemImage: tab.icon)
               }
@@ -1208,7 +1208,9 @@ struct MenuScreen: View {
       }
       SidebarList(scope: scope, push: true)
     }
-    .background(AglynColor.paper)
+    // The list sits on the paper surface under the title, which stays on the page ground (Figma 22:176).
+    .background(AglynColor.paper, ignoresSafeAreaEdges: [])
+    .background(AglynColor.page)
     .navigationTitle(scope.modeTitle ?? "Menu")
   }
 

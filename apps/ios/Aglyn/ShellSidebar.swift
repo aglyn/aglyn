@@ -537,9 +537,9 @@ struct PhoneMenuRow<Leading: View>: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.aglynRow)
-    // A hairline under each row, from the label on (Figma Phone/List row).
+    // A hairline under each row, across the screen (Figma Phone/List row).
     .overlay(alignment: .bottom) {
-      Rectangle().fill(AglynColor.divider).frame(height: 1).padding(.leading, 52).accessibilityHidden(true)
+      Rectangle().fill(AglynColor.divider).frame(height: 1).accessibilityHidden(true)
     }
   }
 }
