@@ -57,13 +57,45 @@ if (!LOCAL.test(AUTH) || !LOCAL.test(FIRESTORE) || (STORAGE && !LOCAL.test(STORA
   process.exit(1)
 }
 
-/** The bucket the local console reads: its env files name it, else the project's default. */
-async function consoleBucket() {
-  const { readEnvFiles, serveEnvFiles } = await import('./lib/emulated-env.mjs')
-  const named = readEnvFiles(serveEnvFiles(ROOT, 'console'))
-    .map((file) => file.parsed.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
-    .find(Boolean)
-  return arg('bucket', named || `${PROJECT}.appspot.com`)
+/**
+ * The bucket the local console reads, resolved the way an emulated console resolves it: the environment first, then the
+ * console's env files (this tree's, or the main checkout's in a worktree that has none: `consoleEnvFiles`, which
+ * `serve-emulated` reads too), then the bucket an emulated console derives from the project. `--bucket` overrides.
+ * Printed once, so a seed and a console that disagree show it; a bucket the console never reads leaves every seeded
+ * picture a 404.
+ */
+let bucketOnce = null
+function consoleBucket() {
+  bucketOnce ??= resolveConsoleBucket()
+  return bucketOnce
+}
+
+async function resolveConsoleBucket() {
+  const given = arg('bucket', null)
+  let bucket = given
+  let source = '--bucket'
+  if (!given) {
+    const { consoleEnvFiles, emulatedServeEnvironment } = await import('./lib/emulated-env.mjs')
+    const files = consoleEnvFiles(ROOT, 'console')
+    const { env } = emulatedServeEnvironment(
+      {
+        ...process.env,
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || PROJECT,
+        FIRESTORE_EMULATOR_HOST: FIRESTORE,
+      },
+      files,
+    )
+    bucket = env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    const file = files.find((entry) => entry.parsed.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
+    source = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+      ? 'the environment'
+      : file
+        ? file.path
+        : `an emulated console's default for ${env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}`
+  }
+  if (!bucket) throw new Error('seed-native-emulator: no Storage bucket resolved for the console; pass --bucket <bucket>.')
+  console.log(`seed-native-emulator: Storage bucket ${bucket} (from ${source})`)
+  return bucket
 }
 
 /** Uploads `bytes` to the Storage emulator at `path` (emulator owner credentials; never a real bucket). */

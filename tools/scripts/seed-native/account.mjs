@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { SITE_COLLABORATOR } from './workspace.mjs'
+
 /*
  * Seed for the Aglyn app's workspace management screens (AGL-3671) and staff
  * section (AGL-3667): the workspace's profile, plan and subscription, the
@@ -98,11 +100,13 @@ export async function seedAccount({ put, uid, orgId, hostId, now, auth, project 
     status: 'active',
     createdAt: now,
   })
-  await put(`hosts/${hostId}/members/seed-collab-riley`, {
-    uid: 'seed-collab-riley',
-    email: 'riley@example.test',
-    displayName: 'Riley Chen',
-    role: 'editor',
+  // The site's collaborator is also on the workspace's roster with an account (workspace.mjs), as the console stores
+  // one added by email: its role change and removal read both and answered 404 for a roster-only stub.
+  await put(`hosts/${hostId}/members/${SITE_COLLABORATOR.uid}`, {
+    uid: SITE_COLLABORATOR.uid,
+    email: SITE_COLLABORATOR.email,
+    displayName: SITE_COLLABORATOR.displayName,
+    role: SITE_COLLABORATOR.siteRole,
     status: 'active',
     createdAt: new Date(now.getTime() - 9 * day),
   })
