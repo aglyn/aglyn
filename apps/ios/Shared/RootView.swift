@@ -48,7 +48,10 @@ struct RootView<Shell: View>: View {
     }
     .task {
       // The intro ends when Auth has answered (signed out → sign-in, signed in → the shell), never on a fixed wait.
-      await intro.run(reduceMotion: reduceMotion) { [model] in model.auth?.ready ?? true }
+      // The sign-in and verify screens show the lockup where the intro docks it; the shell does not, so it fades.
+      await intro.run(
+        reduceMotion: reduceMotion, isReady: { [model] in model.auth?.ready ?? true },
+        docksToLockup: { [self] in self.stage == .signedOut || self.stage == .verify })
     }
     .tint(AglynColor.tint)
     .font(AglynFont.body)
