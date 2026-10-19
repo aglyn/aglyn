@@ -36,8 +36,9 @@
  * | `forms`          | Saved forms (a site's)                        | `hosts/{host}/forms` count             | `formsPerHost`              |
  * | `sites`          | Sites                                         | the workspace's sites                  | `hostLimit`                 |
  *
- * The card is already headed by the workspace's name and plan, so a label
- * drops the page's "(organization)" qualifier and keeps the rest.
+ * A label is the page's own, without its parenthesis ("(this month,
+ * organization)", "(incl. you)"): the card is one line wide and already headed
+ * by the workspace and plan, and a tap opens the Usage page that says the rest.
  */
 
 const METERS = [
@@ -61,14 +62,14 @@ export type PlanCardMeter = (typeof METERS)[number]
  */
 export const PLAN_CARD_METERS: string[] = [...METERS]
 
-/** Each meter's label, the Usage page's own words less its "(organization)" qualifier. */
+/** Each meter's label: the Usage page's own words, without their parenthesis. */
 export const PLAN_CARD_METER_LABELS: Record<string, string> = {
   storage: 'Storage',
-  bandwidth: 'Bandwidth (this month)',
-  emailSends: 'Campaign emails (this month)',
-  aiCredits: 'AI credits (this month)',
+  bandwidth: 'Bandwidth',
+  emailSends: 'Campaign emails',
+  aiCredits: 'AI credits',
   dataStorage: 'Data storage',
-  seats: 'Team seats (incl. you)',
+  seats: 'Team seats',
   pages: 'Pages',
   forms: 'Saved forms',
   sites: 'Sites',

@@ -7695,13 +7695,13 @@
   ],
   "PLAN_CARD_HOME_SCREEN": "shell.home",
   "PLAN_CARD_METER_LABELS": {
-    "aiCredits": "AI credits (this month)",
-    "bandwidth": "Bandwidth (this month)",
+    "aiCredits": "AI credits",
+    "bandwidth": "Bandwidth",
     "dataStorage": "Data storage",
-    "emailSends": "Campaign emails (this month)",
+    "emailSends": "Campaign emails",
     "forms": "Saved forms",
     "pages": "Pages",
-    "seats": "Team seats (incl. you)",
+    "seats": "Team seats",
     "sites": "Sites",
     "storage": "Storage"
   },
