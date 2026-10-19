@@ -58,6 +58,18 @@ export interface PluginMediaIngestRequest {
   description?: string
   /** Where a photo copied from a stock library came from (`stockPhoto` on the asset). */
   stockPhoto?: Omit<AglynHostMediaStockSource, 'importedAt'>
+  /**
+   * The library folder the asset is filed in (AGL-3957); absent or null,
+   * the library's root. An id the library does not hold files the asset at
+   * the root, as an upload naming a stale folder does.
+   */
+  folderId?: string | null
+  /**
+   * The asset is the business's own photo, sent through a site photo link
+   * (AGL-3957) — the id of the link it came through. Stamps `ownerPhoto` on
+   * the asset, which is what the AI reads its owner's pictures by.
+   */
+  ownerPhotoLinkId?: string
 }
 
 /** A stored asset, as a page names it. */
@@ -67,6 +79,8 @@ export interface PluginMediaAsset {
   src: string
   width?: number
   height?: number
+  /** What the asset's own alt text says it shows, where a member wrote one. */
+  alt?: string
 }
 
 export type PluginMediaIngestResult =
@@ -81,6 +95,14 @@ export interface PluginMediaIngest {
    * key (`{provider}:{id}`), so a photo is never stored twice in one library.
    */
   findStockPhoto(input: { hostId: string; sourceKey: string }): Promise<PluginMediaAsset | null>
+  /**
+   * The site's live, public photos of the business itself (AGL-3957): what
+   * came through a site photo link, newest first, at most `limit`. A photo
+   * of the owner's own work is placed before any stock photo is searched
+   * for. Optional: an implementation registered before the link existed
+   * answers nothing, and a caller treats that as an empty library.
+   */
+  listOwnerPhotos?(input: { hostId: string; limit?: number }): Promise<PluginMediaAsset[]>
 }
 
 /** One implementation: the app that holds the media ingress. */

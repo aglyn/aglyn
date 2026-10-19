@@ -350,7 +350,11 @@ at any step: staff take none of a workspace's seats.
    owner row is marked **staff · no seat**, so the workspace's one Free team seat
    stays free. A customer never sees the switch, and the server refuses the comp
    from anyone without the staff role.
-2. **Build the site.**
+2. **Build the site.** To use the client's own photos, open the site's **Media** page,
+   choose **Get a photo link**, and have the client scan the QR code with their phone
+   and pick photos. They land in the site's **From the owner** folder, and when
+   Aglyn AI writes the site's pages it places them before any stock photo. See
+   [Photos from a phone](../content-and-data/media/overview.md#photo-link).
 3. **Hand it over.** On the organization's page (or the site's **Ownership** card),
    choose **Hand off to a new owner**, enter the client's email, and choose whether
    you **Stay on as an admin after the handoff** or **Leave after the handoff**. The

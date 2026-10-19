@@ -712,6 +712,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#approved-media-hosts': 'Add a host to Approved media hosts when a page plays video or audio from a URL on another site.',
     '#default-media-sharing': 'Default sharing for new media, at the top of the workspace\'s Media page, decides what a newly uploaded file or new folder is shared with: All sites, or only the site it was created in.',
     '#organization-library': 'The organization\'s Media page holds the workspace\'s shared library — folders, uploads, editing and a storage meter — for assets more than one site uses, such as a logo or brand photography.',
+    '#photo-link': 'The quickest way to get a business\'s own photos into its site is to let them come straight from the phone that took them.',
     '#site-library': 'The This site tab is the site\'s own library: files only this site uses, organized in folders and served over the CDN.',
     '#two-libraries': 'Every site has a media library of its own, and the workspace has one more that its sites share.',
     '#who-an-asset-is-shared-with': 'Workspace media is shared across every site by default. The Shared with control narrows that, with the same two choices as datasets — All sites or Selected sites….',
