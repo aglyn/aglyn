@@ -283,6 +283,13 @@ struct SidebarList: View {
     let selected = !push && ShellScope.row(row, holds: navigation.section)
     return AglynSidebarRow(row.label, selected: selected, action: { activate(target) }) {
       AglynSidebarIcon(row.appleIcon)
+    } trailing: {
+      // A plugin's count for its row (slot `sidebarCount.<row>`), e.g. Inbox's unread.
+      if let context = model.context(for: navigation) {
+        ForEach(model.registry.widgets(for: model.app, slot: "sidebarCount.\(row.id)")) { widget in
+          widget.make(context).id("\(widget.id):\(context.orgID ?? ""):\(context.hostID ?? "")")
+        }
+      }
     }
     .help(row.description ?? row.label)
     .contextMenu { starMenu(row) }

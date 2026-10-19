@@ -179,3 +179,25 @@ extension ToolbarContent {
     }
   }
 }
+
+/// A count beside a sidebar row (Figma Sidebar/Row count): unread or waiting things, a filled accent pill.
+public struct AglynSidebarCount: View {
+  let count: Int
+  let more: Bool
+
+  public init(_ count: Int, more: Bool = false) {
+    self.count = count
+    self.more = more
+  }
+
+  public var body: some View {
+    Text(more ? "\(count)+" : "\(count)")
+      .font(.system(size: AglynShellMetrics.rowText - 2, weight: .semibold))
+      .monospacedDigit()
+      .foregroundStyle(AglynColor.primaryContrast)
+      .padding(.horizontal, 5)
+      .frame(minWidth: 18, minHeight: 18)
+      .background(Capsule().fill(AglynColor.primary))
+      .accessibilityLabel("\(count) unread")
+  }
+}

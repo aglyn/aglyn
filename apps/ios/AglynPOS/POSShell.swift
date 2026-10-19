@@ -66,6 +66,8 @@ struct POSShell: View {
     .signOutConfirmation(isPresented: $confirmSignOut)
     // Aglyn POS draws the same theme as the account's Aglyn.
     .aglynAppTheme(nonce: navigation.themeNonce)
+    // The register keeps the system's navigation and toolbar on every device; it is not part of the shell redesign.
+    .environment(\.aglynWideChrome, false)
     .onAppear { DebugLaunch.route(navigation) }
   }
 }

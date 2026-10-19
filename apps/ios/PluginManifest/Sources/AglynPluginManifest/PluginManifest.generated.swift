@@ -113,7 +113,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "inbox",
-      contributes: ["screens": ["inbox.people", "inbox.submission", "inbox.submissions"], "widgets": ["inbox.glance", "inbox.needs-you"], "quickActions": ["inbox.open", "inbox.people"], "deepLinks": ["inbox.page", "inbox.people-page", "inbox.submissions-page"]],
+      contributes: ["screens": ["inbox.people", "inbox.submission", "inbox.submissions"], "widgets": ["inbox.glance", "inbox.needs-you", "inbox.sidebar-count"], "quickActions": ["inbox.open", "inbox.people"], "deepLinks": ["inbox.page", "inbox.people-page", "inbox.submissions-page"]],
       register: AglynInboxPlugin.registerInboxNative
     ),
     NativePluginManifestEntry(

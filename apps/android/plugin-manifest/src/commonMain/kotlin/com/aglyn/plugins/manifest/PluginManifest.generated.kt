@@ -115,7 +115,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "inbox",
-            contributes = mapOf("screens" to listOf("inbox.people", "inbox.submission", "inbox.submissions"), "widgets" to listOf("inbox.glance", "inbox.needs-you"), "quickActions" to listOf("inbox.open", "inbox.people"), "deepLinks" to listOf("inbox.page", "inbox.people-page", "inbox.submissions-page")),
+            contributes = mapOf("screens" to listOf("inbox.people", "inbox.submission", "inbox.submissions"), "widgets" to listOf("inbox.glance", "inbox.needs-you", "inbox.sidebar-count"), "quickActions" to listOf("inbox.open", "inbox.people"), "deepLinks" to listOf("inbox.page", "inbox.people-page", "inbox.submissions-page")),
             register = ::registerInboxNative,
         ),
         NativePluginManifestEntry(

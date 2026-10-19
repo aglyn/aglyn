@@ -298,3 +298,32 @@ struct InboxNeedsYouWidget: View {
     .onDisappear { list.stop() }
   }
 }
+
+/// Inbox's count beside its sidebar row (Figma Sidebar: "Inbox 2"): the unread messages where the window stands, the
+/// site's, or every site's in the workspace. Nothing while none wait.
+struct InboxSidebarCount: View {
+  let context: NativePluginContext
+  @State private var list = LiveQueryList(pageSize: 99, map: Submission.init)
+
+  var body: some View {
+    Group {
+      if list.ready && list.failure == nil && !list.rows.isEmpty {
+        AglynSidebarCount(list.rows.count, more: list.hasMore)
+      }
+    }
+    .task(id: "\(context.orgID ?? ""):\(context.hostID ?? "")") {
+      if let hostID = context.hostID {
+        list.show(context.firestore) {
+          submissionsPlan(formID: nil, read: "false", search: "").firestoreQuery(submissionsPath(hostID), limit: $0)
+        }
+      } else if let orgID = context.orgID {
+        list.show(context.firestore) {
+          var group = orgSubmissionsPlan(orgID: orgID, read: "false", search: "").firestoreQuery(orgSubmissionsGroup, limit: $0)
+          group.collectionGroup = true
+          return group
+        }
+      }
+    }
+    .onDisappear { list.stop() }
+  }
+}

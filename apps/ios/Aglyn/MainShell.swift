@@ -66,7 +66,12 @@ struct ShellTabs: View {
         .focusedSceneValue(\.shellNavigation, current)
     }
     .focusedSceneValue(\.shellTabs, strip)
+    // The tab in front keeps the workspace and site it stands in as its own, so the others never follow it.
+    .onChange(of: model.workspace?.effective) { _, pick in
+      if let pick { strip.current.remember(orgID: pick.orgID, hostID: pick.hostID) }
+    }
     #if os(macOS)
+      .background(WindowReader { MacWindowControls.attach($0) })
       // The chrome reaches the window's top edge; the window's own buttons sit in the tab strip. The window has no
       // system toolbar: a screen's actions are in its head, so nothing draws over the chrome.
       .ignoresSafeArea(.container, edges: .top)
@@ -106,6 +111,11 @@ struct ShellChrome: View {
       HStack(spacing: 4) {
         Color.clear.frame(width: AglynShellMetrics.trafficLights, height: 1)
         ForEach(Array(strip.tabs.enumerated()), id: \.offset) { index, tab in
+          if index == 0 {
+            // The pinned Home tab is the brand's mark alone (Figma Titlebar/Home tab 117:16049).
+            HomeMarkTab(selected: index == strip.selected) { strip.select(index, model: model) }
+              .accessibilityIdentifier("tab-0")
+          } else {
           ChromeTab(
             title: index == 0 ? "Home" : tabTitle(tab, model: model), systemImage: index == 0 ? "house" : "square.on.square",
             selected: index == strip.selected, closable: index > 0
@@ -115,6 +125,7 @@ struct ShellChrome: View {
             strip.close(index, model: model, closedTabs: model.closedTabs)
           }
           .accessibilityIdentifier("tab-\(index)")
+          }
         }
         Button {
           strip.open(strip.current.seed(model: model), model: model)
@@ -129,6 +140,11 @@ struct ShellChrome: View {
       }
       .padding(.horizontal, 8)
       .frame(height: Self.tabRow)
+      .contentShape(Rectangle())
+      #if os(macOS)
+        // Double-clicking the tab row zooms the window, as a title bar does.
+        .onTapGesture(count: 2) { NSApp.keyWindow?.performZoom(nil) }
+      #endif
       .overlay(alignment: .bottom) { Rectangle().fill(AglynColor.divider).frame(height: 1) }
       // The toolbar: the rail toggle and history on the left, the bell, Help and AI on the right, and the one search
       // centered on the window.
@@ -173,6 +189,72 @@ struct ShellChrome: View {
       unreadFeed.start(
         reader: model.reader, uid: model.auth?.user?.uid, count: 100, filter: NotificationFilter(status: .new))
     }
+  }
+}
+
+#if os(macOS)
+  /// The window's close, minimize and zoom buttons in the tab row: shown (hiding the system toolbar hides them) and
+  /// centered on the row, again whenever the window lays itself out.
+  @MainActor
+  enum MacWindowControls {
+    private static var watched: Set<ObjectIdentifier> = []
+
+    static func attach(_ window: NSWindow) {
+      place(window)
+      guard watched.insert(ObjectIdentifier(window)).inserted else { return }
+      let center = NotificationCenter.default
+      for name in [NSWindow.didResizeNotification, NSWindow.didEndLiveResizeNotification, NSWindow.didExitFullScreenNotification,
+        NSWindow.didBecomeKeyNotification]
+      {
+        center.addObserver(forName: name, object: window, queue: .main) { [weak window] _ in
+          MainActor.assumeIsolated { if let window { place(window) } }
+        }
+      }
+    }
+
+    static func place(_ window: NSWindow) {
+      let kinds: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+      for (index, kind) in kinds.enumerated() {
+        guard let button = window.standardWindowButton(kind) else { continue }
+        // Every view between the button and the window's frame view is shown again.
+        var view: NSView? = button
+        while let current = view, current !== window.contentView?.superview {
+          current.isHidden = false
+          current.alphaValue = 1
+          view = current.superview
+        }
+        guard let bar = button.superview else { continue }
+        let row = ShellChrome.tabRow
+        let y = bar.isFlipped ? (row - button.frame.height) / 2 : bar.bounds.height - row / 2 - button.frame.height / 2
+        button.setFrameOrigin(NSPoint(x: 14 + CGFloat(index) * 20, y: y))
+      }
+    }
+  }
+#endif
+
+/// The Home tab: the logo kit's mark, 16 points, icon only, never faded.
+struct HomeMarkTab: View {
+  @Environment(AppModel.self) private var model
+  let selected: Bool
+  let select: () -> Void
+  @State private var hovered = false
+
+  var body: some View {
+    AglynArtwork.mark.resizable().scaledToFit().frame(width: 16, height: 16)
+      .frame(width: AglynShellMetrics.barButton + 4, height: AglynShellMetrics.barButton)
+      .background(
+        RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
+          .fill(selected ? AglynColor.paper : hovered ? AglynColor.hover : .clear))
+      .overlay(
+        RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
+          .strokeBorder(selected ? AglynColor.divider : .clear))
+      .contentShape(Rectangle())
+      .onTapGesture(perform: select)
+      .onHover { hovered = $0 }
+      .help("Home")
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel("\(model.brandName) Home")
+      .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
   }
 }
 
@@ -435,10 +517,81 @@ struct ShellStack: View {
     NavigationStack(path: navigation.path(section)) {
       ShellRoot(section: section)
         .phoneTopBar()
-        .navigationDestination(for: Route.self) { RouteView(route: $0) }
+        .navigationDestination(for: Route.self) { route in PushedScreen(section: section) { RouteView(route: route) } }
     }
     // A detail a screen opens goes on this stack's path, so a later push (a page in the browser) never drops it.
     .environment(\.aglynPush, AglynPushAction { [weak navigation] view in navigation?.push(.view(view)) })
+  }
+}
+
+/// A screen pushed over a section's list, with its head on the Mac and iPad (the window has no toolbar there): the way
+/// back to the list, its title, and its actions (`aglynScreenTitle`, `aglynPrimaryAction`, `aglynScreenToolbar`).
+struct PushedScreen<Content: View>: View {
+  @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
+  @Environment(\.aglynWideChrome) private var wide
+  @Environment(\.dismiss) private var dismiss
+  let section: ShellSection
+  /// Whether the head offers the way back (a pushed screen) or not (a section's own first screen).
+  var back = true
+  @ViewBuilder let content: () -> Content
+
+  /// The head's height, kept clear above the screen.
+  private var headHeight: CGFloat { back ? 92 : 70 }
+
+  var body: some View {
+    if wide {
+      content()
+        .safeAreaInset(edge: .top, spacing: 0) { AglynColor.paper.frame(height: headHeight) }
+        .overlayPreferenceValue(AglynScreenChromeKey.self, alignment: .top) { chrome in
+          head(chrome)
+        }
+    } else {
+      content()
+    }
+  }
+
+  private func head(_ chrome: AglynScreenChrome) -> some View {
+    let parent = section == .home ? "Home" : ShellScope(model: model, navigation: navigation).row(for: section)?.label ?? "Back"
+    return VStack(alignment: .leading, spacing: 10) {
+      if back {
+      Button {
+        dismiss()
+      } label: {
+        HStack(spacing: 4) {
+          Image(systemName: "chevron.left").font(.system(size: 10, weight: .semibold))
+          Text(parent).font(.system(size: AglynShellMetrics.rowText - 1))
+        }
+        .foregroundStyle(AglynColor.secondaryText)
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("pushed-back")
+      }
+      HStack(spacing: 8) {
+        Text(chrome.title ?? "")
+          .font(.system(size: 22, weight: .semibold))
+          .foregroundStyle(AglynColor.textPrimary)
+          .lineLimit(1)
+          .accessibilityAddTraits(.isHeader)
+        Spacer(minLength: 8)
+        HStack(spacing: 8) { ForEach(chrome.entries) { $0.content } }
+          .buttonStyle(AglynHeaderButtonStyle())
+          .menuStyle(.button)
+          .fixedSize()
+        if let primary = chrome.primary {
+          AglynPrimaryHeaderButton(
+            primary.title, systemImage: primary.systemImage, shortcut: primary.shortcut, help: primary.help
+          ) { primary.run() }
+            .disabled(!primary.enabled)
+            .opacity(primary.enabled ? 1 : 0.5)
+            .accessibilityIdentifier(primary.id)
+        }
+      }
+      .frame(height: 36)
+    }
+    .padding(.horizontal, AglynContentInsets.horizontal)
+    .padding(.top, 18)
+    .frame(maxWidth: .infinity, alignment: .topLeading)
   }
 }
 
@@ -449,8 +602,8 @@ struct ShellRoot: View {
   var body: some View {
     switch section {
     case .home: HomeView()
-    case .notifications: NotificationsView()
-    case .settings: SettingsView()
+    case .notifications: PushedScreen(section: .home, back: false) { NotificationsView().aglynScreenTitle("Notifications") }
+    case .settings: PushedScreen(section: .home, back: false) { SettingsView().aglynScreenTitle("Settings") }
     case .more: MenuScreen()
     case .analytics: AnalyticsView()
     case .plugin(let screen): AreaView(screen: screen, params: [:])
@@ -587,7 +740,9 @@ struct AreaHeaderActions: View {
         .fixedSize()
         .frame(height: 36)
         if let primary {
-          AglynPrimaryHeaderButton(primary.title, systemImage: primary.systemImage) { primary.run() }
+          AglynPrimaryHeaderButton(
+            primary.title, systemImage: primary.systemImage, shortcut: primary.shortcut, help: primary.help
+          ) { primary.run() }
             .disabled(!primary.enabled)
             .opacity(primary.enabled ? 1 : 0.5)
             .accessibilityIdentifier(primary.id)

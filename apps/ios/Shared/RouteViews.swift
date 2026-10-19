@@ -164,12 +164,8 @@ struct BesignerScreen: View {
       // The editor takes the whole screen: on a phone the tab bar covered the bottom of its canvas.
       .toolbar(.hidden, for: .tabBar)
     #endif
-    .toolbar {
-      ToolbarItem(placement: .confirmationAction) {
-        Button("Done") { leave() }
-          .accessibilityIdentifier("besigner-done")
-      }
-    }
+    .aglynScreenTitle("Besigner")
+    .aglynPrimaryAction(id: "besigner-done", "Done", systemImage: "checkmark") { leave() }
     .task { await start() }
   }
 
