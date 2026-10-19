@@ -70,8 +70,9 @@ public struct AglynFormSheet<Content: View>: View {
           .accessibilityIdentifier("form-sheet-confirm")
         }
       }
+      // A help or legal link in the form opens on the sheet's own stack, over the form it was opened from.
+      .aglynBrowserDestination()
     }
-    .aglynWebSheetHost()
     .aglynSheetMinimumSize(width: 380, height: 420)
   }
 }
