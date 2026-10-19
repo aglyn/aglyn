@@ -55,7 +55,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
                       .filter((entry) =>
                         field === 'stockPhoto.key'
                           ? (entry.data['stockPhoto'] as { key?: string })?.key === value
-                          : field === 'ownerPhoto' && entry.data['ownerPhoto'] === value,
+                          : field === 'importedFrom.key'
+                            ? (entry.data['importedFrom'] as { key?: string })?.key === value
+                            : field === 'ownerPhoto' && entry.data['ownerPhoto'] === value,
                       )
                       .map((entry) => ({ id: entry.id, data: () => entry.data })),
                   }),
@@ -275,6 +277,45 @@ describe('the console media ingest (AGL-3660)', () => {
     expect(mockSaved[1]).toEqual({ path: `hosts/host-1/media/${staleId}`, bytes: JPEG.length })
     expect(mockCreated[1].data).toMatchObject({ folderId: 'gone' })
     expect(mockCreated[1].data).not.toHaveProperty('ownerPhoto')
+  })
+
+  it('stamps a picture a site import brought in, and finds it again by its key, live and public only (AGL-3976)', async () => {
+    const importedFrom = {
+      key: 'import:0f3c9a',
+      url: 'https://static.wixstatic.com/media/loaf.jpg',
+      domain: 'rosies-bakery.com',
+    }
+    const result = await consoleMediaIngest.ingest({
+      hostId: 'host-1',
+      uid: 'member-1',
+      fileName: 'loaf.jpg',
+      contentType: 'image/jpeg',
+      bytes: JPEG,
+      alt: 'A sourdough loaf',
+      importedFrom,
+    })
+    expect(result).toMatchObject({ ok: true })
+    expect(mockCreated[0].data).toMatchObject({ importedFrom: { ...importedFrom, importedAt: expect.anything() } })
+    // Nobody's own photo, and no stock credit.
+    expect(mockCreated[0].data).not.toHaveProperty('ownerPhoto')
+    expect(mockCreated[0].data).not.toHaveProperty('stockPhoto')
+    mockStored = [
+      { id: 'gone', data: { importedFrom, contentType: 'image/jpeg', cdnPath: '/api/media/cdn/host-1/gone', deletedAt: 1 } },
+      { id: 'secret', data: { importedFrom, contentType: 'image/jpeg', private: true } },
+      {
+        id: 'm1',
+        data: { importedFrom, contentType: 'image/jpeg', cdnPath: '/api/media/cdn/host-1/m1', width: 980, height: 600, alt: 'A sourdough loaf' },
+      },
+    ]
+    expect(await consoleMediaIngest.findImportedPhoto({ hostId: 'host-1', sourceKey: 'import:0f3c9a' })).toEqual({
+      mediaId: 'm1',
+      src: 'media:host-1/m1',
+      width: 980,
+      height: 600,
+      alt: 'A sourdough loaf',
+    })
+    expect(await consoleMediaIngest.findImportedPhoto({ hostId: 'host-1', sourceKey: 'import:other' })).toBeNull()
+    expect(await consoleMediaIngest.findImportedPhoto({ hostId: '', sourceKey: 'import:0f3c9a' })).toBeNull()
   })
 
   it("lists the site's own photos newest first, live and public only, with their alt text (AGL-3957)", async () => {

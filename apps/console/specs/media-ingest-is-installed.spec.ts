@@ -46,6 +46,10 @@ jest.mock('../utils/server/media-ingest', () => ({
       mockCalls.push(['find', input])
       return null
     },
+    findImportedPhoto: async (input: unknown) => {
+      mockCalls.push(['find-imported', input])
+      return null
+    },
   },
 }))
 
@@ -78,7 +82,7 @@ describe('the media ingest is installed by this app', () => {
     expect(pluginMediaIngest()).toBeNull()
   })
 
-  it('and both halves reach this app once it has', async () => {
+  it('and every half reaches this app once it has', async () => {
     await register()
     const ingest = pluginMediaIngest()
     expect(ingest).not.toBeNull()
@@ -90,6 +94,8 @@ describe('the media ingest is installed by this app', () => {
       contentType: 'image/jpeg',
       bytes: new Uint8Array([1]),
     })
-    expect(mockCalls.map(([kind]) => kind)).toEqual(['find', 'ingest'])
+    // A site import's dedupe read (AGL-3976): without it an import stores no picture.
+    await ingest?.findImportedPhoto?.({ hostId: 'h1', sourceKey: 'import:abc' })
+    expect(mockCalls.map(([kind]) => kind)).toEqual(['find', 'ingest', 'find-imported'])
   })
 })

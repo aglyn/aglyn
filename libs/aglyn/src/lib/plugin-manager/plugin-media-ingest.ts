@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import type { AglynHostMediaStockSource } from '../foundation/definitions/platform.types'
+import type {
+  AglynHostMediaImportSource,
+  AglynHostMediaStockSource,
+} from '../foundation/definitions/platform.types'
 import {
   definePluginServiceContract,
   registerPluginService,
@@ -70,6 +73,12 @@ export interface PluginMediaIngestRequest {
    * the asset, which is what the AI reads its owner's pictures by.
    */
   ownerPhotoLinkId?: string
+  /**
+   * The website a site import brought the picture in from (AGL-3976),
+   * stamped as `importedFrom` on the asset; {@link PluginMediaIngest.findImportedPhoto}
+   * reads it back by its key, so one picture is stored once per site.
+   */
+  importedFrom?: Omit<AglynHostMediaImportSource, 'importedAt'>
 }
 
 /** A stored asset, as a page names it. */
@@ -103,6 +112,14 @@ export interface PluginMediaIngest {
    * answers nothing, and a caller treats that as an empty library.
    */
   listOwnerPhotos?(input: { hostId: string; limit?: number }): Promise<PluginMediaAsset[]>
+  /**
+   * The site's live, public asset a site import already brought in under this
+   * source key (`import:<hash>`, AGL-3976), so the same picture is never
+   * stored twice. Optional: an implementation registered before imports
+   * existed answers nothing, and an import then stores no picture at all
+   * rather than risk a second copy.
+   */
+  findImportedPhoto?(input: { hostId: string; sourceKey: string }): Promise<PluginMediaAsset | null>
 }
 
 /** One implementation: the app that holds the media ingress. */

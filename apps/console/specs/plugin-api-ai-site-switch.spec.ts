@@ -193,6 +193,10 @@ const WORKSPACE_DOORS = [
   'ai/admin/overage',
   'ai/admin/credits',
   'ai/admin/conversations',
+  // "Bring my site" (AGL-3974): a claim is the workspace's, on a domain, and
+  // the crawl reads that domain; neither names an Aglyn site.
+  'ai/site-import/ownership',
+  'ai/site-import/crawl',
 ]
 
 const HANDLERS = { GET, POST, PATCH, DELETE }

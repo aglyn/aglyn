@@ -71,7 +71,8 @@ import { folderStoragePath, mediaCdnPathUpdate, resolveMediaScope } from './medi
  *
  * A stock photo's credit rides the document as `stockPhoto`, and
  * `findStockPhoto` reads it back by its source key so one photo is stored
- * once per site.
+ * once per site; a picture a site import brought in rides it as
+ * `importedFrom`, read back the same way by `findImportedPhoto` (AGL-3976).
  */
 
 const RASTER_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
@@ -210,6 +211,18 @@ export async function ingestMedia(request: PluginMediaIngestRequest): Promise<Pl
     // The business's own photo (AGL-3957): `true` and never false, so the
     // owner-photo read below is one equality query with no index of its own.
     ...(request.ownerPhotoLinkId ? { ownerPhoto: true, photoLinkId: request.ownerPhotoLinkId } : {}),
+    // Brought in by a site import (AGL-3976): read back by its key so the
+    // same picture is stored once however many pages show it.
+    ...(request.importedFrom?.key
+      ? {
+          importedFrom: {
+            key: String(request.importedFrom.key).slice(0, 120),
+            url: String(request.importedFrom.url ?? '').slice(0, 2048),
+            domain: String(request.importedFrom.domain ?? '').slice(0, 253),
+            importedAt: Timestamp.now(),
+          },
+        }
+      : {}),
     cdnPath,
     createdAt: Timestamp.now(),
   })
@@ -261,6 +274,37 @@ export async function findStockPhotoMedia(input: {
   return null
 }
 
+/**
+ * The site's live, public raster asset a site import brought in under
+ * `sourceKey` (AGL-3976), or null. Read by the Admin SDK on the site's own
+ * library alone, by one equality, as `findStockPhotoMedia` reads a stock key.
+ */
+export async function findImportedPhotoMedia(input: {
+  hostId: string
+  sourceKey: string
+}): Promise<PluginMediaAsset | null> {
+  if (!input.hostId || !input.sourceKey) return null
+  const snapshot = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(input.hostId)
+    .collection('media')
+    .where('importedFrom.key', '==', input.sourceKey)
+    .limit(5)
+    .get()
+  for (const doc of snapshot.docs) {
+    const media = doc.data() as Record<string, unknown>
+    if (media['deletedAt'] || media['private'] === true) continue
+    if (!RASTER_TYPES.has(String(media['contentType'] ?? ''))) continue
+    const asset = assetOf(doc.id, media)
+    if (!asset) continue
+    const alt = typeof media['alt'] === 'string' ? media['alt'].trim() : ''
+    return alt ? { ...asset, alt } : asset
+  }
+  return null
+}
+
 /** The most owner photos read for one site before the newest are kept. */
 const OWNER_PHOTOS_READ = 200
 
@@ -305,8 +349,10 @@ export async function listOwnerPhotoMedia(input: {
     .map((entry) => entry.asset)
 }
 
-export const consoleMediaIngest: PluginMediaIngest & Required<Pick<PluginMediaIngest, 'listOwnerPhotos'>> = {
+export const consoleMediaIngest: PluginMediaIngest &
+  Required<Pick<PluginMediaIngest, 'listOwnerPhotos' | 'findImportedPhoto'>> = {
   ingest: ingestMedia,
   findStockPhoto: findStockPhotoMedia,
   listOwnerPhotos: listOwnerPhotoMedia,
+  findImportedPhoto: findImportedPhotoMedia,
 }

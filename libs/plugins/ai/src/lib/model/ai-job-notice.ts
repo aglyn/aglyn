@@ -105,7 +105,10 @@ export function aiJobNoticeLink(job: AiJobNoticeSource, to: AiJobNoticeTransitio
   const base = job.hostId ? `/${job.hostId}` : '/org'
   // A site job's every notice opens its "Building your site" page (AGL-3594),
   // which leads with the next step whatever the job's state.
-  if (job.kind === 'site' && job.hostId) return `${base}${AI_SITE_BUILD_HREF}/${encodeURIComponent(job.$id)}`
+  // A site import's too (AGL-3976): its waves are reviewed and started there.
+  if ((job.kind === 'site' || job.kind === 'import') && job.hostId) {
+    return `${base}${AI_SITE_BUILD_HREF}/${encodeURIComponent(job.$id)}`
+  }
   if (to === 'done' && job.hostId) {
     const own = (job.outputs ?? []).filter((output) => output.hostId === job.hostId)
     const screens = own.filter((output) => output.resource === 'screen')
@@ -149,6 +152,18 @@ export function aiJobNotice(
         level: 'warning',
         title: `Your ${noun === 'AI job' ? 'AI job' : noun} needs one detail from you`,
         body: `${job.input.message} Nothing is built until you answer it and confirm the plan. It waits in AI jobs.`,
+        link,
+        ...scope,
+      }
+    }
+    // A site import's wave is in, or its site is read (AGL-3976): a decision
+    // waiting, said as one, never as a job that stopped.
+    if (job.review?.reason === 'wave') {
+      return {
+        type: 'content.aiJobNeedsYou',
+        level: 'info',
+        title: 'Your site import is ready for you',
+        body: job.review.message || 'Review the pages brought in, then start the next wave when you are ready.',
         link,
         ...scope,
       }

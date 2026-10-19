@@ -8763,6 +8763,13 @@
             "editable": true
           },
           {
+            "key": "domain-ownership-code",
+            "name": "Website ownership code",
+            "description": "Sent to an address at a website’s own domain when a workspace proves it owns that website before bringing it into the product. Carries a six-digit code that works for 15 minutes.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
             "key": "crm-daily-digest",
             "name": "Daily CRM digest",
             "description": "Each morning, a member’s overdue and due-today tasks and unworked leads, for members who turned the digest on.",
@@ -10245,6 +10252,43 @@
               "name": "confirmUrl",
               "description": "The one-time confirmation link",
               "sample": "https://app.aglyn.com/manage/account"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "domain-ownership-code": [
+            {
+              "name": "org.name",
+              "description": "The workspace that asked",
+              "sample": "Test Org"
+            },
+            {
+              "name": "domain",
+              "description": "The website’s domain",
+              "sample": "example.com"
+            },
+            {
+              "name": "code",
+              "description": "The one-time code",
+              "sample": "123456"
+            },
+            {
+              "name": "expiresInMinutes",
+              "description": "How many minutes the code works",
+              "sample": "15"
             },
             {
               "name": "brand.productName",
@@ -23582,6 +23626,28 @@
                 }
               ],
               "help": "Super staff only. Off by default for everyone: no."
+            },
+            {
+              "key": "release.release_ai_site_import",
+              "label": "Early access: Bring my site",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_ai_site_import}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
             },
             {
               "key": "release.release_crm_assist_whole_record",
