@@ -260,3 +260,18 @@ test('function cases: listed inputs and every combination, with plain results', 
   assert.throws(() => functionCases({ nope: { module: 'm.ts', args: [[]] } }, load, plainValue), /exports no function nope/)
   assert.throws(() => functionCases({ add: { module: 'm.ts' } }, load, plainValue), /lists no inputs/)
 })
+
+test('function cases: a leading contract value is passed ahead of the args and recorded by name', () => {
+  const module = { pick: (manifest, key) => manifest[key] }
+  const out = functionCases(
+    { pick: { module: 'm.ts', leadingValue: 'MANIFEST', args: [['a']] } },
+    () => module,
+    plainValue,
+    { MANIFEST: { a: 1 } },
+  )
+  assert.deepEqual(out.pick, { module: 'm.ts', leadingValue: 'MANIFEST', cases: [{ args: ['a'], result: 1 }] })
+  assert.throws(
+    () => functionCases({ pick: { module: 'm.ts', leadingValue: 'NOPE', args: [['a']] } }, () => module, plainValue, {}),
+    /leadingValue NOPE is no contract value/,
+  )
+})

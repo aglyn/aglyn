@@ -33,6 +33,7 @@ import TemplateInstallStatus from './components/template-install-status.componen
 import PublishArtifactDialog from './components/publish-artifact-dialog.component'
 import { MarketplaceListingContent } from './components/listing-content.component'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { MARKETPLACE_LICENSES_SECTION_ID } from './model/marketplace-section-ids'
 import { RATING_FIELD } from './model/rating-field'
 import RatingInput from './components/rating-input.component'
 
@@ -173,7 +174,7 @@ export function registerMarketplaceConsole(): void {
            * own.
            */
           {
-            id: 'licences',
+            id: MARKETPLACE_LICENSES_SECTION_ID,
             label: 'Licenses',
             landsOnQuery: ['purchase'],
           },

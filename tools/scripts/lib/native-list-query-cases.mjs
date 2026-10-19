@@ -135,22 +135,37 @@ export function listQueryCasesContent({ cases, normalizers }) {
  * list of argument lists; `argsProduct` is one list per parameter, and every
  * combination is a case. A result must be plain JSON.
  */
-export function functionCases(functions, load, plainValue) {
+/**
+ * Each listed function run over its inputs, keyed by name. A function whose
+ * first argument is a contract value (the assembled nav manifest) names it
+ * as `leadingValue`: it is passed from `values` ahead of every case's args
+ * and recorded by name, never copied into each case, and each platform's
+ * replay passes its own `ContractValues` property in the same place.
+ */
+export function functionCases(functions, load, plainValue, values = {}) {
   const out = {}
   for (const name of Object.keys(functions).sort()) {
-    const { module, args = [], argsProduct } = functions[name]
+    const { module, args = [], argsProduct, leadingValue } = functions[name]
     const fn = load(module)[name]
     if (typeof fn !== 'function') throw new Error(`functionCases.${name}: ${module} exports no function ${name}`)
+    if (leadingValue && !(leadingValue in values)) {
+      throw new Error(`functionCases.${name}: leadingValue ${leadingValue} is no contract value`)
+    }
     const inputs = [...args]
     if (argsProduct) {
       const product = argsProduct.reduce((acc, list) => acc.flatMap((prefix) => list.map((value) => [...prefix, value])), [[]])
       inputs.push(...product)
     }
     if (!inputs.length) throw new Error(`functionCases.${name} lists no inputs`)
+    const lead = leadingValue ? [values[leadingValue]] : []
     out[name] = {
       module,
+      ...(leadingValue ? { leadingValue } : {}),
       // A function that answers `undefined` (no reference, no alt) answers nothing; JSON records that as null.
-      cases: inputs.map((input, i) => ({ args: input, result: plainValue(fn(...structuredClone(input)) ?? null, `${name} case ${i}`) })),
+      cases: inputs.map((input, i) => ({
+        args: input,
+        result: plainValue(fn(...structuredClone([...lead, ...input])) ?? null, `${name} case ${i}`),
+      })),
     }
   }
   return out

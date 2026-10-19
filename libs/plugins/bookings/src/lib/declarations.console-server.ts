@@ -18,6 +18,8 @@
 // The registry's own module, not the `@aglyn/aglyn/server` barrel: boot needs
 // one registry, not the whole server surface.
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
+import { registerPluginSearchSources } from '@aglyn/aglyn/plugin-manager/plugin-search-sources'
+import { BOOKINGS_SEARCH_SOURCES } from './model/bookings-search-sources'
 import {
   registerPluginTransferResource,
   type PluginTransferResource,
@@ -111,4 +113,7 @@ export function registerBookingsConsoleServerDeclarations(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  // What the native apps' one box finds in a site's bookings (AGL-3943): the
+  // palette's own group, under the extension's plan flag.
+  registerPluginSearchSources(BOOKINGS_SEARCH_SOURCES, { pluginId: BUNDLE_ID, featureFlag: 'bookings' })
 }

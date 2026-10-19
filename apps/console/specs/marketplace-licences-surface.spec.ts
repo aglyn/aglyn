@@ -66,7 +66,10 @@ describe('the org marketplace carries a Licences section (AGL-2331)', () => {
   })
 
   it('is listed as a section, so the rail and the trail both name it', () => {
-    expect(read('plugin.ts')).toContain("id: 'licences'")
+    expect(read('plugin.ts')).toContain('id: MARKETPLACE_LICENSES_SECTION_ID')
+    expect(read('model/marketplace-section-ids.ts')).toContain(
+      "MARKETPLACE_LICENSES_SECTION_ID = 'licences'",
+    )
   })
 
   it('is NOT gated on the publisher permission', () => {

@@ -20,6 +20,9 @@ and behavior. The apps are:
 | **Aglyn** | `com.aglyn.app` | Manages the workspace: sites, team, products, orders, forms, media, analytics, bookings, CRM, emails, inbox and notifications. Every console area is a native screen. Only the Besigner opens in a web view, inside the app. There is no native builder. |
 | **Aglyn POS** | `com.aglyn.pos` | The register: fast item picking, Stripe Terminal (Tap to Pay and Bluetooth readers on mobile, smart readers everywhere), tips, receipts and booking payments. |
 
+Navigation (the sidebars, settings modes, pins, starred and recents, the one
+box and theming) is specified in `native-navigation.md` (AGL-3943).
+
 ### Native console, Besigner-only web view (binding, Zach 2026-10-07)
 
 The apps manage the workspace natively. Every console area the Aglyn app

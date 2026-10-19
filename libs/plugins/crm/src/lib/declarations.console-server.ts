@@ -28,6 +28,8 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-membership-detach'
 import { registerPluginPersonRecordsEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { registerPluginSearchSources } from '@aglyn/aglyn/plugin-manager/plugin-search-sources'
+import { CRM_SEARCH_SOURCES } from './model/crm-search-sources'
 import {
   registerPluginResourceDraftWriter,
   type PluginResourceDraftWriter,
@@ -225,4 +227,12 @@ export function registerCrmConsoleServerDeclarations(): void {
       { pluginId: BUNDLE_ID },
     )
   }
+  // What the native apps' one box finds in the record system (AGL-3943): the
+  // palette's own six groups, under the gates the CRM's console extension
+  // puts on them.
+  registerPluginSearchSources(CRM_SEARCH_SOURCES, {
+    pluginId: BUNDLE_ID,
+    featureFlag: 'crm',
+    permission: 'data.manage',
+  })
 }

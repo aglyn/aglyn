@@ -28,6 +28,8 @@ import {
   type PluginRecordIndex,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-index'
 import { registerPluginTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { registerPluginSearchSources } from '@aglyn/aglyn/plugin-manager/plugin-search-sources'
+import { WORKFLOWS_SEARCH_SOURCES } from './model/workflows-search-sources'
 import { BUNDLE_ID } from './constants/bundle-common'
 import {
   ORG_AUTOMATION_PACKAGE_RULES,
@@ -129,6 +131,10 @@ export function registerWorkflowsServerDeclarations(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  // What the native apps' one box finds in a site's automation (AGL-3943):
+  // the palette's own group, under the extension's plan flag. Plain data, so
+  // registering it in the tenant process too costs nothing.
+  registerPluginSearchSources(WORKFLOWS_SEARCH_SOURCES, { pluginId: BUNDLE_ID, featureFlag: 'workflows' })
 }
 
 type IndexName = 'workflowRecordIndex' | 'webhookRecordIndex' | 'actionRecordIndex'
