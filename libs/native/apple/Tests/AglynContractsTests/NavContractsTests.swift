@@ -168,6 +168,14 @@ final class NavContractsTests: XCTestCase {
     }
   }
 
+  func testThemesDeriveFromTheirPreviewsAsTheConsoleDerivesThem() throws {
+    for item in cases("deriveThemeFromPreview") {
+      XCTAssertEqual(
+        deriveThemeFromPreview(try decode(ThemePreview.self, item.args[0]), darkRailSeed: item.args[1] as? String ?? ""),
+        try decode(ThemeColorsPair.self, item.result), item.label)
+    }
+  }
+
   func testRolesGrantAsTheConsoleResolvesThem() throws {
     for item in cases("rolePermissions") {
       XCTAssertEqual(

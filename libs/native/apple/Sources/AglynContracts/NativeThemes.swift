@@ -160,12 +160,11 @@ public func themePalette(_ id: String?) -> ThemePalette {
   return palettes.first { $0.id.rawValue == id } ?? palettes[0]
 }
 
-/// A theme's full palette from a four-color preview, over the base the preview builds on (Figma's Aglyn mode, light and
-/// dark), by the same rules as the console's `deriveThemeFromPreview`: light keeps the preview's canvas, surface and
-/// rail and blends the rest toward the rail; dark tints the base dark toward `darkRailSeed`.
-public func deriveThemeFromPreview(
-  _ preview: ThemePreview, darkRailSeed: String, base: (light: ThemeColors, dark: ThemeColors)
-) -> (light: ThemeColors, dark: ThemeColors) {
+/// A theme's full palette from a four-color preview, over Figma's Aglyn mode (`THEME_FIGMA_BASE`), by the same rules as
+/// the console's `deriveThemeFromPreview`: light keeps the preview's canvas, surface and rail and blends the rest toward
+/// the rail; dark tints the base dark toward `darkRailSeed`.
+public func deriveThemeFromPreview(_ preview: ThemePreview, darkRailSeed: String) -> ThemeColorsPair {
+  let base = ContractValues.shared.themeFigmaBase
   var light = base.light
   light.canvas = preview.canvas
   light.surface = preview.surface
@@ -181,7 +180,7 @@ public func deriveThemeFromPreview(
   dark.surface = themeLerp(base.dark.surface, darkRailSeed, 0.18)
   dark.raised = themeLerp(base.dark.raised, darkRailSeed, 0.18)
   dark.rail = themeLerp(base.dark.rail, darkRailSeed, 0.45)
-  return (light, dark)
+  return ThemeColorsPair(dark: dark, light: light)
 }
 
 // MARK: Workspace role grants
