@@ -63,6 +63,7 @@ final class FunctionCasesTests: XCTestCase {
       "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents",
       "apportionCents", "describeRestockCheck", "posPinProblem", "posCashVarianceCents", "expandVariantMatrix", "renameProductOptions",
       "currencyFractionDigits", "currencyMinorToMajor", "parseCurrencyInput", "customFieldCurrency",
+      "planCardMeterOrder", "planCardContext", "planCardShows",
     ] {
       XCTAssertNotNil(functions[name], name)
     }
@@ -94,6 +95,27 @@ final class FunctionCasesTests: XCTestCase {
     XCTAssertEqual(formatCurrencyFieldValue(125050, "usd", locale: us), "$1,250.50")
     XCTAssertEqual(formatCurrencyFieldValue(1500, "jpy", locale: us), "¥1,500")
     XCTAssertTrue(formatCurrencyFieldValue(1250, "bhd", locale: us).hasSuffix("1.250"))
+  }
+
+  /// The plan card's meters (AGL-3992): the context's meter leads, the rest fullest first, Sites last outside the Sites
+  /// list, failed and uncapped meters left out, as the console's `plan-card-meters.ts`.
+  func testThePlanCardOrdersItsMetersAsTheConsoleDoes() {
+    func readings(_ value: Any) -> [PlanCardReading] {
+      (value as? [[String: Any]] ?? []).map {
+        PlanCardReading(
+          meter: $0["meter"] as? String ?? "", used: ($0["used"] as? NSNumber)?.doubleValue,
+          limit: ($0["limit"] as? NSNumber)?.doubleValue)
+      }
+    }
+    for item in cases("planCardMeterOrder") {
+      XCTAssertEqual(planCardMeterOrder(readings(item.args[0]), context: string(item.args[1])), item.result as? [String], item.label)
+    }
+    for item in cases("planCardContext") {
+      XCTAssertEqual(planCardContext(string(item.args[0]), inSite: item.args[1] as? Bool ?? false), string(item.result), item.label)
+    }
+    for item in cases("planCardShows") {
+      XCTAssertEqual(planCardShows(readings(item.args[0]), offersUpgrade: item.args[1] as? Bool ?? false), item.result as? Bool, item.label)
+    }
   }
 
   func testTheRestockQuestionIsWordedAsTheConsoleWordsIt() throws {

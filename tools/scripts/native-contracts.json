@@ -949,6 +949,19 @@
         "ORG_ROLE_GRANTS",
         "ORG_ROLE_NAMES"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/plan-card-meters.ts": {
+      "values": [
+        "PLAN_CARD_METERS",
+        "PLAN_CARD_METER_LABELS",
+        "PLAN_CARD_METER_UNITS",
+        "PLAN_CARD_CONTEXTS",
+        "PLAN_CARD_CONTEXT_METERS",
+        "PLAN_CARD_SCREEN_CONTEXTS",
+        "PLAN_CARD_HOME_SCREEN",
+        "PLAN_CARD_ADVANCE_MS",
+        "PLAN_CARD_WARNING_SHARE"
+      ]
     }
   },
   "assembled": {
@@ -28317,6 +28330,420 @@
           {
             "currency": "euro"
           }
+        ]
+      ]
+    },
+    "planCardMeterOrder": {
+      "module": "libs/aglyn/src/lib/app-utils/plan-card-meters.ts",
+      "args": [
+        [
+          [
+            {
+              "meter": "sites",
+              "used": 3,
+              "limit": 3
+            },
+            {
+              "meter": "storage",
+              "used": 400,
+              "limit": 1000
+            },
+            {
+              "meter": "bandwidth",
+              "used": 9,
+              "limit": 10
+            },
+            {
+              "meter": "campaignEmails",
+              "used": 100,
+              "limit": 1000
+            },
+            {
+              "meter": "aiCredits",
+              "used": null,
+              "limit": 500
+            },
+            {
+              "meter": "dataStorage",
+              "used": 5,
+              "limit": null
+            }
+          ],
+          "media"
+        ],
+        [
+          [
+            {
+              "meter": "sites",
+              "used": 3,
+              "limit": 3
+            },
+            {
+              "meter": "storage",
+              "used": 400,
+              "limit": 1000
+            },
+            {
+              "meter": "bandwidth",
+              "used": 9,
+              "limit": 10
+            },
+            {
+              "meter": "campaignEmails",
+              "used": 100,
+              "limit": 1000
+            },
+            {
+              "meter": "aiCredits",
+              "used": null,
+              "limit": 500
+            },
+            {
+              "meter": "dataStorage",
+              "used": 5,
+              "limit": null
+            }
+          ],
+          "email"
+        ],
+        [
+          [
+            {
+              "meter": "sites",
+              "used": 3,
+              "limit": 3
+            },
+            {
+              "meter": "storage",
+              "used": 400,
+              "limit": 1000
+            },
+            {
+              "meter": "bandwidth",
+              "used": 9,
+              "limit": 10
+            },
+            {
+              "meter": "campaignEmails",
+              "used": 100,
+              "limit": 1000
+            },
+            {
+              "meter": "aiCredits",
+              "used": null,
+              "limit": 500
+            },
+            {
+              "meter": "dataStorage",
+              "used": 5,
+              "limit": null
+            }
+          ],
+          null
+        ],
+        [
+          [
+            {
+              "meter": "sites",
+              "used": 3,
+              "limit": 3
+            },
+            {
+              "meter": "storage",
+              "used": 400,
+              "limit": 1000
+            },
+            {
+              "meter": "bandwidth",
+              "used": 9,
+              "limit": 10
+            },
+            {
+              "meter": "campaignEmails",
+              "used": 100,
+              "limit": 1000
+            },
+            {
+              "meter": "aiCredits",
+              "used": null,
+              "limit": 500
+            },
+            {
+              "meter": "dataStorage",
+              "used": 5,
+              "limit": null
+            }
+          ],
+          "sites"
+        ],
+        [
+          [
+            {
+              "meter": "sites",
+              "used": 3,
+              "limit": 3
+            },
+            {
+              "meter": "storage",
+              "used": 400,
+              "limit": 1000
+            },
+            {
+              "meter": "bandwidth",
+              "used": 9,
+              "limit": 10
+            },
+            {
+              "meter": "campaignEmails",
+              "used": 100,
+              "limit": 1000
+            },
+            {
+              "meter": "aiCredits",
+              "used": null,
+              "limit": 500
+            },
+            {
+              "meter": "dataStorage",
+              "used": 5,
+              "limit": null
+            }
+          ],
+          "ai"
+        ],
+        [
+          [
+            {
+              "meter": "sites",
+              "used": 3,
+              "limit": 3
+            },
+            {
+              "meter": "storage",
+              "used": 400,
+              "limit": 1000
+            },
+            {
+              "meter": "bandwidth",
+              "used": 9,
+              "limit": 10
+            },
+            {
+              "meter": "campaignEmails",
+              "used": 100,
+              "limit": 1000
+            },
+            {
+              "meter": "aiCredits",
+              "used": null,
+              "limit": 500
+            },
+            {
+              "meter": "dataStorage",
+              "used": 5,
+              "limit": null
+            }
+          ],
+          "website"
+        ],
+        [
+          [
+            {
+              "meter": "sites",
+              "used": 3,
+              "limit": 3
+            },
+            {
+              "meter": "storage",
+              "used": 400,
+              "limit": 1000
+            },
+            {
+              "meter": "bandwidth",
+              "used": 9,
+              "limit": 10
+            },
+            {
+              "meter": "campaignEmails",
+              "used": 100,
+              "limit": 1000
+            },
+            {
+              "meter": "aiCredits",
+              "used": null,
+              "limit": 500
+            },
+            {
+              "meter": "dataStorage",
+              "used": 5,
+              "limit": null
+            }
+          ],
+          "unknown"
+        ],
+        [
+          [
+            {
+              "meter": "pages",
+              "used": 2,
+              "limit": 0
+            },
+            {
+              "meter": "forms",
+              "used": 1,
+              "limit": 2
+            }
+          ],
+          null
+        ],
+        [
+          [
+            {
+              "meter": "forms",
+              "used": 1,
+              "limit": 2
+            },
+            {
+              "meter": "storage",
+              "used": 5,
+              "limit": 10
+            },
+            {
+              "meter": "storage",
+              "used": 9,
+              "limit": 10
+            }
+          ],
+          "team"
+        ],
+        [
+          [
+            {
+              "meter": "seats",
+              "used": 2,
+              "limit": 3
+            },
+            {
+              "meter": "pages",
+              "used": 8,
+              "limit": 10
+            },
+            {
+              "meter": "aiCredits",
+              "used": 450,
+              "limit": 500
+            },
+            {
+              "meter": "sites",
+              "used": 1,
+              "limit": 1
+            }
+          ],
+          "team"
+        ],
+        [
+          [],
+          "media"
+        ]
+      ]
+    },
+    "planCardContext": {
+      "module": "libs/aglyn/src/lib/app-utils/plan-card-meters.ts",
+      "args": [
+        [
+          "shell.home",
+          true
+        ],
+        [
+          "shell.home",
+          false
+        ],
+        [
+          "site.media",
+          false
+        ],
+        [
+          "site.pages",
+          true
+        ],
+        [
+          "core.team",
+          false
+        ],
+        [
+          "core.site.users",
+          true
+        ],
+        [
+          "site.sites",
+          false
+        ],
+        [
+          "commerce.orders",
+          true
+        ],
+        [
+          null,
+          true
+        ]
+      ]
+    },
+    "planCardShows": {
+      "module": "libs/aglyn/src/lib/app-utils/plan-card-meters.ts",
+      "args": [
+        [
+          [
+            {
+              "meter": "storage",
+              "used": 1,
+              "limit": 100
+            }
+          ],
+          true
+        ],
+        [
+          [
+            {
+              "meter": "storage",
+              "used": 1,
+              "limit": 100
+            }
+          ],
+          false
+        ],
+        [
+          [
+            {
+              "meter": "storage",
+              "used": 80,
+              "limit": 100
+            }
+          ],
+          false
+        ],
+        [
+          [
+            {
+              "meter": "storage",
+              "used": null,
+              "limit": 100
+            }
+          ],
+          true
+        ],
+        [
+          [
+            {
+              "meter": "sites",
+              "used": 1,
+              "limit": null
+            }
+          ],
+          true
+        ],
+        [
+          [],
+          true
         ]
       ]
     }

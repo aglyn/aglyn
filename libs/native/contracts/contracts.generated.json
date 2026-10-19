@@ -7656,6 +7656,96 @@
   "PAYMENT_ACCEPTED_MAX_LENGTH": 200,
   "PINNED_ORGS_FIELD": "pinnedOrgs",
   "PINNED_ORGS_MAX": 5,
+  "PLAN_CARD_ADVANCE_MS": 8000,
+  "PLAN_CARD_CONTEXT_METERS": {
+    "ai": [
+      "aiCredits"
+    ],
+    "data": [
+      "dataStorage"
+    ],
+    "email": [
+      "campaignEmails"
+    ],
+    "forms": [
+      "forms"
+    ],
+    "media": [
+      "storage"
+    ],
+    "sites": [
+      "sites"
+    ],
+    "team": [
+      "seats"
+    ],
+    "website": [
+      "bandwidth"
+    ]
+  },
+  "PLAN_CARD_CONTEXTS": [
+    "media",
+    "website",
+    "email",
+    "ai",
+    "forms",
+    "data",
+    "team",
+    "sites"
+  ],
+  "PLAN_CARD_HOME_SCREEN": "shell.home",
+  "PLAN_CARD_METER_LABELS": {
+    "aiCredits": "AI credits (this month)",
+    "bandwidth": "Bandwidth (this month)",
+    "campaignEmails": "Campaign emails (this month)",
+    "dataStorage": "Data storage",
+    "forms": "Saved forms",
+    "pages": "Pages",
+    "seats": "Team seats (incl. you)",
+    "sites": "Sites",
+    "storage": "Storage"
+  },
+  "PLAN_CARD_METER_UNITS": {
+    "aiCredits": "",
+    "bandwidth": "GB",
+    "campaignEmails": "",
+    "dataStorage": "MB",
+    "forms": "",
+    "pages": "",
+    "seats": "",
+    "sites": "",
+    "storage": "MB"
+  },
+  "PLAN_CARD_METERS": [
+    "storage",
+    "bandwidth",
+    "campaignEmails",
+    "aiCredits",
+    "dataStorage",
+    "seats",
+    "pages",
+    "forms",
+    "sites"
+  ],
+  "PLAN_CARD_SCREEN_CONTEXTS": {
+    "ai.credits": "ai",
+    "ai.jobs": "ai",
+    "core.site.users": "team",
+    "core.team": "team",
+    "core.team.activity": "team",
+    "core.team.roles": "team",
+    "data.datasets": "data",
+    "email.messages": "email",
+    "forms.list": "forms",
+    "logic.page": "website",
+    "marketing.overview": "email",
+    "outreach.sequences": "email",
+    "shell.analytics": "website",
+    "site.media": "media",
+    "site.pages": "website",
+    "site.sites": "sites"
+  },
+  "PLAN_CARD_WARNING_SHARE": 0.8,
   "POS_CASH_EVENT_LABELS": {
     "drop": "Safe drop",
     "paid_in": "Paid in",
