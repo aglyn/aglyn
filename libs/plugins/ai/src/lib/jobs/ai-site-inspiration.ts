@@ -228,7 +228,7 @@ export function aiSiteInspirationPlanLines(inspiration: AiSiteInspiration | null
   })
   const features = options.paid ? aiSiteInspirationFeatures(inspiration) : []
   if (features.length) {
-    lines.push('Features the person liked, each to plan with Aglyn’s own part:')
+    lines.push('Features the person liked, each to plan with the platform’s own part:')
     for (const feature of features) lines.push(`- ${feature}: ${AI_SITE_INSPIRATION_FEATURE_PARTS[feature]}`)
   }
   if (!lines.length) return []
