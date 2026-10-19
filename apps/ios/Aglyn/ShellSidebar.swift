@@ -161,22 +161,27 @@ private struct WorkspaceButton: View {
             size: AglynShellMetrics.workspaceLogo)
             .padding(-3)
         }
+        // Figma Sidebar/Scope header 98:1023: an 18-point name row with ▾ at the header's trailing edge, 2 points, and
+        // an 18-point plan badge.
         VStack(alignment: .leading, spacing: 2) {
           HStack(spacing: 4) {
             Text(org?.name ?? (model.workspace?.ready == true ? "No workspace" : "Loading…"))
               .font(.system(size: AglynShellMetrics.workspaceName, weight: .semibold)).lineLimit(1)
               .foregroundStyle(AglynColor.textPrimary)
+            Spacer(minLength: 0)
             Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
               .foregroundStyle(AglynColor.secondaryText)
               .frame(width: 14, height: 14)
           }
+          .frame(minHeight: 18)
           if let plan = logo?.planLabel {
             Text(plan).font(.system(size: 12, weight: .semibold)).foregroundStyle(AglynColor.tint)
-              .padding(.horizontal, 7).padding(.vertical, 1)
+              .padding(.horizontal, 7)
+              .frame(minHeight: 18)
               .background(Capsule().fill(AglynColor.accentSoft))
           }
         }
-        Spacer(minLength: 0)
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
       .contentShape(Rectangle())
     }
@@ -229,11 +234,163 @@ private struct SiteTitleRow: View {
     .accessibilityHint("Switches to another site of the workspace")
     .accessibilityIdentifier("sidebar-site-picker")
     .popover(isPresented: $switching, arrowEdge: .bottom) {
-      SitePickerList(siteNoun: "Site") { switching = false }
+      SiteSwitcherPopover { switching = false }
         .environment(model)
         .environment(navigation)
-        .frame(width: 320, height: 380)
     }
+  }
+}
+
+/// The site switcher under the site's title row (Figma 121:7014, in context 121:6735): "Find a site", the sites with
+/// the recent ones first and a check on the open one, then View all sites and Create site, as the console's switcher
+/// offers them. Its way back to the whole workspace is the sidebar's "‹ Workspace" line, not a row here.
+struct SiteSwitcherPopover: View {
+  @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
+  let done: () -> Void
+  @State private var query = ""
+  @State private var shown = pickerPage
+  @FocusState private var focused: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack(spacing: 8) {
+        Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(AglynColor.textTertiary)
+          .accessibilityHidden(true)
+        TextField("Find a site", text: $query).textFieldStyle(.plain).font(.system(size: 13)).focused($focused)
+          .accessibilityIdentifier("switcher-find-site")
+      }
+      .padding(.horizontal, 10)
+      .frame(height: 32)
+      .background(
+        RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).fill(AglynColor.sunken))
+      Color.clear.frame(height: 6)
+      if let workspace = model.workspace {
+        ScrollView(.vertical) {
+          VStack(alignment: .leading, spacing: 0) { rows(workspace) }
+        }
+        .frame(maxHeight: 300)
+        .fixedSize(horizontal: false, vertical: true)
+      } else {
+        ProgressView().frame(maxWidth: .infinity, minHeight: 88)
+      }
+      Rectangle().fill(AglynColor.divider).frame(height: 1).padding(.vertical, 4).accessibilityHidden(true)
+      action("View all sites", systemImage: "square.grid.2x2", identifier: "switcher-view-all-sites") {
+        navigation.enterWorkspace()
+        navigation.select(.plugin("site.sites"))
+      }
+      // The console's Create site: the Sites screen's create flow, which says first when the plan or the role stops it.
+      action("Create site", systemImage: "plus", identifier: "switcher-create-site") {
+        navigation.enterWorkspace()
+        navigation.select(ShellSection.opening("site.sites", ["new": "1"]))
+      }
+    }
+    .padding(6)
+    .frame(width: 344)
+    .onAppear { focused = true }
+  }
+
+  @ViewBuilder
+  private func rows(_ workspace: WorkspaceStore) -> some View {
+    let text = query.trimmingCharacters(in: .whitespaces)
+    if !workspace.ready {
+      ProgressView().frame(maxWidth: .infinity, minHeight: 88)
+    } else if !text.isEmpty {
+      let matches = workspace.sites.compactMap { site in
+        scoreMatch(name: site.name, extra: [site.subdomain], query: text).map { (site, $0) }
+      }.sorted { scoredFirst(($0.1, $0.0.name), ($1.1, $1.0.name)) }.map(\.0)
+      if matches.isEmpty { note("No sites match.") }
+      ForEach(matches) { row($0) }
+    } else if workspace.sites.isEmpty {
+      note("No sites yet.")
+    } else {
+      let recentIDs = model.recentSiteIDs(in: workspace)
+      let recent = recentIDs.compactMap { id in workspace.sites.first { $0.id == id } }
+      let rest = workspace.sites.filter { !recentIDs.contains($0.id) }
+      if !recent.isEmpty {
+        Text("Recent").font(.system(size: 12, weight: .semibold)).foregroundStyle(AglynColor.secondaryText)
+          .padding(EdgeInsets(top: 8, leading: 10, bottom: 4, trailing: 10))
+          .accessibilityAddTraits(.isHeader)
+      }
+      ForEach(recent) { row($0) }
+      ForEach(Array(rest.prefix(shown))) { row($0) }
+      if rest.count > shown {
+        action("Show more", systemImage: "ellipsis", identifier: "switcher-show-more", closes: false) { shown += pickerPage }
+      }
+    }
+  }
+
+  private func note(_ text: String) -> some View {
+    Text(text).font(.system(size: 13)).foregroundStyle(AglynColor.secondaryText)
+      .padding(.horizontal, 10).padding(.vertical, 12)
+  }
+
+  /// A site (Figma Picker/Site row in the switcher): its favicon 24, its name and address, a check on the open one.
+  private func row(_ site: WorkspaceSite) -> some View {
+    let current = site.id == model.scopedSite(navigation)?.id
+    return SwitcherRow(identifier: "switcher-site-\(site.id)", height: 44) {
+      model.workspace?.selectSite(site.id)
+      navigation.enterSite()
+      done()
+    } content: {
+      AglynBrandPicture(model.mediaURL(site.favicon, hostID: site.id), size: 24, cornerRadius: 6) {
+        AglynWorkspaceTile(
+          name: site.name, logoURL: nil, colorHex: model.workspaceColor(model.workspace?.org?.id).color, selected: false,
+          size: 24
+        )
+        .padding(-3)
+      }
+      VStack(alignment: .leading, spacing: 0) {
+        Text(site.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(AglynColor.textPrimary).lineLimit(1)
+        Text(HostStatus.siteAddress(site.subdomain) ?? site.subdomain).font(.system(size: 12))
+          .foregroundStyle(AglynColor.secondaryText).lineLimit(1)
+      }
+      Spacer(minLength: 0)
+      if current {
+        Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(AglynColor.tint)
+          .frame(width: 14, height: 14).accessibilityHidden(true)
+      }
+    }
+    .accessibilityAddTraits(current ? .isSelected : [])
+  }
+
+  /// A plain menu row (Figma Menu/Row): a 16-point line icon and its label, 30 points tall.
+  private func action(
+    _ title: String, systemImage: String, identifier: String, closes: Bool = true, run: @escaping () -> Void
+  ) -> some View {
+    SwitcherRow(identifier: identifier, height: 30) {
+      run()
+      if closes { done() }
+    } content: {
+      Image(systemName: systemImage).font(.system(size: 13)).foregroundStyle(AglynColor.textPrimary)
+        .frame(width: 16, height: 16).accessibilityHidden(true)
+      Text(title).font(.system(size: 13)).foregroundStyle(AglynColor.textPrimary)
+      Spacer(minLength: 0)
+    }
+  }
+}
+
+/// One row of the switcher: its content in a 10-point inset, the hover ground with a 6-point radius.
+private struct SwitcherRow<Content: View>: View {
+  let identifier: String
+  let height: CGFloat
+  let action: () -> Void
+  @ViewBuilder let content: () -> Content
+  @State private var hovered = false
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 10) { content() }
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, minHeight: height, alignment: .leading)
+        .background(
+          RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
+            .fill(hovered ? AglynColor.hover : Color.clear))
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .onHover { hovered = $0 }
+    .accessibilityIdentifier(identifier)
   }
 }
 
@@ -331,12 +488,11 @@ struct SidebarList: View {
         }
       } else if group.id == "more" && group.foldable && filter.isEmpty {
         // More is a row of its own (Figma "··· More"), opening its rows under it.
+        // A plain row in Figma (Sidebar 12:703, "··· More"): no trailing mark; its rows opening under it say it opened.
         AglynSidebarRow("More", selected: false, action: { toggle(group) }) {
           AglynSidebarIcon("ellipsis")
         } trailing: {
-          Image(systemName: "chevron.right").font(.system(size: AglynShellMetrics.groupChevron * 0.7, weight: .semibold))
-            .foregroundStyle(AglynColor.secondaryText)
-            .rotationEffect(.degrees(open ? 90 : 0))
+          EmptyView()
         }
         .accessibilityValue(open ? "Open" : "Folded")
         .accessibilityIdentifier("sidebar-group-more")

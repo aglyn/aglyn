@@ -216,9 +216,9 @@ struct ShellChrome: View {
           ) {
             withAnimation(.easeOut(duration: 0.2)) { navigation.railHidden.toggle() }
           }
-          TitleBarButton("Back", systemImage: "chevron.left", identifier: "titlebar-back") { navigation.goBack() }
+          TitleBarButton("Back", systemImage: "arrow.left", identifier: "titlebar-back") { navigation.goBack() }
             .disabled(!navigation.canGoBack)
-          TitleBarButton("Forward", systemImage: "chevron.right", identifier: "titlebar-forward") { navigation.goForward() }
+          TitleBarButton("Forward", systemImage: "arrow.right", identifier: "titlebar-forward") { navigation.goForward() }
             .disabled(!navigation.canGoForward)
           RecentPlacesMenu()
           Spacer(minLength: 0)

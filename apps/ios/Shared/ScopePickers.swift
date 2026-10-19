@@ -14,7 +14,7 @@ import SwiftUI
 // everyone else A to Z, 50 at a time. Pins are the account's (`pinnedOrgs`), shared with the console, five at most.
 
 /// How many rows a picker shows before "Show more".
-private let pickerPage = 50
+let pickerPage = 50
 
 /// The picker sheet: the workspace step, then the site step. On a phone it is the scope chip's two-step picker; on iPad
 /// and the Mac the All workspaces tile opens it on the workspace step, and the site button on the site step.
@@ -328,14 +328,18 @@ struct SitePickerList: View {
     .accessibilityAddTraits(site.id == model.scopedSite(navigation)?.id ? .isSelected : [])
   }
 
-  /// The sites opened most lately, newest first, from the account's recents (`recents` with a site).
-  private func recentSiteIDs(_ workspace: WorkspaceStore) -> [String] {
+  private func recentSiteIDs(_ workspace: WorkspaceStore) -> [String] { model.recentSiteIDs(in: workspace) }
+}
+
+extension AppModel {
+  /// The sites opened most lately, newest first: the one open, then the account's recents (`recents` with a site).
+  func recentSiteIDs(in workspace: WorkspaceStore, limit: Int = 3) -> [String] {
     var seen = Set<String>()
     var out: [String] = []
     if let current = workspace.site?.id { seen.insert(current); out.append(current) }
-    for item in model.preferences?.recents ?? [] where item.orgId == workspace.org?.id {
+    for item in preferences?.recents ?? [] where item.orgId == workspace.org?.id {
+      if out.count >= limit { break }
       if let hostID = item.hostId, seen.insert(hostID).inserted { out.append(hostID) }
-      if out.count >= 3 { break }
     }
     return out
   }
