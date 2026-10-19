@@ -244,7 +244,7 @@ internal fun SettingsScreen(
     val theme = services.accountPrefs.state.collectAsState().value.theme
     AglynListItem(
       title = "Theme",
-      supporting = "${themeLabel(theme.theme)} · ${appearanceLabel(theme.appearance)} · ${densityLabel(theme.density)}",
+      supporting = "${themeLabel(theme.theme, services.config.brandName)} · ${appearanceLabel(theme.appearance)} · ${densityLabel(theme.density)}",
       icon = AglynIcons.named("palette"),
       trailing = { Icon(AglynIcons.named("chevron_right"), contentDescription = null) },
       onClick = onTheme,

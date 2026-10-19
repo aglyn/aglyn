@@ -20,8 +20,8 @@ import com.aglyn.contracts.themePalette
 /*
  * Whole-app theming (AGL-3946 Phase 4). The palettes, named accents, swatches and densities are the contract's
  * (native-themes.ts, AGL-3950: Figma's Native App variables, Ocean and Warm derived from their previews), and so is the
- * accent derivation; this file only turns them into Compose colors. The Aglyn theme keeps the console's generated
- * scheme as it is, so the default look is the console's.
+ * accent derivation; this file only turns them into Compose colors. The brand's own theme's palette comes from the
+ * console's scheme; its "Theme" accent stays the console's primary, so the default look is the console's.
  */
 
 /** A theme's grounds, lines, inks and status pairs, for one appearance. */
@@ -78,11 +78,9 @@ private val surfacesById: Map<ThemePaletteId, Pair<ThemeSurfaces, ThemeSurfaces>
   Contracts.themePalettes.associate { it.id to (it.light.toSurfaces() to it.dark.toSurfaces()) }
 }
 
-/** The theme's grounds for [dark], or null for Aglyn, which is the console's generated scheme as it is. */
+/** The theme's grounds for [dark]; an unknown theme reads as the brand's own (THEME_PALETTES.aglyn, from the console's scheme). */
 fun themeSurfaces(theme: AppThemeName, dark: Boolean): ThemeSurfaces? {
-  if (theme == AppThemeName.AGLYN || theme == AppThemeName.UNKNOWN) return null
   val palette = themePalette(theme.raw)
-  if (palette.id == ThemePaletteId.AGLYN) return null
   val (light, darkSurfaces) = surfacesById[palette.id] ?: return null
   return if (dark || palette.alwaysDark == true) darkSurfaces else light
 }
@@ -163,7 +161,7 @@ fun uiDensityOf(density: AppDensity): UiDensity = if (density == AppDensity.COMP
 
 val LocalUiDensity = staticCompositionLocalOf { ComfortableDensity }
 
-/** The theme's grounds in effect, or null under Aglyn (the generated scheme). */
+/** The theme's grounds in effect. */
 val LocalThemeSurfaces = staticCompositionLocalOf<ThemeSurfaces?> { null }
 
 /** The accent in effect. */

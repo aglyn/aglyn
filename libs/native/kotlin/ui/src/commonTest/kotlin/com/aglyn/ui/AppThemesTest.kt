@@ -6,7 +6,6 @@ import com.aglyn.contracts.AppThemeName
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Whole-app theming (AGL-3946): every theme's grounds, and accents that always read. */
@@ -35,8 +34,10 @@ class AppThemesTest {
 
   @Test
   fun aglynIsTheGeneratedSchemeAndTheOthersHaveTheirOwnGrounds() {
-    assertNull(themeSurfaces(AppThemeName.AGLYN, false))
-    for (name in AppThemeName.entries.filter { it != AppThemeName.AGLYN && it != AppThemeName.UNKNOWN }) {
+    // The brand's own theme is the console's scheme.
+    assertEquals(AglynLightColorScheme.background.toHex(), themeSurfaces(AppThemeName.AGLYN, false)!!.canvas.toHex())
+    assertEquals(themeSurfaces(AppThemeName.AGLYN, true), themeSurfaces(AppThemeName.UNKNOWN, true))
+    for (name in AppThemeName.entries.filter { it != AppThemeName.UNKNOWN }) {
       val light = themeSurfaces(name, false)!!
       val dark = themeSurfaces(name, true)!!
       // Text reads on each theme's page.

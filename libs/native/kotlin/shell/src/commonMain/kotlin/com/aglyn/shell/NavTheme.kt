@@ -70,15 +70,9 @@ import com.aglyn.ui.themeAccentSeed
 import com.aglyn.ui.themeSurfaces
 import com.aglyn.ui.toHex
 
-internal fun themeLabel(theme: AppThemeName): String = when (theme) {
-  AppThemeName.AGLYN -> "Aglyn"
-  AppThemeName.QUIET -> "Quiet"
-  AppThemeName.NIGHT -> "Night"
-  AppThemeName.OCEAN -> "Ocean"
-  AppThemeName.WARM -> "Warm"
-  AppThemeName.HIGH_CONTRAST -> "High contrast"
-  AppThemeName.UNKNOWN -> "Aglyn"
-}
+/** A theme's name as the contract words it; the brand's own theme (Aglyn's, `brandLabel`) takes the build's brand name. */
+internal fun themeLabel(theme: AppThemeName, brandName: String): String =
+  com.aglyn.contracts.themePalette(theme.raw).let { if (it.brandLabel == true || it.label.isBlank()) brandName else it.label }
 
 internal fun densityLabel(density: AppDensity) = if (density == AppDensity.COMPACT) "Compact" else "Comfortable"
 
@@ -119,7 +113,7 @@ internal fun ThemeSettingsScreen(services: ShellServices, workspace: WorkspaceSt
     SettingsGroup("Theme", footer = if (theme.theme == AppThemeName.NIGHT) "Night is dark whatever the appearance says." else null) {
       FlowRow(Modifier.fillMaxWidth().padding(space(1.5f)), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         for (name in Contracts.appThemeNames) {
-          ThemeTile(name, selected = theme.theme == name) { save(theme.copy(theme = name)) }
+          ThemeTile(name, themeLabel(name, services.config.brandName), selected = theme.theme == name) { save(theme.copy(theme = name)) }
         }
       }
     }
@@ -134,7 +128,7 @@ internal fun ThemeSettingsScreen(services: ShellServices, workspace: WorkspaceSt
       }
       if (theme.accent != "theme") {
         TextButton(onClick = { save(theme.copy(accent = "theme")) }, modifier = Modifier.padding(start = space(1f)).testTag("accent-theme")) {
-          Text("Use ${themeLabel(theme.theme)}'s own accent")
+          Text("Use ${themeLabel(theme.theme, services.config.brandName)}'s own accent")
         }
       }
     }
@@ -216,9 +210,9 @@ private fun <T> Choice(options: List<T>, selected: T, label: (T) -> String, tag:
 
 /** A theme's preview: its rail, its page, a row and its accent, light, with the name under it. */
 @Composable
-private fun ThemeTile(name: AppThemeName, selected: Boolean, onClick: () -> Unit) {
+private fun ThemeTile(name: AppThemeName, label: String, selected: Boolean, onClick: () -> Unit) {
   val surfaces = themeSurfaces(name, dark = name == AppThemeName.NIGHT)
-  val rail = surfaces?.rail ?: com.aglyn.ui.shellColors(AglynLightColorScheme, com.aglyn.ui.AglynTokens.light).rail
+  val rail = surfaces?.rail ?: AglynLightColorScheme.surfaceContainerHigh
   val page = surfaces?.canvas ?: AglynLightColorScheme.background
   val card = surfaces?.surface ?: AglynLightColorScheme.surfaceContainerLowest
   val line = surfaces?.borderSubtle ?: AglynLightColorScheme.outlineVariant
@@ -241,7 +235,7 @@ private fun ThemeTile(name: AppThemeName, selected: Boolean, onClick: () -> Unit
         Box(Modifier.width(36.dp).height(10.dp).clip(RoundedCornerShape(4.dp)).background(accent))
       }
     }
-    Text(themeLabel(name), style = MaterialTheme.typography.labelLarge)
+    Text(label, style = MaterialTheme.typography.labelLarge)
   }
 }
 

@@ -142,7 +142,7 @@ internal fun AccountMenuItems(services: ShellServices, user: AuthUser?, close: (
       }
     }
   }
-  MenuRow("Theme", "palette", trailing = themeLabel(prefs.theme.theme), tag = "account-menu-theme") { close(); actions.themeSettings() }
+  MenuRow("Theme", "palette", trailing = themeLabel(prefs.theme.theme, services.config.brandName), tag = "account-menu-theme") { close(); actions.themeSettings() }
   MenuRow("Settings", "settings", tag = "account-menu-settings") { close(); actions.accountSettings() }
   MenuRow("Marketplace", "storefront", tag = "account-menu-marketplace") { close(); actions.openScreen("marketplace.sell", emptyMap()) }
   MenuRow("Documentation", "article", tag = "account-menu-docs") { close(); actions.openWeb(helpLinks(services.config).first { it.id == "docs" }.url) }
