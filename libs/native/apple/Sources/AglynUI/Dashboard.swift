@@ -477,13 +477,26 @@ public struct AglynPressableStyle: ButtonStyle {
 }
 
 extension View {
-  /// A list on the console's page color, its rows on paper: the kit's list look in light and dark.
-  public func aglynListBackground() -> some View {
-    scrollContentBackground(.hidden).background(AglynColor.page)
-  }
+  /// A list on the console's page color, its rows on paper: the kit's list look in light and dark. On the Mac and iPad
+  /// its rows sit on the column's content edges: the Mac's list insets every row by 16 of its own, so the list's safe
+  /// area adds the rest of E (measured off screen); iPad's grouped cards take E as their margins.
+  public func aglynListBackground() -> some View { modifier(AglynListBackgroundModifier()) }
 
   /// A list row on the console's paper surface.
   public func aglynListRow() -> some View {
     listRowBackground(AglynColor.paper)
+  }
+}
+
+private struct AglynListBackgroundModifier: ViewModifier {
+  @Environment(\.aglynWideChrome) private var wide
+
+  func body(content: Content) -> some View {
+    let base = content.scrollContentBackground(.hidden).background(AglynColor.page)
+    #if os(macOS)
+      base.safeAreaPadding(.horizontal, wide ? AglynContentInsets.horizontal - 16 : 0)
+    #else
+      base.contentMargins(.horizontal, wide ? AglynContentInsets.horizontal : nil, for: .scrollContent)
+    #endif
   }
 }

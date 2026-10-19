@@ -444,7 +444,7 @@ struct MediaLibrary: View {
             tile(item, selectable: selectable)
           }
         }
-        .padding(AglynSpace.two)
+        .aglynContentEdges().padding(.vertical, AglynSpace.two)
         if model.hasMore {
           AglynLoadMoreRow("Show more files") { model.loadMore() }.padding(.bottom, AglynSpace.two)
         }
@@ -783,7 +783,7 @@ struct MediaDetailBody: View {
         }
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .accessibilityIdentifier("media-detail")
     .onChange(of: item, initial: true) { _, _ in reset() }

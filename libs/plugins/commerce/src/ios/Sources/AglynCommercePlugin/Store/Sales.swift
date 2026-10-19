@@ -288,7 +288,7 @@ struct SalesScreen: View {
             Button("All orders") { context.navigate(commerceOrdersScreen) }
           }
         }
-        .formStyle(.grouped)
+        .formStyle(.aglynGrouped)
         .aglynListBackground()
       } else {
         List { SkeletonRows(count: 4) }.aglynListBackground()

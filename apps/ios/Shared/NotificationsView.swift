@@ -430,7 +430,7 @@ struct NotificationDetail: View {
       .padding(.horizontal, wide ? AglynContentInsets.horizontal : AglynContentInsets.phone)
       .padding(.vertical, AglynSpace.two)
     }
-    .aglynListBackground()
+    .background(AglynColor.page)
     .accessibilityIdentifier("notification-detail")
   }
 }

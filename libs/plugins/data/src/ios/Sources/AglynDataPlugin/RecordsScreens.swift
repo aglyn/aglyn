@@ -480,7 +480,7 @@ struct RecordDetailView: View {
         AglynDetailRow("Updated", value: record.updatedAt.map { relativeTime($0, now: now) })
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .accessibilityIdentifier("record-detail")
   }
@@ -536,7 +536,7 @@ private struct RecordEditorSheet: View {
           }
         }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle(recordID == nil ? "New \(noun)" : "Edit \(noun)")
       .aglynScreenTitle(recordID == nil ? "New \(noun)" : "Edit \(noun)")
       #if os(iOS)

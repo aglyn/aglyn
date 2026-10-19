@@ -212,7 +212,10 @@ struct TasksSection: View {
         ForEach(TaskView.allCases) { Text($0.label).tag($0) }
       }
       .pickerStyle(.segmented)
-      .padding(AglynSpace.two)
+      .fixedSize()
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .aglynContentEdges()
+      .padding(.vertical, AglynSpace.two)
       if !list.ready {
         List { SkeletonRows(count: 6) }.aglynListBackground()
       } else if let failure = list.failure {

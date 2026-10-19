@@ -139,7 +139,8 @@ struct AutomationHubScreen: View {
     } icon: {
       Image(systemName: section.icon).foregroundStyle(AglynColor.tint)
     }
-    .aglynSelectableRow(section, selection: picked, density: .sidebar)
+    // A content column's row, on the column's content edges like every column's (not the shell sidebar's inset).
+    .aglynSelectableRow(section, selection: picked)
   }
 
   private var sidebar: some View {
@@ -481,7 +482,7 @@ struct DuplicateWorkflowSheet: View {
         }
         if let error { Section { AglynNotice(error, tone: .error) } }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle("Duplicate workflow")
       .aglynScreenTitle("Duplicate workflow")
       #if os(iOS)

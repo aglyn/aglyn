@@ -667,7 +667,7 @@ struct AddPeopleSheet: View {
           }
         }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle("Add people")
       .aglynScreenTitle("Add people")
       .toolbar {
@@ -961,7 +961,7 @@ struct SendingSection: View {
         SkeletonRows(count: 5)
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .task { await load() }
     .refreshable { await load() }

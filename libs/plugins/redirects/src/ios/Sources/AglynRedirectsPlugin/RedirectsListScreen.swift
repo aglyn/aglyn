@@ -163,7 +163,7 @@ struct RedirectEditorSheet: View {
           Toggle("On", isOn: binding(\.enabled))
         }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle(editor.draft?.id == nil ? "Add redirect" : "Edit redirect")
       .aglynScreenTitle(editor.draft?.id == nil ? "Add redirect" : "Edit redirect")
       #if os(iOS)
@@ -246,7 +246,7 @@ struct RedirectDetail: View {
           }
         }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .aglynListBackground()
       .navigationTitle(titled ? row.source : "Redirects")
       .aglynScreenTitle(titled ? row.source : "Redirects")

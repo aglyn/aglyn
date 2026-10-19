@@ -81,7 +81,7 @@ struct CustomerTextsScreen: View {
         Text("Order updates reach customers by email. Texts add a second channel for the same updates.")
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
   }
 }

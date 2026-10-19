@@ -69,9 +69,10 @@ public struct AglynRow<Trailing: View>: View {
     HStack(spacing: 12) {
       if let systemImage, !typeSize.isAccessibilitySize {
         AglynBrandPicture(imageURL, darkURL: darkImageURL, size: 28, cornerRadius: AglynRadius.control) {
+          // On the row's leading edge, so the icon starts on the column's content edge as a picture does.
           Image(systemName: systemImage)
             .foregroundStyle(tint ?? AglynColor.tint)
-            .frame(width: 28)
+            .frame(width: 28, alignment: .leading)
         }
         .accessibilityHidden(true)
       }
