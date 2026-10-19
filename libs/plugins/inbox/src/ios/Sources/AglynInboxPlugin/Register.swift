@@ -35,6 +35,8 @@ public func registerInboxNative(_ r: NativePluginRegistrar) {
   r.widget("inbox.glance", title: "Inbox", icon: "tray", order: 60, size: .half, requiresSite: true) {
     InboxGlanceWidget(context: $0)
   }
+  // The unread count beside Inbox's row in the sidebar, in the workspace and in a site.
+  r.widget("inbox.sidebar-count", title: "Inbox", order: 10, slot: "sidebarCount.inbox") { InboxSidebarCount(context: $0) }
   r.widget("inbox.needs-you", title: "Needs you", order: 20, requiresSite: true, slot: "homeNeedsYou") {
     InboxNeedsYouWidget(context: $0)
   }

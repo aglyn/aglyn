@@ -203,11 +203,18 @@ public struct AglynContentHeader<Crumbs: View, Accessory: View>: View {
 public struct AglynPrimaryHeaderButton: View {
   let title: String
   let systemImage: String
+  let shortcut: KeyboardShortcut?
+  let help: String?
   let action: () -> Void
 
-  public init(_ title: String, systemImage: String, action: @escaping () -> Void) {
+  public init(
+    _ title: String, systemImage: String, shortcut: KeyboardShortcut? = nil, help: String? = nil,
+    action: @escaping () -> Void
+  ) {
     self.title = title
     self.systemImage = systemImage
+    self.shortcut = shortcut
+    self.help = help
     self.action = action
   }
 
@@ -224,6 +231,8 @@ public struct AglynPrimaryHeaderButton: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .keyboardShortcut(shortcut)
+    .help(help ?? title)
   }
 }
 
@@ -233,13 +242,22 @@ public struct AglynPrimaryAction: Equatable {
   public let title: String
   public let systemImage: String
   public let enabled: Bool
+  /// Its keyboard shortcut (⌘N for a New … action), on every device.
+  public let shortcut: KeyboardShortcut?
+  /// Its tooltip, and why it is disabled when it is.
+  public let help: String?
   public let run: @MainActor () -> Void
 
-  public init(id: String, title: String, systemImage: String, enabled: Bool = true, run: @escaping @MainActor () -> Void) {
+  public init(
+    id: String, title: String, systemImage: String, enabled: Bool = true, shortcut: KeyboardShortcut? = nil,
+    help: String? = nil, run: @escaping @MainActor () -> Void
+  ) {
     self.id = id
     self.title = title
     self.systemImage = systemImage
     self.enabled = enabled
+    self.shortcut = shortcut
+    self.help = help
     self.run = run
   }
 
@@ -252,6 +270,8 @@ public struct AglynPrimaryAction: Equatable {
 public struct AglynScreenChrome {
   public var primary: AglynPrimaryAction?
   public var entries: [AglynScreenToolbarEntry] = []
+  /// The screen's own title, for the head of a screen pushed over a list (`aglynScreenTitle`).
+  public var title: String?
 }
 
 public struct AglynScreenChromeKey: PreferenceKey {
@@ -260,6 +280,7 @@ public struct AglynScreenChromeKey: PreferenceKey {
     let next = nextValue()
     value.primary = value.primary ?? next.primary
     value.entries.append(contentsOf: next.entries)
+    value.title = value.title ?? next.title
   }
 }
 
@@ -267,11 +288,13 @@ extension View {
   /// The screen's one primary action: the filled button in its head on the Mac and iPad (the shell draws it there),
   /// the navigation bar's button on a phone.
   public func aglynPrimaryAction(
-    id: String, _ title: String, systemImage: String, enabled: Bool = true, action: @escaping @MainActor () -> Void
+    id: String, _ title: String, systemImage: String, enabled: Bool = true, shortcut: KeyboardShortcut? = nil,
+    help: String? = nil, action: @escaping @MainActor () -> Void
   ) -> some View {
     modifier(
       AglynPrimaryActionModifier(
-        action: AglynPrimaryAction(id: id, title: title, systemImage: systemImage, enabled: enabled, run: action)))
+        action: AglynPrimaryAction(
+          id: id, title: title, systemImage: systemImage, enabled: enabled, shortcut: shortcut, help: help, run: action)))
   }
 }
 
@@ -287,6 +310,8 @@ private struct AglynPrimaryActionModifier: ViewModifier {
         ToolbarItem(placement: .primaryAction) {
           Button { action.run() } label: { Label(action.title, systemImage: action.systemImage) }
             .disabled(!action.enabled)
+            .keyboardShortcut(action.shortcut)
+            .help(action.help ?? action.title)
             .accessibilityIdentifier(action.id)
         }
       }
@@ -365,3 +390,18 @@ public struct AglynHeaderButtonStyle: ButtonStyle {
         RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).strokeBorder(AglynColor.divider))
   }
 }
+
+extension View {
+  /// A screen's title in its head on the Mac and iPad when it is pushed over a list (a product, a contact); the
+  /// navigation title on a phone. Use beside `.navigationTitle` with the same words.
+  public func aglynScreenTitle(_ title: String) -> some View {
+    preference(key: AglynScreenChromeKey.self, value: AglynScreenChrome(title: title))
+  }
+}
+
+// How a screen puts its own chrome in its content on the Mac and iPad (the window has no toolbar there):
+// - `aglynSearchable(text:prompt:onSubmit:filter:)`: the list's search and its one Filter, in the list's toolbar.
+// - `aglynPrimaryAction(id:_:systemImage:enabled:action:)`: the one filled button at the right of the screen's head.
+// - `aglynScreenToolbar(id:content:)`: the screen's other actions (Select, a ⋯ menu), beside the primary button.
+// - `aglynScreenTitle(_:)`: a pushed screen's title in its head.
+// On a phone each falls back to the navigation bar. The shell (AreaView, PushedScreen) draws the head.
