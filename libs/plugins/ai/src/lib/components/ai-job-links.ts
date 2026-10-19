@@ -232,6 +232,15 @@ export function aiStoreFinishLinks(
   return steps
 }
 
+/**
+ * The site an AI-built store is on — the one {@link aiStoreFinishLinks}
+ * links — so "Finish your store" can read whether its workspace already takes
+ * payments (AGL-3982). `null` where no output names a site.
+ */
+export function aiStoreFinishHostId(job: Pick<AiJobSummary, 'outputs'>): string | null {
+  return job.outputs.find((output) => output.resource === 'screen' && output.hostSubdomain)?.hostId ?? null
+}
+
 /** What a build's "Review your products" step says: its products are drafts, priced only where the request said. */
 export const AI_BUILD_STORE_PRODUCTS_TEXT =
   'Your new products are drafts. Set their prices, photos and stock, then make them active so they show in your store.'
