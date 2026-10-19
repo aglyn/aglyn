@@ -253,7 +253,8 @@ private fun PhoneMenu(
       }
     }
     if (sidebar.modeTitle != null) {
-      BackLink(sidebar.modeTitle, tag = "settings-mode-back", onClick = sidebar.onExitMode)
+      BackLink(sidebar.modeBack ?: sidebar.modeTitle, tag = "settings-mode-back", onClick = sidebar.onExitMode)
+      Text(sidebar.modeTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).testTag("settings-mode-title"))
     } else {
       ScopeHeader(services, workspace, chrome)
     }

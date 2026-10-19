@@ -154,6 +154,20 @@ data class ShellMetrics(
   /** A sidebar group's heading row, and a tile's initials. */
   val groupHeader: androidx.compose.ui.unit.Dp,
   val tileInitial: androidx.compose.ui.unit.TextUnit,
+  /** The sidebar's own inset around its rows (Figma Sidebar's Header and Rows padding). */
+  val sidebarPad: androidx.compose.ui.unit.Dp = 8.dp,
+  /** A top-level row's leading padding and the gap between its icon and text (Figma Sidebar/Row). */
+  val rowPad: androidx.compose.ui.unit.Dp = 8.dp,
+  val rowGap: androidx.compose.ui.unit.Dp = 8.dp,
+  /** A group's rows sit this much further in than its heading, so what belongs to what reads at a glance. */
+  val groupIndent: androidx.compose.ui.unit.Dp = 12.dp,
+  /** A group heading's chevron, after its label. */
+  val groupChevron: androidx.compose.ui.unit.Dp = 12.dp,
+  /** A divider's room above and below its hairline. */
+  val dividerPad: androidx.compose.ui.unit.Dp = 4.dp,
+  /** A site's name in its own sidebar's title row, and a settings mode's title. */
+  val siteTitleText: androidx.compose.ui.unit.TextUnit = 15.sp,
+  val modeTitleText: androidx.compose.ui.unit.TextUnit = 17.sp,
 )
 
 val CompactShellMetrics = ShellMetrics(
@@ -161,16 +175,36 @@ val CompactShellMetrics = ShellMetrics(
   sidebarWidth = 248.dp, row = 28.dp, rowText = 13.sp, rowIcon = 16.dp, pillRadius = 6.dp, rowInset = 8.dp, headerLogo = 20.dp,
   headerLogoRadius = 5.dp, titleBar = 52.dp, controlRadius = 6.dp, cardRadius = 10.dp, sheetRadius = 12.dp, barButton = 28.dp, barIcon = 16.dp,
   ringBox = 38.dp, ringRadius = 11.dp, selectionBar = 18.dp, utilityRadius = 6.dp, avatar = 24.dp, groupHeader = 24.dp, tileInitial = 13.sp,
+  sidebarPad = 8.dp, rowPad = 8.dp, rowGap = 8.dp, groupIndent = 12.dp, groupChevron = 12.dp, dividerPad = 4.dp, siteTitleText = 15.sp, modeTitleText = 17.sp,
 )
 
 val TouchShellMetrics = ShellMetrics(
   compact = false, railWidth = 64.dp, tile = 40.dp, tileRadius = 10.dp, badge = 18.dp, railLabel = 10.sp, tileGap = 8.dp, utility = 36.dp,
-  sidebarWidth = 256.dp, row = 36.dp, rowText = 15.sp, rowIcon = 18.dp, pillRadius = 8.dp, rowInset = 8.dp, headerLogo = 24.dp,
+  sidebarWidth = 248.dp, row = 36.dp, rowText = 15.sp, rowIcon = 18.dp, pillRadius = 8.dp, rowInset = 8.dp, headerLogo = 20.dp,
   headerLogoRadius = 6.dp, titleBar = 56.dp, controlRadius = 8.dp, cardRadius = 12.dp, sheetRadius = 16.dp, barButton = 40.dp, barIcon = 20.dp,
-  ringBox = 48.dp, ringRadius = 14.dp, selectionBar = 22.dp, utilityRadius = 10.dp, avatar = 32.dp, groupHeader = 32.dp, tileInitial = 16.sp,
+  ringBox = 48.dp, ringRadius = 14.dp, selectionBar = 22.dp, utilityRadius = 10.dp, avatar = 32.dp, groupHeader = 28.dp, tileInitial = 16.sp,
+  sidebarPad = 12.dp, rowPad = 10.dp, rowGap = 10.dp, groupIndent = 12.dp, groupChevron = 14.dp, dividerPad = 6.dp, siteTitleText = 16.sp, modeTitleText = 18.sp,
 )
 
 val LocalShellMetrics = staticCompositionLocalOf { TouchShellMetrics }
+
+/**
+ * The shell's motion (Figma Motion 121:6163, timings 121:6714), the same on Apple and Android: drilling in and out of a scope
+ * is a slide with a fade on a ~250 ms spring, a group folds in 200 ms, the selection pill moves on a 250 ms spring, another
+ * workspace cross-fades in 150 ms. Reduce Motion keeps the cross-fades only.
+ */
+object ShellMotion {
+  const val DRILL_MS = 250
+  const val FOLD_MS = 200
+  const val PILL_MS = 250
+  const val CROSS_FADE_MS = 150
+  /** The drill's spring: about 250 ms with a little bounce (SwiftUI's `.spring(duration: 0.25, bounce: 0.1)`). */
+  fun <T> drill() = androidx.compose.animation.core.spring<T>(dampingRatio = 0.9f, stiffness = 632f)
+  /** The pill's spring (`.spring(duration: 0.25, bounce: 0.15)`). */
+  fun <T> pill() = androidx.compose.animation.core.spring<T>(dampingRatio = 0.85f, stiffness = 632f)
+  fun <T> fold() = androidx.compose.animation.core.tween<T>(FOLD_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+  fun <T> crossFade() = androidx.compose.animation.core.tween<T>(CROSS_FADE_MS)
+}
 
 /** The desktop's radii (Compact): fields and controls 6, cards 10, menus, sheets and dialogs 12. */
 val CompactShapes = androidx.compose.material3.Shapes(

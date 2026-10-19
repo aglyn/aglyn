@@ -7,6 +7,8 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
@@ -62,7 +64,10 @@ class NavShellUiTest {
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-siteSettings") > 0 }
     onNodeWithTag("nav-site-siteSettings").performScrollTo().performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("settings-mode-back") > 0 }
-    onNodeWithTag("settings-mode-back").assertTextContains("Acme Shop settings")
+    // "‹ Acme Shop" over the mode's title (Figma Sidebar, Scope = Settings), and its own search.
+    onNodeWithTag("settings-mode-back").assertTextContains("Acme Shop")
+    onNodeWithTag("settings-mode-title").assertTextContains("Site settings")
+    onNodeWithTag("settings-mode-search").assertExists()
     onNodeWithTag("nav-siteSettings-users").assertIsDisplayed()
     onNodeWithTag("nav-siteSettings-seo").assertIsDisplayed()
     // The first row opens with the mode.
@@ -70,6 +75,44 @@ class NavShellUiTest {
     onNodeWithTag("settings-mode-back").performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-home") > 0 }
     assertEquals(0, onAllNodesWithTagCount("nav-siteSettings-users"))
+  }
+
+  @Test
+  fun aSiteIsDrilledIntoWithAWayBackAndASwitcher() = runComposeUiTest {
+    setContent { AglynShell(testServices(userDoc = emptyMap())) }
+    signIn()
+    // Inside a site: "‹ Acme" back to the workspace, then the site's title row (Figma Sidebar 12:703, Scope = Site).
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("scope-back-to-workspace") > 0 }
+    onNodeWithTag("scope-back-to-workspace").assertTextContains("Acme")
+    onNodeWithTag("site-picker-button").assertTextContains("Acme Shop")
+    // Its ▾ opens the switcher anchored under it, searchable; Esc closes it.
+    onNodeWithTag("site-picker-button").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-switcher") > 0 }
+    onNodeWithTag("site-switcher-search").assertExists()
+    onNodeWithTag("site-switcher-all").assertExists()
+    onNodeWithTag("site-switcher-search").performKeyInput { pressKey(androidx.compose.ui.input.key.Key.Escape) }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-switcher") == 0 }
+    // Back slides out to the whole workspace.
+    onNodeWithTag("scope-back-to-workspace").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("workspace-menu-button") > 0 && onAllNodesWithTagCount("site-picker-button") == 0 }
+  }
+
+  @Test
+  fun groupRowsSitFurtherInThanTheirHeading() = runComposeUiTest {
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-group-website") > 0 }
+    onNodeWithTag("nav-group-website").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-pages") > 0 }
+    waitForIdle()
+    // A top-level row's icon starts at the row padding; a grouped row's 12 further in (Figma: 8 / 20 at Compact).
+    val home = onNodeWithTag("nav-site-home-icon", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x
+    val pages = onNodeWithTag("nav-site-pages-icon", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.x
+    assertEquals(12f, (pages - home) / density.density, 0.5f)
+    // One selection pill sits behind the selected row.
+    onNodeWithTag("nav-site-pages").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-selection-pill") > 0 }
   }
 
   @Test
@@ -86,7 +129,8 @@ class NavShellUiTest {
     onNodeWithTag("workspace-menu-billing").assertIsDisplayed()
     onNodeWithTag("workspace-menu-settings").performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("settings-mode-back") > 0 }
-    onNodeWithTag("settings-mode-back").assertTextContains("Acme settings")
+    onNodeWithTag("settings-mode-back").assertTextContains("Acme")
+    onNodeWithTag("settings-mode-title").assertTextContains("Workspace settings")
     onNodeWithTag("nav-workspaceSettings-members").assertIsDisplayed()
   }
 

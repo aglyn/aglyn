@@ -385,12 +385,19 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     val sidebar = SidebarContent(
       groups = settingsGroups ?: scopeGroups,
       modeTitle = when (chrome.settingsMode) {
-        NativeNavListId.WORKSPACE_SETTINGS -> "${workspace.org?.name ?: "Workspace"} settings"
-        NativeNavListId.SITE_SETTINGS -> "${workspace.site?.name ?: "Site"} settings"
+        NativeNavListId.WORKSPACE_SETTINGS -> "Workspace settings"
+        NativeNavListId.SITE_SETTINGS -> "Site settings"
         STAFF_MODE -> "Admin"
         else -> null
       },
       onExitMode = { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) },
+      // "‹ Juniper Street Bakery" over Site settings, "‹ Juniper Street Co." over Workspace settings (Figma Sidebar).
+      modeBack = when (chrome.settingsMode) {
+        NativeNavListId.SITE_SETTINGS -> workspace.site?.name ?: "Site"
+        NativeNavListId.WORKSPACE_SETTINGS -> workspace.org?.name ?: "Workspace"
+        STAFF_MODE -> workspace.org?.name ?: "Back"
+        else -> null
+      },
     )
     // The AI panel is a plugin's (slot "assistPanel"), shown while that plugin runs here; it reads where the person is.
     val assist = remember(version) { context.slotWidgets(ASSIST_PANEL_SLOT) }.firstOrNull { it.pluginId in enabled || it.pluginId in orgEnabled }

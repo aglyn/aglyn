@@ -218,9 +218,11 @@ class ShellUiTest {
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-picker-button") > 0 }
     onNodeWithTag("scope-back-to-workspace").assertTextContains("Acme", substring = true)
     onNodeWithTag("site-picker-button").assertTextContains("Acme Shop", substring = true)
+    // The site's ▾ opens the switcher popover under it (Figma 16:425): find a site, the sites, View all sites.
     onNodeWithTag("site-picker-button").performClick()
-    onNodeWithTag("picker-site-h1").assertIsDisplayed()
-    onNodeWithTag("picker-whole-workspace").assertIsDisplayed()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-switcher") > 0 }
+    onNodeWithTag("site-switcher-h1").assertIsDisplayed()
+    onNodeWithTag("site-switcher-all").assertIsDisplayed()
     // The phone's chip and tabs are for narrow windows only.
     assertEquals(0, onAllNodesWithTagCount("scope-chip"))
   }
