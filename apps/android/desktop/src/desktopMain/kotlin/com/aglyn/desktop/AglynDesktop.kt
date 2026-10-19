@@ -42,11 +42,11 @@ fun main(args: Array<String>) {
           Item("Sign out", shortcut = shortcut(Key.Q, shift = true), onClick = signOut)
         }
       },
-    ) {
+    ) { onIntroRevealed ->
       androidx.compose.runtime.CompositionLocalProvider(
         com.aglyn.screens.LocalGoogleCredentialSource provides google,
       ) {
-        AglynShell(services, navigator, autoSignIn = autoSignIn)
+        AglynShell(services, navigator, autoSignIn = autoSignIn, playIntro = true, onIntroRevealed = onIntroRevealed)
       }
     }
   }

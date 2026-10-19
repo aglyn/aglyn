@@ -18,7 +18,7 @@ val LocalAglynPalette = staticCompositionLocalOf { AglynTokens.light }
 /** The bundled Roboto Flex, at every weight the console's type scale uses. */
 @Composable
 fun aglynFontFamily(): FontFamily = FontFamily(
-  listOf(400, 500, 700, 800, 900).map { weight -> Font(Res.font.robotoflex_variable, FontWeight(weight)) },
+  listOf(400, 500, 600, 700, 800, 900).map { weight -> Font(Res.font.robotoflex_variable, FontWeight(weight)) },
 )
 
 /**
@@ -27,7 +27,10 @@ fun aglynFontFamily(): FontFamily = FontFamily(
  */
 @Composable
 fun AglynTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-  CompositionLocalProvider(LocalAglynPalette provides if (dark) AglynTokens.dark else AglynTokens.light) {
+  CompositionLocalProvider(
+    LocalAglynPalette provides if (dark) AglynTokens.dark else AglynTokens.light,
+    LocalAglynDark provides dark,
+  ) {
     MaterialTheme(
       colorScheme = if (dark) AglynDarkColorScheme else AglynLightColorScheme,
       typography = aglynTypography(aglynFontFamily()),

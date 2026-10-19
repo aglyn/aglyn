@@ -31,6 +31,8 @@ kotlin {
     androidMain.dependencies {
       implementation(libs.androidx.activity.compose)
       implementation(libs.androidx.core.ktx)
+      // The launch splash's hand-over (AGL-3934): kept up until auth is known, then the spec's exit.
+      implementation(libs.androidx.core.splashscreen)
       implementation(libs.androidx.browser)
       implementation(libs.androidx.credentials)
       implementation(libs.androidx.credentials.play.services)
