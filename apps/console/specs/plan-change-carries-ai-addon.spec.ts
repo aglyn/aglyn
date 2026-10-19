@@ -17,18 +17,19 @@
 
 /**
  * A plan change never silently drops — or silently re-prices — the Aglyn AI
- * add-on (AGL-2899).
+ * tier (AGL-2899, AGL-3965).
  *
- * `/api/billing/subscription` re-prices every add-on item to the target plan
- * in the same update and reports the kinds it deleted as `droppedAddons`.
- * The proration figure the confirm quotes already includes that, but a
- * figure cannot say that a $19 line became a $39 one. This is the sentence
- * the switch confirm appends, and the three answers it has to give: carries
- * at the target's price, is removed, or is not mentioned because the org
- * never had it.
+ * `/api/billing/subscription` moves every add-on item to the target in the
+ * same update and reports the kinds it deleted as `droppedAddons`. Since
+ * AGL-3965 a tier is chosen on its own, at one price on every paid plan, so
+ * a plan change KEEPS the tier and its price; only a target that sells no
+ * tier (Free), or one the server could not carry it to, drops it. This is the
+ * sentence the switch confirm appends, and the answers it has to give:
+ * carries at the tier's own price, is removed (and why), or is not mentioned
+ * because the org never had it.
  */
 
-import { PLAN_PRICING } from '@aglyn/aglyn'
+import { AI_TIERS } from '@aglyn/aglyn'
 import { carriedAiAddonSentence } from '../utils/proration-quote'
 
 const PRO_WITH_AI = {
@@ -37,7 +38,7 @@ const PRO_WITH_AI = {
   seatAddons: { aiAddon: 1 },
 } as any
 
-describe('carriedAiAddonSentence (AGL-2899)', () => {
+describe('carriedAiAddonSentence (AGL-2899, AGL-3965)', () => {
   it('says nothing for an org without the add-on', () => {
     expect(carriedAiAddonSentence({ plan: 'pro' } as any, 'business', [])).toBe('')
     // A dead subscription's add-on is not carried, because it is not held.
@@ -50,22 +51,23 @@ describe('carriedAiAddonSentence (AGL-2899)', () => {
     ).toBe('')
   })
 
-  it('names the add-on at the TARGET plan price, read from the pricing table', () => {
-    // FORCED RED by quoting the current plan's price: a Pro org moving to
-    // Business would read "$19/mo" on a line that bills $39.
+  it('names the tier at ITS OWN price on the target, which the plan change does not move', () => {
+    // No `aiTier` written: Pro's old add-on, which is Boost at $19. Moving to
+    // Business keeps it at $19 — not Business's old $39 add-on.
     const sentence = carriedAiAddonSentence(PRO_WITH_AI, 'business', [])
     expect(sentence).toBe(
-      ' Your Aglyn AI add-on carries over at $39/mo on Business, billed with the plan.',
+      ' Your Aglyn AI Boost tier carries over at $19/mo on Business, billed with the plan.',
     )
-    expect(PLAN_PRICING.business.aiAddonMonthlyUsd).toBe(39)
-    // Down the ladder too: a downgrade carries it at the lower price.
-    expect(carriedAiAddonSentence(PRO_WITH_AI, 'starter', [])).toContain('$9/mo on Starter')
+    expect(AI_TIERS.boost.monthlyUsd).toBe(19)
+    // Down the ladder too: the same tier, the same price.
+    expect(carriedAiAddonSentence(PRO_WITH_AI, 'starter', [])).toContain('$19/mo on Starter')
+    // And the tier written, whatever the plan.
+    expect(
+      carriedAiAddonSentence({ ...PRO_WITH_AI, aiTier: 'studio' }, 'scale', []),
+    ).toBe(' Your Aglyn AI Studio tier carries over at $299/mo on Scale, billed with the plan.')
   })
 
-  it('says it is removed when the server reports the drop, or the target sells none', () => {
-    expect(carriedAiAddonSentence(PRO_WITH_AI, 'business', ['aiAddon'])).toContain(
-      'not sold on Business, so it is removed',
-    )
+  it('says it is removed when the target sells no tier', () => {
     expect(carriedAiAddonSentence(PRO_WITH_AI, 'free', [])).toContain(
       'not sold on Free, so it is removed',
     )
@@ -76,9 +78,16 @@ describe('carriedAiAddonSentence (AGL-2899)', () => {
     )
   })
 
+  it('says it is removed when the server reports the drop, without claiming the plan sells none', () => {
+    const sentence = carriedAiAddonSentence(PRO_WITH_AI, 'business', ['aiAddon'])
+    expect(sentence).toContain('cannot move to Business with this change, so it is removed')
+    expect(sentence).toContain('its AI credits go with it')
+    expect(sentence).not.toContain('not sold')
+  })
+
   it('tolerates a preview without the field', () => {
     expect(carriedAiAddonSentence(PRO_WITH_AI, 'scale', undefined)).toContain(
-      '$69/mo on Scale',
+      '$19/mo on Scale',
     )
   })
 })

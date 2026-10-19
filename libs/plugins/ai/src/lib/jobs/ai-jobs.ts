@@ -36,6 +36,7 @@ import {
   type AiJob,
   type AiJobApplied,
   type AiJobCancelRequest,
+  type AiJobInputRequest,
   type AiJobItemLedger,
   type AiJobKind,
   type AiJobOutput,
@@ -47,6 +48,7 @@ import {
   type AiJobStepTokens,
   type AiJobSummary,
 } from '../model/ai-jobs.types'
+import { aiJobInputProblems, aiPlanWithInput } from '../model/ai-job-input'
 import type { AiJobCreditsConfirmation } from '../model/ai-credit-estimate'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -763,6 +765,7 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
         }
       : null,
     review: job.review ? aiCustomerSafeReview(job.review, { page: job.kind === 'page' }) : null,
+    ...(job.status === 'needs_input' && job.input?.fields?.length ? { input: job.input } : {}),
     applied: job.applied
       ? {
           at: toIso(job.applied.at as Instant),
@@ -1009,6 +1012,11 @@ export interface RecordStepInput {
   /** The step stopped for a person: the job parks `needs_review` in this same write. */
   review?: AiJobReview
   /**
+   * With `review`: the person must answer these first (AGL-3978), so the job
+   * parks `needs_input` with them, the review kept for after the answer.
+   */
+  input?: AiJobInputRequest
+  /**
    * With `pending`: the step is handed back because it made progress and
    * asked to continue (AGL-2910), not because an attempt failed. Its
    * attempts count again from zero and its passes by one.
@@ -1194,6 +1202,8 @@ export async function recordStep(
     // write that records what the step cost and built: nothing after it runs.
     const canceling = aiJobCancelPending(job)
     const parksForReview = Boolean(input.review) && !isAiJobTerminal(job.status) && !canceling
+    // A plan only the person can complete waits for their answer (AGL-3978).
+    const parkedAs: AiJobStatus = input.input ? 'needs_input' : 'needs_review'
     const status: AiJobStatus = isAiJobTerminal(job.status)
       ? job.status
       : canceling
@@ -1201,7 +1211,7 @@ export async function recordStep(
         : job.status === 'needs_input'
           ? job.status
           : parksForReview
-            ? 'needs_review'
+            ? parkedAs
             : input.status === 'failed'
               ? 'running'
               : remaining > 0
@@ -1232,10 +1242,12 @@ export async function recordStep(
       // A doctrine or limit review's sentence is the job's customer-safe
       // error, as a meter park's is; a plan waiting to be confirmed is not an
       // error.
+      // A job waiting for an answer says its question there too (AGL-3978).
       ...(parksForReview && input.review
         ? {
             review: input.review,
-            error: input.review.reason === 'plan' ? null : input.review.message,
+            error: input.input ? input.input.message : input.review.reason === 'plan' ? null : input.review.message,
+            input: input.input ?? null,
           }
         : {}),
       ...(canceling
@@ -1252,8 +1264,8 @@ export async function recordStep(
     return {
       job: { ...job, ...(patch as unknown as Partial<AiJob>) } as AiJob,
       remaining,
-      // Entered `needs_review` in this write, rather than parked again.
-      parked: parksForReview && job.status !== 'needs_review',
+      // Entered `needs_review` (or `needs_input` for an answer) in this write, rather than parked again.
+      parked: parksForReview && job.status !== parkedAs,
       // Ended `canceled` in this write (AGL-3936).
       ended: canceling && !isAiJobTerminal(job.status),
     }
@@ -1878,6 +1890,8 @@ export async function resumeAiJob(
      * the plan the job proposed. Only while that plan waits for confirmation.
      */
     reducePlan?: (plan: AiJobPlan) => AiJobPlan | null
+    /** The answers a job waiting in `needs_input` asked for (AGL-3978), by `aiJobInputKey`. */
+    input?: Readonly<Record<string, unknown>> | null
   } = {},
 ): Promise<{ job: AiJob; changed: boolean }> {
   const resumed = await transition(firestore, orgId, jobId, (current) => {
@@ -1885,6 +1899,22 @@ export async function resumeAiJob(
     // on: that step is already pending, so it is queued again with nothing
     // else changed. Whether the credits are there now is the reservation's
     // to say, at the door and again at the step.
+    // A job waiting for a person's answer (AGL-3978) takes it only once every
+    // field reads (`aiJobInputProblems`, which the door asks first): the
+    // answer is written to the plan's item and the job returns to its plan
+    // card, where Confirm builds it as any plan.
+    if (current.status === 'needs_input' && current.input?.fields?.length) {
+      const values = options.input
+      if (!values || !current.plan || Object.keys(aiJobInputProblems(current.input, values)).length) return null
+      return {
+        status: 'needs_review',
+        plan: aiPlanWithInput(current.plan, current.input, values),
+        input: null,
+        error: null,
+        lease: null,
+        updatedAt: now,
+      }
+    }
     if (current.status === 'needs_input') {
       return { status: 'queued', error: null, lease: null, updatedAt: now }
     }
@@ -2523,6 +2553,7 @@ export async function runAiJobStep(
       outputs: outcome.outputs,
       ...(outcome.plan ? { plan: outcome.plan } : {}),
       ...(review ? { review } : {}),
+      ...(review && outcome.input ? { input: outcome.input } : {}),
       ...(outcome.sitePublish ? { sitePublish: outcome.sitePublish } : {}),
       ...(aiJobSettlesByItem(job.kind) && outcome.items ? { items: outcome.items } : {}),
       ...(itemRecord ? { item: itemRecord } : {}),
@@ -2575,6 +2606,13 @@ export async function runAiJobStep(
       after: { status: resumed.job.status, confirmedPlan: true, autoConfirm: true },
     })
     return { outcome: 'done', job: resumed.job }
+  }
+  // A plan waiting for an answer only the person can give (AGL-3978): kept,
+  // charged as any plan is, and asked of them; nothing about it failed.
+  if (review && outcome.input && recorded.job.status === 'needs_input') {
+    await logAiJobNeedsInput(orgId, { uid: null }, { jobId, kind: job.kind, reason: 'input' })
+    if (recorded.parked) await announceAiJobTransition(recorded.job, 'needs-review')
+    return { outcome: 'needs_input', job: recorded.job }
   }
   if (review && recorded.job.status === 'needs_review') {
     // Nobody parked the job but its own step, so the row names no actor, as
@@ -2748,6 +2786,16 @@ export async function sweepAiJobs(
       const minimumMs = current ? aiJobNextStepMinimumMs(current) : 0
       if (minimumMs > left) {
         if (first) result.remaining += 1
+        return
+      }
+      // A job waiting for a person's answer (AGL-3978) is theirs to resume:
+      // it rests again, at the back of the parked queue, so it never holds a
+      // place a meter park could use.
+      if (current?.status === 'needs_input' && current.input?.fields?.length) {
+        await transition(options.firestore, orgId, jobId, (job) =>
+          job.status === 'needs_input' && job.input?.fields?.length ? { updatedAt: new Date(now()) } : null,
+        )
+        if (first) result.skipped += 1
         return
       }
       if (current?.status === 'needs_input') {

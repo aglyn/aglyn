@@ -66,9 +66,10 @@ declare module '@aglyn/aglyn/plugin-manager/plugin-entitlement-keys' {
      * `tier-margin-floor.spec.ts` is the model, and it pins both the rule and
      * the resulting figures.
      *
-     * The Aglyn AI add-on (AGL-2896) adds `AI_ADDON_CREDITS_PER_MONTH[plan]`
-     * to this band in `resolveOrgEntitlements` — one pool, widened, rather
-     * than a second meter.
+     * ONE POOL FOR EVERYTHING (AGL-3965): this band pays for every Aglyn AI
+     * action, generation included, on every plan. An Aglyn AI tier adds its
+     * credits (`AI_TIERS[tier].credits`) to it in `resolveOrgEntitlements`
+     * — one pool, widened, rather than a second meter.
      */
     assistCreditsPerMonth?: number
   }
@@ -187,18 +188,13 @@ export const AI_CREDITS_BY_PLAN: Readonly<Record<OrgPlan, number>> = {
   // plan bands at zero any more" was true of the number and false of the
   // capability.
   //
-  // It opens `aiAssist` rather than `aiGenerative` because that is the shape
-  // of every paid rung above it — the included band funds the guided
-  // assistant and generation is the add-on. Opening the generative door here
-  // instead would hand the FIRST paid rung a door Pro through Agency have to
-  // buy.
+  // Since AGL-3965 it opens `aiGenerative` too, as every paid rung does: the
+  // included band pays for generation and assist alike (one pool), and an
+  // Aglyn AI tier adds credits on top rather than opening a door.
   //
   // No cost moves: `tier-margin-floor.spec.ts` already prices this tier's
   // assist term at 100% burn of the 750 credits, 75¢/mo. A door does not
   // widen a band; it only makes spend that was already modeled reachable.
-  //
-  // The AI add-on adds `AI_ADDON_CREDITS_PER_MONTH.starter` on top and
-  // switches `aiGenerative` on as well.
   starter: 750,
   // $2.75 of provider spend, against the $8.35 the tier's other seven cost
   // terms leave out of $56. See the key's docblock for why the remainder and

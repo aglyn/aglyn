@@ -41,7 +41,7 @@
  */
 
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
+  AI_TIERS,
   apiRequestEnforcementShape,
   checkApiRequestQuota,
   checkCrmEmailQuota,
@@ -225,7 +225,7 @@ describe('a comp applies on a dead subscription (AGL-3034)', () => {
     expect(resolved.hostLimit).toBe(PLAN_ENTITLEMENTS.pro.hostLimit)
     expect(resolved.assistCreditsPerMonth).toBe(PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth)
     expect(resolved.assistCreditsPerMonth).not.toBe(
-      PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth + AI_ADDON_CREDITS_PER_MONTH.pro,
+      PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth + AI_TIERS.boost.credits,
     )
   })
 })

@@ -30,7 +30,8 @@
  */
 
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
+  aiTierQuotaPerUnit,
+  planSellsAiTiers,
   PLAN_ENTITLEMENTS,
   planLabelGrantingFeature,
   registerPluginEntitlements,
@@ -40,6 +41,7 @@ import {
   blockedExtensionNotice,
   composeExtensionEntitlements,
   entitlementPurchasable,
+  lockedPreviewPlanLabel,
   resolveExtensionEntitlement,
 } from './extension-entitlement'
 
@@ -118,7 +120,8 @@ describe('entitlementPurchasable (AGL-3601)', () => {
           key: 'demoUpsellAddon',
           label: 'Demo add-on',
           maxUnits: 1,
-          quota: { key: 'demoUpsellQuota', perUnitByPlan: AI_ADDON_CREDITS_PER_MONTH },
+          quota: { key: 'demoUpsellQuota', perUnit: aiTierQuotaPerUnit },
+          soldOn: planSellsAiTiers,
           features: ['demoUpsell'],
         },
       ],
@@ -138,7 +141,7 @@ describe('entitlementPurchasable (AGL-3601)', () => {
   })
 
   it('answers no on a plan the add-on is not sold on', () => {
-    expect(AI_ADDON_CREDITS_PER_MONTH.free).toBe(0)
+    expect(planSellsAiTiers('free')).toBe(false)
     expect(entitlementPurchasable(['demoUpsell'], live('free'))).toBe(false)
   })
 
@@ -162,5 +165,30 @@ describe('entitlementPurchasable (AGL-3601)', () => {
         live('pro', { entitlements: { features: { demoUpsell: true } } }),
       ),
     ).toBe(false)
+  })
+})
+
+describe('lockedPreviewPlanLabel (AGL-3977)', () => {
+  it('names the plan that includes what a Free workspace lacks', () => {
+    expect(lockedPreviewPlanLabel(['crm'], { plan: 'free' })).toBe(
+      planLabelGrantingFeature('crm'),
+    )
+  })
+
+  it('names the HIGHEST plan when two flags are missing', () => {
+    // `crm` starts lower than `scheduledPublishing`; only the higher plan has both.
+    expect(lockedPreviewPlanLabel(['crm', 'scheduledPublishing'], { plan: 'free' })).toBe(
+      planLabelGrantingFeature('scheduledPublishing'),
+    )
+  })
+
+  it('answers nothing when nothing is missing', () => {
+    expect(
+      lockedPreviewPlanLabel(['crm', undefined], { plan: 'business', billingStatus: 'active' }),
+    ).toBeUndefined()
+  })
+
+  it('answers nothing when a missing flag is on no plan, so the card stays absent', () => {
+    expect(lockedPreviewPlanLabel(['crm', 'outreach'], { plan: 'free' })).toBeUndefined()
   })
 })

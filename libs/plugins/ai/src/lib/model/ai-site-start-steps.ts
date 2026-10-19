@@ -16,7 +16,7 @@
  */
 
 import { AI_SITE_INPUT_MAX_CHARS, AI_SITE_SUBMISSIONS, aiSitePagesBand } from './ai-site-job'
-import type { AiSiteStartAnswers } from './ai-site-start'
+import { aiSiteStartInspirationRefusal, type AiSiteStartAnswers } from './ai-site-start'
 
 /**
  * The guided start's steps (AGL-3898): the same questions `ai-site-start.ts`
@@ -49,14 +49,15 @@ export const AI_SITE_START_STEP_LABELS: Readonly<Record<AiSiteStartStep, string>
 }
 
 /** An answer a step asks for, by its key on {@link AiSiteStartAnswers}. */
-export type AiSiteStartField = 'siteType' | 'audience' | 'kind' | 'pages' | 'submissions' | 'welcomeEmail'
+export type AiSiteStartField = 'siteType' | 'audience' | 'kind' | 'inspiration' | 'pages' | 'submissions' | 'welcomeEmail'
 
 /** The answers each step holds. */
 export const AI_SITE_START_STEP_FIELDS: Readonly<Record<AiSiteStartStep, readonly AiSiteStartField[]>> = {
   choose: [],
   kind: ['siteType'],
   audience: ['audience'],
-  style: ['kind'],
+  // The sites they like sit under the style cards (AGL-3975), when asked.
+  style: ['kind', 'inspiration'],
   details: ['submissions', 'pages', 'welcomeEmail'],
   review: [],
 }
@@ -107,6 +108,8 @@ export function aiSiteStartFieldErrors(
   if (!(AI_SITE_SUBMISSIONS as readonly string[]).includes(answers.submissions)) {
     errors.submissions = { message: 'Say where the contact form’s submissions go.', code: 'invalid' }
   }
+  const inspiration = aiSiteStartInspirationRefusal(answers, options)
+  if (inspiration) errors.inspiration = { message: inspiration, code: 'invalid' }
   return errors
 }
 

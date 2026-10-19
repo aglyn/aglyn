@@ -408,15 +408,23 @@ describe('LanguagesCard on a plan without multilingual (AGL-3502)', () => {
     expect(payload.locales).toEqual(['es'])
   })
 
-  it('REFUSES a second language, naming the plan that has it', async () => {
+  it('REFUSES a second language BEFORE the click, naming the plan that has it (AGL-3977)', () => {
     render(<LanguagesCard hostId="host-1" />)
+
+    // The plan is said up front, with the way to buy it — not after Save.
+    expect(screen.getByRole('alert').textContent).toContain('Included from Business.')
+    expect(screen.getByRole('button', { name: 'Upgrade' }).getAttribute('href')).toBe(
+      '/acme/billing#plans',
+    )
 
     save('en, es')
 
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    const button = screen.getByRole('button', { name: 'Save languages' })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    expect(
+      screen.getByLabelText('Publishing in more than one language is included from Business.'),
+    ).toBeTruthy()
     expect(updateDoc).not.toHaveBeenCalled()
-    const [message] = mockEnqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('Business plan'))
   })
 })
 

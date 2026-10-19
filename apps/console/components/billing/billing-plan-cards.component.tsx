@@ -18,12 +18,15 @@
 
 import {
   type AglynOrgBilling,
+  AI_TIERS,
   aiAddonName,
   checkEntitlement,
+  isCustomPricedPlan,
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
   PLAN_PRICING,
   PLATFORM_BRAND_NAME,
+  planSellsAiTiers,
   resolveOrgEntitlements,
   resolveTransactionFeePct,
   SELF_SERVE_PLANS,
@@ -217,56 +220,24 @@ const mbLabel = (mb: number) =>
 
 type FeatureKey = keyof (typeof PLAN_ENTITLEMENTS)['free']['features']
 
-/**
- * One checklist row. A `priced` row is sold as an add-on rather than carried
- * by a tier (AGL-2899): its cell is the per-plan price instead of a tick,
- * and it is left out of the tick lists that describe what a tier INCLUDES —
- * an add-on is not a gain of the step up, nor something a lower tier lacks.
- */
+/** One checklist row. */
 interface FeatureRow {
   key: FeatureKey
   label: string
-  priced?: 'aiAddon'
 }
 
 /**
- * Whether a plan carries everything the AI add-on unlocks without buying it:
- * both `aiGenerative` and `aiAssist` (Enterprise, in the agreement). Free's
- * generation taste carries `aiGenerative` alone, behind its own wall, and is
- * not the add-on.
+ * The Aglyn AI line in a card's quota block (AGL-2899, AGL-3965): a tier is
+ * sold on its own, at the same prices on every paid plan, so the line names
+ * the cheapest tier rather than a per-plan price. Enterprise's AI is in the
+ * agreement; Free sells no tier.
  */
-export function planIncludesAiAddon(
-  entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
-): boolean {
-  return entitlements.features.aiGenerative && entitlements.features.aiAssist
-}
-
-/**
- * The AI add-on's cell on a plan (AGL-2899): the add-on's monthly price where
- * the plan sells it, "Custom" where the plan includes it in its agreement
- * (Enterprise), and a dash where neither holds (Free).
- */
-export function aiAddonCell(
-  entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
-  pricing: (typeof PLAN_PRICING)[OrgPlan],
-): string {
-  if (pricing.aiAddonMonthlyUsd != null) return `+$${pricing.aiAddonMonthlyUsd}/mo`
-  return planIncludesAiAddon(entitlements) ? 'Custom' : '—'
-}
-
-/** The add-on's line in a card's quota block, beside the other rates. */
-function aiAddonLine(
-  entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
-  pricing: (typeof PLAN_PRICING)[OrgPlan],
-  brand: string,
-): string {
+export function aiTiersLine(plan: OrgPlan, brand: string): string {
   const name = aiAddonName(brand)
-  if (pricing.aiAddonMonthlyUsd != null) {
-    return `${name} add-on (+$${pricing.aiAddonMonthlyUsd}/mo)`
+  if (planSellsAiTiers(plan)) {
+    return `More AI credits: ${name} tiers from +$${AI_TIERS.spark.monthlyUsd}/mo`
   }
-  return planIncludesAiAddon(entitlements)
-    ? `${name} included`
-    : `No ${name} add-on`
+  return isCustomPricedPlan(plan) ? `${name} included` : `No ${name} tiers`
 }
 
 /**
@@ -379,14 +350,10 @@ const featureGroups = (
     title: 'Grow & automate',
     rows: [
       { key: 'aiAssist', label: 'AI assist' },
-      // Generative building is an ADD-ON on every self-serve tier (AGL-2896),
-      // so this row prices it per plan rather than ticking it; Enterprise
-      // carries it in the agreement and reads "Custom".
-      {
-        key: 'aiGenerative',
-        label: `${aiAddonName(brand)} (add-on)`,
-        priced: 'aiAddon',
-      },
+      // Generation draws on the plan's included AI credits on every plan
+      // since AGL-3965 (one pool), so it ticks like any inclusion; Free's
+      // taste ticks too, behind its own wall.
+      { key: 'aiGenerative', label: `${aiAddonName(brand)} generation` },
       { key: 'workflows', label: 'Workflows & automations' },
       { key: 'actions', label: 'Actions builder' },
       { key: 'dataStore', label: 'Datasets & dynamic data' },
@@ -569,6 +536,7 @@ function useContactsOverageBilled(): boolean | null {
 }
 
 function headlineLimits(
+  plan: OrgPlan,
   entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan],
   pricing: (typeof PLAN_PRICING)[OrgPlan],
   /**
@@ -690,9 +658,9 @@ function headlineLimits(
       ? `${quotaCount(entitlements.emailSendsPerMonth)} campaign emails/mo` +
         perThousand(pricing.extraEmailSendsUsdPer1k)
       : 'No campaign email',
-    // The AI add-on's rate (AGL-2899), a line rather than a suffix: it is a
-    // purchase on its own, not overage on a band above.
-    aiAddonLine(entitlements, pricing, brand),
+    // The Aglyn AI tiers (AGL-2899, AGL-3965), a line rather than a suffix:
+    // a purchase on its own, not overage on a band above.
+    aiTiersLine(plan, brand),
   ]
 }
 
@@ -734,9 +702,7 @@ function upgradeGains(
 ): string[] {
   return featureGroups(brand, options)
     .flatMap((group) => group.rows)
-    .filter(
-      (row) => !row.priced && !from.features[row.key] && to.features[row.key],
-    )
+    .filter((row) => !from.features[row.key] && to.features[row.key])
     .map((row) => row.label)
 }
 
@@ -755,7 +721,7 @@ function keyFeatures(
 ): string[] {
   return featureGroups(brand, options)
     .flatMap((group) => group.rows)
-    .filter((row) => !row.priced && entitlements.features[row.key])
+    .filter((row) => entitlements.features[row.key])
     .map((row) => row.label)
 }
 
@@ -779,7 +745,6 @@ function missingFromTier(
     .flatMap((group) => group.rows)
     .filter(
       (row) =>
-        !row.priced &&
         !mine.features[row.key] &&
         above.some((tier) => PLAN_ENTITLEMENTS[tier].features[row.key]),
     )
@@ -1218,6 +1183,7 @@ function FocusedTierView(props: {
                     five lines twice in one card. */}
                 <Stack spacing={0.5}>
                   {headlineLimits(
+                    rung === 'enterprise' ? 'enterprise' : (rung as OrgPlan),
                     PLAN_ENTITLEMENTS[
                       rung === 'enterprise' ? 'enterprise' : (rung as OrgPlan)
                     ],
@@ -1461,11 +1427,13 @@ function LowerTierDisclosure(props: {
  * card `ENTERPRISE_HIGHLIGHTS` is what answers it.
  */
 function PlanCardBody({
+  plan,
   entitlements,
   pricing,
   groups,
   brand,
 }: {
+  plan: OrgPlan
   entitlements: (typeof PLAN_ENTITLEMENTS)[OrgPlan]
   pricing: (typeof PLAN_PRICING)[OrgPlan]
   groups: ReturnType<typeof featureGroups>
@@ -1642,10 +1610,10 @@ function PlanCardBody({
             : '0% platform fees, plus card processing at cost'
           : 'No storefront'}
       </Typography>
-      {/* The AI add-on's rate on this tier (AGL-2899), in the same slot on
+      {/* The Aglyn AI tiers line (AGL-2899, AGL-3965), in the same slot on
           every card so the ladder reads across. */}
       <Typography variant="body2">
-        {aiAddonLine(entitlements, pricing, brand)}
+        {aiTiersLine(plan, brand)}
       </Typography>
     </Stack>
     <Stack spacing={1.5}>
@@ -1662,36 +1630,7 @@ function PlanCardBody({
       >
         {group.title}
       </Typography>
-      {group.rows.map(({ key, label, priced }) => {
-        // A priced row (the AI add-on) is a purchase, not an
-        // inclusion: its cell is the plan's price for it, a tick where the
-        // plan sells it or carries it, and a dash where it does neither.
-        if (priced) {
-          const cell = aiAddonCell(entitlements, pricing)
-          const offered = cell !== '—'
-          return (
-            <Stack
-              key={key}
-              direction="row"
-              spacing={0.75}
-              sx={{
-                alignItems: 'center',
-                color: offered ? 'text.primary' : 'text.disabled',
-              }}
-            >
-              <MdiIcon
-                fontSize="inherit"
-                sx={{ color: offered ? 'success.main' : 'text.disabled' }}
-                path={
-                  offered
-                    ? ICON_VARIANT_SYMBOL_CONFIRMED.path
-                    : ICON_VARIANT_SYMBOL_MINUS.path
-                }
-              />
-              <Typography variant="body2">{`${label} · ${cell}`}</Typography>
-            </Stack>
-          )
-        }
+      {group.rows.map(({ key, label }) => {
         const enabled = entitlements.features[key]
         return (
           <Stack
@@ -2146,6 +2085,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                 )}
                 <Divider sx={{ mb: 1.5 }} />
                 <PlanCardBody
+                  plan={tier}
                   entitlements={entitlements}
                   pricing={pricing}
                   groups={groups}
@@ -2338,6 +2278,7 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                 2026-09-07 — and a contracted default a customer cannot see
                 is a future refusal rather than a plan they agreed to. */}
             <PlanCardBody
+              plan="enterprise"
               entitlements={PLAN_ENTITLEMENTS.enterprise}
               pricing={PLAN_PRICING.enterprise}
               groups={groups}

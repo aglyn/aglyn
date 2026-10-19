@@ -29,7 +29,7 @@ import {
   type AiBuildPlanCreateKind,
   type AiBuildPlanScreen,
 } from './ai-build-plan'
-import type { AiJobItemLedger, AiJobItemStatus } from './ai-jobs.types'
+import type { AiJobInputField, AiJobItemLedger, AiJobItemStatus } from './ai-jobs.types'
 import {
   AI_BUILD_STORE_OP,
   AI_BUILD_STORE_PAGES_LABEL,
@@ -388,6 +388,37 @@ export function aiBuildPlanMissingInput(plan: AiBuildPlan, ops: AiBuildOps | nul
     if (question && !questions.includes(question)) questions.push(question)
   }
   return questions.length ? questions.join(' ') : null
+}
+
+/**
+ * The code on the build's admission refusal for a plan only the person can
+ * complete (AGL-3978): the plan step keeps such a plan and waits in
+ * `needs_input` for the fields `aiBuildPlanInputFields` reads, where the
+ * operations describe them.
+ */
+export const AI_BUILD_NEEDS_INPUT_CODE = 'needs-input'
+
+/**
+ * The fields the person fills before this plan can be built (AGL-3978), one
+ * per id an item asks for, as its operation describes them (`inputFields`).
+ * Empty when nothing asks, or when an item asks without fields to fill — a
+ * tracking change naming no tag at all — which the build answers with its
+ * question instead.
+ */
+export function aiBuildPlanInputFields(plan: AiBuildPlan, ops: AiBuildOps | null | undefined): AiJobInputField[] {
+  if (!ops) return []
+  const fields: AiJobInputField[] = []
+  for (const item of plan.items ?? []) {
+    const capability = ops.get(item.op)
+    const one = { name: item.name, why: item.why, args: item.args }
+    if (!capability?.missingInput?.(one)) continue
+    const asked = capability.inputFields?.(one) ?? []
+    if (!asked.length) return []
+    for (const field of asked) {
+      fields.push({ item: item.name, arg: field.arg, label: field.label, shape: field.shape, pattern: field.pattern.source })
+    }
+  }
+  return fields
 }
 
 /** "a booking service", "an email design". */

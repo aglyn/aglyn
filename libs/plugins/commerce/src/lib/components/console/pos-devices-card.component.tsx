@@ -37,6 +37,7 @@ import {
 import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import { posDisplayCall, posReadersCall, PosRequestError } from './pos/pos-api'
+import { POS_DEVICES_ANCHOR } from './pos/pos-kiosk-readiness.component'
 import { POS_REGISTERS_ANCHOR, usePosPairing } from './pos/pos-pairing.component'
 
 interface ReaderRow {
@@ -206,8 +207,19 @@ export function PosDevicesCard({ hostId, canManagePos = false }: PosDevicesCardP
   const readers = answer?.readers ?? []
   const showReaders = Boolean(answer?.available)
 
+  /*
+   * Arrived by a kiosk's "Open POS devices" (AGL-3982): this card renders
+   * after the page has already tried to scroll to the anchor, so it brings
+   * itself into view.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.location.hash !== `#${POS_DEVICES_ANCHOR}`) return
+    document.getElementById(POS_DEVICES_ANCHOR)?.scrollIntoView?.({ block: 'start' })
+  }, [])
+
   return (
     <CardDisplay
+      id={POS_DEVICES_ANCHOR}
       header={'POS devices'}
       help={pluginDocsHelp('pos', { anchor: '#card-readers' })}
       HeaderProps={

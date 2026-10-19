@@ -322,6 +322,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'off-tenant',
     why: "Not a sink, and never on a tenant render: the AI eval harness's live recorders and grader (AGL-2937, AGL-3074), imported only by the AI plugin's own specs and run from a developer's machine by `npm run eval:ai-live`, never by a deployment. Both markers are a product's photo on its way to a model: the `image` seams handed to the products job step, which read a committed fixture under tools/ai-eval/fixtures in place of the storage download, and the `read.image` picture part `readAiProductImage` re-encodes for the grader. Neither is a URL, and nothing here renders a page.",
   },
+  'libs/plugins/ai/src/lib/jobs/ai-site-inspiration-signals.ts': {
+    markers: 4,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: Sites I like's signal reader (AGL-3975), behind `release_ai_site_inspiration`, imported only by the site job's plan and look steps (jobs/ai-site-inspiration.ts, ai-job-plan-step.ts, ai-job-site-look.ts) on the console's AI job runner. Every marker is a pattern it matches against a liked page's HTML to count or locate things (`<style>` blocks, `<img>`/`<picture>` for density and a gallery, an `<img>` in the header as the logo's place); it reads the page and keeps only closed-set signals, and never emits an address or renders anything.",
+  },
   'libs/plugins/ai/src/lib/runtime/ai-palette.generated.ts': {
     markers: 4,
     guard: 'platform',

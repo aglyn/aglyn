@@ -33,7 +33,7 @@ final class BesignerUITests: XCTestCase {
       let dontAllow = springboard.buttons["Don’t Allow"]
       if dontAllow.waitForExistence(timeout: 20) { dontAllow.tap() }
     #endif
-    XCTAssertTrue(app.buttons["quick-action-redirects.open"].waitForExistence(timeout: 60), "Home never appeared")
+    XCTAssertTrue(app.descendants(matching: .any)["home-site-line"].waitForExistence(timeout: 60), "Home never appeared")
     shot("0-home")
     app.open(URL(string: page)!)
     #if os(iOS)
@@ -50,7 +50,7 @@ final class BesignerUITests: XCTestCase {
     let app = XCUIApplication()
     openBesigner(app)
     app.buttons["besigner-done"].tap()
-    XCTAssertTrue(app.buttons["quick-action-redirects.open"].waitForExistence(timeout: 30), "Done did not return to Home")
+    XCTAssertTrue(app.descendants(matching: .any)["home-site-line"].waitForExistence(timeout: 30), "Done did not return to Home")
     shot("2-back-home")
   }
 

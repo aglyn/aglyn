@@ -292,7 +292,7 @@ lists that page's findings, as the page is published. It checks the whole site t
 because a title another page also uses, or a page nothing links to, shows only from the
 site as a whole.
 
-With the AI add-on, [AI SEO](./seo-by-ai.md) proposes a fix for each finding.
+[AI SEO](./seo-by-ai.md) proposes a fix for each finding, from your plan's AI credits.
 
 ## Search engine visibility
 

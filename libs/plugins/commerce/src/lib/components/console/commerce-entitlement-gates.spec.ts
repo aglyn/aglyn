@@ -129,12 +129,25 @@ describe('AGL-2080 · commerce entitlements are gated at the console', () => {
 
   it('the shared gate routes its upsell through AppLink to billing', () => {
     // Never a MUI `href` — it bypasses the client router and full-reloads
-    // the console.
+    // the console. The notice and the lock are the console-wide ones since
+    // AGL-3977, so the properties are pinned where they now live.
     const gate = source('entitlement-gate.component.tsx')
-    expect(gate).toContain('<AppLink')
-    expect(gate).toContain('/billing')
-    expect(gate).toContain('planLabelGrantingFeature')
+    expect(gate).toContain('<PlanUpsellNotice')
+    expect(gate).toContain('resolvePlanFeatureLock')
     expect(gate).not.toMatch(/<Button[^>]*\bhref=/)
+    const libs = join(__dirname, '../../../../../..')
+    const lock = readFileSync(
+      join(libs, 'tenant/feature/instance/src/lib/hooks/plan-feature-lock.ts'),
+      'utf8',
+    )
+    expect(lock).toContain('/billing#')
+    expect(lock).toContain('planLabelGrantingFeature')
+    const notice = readFileSync(
+      join(libs, 'shared/ui/jsx/src/lib/components/prerequisite-notice.component.tsx'),
+      'utf8',
+    )
+    expect(notice).toContain('<AppLink')
+    expect(notice).not.toMatch(/<Button[^>]*\bhref=/)
   })
 
   it('the shared gate holds while the plan is in flight', () => {
