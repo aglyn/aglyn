@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -36,6 +37,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /*
  * The calmer screens' pieces (the nav redesign's eight rules): one primary action, summary before detail, advanced
@@ -89,21 +91,33 @@ fun RecordHeader(
       }
       status?.invoke()
     }
+    // Beside a list (the desktop, a tablet) the head is Figma's (Mac 13:483, iPad 13:2167): the ⋯ in a bordered square,
+    // then the standard filled button, as the list head draws them. A phone keeps its own.
+    val compactHead = LocalShellMetrics.current.compact || currentWidthClass() != WidthClass.COMPACT
     if (more.isNotEmpty()) {
-      OverflowMenu(more.map { MenuAction(it.id, it.label, it.icon, destructive = it.destructive, enabled = it.enabled) { it.run() } }, contentDescription = "More actions")
+      OverflowMenu(
+        more.map { MenuAction(it.id, it.label, it.icon, destructive = it.destructive, enabled = it.enabled) { it.run() } },
+        contentDescription = "More actions", boxed = compactHead, boxSize = 36.dp,
+      )
     }
     primary?.let { action ->
-      Button(shape = controlShape(), onClick = action.run, enabled = action.enabled, modifier = Modifier.testTag(action.id)) {
-        Icon(AglynIcons.named(action.icon), contentDescription = null, Modifier.size(18.dp))
-        Text(action.label, Modifier.padding(start = space(1f)), maxLines = 1)
+      if (compactHead) {
+        // Figma's record head button is words only (iPad 13:2167 "Fulfill", 36 tall).
+        CompactButton(action.label, null, action.run, Modifier.testTag(action.id), enabled = action.enabled, filled = true, tall = true)
+      } else {
+        Button(shape = controlShape(), onClick = action.run, enabled = action.enabled, modifier = Modifier.testTag(action.id)) {
+          Icon(AglynIcons.named(action.icon), contentDescription = null, Modifier.size(18.dp))
+          Text(action.label, Modifier.padding(start = space(1f)), maxLines = 1)
+        }
       }
     }
   }
 }
 
 /**
- * A section that stays folded until opened (Payment and refunds, Customer details, Timeline and notes): a heading with an
- * optional count, separated by a rule rather than a card.
+ * A section that stays folded until opened (Customer details, Timeline and notes), as Figma's Section/Folded draws it
+ * (Mac 13:483, iPad 13:2167): a row under a hairline, the chevron at the content's edge (it turns down when open), the
+ * title, and the count on the right.
  */
 @Composable
 fun FoldedSection(
@@ -122,14 +136,20 @@ fun FoldedSection(
         .then(if (tag != null) Modifier.testTag(tag) else Modifier)
         .semantics(mergeDescendants = true) { role = Role.Button; stateDescription = if (open) "Open" else "Folded"; heading() },
       verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(space(1f)),
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      Icon(AglynIcons.named(if (open) "expand_more" else "chevron_right"), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-      Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-      count?.takeIf { it > 0 }?.let { Text(it.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      Box(Modifier.size(16.dp), contentAlignment = Alignment.CenterStart) {
+        Icon(
+          AglynIcons.named("chevron_right"), null,
+          Modifier.size(16.dp).graphicsLayer { rotationZ = if (open) 90f else 0f },
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+      Text(title, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+      count?.takeIf { it > 0 }?.let { Text(it.toString(), fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
     AnimatedVisibility(open) {
-      Column(Modifier.fillMaxWidth().padding(start = space(3.5f), bottom = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f)), content = content)
+      Column(Modifier.fillMaxWidth().padding(start = 28.dp, bottom = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f)), content = content)
     }
   }
 }

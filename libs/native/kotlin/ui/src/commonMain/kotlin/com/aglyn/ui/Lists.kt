@@ -102,6 +102,8 @@ fun OverflowMenu(
   contentDescription: String = "More actions",
   /** Figma's list head "More" (Mac 13:483, iPad 13:2167): a horizontal ⋯ in a bordered 28 square after the primary. */
   boxed: Boolean = false,
+  /** The boxed square's side: 28 beside a list head's buttons, 36 beside a record head's standard button. */
+  boxSize: androidx.compose.ui.unit.Dp = 28.dp,
 ) {
   if (actions.isEmpty()) return
   var open by remember { mutableStateOf(false) }
@@ -110,7 +112,7 @@ fun OverflowMenu(
       if (boxed) {
         val shape = androidx.compose.foundation.shape.RoundedCornerShape(LocalShellMetrics.current.controlRadius)
         Box(
-          Modifier.size(28.dp).clip(shape).background(MaterialTheme.colorScheme.surface)
+          Modifier.size(boxSize).clip(shape).background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outline, shape)
             .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = { open = true })
             .testTag("overflow-menu").semantics { this.contentDescription = contentDescription },
