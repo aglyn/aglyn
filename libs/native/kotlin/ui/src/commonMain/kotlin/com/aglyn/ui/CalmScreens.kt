@@ -93,7 +93,7 @@ fun RecordHeader(
       OverflowMenu(more.map { MenuAction(it.id, it.label, it.icon, destructive = it.destructive, enabled = it.enabled) { it.run() } }, contentDescription = "More actions")
     }
     primary?.let { action ->
-      Button(onClick = action.run, enabled = action.enabled, modifier = Modifier.testTag(action.id)) {
+      Button(shape = controlShape(), onClick = action.run, enabled = action.enabled, modifier = Modifier.testTag(action.id)) {
         Icon(AglynIcons.named(action.icon), contentDescription = null, Modifier.size(18.dp))
         Text(action.label, Modifier.padding(start = space(1f)), maxLines = 1)
       }

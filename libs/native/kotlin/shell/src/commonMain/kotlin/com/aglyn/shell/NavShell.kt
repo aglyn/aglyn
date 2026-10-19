@@ -2,6 +2,8 @@ package com.aglyn.shell
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,6 +61,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -118,6 +121,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   val version by services.registry.version.collectAsState()
   val widthClass = currentWidthClass()
   val wide = widthClass != WidthClass.COMPACT
+  val compactChrome = usesCompactChrome
   val context = ShellPluginContext(uid, workspace, services, navigator, emptySet())
 
   // The workspace on screen is the most recent one; each account remembers the workspaces it holds for links.
@@ -340,7 +344,9 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     // Where the person is, as an account item: what ☆ stars and what Recents remember.
     val here = placeRef(navigator, route, row, title, workspace)
     // The tab names where it stands: the place, then its site or workspace.
-    val tabTitle = listOfNotNull(title.takeIf { it.isNotBlank() }, workspace.site?.name ?: workspace.org?.name).joinToString(" · ")
+    // As Figma words a tab: "Bakery — Orders" (the scope, then the place); Home is just "Home".
+    val atHome = route == null && navigator.top == ShellNavigator.HOME
+    val tabTitle = if (atHome) "Home" else listOfNotNull(workspace.site?.name ?: workspace.org?.name, title.takeIf { it.isNotBlank() }).joinToString(" — ")
     LaunchedEffect(tabTitle, tabs.activeId) { tabs.active.title = tabTitle.ifBlank { "Home" } }
     LaunchedEffect(here) {
       val item = here ?: return@LaunchedEffect
@@ -406,75 +412,81 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     val starred = prefs.starred.filter { it.orgId == workspace.org?.id && (it.hostId == null || it.hostId == workspace.site?.id) }
     val onStar: (com.aglyn.contracts.StarredItem) -> Unit = { item -> openRef(item.toRef()) }
     if (wide) {
-      // A tablet draws edge to edge: the status bar and the taskbar keep their space, in the rail's color.
-      Column(Modifier.fillMaxSize().background(shellColors.rail).windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing).then(shortcuts)) {
-      if (tabs.tabs.size > 1) {
-        Box(Modifier.background(shellColors.rail).padding(top = LocalTitleBarInset.current)) {
-          TabStrip(tabs, onSelect = ::selectTab, onClose = { closeTab(it) }, onNew = { newTab() })
-        }
+      val metrics = if (compactChrome) com.aglyn.ui.CompactShellMetrics else com.aglyn.ui.TouchShellMetrics
+      // The window's radii: controls 6, cards 10, menus and sheets 12 on the desktop; a step larger on tablets.
+      val shapes = if (compactChrome) {
+        com.aglyn.ui.CompactShapes
+      } else {
+        MaterialTheme.shapes.copy(extraLarge = RoundedCornerShape(16.dp))
       }
-      CompositionLocalProvider(LocalTitleBarInset provides if (tabs.tabs.size > 1) 0.dp else LocalTitleBarInset.current) {
-      Row(Modifier.weight(1f).fillMaxWidth().testTag("nav-shell-wide")) {
-        if (!chrome.railHidden) {
-          Box(Modifier.fillMaxHeight().background(shellColors.rail).padding(top = LocalTitleBarInset.current)) {
-            WorkspaceRail(
-              services, workspace, prefs, user, unreadByOrg(services, uid),
-              RailActions(
-                open = { orgId -> chrome.settingsMode = null; services.workspace.selectOrg(orgId); navigator.select(ShellNavigator.HOME) },
-                all = { chrome.picker = PickerStep.WORKSPACE },
-                create = { chrome.createMenu = true },
-                admin = if (screenSession.claims.isStaff) ({ chrome.settingsMode = STAFF_MODE; staffGroups.firstOrNull()?.rows?.firstOrNull()?.let { navigator.select(it.key) } }) else null,
-                account = { chrome.accountMenu = true },
-                color = { chrome.colorFor = it },
-                settings = { orgId -> services.workspace.selectOrg(orgId); actions.enterSettings(NativeNavListId.WORKSPACE_SETTINGS) },
-                pinFull = { chrome.pinFullFor = it },
-              ),
-            )
-            Box(Modifier.align(Alignment.BottomStart)) {
-              AccountMenu(services, user, chrome)
-              CreateMenu(services, workspace, chrome, enabled, uid, actions)
-            }
-          }
-          VerticalDivider(color = shellColors.divider)
+      MaterialTheme(colorScheme = MaterialTheme.colorScheme, typography = MaterialTheme.typography, shapes = shapes) {
+      CompositionLocalProvider(com.aglyn.ui.LocalShellMetrics provides metrics) {
+      // One continuous title bar over the rail, the sidebar and the content (as Figma draws the window), then the flush
+      // columns under it. A tablet draws edge to edge: the status bar and the taskbar keep their space.
+      Column(Modifier.fillMaxSize().background(shellColors.titleBar).windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing).then(shortcuts)) {
+        WideTitleBar(
+          services, navigator, chrome, tabs, onSelectTab = ::selectTab, onCloseTab = { closeTab(it) }, onNewTab = { newTab() },
+          pushed = route != null, uid = uid, here = here, prefs = prefs,
+        ) {
+          HelpButton(help)
+          if (assist != null) TitleBarButton(if (chrome.aiPanel) "Close the AI panel" else "AI", "auto_awesome", "ai-panel-toggle") { chrome.toggleAiPanel() }
         }
-        if (!chrome.sidebarHidden) {
-          Box(Modifier.padding(top = LocalTitleBarInset.current).background(tint ?: shellColors.sidebar)) {
+        HorizontalDivider(color = shellColors.divider)
+        Row(Modifier.weight(1f).fillMaxWidth().testTag("nav-shell-wide")) {
+          if (!chrome.railHidden) {
+            Box(Modifier.fillMaxHeight().background(shellColors.rail)) {
+              WorkspaceRail(
+                services, workspace, prefs, user, unreadByOrg(services, uid),
+                RailActions(
+                  open = { orgId -> chrome.settingsMode = null; services.workspace.selectOrg(orgId); navigator.select(ShellNavigator.HOME) },
+                  all = { chrome.picker = PickerStep.WORKSPACE },
+                  create = { chrome.createMenu = true },
+                  admin = if (screenSession.claims.isStaff) ({ chrome.settingsMode = STAFF_MODE; staffGroups.firstOrNull()?.rows?.firstOrNull()?.let { navigator.select(it.key) } }) else null,
+                  account = { chrome.accountMenu = true },
+                  color = { chrome.colorFor = it },
+                  settings = { orgId -> services.workspace.selectOrg(orgId); actions.enterSettings(NativeNavListId.WORKSPACE_SETTINGS) },
+                  pinFull = { chrome.pinFullFor = it },
+                ),
+              )
+              Box(Modifier.align(Alignment.BottomStart)) {
+                AccountMenu(services, user, chrome)
+                CreateMenu(services, workspace, chrome, enabled, uid, actions)
+              }
+            }
+            VerticalDivider(color = shellColors.divider)
+          }
+          if (!chrome.sidebarHidden) {
             NavSidebar(services, workspace, chrome, sidebar, selectedKey, starred, tint, onRow = { openRow(it) }, onStar = onStar, foot = planFoot)
+            VerticalDivider(color = shellColors.divider)
           }
-          VerticalDivider(color = shellColors.divider)
-        }
-        Column(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
-          if (route !is Route.Web) {
-            // Breadcrumbs on a pushed screen: the destination it was opened from, then the screen itself.
-            val crumb = row?.let { r -> r.sections.firstOrNull { it.key == navigator.top }?.label?.takeIf { r.sections.size > 1 } ?: r.label }
-              ?.takeIf { route != null && it != title }
-            WideTitleBar(services, navigator, chrome, title, route != null, uid, here, prefs, crumb = crumb) {
-              // The desktop opens tabs from its menu bar (Tab ▸ New tab); a tablet has no menu bar, so the title bar offers it.
-              if (tabs.tabs.size == 1 && !hasMenuBar) TitleBarButton("New tab  ${shortcutText("T")}", "tab", "tab-new-title") { newTab() }
-              HelpButton(help)
-              if (assist != null) TitleBarButton(if (chrome.aiPanel) "Close the AI panel" else "AI", "auto_awesome", "ai-panel-toggle") { chrome.toggleAiPanel() }
+          Column(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
+            if (route !is Route.Web) {
+              // Breadcrumbs on a pushed screen: the destination it was opened from, then the screen itself.
+              val crumb = row?.let { r -> r.sections.firstOrNull { it.key == navigator.top }?.label?.takeIf { r.sections.size > 1 } ?: r.label }
+                ?.takeIf { route != null && it != title }
+              crumb?.let { Breadcrumbs(listOfNotNull(workspace.site?.name ?: workspace.org?.name, it, title), onBack = { navigator.select(navigator.top) }) }
+              banner()
+              sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
             }
-            banner()
-            sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
-          }
-          Row(Modifier.weight(1f).fillMaxWidth()) {
-            Box(Modifier.weight(1f).fillMaxHeight()) { body() }
-            if (assist != null && chrome.aiPanel && route !is Route.Web) {
-              VerticalDivider(color = shellColors.divider)
-              Column(Modifier.width(380.dp).fillMaxHeight().background(shellColors.sidebar).testTag("ai-panel")) {
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                  Text(assist.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                  TitleBarButton("Close", "close", "ai-panel-close") { chrome.toggleAiPanel(false) }
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+              Box(Modifier.weight(1f).fillMaxHeight()) { body() }
+              if (assist != null && chrome.aiPanel && route !is Route.Web) {
+                VerticalDivider(color = shellColors.divider)
+                Column(Modifier.width(380.dp).fillMaxHeight().background(shellColors.sidebar).testTag("ai-panel")) {
+                  Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(assist.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    TitleBarButton("Close", "close", "ai-panel-close") { chrome.toggleAiPanel(false) }
+                  }
+                  Box(Modifier.weight(1f)) { assistContent() }
                 }
-                Box(Modifier.weight(1f)) { assistContent() }
               }
             }
           }
         }
       }
-      }
-      }
       if (tabs.overview) TabOverview(tabs, onSelect = ::selectTab, onReopen = { tab -> tabs.closed.remove(tab); tabs.closed.add(0, tab); reopenTab() })
+      }
+      }
     } else {
       PhoneShell(
         services, navigator, chrome, workspace, prefs, user, uid, title, route, scopeGroups, settingsGroups, sidebar, starred,
@@ -676,77 +688,134 @@ private fun WideTitleBar(
   services: ShellServices,
   navigator: ShellNavigator,
   chrome: NavChromeState,
-  title: String,
+  tabs: ShellTabs,
+  onSelectTab: (ShellTab) -> Unit,
+  onCloseTab: (ShellTab) -> Unit,
+  onNewTab: () -> Unit,
   pushed: Boolean,
   uid: String,
   here: com.aglyn.contracts.AccountItemRef?,
   prefs: com.aglyn.core.AccountPreferences,
-  /** The destination a pushed screen was opened from, shown before its title and leading back to it. */
-  crumb: String? = null,
   trailing: @Composable () -> Unit = {},
 ) {
+  val m = com.aglyn.ui.shellMetrics
+  // The Mac's traffic lights sit at the bar's left edge (a transparent, full-size title bar).
+  val lights = if (LocalTitleBarInset.current > 0.dp) 76.dp else 8.dp
   Row(
-    Modifier.fillMaxWidth().background(shellColors.titleBar).padding(top = LocalTitleBarInset.current).height(com.aglyn.ui.LocalUiDensity.current.titleBar.dp).padding(horizontal = 8.dp).testTag("title-bar"),
+    Modifier.fillMaxWidth().background(shellColors.titleBar).height(m.titleBar).padding(start = lights, end = 8.dp).testTag("title-bar"),
     verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(4.dp),
+    horizontalArrangement = Arrangement.spacedBy(2.dp),
   ) {
     TitleBarButton(if (chrome.sidebarHidden) "Show sidebar" else "Hide sidebar", "view_sidebar", "toggle-sidebar") { chrome.toggleSidebar() }
     if (pushed) {
       TitleBarButton("Back", "arrow_back", "title-back") { navigator.back() }
     } else {
       // Back and forward through the places visited, and what was opened recently.
-      TitleBarButton("Back", "chevron_left", "history-back", enabled = navigator.canGoBackInHistory) { navigator.historyBack() }
-      TitleBarButton("Forward", "chevron_right", "history-forward", enabled = navigator.canGoForwardInHistory) { navigator.historyForward() }
-      val openRecent = LocalOpenRecent.current
-      RecentHistoryButton(prefs) { item -> openRecent?.invoke(item) }
+      TitleBarButton("Back", "arrow_back", "history-back", enabled = navigator.canGoBackInHistory) { navigator.historyBack() }
     }
-    // The title and the search box share the room the buttons leave (search up to its width); the title ellipsizes.
-    Row(Modifier.weight(1.5f), verticalAlignment = Alignment.CenterVertically) {
-      crumb?.let {
-        Text(
-          it,
-          style = MaterialTheme.typography.titleMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.padding(start = 8.dp).widthIn(max = 200.dp).clip(RoundedCornerShape(6.dp))
-            .clickable { navigator.select(navigator.top) }.padding(horizontal = 4.dp).testTag("title-crumb")
-            .semantics { role = Role.Button },
-        )
-        Icon(AglynIcons.named("chevron_right"), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-      }
-      Text(
-        title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false).semantics { heading() },
-      )
-      here?.let { StarButton(services, it, prefs) }
+    TitleBarButton("Forward", "arrow_forward", "history-forward", enabled = !pushed && navigator.canGoForwardInHistory) { navigator.historyForward() }
+    val openRecent = LocalOpenRecent.current
+    RecentHistoryButton(prefs) { item -> openRecent?.invoke(item) }
+    Spacer(Modifier.width(6.dp))
+    // The window's tabs, in the bar itself as Figma draws them: the pinned Home tab first, then +.
+    Row(
+      Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()).testTag("tab-strip"),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+      for (tab in tabs.tabs) TitleTab(tab, selected = tab.id == tabs.activeId, closable = !tab.pinned, onSelect = { onSelectTab(tab) }, onClose = { onCloseTab(tab) })
     }
+    TitleBarButton("New tab  ${shortcutText("T")}", "add", "tab-new", onClick = onNewTab)
+    if (tabs.tabs.size > 1) TitleBarButton("All tabs", "grid_view", "tab-overview") { tabs.overview = true }
+    here?.let { StarButton(services, it, prefs) }
+    Spacer(Modifier.weight(0.001f))
     Surface(
       onClick = { chrome.oneBox = true },
-      shape = RoundedCornerShape(10.dp),
+      shape = RoundedCornerShape(m.controlRadius),
       color = MaterialTheme.colorScheme.surfaceContainerHigh,
-      modifier = Modifier.weight(1f, fill = false).widthIn(min = 160.dp, max = 340.dp).height(36.dp).testTag("search-or-jump").semantics { contentDescription = "Search or jump to" },
+      border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+      modifier = Modifier.widthIn(min = 180.dp, max = 340.dp).height(if (m.compact) 30.dp else 40.dp).testTag("search-or-jump").semantics { contentDescription = "Search or jump to" },
     ) {
-      Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(AglynIcons.named("search"), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Search or jump to", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-        Text(shortcutText("K"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(AglynIcons.named("search"), null, Modifier.size(m.rowIcon), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Search or jump to", style = MaterialTheme.typography.bodyMedium.copy(fontSize = m.rowText), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1)
+        Text(
+          shortcutText("K"),
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainerLowest).padding(horizontal = 5.dp, vertical = 1.dp),
+        )
       }
     }
-    Spacer(Modifier.width(4.dp))
+    Spacer(Modifier.width(6.dp))
     BellButton(services, uid) { navigator.select(ShellNavigator.NOTIFICATIONS) }
     trailing()
   }
 }
 
+/** "Bakery › Sell › Orders": where a pushed screen sits; the steps before the last lead back to the destination. */
+@Composable
+private fun Breadcrumbs(steps: List<String>, onBack: () -> Unit) {
+  Row(
+    Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp).testTag("title-crumb"),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(4.dp),
+  ) {
+    steps.forEachIndexed { index, step ->
+      val last = index == steps.lastIndex
+      if (index > 0) Icon(AglynIcons.named("chevron_right"), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+      Text(
+        step,
+        style = MaterialTheme.typography.bodySmall,
+        color = if (last) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+        fontWeight = if (last) FontWeight.Medium else FontWeight.Normal,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = if (last) Modifier else Modifier.clip(RoundedCornerShape(4.dp)).clickable(onClick = onBack).padding(horizontal = 2.dp),
+      )
+    }
+  }
+}
+
+/** One tab in the title bar: its place's icon and name, and × (the pinned Home tab has none). */
+@Composable
+private fun TitleTab(tab: ShellTab, selected: Boolean, closable: Boolean, onSelect: () -> Unit, onClose: () -> Unit) {
+  val m = com.aglyn.ui.shellMetrics
+  Surface(
+    onClick = onSelect,
+    shape = RoundedCornerShape(m.controlRadius),
+    color = if (selected) MaterialTheme.colorScheme.surfaceContainerLowest else Color.Transparent,
+    border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
+    modifier = Modifier.height(if (m.compact) 28.dp else 36.dp).widthIn(max = 220.dp).testTag("tab-${tab.id}")
+      .semantics { this.selected = selected; role = Role.Tab },
+  ) {
+    Row(Modifier.padding(start = 10.dp, end = if (closable) 2.dp else 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+      Icon(AglynIcons.named(if (tab.pinned) "home" else "tab"), null, Modifier.size(m.rowIcon - 2.dp), tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+      Text(
+        tab.title,
+        style = MaterialTheme.typography.labelLarge.copy(fontSize = m.rowText),
+        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.widthIn(max = 170.dp),
+      )
+      if (closable) {
+        androidx.compose.material3.IconButton(onClick = onClose, modifier = Modifier.size(20.dp).testTag("tab-close-${tab.id}").semantics { contentDescription = "Close ${tab.title}" }) {
+          Icon(AglynIcons.named("close"), null, Modifier.size(12.dp))
+        }
+      }
+    }
+  }
+}
+
 @Composable
 internal fun TitleBarButton(label: String, icon: String, tag: String, enabled: Boolean = true, onClick: () -> Unit) {
+  val m = com.aglyn.ui.shellMetrics
   WithTooltip(label) {
-    androidx.compose.material3.IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.testTag(tag)) { Icon(AglynIcons.named(icon), contentDescription = label) }
+    androidx.compose.material3.IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(m.barButton).testTag(tag)) {
+      Icon(AglynIcons.named(icon), contentDescription = label, Modifier.size(m.barIcon))
+    }
   }
 }
 
@@ -795,10 +864,10 @@ internal fun BellButton(services: ShellServices, uid: String, onClick: () -> Uni
     WithTooltip("Notifications") {
       androidx.compose.material3.IconButton(
         onClick = { if (popover != null) open = true else onClick() },
-        modifier = Modifier.testTag("bell").semantics { contentDescription = if (unread > 0) "Notifications, $unread unread" else "Notifications" },
+        modifier = Modifier.size(com.aglyn.ui.shellMetrics.barButton).testTag("bell").semantics { contentDescription = if (unread > 0) "Notifications, $unread unread" else "Notifications" },
       ) {
         androidx.compose.material3.BadgedBox(badge = { if (unread > 0) androidx.compose.material3.Badge(containerColor = shellColors.badge) }) {
-          Icon(AglynIcons.named("notifications"), null)
+          Icon(AglynIcons.named("notifications"), null, Modifier.size(com.aglyn.ui.shellMetrics.barIcon))
         }
       }
     }

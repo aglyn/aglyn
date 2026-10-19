@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
  * The navigation shell's colors (the rail, the sidebar, the title bar, badges and the color picks), derived once from
@@ -107,3 +108,89 @@ val RailWidth = 68.dp
 
 /** The sidebar's width. */
 val SidebarWidth = 248.dp
+
+/**
+ * The shell's sizes for the kind of window it is in (the Figma Rail / Sidebar components' Size variant): Compact on the
+ * desktop (pointer, Mac-native sizes), Touch on tablets. Phones have no rail and keep their own sizes.
+ */
+@Immutable
+data class ShellMetrics(
+  val compact: Boolean,
+  val railWidth: androidx.compose.ui.unit.Dp,
+  /** A workspace tile, and its corner radius. */
+  val tile: androidx.compose.ui.unit.Dp,
+  val tileRadius: androidx.compose.ui.unit.Dp,
+  val badge: androidx.compose.ui.unit.Dp,
+  /** The rail's section labels (PINNED, RECENT), in caps. */
+  val railLabel: androidx.compose.ui.unit.TextUnit,
+  val tileGap: androidx.compose.ui.unit.Dp,
+  /** Create new and the account photo at the rail's foot. */
+  val utility: androidx.compose.ui.unit.Dp,
+  val sidebarWidth: androidx.compose.ui.unit.Dp,
+  /** A sidebar row: height, text, icon, its selected pill's radius and the inset around it. */
+  val row: androidx.compose.ui.unit.Dp,
+  val rowText: androidx.compose.ui.unit.TextUnit,
+  val rowIcon: androidx.compose.ui.unit.Dp,
+  val pillRadius: androidx.compose.ui.unit.Dp,
+  val rowInset: androidx.compose.ui.unit.Dp,
+  /** The workspace / site header's logo and its radius. */
+  val headerLogo: androidx.compose.ui.unit.Dp,
+  val headerLogoRadius: androidx.compose.ui.unit.Dp,
+  val titleBar: androidx.compose.ui.unit.Dp,
+  /** Controls (buttons, fields, the search box), cards, and sheets or popovers. */
+  val controlRadius: androidx.compose.ui.unit.Dp,
+  val cardRadius: androidx.compose.ui.unit.Dp,
+  val sheetRadius: androidx.compose.ui.unit.Dp,
+  /** A title-bar icon button and its icon. */
+  val barButton: androidx.compose.ui.unit.Dp,
+  val barIcon: androidx.compose.ui.unit.Dp,
+  /** The selected tile's ring box and radius, and the rail's left bar beside it. */
+  val ringBox: androidx.compose.ui.unit.Dp,
+  val ringRadius: androidx.compose.ui.unit.Dp,
+  val selectionBar: androidx.compose.ui.unit.Dp,
+  /** Create new's corner radius, and the account photo. */
+  val utilityRadius: androidx.compose.ui.unit.Dp,
+  val avatar: androidx.compose.ui.unit.Dp,
+  /** A sidebar group's heading row, and a tile's initials. */
+  val groupHeader: androidx.compose.ui.unit.Dp,
+  val tileInitial: androidx.compose.ui.unit.TextUnit,
+)
+
+val CompactShellMetrics = ShellMetrics(
+  compact = true, railWidth = 56.dp, tile = 32.dp, tileRadius = 8.dp, badge = 14.dp, railLabel = 9.sp, tileGap = 8.dp, utility = 28.dp,
+  sidebarWidth = 248.dp, row = 28.dp, rowText = 13.sp, rowIcon = 16.dp, pillRadius = 6.dp, rowInset = 8.dp, headerLogo = 20.dp,
+  headerLogoRadius = 5.dp, titleBar = 52.dp, controlRadius = 6.dp, cardRadius = 10.dp, sheetRadius = 12.dp, barButton = 28.dp, barIcon = 16.dp,
+  ringBox = 38.dp, ringRadius = 11.dp, selectionBar = 18.dp, utilityRadius = 6.dp, avatar = 24.dp, groupHeader = 24.dp, tileInitial = 13.sp,
+)
+
+val TouchShellMetrics = ShellMetrics(
+  compact = false, railWidth = 64.dp, tile = 40.dp, tileRadius = 10.dp, badge = 18.dp, railLabel = 10.sp, tileGap = 8.dp, utility = 36.dp,
+  sidebarWidth = 256.dp, row = 36.dp, rowText = 15.sp, rowIcon = 18.dp, pillRadius = 8.dp, rowInset = 8.dp, headerLogo = 24.dp,
+  headerLogoRadius = 6.dp, titleBar = 56.dp, controlRadius = 8.dp, cardRadius = 12.dp, sheetRadius = 16.dp, barButton = 40.dp, barIcon = 20.dp,
+  ringBox = 48.dp, ringRadius = 14.dp, selectionBar = 22.dp, utilityRadius = 10.dp, avatar = 32.dp, groupHeader = 32.dp, tileInitial = 16.sp,
+)
+
+val LocalShellMetrics = staticCompositionLocalOf { TouchShellMetrics }
+
+/** The desktop's radii (Compact): fields and controls 6, cards 10, menus, sheets and dialogs 12. */
+val CompactShapes = androidx.compose.material3.Shapes(
+  extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+  small = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+  medium = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+  large = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+  extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+)
+
+/** The shell's sizes in effect. */
+val shellMetrics: ShellMetrics
+  @Composable @ReadOnlyComposable get() = LocalShellMetrics.current
+
+/**
+ * A button's shape in the window it is in: the Compact density's 6 dp corners on the desktop (Figma Button, Density =
+ * Compact), the Touch pill elsewhere.
+ */
+@Composable
+fun controlShape(): androidx.compose.ui.graphics.Shape {
+  val metrics = LocalShellMetrics.current
+  return if (metrics.compact) androidx.compose.foundation.shape.RoundedCornerShape(metrics.controlRadius) else androidx.compose.material3.ButtonDefaults.shape
+}

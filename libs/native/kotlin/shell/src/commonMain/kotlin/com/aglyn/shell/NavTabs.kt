@@ -120,40 +120,6 @@ internal class ShellTabs(root: ShellNavigator) {
   }
 }
 
-/** The tab strip over the title bar, shown once there is more than the Home tab. */
-@Composable
-internal fun TabStrip(tabs: ShellTabs, onSelect: (ShellTab) -> Unit, onClose: (ShellTab) -> Unit, onNew: () -> Unit) {
-  Row(
-    Modifier.fillMaxWidth().background(shellColors.rail).height(40.dp).padding(horizontal = 8.dp).testTag("tab-strip"),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(4.dp),
-  ) {
-    Row(Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-      for (tab in tabs.tabs) {
-        val selected = tab.id == tabs.activeId
-        Surface(
-          onClick = { onSelect(tab) },
-          shape = RoundedCornerShape(8.dp),
-          color = if (selected) MaterialTheme.colorScheme.surfaceContainerLowest else androidx.compose.ui.graphics.Color.Transparent,
-          modifier = Modifier.heightIn(min = 32.dp).widthIn(max = 240.dp).testTag("tab-${tab.id}").semantics { this.selected = selected; role = Role.Tab },
-        ) {
-          Row(Modifier.padding(start = 10.dp, end = if (tab.pinned) 10.dp else 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(AglynIcons.named(if (tab.pinned) "home" else "tab"), null, Modifier.size(16.dp))
-            Text(if (tab.pinned) "Home" else tab.title, style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.SemiBold else null, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp))
-            if (!tab.pinned) {
-              IconButton(onClick = { onClose(tab) }, modifier = Modifier.size(24.dp).testTag("tab-close-${tab.id}").semantics { contentDescription = "Close ${tab.title}" }) {
-                Icon(AglynIcons.named("close"), null, Modifier.size(14.dp))
-              }
-            }
-          }
-        }
-      }
-    }
-    TitleBarButton("New tab  ${shortcutText("T")}", "add", "tab-new", onClick = onNew)
-    TitleBarButton("All tabs", "grid_view", "tab-overview") { tabs.overview = true }
-  }
-}
-
 /** The tab overview: every open tab with search, and the recently closed. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

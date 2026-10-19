@@ -50,7 +50,7 @@ fun ListToolbar(
     SearchField(query, onQuery, placeholder = placeholder, modifier = Modifier.weight(1f))
     if (onFilters != null) {
       val count = filterCount ?: 0
-      OutlinedButton(onClick = onFilters, modifier = Modifier.testTag("$tag-filters").semantics { contentDescription = if (count == 0) "Filters" else "Filters, $count set" }) {
+      OutlinedButton(shape = controlShape(), onClick = onFilters, modifier = Modifier.testTag("$tag-filters").semantics { contentDescription = if (count == 0) "Filters" else "Filters, $count set" }) {
         Icon(AglynIcons.named("filter_list"), contentDescription = null)
         if (count > 0) Text("$count", Modifier.padding(start = space(0.5f)))
       }
@@ -59,7 +59,7 @@ fun ListToolbar(
       var open by remember { mutableStateOf(false) }
       val current = sorts.firstOrNull { it.key == sort }
       Box {
-        OutlinedButton(onClick = { open = true }, modifier = Modifier.testTag("$tag-sort").semantics { contentDescription = "Sort: ${current?.label ?: ""}" }) {
+        OutlinedButton(shape = controlShape(), onClick = { open = true }, modifier = Modifier.testTag("$tag-sort").semantics { contentDescription = "Sort: ${current?.label ?: ""}" }) {
           Icon(AglynIcons.named("sort"), contentDescription = null)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -77,7 +77,7 @@ fun ListToolbar(
     if (view != null) {
       // One button that switches to the other view, so a narrow list pane keeps its room for search.
       val next = if (view == ListView.GRID) ListView.LIST else ListView.GRID
-      OutlinedButton(
+      OutlinedButton(shape = controlShape(), 
         onClick = { onView(next) },
         modifier = Modifier.testTag("$tag-view-${next.name.lowercase()}").semantics { contentDescription = if (next == ListView.GRID) "Show as a grid" else "Show as a list" },
       ) {

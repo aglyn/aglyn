@@ -77,11 +77,16 @@ internal fun NavSidebar(
   foot: @Composable () -> Unit = {},
 ) {
   val shell = shellColors
-  Column(modifier.width(SidebarWidth).fillMaxHeight().background(tint ?: shell.sidebar).testTag("nav-sidebar")) {
+  val m = com.aglyn.ui.shellMetrics
+  // One flush, full-height column under the title bar (no inset card): the lockup, a hairline, then the scope's lists.
+  Column(modifier.width(m.sidebarWidth).fillMaxHeight().background(tint ?: shell.sidebar).testTag("nav-sidebar")) {
     // The logo kit's lockup with the mark's height of clear space around it.
-    AglynLogo(Modifier.padding(horizontal = 20.dp, vertical = 18.dp).height(24.dp).semantics { heading() }, contentDescription = services.config.brandName)
+    AglynLogo(
+      Modifier.padding(horizontal = 20.dp, vertical = if (m.compact) 14.dp else 18.dp).height(if (m.compact) 20.dp else 24.dp).semantics { heading() },
+      contentDescription = services.config.brandName,
+    )
     HorizontalDivider(color = shell.divider)
-    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 10.dp)) {
+    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 10.dp)) {
       if (content.modeTitle != null) {
         BackLink(content.modeTitle, tag = "settings-mode-back", onClick = content.onExitMode)
         Spacer(Modifier.height(4.dp))
@@ -118,12 +123,12 @@ internal fun ScopeHeader(services: ShellServices, workspace: WorkspaceState, chr
   if (site == null) {
     Surface(
       onClick = { chrome.workspaceMenu = true },
-      shape = RoundedCornerShape(10.dp),
+      shape = RoundedCornerShape(com.aglyn.ui.shellMetrics.controlRadius),
       color = Color.Transparent,
       modifier = Modifier.fillMaxWidth().testTag("workspace-menu-button").semantics { contentDescription = "${org.name} menu" },
     ) {
       Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        WorkspaceTile(org.name, light, dark, color, size = 32.dp)
+        WorkspaceTile(org.name, light, dark, color, size = com.aglyn.ui.shellMetrics.tile, cornerRadius = com.aglyn.ui.shellMetrics.tileRadius)
         Column(Modifier.weight(1f)) {
           Text(org.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
           workspace.orgLogo?.plan?.let { PlanChip(it) }
@@ -154,22 +159,24 @@ private fun SiteButton(services: ShellServices, workspace: WorkspaceState, hostI
   val site = workspace.sites.firstOrNull { it.id == hostId }
   Surface(
     onClick = onClick,
-    shape = RoundedCornerShape(10.dp),
+    shape = RoundedCornerShape(com.aglyn.ui.shellMetrics.controlRadius),
     color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).testTag("site-picker-button")
       .semantics { contentDescription = site?.let { "Site: ${it.name}. Switch site" } ?: "Choose a site" },
   ) {
-    Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val m = com.aglyn.ui.shellMetrics
+    Row(Modifier.padding(horizontal = 8.dp, vertical = if (m.compact) 6.dp else 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       if (site != null) {
-        com.aglyn.ui.BrandPicture(com.aglyn.core.mediaPreviewUrl(site.favicon, services.api.origin, site.id, 96), null, 20.dp, RoundedCornerShape(5.dp)) {
-          WorkspaceTile(site.name, null, null, null, size = 20.dp)
+        com.aglyn.ui.BrandPicture(com.aglyn.core.mediaPreviewUrl(site.favicon, services.api.origin, site.id, 96), null, m.headerLogo, RoundedCornerShape(m.headerLogoRadius)) {
+          WorkspaceTile(site.name, null, null, null, size = m.headerLogo, cornerRadius = m.headerLogoRadius)
         }
       } else {
-        Icon(AglynIcons.named("public"), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(AglynIcons.named("public"), null, Modifier.size(m.rowIcon), tint = MaterialTheme.colorScheme.onSurfaceVariant)
       }
       Text(
         site?.name ?: "Choose a site",
-        style = MaterialTheme.typography.bodyMedium,
+        style = MaterialTheme.typography.bodyMedium.copy(fontSize = m.rowText),
         fontWeight = if (site != null) FontWeight.SemiBold else null,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -194,13 +201,13 @@ internal fun PlanChip(plan: String) {
 @Composable
 internal fun BackLink(label: String, tag: String, onClick: () -> Unit) {
   Row(
-    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 8.dp).testTag(tag)
+    Modifier.fillMaxWidth().clip(RoundedCornerShape(com.aglyn.ui.shellMetrics.pillRadius)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 6.dp).testTag(tag)
       .semantics { role = Role.Button; contentDescription = "Back to $label" },
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(6.dp),
   ) {
-    Icon(AglynIcons.named("chevron_left"), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-    Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Icon(AglynIcons.named("chevron_left"), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(label, style = MaterialTheme.typography.bodyMedium.copy(fontSize = com.aglyn.ui.shellMetrics.rowText), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
 }
 
@@ -235,16 +242,24 @@ internal fun NavGroupsList(
     if (group.label != null) {
       if (group.foldable) {
         Row(
-          Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+          Modifier.fillMaxWidth().clip(RoundedCornerShape(if (dense) com.aglyn.ui.shellMetrics.pillRadius else 8.dp))
             .clickable { chrome.toggle(listId, group.id, !open) }
-            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .heightIn(min = if (dense) com.aglyn.ui.shellMetrics.groupHeader else 36.dp)
+            .padding(horizontal = 8.dp)
             .testTag("nav-group-${group.id}")
             .semantics { role = Role.Button; stateDescription = if (open) "Open" else "Folded"; heading() },
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-          Icon(AglynIcons.named(if (open) "expand_more" else "chevron_right"), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-          Text(group.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+          Icon(AglynIcons.named(if (open) "expand_more" else "chevron_right"), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text(
+            group.label,
+            style = MaterialTheme.typography.labelLarge,
+            fontSize = if (dense) com.aglyn.ui.shellMetrics.rowText * 0.92f else MaterialTheme.typography.labelLarge.fontSize,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+          )
           if (!open) {
             val count = if (isStarred) starred.size else rows.size
             Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -309,30 +324,36 @@ internal fun NavLine(
 ) {
   val shell = shellColors
   val density = com.aglyn.ui.LocalUiDensity.current
+  val m = com.aglyn.ui.shellMetrics
+  // The sidebar (dense) takes the window's Size metrics, a little tighter at Compact density; the phone's Menu its own.
+  val height = if (dense) (if (density.compact) m.row - 4.dp else m.row) else density.phoneRow.dp
   Row(
     Modifier
       .fillMaxWidth()
       .padding(vertical = 1.dp)
-      .clip(RoundedCornerShape(8.dp))
+      .clip(RoundedCornerShape(if (dense) m.pillRadius else 8.dp))
       .background(if (selected) shell.selected else Color.Transparent)
       .clickable(onClick = onClick)
-      .heightIn(min = if (dense) density.row.dp else density.phoneRow.dp)
-      .padding(horizontal = 10.dp)
+      .heightIn(min = height)
+      .padding(horizontal = if (dense) m.rowInset else 10.dp)
       .testTag(tag)
       .semantics(mergeDescendants = true) { role = Role.Button; this.selected = selected },
     verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(12.dp),
+    horizontalArrangement = Arrangement.spacedBy(if (dense) 10.dp else 12.dp),
   ) {
-    val ink = if (selected) shell.onSelected else MaterialTheme.colorScheme.onSurface
+    // Rows read in the primary text color with line icons in that color; the selected row is a filled pill whose icon
+    // takes the accent (as Figma draws the sidebar).
+    val ink = MaterialTheme.colorScheme.onSurface
+    val iconSize = if (dense) m.rowIcon else 20.dp
     when {
-      dot != null -> Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) { Box(Modifier.size(8.dp).clip(CircleShape).background(dot)) }
-      icon != null -> Icon(AglynIcons.named(icon), null, Modifier.size(20.dp), tint = if (selected) shell.onSelected else MaterialTheme.colorScheme.onSurfaceVariant)
+      dot != null -> Box(Modifier.size(iconSize), contentAlignment = Alignment.Center) { Box(Modifier.size(8.dp).clip(CircleShape).background(dot)) }
+      icon != null -> Icon(AglynIcons.named(icon), null, Modifier.size(iconSize), tint = if (selected) MaterialTheme.colorScheme.primary else ink)
     }
     Text(
       label,
-      style = if (dense) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+      style = if (dense) MaterialTheme.typography.bodyMedium.copy(fontSize = m.rowText) else MaterialTheme.typography.bodyLarge,
       color = ink,
-      fontWeight = if (selected) FontWeight.SemiBold else null,
+      fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
       modifier = Modifier.weight(1f),

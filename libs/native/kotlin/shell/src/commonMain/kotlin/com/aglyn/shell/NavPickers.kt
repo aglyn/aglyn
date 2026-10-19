@@ -339,7 +339,7 @@ private fun AddWorkspaceRow(services: ShellServices) {
       )
     },
     confirmButton = {
-      Button(
+      Button(shape = com.aglyn.ui.controlShape(), 
         enabled = name.isNotBlank() && !busy,
         onClick = {
           busy = true

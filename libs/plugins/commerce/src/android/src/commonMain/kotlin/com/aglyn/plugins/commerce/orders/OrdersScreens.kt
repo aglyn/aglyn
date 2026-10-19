@@ -230,9 +230,9 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
       }
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
         // Selling to someone directly: their order as a payment link (the console's Draft order).
-        OutlinedButton(onClick = { drafting = true }, modifier = Modifier.testTag("orders-draft")) { Text("Draft order") }
+        OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = { drafting = true }, modifier = Modifier.testTag("orders-draft")) { Text("Draft order") }
         Box {
-          OutlinedButton(onClick = { presetMenu = true }, modifier = Modifier.testTag("orders-export-shipping")) { Text("Export for shipping") }
+          OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = { presetMenu = true }, modifier = Modifier.testTag("orders-export-shipping")) { Text("Export for shipping") }
           androidx.compose.material3.DropdownMenu(expanded = presetMenu, onDismissRequest = { presetMenu = false }) {
             Contracts.orderShippingPresetChoices.forEach { preset ->
               androidx.compose.material3.DropdownMenuItem(
@@ -255,7 +255,7 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
           }
         }
         if (com.aglyn.plugins.commerce.products.canImportProducts(context)) {
-          OutlinedButton(
+          OutlinedButton(shape = com.aglyn.ui.controlShape(), 
             onClick = { context.navigate(com.aglyn.plugins.commerce.products.CORE_DATA_IMPORT_SCREEN, trackingImportParams(hostId)) },
             modifier = Modifier.testTag("orders-import-tracking"),
           ) { Text("Import tracking") }
@@ -290,7 +290,7 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
         "Could not load orders",
         body = rows.message,
         icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
-        action = { OutlinedButton(onClick = { model.reload() }) { Text("Try again") } },
+        action = { OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = { model.reload() }) { Text("Try again") } },
       )
       is Load.Ready -> if (rows.value.isEmpty()) {
         EmptyState(
@@ -313,14 +313,14 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
     }
     if (selecting) {
       Row(Modifier.fillMaxWidth().padding(space(2f)), horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-        Button(
+        Button(shape = com.aglyn.ui.controlShape(), 
           onClick = { confirming = true },
           enabled = picked.isNotEmpty() && !running,
           modifier = Modifier.weight(1f).testTag("orders-bulk-fulfill"),
         ) { Text("Mark ${picked.size} fulfilled") }
         // Whatever services are connected add what they can do to the ticked orders (buy their labels, say).
         if (ScreenCatalog.zone("ordersBulk").isNotEmpty()) {
-          OutlinedButton(
+          OutlinedButton(shape = com.aglyn.ui.controlShape(), 
             onClick = { context.navigate("commerce.ordersBulk", mapOf("orderIds" to picked.sorted().joinToString(","), "run" to newAttemptKey("bulk").filter { it.isLetterOrDigit() })) },
             enabled = picked.isNotEmpty() && picked.size <= 50,
             modifier = Modifier.testTag("orders-bulk-more"),
@@ -554,7 +554,7 @@ private fun OrderDetailContent(
       order.paymentLinkUrl?.takeIf { it.isNotBlank() }?.let { link ->
         val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-          OutlinedButton(
+          OutlinedButton(shape = com.aglyn.ui.controlShape(), 
             onClick = {
               clipboard.setText(androidx.compose.ui.text.AnnotatedString(link))
               actions.done = "Payment link copied"
@@ -668,7 +668,7 @@ private fun RestockCard(detail: OrderDetail, check: OrderRestockCheck, actions: 
       RestockAnswerChoice.entries.forEachIndexed { index, choice ->
         val onClick = { actions.answerRestock(detail.id, choice, check.flaggedAtMs) }
         val tag = Modifier.testTag("order-restock-${choice.raw}")
-        if (index == 0) OutlinedButton(onClick = onClick, enabled = !actions.busy, modifier = tag) { Text(choice.label) }
+        if (index == 0) OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = onClick, enabled = !actions.busy, modifier = tag) { Text(choice.label) }
         else TextButton(onClick = onClick, enabled = !actions.busy, modifier = tag) { Text(choice.label) }
       }
     }

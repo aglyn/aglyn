@@ -115,7 +115,7 @@ internal fun ListingCard(listing: ListingRow, origin: String, onOpen: () -> Unit
         )
         Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
           StatusChip(priceLabel(listing.priceUsd), if (listing.paid) StatusTone.INFO else StatusTone.SUCCESS)
-          FilledTonalButton(onClick = onInstall, modifier = Modifier.testTag("card-install-${listing.id}")) { Text(cardActionLabel(listing.artifactType)) }
+          FilledTonalButton(shape = com.aglyn.ui.controlShape(), onClick = onInstall, modifier = Modifier.testTag("card-install-${listing.id}")) { Text(cardActionLabel(listing.artifactType)) }
         }
       }
     }

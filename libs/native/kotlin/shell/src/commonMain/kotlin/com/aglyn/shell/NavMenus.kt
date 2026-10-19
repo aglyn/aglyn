@@ -216,7 +216,7 @@ internal fun PinnedFullDialog(services: ShellServices, workspace: WorkspaceState
       }
     },
     confirmButton = {
-      Button(
+      Button(shape = com.aglyn.ui.controlShape(), 
         onClick = { replacing?.let { services.accountPrefs.replacePin(it, orgId) }; onDone() },
         enabled = replacing != null,
         modifier = Modifier.testTag("pinned-full-replace"),
@@ -264,7 +264,7 @@ internal fun KeepPinsDialog(services: ShellServices, workspace: WorkspaceState, 
       }
     },
     confirmButton = {
-      Button(onClick = { services.accountPrefs.keepPins(kept.toList()); onLater() }, enabled = kept.isNotEmpty(), modifier = Modifier.testTag("keep-pins-confirm")) {
+      Button(shape = com.aglyn.ui.controlShape(), onClick = { services.accountPrefs.keepPins(kept.toList()); onLater() }, enabled = kept.isNotEmpty(), modifier = Modifier.testTag("keep-pins-confirm")) {
         Text("Keep these ${kept.size}")
       }
     },

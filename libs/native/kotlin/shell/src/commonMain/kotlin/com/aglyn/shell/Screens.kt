@@ -162,7 +162,7 @@ internal fun PluginScreenHost(
       "${screen.title} is coming to the app",
       body = "This part of ${services.config.brandName} is on its way to the app.",
       icon = AglynIcons.named(screen.icon ?: "extension"),
-      action = { OutlinedButton(onClick = onExit) { Text("Back") } },
+      action = { OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = onExit) { Text("Back") } },
       modifier = Modifier.testTag("upcoming-${screen.id}"),
     )
     else -> screen.content(context, params)
@@ -262,7 +262,7 @@ internal fun SettingsScreen(
     HelpSection(services.config)
     HorizontalDivider()
     Column(Modifier.padding(space(2f)).widthIn(max = 480.dp).fillMaxWidth()) {
-      OutlinedButton(onClick = { scope.launch { services.signOut() } }, modifier = Modifier.fillMaxWidth().testTag("sign-out")) {
+      OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = { scope.launch { services.signOut() } }, modifier = Modifier.fillMaxWidth().testTag("sign-out")) {
         Text("Sign out")
       }
     }

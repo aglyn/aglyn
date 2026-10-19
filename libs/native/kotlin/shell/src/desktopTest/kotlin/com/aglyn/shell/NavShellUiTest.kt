@@ -49,7 +49,7 @@ class NavShellUiTest {
     onNodeWithTag("nav-site-media").assertIsDisplayed()
     onNodeWithTag("nav-site-pages").performClick()
     waitUntil(timeoutMillis = 3_000) { navigator.top == NavKeys.of("site.pages") }
-    onNode(androidx.compose.ui.test.hasText("Pages") and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("title-bar"))).assertIsDisplayed()
+    onNode(androidx.compose.ui.test.hasText("Pages", substring = true) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("title-bar"))).assertIsDisplayed()
     // The old drawer's double site heading is gone.
     assertEquals(0, onAllNodesWithTextCount("Site · Acme Shop"))
   }
@@ -160,11 +160,11 @@ class NavShellUiTest {
     setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
     signIn()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-overview") > 0 }
-    // One tab draws no strip; the desktop's menu bar opens another (Tab ▸ New tab).
-    assertEquals(0, onAllNodesWithTagCount("tab-strip"))
+    // The title bar carries the pinned Home tab; the desktop's menu bar opens another (Tab ▸ New tab).
+    assertEquals(0, onAllNodesWithTagCount("tab-1"))
     runOnIdle { navigator.command = ShellCommand.NEW_TAB }
-    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-strip") > 0 }
-    onNodeWithTag("tab-0").assertTextContains("Home")
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-1") > 0 }
+    onNodeWithTag("tab-0").assertTextContains("Home", substring = true)
     onNodeWithTag("nav-group-website").performClick()
     onNodeWithTag("nav-site-pages").performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodes(androidx.compose.ui.test.hasTestTag("tab-1") and androidx.compose.ui.test.hasText("Pages", substring = true)).fetchSemanticsNodes().isNotEmpty() }
@@ -178,7 +178,7 @@ class NavShellUiTest {
     onNodeWithTag("tab-1").assertIsDisplayed()
     // Closing the other tab drops the strip; Reopen brings it back where it was.
     onNodeWithTag("tab-close-1").performClick()
-    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-strip") == 0 }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-1") == 0 }
     runOnIdle { navigator.command = ShellCommand.REOPEN_TAB }
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-1") > 0 }
     onNodeWithTag("tab-1").assertTextContains("Pages", substring = true)

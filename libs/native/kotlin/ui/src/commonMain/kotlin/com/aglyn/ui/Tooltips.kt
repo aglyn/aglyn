@@ -41,7 +41,9 @@ fun AglynIconButton(
   tint: Color = Color.Unspecified,
 ) {
   WithTooltip(label) {
-    IconButton(onClick = onClick, modifier = modifier, enabled = enabled) {
+    // Compact (desktop) icon buttons are rounded 6 like every other control; touch keeps the round target.
+    val metrics = LocalShellMetrics.current
+    IconButton(onClick = onClick, modifier = modifier, enabled = enabled, shape = if (metrics.compact) androidx.compose.foundation.shape.RoundedCornerShape(metrics.controlRadius) else androidx.compose.material3.IconButtonDefaults.standardShape) {
       Icon(icon, contentDescription = label, tint = if (tint == Color.Unspecified) LocalContentColor.current else tint)
     }
   }

@@ -295,7 +295,8 @@ fun AuthButton(
     AuthButtonKind.DESTRUCTIVE -> (if (pressed) C.destructivePressed else if (hovered) C.destructiveHover else C.destructive).current
   }
   val ink = if (kind == AuthButtonKind.PRIMARY || kind == AuthButtonKind.DESTRUCTIVE) C.onPrimary.current else C.textPrimary.current
-  val shape = RoundedCornerShape(size.radius.dp)
+  // The desktop takes the Compact density: every button size rounds to 6 (Figma Button, Density = Compact).
+  val shape = RoundedCornerShape(if (LocalShellMetrics.current.compact) LocalShellMetrics.current.controlRadius else size.radius.dp)
   Surface(
     onClick = onClick,
     enabled = enabled && !busy,
@@ -341,7 +342,7 @@ fun AuthButton(
  */
 @Composable
 fun GoogleButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-  val shape = RoundedCornerShape(M.BUTTON_RADIUS.dp)
+  val shape = RoundedCornerShape(if (LocalShellMetrics.current.compact) LocalShellMetrics.current.controlRadius else M.BUTTON_RADIUS.dp)
   Surface(
     onClick = onClick,
     enabled = enabled,
@@ -411,7 +412,7 @@ fun AuthInput(
 ) {
   val interaction = remember { MutableInteractionSource() }
   val focused by interaction.collectIsFocusedAsState()
-  val shape = RoundedCornerShape(M.FIELD_RADIUS.dp)
+  val shape = RoundedCornerShape(if (LocalShellMetrics.current.compact) LocalShellMetrics.current.controlRadius else M.FIELD_RADIUS.dp)
   val ink = C.textPrimary.current
   Column(modifier, verticalArrangement = Arrangement.spacedBy(M.FIELD_LABEL_GAP.dp)) {
     Text(label, style = AuthType.smallStrong, color = ink)

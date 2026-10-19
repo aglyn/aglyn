@@ -116,7 +116,8 @@ fun AglynListItem(
         title,
         style = MaterialTheme.typography.bodyLarge,
         color = content,
-        maxLines = 2,
+        // One line at every width, the tail truncated (Figma's list rows).
+        maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         fontWeight = if (emphasized || selected) FontWeight.SemiBold else null,
       )
