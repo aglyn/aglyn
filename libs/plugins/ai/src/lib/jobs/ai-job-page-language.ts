@@ -24,7 +24,7 @@ import {
   type AiSiteInventory,
 } from '../model/ai-site-inventory'
 import { AI_LAYOUT_POST_ADDRESS_TOKENS, aiCompileLayoutPage } from '../layout-language/ai-layout-compiler'
-import { aiWithSiteMotion } from '../layout-language/ai-layout-motion'
+import { aiSiteMotionStyle, aiWithSiteMotion, type AiSiteMotionStyle } from '../layout-language/ai-layout-motion'
 import { aiLayoutListingAt, aiLayoutListingsOf, aiLayoutRecordHref, type AiLayoutListing } from '../layout-language/ai-layout-listings'
 import {
   AI_LAYOUT_LANGUAGE_TEXT,
@@ -474,10 +474,19 @@ export function aiLayoutDesignOf(job: Pick<AiJob, '$id' | 'inputs'>, slug: strin
 /**
  * The site a page's entrance motion is drawn for (AGL-3838): its design where
  * the job names a kind of site, else the job's own seed, which moves in the
- * standard mood — so every page of one site moves alike.
+ * standard mood — so every page of one site moves alike. The motion style its
+ * look chose rides along (AGL-3941); a job whose look chose none — one from
+ * before the look did, a replay of one, a job with no look — moves in its
+ * kind's mood.
  */
-export function aiLayoutMotionSiteOf(job: Pick<AiJob, '$id' | 'inputs'>, slug: string): { kind?: string; seed: number } {
-  return aiLayoutDesignOf(job, slug) ?? { seed: aiSiteSeed(aiOriginJobId(job)) }
+export function aiLayoutMotionSiteOf(
+  job: Pick<AiJob, '$id' | 'inputs'>,
+  slug: string,
+): { kind?: string; seed: number; motion?: AiSiteMotionStyle } {
+  const style = job.inputs?.['siteStyle'] as Record<string, unknown> | undefined
+  const motion = aiSiteMotionStyle(style?.['motion'])
+  const { kind, seed } = aiLayoutDesignOf(job, slug) ?? { seed: aiSiteSeed(aiOriginJobId(job)) }
+  return { ...(kind ? { kind } : {}), seed, ...(motion ? { motion } : {}) }
 }
 
 /** A validated language page, stored as the page keeps it. */
@@ -509,7 +518,7 @@ export interface AiLayoutPageCheckInput {
   /** The site's language, which the compiler's own words are written in (AGL-3760); absent, English. */
   language?: string
   /** The site the page's entrance motion is drawn for (`aiLayoutMotionSiteOf`); absent, its design. */
-  motion?: { kind?: string; seed: number }
+  motion?: { kind?: string; seed: number; motion?: AiSiteMotionStyle }
   /** Whether copy may promise what is coming (a coming-soon site, AGL-3887); absent, it may not. */
   promisesAllowed?: boolean
 }

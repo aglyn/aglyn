@@ -528,7 +528,7 @@ struct SpecScreenBody: View {
     if let link = action.link {
       let rendered = ScreenValues.render(link, in: scope)
       guard let url = URL(string: rendered.hasPrefix("/") ? session.origin + rendered : rendered) else { return }
-      // A plain page (the live site, a preview, a docs link) shows in the in-app web sheet the app's root installs;
+      // A plain page (the live site, a preview, a docs link) shows in the in-app browser screen the app's root installs;
       // the sign-in session is for OAuth and hosted payment steps only.
       openURL(url)
       return

@@ -246,6 +246,12 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
   val scope = rememberCoroutineScope()
   BackHandler(enabled = navigator.stack.isNotEmpty()) { navigator.back() }
   val route = navigator.current
+  // A plain web page the register opens (a payment page, a tracking link) is pushed onto its stack as the browser screen.
+  com.aglyn.webview.ProvideInAppBrowser(secureTab = services.openHostedPage, openPage = navigator::openWeb) {
+  val openInBrowser = com.aglyn.webview.rememberSystemBrowser()
+  if (route is Route.Web) {
+    com.aglyn.webview.WebPageScreen(route.url, onClose = { navigator.back() }, openInBrowser = openInBrowser)
+  } else {
   Scaffold(
     containerColor = MaterialTheme.colorScheme.background,
     topBar = {
@@ -318,5 +324,7 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
         )
       }
     }
+  }
+  }
   }
 }

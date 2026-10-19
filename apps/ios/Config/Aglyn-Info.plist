@@ -34,6 +34,8 @@
 	<string>$(AGLYN_APP_CHECK)</string>
 	<key>AGLYN_LEGAL_ORIGIN</key>
 	<string>$(AGLYN_LEGAL_ORIGIN)</string>
+	<key>AGLYN_DOCS_ORIGIN</key>
+	<string>$(AGLYN_DOCS_ORIGIN)</string>
 	<key>AGLYN_APPLE_SIGN_IN</key>
 	<string>$(AGLYN_APPLE_SIGN_IN)</string>
 	<key>AGLYN_DEBUG_EMAIL</key>

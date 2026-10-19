@@ -27,7 +27,10 @@ struct AglynApp: App {
         .environment(model)
     }
     .defaultSize(width: 1180, height: 780)
-    .commands { AglynCommands(model: model) }
+    .commands {
+      AglynCommands(model: model)
+      HelpCommands(model: model)
+    }
 
     #if os(macOS)
       Settings {

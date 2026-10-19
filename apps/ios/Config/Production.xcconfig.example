@@ -27,4 +27,5 @@
 // DeviceCheck in the Firebase console first); off only for a project that does not.
 // AGLYN_APP_CHECK = on
 // AGLYN_LEGAL_ORIGIN = https:/$()/<your legal site>
+// AGLYN_DOCS_ORIGIN = https:/$()/<your documentation site>
 // AGLYN_APPLE_SIGN_IN = YES

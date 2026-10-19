@@ -37,10 +37,7 @@ struct RootView<Shell: View>: View {
     ZStack {
       // The Facets ground: under the launch intro, and behind every signed-out screen so it holds still as they change.
       if !intro.finished || stage == .signedOut || stage == .verify {
-        AglynFacetsBackground(settle: intro.settle, light: intro.light)
-          // Reduce Motion cross-fades the launch frame into the ground at rest instead of moving the planes.
-          .id(intro.crossFades ? AnyHashable(intro.settled) : AnyHashable("ground"))
-          .transition(.opacity)
+        ground
       }
       destination(stage)
       if !intro.finished {
@@ -55,8 +52,9 @@ struct RootView<Shell: View>: View {
     }
     .tint(AglynColor.tint)
     .font(AglynFont.body)
-    // Every plain web page (a live site, a preview, a docs or legal link) opens in the in-app web sheet (AGL-3893).
-    .aglynWebSheetHost()
+    // Every plain web page (a live site, a preview, a docs or legal page) opens in the in-app browser screen, pushed
+    // onto the section on screen (AGL-3935).
+    .aglynBrowserHost { page, disposition in navigation.openWeb(page, disposition) }
     .onChange(of: model.auth?.user, initial: true) { _, user in
       model.userChanged(user)
       openPendingPush()
@@ -83,6 +81,14 @@ struct RootView<Shell: View>: View {
     .task { await DebugLaunch.autoSignIn(model) }
   }
 
+  /// The Facets ground at the intro's settle and light.
+  private var ground: some View {
+    AglynFacetsBackground(settle: intro.settle, light: intro.light)
+      // Reduce Motion cross-fades the launch frame into the ground at rest instead of moving the planes.
+      .id(intro.crossFades ? AnyHashable(intro.settled) : AnyHashable("ground"))
+      .transition(.opacity)
+  }
+
   @ViewBuilder
   private func destination(_ stage: Stage) -> some View {
     let reveal = AuthReveal(offset: intro.destinationOffset, opacity: intro.destinationOpacity)
@@ -102,7 +108,9 @@ struct RootView<Shell: View>: View {
       Color.clear
     case .signedOut:
       // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
-      SignedOutView().environment(\.authReveal, reveal)
+      // Its Terms of Service and Privacy Policy links open in the in-app browser screen, pushed over it; the stack's
+      // root carries the same ground, so it reads as one with the intro under it whether or not the stack paints.
+      AglynBrowserStack { SignedOutView().environment(\.authReveal, reveal).background { ground } }
     case .verify:
       // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
       VerifyEmailView().environment(\.authReveal, reveal)

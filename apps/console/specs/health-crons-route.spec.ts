@@ -225,6 +225,13 @@ function summaryBeats(): Record<string, number> {
 let errorLog: jest.SpyInstance
 
 beforeEach(() => {
+  // One registry per process (AGL-3947), so `jest.resetModules` no longer
+  // empties it: a test's plugin job would otherwise sit in the next one.
+  ;(
+    jest.requireActual(
+      '@aglyn/aglyn/plugin-manager/plugin-console-crons',
+    ) as typeof import('@aglyn/aglyn/plugin-manager/plugin-console-crons')
+  ).resetPluginConsoleCronsForTests()
   mockDeclarePluginJobs = null
   mockStore = {}
   mockWrites = []

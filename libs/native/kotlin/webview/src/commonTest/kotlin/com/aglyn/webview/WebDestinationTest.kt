@@ -32,8 +32,24 @@ class WebDestinationTest {
   }
 
   @Test
-  fun theSheetNamesThePagesHost() {
+  fun theScreenNamesThePagesHost() {
     assertEquals("bakery.aglyn.app", webPageHost("https://bakery.aglyn.app/menu"))
     assertEquals("example.com", webPageHost("https://www.example.com?x=1"))
+  }
+
+  @Test
+  fun theAddressIsTheHostAndPathWithoutTheScheme() {
+    assertEquals("juniper-street.aglyn.app", webPageAddress("https://juniper-street.aglyn.app/"))
+    assertEquals("example.com/menu", webPageAddress("https://www.example.com/menu/?x=1#top"))
+    assertEquals("10.0.2.2:4380/acme/preview", webPageAddress("http://10.0.2.2:4380/acme/preview"))
+    assertEquals("docs.aglyn.com/whats-new", webPageAddress("https://docs.aglyn.com/whats-new"))
+    assertEquals("example.com", webPageAddress("https://example.com#top"))
+  }
+
+  @Test
+  fun theTitleIsThePagesOwnOrItsHostUntilItHasOne() {
+    assertEquals("Juniper Street — Menu", webPageTitle("  Juniper Street — Menu \n", "https://juniper-street.aglyn.app/menu"))
+    assertEquals("juniper-street.aglyn.app", webPageTitle(null, "https://www.juniper-street.aglyn.app/menu"))
+    assertEquals("juniper-street.aglyn.app", webPageTitle("   ", "https://juniper-street.aglyn.app/menu"))
   }
 }
