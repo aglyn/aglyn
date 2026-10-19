@@ -461,10 +461,18 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
           }
           Column(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
             if (route !is Route.Web) {
-              // Breadcrumbs on a pushed screen: the destination it was opened from, then the screen itself.
-              val crumb = row?.let { r -> r.sections.firstOrNull { it.key == navigator.top }?.label?.takeIf { r.sections.size > 1 } ?: r.label }
-                ?.takeIf { route != null && it != title }
-              crumb?.let { Breadcrumbs(listOfNotNull(workspace.site?.name ?: workspace.org?.name, it, title), onBack = { navigator.select(navigator.top) }) }
+              // Where the screen sits, as Figma heads every page: the scope, the group, the destination, then a pushed screen.
+              if (row != null || route != null) {
+                val group = allGroups.firstOrNull { g -> g.rows.any { navigator.top in it.keys } }?.label
+                val place = row?.label
+                val steps = buildList {
+                  add(Crumb(workspace.site?.name ?: workspace.org?.name ?: "") { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) })
+                  group?.let { add(Crumb(it, null)) }
+                  place?.let { add(Crumb(it) { navigator.select(navigator.top) }) }
+                  if (route != null && title.isNotBlank() && title != place) add(Crumb(title, null))
+                }.filter { it.label.isNotBlank() }
+                Breadcrumbs(steps)
+              }
               banner()
               sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
             }
@@ -753,25 +761,28 @@ private fun WideTitleBar(
   }
 }
 
-/** "Bakery › Sell › Orders": where a pushed screen sits; the steps before the last lead back to the destination. */
+/** One step of the breadcrumbs, and where it leads (none for a group heading or the page on screen). */
+private data class Crumb(val label: String, val open: (() -> Unit)?)
+
+/** "Bakery › Sell › Orders": where the screen sits; every step but the last leads back to it. */
 @Composable
-private fun Breadcrumbs(steps: List<String>, onBack: () -> Unit) {
+private fun Breadcrumbs(steps: List<Crumb>) {
   Row(
-    Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp).testTag("title-crumb"),
+    Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 4.dp).testTag("title-crumb"),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {
     steps.forEachIndexed { index, step ->
       val last = index == steps.lastIndex
-      if (index > 0) Icon(AglynIcons.named("chevron_right"), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+      if (index > 0) Icon(AglynIcons.named("chevron_right"), null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
       Text(
-        step,
+        step.label,
         style = MaterialTheme.typography.bodySmall,
         color = if (last) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
         fontWeight = if (last) FontWeight.Medium else FontWeight.Normal,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = if (last) Modifier else Modifier.clip(RoundedCornerShape(4.dp)).clickable(onClick = onBack).padding(horizontal = 2.dp),
+        modifier = if (!last && step.open != null) Modifier.clip(RoundedCornerShape(4.dp)).clickable(onClick = step.open).padding(horizontal = 2.dp) else Modifier,
       )
     }
   }

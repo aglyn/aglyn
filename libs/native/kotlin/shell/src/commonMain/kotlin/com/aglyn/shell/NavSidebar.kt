@@ -128,7 +128,7 @@ internal fun ScopeHeader(services: ShellServices, workspace: WorkspaceState, chr
       modifier = Modifier.fillMaxWidth().testTag("workspace-menu-button").semantics { contentDescription = "${org.name} menu" },
     ) {
       Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        WorkspaceTile(org.name, light, dark, color, size = com.aglyn.ui.shellMetrics.tile, cornerRadius = com.aglyn.ui.shellMetrics.tileRadius)
+        WorkspaceTile(org.name, light, dark, color, size = com.aglyn.ui.shellMetrics.headerLogo + 4.dp, cornerRadius = com.aglyn.ui.shellMetrics.headerLogoRadius + 1.dp)
         Column(Modifier.weight(1f)) {
           Text(org.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
           workspace.orgLogo?.plan?.let { PlanChip(it) }
@@ -137,10 +137,6 @@ internal fun ScopeHeader(services: ShellServices, workspace: WorkspaceState, chr
       }
     }
     workspaceMenuAnchor(services, workspace, chrome)
-    if (workspace.sites.isNotEmpty()) {
-      Spacer(Modifier.height(4.dp))
-      SiteButton(services, workspace, null) { chrome.picker = PickerStep.SITE }
-    }
   } else {
     BackLink(org.name, tag = "scope-back-to-workspace") { services.workspace.selectWholeWorkspace() }
     SiteButton(services, workspace, site.id) { chrome.picker = PickerStep.SITE }
