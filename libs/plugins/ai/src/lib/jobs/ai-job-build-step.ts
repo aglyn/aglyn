@@ -91,7 +91,15 @@ import {
 } from './ai-job-plugin-drafts'
 import { aiSitePageWritten, aiSiteResolvedRef } from './ai-job-site-step'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSitePagesOfPlan } from './ai-job-layout-site-pages'
-import { AI_LAYOUT_FORM_PAGE_INPUT, AI_LAYOUT_LANGUAGE_INPUT, aiJobUsesLayoutLanguage, aiLayoutFormPageOfPlan } from './ai-job-page-language'
+import {
+  AI_LAYOUT_FORM_PAGE_INPUT,
+  AI_LAYOUT_LANGUAGE_INPUT,
+  AI_LAYOUT_SITE_MOTION_INPUT,
+  aiJobUsesLayoutLanguage,
+  aiLayoutFormPageOfPlan,
+  aiLayoutSiteMotionOf,
+  type AiLayoutSiteMotion,
+} from './ai-job-page-language'
 import { aiDatasetListingsOf } from './ai-job-site-datasets'
 import { AI_SITE_EVENT_OP, aiEventsListings } from './ai-job-site-events'
 import { AI_FORM_DATASET_MADE_INPUT } from './ai-job-form-dataset'
@@ -247,6 +255,8 @@ export function aiBuildUnitJob(
     briefLines?: readonly string[]
     /** The `new:` names, lowercased, of what failed and the unit is built without (`aiBuildDegradation`). */
     dropped?: ReadonlySet<string>
+    /** The motion of the site the build adds to, from its stored look (`aiLayoutSiteMotionOf`); absent, none stored. */
+    siteMotion?: AiLayoutSiteMotion | null
   },
 ): AiJob {
   const plan = job.plan as AiJobPlan
@@ -318,6 +328,11 @@ export function aiBuildUnitJob(
     originJobId: aiOriginJobId(job),
   }
   delete inputs[AI_BUILD_PUBLISH_INPUT]
+  // What a build adds to a site moves the way the site's own pages do
+  // (AGL-3949): its look's motion style, drawn with the site's seed.
+  if (context.siteMotion && (context.kind === 'page' || context.kind === 'layout' || context.kind === 'template')) {
+    inputs[AI_LAYOUT_SITE_MOTION_INPUT] = context.siteMotion
+  }
   // An item is told the pages and layouts this build made before it, which
   // its arguments may link as `new:<name>` (a menu item, AGL-3728).
   if (item) {
@@ -828,6 +843,7 @@ export function createAiJobBuildStep(deps: AiJobBuildStepDeps = {}): AiJobStepRu
       ops,
       briefLines: degradation.briefLines,
       dropped: degradation.dropped,
+      siteMotion: aiLayoutSiteMotionOf(host?.['siteStyle']),
     })
     // An item's kind is asked its own admission first (a campaign's plan,
     // a template's subject), once, before its first pass.
