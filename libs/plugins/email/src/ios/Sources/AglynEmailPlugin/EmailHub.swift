@@ -340,13 +340,7 @@ struct TemplatesSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search templates", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      if role.canEdit {
-        ToolbarItem(placement: .primaryAction) {
-          Button("New design", systemImage: "plus") { creating = true }.accessibilityIdentifier("template-new")
-        }
-      }
-    }
+    .aglynPrimaryAction(id: "template-new", "New design", systemImage: "plus", enabled: role.canEdit) { creating = true }
     .task(id: search) {
       role.start(context)
       let search = search, hostID = actions.hostID
@@ -451,11 +445,7 @@ struct AudiencesSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search lists", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button("New list", systemImage: "plus") { creating = true }.accessibilityIdentifier("list-new")
-      }
-    }
+    .aglynPrimaryAction(id: "list-new", "New list", systemImage: "plus") { creating = true }
     .task(id: "\(kind)|\(search)") {
       if selection == nil { selection = initial }
       let kind = kind, search = search, orgID = actions.orgID
@@ -538,6 +528,7 @@ struct ListDetail: View {
   let actions: EmailActions
   let listID: String
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.aglynWideChrome) private var wide
   @State private var doc = ObservedDocument()
   @State private var members = LiveQueryList(pageSize: 25, map: listMemberRow)
   @State private var searchText = ""
@@ -577,22 +568,22 @@ struct ListDetail: View {
       }
     }
     .navigationTitle(row?.name ?? "List")
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Menu {
-          Button("Add people", systemImage: "person.badge.plus") { adding = true }
-          // The console's Import and Export on a list's page: the records wizard and export sheet, on this list.
-          Button("Import and export", systemImage: "arrow.up.arrow.down") {
-            context.navigate("email.list.transfer", ["list": listID, "name": row?.name ?? "this list", "resource": "email.list-members:\(listID)"])
-          }
-          .accessibilityIdentifier("list-transfer")
-          Button("Rename", systemImage: "pencil") { renaming = true }
-          Button("Delete list", systemImage: "trash", role: .destructive) { confirmDelete = true }
-        } label: {
-          Label("List", systemImage: "ellipsis.circle")
+    // Add people is the head's one primary action on the Mac and iPad; on a phone it stays first in the list's menu.
+    .aglynWidePrimaryAction(id: "list-add-people", "Add people", systemImage: "person.badge.plus") { adding = true }
+    .aglynScreenToolbar(id: "email-list") {
+      Menu {
+        if !wide { Button("Add people", systemImage: "person.badge.plus") { adding = true } }
+        // The console's Import and Export on a list's page: the records wizard and export sheet, on this list.
+        Button("Import and export", systemImage: "arrow.up.arrow.down") {
+          context.navigate("email.list.transfer", ["list": listID, "name": row?.name ?? "this list", "resource": "email.list-members:\(listID)"])
         }
-        .accessibilityIdentifier("list-actions")
+        .accessibilityIdentifier("list-transfer")
+        Button("Rename", systemImage: "pencil") { renaming = true }
+        Button("Delete list", systemImage: "trash", role: .destructive) { confirmDelete = true }
+      } label: {
+        Label(wide ? "More" : "List", systemImage: "ellipsis.circle")
       }
+      .accessibilityIdentifier("list-actions")
     }
     .task(id: "\(listID)|\(search)") {
       doc.start(context.firestore, ["orgs", actions.orgID, "lists", listID])
@@ -754,9 +745,7 @@ struct TopicsSection: View {
         }
       }
     }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) { Button("Add topic", systemImage: "plus") { adding = true } }
-    }
+    .aglynPrimaryAction(id: "topic-add", "Add topic", systemImage: "plus") { adding = true }
     .task {
       let orgID = actions.orgID
       list.show(context.firestore) { _ in FirestoreQuery(["orgs", orgID, "emailTopics"], limit: 100) }
@@ -816,9 +805,7 @@ struct SuppressionsSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search addresses", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) { Button("Suppress", systemImage: "plus") { adding = true }.accessibilityIdentifier("suppression-add") }
-    }
+    .aglynPrimaryAction(id: "suppression-add", "Suppress", systemImage: "plus") { adding = true }
     .task(id: search) {
       let search = search, hostID = actions.hostID
       list.show(context.firestore) { suppressionsQuery(hostID, search: search, limit: $0) }

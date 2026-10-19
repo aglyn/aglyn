@@ -109,9 +109,13 @@ struct ArtifactsScreen: View {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }
     }
-    .toolbar {
+    .aglynPrimaryAction(id: "add-\(kind.singular)", "New \(kind.singular)", systemImage: "plus", enabled: canEdit) {
+      runner.clear()
+      dialog = .create
+    }
+    .aglynScreenToolbar(id: "artifacts-\(kind.singular)") {
       if kind != .template {
-        ToolbarItem(placement: .primaryAction) {
+        AglynSecondaryActions {
           Button {
             runner.clear()
             dialog = .gallery
@@ -122,21 +126,8 @@ struct ArtifactsScreen: View {
           .accessibilityIdentifier("from-template-\(kind.singular)")
         }
       }
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          runner.clear()
-          dialog = .create
-        } label: {
-          Label("New \(kind.singular)", systemImage: "plus")
-        }
-        .disabled(!canEdit)
-        .keyboardShortcut("n", modifiers: .command)
-        .accessibilityIdentifier("add-\(kind.singular)")
-      }
       // Create with AI and anything else a plugin puts beside New (the console's zone for this list).
-      ToolbarItemGroup(placement: .primaryAction) {
-        SlotWidgets(context: context, slot: kind.createZone, placement: .header)
-      }
+      SlotWidgets(context: context, slot: kind.createZone, placement: .header)
     }
     .onAppear {
       if !seeded {

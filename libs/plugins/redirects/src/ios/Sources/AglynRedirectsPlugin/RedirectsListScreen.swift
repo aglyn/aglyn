@@ -30,17 +30,7 @@ struct RedirectsListScreen: View {
       }
     }
     .navigationTitle("Redirects")
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          editor?.add()
-        } label: {
-          Label("Add redirect", systemImage: "plus")
-        }
-        .disabled(editor == nil)
-        .accessibilityIdentifier("redirects-add")
-      }
-    }
+    .aglynPrimaryAction(id: "redirects-add", "Add redirect", systemImage: "plus", enabled: editor != nil) { editor?.add() }
     .safeAreaInset(edge: .bottom) {
       if let notice = editor?.notice {
         AglynNotice(notice, tone: .success) { editor?.notice = nil }

@@ -39,14 +39,9 @@ struct OrgAutomationEditorScreen: View {
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
     #endif
-    .toolbar {
-      ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-      ToolbarItem(placement: .confirmationAction) {
-        Button(saving ? "Saving…" : "Save org automation") { save() }
-          .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || saving)
-          .accessibilityIdentifier("org-automation-save")
-      }
-    }
+    .aglynEditorActions(
+      id: "org-automation-save", save: saving ? "Saving…" : "Save org automation", enabled: !(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || saving), cancel: { dismiss() }
+    ) { save() }
     .task(id: "\(context.orgID ?? "")|\(editingID ?? "new")") {
       guard let orgID = context.orgID else { return }
       sites.start(context)
@@ -237,14 +232,9 @@ struct WebhookEditorScreen: View {
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
     #endif
-    .toolbar {
-      ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-      ToolbarItem(placement: .confirmationAction) {
-        Button(saving ? "Saving…" : "Save webhook") { save() }
-          .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || saving)
-          .accessibilityIdentifier("webhook-save")
-      }
-    }
+    .aglynEditorActions(
+      id: "webhook-save", save: saving ? "Saving…" : "Save webhook", enabled: !(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || saving), cancel: { dismiss() }
+    ) { save() }
     .accessibilityIdentifier("webhook-editor")
     .task(id: hostID) {
       if let hostID {

@@ -39,28 +39,20 @@ struct ProductsScreen: View {
     .navigationTitle("Products")
     .aglynSearchable(text: $searchText, prompt: "Product name", onSubmit: { model.search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { model.search = "" } }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          creating = .creating()
-        } label: {
-          Label("New product", systemImage: "plus")
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(!quota.hasRoom)
-        .accessibilityIdentifier("new-product")
-        .help(quota.hasRoom ? "Add a product to this site" : "Your plan includes \(Int(quota.limit ?? 0)) products — upgrade for more")
-      }
-      ToolbarItem(placement: .primaryAction) {
+    // New product is the list's one primary action; Scan and Import are in its More menu on the Mac and iPad, their own
+    // buttons on a phone.
+    .aglynPrimaryAction(id: "new-product", "New product", systemImage: "plus", enabled: quota.hasRoom) {
+      creating = .creating()
+    }
+    .aglynScreenToolbar(id: "products") {
+      AglynSecondaryActions {
         Button {
           context.navigate(commerceScanScreen)
         } label: {
           Label("Scan", systemImage: "barcode.viewfinder")
         }
         .help("Find a product by its barcode or SKU")
-      }
-      if canImportProducts(context) {
-        ToolbarItem(placement: .secondaryAction) {
+        if canImportProducts(context) {
           // The console's Import beside Add product: the data transfer hub's import, for this site's products.
           Button {
             context.navigate(coreDataImportScreen, productsImportParams(hostID: context.hostID))
@@ -253,68 +245,66 @@ struct ProductDetailView: View {
       // The header below already shows the name large.
       .navigationBarTitleDisplayMode(.inline)
     #endif
-    .toolbar {
+    .aglynScreenToolbar(id: "product") {
       if let doc = model.doc, let row = model.row {
         // HIG toolbars: the two actions used most stay visible, every other one is in one labeled More menu.
         // The calmer screens: the one filled button sits in the header below; every other act is in this one menu.
-        ToolbarItem(placement: .secondaryAction) {
-          AglynMoreMenu {
-            if row.status == "draft" {
-              Button {
-                editing = .editing(doc)
-              } label: {
-                Label("Edit product", systemImage: "pencil")
-              }
-              .accessibilityIdentifier("edit-product")
-            }
+        AglynMoreMenu {
+          if row.status == "draft" {
             Button {
-              adjusting = true
+              editing = .editing(doc)
             } label: {
-              Label("Adjust stock", systemImage: "plusminus")
+              Label("Edit product", systemImage: "pencil")
             }
-            .disabled(row.item.variants.isEmpty)
-            .accessibilityIdentifier("adjust-stock")
-            if row.type == "physical" {
-              // Shelf labels with a barcode the register scans back (the console's Labels).
-              Button {
-                labels = productLabelRows(JSONValue.from(doc.data))
-              } label: {
-                Label("Labels", systemImage: "barcode")
-              }
-              .accessibilityIdentifier("product-labels")
-            }
-            if row.type == "digital" {
-              Button {
-                keys = true
-              } label: {
-                Label("Keys", systemImage: "key")
-              }
-              .accessibilityIdentifier("product-keys")
-            }
-            Divider()
-            Button {
-              Task { await duplicate() }
-            } label: {
-              Label("Duplicate", systemImage: "plus.square.on.square")
-            }
-            .disabled(working)
-            .accessibilityIdentifier("product-duplicate")
-            Button {
-              Task { await setStatus(doc, row, row.status == "archived" ? "active" : "archived") }
-            } label: {
-              Label(row.status == "archived" ? "Activate" : "Archive", systemImage: row.status == "archived" ? "tray.and.arrow.up" : "archivebox")
-            }
-            .disabled(working)
-            .accessibilityIdentifier("product-archive")
-            Divider()
-            Button(role: .destructive) {
-              deleting = true
-            } label: {
-              Label("Delete", systemImage: "trash")
-            }
-            .disabled(working)
-            .accessibilityIdentifier("product-delete")
+            .accessibilityIdentifier("edit-product")
           }
+          Button {
+            adjusting = true
+          } label: {
+            Label("Adjust stock", systemImage: "plusminus")
+          }
+          .disabled(row.item.variants.isEmpty)
+          .accessibilityIdentifier("adjust-stock")
+          if row.type == "physical" {
+            // Shelf labels with a barcode the register scans back (the console's Labels).
+            Button {
+              labels = productLabelRows(JSONValue.from(doc.data))
+            } label: {
+              Label("Labels", systemImage: "barcode")
+            }
+            .accessibilityIdentifier("product-labels")
+          }
+          if row.type == "digital" {
+            Button {
+              keys = true
+            } label: {
+              Label("Keys", systemImage: "key")
+            }
+            .accessibilityIdentifier("product-keys")
+          }
+          Divider()
+          Button {
+            Task { await duplicate() }
+          } label: {
+            Label("Duplicate", systemImage: "plus.square.on.square")
+          }
+          .disabled(working)
+          .accessibilityIdentifier("product-duplicate")
+          Button {
+            Task { await setStatus(doc, row, row.status == "archived" ? "active" : "archived") }
+          } label: {
+            Label(row.status == "archived" ? "Activate" : "Archive", systemImage: row.status == "archived" ? "tray.and.arrow.up" : "archivebox")
+          }
+          .disabled(working)
+          .accessibilityIdentifier("product-archive")
+          Divider()
+          Button(role: .destructive) {
+            deleting = true
+          } label: {
+            Label("Delete", systemImage: "trash")
+          }
+          .disabled(working)
+          .accessibilityIdentifier("product-delete")
         }
       }
     }

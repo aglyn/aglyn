@@ -77,16 +77,18 @@ struct FunnelsScreen: View {
         list(selectable: false)
       }
     }
-    .toolbar {
+    .aglynPrimaryAction(
+      id: "funnels-add", "New funnel", systemImage: "plus",
+      enabled: access.state.canManage && editor != nil && model.rows.count < ContractValues.shared.funnelsMaxPerSite
+        && editor?.busy != true
+    ) {
+      Task { await editor?.add() }
+    }
+    .aglynScreenToolbar(id: "funnels") {
       if access.state.canManage, let editor {
-        ToolbarItemGroup(placement: .primaryAction) {
-          Button { editor.askPropose() } label: { Label("Create with AI", systemImage: FunnelsSymbols.ai) }
-            .disabled(model.rows.count >= ContractValues.shared.funnelsMaxPerSite)
-            .accessibilityIdentifier("funnels-propose")
-          Button { Task { await editor.add() } } label: { Label("New funnel", systemImage: "plus") }
-            .disabled(model.rows.count >= ContractValues.shared.funnelsMaxPerSite || editor.busy)
-            .accessibilityIdentifier("funnels-add")
-        }
+        Button { editor.askPropose() } label: { Label("Create with AI", systemImage: FunnelsSymbols.ai) }
+          .disabled(model.rows.count >= ContractValues.shared.funnelsMaxPerSite)
+          .accessibilityIdentifier("funnels-propose")
       }
     }
     .safeAreaInset(edge: .bottom) {

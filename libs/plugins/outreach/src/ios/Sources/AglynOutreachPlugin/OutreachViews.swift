@@ -126,9 +126,7 @@ struct SequencesSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search sequences", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) { Button("New sequence", systemImage: "plus") { creating = true }.accessibilityIdentifier("sequence-new") }
-    }
+    .aglynPrimaryAction(id: "sequence-new", "New sequence", systemImage: "plus") { creating = true }
     .task(id: "\(status)|\(search)") {
       if selection == nil { selection = initial }
       let status = status, search = search, orgID = orgID
@@ -267,14 +265,12 @@ struct SequenceDetail: View {
         .formStyle(.grouped)
         .aglynListBackground()
         .navigationTitle(row.name)
-        .toolbar {
-          ToolbarItem(placement: .primaryAction) {
-            Menu {
-              Button("Edit", systemImage: "pencil") { editing = true }
-              if row.status == "draft" { Button("Delete", systemImage: "trash", role: .destructive) { confirm = ("Delete this sequence?", "delete") } }
-            } label: {
-              Label("Sequence", systemImage: "ellipsis.circle")
-            }
+        .aglynScreenToolbar(id: "sequence") {
+          Menu {
+            Button("Edit", systemImage: "pencil") { editing = true }
+            if row.status == "draft" { Button("Delete", systemImage: "trash", role: .destructive) { confirm = ("Delete this sequence?", "delete") } }
+          } label: {
+            Label("Sequence", systemImage: "ellipsis.circle")
           }
         }
         .sheet(isPresented: $editing) { SequenceEditor(context: context, api: api, sequence: row, mailboxes: mailboxes) { _ in } }
@@ -612,16 +608,14 @@ struct MailboxesSection: View {
         }
       }
     }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Menu {
-          Button("Google") { Task { await connect("google") } }
-          Button("Microsoft") { Task { await connect("microsoft") } }
-        } label: {
-          Label(connecting ? "Connecting…" : "Connect a mailbox", systemImage: "plus")
-        }
-        .disabled(connecting)
+    .aglynScreenToolbar(id: "mailboxes") {
+      Menu {
+        Button("Google") { Task { await connect("google") } }
+        Button("Microsoft") { Task { await connect("microsoft") } }
+      } label: {
+        Label(connecting ? "Connecting…" : "Connect a mailbox", systemImage: "plus")
       }
+      .disabled(connecting)
     }
     .task {
       let orgID = orgID

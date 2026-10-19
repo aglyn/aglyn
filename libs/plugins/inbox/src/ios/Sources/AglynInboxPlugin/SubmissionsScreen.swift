@@ -95,9 +95,8 @@ struct SubmissionsScreen: View {
     .navigationTitle(title)
     .aglynSearchable(text: $searchText, prompt: "Search submissions")
     .onChange(of: searchText) { _, text in model.type(text) }
-    .toolbar {
+    .aglynScreenToolbar(id: "submissions") {
       if !wholeWorkspace {
-      ToolbarItem(placement: .primaryAction) {
         Button {
           runner.clear()
           exporting = TransferExportRequest(
@@ -110,7 +109,6 @@ struct SubmissionsScreen: View {
         }
         .keyboardShortcut("e", modifiers: [.command, .shift])
         .accessibilityIdentifier("submissions-export")
-      }
       }
     }
     .aglynPushDestination(item: $pushed) { id in detail(id, titled: true) }

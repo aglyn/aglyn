@@ -194,8 +194,13 @@ private struct RecordsBody: View {
     .navigationTitle(dataset.plural.trimmingCharacters(in: .whitespaces).isEmpty ? dataset.name : dataset.plural)
     .aglynSearchable(text: $searchText, prompt: "Search \(dataset.name)")
     .onChange(of: searchText) { _, text in model.type(text) }
-    .toolbar {
-      ToolbarItemGroup(placement: .primaryAction) {
+    // Add is the one primary action; Import and Export are in the More menu on the Mac and iPad.
+    .aglynPrimaryAction(id: "add-record", "Add \(noun)", systemImage: "plus", enabled: canWrite) {
+      runner.clear()
+      sheet = .edit(recordID: nil, values: newRecordInputs(dataset.model))
+    }
+    .aglynScreenToolbar(id: "records") {
+      AglynSecondaryActions {
         if canImportDatasetRecords(orgRole: context.orgRole) {
           Button {
             context.navigate(dataImportScreen, datasetImportParams(id: dataset.id, name: dataset.name))
@@ -210,15 +215,6 @@ private struct RecordsBody: View {
           Label("Export records", systemImage: "square.and.arrow.down")
         }
         .accessibilityIdentifier("export-records")
-        Button {
-          runner.clear()
-          sheet = .edit(recordID: nil, values: newRecordInputs(dataset.model))
-        } label: {
-          Label("Add \(noun)", systemImage: "plus")
-        }
-        .disabled(!canWrite)
-        .keyboardShortcut("n", modifiers: .command)
-        .accessibilityIdentifier("add-record")
       }
     }
     .aglynPushDestination(item: $pushed) { id in detail(id, titled: true) }

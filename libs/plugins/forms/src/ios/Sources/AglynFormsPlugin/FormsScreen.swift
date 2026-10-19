@@ -82,22 +82,13 @@ struct FormsScreen: View {
     .navigationTitle("Forms")
     .aglynSearchable(text: $searchText, prompt: "Search forms")
     .onChange(of: searchText) { _, text in model.type(text) }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          runner.clear()
-          sheet = .create
-        } label: {
-          Label("New form", systemImage: "plus")
-        }
-        .disabled(!role.canEditContent)
-        .keyboardShortcut("n", modifiers: .command)
-        .accessibilityIdentifier("add-form")
-      }
-      // Create with AI and anything else a plugin puts beside New form (the console's `hostForms` zone).
-      ToolbarItemGroup(placement: .primaryAction) {
-        SlotWidgets(context: context, slot: ListCreateZone.forms, placement: .header)
-      }
+    .aglynPrimaryAction(id: "add-form", "New form", systemImage: "plus", enabled: role.canEditContent) {
+      runner.clear()
+      sheet = .create
+    }
+    // Create with AI and anything else a plugin puts beside New form (the console's `hostForms` zone).
+    .aglynScreenToolbar(id: "forms-create") {
+      SlotWidgets(context: context, slot: ListCreateZone.forms, placement: .header)
     }
     .aglynPushDestination(item: $pushed) { id in detail(id, titled: true) }
     .safeAreaInset(edge: .bottom) {

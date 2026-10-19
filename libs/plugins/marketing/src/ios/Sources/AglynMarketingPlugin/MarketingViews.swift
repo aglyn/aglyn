@@ -247,11 +247,7 @@ struct CampaignsSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search campaigns", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      if access.canEdit {
-        ToolbarItem(placement: .primaryAction) { Button("New campaign", systemImage: "plus") { creating = true }.accessibilityIdentifier("campaign-new") }
-      }
-    }
+    .aglynPrimaryAction(id: "campaign-new", "New campaign", systemImage: "plus", enabled: access.canEdit) { creating = true }
     .task(id: search) {
       if selection == nil { selection = initial }
       let orgID = actions.orgID, hostID = actions.hostID, search = search, orgLevel = actions.orgLevel
@@ -379,15 +375,13 @@ struct CampaignDetail: View {
         .formStyle(.grouped)
         .aglynListBackground()
         .navigationTitle(row.name)
-        .toolbar {
+        .aglynScreenToolbar(id: "campaign") {
           if access.canEdit {
-            ToolbarItem(placement: .primaryAction) {
-              Menu {
-                Button("Edit", systemImage: "pencil") { editing = true }
-                Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
-              } label: {
-                Label("Campaign", systemImage: "ellipsis.circle")
-              }
+            Menu {
+              Button("Edit", systemImage: "pencil") { editing = true }
+              Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
+            } label: {
+              Label("Campaign", systemImage: "ellipsis.circle")
             }
           }
         }
@@ -604,17 +598,15 @@ struct OverlaysSection: View {
         }
       }
     }
-    .toolbar {
+    .aglynScreenToolbar(id: "overlays") {
       if access.canEdit {
-        ToolbarItem(placement: .primaryAction) {
-          Menu {
-            Button("Announcement bar") { creatingKind = "bar" }
-            Button("Popup") { creatingKind = "popup" }
-          } label: {
-            Label("New overlay", systemImage: "plus")
-          }
-          .accessibilityIdentifier("overlay-new")
+        Menu {
+          Button("Announcement bar") { creatingKind = "bar" }
+          Button("Popup") { creatingKind = "popup" }
+        } label: {
+          Label("New overlay", systemImage: "plus")
         }
+        .accessibilityIdentifier("overlay-new")
       }
     }
     .task {
@@ -823,11 +815,7 @@ struct ExperimentsSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search experiments", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      if access.canEdit {
-        ToolbarItem(placement: .primaryAction) { Button("New experiment", systemImage: "plus") { creating = true }.accessibilityIdentifier("experiment-new") }
-      }
-    }
+    .aglynPrimaryAction(id: "experiment-new", "New experiment", systemImage: "plus", enabled: access.canEdit) { creating = true }
     .task(id: search) {
       let hostID = actions.hostID, search = search
       list.show(context.firestore) { experimentsQuery(hostID, search: search, limit: $0) }
@@ -892,11 +880,9 @@ struct ExperimentDetail: View {
         .formStyle(.grouped)
         .aglynListBackground()
         .navigationTitle(row.name)
-        .toolbar {
+        .aglynScreenToolbar(id: "experiment") {
           if access.canEdit {
-            ToolbarItem(placement: .primaryAction) {
-              Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
-            }
+            Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
           }
         }
         .confirmationDialog("Delete experiment?", isPresented: $confirmDelete, titleVisibility: .visible) {

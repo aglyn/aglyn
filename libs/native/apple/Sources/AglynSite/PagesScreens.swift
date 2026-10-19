@@ -179,8 +179,10 @@ struct PagesScreen: View {
       }
     }
     .navigationTitle("Pages")
-    .toolbar {
-      ToolbarItemGroup(placement: .primaryAction) {
+    // New page is the one primary action; a template and a group are in the More menu on the Mac and iPad.
+    .aglynPrimaryAction(id: "add-page", "New page", systemImage: "plus", enabled: canEdit) { open(.newPage) }
+    .aglynScreenToolbar(id: "pages") {
+      AglynSecondaryActions {
         Button {
           open(.fromTemplate)
         } label: {
@@ -196,17 +198,9 @@ struct PagesScreen: View {
         .disabled(!canEdit)
         .keyboardShortcut("n", modifiers: [.command, .shift])
         .accessibilityIdentifier("add-group")
-        Button {
-          open(.newPage)
-        } label: {
-          Label("New page", systemImage: "plus")
-        }
-        .disabled(!canEdit)
-        .keyboardShortcut("n", modifiers: .command)
-        .accessibilityIdentifier("add-page")
-        // Create with AI and anything else a plugin puts beside New page (the console's `hostScreens` zone).
-        SlotWidgets(context: context, slot: ListCreateZone.pages, placement: .header)
       }
+      // Create with AI and anything else a plugin puts beside New page (the console's `hostScreens` zone).
+      SlotWidgets(context: context, slot: ListCreateZone.pages, placement: .header)
     }
     .safeAreaInset(edge: .bottom) { banner }
   }

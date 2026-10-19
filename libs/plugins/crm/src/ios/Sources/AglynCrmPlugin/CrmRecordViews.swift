@@ -68,19 +68,10 @@ struct RecordsSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search \(kind.plural.lowercased())", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      if scope.canWrite {
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-            creating = true
-          } label: {
-            Label("New \(kind.singular.lowercased())", systemImage: "plus")
-          }
-          .keyboardShortcut("n", modifiers: .command)
-          .accessibilityIdentifier("crm-new-\(kind.collection)")
-        }
-      }
-    }
+    // Shown to everyone, and off for a member whose role cannot add records.
+    .aglynPrimaryAction(
+      id: "crm-new-\(kind.collection)", "New \(kind.singular.lowercased())", systemImage: "plus", enabled: scope.canWrite
+    ) { creating = true }
     .sheet(isPresented: $creating) {
       CreateRecordSheet(kind: kind, scope: scope, api: api, reference: reference) { id in selection = id }
     }

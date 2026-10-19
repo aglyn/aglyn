@@ -117,15 +117,13 @@ struct BookingsCalendarScreen: View {
       }
     }
     .navigationTitle("Bookings")
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          context.navigate(bookingsServicesScreen)
-        } label: {
-          Label("Services", systemImage: "list.bullet.rectangle")
-        }
-        .accessibilityIdentifier("open-services")
+    .aglynScreenToolbar(id: "bookings") {
+      Button {
+        context.navigate(bookingsServicesScreen)
+      } label: {
+        Label("Services", systemImage: "list.bullet.rectangle")
       }
+      .accessibilityIdentifier("open-services")
     }
     .onAppear {
       guard !started else { return }

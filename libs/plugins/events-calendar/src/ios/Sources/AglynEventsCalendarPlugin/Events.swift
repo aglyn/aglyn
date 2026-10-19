@@ -181,15 +181,8 @@ struct EventsScreen: View {
       }
     }
     .navigationTitle("Events")
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          if sizeClass == .compact { adding = true } else { selection = Self.newID }
-        } label: {
-          Label("Add event", systemImage: "plus")
-        }
-        .accessibilityIdentifier("add-event")
-      }
+    .aglynPrimaryAction(id: "add-event", "Add event", systemImage: "plus") {
+      if sizeClass == .compact { adding = true } else { selection = Self.newID }
     }
     .sheet(isPresented: $adding) { NavigationStack { editor(for: nil) } }
     .onAppear {
@@ -374,15 +367,10 @@ struct EventEditor: View {
     .aglynListBackground()
     .navigationTitle(draft.id == nil ? "New event" : draft.title.isEmpty ? "Event" : draft.title)
     .onAppear { if draft.startsAt == nil { draft.startsAt = Self.nextHour } }
-    .toolbar {
-      ToolbarItem(placement: .confirmationAction) {
-        Button("Save") {
-          onSave(draft)
-          if draft.id == nil { dismiss() }
-        }
-        .disabled(problem != nil)
-        .accessibilityIdentifier("event-save")
-      }
+    // Beside the list on the Mac and iPad, Save sits in the head as a bordered button; the list keeps Add event.
+    .aglynEditorActions(id: "event-save", save: "Save", enabled: problem == nil, primary: false) {
+      onSave(draft)
+      if draft.id == nil { dismiss() }
     }
     .accessibilityIdentifier("event-editor")
   }

@@ -164,6 +164,7 @@ struct SpecScreenBody: View {
   @Environment(\.openURL) private var openURL
   @Environment(\.dismiss) private var dismiss
   @Environment(\.aglynGateResolve) private var gateResolve
+  @Environment(\.aglynWideChrome) private var wide
   @State private var confirming: PendingAction?
   @State private var prompting: PendingAction?
   @State private var reauthing: PendingAction?
@@ -195,7 +196,11 @@ struct SpecScreenBody: View {
         }
       }
       .animation(.default, value: notice?.text)
-      .toolbar { toolbar }
+      // On the Mac and iPad the screen's first action is its head's one primary button and the rest are in More; a
+      // phone keeps them in its navigation bar.
+      .toolbar { if !wide { toolbar } }
+      .aglynPrimaryAction(wide ? headPrimary : nil)
+      .aglynScreenToolbar(id: "spec-\(model.spec.id)") { if wide { headMore } }
       // A screen that names a `start` action runs it once, as soon as its data is in: the action's own `when` decides
       // whether there is anything to do (a link's `?notice=` that names a notice that cannot be reviewed does nothing).
       .task(id: isReady) {
@@ -313,10 +318,49 @@ struct SpecScreenBody: View {
     model.spec.blocks.first { $0.type == "list" && $0["search"] == .bool(true) }?["load"]?.stringValue
   }
 
+  /// The screen's actions that apply now.
+  private var actions: [ActionSpec] {
+    model.spec.raw["actions"].array.compactMap(ActionSpec.init).filter { ScreenValues.condition($0.when, in: context) }
+  }
+
+  /// The head's primary button: the screen's first action, unless it is destructive.
+  private var headPrimary: AglynPrimaryAction? {
+    guard let first = actions.first, !first.destructive else { return nil }
+    let scope = context
+    return AglynPrimaryAction(
+      id: "spec-action-\(first.id)", title: first.label, systemImage: first.icon ?? "plus", enabled: running == nil
+    ) { trigger(first, scope: scope) }
+  }
+
+  /// The head's More menu: the other actions, and Refresh on the Mac.
+  @ViewBuilder
+  private var headMore: some View {
+    let rest = headPrimary == nil ? actions : Array(actions.dropFirst())
+    #if os(macOS)
+      let refresh = true
+    #else
+      let refresh = false
+    #endif
+    if !rest.isEmpty || refresh {
+      AglynMoreMenu {
+        ForEach(rest) { action in
+          Button(role: action.destructive ? .destructive : nil) { trigger(action, scope: context) } label: {
+            Label(action.label, systemImage: action.icon ?? "circle")
+          }
+          .disabled(running != nil)
+        }
+        if refresh {
+          if !rest.isEmpty { Divider() }
+          Button { Task { await model.load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+            .keyboardShortcut("r", modifiers: .command)
+        }
+      }
+    }
+  }
+
   @ToolbarContentBuilder
   private var toolbar: some ToolbarContent {
-    let actions = model.spec.raw["actions"].array.compactMap(ActionSpec.init)
-      .filter { ScreenValues.condition($0.when, in: context) }
+    let actions = actions
     if let first = actions.first {
       ToolbarItem(placement: .primaryAction) {
         if actions.count == 1 {

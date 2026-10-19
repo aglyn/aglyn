@@ -114,20 +114,15 @@ struct LogicScreen: View {
       }
     }
     .navigationTitle("Functions & Variables")
-    .toolbar {
-      if tab != .health {
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-            runner.clear()
-            if tab == .variables { sheet = .editVariable(VariableDraft()) } else { context.navigate(logicFunctionScreen) }
-          } label: {
-            Label(tab == .variables ? "Add variable" : "Add function", systemImage: "plus")
-          }
-          .disabled(!canEdit)
-          .accessibilityIdentifier("logic-add")
-        }
-      }
-    }
+    .aglynPrimaryAction(
+      tab == .health
+        ? nil
+        : AglynPrimaryAction(
+          id: "logic-add", title: tab == .variables ? "Add variable" : "Add function", systemImage: "plus", enabled: canEdit
+        ) {
+          runner.clear()
+          if tab == .variables { sheet = .editVariable(VariableDraft()) } else { context.navigate(logicFunctionScreen) }
+        })
     .safeAreaInset(edge: .bottom) {
       if sheet == nil, let notice = runner.notice {
         AglynNotice(notice, tone: .success) { runner.clear() }.padding(AglynSpace.two)

@@ -330,26 +330,24 @@ private struct ListingDetail: View {
         EditListingSheet(context: context, listing: listing, runner: editRunner, api: SellerAPI(api: context.api, orgID: orgID)) { editing = nil }
       }
     }
-    .toolbar {
+    .aglynScreenToolbar(id: "listing") {
       // The owner's actions on the listing itself: a plugin ships a new version from here, and any listing is edited here.
       if let owned, installRoles.contains(context.orgRole ?? "") {
-        ToolbarItemGroup(placement: .primaryAction) {
-          if owned.isPlugin {
-            Button {
-              context.navigate("marketplace.publishPlugin", ["listing": owned.id])
-            } label: {
-              Label("Publish new version", systemImage: "square.and.arrow.up")
-            }
-            .accessibilityIdentifier("listing-publish-version")
-          }
+        if owned.isPlugin {
           Button {
-            editRunner.clear()
-            editing = owned
+            context.navigate("marketplace.publishPlugin", ["listing": owned.id])
           } label: {
-            Label("Edit listing", systemImage: "pencil")
+            Label("Publish new version", systemImage: "square.and.arrow.up")
           }
-          .accessibilityIdentifier("listing-edit")
+          .accessibilityIdentifier("listing-publish-version")
         }
+        Button {
+          editRunner.clear()
+          editing = owned
+        } label: {
+          Label("Edit listing", systemImage: "pencil")
+        }
+        .accessibilityIdentifier("listing-edit")
       }
     }
     .task(id: "\(listingID)-\(context.hostID ?? "")-\(context.orgID ?? "")") {

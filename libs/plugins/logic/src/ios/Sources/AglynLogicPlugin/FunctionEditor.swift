@@ -120,21 +120,16 @@ private struct FunctionEditor: View {
       testRunSection
     }
     .formStyle(.grouped)
-    .toolbar {
-      ToolbarItem(placement: .cancellationAction) { Button("Cancel") { context.back() } }
-      ToolbarItem(placement: .confirmationAction) {
-        Button {
-          guard let hostID = context.hostID else { return }
-          let api = LogicAPI(api: context.api, writer: context.writer, reader: context.firestore, hostID: hostID)
-          let current = draft
-          runner.run(success: functionID == nil ? "Function added." : "Function saved.", onDone: { context.back() }) {
-            try await api.saveFunction(id: functionID, definition: current)
-          }
-        } label: {
-          if runner.busy { ProgressView() } else { Text("Done") }
-        }
-        .disabled(!canEdit || runner.busy || (draft.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || nameTaken)
-        .accessibilityIdentifier("function-save")
+    .aglynEditorActions(
+      id: "function-save", save: runner.busy ? "Saving…" : "Done",
+      enabled: canEdit && !runner.busy && !(draft.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !nameTaken,
+      cancel: { context.back() }
+    ) {
+      guard let hostID = context.hostID else { return }
+      let api = LogicAPI(api: context.api, writer: context.writer, reader: context.firestore, hostID: hostID)
+      let current = draft
+      runner.run(success: functionID == nil ? "Function added." : "Function saved.", onDone: { context.back() }) {
+        try await api.saveFunction(id: functionID, definition: current)
       }
     }
     .task(id: context.hostID) {

@@ -183,18 +183,10 @@ private struct CollectionEntries: View {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }
     }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          env.open(.newEntry(collection.id))
-        } label: {
-          Label("New entry", systemImage: "plus")
-        }
-        .disabled(!env.canWrite)
-        .keyboardShortcut("n", modifiers: .command)
-        .accessibilityIdentifier("add-entry")
-      }
-      ToolbarItem(placement: .secondaryAction) {
+    .aglynPrimaryAction(id: "add-entry", "New entry", systemImage: "plus", enabled: env.canWrite) {
+      env.open(.newEntry(collection.id))
+    }
+    .aglynScreenToolbar(id: "collection") {
         Menu {
           Button("New collection", systemImage: "plus") { env.open(.newCollection) }.disabled(!env.canWrite)
           Button("Collection settings", systemImage: "gearshape") { env.open(.settings(collection.id)) }.disabled(!env.canWrite)
@@ -205,7 +197,6 @@ private struct CollectionEntries: View {
           Label("Collection", systemImage: "ellipsis.circle")
         }
         .accessibilityIdentifier("collection-menu")
-      }
     }
   }
 

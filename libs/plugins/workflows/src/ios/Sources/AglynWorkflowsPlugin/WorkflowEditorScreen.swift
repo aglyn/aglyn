@@ -53,14 +53,9 @@ struct WorkflowEditorScreen: View {
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
     #endif
-    .toolbar {
-      ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-      ToolbarItem(placement: .confirmationAction) {
-        Button(saving ? "Saving…" : "Done") { save() }
-          .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || nameTaken || saving)
-          .accessibilityIdentifier("workflow-save")
-      }
-    }
+    .aglynEditorActions(
+      id: "workflow-save", save: saving ? "Saving…" : "Done", enabled: !(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || nameTaken || saving), cancel: { dismiss() }
+    ) { save() }
     .task(id: "\(hostID ?? "")|\(editingID ?? "new")") {
       guard let hostID else { return }
       list.start(context.firestore, AutomationQueries.workflows(hostID))

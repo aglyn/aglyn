@@ -37,16 +37,9 @@ struct BookingServicesScreen: View {
       }
     }
     .navigationTitle("Services")
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          adding = true
-          selection = Self.newID
-        } label: {
-          Label("Add service", systemImage: "plus")
-        }
-        .accessibilityIdentifier("add-service")
-      }
+    .aglynPrimaryAction(id: "add-service", "Add service", systemImage: "plus") {
+      adding = true
+      selection = Self.newID
     }
     .onAppear {
       guard startNew, !startedNew else { return }
@@ -273,17 +266,15 @@ struct ServiceEditor: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(service == nil ? "New service" : form.name.isEmpty ? "Service" : form.name)
-    .toolbar {
-      ToolbarItem(placement: .confirmationAction) {
-        Button(service == nil ? "Add" : "Save") {
-          var draft = form
-          draft.windowText = hours.map { formatBookingWindows($0.map { BookingWindow(end: $0.end, start: $0.start) }) }
-          onSave(draft)
-          if service == nil { dismiss() }
-        }
-        .disabled(bookingServiceDraftProblem(name: form.name) != nil)
-        .accessibilityIdentifier("service-save")
-      }
+    // Beside the list on the Mac and iPad, Save sits in the head as a bordered button; the list keeps Add service.
+    .aglynEditorActions(
+      id: "service-save", save: service == nil ? "Add" : "Save", enabled: bookingServiceDraftProblem(name: form.name) == nil,
+      primary: false
+    ) {
+      var draft = form
+      draft.windowText = hours.map { formatBookingWindows($0.map { BookingWindow(end: $0.end, start: $0.start) }) }
+      onSave(draft)
+      if service == nil { dismiss() }
     }
     .accessibilityIdentifier("service-editor")
   }

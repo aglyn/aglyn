@@ -80,18 +80,8 @@ struct EmailsScreen: View {
     .navigationTitle("Emails")
     .aglynSearchable(text: $searchText, prompt: "Search subjects", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .toolbar {
-      if role.canSend {
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-            composing = true
-          } label: {
-            Label("Write an email", systemImage: "square.and.pencil")
-          }
-          .keyboardShortcut("n", modifiers: .command)
-          .accessibilityIdentifier("email-compose")
-        }
-      }
+    .aglynPrimaryAction(id: "email-compose", "Write an email", systemImage: "square.and.pencil", enabled: role.canSend) {
+      composing = true
     }
     .sheet(isPresented: $composing) { ComposeSheet(context: context, send: nil, siteName: role.siteName, campaignID: composeCampaign) }
     .task(id: composeCampaign) { if composeCampaign != nil { composing = true } }

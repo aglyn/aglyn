@@ -215,18 +215,9 @@ struct DatasetsScreen: View {
         list(selectable: false)
       }
     }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          runner.clear()
-          sheet = .create
-        } label: {
-          Label("New dataset", systemImage: "plus")
-        }
-        .disabled(!canWrite)
-        .keyboardShortcut("n", modifiers: .command)
-        .accessibilityIdentifier("add-dataset")
-      }
+    .aglynPrimaryAction(id: "add-dataset", "New dataset", systemImage: "plus", enabled: canWrite) {
+      runner.clear()
+      sheet = .create
     }
     .aglynPushDestination(item: $pushed) { id in detail(id, titled: true) }
     .safeAreaInset(edge: .bottom) {
