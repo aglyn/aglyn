@@ -368,9 +368,12 @@ struct CreateSiteSheet: View {
       .accessibilityIdentifier("site-name")
       LabeledContent {
         HStack(spacing: 2) {
+          // One label: the row's ("Address"); the field draws none of its own (it read "Address Address" on the Mac).
           TextField(
-            "Address", text: Binding(get: { subdomain }, set: { edited = true; subdomain = cleanSubdomainInput($0) })
+            "Address", text: Binding(get: { subdomain }, set: { edited = true; subdomain = cleanSubdomainInput($0) }),
+            prompt: Text("your-site")
           )
+          .labelsHidden()
           .autocorrectionDisabled()
           #if os(iOS)
             .textInputAutocapitalization(.never)
@@ -447,7 +450,7 @@ func createSiteBlock(_ context: NativePluginContext, orgID: String) async -> Cre
   guard let entitlements = try? await context.api.request("/api/orgs/entitlements", query: [("orgId", orgID)]),
     let limit = entitlements["quotas"]?["hostLimit"]?.numberValue
   else { return nil }
-  let used: Int? = await withCheckedContinuation { continuation in
+  let mapped: Int? = await withCheckedContinuation { continuation in
     var listener: FirestoreListening?
     var answered = false
     listener = context.firestore.listenDocument(["orgs", orgID]) { result in
@@ -458,8 +461,19 @@ func createSiteBlock(_ context: NativePluginContext, orgID: String) async -> Cre
       continuation.resume(returning: hosts.map { $0.values.filter { !($0 is NSNull) && ($0 as? Bool) != false }.count })
     }
   }
-  guard let used else { return nil }
-  return used >= Int(limit) ? .limit(Int(limit)) : nil
+  // The route counts the larger of the workspace's sites and its directory (`claimHostForOrg`); a workspace whose
+  // directory lags its sites (a seeded one, an older one) is still stopped before the click, not after it.
+  let counted = try? await context.firestore.count(
+    FirestoreQuery(["hosts"], filters: [ListQueryConstraint(path: "orgId", op: .equal, value: orgID)]))
+  guard mapped != nil || counted != nil else { return nil }
+  return siteLimitBlock(limit: Int(limit), mapped: mapped, counted: counted ?? nil)
+}
+
+/// The route's count of a workspace's sites against its plan's `hostLimit`: the larger of the sites that name the
+/// workspace and its `hosts` directory; nil while there is room.
+func siteLimitBlock(limit: Int, mapped: Int?, counted: Int?) -> CreateSiteBlock? {
+  let used = max(mapped ?? 0, counted ?? 0)
+  return used >= limit ? .limit(limit) : nil
 }
 
 /// The picked site's own overview screen.

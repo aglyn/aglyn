@@ -52,6 +52,16 @@ final class SiteTests: XCTestCase {
         + "change your role.")
   }
 
+  /// The plan's site limit is said before the click, counted as the route counts it: the larger of the workspace's
+  /// sites and its directory, so a lagging directory does not let the sheet through to a 403.
+  func testTheSiteLimitCountsAsTheRouteDoes() {
+    XCTAssertEqual(siteLimitBlock(limit: 3, mapped: nil, counted: 3), .limit(3))
+    XCTAssertEqual(siteLimitBlock(limit: 3, mapped: 3, counted: nil), .limit(3))
+    XCTAssertEqual(siteLimitBlock(limit: 3, mapped: 0, counted: 3), .limit(3))
+    XCTAssertNil(siteLimitBlock(limit: 3, mapped: 2, counted: 2))
+    XCTAssertNil(siteLimitBlock(limit: 3, mapped: nil, counted: nil))
+  }
+
   func testRegistersEveryDeclaredContribution() {
     let registry = registry()
     XCTAssertEqual(registry.screen("site.pages")?.requiresSite, true)

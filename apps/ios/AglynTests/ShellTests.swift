@@ -82,15 +82,11 @@ final class ShellTests: XCTestCase {
 
   /// Firebase Auth's app-delegate proxy hands the APNs device token only to a delegate class that implements the
   /// callback itself, and SwiftUI's forwards it to `PushAppDelegate`: with the proxy on, the token never reaches `PushCenter`.
-  func testBothAppsKeepFirebasesAppDelegateProxyOff() throws {
+  /// The built app's own Info.plist, from its bundle. Both apps' source plists are checked by the SwiftPM
+  /// `AppConfigTests`: a hosted app test that read them from the checkout under ~/Documents raised the system's
+  /// Documents-folder prompt on the Mac and hung the run.
+  func testBothAppsKeepFirebasesAppDelegateProxyOff() {
     XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "FirebaseAppDelegateProxyEnabled") as? Bool, false)
-    let config = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-      .appendingPathComponent("Config")
-    for name in ["Aglyn-Info.plist", "AglynPOS-Info.plist"] {
-      let data = try Data(contentsOf: config.appendingPathComponent(name))
-      let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
-      XCTAssertEqual(plist["FirebaseAppDelegateProxyEnabled"] as? Bool, false, name)
-    }
   }
 
   /// Every row the nav manifest lists opens a screen this app has (AGL-3945): a row with none would be a dead end.
