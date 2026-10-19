@@ -937,6 +937,24 @@ describe('the site’s own listing, from the answers', () => {
     })
   })
 
+  it('leads with the site’s own name where the start named no business, as the publish writes it (AGL-3979)', async () => {
+    const siteName = jest.fn(async () => 'Hillside Dog Grooming')
+    const step = stepWith({ page: fakeRunner([], () => ({ outputs: [output('screen', 's')] })) }, { siteName })
+    const job = siteJob({
+      inputs: { businessType: 'a neighborhood dog groomer', audience: 'local dog owners', pages: AI_SITE_PAGES.min, welcomeEmail: false },
+    })
+    const outcome = await step(context(job))
+    expect(siteName).toHaveBeenCalledWith(expect.anything(), job.hostId)
+    expect(aiSiteSeoProposalOf(outcome.outputs)?.values).toEqual({
+      'seo.title': 'Hillside Dog Grooming — Neighborhood dog groomer',
+      'seo.description': 'Hillside Dog Grooming is a neighborhood dog groomer for local dog owners.',
+    })
+    // Once reported, no pass reads the name again.
+    siteName.mockClear()
+    await step(context(siteJob({ ...job, outputs: [LOOK, ...outcome.outputs] })))
+    expect(siteName).not.toHaveBeenCalled()
+  })
+
   it('says it in the language the plan writes the site in, with no English around the answers (AGL-3792)', async () => {
     const step = stepWith({
       page: fakeRunner([], () => ({ outputs: [output('screen', 's')] })),

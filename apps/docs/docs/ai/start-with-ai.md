@@ -256,10 +256,15 @@ name, which search engines are asked not to index.
 
 ## The site's search listing {#the-sites-search-listing}
 
-The site's own search title and description, the fallback for every page without its own,
-are not saved for you. The site's **SEO** section shows them in a card, **The listing your
-answers describe**. **Put in the form** stages them in the SEO form below as unsaved
-changes, and the form's **Update** saves them.
+The site's own search title and description are the fallback for every page without its
+own, and what search results and AI assistants read about the site as a whole. When the
+site is published, your answers become them, led by the site's name, as long as the site
+still has the title and description it was created with (its name and *Welcome to …*).
+
+A title or description you changed yourself is never replaced. Instead, the site's **SEO**
+section shows the start's in a card, **The listing your answers describe**. **Put in the
+form** stages them in the SEO form below as unsaved changes, and the form's **Update** saves
+them.
 
 ## Your business, for search engines and AI assistants {#business-details}
 

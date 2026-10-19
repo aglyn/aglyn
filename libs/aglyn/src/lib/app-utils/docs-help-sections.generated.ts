@@ -146,7 +146,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#details': 'Business phone and Business email come first. Both are optional.',
     '#how-do-you-want-to-start': 'The first step asks for the site\'s Site name and Subdomain, its free address on Aglyn.',
     '#review': 'The last step lists every answer: the kind of site, who it is for, the style, where form submissions go, the pages and, on a paid plan, the welcome email, then every detail you gave, such as the phone, the email, the…',
-    '#the-sites-search-listing': 'The site\'s own search title and description, the fallback for every page without its own, are not saved for you.',
+    '#the-sites-search-listing': 'The site\'s own search title and description are the fallback for every page without its own, and what search results and AI assistants read about the site as a whole.',
     '#your-business': 'What kind of site are you creating? is the one required answer.',
   },
   aiTemplate: {

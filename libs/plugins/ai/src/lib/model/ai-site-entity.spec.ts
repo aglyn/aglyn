@@ -22,10 +22,20 @@
  * tenant's own JSON-LD serializer.
  */
 
+import { defaultSiteSeo } from '@aglyn/aglyn/app-utils/default-site'
 import { LOCAL_BUSINESS_TYPES } from '@aglyn/aglyn/app-utils/local-business'
 import { siteEntityJsonLd } from '@aglyn/aglyn/app-utils/site-entity-json-ld'
 import { AI_SITE_KINDS } from './ai-site-kinds'
-import { AI_SITE_CONTACT_TYPE, AI_SITE_KIND_SCHEMA, aiSiteEntityUpdates, aiSiteEntityValues, aiSiteSchemaOf } from './ai-site-entity'
+import {
+  AI_SITE_CONTACT_TYPE,
+  AI_SITE_KIND_SCHEMA,
+  aiSiteEntityUpdates,
+  aiSiteEntityValues,
+  aiSiteListingSeeded,
+  aiSiteListingUpdates,
+  aiSiteSchemaOf,
+} from './ai-site-entity'
+import { aiSiteSeoProposalForInputs } from './ai-site-start-seo'
 
 const PLUMBER = {
   businessType: 'a family plumbing company',
@@ -214,5 +224,51 @@ describe('what a publish writes on the host', () => {
     const node = siteEntityJsonLd({ displayName: 'Ana Ruiz', seo: applied({}, updates) } as never, { origin: 'https://ana.aglyn.app' })
     expect(node?.['@type']).toBe('Person')
     expect(node).toMatchObject({ contactPoint: { email: 'ana@ruiz.dev' } })
+  })
+})
+
+/*
+ * The site's own listing (AGL-3979): the start's title and description go
+ * over the ones the site was created with, and over nothing an owner wrote.
+ */
+describe('the site’s own listing at publish', () => {
+  const NAME = 'Hillside Dog Grooming'
+  const GROOMER = { businessType: 'a neighborhood dog groomer', audience: 'busy dog owners', city: 'Austin' }
+  const listing = aiSiteSeoProposalForInputs(GROOMER, null, NAME)
+
+  it('leads with the site’s name where the start named no business', () => {
+    expect(listing?.values['seo.title']).toBe('Hillside Dog Grooming — Neighborhood dog groomer in Austin')
+    expect(listing?.values['seo.description']).toMatch(/^Hillside Dog Grooming is a neighborhood dog groomer/)
+    // A business the start names is its own name, whatever the site is called.
+    expect(aiSiteSeoProposalForInputs({ ...GROOMER, businessName: 'Pawsome' }, null, NAME)?.values['seo.title']).toMatch(/^Pawsome — /)
+  })
+
+  it('writes both halves over the default the site was created with', () => {
+    const seeded = defaultSiteSeo(NAME)
+    expect(aiSiteListingSeeded(seeded, NAME)).toEqual({ title: true, description: true })
+    expect(aiSiteListingUpdates(seeded, NAME, listing)).toEqual({
+      'seo.title': listing?.values['seo.title'],
+      'seo.description': listing?.values['seo.description'],
+    })
+    // Renamed after it was made, the seeded pair is still the seeded pair; blank was never chosen either.
+    expect(aiSiteListingSeeded(defaultSiteSeo('Old Name'), NAME)).toEqual({ title: true, description: true })
+    expect(aiSiteListingSeeded({}, NAME)).toEqual({ title: true, description: true })
+    expect(aiSiteListingSeeded(defaultSiteSeo(''), '')).toEqual({ title: true, description: true })
+  })
+
+  it('never writes over a title or description the owner changed', () => {
+    const seeded = defaultSiteSeo(NAME)
+    const ownTitle = { ...seeded, title: 'Hillside Grooming | Austin dog spa' }
+    expect(aiSiteListingUpdates(ownTitle, NAME, listing)).toEqual({ 'seo.description': listing?.values['seo.description'] })
+    const ownDescription = { ...seeded, description: 'Gentle grooming for nervous dogs since 2009.' }
+    expect(aiSiteListingUpdates(ownDescription, NAME, listing)).toEqual({ 'seo.title': listing?.values['seo.title'] })
+    expect(aiSiteListingUpdates({ title: 'Our own title', description: 'Our own words.' }, NAME, listing)).toEqual({})
+    expect(aiSiteListingUpdates(seeded, NAME, null)).toEqual({})
+  })
+
+  it('writes nothing a second time', () => {
+    const seo = applied(defaultSiteSeo(NAME), aiSiteListingUpdates(defaultSiteSeo(NAME), NAME, listing))
+    expect(aiSiteListingSeeded(seo, NAME)).toEqual({ title: false, description: false })
+    expect(aiSiteListingUpdates(seo, NAME, listing)).toEqual({})
   })
 })

@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
+import { defaultHomeDescription, defaultSiteSeo } from '@aglyn/aglyn/app-utils/default-site'
 import type { LocalBusinessType } from '@aglyn/aglyn/app-utils/local-business'
 import { HostEntityType } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import { aiSiteAddressLine, aiSiteDetailsOf, aiSiteHoursSentence, aiSiteServiceAreas } from './ai-site-details'
 import { aiSiteKindOfInputs } from './ai-site-kinds'
-import { aiSiteSeoProposalForInputs, AI_SITE_SEO_FORM_FIELDS } from './ai-site-start-seo'
+import { aiSiteSeoProposalForInputs, AI_SITE_SEO_FORM_FIELDS, type AiSiteSeoProposal } from './ai-site-start-seo'
 
 /**
  * Who publishes a site a guided start built, as its structured data and its
@@ -48,6 +49,15 @@ import { aiSiteSeoProposalForInputs, AI_SITE_SEO_FORM_FIELDS } from './ai-site-s
  * {@link aiSiteEntityUpdates} writes only fields that are empty, so a site
  * whose owner already filled its Entity keeps every word of it, and a second
  * publish (Try again) writes nothing it wrote before.
+ *
+ * ── The site's own listing ───────────────────────────────────────────────
+ *
+ * `/llms.txt` opens with the site's title and description, and every page
+ * without its own title falls back to them. A new site is created with its
+ * name and a "Welcome to …" line there, which nobody chose, so
+ * {@link aiSiteListingUpdates} puts the start's listing over that seeded
+ * default, and only over it: a title or description the owner changed keeps
+ * their words, and the SEO section offers the start's beside them.
  *
  * Pure: no Firestore and no React.
  */
@@ -223,16 +233,22 @@ export function aiSiteAgentGuidance(input: {
   return { whenToUse: when, howToUse: how }
 }
 
-/** The Entity and AI-agent values a site job's inputs imply, in the language its plan writes the site in. */
+/**
+ * The Entity and AI-agent values a site job's inputs imply, in the language
+ * its plan writes the site in. `siteName` is the site's own name: it leads
+ * the description and the guidance where the inputs name no business, and is
+ * never written as the Entity's name, which falls back to it at render and so
+ * follows a rename.
+ */
 export function aiSiteEntityValues(
   inputs: Readonly<Record<string, unknown>> | null | undefined,
-  options: { language?: string | null } = {},
+  options: { language?: string | null; siteName?: string | null } = {},
 ): AiSiteEntityValues {
   const details = aiSiteDetailsOf(inputs)
   const schema = aiSiteSchemaOf(inputs)
   const name = text(inputs?.['businessName'])
   const city = text(inputs?.['city'])
-  const listing = aiSiteSeoProposalForInputs(inputs, options.language ?? null)
+  const listing = aiSiteSeoProposalForInputs(inputs, options.language ?? null, options.siteName ?? null)
   const description = listing?.values[AI_SITE_SEO_FORM_FIELDS.description] ?? ''
   const areas = aiSiteServiceAreas(details.serviceArea)
   // A business that names no other area serves the city it is in.
@@ -240,7 +256,7 @@ export function aiSiteEntityValues(
   const sameAs = details.social ? details.social.split('\n').filter(Boolean) : []
   const address = details.street ? aiSiteAddressLine(details, city) : ''
   const guidance = aiSiteAgentGuidance({
-    name,
+    name: name || text(options.siteName),
     description,
     areas,
     hours: Boolean(aiSiteHoursSentence(details.hours)),
@@ -345,5 +361,58 @@ export function aiSiteEntityUpdates(
   fill('seo.agent.howToUse', agent['howToUse'], values.howToUse)
   fill('business.supportEmail', business['supportEmail'], values.email)
   fill('business.address', business['address'], values.postalAddress)
+  return updates
+}
+
+/** Trimmed, or `''` for anything that is not a string: as site creation compares names. */
+const trimmed = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * Which half of a site's own listing is still the one its creation seeded
+ * (AGL-3979): `defaultSiteSeo(name)` — the site's name as its title and
+ * "Welcome to {name}. See what we do, browse our work and get in touch." as
+ * its description. Blank counts as seeded too: nobody chose it.
+ *
+ * The title is seeded when it is the site's name, or when it still pairs with
+ * a seeded description, as it does on a site renamed after it was made. The
+ * description is seeded when it is the welcome line for the site's name, for
+ * the title's, or for no name. Anything else is the owner's own words.
+ */
+export function aiSiteListingSeeded(seo: unknown, displayName: unknown): { title: boolean; description: boolean } {
+  const current = isRecord(seo) ? seo : {}
+  const title = trimmed(current['title'])
+  const description = trimmed(current['description'])
+  const name = trimmed(displayName)
+  const welcomes = new Set([name, title, ''].map((each) => defaultHomeDescription(each)))
+  const seededDescription = !description || welcomes.has(description)
+  const seededTitle =
+    !title ||
+    title === trimmed(defaultSiteSeo(name)['title']) ||
+    (Boolean(description) && description === defaultHomeDescription(title))
+  return { title: seededTitle, description: seededDescription }
+}
+
+/**
+ * The host updates that put a start's own listing on its site (AGL-3979), as
+ * field paths for the publish's batch: each half only where it is still the
+ * seeded default and differs from the listing, so the owner's own title or
+ * description is never written over, and a second publish writes nothing.
+ * `{}` with no listing to write.
+ */
+export function aiSiteListingUpdates(
+  seo: unknown,
+  displayName: unknown,
+  listing: AiSiteSeoProposal | null,
+): Record<string, string> {
+  if (!listing) return {}
+  const current = isRecord(seo) ? seo : {}
+  const seeded = aiSiteListingSeeded(current, displayName)
+  const updates: Record<string, string> = {}
+  const title = trimmed(listing.values[AI_SITE_SEO_FORM_FIELDS.title])
+  const description = trimmed(listing.values[AI_SITE_SEO_FORM_FIELDS.description])
+  if (title && seeded.title && title !== trimmed(current['title'])) updates[AI_SITE_SEO_FORM_FIELDS.title] = title
+  if (description && seeded.description && description !== trimmed(current['description'])) {
+    updates[AI_SITE_SEO_FORM_FIELDS.description] = description
+  }
   return updates
 }
