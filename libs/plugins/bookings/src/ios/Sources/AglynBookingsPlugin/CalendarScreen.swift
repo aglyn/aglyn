@@ -367,7 +367,7 @@ struct BookingsNeedsYouWidget: View {
   var body: some View {
     let now = nowMs()
     let rows = (bookings.rows ?? []).filter { $0.state(now) != .canceled && $0.state(now) != .expired && $0.endsAtMs > now }
-    Group {
+    VStack(spacing: 0) {
       if let next = rows.min(by: { $0.startsAtMs < $1.startsAtMs }) {
         let time = next.start.formatted(date: .omitted, time: .shortened)
         AglynNeedsYouLine(

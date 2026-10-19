@@ -280,7 +280,8 @@ struct InboxNeedsYouWidget: View {
   @State private var list = LiveQueryList(pageSize: submissionsPageSize, map: Submission.init)
 
   var body: some View {
-    Group {
+    // A stack, not a Group: a Group hands .task to its children, and with nothing drawn yet the read never starts.
+    VStack(spacing: 0) {
       if list.ready && list.failure == nil && !list.rows.isEmpty {
         let count = list.rows.count
         AglynNeedsYouLine(
@@ -309,7 +310,8 @@ struct InboxSidebarCount: View {
   @State private var list = LiveQueryList(pageSize: 99, map: Submission.init)
 
   var body: some View {
-    Group {
+    // A stack, not a Group: a Group hands .task to its children, and with nothing drawn yet the read never starts.
+    VStack(spacing: 0) {
       if list.ready && list.failure == nil && !list.rows.isEmpty {
         AglynSidebarCount(list.rows.count, more: list.hasMore)
       }

@@ -62,6 +62,18 @@ final class ShellTests: XCTestCase {
     XCTAssertEqual(navigation.paths[.home] ?? [], [])
   }
 
+  /// A workspace picked in the switcher from a pushed settings screen is open at once, from its Home: the phone's
+  /// sites step only narrows it, and closing the sheet there must not leave the old workspace's screen in front.
+  func testPickingAWorkspaceLeavesSettingsForItsHome() {
+    let navigation = ShellNavigation()
+    navigation.enter(.workspaceSettings, first: .plugin("core.team"))
+    navigation.push(.screen("core.team.member", ["uid": "u-1"]))
+    openPickedWorkspace("org-2", in: nil, navigation: navigation)
+    XCTAssertEqual(navigation.mode, .main)
+    XCTAssertEqual(navigation.section, .home)
+    XCTAssertTrue(navigation.paths.values.allSatisfy(\.isEmpty))
+  }
+
   /// Decision 5: a white-label workspace's brand color is the accent while you are in it (switch-off-able), never a
   /// picked or logo-derived color, never a brand color the workspace is not white-label for; your own accent wins.
   func testOnlyAWhiteLabelBrandBecomesTheAccent() {
