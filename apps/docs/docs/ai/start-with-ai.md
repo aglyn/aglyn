@@ -74,10 +74,14 @@ later AI job for the site reads.
 ## Style {#style}
 
 The **Style** step shows each style as a card with a picture: an example home page of
-that kind of site, drawn in its style. A photographer's opens on a gallery, a café's on
-its menu, an online store's on its products, a blog's on its latest posts, an events
-site's on its program and a real estate site's on its listings, so you can see each
-style's colors, fonts, buttons and corners, and the shape of its pages, before you pick.
+that kind of site, drawn in its style, each with a photo. A photographer's opens on a
+gallery, a café's on its heading centered over a photo of the café with its menu under
+it, an online store's on two photos of what it sells, a blog's on a centered heading
+above a wide photo, an events site's on its dates beside two photos of the day and a real
+estate site's on a card over a photo of a home, so you can see each style's colors,
+fonts, buttons and corners, and the shape of its pages, before you pick. The picked card
+is outlined in color and carries a check. See
+[each style's layout](./site-looks.md#each-styles-layout).
 **Pick for me** comes first and is chosen unless you choose another. It names the style
 your first answer suggests, such as *From your answer: Home services & trades*. The style
 decides how the site looks and which pages it usually has: an online store, a portfolio,
