@@ -16,6 +16,7 @@
  */
 
 import { aiSiteKind } from './ai-site-kinds'
+import { parseAiSiteDetails, type AiSiteDetails } from './ai-site-details'
 import { parseAiSiteInspiration } from './ai-site-inspiration'
 import {
   AI_BUILD_PLAN_CREATION_NOUNS,
@@ -659,7 +660,12 @@ export const AI_SITE_BATCH_MAX = 25
  */
 export const AI_SITE_BATCH_MIN_HOST_LIMIT = 25
 
-export interface AiSiteJobInputs {
+/**
+ * A scaffold's scalar inputs. The business details (AGL-3979, `AiSiteDetails`)
+ * are among them, each `''` where nobody gave it: how to reach the business,
+ * where it is, when it is open, where it works and its profiles.
+ */
+export interface AiSiteJobInputs extends AiSiteDetails {
   /** What the business is, in a few words: the brief's subject. */
   businessType: string
   /**
@@ -851,11 +857,17 @@ export function parseAiSiteJobInputs(
         ? rawBatch
         : undefined
   if (batchId === undefined) return 'batchId is not a batch id'
+  // The business details, each held to its own rule (AGL-3979): a phone
+  // number that reads as one, an email address, https profile links, a year;
+  // hours keep only the lines that read, areas and links one a line.
+  const details = parseAiSiteDetails(inputs)
+  if (typeof details === 'string') return details
   // https addresses only, at most three; the door holds a workspace to its
   // plan's own limit (`aiSiteInspirationRefusal`).
   const inspiration = parseAiSiteInspiration(inputs)
   if (typeof inspiration === 'string') return inspiration
   return {
+    ...details,
     businessType,
     audience: audience as string,
     starter: starter as string,

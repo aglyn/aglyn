@@ -26,6 +26,7 @@ import {
   type PageScope,
   type SectionScope,
 } from './ai-layout-compiler'
+import { aiLayoutContactItems, aiLayoutContactShown } from './ai-layout-contact'
 import { aiLayoutFitText } from './ai-layout-copy'
 import { aiLayoutRepairFrameHollows } from './ai-layout-frame-hollows'
 import { AI_LAYOUT_CART_ELEMENT } from './ai-layout-listings'
@@ -645,6 +646,19 @@ function compileFooter(
       columns.push([{ kind: 'heading', text: aiLayoutLabel('customerCare', plan.language) }, list])
       weights.push(1)
     }
+  }
+  // How to reach the business (AGL-3979): the phone and email it gave, as
+  // links that call and write, in a column of their own under its heading,
+  // wherever the design's footer did not already show them.
+  const contact = page.targets.contact
+  const contactItems = contact ? aiLayoutContactItems(contact, aiLayoutContactShown(blocks, contact)) : []
+  if (contactItems.length) {
+    columns.push([
+      { kind: 'heading', text: aiLayoutLabel('contact', plan.language) },
+      { kind: 'list', items: contactItems },
+    ])
+    weights.push(1)
+    page.settled.push({ at: 'footer', what: 'the phone and email the business gave, in a column of their own' })
   }
   const filled = columns
     .map((column, position) => ({ column, weight: weights[position] ?? 1 }))
