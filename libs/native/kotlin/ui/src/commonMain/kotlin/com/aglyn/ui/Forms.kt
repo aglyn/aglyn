@@ -49,7 +49,8 @@ fun SearchField(
   onSearch: (() -> Unit)? = null,
 ) {
   val metrics = LocalShellMetrics.current
-  if (metrics.compact) {
+  // The desktop and the tablet draw Figma's 28 list search (Mac 13:483, iPad 13:2167); phones keep the touch field.
+  if (metrics.compact || currentWidthClass() != WidthClass.COMPACT) {
     CompactListSearch(query, onQuery, placeholder, modifier, onSearch, metrics)
     return
   }
@@ -86,7 +87,7 @@ private fun CompactListSearch(
     value = query,
     onValueChange = onQuery,
     singleLine = true,
-    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = metrics.rowText, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurface),
+    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurface),
     cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
     keyboardActions = KeyboardActions(onSearch = { onSearch?.invoke() }),
@@ -100,7 +101,7 @@ private fun CompactListSearch(
       ) {
         Icon(AglynIcons.named("search"), contentDescription = null, modifier = Modifier.size(14.dp), tint = muted)
         Box(Modifier.weight(1f)) {
-          if (query.isEmpty()) Text(placeholder, fontSize = metrics.rowText, lineHeight = 18.sp, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          if (query.isEmpty()) Text(placeholder, fontSize = 13.sp, lineHeight = 18.sp, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
           field()
         }
         if (query.isNotEmpty()) {

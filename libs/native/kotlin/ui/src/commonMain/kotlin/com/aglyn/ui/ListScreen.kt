@@ -109,7 +109,7 @@ fun CompactButton(
  */
 @Composable
 fun ListHeaderAction(label: String, icon: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-  if (LocalShellMetrics.current.compact) {
+  if (LocalShellMetrics.current.compact || currentWidthClass() != WidthClass.COMPACT) {
     CompactButton(label, icon, onClick, modifier, enabled = enabled)
   } else {
     Button(onClick = onClick, enabled = enabled, modifier = modifier) {
@@ -156,6 +156,8 @@ fun ListScreenScaffold(
     }
   }
   val metrics = LocalShellMetrics.current
+  // The desktop and the tablet head a list as Figma does (Mac 13:483, iPad 13:2167): 28 controls, the 22/28 title.
+  val compactHead = metrics.compact || currentWidthClass() != WidthClass.COMPACT
   val groups = filters.groupBy { it.group }
   val active = groups.mapNotNull { (group, options) -> options.firstOrNull { it.key == picked[group] }?.takeIf { it != options.first() } }
   Column(modifier.fillMaxSize().testTag("$tag-screen")) {
@@ -167,7 +169,7 @@ fun ListScreenScaffold(
       Text(
         title,
         // Figma's list title: 22/28 bold on the desktop.
-        style = if (metrics.compact) MaterialTheme.typography.headlineSmall.copy(fontSize = 22.sp, lineHeight = 28.sp) else MaterialTheme.typography.headlineSmall,
+        style = if (compactHead) MaterialTheme.typography.headlineSmall.copy(fontSize = 22.sp, lineHeight = 28.sp) else MaterialTheme.typography.headlineSmall,
         fontWeight = FontWeight.Bold,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -175,9 +177,9 @@ fun ListScreenScaffold(
       )
       star?.star?.invoke()
       Box(Modifier.weight(1f))
-      if (more.isNotEmpty()) OverflowMenu(more, contentDescription = "More actions")
+      if (more.isNotEmpty() && !compactHead) OverflowMenu(more, contentDescription = "More actions")
       primary?.let { action ->
-        if (metrics.compact) {
+        if (compactHead) {
           CompactButton(action.label, action.icon, action.run, Modifier.testTag(action.id), enabled = action.enabled, filled = !inListColumn, tall = !inListColumn)
         } else {
           Button(onClick = action.run, enabled = action.enabled, shape = controlShape(), modifier = Modifier.testTag(action.id)) {
@@ -186,6 +188,7 @@ fun ListScreenScaffold(
           }
         }
       }
+      if (more.isNotEmpty() && compactHead) OverflowMenu(more, contentDescription = "More actions", boxed = true)
     }
     Row(
       Modifier.fillMaxWidth().padding(horizontal = space(3f)).padding(bottom = space(1f)),
@@ -198,7 +201,7 @@ fun ListScreenScaffold(
         Box {
           val filterLabel = if (active.isEmpty()) "Filter" else "Filter · ${active.size}"
           val filterTag = Modifier.testTag("$tag-filter").semantics { contentDescription = if (active.isEmpty()) "Filter" else "Filter, ${active.size} set" }
-          if (metrics.compact) {
+          if (compactHead) {
             // Figma's list toolbar Button: 28, the surface with the strong border.
             CompactButton(filterLabel, "filter_list", { open = true }, filterTag)
           } else {

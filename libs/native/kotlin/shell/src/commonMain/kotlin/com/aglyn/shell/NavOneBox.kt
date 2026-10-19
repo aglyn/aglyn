@@ -93,7 +93,7 @@ private const val RECENTS_GROUP = "recents"
 /** A kind of result's icon, by its group id. */
 internal fun oneBoxIcon(group: String): String = when (group) {
   "pages", "page" -> "description"
-  "orders", "order" -> "shopping_basket"
+  "orders", "order" -> "shopping_bag"
   "contacts", "contact" -> "contact_mail"
   "leads", "lead" -> "person_add"
   "companies", "company" -> "business"

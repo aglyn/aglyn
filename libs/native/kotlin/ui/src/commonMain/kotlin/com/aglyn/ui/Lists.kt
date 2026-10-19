@@ -35,6 +35,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.unit.dp
 
 /**
  * A list that refreshes when pulled (and from a refresh key on desktop, where
@@ -89,13 +96,32 @@ data class MenuAction(
 
 /** The ⋮ button and its menu: a row's or a detail pane's less common actions. */
 @Composable
-fun OverflowMenu(actions: List<MenuAction>, modifier: Modifier = Modifier, contentDescription: String = "More actions") {
+fun OverflowMenu(
+  actions: List<MenuAction>,
+  modifier: Modifier = Modifier,
+  contentDescription: String = "More actions",
+  /** Figma's list head "More" (Mac 13:483, iPad 13:2167): a horizontal ⋯ in a bordered 28 square after the primary. */
+  boxed: Boolean = false,
+) {
   if (actions.isEmpty()) return
   var open by remember { mutableStateOf(false) }
   Box(modifier) {
     WithTooltip(contentDescription) {
-      IconButton(onClick = { open = true }, Modifier.testTag("overflow-menu")) {
-        Icon(AglynIcons.named("more_vert"), contentDescription = contentDescription)
+      if (boxed) {
+        val shape = androidx.compose.foundation.shape.RoundedCornerShape(LocalShellMetrics.current.controlRadius)
+        Box(
+          Modifier.size(28.dp).clip(shape).background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, shape)
+            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = { open = true })
+            .testTag("overflow-menu").semantics { this.contentDescription = contentDescription },
+          contentAlignment = Alignment.Center,
+        ) {
+          Icon(AglynIcons.named("more_horiz"), contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface)
+        }
+      } else {
+        IconButton(onClick = { open = true }, Modifier.testTag("overflow-menu")) {
+          Icon(AglynIcons.named("more_vert"), contentDescription = contentDescription)
+        }
       }
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {

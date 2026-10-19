@@ -199,6 +199,7 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sell
 import androidx.compose.material.icons.outlined.ShoppingBasket
+import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.RotateLeft
@@ -295,6 +296,8 @@ object AglynIcons {
     "remove" to Icons.Outlined.Remove,
     "delete" to Icons.Outlined.DeleteOutline,
     "shopping_basket" to Icons.Outlined.ShoppingBasket,
+    // An order, as Figma and Apple draw it (the bag).
+    "shopping_bag" to Icons.Outlined.ShoppingBag,
     "payments" to Icons.Outlined.Payments,
     "card_giftcard" to Icons.Outlined.CardGiftcard,
     "contactless" to Icons.Outlined.Contactless,

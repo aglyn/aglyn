@@ -31,7 +31,7 @@ fun OrdersNeedsYouWidget(context: NativePluginContext) {
   (toFulfill as? Live.Ready)?.value?.size?.takeIf { it > 0 }?.let { count ->
     val shown = if (count >= ORDERS_PAGE_SIZE) "$ORDERS_PAGE_SIZE+" else count.toString()
     NeedsYouLine(
-      "orders-to-fulfill", "shopping_basket", "$shown ${if (count == 1) "order" else "orders"} to get ready", "Orders",
+      "orders-to-fulfill", "shopping_bag", "$shown ${if (count == 1) "order" else "orders"} to get ready", "Orders",
       onClick = { context.navigate(COMMERCE_ORDERS_SCREEN, mapOf("filter" to "unfulfilled")) },
     )
   }

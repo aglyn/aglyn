@@ -203,8 +203,9 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
 
   val (orgColor, tints) = workspace.org?.id?.let { rememberWorkspaceColor(it, workspace, prefs, services.api.origin) } ?: (null to false)
   val dark = MaterialTheme.colorScheme.background.let { (it.red + it.green + it.blue) / 3 < 0.5f }
-  // A workspace's color tints the app while it is on screen (it stands in for the accent); the sidebar wears it too unless
-  // the Sidebar setting is Plain.
+  // A workspace's color is its rail tile and a light wash over the sidebar while it is on screen (unless the Sidebar
+  // setting is Plain). It never stands in for the accent: the accent is the account theme's own, Aglyn blue unless the
+  // person picked another (Figma 13:483 / 13:3, and the Apple shell).
   val brand = orgColor?.takeIf { tints }
   val tintsSidebar = brand != null && prefs.theme.sidebarStyle != com.aglyn.contracts.AppSidebarStyle.PLAIN
 
@@ -322,7 +323,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     }
   }
 
-  WorkspaceBrandTheme(services, dark, brand) {
+  run {
   val shell = com.aglyn.ui.shellColors(MaterialTheme.colorScheme, LocalAglynPalette.current, com.aglyn.ui.LocalThemeSurfaces.current)
   // The sidebar's tint over this theme's own sidebar ground, and its ink, both read after the theme is in force.
   val tint = if (tintsSidebar && brand != null) workspaceTint(brand, shell.sidebar, dark) else null
@@ -574,12 +575,6 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   }
   }
   }
-}
-
-/** The account's theme again with a workspace's color as the accent, while that workspace tints the app. */
-@Composable
-private fun WorkspaceBrandTheme(services: ShellServices, dark: Boolean, brand: androidx.compose.ui.graphics.Color?, content: @Composable () -> Unit) {
-  if (brand == null) content() else AccountTheme(services, dark, brand, content)
 }
 
 /** Which settings mode a screen belongs to, so opening a setting from search or Recents shows its list. */

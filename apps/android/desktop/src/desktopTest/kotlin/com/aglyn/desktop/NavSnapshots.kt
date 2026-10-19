@@ -79,7 +79,9 @@ fun main() = runBlocking {
         }
         delay(1500)
         shootNav(dir, "nav-$name-$size${if (dark) "-dark" else ""}", dims.first, dims.second) {
-          CompositionLocalProvider(com.aglyn.shell.LocalTitleBarInset provides androidx.compose.ui.unit.Dp(0f)) {
+          // A Mac window's title-bar inset, so the tab row keeps the traffic lights' room as the real window does (the offscreen
+          // scene draws no system buttons itself).
+          CompositionLocalProvider(com.aglyn.shell.LocalTitleBarInset provides androidx.compose.ui.unit.Dp(if (size == "desktop") 28f else 0f)) {
             AglynShell(aglyn, navigator, dark = dark)
           }
         }
