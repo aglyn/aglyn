@@ -43,11 +43,10 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  consoleEnvFiles,
   emulatedServeEnvironment,
   LIVE_AI_CREDENTIALS,
   liveAiFromEnv,
-  readEnvFiles,
-  serveEnvFiles,
 } from './lib/emulated-env.mjs'
 
 const ownRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -140,7 +139,7 @@ if (liveAi && !process.env.FIRESTORE_EMULATOR_HOST) {
 }
 const { env, blanked, passedThrough, identityFilled, adminSdkMissing } = emulatedServeEnvironment(
   process.env,
-  readEnvFiles(serveEnvFiles(repoRoot, app)),
+  consoleEnvFiles(repoRoot, app),
   { liveAi },
 )
 if (liveAi && passedThrough.length === 0) {
