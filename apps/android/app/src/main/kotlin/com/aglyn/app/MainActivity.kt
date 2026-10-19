@@ -50,7 +50,9 @@ class MainActivity : ComponentActivity() {
     // A first launch hands the splash straight to the launch intro, whose first frame is the splash's own picture (P14); a
     // warm start keeps the splash up until the auth state is known, then exits with the spec's motion (AGL-3934).
     val playIntro = !com.aglyn.ui.LaunchIntro.hasPlayed
-    if (playIntro) splash.handOverToIntro { splashGone = true } else splash.handOver(services)
+    // Removing the splash restores the post-splash theme's system bars, which undoes edge to edge for a frame (a black status
+    // bar, the window laid out under it, the mark shifted): edge to edge goes back on in the same step, before that frame.
+    if (playIntro) splash.handOverToIntro { enableEdgeToEdge(); splashGone = true } else splash.handOver(services)
     // Single sign-on's console page handing the code back finishes the sign-in here; anything else opens in the shell.
     openLink(intent, linkOf(intent)?.takeUnless { services.handleConsoleHandoffReturn(it, lifecycleScope) })
     // Debug builds only: `adb shell am start … --ez autoSignIn true` signs the seeded member in.

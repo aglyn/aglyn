@@ -115,6 +115,15 @@ internal class NavChromeState(private val device: KeyValueStore) {
   }
 }
 
+/**
+ * The accent a workspace lends the app while you are in it (Zach, decision 5, 2026-10-18): a white-label workspace's brand
+ * color (`brandingProfile.primaryColor`) while "Use each workspace's brand" is on; otherwise none, so the account theme's
+ * own accent stays (Aglyn blue unless the person picked one). A color the person picked, or one taken from the logo, only
+ * colors the rail tile and the light sidebar wash, never the accent.
+ */
+internal fun workspaceAccent(brandColor: String?, useWorkspaceBrand: Boolean): String? =
+  brandColor?.takeIf { useWorkspaceBrand && com.aglyn.contracts.isAccountColor(it) }
+
 /** A workspace's logo as a URL the image loader reads, light and dark. */
 internal fun orgLogoUrls(workspace: WorkspaceState, orgId: String, origin: String): Pair<String?, String?> {
   val logo = workspace.orgLogos[orgId]

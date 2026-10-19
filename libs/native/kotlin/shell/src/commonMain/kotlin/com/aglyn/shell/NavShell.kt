@@ -204,9 +204,11 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   val (orgColor, tints) = workspace.org?.id?.let { rememberWorkspaceColor(it, workspace, prefs, services.api.origin) } ?: (null to false)
   val dark = MaterialTheme.colorScheme.background.let { (it.red + it.green + it.blue) / 3 < 0.5f }
   // A workspace's color is its rail tile and a light wash over the sidebar while it is on screen (unless the Sidebar
-  // setting is Plain). It never stands in for the accent: the accent is the account theme's own, Aglyn blue unless the
-  // person picked another (Figma 13:483 / 13:3, and the Apple shell).
+  // setting is Plain). Only a white-label workspace's brand color stands in for the accent ([workspaceAccent]); a picked
+  // or logo color never does, so the accent stays the account theme's (Aglyn blue unless the person picked one).
   val brand = orgColor?.takeIf { tints }
+  val accent = workspace.org?.id?.let { id -> workspaceAccent(workspace.orgLogos[id]?.brandColor, prefs.theme.useWorkspaceBrand) }
+    ?.let { com.aglyn.ui.colorOfHex(it) }
   val tintsSidebar = brand != null && prefs.theme.sidebarStyle != com.aglyn.contracts.AppSidebarStyle.PLAIN
 
   val openInBrowser = com.aglyn.webview.rememberSystemBrowser()
@@ -323,7 +325,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     }
   }
 
-  run {
+  WorkspaceBrandTheme(services, dark, accent) {
   val shell = com.aglyn.ui.shellColors(MaterialTheme.colorScheme, LocalAglynPalette.current, com.aglyn.ui.LocalThemeSurfaces.current)
   // The sidebar's tint over this theme's own sidebar ground, and its ink, both read after the theme is in force.
   val tint = if (tintsSidebar && brand != null) workspaceTint(brand, shell.sidebar, dark) else null
@@ -575,6 +577,12 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   }
   }
   }
+}
+
+/** The account's theme again with a white-label workspace's brand color as the accent, while you are in it. */
+@Composable
+private fun WorkspaceBrandTheme(services: ShellServices, dark: Boolean, accent: androidx.compose.ui.graphics.Color?, content: @Composable () -> Unit) {
+  if (accent == null) content() else AccountTheme(services, dark, accent, content)
 }
 
 /** Which settings mode a screen belongs to, so opening a setting from search or Recents shows its list. */
