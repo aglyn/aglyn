@@ -33,6 +33,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 
@@ -150,44 +160,116 @@ fun PlanUsageCard(detail: String?, title: String, actionTitle: String, reached: 
   }
 }
 
+/** One meter on the plan card: the Usage page's label, its figures ("1.2 / 5 GB"), and how full it is (0–1). */
+data class PlanMeterLine(val key: String, val label: String, val figures: String, val share: Float)
+
 /**
- * The plan card at the sidebar's foot, as Figma 98:1048 draws it (the twin of Apple's PlanCard): whose plan it is ("Juniper
- * Street Bakery · Pro plan"), the console meter's own label and figures with Upgrade ("Pages 84 / 100 · Upgrade"), and the
- * meter, amber from 80% and red at the limit. A long press (or right click) hides it until the next limit.
+ * The plan card at the sidebar's foot (Figma 98:1048; AGL-3992, the twin of Apple's): whose plan it is ("Juniper Street
+ * Bakery · Pro plan"), then a slow carousel of the console's usage meters, the one that fits the screen first. Each shows
+ * its label and figures with Upgrade and the meter (amber from the warning share, red at the limit), and page dots step
+ * through them. It moves on every [advanceMs], and holds while hovered, focused or touched, while a screen reader is on,
+ * and with animations off (the dots then step by hand). A tap opens Billing › Usage; Upgrade opens the plans; a long press
+ * (or right click) hides it.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun PlanMeterCard(detail: String, label: String, used: Long, limit: Long, onUpgrade: () -> Unit, onHide: () -> Unit, modifier: Modifier = Modifier) {
+fun PlanMeterCarousel(
+  detail: String,
+  meters: List<PlanMeterLine>,
+  advanceMs: Long,
+  warningShare: Float,
+  onUpgrade: (() -> Unit)?,
+  onOpenUsage: () -> Unit,
+  onHide: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  if (meters.isEmpty()) return
   val m = shellMetrics
   val palette = LocalAglynPalette.current
-  val full = used >= limit
-  val share = if (limit > 0) (used.toFloat() / limit).coerceIn(0f, 1f) else 0f
   val shape = RoundedCornerShape(m.cardRadius)
+  // The context's meter leads: a new order (another screen, another workspace) starts again at its first meter.
+  var index by androidx.compose.runtime.remember(meters.map { it.key }) { androidx.compose.runtime.mutableIntStateOf(0) }
+  val interaction = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+  val hovered by interaction.collectIsHoveredAsState()
+  val focused by interaction.collectIsFocusedAsState()
+  val pressed by interaction.collectIsPressedAsState()
+  var touches by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+  val auto = !reduceMotion() && !screenReaderOn()
+  val shown = meters[index.coerceIn(0, meters.lastIndex)]
+  androidx.compose.runtime.LaunchedEffect(index, meters.size, auto, hovered, focused, pressed, touches) {
+    if (auto && meters.size > 1 && !hovered && !focused && !pressed) {
+      kotlinx.coroutines.delay(advanceMs)
+      index = (index + 1) % meters.size
+    }
+  }
   Column(
     modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surface)
       .then(Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape))
-      .combinedClickable(onClick = onUpgrade, onLongClick = onHide)
+      .hoverable(interaction)
+      .pointerInput(Unit) {
+        // A touch anywhere on the card starts its wait again, so the meter being read does not move away.
+        awaitPointerEventScope {
+          while (true) {
+            val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+            if (event.type == androidx.compose.ui.input.pointer.PointerEventType.Press) touches++
+          }
+        }
+      }
+      .combinedClickable(interactionSource = interaction, indication = androidx.compose.material3.ripple(), onClick = onOpenUsage, onLongClick = onHide)
       .padding(if (m.compact) 10.dp else 12.dp)
       .testTag("plan-card")
       .semantics(mergeDescendants = true) {
-        contentDescription = "$label, $used of $limit. $detail"
-        customActions = listOf(
-          androidx.compose.ui.semantics.CustomAccessibilityAction("Upgrade") { onUpgrade(); true },
-          androidx.compose.ui.semantics.CustomAccessibilityAction("Hide until the next limit") { onHide(); true },
+        contentDescription = "${shown.label}, ${shown.figures}. $detail"
+        customActions = listOfNotNull(
+          onUpgrade?.let { androidx.compose.ui.semantics.CustomAccessibilityAction("Upgrade") { it(); true } },
+          androidx.compose.ui.semantics.CustomAccessibilityAction("Open usage") { onOpenUsage(); true },
+          androidx.compose.ui.semantics.CustomAccessibilityAction("Next meter") { index = (index + 1) % meters.size; true }.takeIf { meters.size > 1 },
+          androidx.compose.ui.semantics.CustomAccessibilityAction("Hide") { onHide(); true },
         )
       },
     verticalArrangement = Arrangement.spacedBy(8.dp),
   ) {
     Text(detail, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      Text(label, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
-      Spacer(Modifier.weight(1f))
-      Text("$used / $limit · ", fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-      Text("Upgrade", fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1, modifier = Modifier.testTag("plan-card-upgrade"))
+    androidx.compose.animation.AnimatedContent(
+      shown,
+      transitionSpec = { androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(400)) togetherWith androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(400)) },
+      contentKey = { it.key },
+      label = "plan-meter",
+    ) { meter ->
+      Column(Modifier.fillMaxWidth().testTag("plan-card-meter-${meter.key}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text(meter.label, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+          Spacer(Modifier.weight(1f))
+          Text(if (onUpgrade != null) "${meter.figures} · " else meter.figures, fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+          if (onUpgrade != null) {
+            Text(
+              "Upgrade", fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1,
+              modifier = Modifier.clickable(onClick = onUpgrade).testTag("plan-card-upgrade"),
+            )
+          }
+        }
+        // The console's meter: the accent below the warning share, amber from it, red at the limit.
+        val fill = when {
+          meter.share >= 1f -> palette.error.main
+          meter.share >= warningShare -> palette.warning.main
+          else -> MaterialTheme.colorScheme.primary
+        }
+        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+          Box(Modifier.fillMaxWidth(meter.share.coerceIn(0f, 1f)).fillMaxSize().clip(RoundedCornerShape(50)).background(fill))
+        }
+      }
     }
-    // The console's meter: amber from 80%, red at the limit.
-    Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)) {
-      Box(Modifier.fillMaxWidth(share).fillMaxSize().clip(RoundedCornerShape(50)).background(if (full) palette.error.main else palette.warning.main))
+    if (meters.size > 1) {
+      Row(Modifier.align(Alignment.CenterHorizontally).testTag("plan-card-dots"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        meters.forEachIndexed { i, meter ->
+          Box(
+            Modifier.size(6.dp).clip(CircleShape)
+              .background(if (i == index) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant)
+              .clickable { index = i }
+              .testTag("plan-card-dot-${meter.key}"),
+          )
+        }
+      }
     }
   }
 }
