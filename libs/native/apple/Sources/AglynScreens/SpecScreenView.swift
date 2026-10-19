@@ -287,15 +287,20 @@ struct SpecScreenBody: View {
     case .loading:
       Form { SkeletonRows(count: 6) }.formStyle(.grouped)
     case .failed(let message):
+      // On the page's own ground, as the loaded screen is: a bare state shows the window behind it (black in dark).
       AglynEmptyState("This did not load", systemImage: "exclamationmark.triangle", message: message) {
         Button("Try again") { Task { await model.load() } }
       }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(AglynColor.page)
     case .planRefused(let message):
       AglynUpsellState(
         "Add this to your plan", message: message, systemImage: "sparkles", actionTitle: "See add-ons"
       ) {
         plugin.navigate("core.billing.addons", [:])
       }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(AglynColor.page)
     case .ready:
       let blocks = model.spec.blocks.filter { ScreenValues.condition($0.when, in: context) }
       Form {

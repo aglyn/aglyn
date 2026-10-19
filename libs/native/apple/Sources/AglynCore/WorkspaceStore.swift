@@ -53,12 +53,15 @@ public struct WorkspaceOrgLogo: Equatable, Hashable, Sendable {
   public let enabledPlugins: [String]?
   /// The plan's payment failed and is owed (`past_due` or `unpaid`): Home says so and opens Billing.
   public let paymentDue: Bool
+  /// The workspace's own release-flag overrides (`releaseFlags`), which staff set for one workspace.
+  public let releaseFlags: [String: Bool]
 
   public init(
     light: String?, dark: String?, brandColor: String? = nil, plan: String? = nil, enabledPlugins: [String]? = nil,
-    paymentDue: Bool = false
+    paymentDue: Bool = false, releaseFlags: [String: Bool] = [:]
   ) {
     self.paymentDue = paymentDue
+    self.releaseFlags = releaseFlags
     self.light = light
     self.dark = dark
     self.brandColor = brandColor
@@ -80,7 +83,8 @@ public struct WorkspaceOrgLogo: Equatable, Hashable, Sendable {
         let status = (mirrored?.isEmpty == false ? mirrored : nil)
           ?? ((doc?.data["subscription"] as? [String: Any])?["status"] as? String)
         return status == "past_due" || status == "unpaid"
-      }())
+      }(),
+      releaseFlags: ((doc?.data["releaseFlags"] as? [String: Any]) ?? [:]).compactMapValues { $0 as? Bool })
   }
 
   /// The plan as the console names it ("Pro").
