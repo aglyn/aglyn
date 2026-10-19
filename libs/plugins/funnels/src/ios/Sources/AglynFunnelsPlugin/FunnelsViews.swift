@@ -202,7 +202,7 @@ struct FunnelDetail: View {
         Text("A visit is one browser tab, recorded only when the visitor\u{2019}s consent allows analytics.")
           .font(AglynFont.caption).foregroundStyle(.secondary)
       }
-      .padding(AglynSpace.two)
+      .aglynContentEdges().padding(.vertical, AglynSpace.two)
     }
     .background(AglynColor.page)
     .navigationTitle(row.name)

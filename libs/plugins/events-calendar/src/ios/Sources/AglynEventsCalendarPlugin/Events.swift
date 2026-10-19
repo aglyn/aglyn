@@ -224,7 +224,7 @@ struct EventsScreen: View {
   @ViewBuilder
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
-      if let (text, tone) = notice { AglynNotice(text, tone: tone) { notice = nil }.padding(AglynSpace.two) }
+      if let (text, tone) = notice { AglynNotice(text, tone: tone) { notice = nil }.aglynContentEdges().padding(.vertical, AglynSpace.two) }
       if events.full { AglynNotice("Showing the newest \(eventCeiling) events.", tone: .info).aglynContentEdges() }
       if let rows = events.rows {
         if events.failed && rows.isEmpty {

@@ -174,7 +174,7 @@ struct OverviewSection: View {
           caption: "running · \(experiments.rows.filter { $0.winnerVariantID != nil }.count) decided", actionLabel: "Open A/B testing") { open(.experiments) }
         }
       }
-      .padding(AglynSpace.two)
+      .aglynContentEdges().padding(.vertical, AglynSpace.two)
     }
     .task {
       let hostID = actions.hostID, orgID = actions.orgID, orgLevel = actions.orgLevel

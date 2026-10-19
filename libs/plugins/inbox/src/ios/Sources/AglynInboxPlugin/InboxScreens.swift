@@ -117,7 +117,7 @@ struct PeopleScreen: View {
       }
       .pickerStyle(.segmented)
       .labelsHidden()
-      .frame(maxWidth: 420)
+      .fixedSize()
       .frame(maxWidth: .infinity, alignment: .leading)
       .aglynContentEdges()
       .padding(.top, AglynSpace.two)

@@ -271,7 +271,7 @@ struct RescheduleSheet: View {
               .font(AglynFont.caption).foregroundStyle(.secondary)
           }
         }
-        .padding(AglynSpace.two)
+        .aglynContentEdges().padding(.vertical, AglynSpace.two)
       }
       .navigationTitle("Move \(row.name)'s booking")
       .aglynScreenTitle("Move \(row.name)'s booking")
