@@ -21,13 +21,14 @@
 //   npm run test:lib-boundaries
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, it } from 'node:test'
 
 import {
+  CONTRACTS_MODULE,
   DEP_CONSTRAINTS,
   INDEPENDENTLY_VERSIONED,
   LAZY_AND_STATIC_ALLOWED,
@@ -35,6 +36,12 @@ import {
   caretAdmits,
   compareToAllowlist,
   compareVersions,
+  contractEdges,
+  contractPeerFindings,
+  contractsModuleFindings,
+  crossPluginImports,
+  importStatements,
+  pluginCodeDependencies,
   declarationsOwed,
   evaluateEdges,
   lazyAndStaticPairs,
@@ -593,5 +600,197 @@ describe('a peer range is one a consumer can satisfy (AGL-3201)', () => {
       return peerRangeFindings(manifest.peerDependencies, { rootRanges, workspacePackages }).map((line) => `${project.root}: ${line}`)
     })
     assert.deepEqual(findings, [])
+  })
+})
+
+describe('plugin contracts (AGL-3980)', () => {
+  const config = {
+    plugins: [
+      { id: 'commerce', package: '@aglyn/plugins-commerce' },
+      { id: 'accounting', package: '@aglyn/plugins-accounting', uses: ['commerce'] },
+      { id: 'crm', package: '@aglyn/plugins-crm', capabilities: [{ id: 'crm.people' }] },
+      { id: 'forms', package: '@aglyn/plugins-forms', catalog: { requires: ['crm.people'] } },
+      { id: 'loyalty', package: '@aglyn/plugins-loyalty' },
+    ],
+  }
+
+  it('reads uses and requires as what a plugin may import, a capability resolving to its plugin', () => {
+    const { plugins, findings } = pluginCodeDependencies(config)
+    assert.deepEqual(findings, [])
+    assert.deepEqual([...plugins.get('accounting').may], ['commerce'])
+    assert.deepEqual([...plugins.get('forms').may], ['crm'])
+    assert.deepEqual([...plugins.get('loyalty').may], [])
+  })
+
+  it('refuses a uses that names nothing, itself, a capability, or one plugin twice', () => {
+    const { findings } = pluginCodeDependencies({
+      plugins: [
+        ...config.plugins,
+        { id: 'shipping', package: '@aglyn/plugins-shipping', uses: ['nope', 'shipping', 'crm.people', 'commerce', 'commerce'] },
+        { id: 'zapier', package: '@aglyn/plugins-zapier', uses: 'commerce' },
+      ],
+    })
+    assert.equal(findings.length, 5, findings.join('\n'))
+    assert.match(findings.join('\n'), /"nope", which is no plugin/)
+    assert.match(findings.join('\n'), /names the plugin itself/)
+    assert.match(findings.join('\n'), /a capability of "crm": name the plugin/)
+    assert.match(findings.join('\n'), /names a plugin twice/)
+    assert.match(findings.join('\n'), /"zapier" "uses" must be a list/)
+  })
+
+  it('reads every import statement, and which of them the compiler erases', () => {
+    const text = [
+      "import type { A } from './a'",
+      "import { type B, type C } from './b'",
+      'import {',
+      '  definePluginDomainEvent,',
+      '  type PluginDomainEvent,',
+      "} from '@aglyn/aglyn/plugin-manager/plugin-domain-events'",
+      "export type { D } from './d'",
+      "export { E } from './e'",
+      "export * from './f'",
+      "import './side-effect'",
+      "// import { nope } from 'a-comment'",
+      "/* import { nope } from 'a-block-comment' */",
+      "const lazy = () => import('./lazy')",
+    ].join('\n')
+    assert.deepEqual(importStatements(text), [
+      { specifier: './a', typeOnly: true },
+      { specifier: './b', typeOnly: true },
+      { specifier: '@aglyn/aglyn/plugin-manager/plugin-domain-events', typeOnly: false },
+      { specifier: './d', typeOnly: true },
+      { specifier: './e', typeOnly: false },
+      { specifier: './f', typeOnly: false },
+      { specifier: './side-effect', typeOnly: false },
+      { specifier: './lazy', typeOnly: false },
+    ])
+  })
+
+  it('allows an edge of contracts imports alone, declared, onto a plugin that has a contracts module', () => {
+    const { plugins } = pluginCodeDependencies(config)
+    const contract = (to) => ({ file: 'a.ts', specifier: `@aglyn/plugins-${to}/contracts`, to, contract: true })
+    const verdict = contractEdges({
+      plugins,
+      imports: new Map([['accounting', [contract('commerce'), contract('commerce')]]]),
+      hasContracts: () => true,
+    })
+    assert.deepEqual(verdict, { allowed: [{ from: 'accounting', to: 'commerce' }], findings: [] })
+  })
+
+  it('is RED for an undeclared contracts import, and for one onto a plugin with no contracts module', () => {
+    const { plugins } = pluginCodeDependencies(config)
+    const undeclared = contractEdges({
+      plugins,
+      imports: new Map([['loyalty', [{ file: 'a.ts', specifier: '@aglyn/plugins-commerce/contracts', to: 'commerce', contract: true }]]]),
+      hasContracts: () => true,
+    })
+    assert.deepEqual(undeclared.allowed, [])
+    assert.match(undeclared.findings[0], /add "commerce" to "uses" on "loyalty"/)
+    const missing = contractEdges({
+      plugins,
+      imports: new Map([['accounting', [{ file: 'a.ts', specifier: '@aglyn/plugins-commerce/contracts', to: 'commerce', contract: true }]]]),
+      hasContracts: () => false,
+    })
+    assert.match(missing.findings[0], new RegExp(`commerce has no ${CONTRACTS_MODULE.replace('.', '\\.')}`))
+  })
+
+  it('leaves an edge that also imports anything else of the provider to evaluateEdges, which refuses it', () => {
+    const { plugins } = pluginCodeDependencies(config)
+    const verdict = contractEdges({
+      plugins,
+      imports: new Map([
+        [
+          'accounting',
+          [
+            { file: 'a.ts', specifier: '@aglyn/plugins-commerce/contracts', to: 'commerce', contract: true },
+            { file: 'b.ts', specifier: '@aglyn/plugins-commerce/model/order-events', to: 'commerce', contract: false },
+          ],
+        ],
+      ]),
+      hasContracts: () => true,
+    })
+    assert.deepEqual(verdict, { allowed: [], findings: [] })
+  })
+
+  it('finds cross-plugin imports in a plugin tree, specs included, and marks the contracts one', () => {
+    const root = mkdtempSync(join(tmpdir(), 'aglyn-contracts-'))
+    try {
+      mkdirSync(join(root, 'src', 'lib'), { recursive: true })
+      writeFileSync(
+        join(root, 'src', 'lib', 'a.ts'),
+        "import type { OrderEventPayload } from '@aglyn/plugins-commerce/contracts'\nimport { x } from './own'\nimport { y } from '@aglyn/plugins-accounting/z'\n",
+      )
+      writeFileSync(join(root, 'src', 'lib', 'a.spec.ts'), "import { crm } from '@aglyn/plugins-crm'\n")
+      const idByAlias = new Map([
+        ['@aglyn/plugins-commerce', 'commerce'],
+        ['@aglyn/plugins-accounting', 'accounting'],
+        ['@aglyn/plugins-crm', 'crm'],
+      ])
+      const found = crossPluginImports(root, 'accounting', idByAlias).map(({ specifier, to, contract }) => ({ specifier, to, contract }))
+      assert.deepEqual(found.sort((a, b) => a.specifier.localeCompare(b.specifier)), [
+        { specifier: '@aglyn/plugins-commerce/contracts', to: 'commerce', contract: true },
+        { specifier: '@aglyn/plugins-crm', to: 'crm', contract: false },
+      ])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a contracts module that loads its plugin or a third package, and accepts erased types and the contract helpers', () => {
+    const clean = [
+      "import { definePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'",
+      "import type { Money } from './model/money'",
+    ].join('\n')
+    assert.deepEqual(contractsModuleFindings(clean, 'contracts.ts'), [])
+    const dirty = [
+      "import { orderViewFromData } from './server/api-v1/order-view'",
+      "import type { Stripe } from 'stripe'",
+      "export { ORDER_STATUS } from './model/order-status'",
+    ].join('\n')
+    const findings = contractsModuleFindings(dirty, 'contracts.ts')
+    assert.equal(findings.length, 3, findings.join('\n'))
+    assert.match(findings[0], /loads ".\/server\/api-v1\/order-view" at runtime/)
+    assert.match(findings[1], /imports types from "stripe"/)
+  })
+
+  it('wants each provider as an optional peer at the repo version, never as a dependency', () => {
+    const name = '@aglyn/plugins-commerce'
+    assert.deepEqual(
+      contractPeerFindings({ peerDependencies: { [name]: '1.0.0' }, peerDependenciesMeta: { [name]: { optional: true } } }, [name], '1.0.0'),
+      [],
+    )
+    const findings = contractPeerFindings({ dependencies: { [name]: '1.0.0' } }, [name], '1.0.0')
+    assert.equal(findings.length, 3, findings.join('\n'))
+    assert.match(findings[0], /dependencies carries @aglyn\/plugins-commerce/)
+  })
+
+  it('lets a plugin lint its declared providers by their contracts subpath only', () => {
+    const packageMap = [
+      { name: 'plugins-accounting', root: 'libs/plugins/accounting', alias: '@aglyn/plugins-accounting', deepAlias: true, tags: [], projectType: 'library' },
+    ]
+    const blocks = lintOverridesFor({
+      allowlist: [],
+      packageMap,
+      projectRoot: 'libs/plugins/accounting',
+      ruleName: 'rule',
+      baseOptions: { allow: [] },
+      contractAliasesOf: (alias) => (alias === '@aglyn/plugins-accounting' ? ['@aglyn/plugins-commerce'] : []),
+    })
+    const [pattern] = blocks[0].rules.rule[1].allow
+    assert.match('@aglyn/plugins-commerce/contracts', new RegExp(pattern))
+    assert.doesNotMatch('@aglyn/plugins-commerce', new RegExp(pattern))
+    assert.doesNotMatch('@aglyn/plugins-commerce/model/order-events', new RegExp(pattern))
+    assert.doesNotMatch('@aglyn/plugins-commerce/contracts-extra', new RegExp(pattern))
+  })
+
+  it('THE REAL WORKSPACE: plugins.config.json is well formed, and every contracts module loads nothing of its plugin', () => {
+    const real = JSON.parse(readFileSync(join(repoRoot, 'plugins.config.json'), 'utf8'))
+    assert.deepEqual(pluginCodeDependencies(real).findings, [])
+    for (const plugin of real.plugins) {
+      const path = join(repoRoot, 'libs', 'plugins', plugin.id, CONTRACTS_MODULE)
+      if (!existsSync(path)) continue
+      assert.deepEqual(contractsModuleFindings(readFileSync(path, 'utf8'), path), [], path)
+    }
+    assert.ok(existsSync(join(repoRoot, 'libs', 'plugins', 'commerce', CONTRACTS_MODULE)), 'commerce publishes its contracts')
   })
 })

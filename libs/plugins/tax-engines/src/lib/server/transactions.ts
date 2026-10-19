@@ -16,6 +16,11 @@
  */
 
 import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type {
+  OrderEventOrder,
+  OrderEventPayload,
+  OrderRefundedEventPayload,
+} from '@aglyn/plugins-commerce/contracts'
 import { createHash } from 'node:crypto'
 import { taxDocumentDate } from '../model/tax-engines'
 import { TaxProviderError } from '../providers/http'
@@ -67,24 +72,6 @@ import {
 /** The outbox's attempts per subscriber (`PLUGIN_EVENT_MAX_ATTEMPTS`). */
 const LAST_ATTEMPT = 8
 
-/** The order as commerce's events carry it: the public API's shape. */
-export interface PaidOrderView {
-  id: string
-  channel?: string
-  currency?: string
-  customerEmail?: string | null
-  lineItems?: unknown
-  totals?: {
-    itemsCents?: number
-    shippingCents?: number
-    taxCents?: number
-    discountCents?: number
-    totalCents?: number | null
-  }
-  shippingAddress?: Record<string, unknown> | null
-  taxEngine?: { provider?: string; status?: string; reason?: string | null } | null
-}
-
 /**
  * The code a sale is filed under at the engine: the order id, or — for an id
  * longer than AvaTax's 50 characters, which a Checkout Session's is — its
@@ -111,15 +98,20 @@ function isTransient(error: unknown): boolean {
   return error instanceof TaxProviderError ? error.transient : !(error instanceof TaxEngineUnavailableError)
 }
 
-/** The document a paid order is recorded as. */
+/**
+ * The document a paid order is recorded as. The order is in the public API's
+ * shape; that shape comes from commerce's contracts (AGL-3980).
+ */
 export async function saleFromOrder(
   hostId: string,
-  order: PaidOrderView,
+  order: OrderEventOrder,
   occurredAtMs: number,
 ): Promise<{ sale: TaxCommitRequest; provider: StoredTaxEngineTransaction['provider'] }> {
   const { connection } = await usableConnection(hostId)
   const shipFrom = shipFromOf(connection)
   const shipTo = shipToOf(shipFrom, String(order.channel ?? 'online'), order.shippingAddress ?? null)
+  // Commerce does not type its lines yet (`lineItems: unknown`), so the
+  // fields read here are this plugin's own reading of them.
   const items = (Array.isArray(order.lineItems) ? order.lineItems : []) as Array<Record<string, any>>
   const lines = await documentLines(
     hostId,
@@ -183,9 +175,7 @@ export async function commitStoredSale(
 }
 
 /** `order.paid`: record the sale. */
-export async function onOrderPaid(
-  envelope: PluginDomainEventEnvelope<{ order: PaidOrderView }>,
-): Promise<void> {
+export async function onOrderPaid(envelope: PluginDomainEventEnvelope<OrderEventPayload>): Promise<void> {
   const order = envelope.payload?.order
   if (!order?.id || !order.taxEngine) return
   const hostId = envelope.hostId
@@ -235,12 +225,7 @@ export async function onOrderPaid(
 }
 
 /** `order.refunded`: reverse what this refund moved. */
-export async function onOrderRefunded(
-  envelope: PluginDomainEventEnvelope<{
-    order: PaidOrderView
-    refund?: { id?: string | null; amountCents?: number; full?: boolean }
-  }>,
-): Promise<void> {
+export async function onOrderRefunded(envelope: PluginDomainEventEnvelope<OrderRefundedEventPayload>): Promise<void> {
   const order = envelope.payload?.order
   const refund = envelope.payload?.refund
   if (!order?.id || !refund) return
@@ -294,9 +279,7 @@ export async function onOrderRefunded(
 }
 
 /** `order.cancelled`: void a recorded sale nothing was refunded on. */
-export async function onOrderCancelled(
-  envelope: PluginDomainEventEnvelope<{ order: PaidOrderView }>,
-): Promise<void> {
+export async function onOrderCancelled(envelope: PluginDomainEventEnvelope<OrderEventPayload>): Promise<void> {
   const order = envelope.payload?.order
   if (!order?.id) return
   const hostId = envelope.hostId

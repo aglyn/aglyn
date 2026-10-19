@@ -19,6 +19,7 @@
  */
 
 import type { PluginPersonChangesPage } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
+import type { OrderEventOrder } from '@aglyn/plugins-commerce/contracts'
 import { OUTBOX_MAX_AGE_MS, OUTBOX_MAX_ATTEMPTS, SYNC_INTERVAL_MS, SYNC_MAX_CONSECUTIVE_FAILURES } from '../constants'
 import type { HelpDeskProviderId } from '../model/connections'
 import type { HelpDeskOrder } from '../model/orders'
@@ -32,17 +33,19 @@ const HOST = 'host-1'
 const ORG = 'org-1'
 const NOW = Date.UTC(2026, 9, 15, 12)
 
-const orderView = (id: string, overrides: Record<string, unknown> = {}) => ({
+const orderView = (id: string, overrides: Partial<OrderEventOrder> = {}): OrderEventOrder => ({
   id,
   object: 'order',
   number: 1000 + Number(id.replace(/\D/g, '') || 0),
   status: 'paid',
+  channel: 'online',
   currency: 'usd',
   customerEmail: 'pat@example.com',
   customerName: 'Pat Lee',
   lineItems: [{ name: 'Mug', sku: 'MUG', quantity: 1, unitAmountCents: 1500, productId: 'p1' }],
-  totals: { totalCents: 1500 },
+  totals: { itemsCents: 1500, shippingCents: 0, taxCents: 0, discountCents: 0, totalCents: 1500, feeCents: 0 },
   refundedCents: 0,
+  taxMode: null,
   livemode: true,
   created: new Date(NOW - 5 * 24 * 60 * 60 * 1000).toISOString(),
   ...overrides,

@@ -27,16 +27,23 @@
  * console's tick posts what was queued. The intake is imported when an event
  * first arrives, so boot pays for three registrations.
  *
- * Each subscriber restates the event by name and reads commerce's public
- * order view; the plugin never imports commerce. A throw is retried by the
- * outbox with backoff, which is right for a queueing write that failed.
+ * Each subscriber takes the event by commerce's token and reads its public
+ * order view; the shapes come from commerce's contracts (AGL-3980). A throw
+ * is retried by the outbox with backoff, which is right for a queueing write
+ * that failed.
  */
 
 import { subscribePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import {
+  ORDER_CANCELLED_EVENT,
+  ORDER_PAID_EVENT,
+  ORDER_REFUNDED_EVENT,
+  type CommerceOrderEventName,
+} from '@aglyn/plugins-commerce/contracts'
 import { ACCOUNTING_PLUGIN_ID } from './constants/bundle-common'
 
 /** The commerce events the sync takes, by name. */
-export const ACCOUNTING_SUBSCRIBED_EVENTS = ['order.paid', 'order.refunded', 'order.cancelled'] as const
+export const ACCOUNTING_SUBSCRIBED_EVENTS: readonly CommerceOrderEventName[] = ['order.paid', 'order.refunded', 'order.cancelled']
 
 async function intake() {
   const [module, { defaultAccountingIntakeDeps }] = await Promise.all([
@@ -48,26 +55,26 @@ async function intake() {
 
 export function registerAccountingServerDeclarations(): void {
   subscribePluginDomainEvent(
-    'order.paid',
+    ORDER_PAID_EVENT,
     async (envelope) => {
       const { module, deps } = await intake()
-      await module.onOrderPaid(deps, envelope as never)
+      await module.onOrderPaid(deps, envelope)
     },
     { pluginId: ACCOUNTING_PLUGIN_ID },
   )
   subscribePluginDomainEvent(
-    'order.refunded',
+    ORDER_REFUNDED_EVENT,
     async (envelope) => {
       const { module, deps } = await intake()
-      await module.onOrderRefunded(deps, envelope as never)
+      await module.onOrderRefunded(deps, envelope)
     },
     { pluginId: ACCOUNTING_PLUGIN_ID },
   )
   subscribePluginDomainEvent(
-    'order.cancelled',
+    ORDER_CANCELLED_EVENT,
     async (envelope) => {
       const { module, deps } = await intake()
-      await module.onOrderCancelled(deps, envelope as never)
+      await module.onOrderCancelled(deps, envelope)
     },
     { pluginId: ACCOUNTING_PLUGIN_ID },
   )
