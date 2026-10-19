@@ -99,12 +99,18 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **console:** declare invoice.stripe.com, the Site Care invoice pay link ([AGL-3970](https://linear.app/aglyn/issue/AGL-3970))
 - **native:** every embed task and the Windows check read JSON as LF ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **native:** embed contract JSON with LF on every platform, so Windows compiles ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **ai:** whole listing title, a/an agreement, honest form note, named welcome email ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
 - **native:** draw a logo mark or favicon whole instead of cropping it to the badge ([AGL-3991](https://linear.app/aglyn/issue/AGL-3991))
 - **apple:** one content edge per column; Home, Analytics and notices fill it ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
 - **apple:** spec zones read their conditional screens, so a zone row never waits ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
+- **ai:** fold like columns with a button or no heading into one group, not a refusal ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
+- **ai:** a guided start never links a page it did not put live; pages keep site order ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
 - **e2e:** reap Chrome bundle copies that killed or crashed Chromes leave ([AGL-3904](https://linear.app/aglyn/issue/AGL-3904))
+- **ai:** a failed photo takes the job's own photo, never an office; plain alts ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988), [AGL-3831](https://linear.app/aglyn/issue/AGL-3831), [AGL-3856](https://linear.app/aglyn/issue/AGL-3856))
+- **stock-photos:** wait out Pixabay's 429 on photo downloads, two at a time ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
 - **native:** a tab keeps its screen's name whole and wears the screen's icon ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **native:** a plain detail column's totals rows are Figma's 40, not 36 ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **apple:** views that load in a task draw once loaded, Inbox's count first ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
@@ -211,9 +217,11 @@ content on the marketing site and is written separately.
 
 ### Documentation
 
+- **release:** beta.271 changelog carries the full Windows embed fix ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **release:** beta.271 changelog carries the Windows contract embed fix ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **release:** beta.271 changelog carries Site Care (#1840, #1820) merged in from main ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **release:** beta.271 changelog carries everything merged in from main ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **ai:** what a failed page and a failed photo come to on a guided start ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
 - **ai:** each style's layout, and the style cards' new pictures ([AGL-3985](https://linear.app/aglyn/issue/AGL-3985))
 - **decision-log:** record the Site Care time constants ([AGL-3959](https://linear.app/aglyn/issue/AGL-3959))
 - **domains:** list the Buy a domain guide for domain go-live ([AGL-3964](https://linear.app/aglyn/issue/AGL-3964))
