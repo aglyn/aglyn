@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
+import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import type { PluginFulfillmentHold } from '@aglyn/aglyn/plugin-manager/plugin-fulfillment-providers'
+import type { OrderEventOrder, OrderEventPayload, OrderRefundedEventPayload } from '@aglyn/plugins-commerce/contracts'
 import {
   NETWORK_PROVIDER_IDS,
   NETWORK_PROVIDERS,
@@ -27,9 +29,8 @@ import { routingHolds } from '../model/routing'
 import type { NetworkStore, StoredRouting } from './store'
 
 /**
- * Commerce's order events, taken by name (AGL-3634). The plugin never
- * imports commerce: each subscriber restates the fields it reads of the
- * public order view the events carry.
+ * Commerce's order events (AGL-3634). The payload's shape comes from
+ * commerce's contracts (AGL-3980).
  *
  * These run where the event outbox is drained — the TENANT — so they only
  * write: a paid order is QUEUED for each network the site sends to
@@ -40,21 +41,21 @@ import type { NetworkStore, StoredRouting } from './store'
  */
 
 /** The public order view's fields this plugin reads. */
-export interface OrderEventOrderView {
-  id: string
-  number: number | null
-  status: string | null
-  shippingAddress?: Record<string, unknown> | null
-  lineItems?: unknown
+export type OrderEventOrderView = Pick<OrderEventOrder, 'id' | 'number' | 'status' | 'shippingAddress' | 'lineItems'>
+
+/** A line's fields this plugin reads: commerce's contract leaves `lineItems` untyped, so they are restated here. */
+interface OrderLineFields {
+  sku?: unknown
+  quantity?: unknown
+  name?: unknown
+  variantLabel?: unknown
 }
 
-export interface OrderEnvelope<Extra = Record<string, never>> {
-  id: string
-  hostId: string
-  orgId: string | null
-  occurredAtMs: number
-  payload: { order: OrderEventOrderView } & Extra
-}
+/** An envelope as the outbox hands it over. */
+export type OrderEnvelope<Payload extends OrderEventPayload = OrderEventPayload> = Pick<
+  PluginDomainEventEnvelope<Payload>,
+  'id' | 'hostId' | 'orgId' | 'occurredAtMs' | 'payload'
+>
 
 export interface IntakeDeps {
   store: NetworkStore
@@ -66,19 +67,19 @@ const displayRefOf = (order: OrderEventOrderView): string =>
 
 /** The order's lines that carry a SKU, as a first guess at what a network will take. */
 function estimatedLines(order: OrderEventOrderView, stock: Record<string, number>): NetworkOrderLine[] {
-  const items = Array.isArray(order.lineItems) ? (order.lineItems as Array<Record<string, unknown>>) : []
+  const items = Array.isArray(order.lineItems) ? (order.lineItems as Array<OrderLineFields | null>) : []
   const known = Object.keys(stock ?? {}).length > 0
   const lines: NetworkOrderLine[] = []
   items.forEach((item, lineIndex) => {
-    const sku = String(item?.['sku'] ?? '').trim()
-    const quantity = Math.max(0, Math.floor(Number(item?.['quantity']) || 0))
+    const sku = String(item?.sku ?? '').trim()
+    const quantity = Math.max(0, Math.floor(Number(item?.quantity) || 0))
     if (!sku || !quantity) return
     // A network that has been counted holds only the SKUs it reported.
     if (known && !(sku in stock)) return
     lines.push({
       lineIndex,
       sku,
-      name: [item?.['name'], item?.['variantLabel']].filter(Boolean).join(' — ') || 'Item',
+      name: [item?.name, item?.variantLabel].filter(Boolean).join(' — ') || 'Item',
       quantity,
       shippedQuantity: 0,
     })
@@ -146,7 +147,7 @@ export async function onOrderCancelled(deps: IntakeDeps, envelope: OrderEnvelope
 
 export async function onOrderRefunded(
   deps: IntakeDeps,
-  envelope: OrderEnvelope<{ refund?: { full?: boolean; lineItemIds?: number[] } }>,
+  envelope: OrderEnvelope<OrderRefundedEventPayload>,
 ): Promise<void> {
   const order = envelope.payload?.order
   if (!order?.id || !envelope.hostId) return

@@ -219,8 +219,14 @@ refuses a dirty one, so it can never take a live session's work.
 Every `libs/**` project is a future npm package; `docs/PACKAGES.md` is the map
 (npm name, entry points, what it may import) and `check:lib-boundaries` holds
 it. An app never holds logic a consumer would need — it goes in a lib. A plugin
-never imports another plugin or core's UI; core never imports a plugin; `shared`
-imports only `shared`. A new lib gets its `scope:`/`type:` tags and its map row
+never imports another plugin or core's UI, with one exception: another
+plugin's `@aglyn/plugins-<id>/contracts` (its `src/lib/contracts.ts`: types,
+event and service tokens, nothing that runs it), and only when it names that
+plugin in its `uses` in `plugins.config.json` and carries it as an optional
+peer (AGL-3980, `docs/PACKAGES.md` "Plugin contracts"). Restating another
+plugin's event payload or service by hand is the drift that exception
+replaces. Core never imports a plugin, contracts included; `shared` imports
+only `shared`. A new lib gets its `scope:`/`type:` tags and its map row
 in the same commit. The allowlist of today's cross-package edges only shrinks.
 
 A lib's `package.json` declares every package its shipped source imports

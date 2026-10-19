@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { OrderEventOrder } from '@aglyn/plugins-commerce/contracts'
 import type { ReviewPlatform } from '../constants/bundle-common'
 
 /**
@@ -155,8 +156,8 @@ export function normalizeYotpoAppKey(value: unknown): string | null {
  * The buyer-email moments a BCC invitation rides on. `shipped`: the first
  * email about the order leaving the store; `delivered`: the email saying it
  * arrived or was collected. The buyer email moments are commerce's own
- * names (`order-notifications`), restated, since a plugin never imports
- * another.
+ * names (`order-notifications`), restated: commerce's contracts do not
+ * carry them (AGL-3980).
  */
 export const BCC_MOMENTS: Readonly<Record<InvitationMoment, readonly string[]>> = {
   shipped: ['shipped', 'out_for_delivery', 'picked_up', 'delivered'],
@@ -174,22 +175,28 @@ export const INVITATION_SKIP_LABELS: Record<InvitationSkipReason, string> = {
   no_consent: 'The customer has not agreed to marketing email from this store',
 }
 
-/** The order fields an invitation reads, as the seller's public API shapes them. */
-export interface InvitationOrder {
-  id: string
-  number?: number | null
-  status?: string | null
-  livemode?: boolean
-  currency?: string
-  customerEmail?: string | null
-  customerName?: string | null
-  lineItems?: unknown
-  totals?: { totalCents?: number | null }
-  refundedCents?: number
-  disputed?: boolean
-  fulfillments?: Array<{ id?: string | null; status?: string; at?: string | null }>
-  created?: unknown
-}
+/**
+ * The order fields an invitation reads, from commerce's contracts (AGL-3980).
+ * Only `id` is required: the buyer-email copy seam hands the order as a loose
+ * record, not as an event payload.
+ */
+export type InvitationOrder = Pick<OrderEventOrder, 'id'> &
+  Partial<
+    Pick<
+      OrderEventOrder,
+      | 'number'
+      | 'status'
+      | 'livemode'
+      | 'currency'
+      | 'customerEmail'
+      | 'customerName'
+      | 'lineItems'
+      | 'refundedCents'
+      | 'disputed'
+      | 'fulfillments'
+      | 'created'
+    >
+  > & { totals?: Partial<Pick<OrderEventOrder['totals'], 'totalCents'>> }
 
 /** Whether the sale was a rehearsal: the recorded fact, else a test checkout's id. */
 export function invitationOrderIsTestMode(order: Pick<InvitationOrder, 'id' | 'livemode'>): boolean {

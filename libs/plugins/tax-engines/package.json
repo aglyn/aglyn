@@ -36,10 +36,16 @@
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
+    "@aglyn/plugins-commerce": "1.0.0-beta.270",
     "@mui/material": "^9.3.1",
     "firebase": "^13.0.0",
     "firebase-admin": "^14.3.0",
     "react": "^19.2.8"
+  },
+  "peerDependenciesMeta": {
+    "@aglyn/plugins-commerce": {
+      "optional": true
+    }
   },
   "sideEffects": false,
   "description": "Outside sales tax engines for Aglyn stores: a merchant connects their own Avalara AvaTax or TaxJar account; quotes at checkout and the POS, records paid orders and refunds, product tax codes, customer exemptions and address checks, behind core's core.tax-engine contract."

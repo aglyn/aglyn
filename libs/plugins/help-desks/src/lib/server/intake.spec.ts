@@ -19,6 +19,7 @@
  */
 
 import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type { OrderEventOrder, OrderEventPayload } from '@aglyn/plugins-commerce/contracts'
 import { HELP_DESKS_SUBSCRIBED_EVENTS } from '../declarations.server'
 import { helpDeskOrderFromView, mergeRecentOrders, orderStatusLabel } from '../model/orders'
 import { createMemoryStore } from '../testing/memory-store'
@@ -28,11 +29,12 @@ import { emptyConnection, type StoredConnection } from './store'
 const HOST = 'host-1'
 const NOW = Date.UTC(2026, 9, 15, 12)
 
-const order = {
+const order: OrderEventOrder = {
   id: 'ord-1',
   object: 'order',
   number: 1042,
   status: 'paid',
+  channel: 'online',
   currency: 'usd',
   customerEmail: 'Pat@Example.com',
   customerName: 'Pat Lee',
@@ -40,13 +42,14 @@ const order = {
     { name: 'Mug', sku: 'MUG', quantity: 2, unitAmountCents: 1500, productId: 'p1' },
     { name: 'Gone', quantity: 0, unitAmountCents: 100 },
   ],
-  totals: { totalCents: 3000 },
+  totals: { itemsCents: 3000, shippingCents: 0, taxCents: 0, discountCents: 0, totalCents: 3000, feeCents: 0 },
   refundedCents: 0,
+  taxMode: null,
   livemode: true,
   created: '2026-10-07T12:00:00.000Z',
 }
 
-const envelope = (event: string, payload: unknown, id = 'evt-1'): PluginDomainEventEnvelope<unknown> => ({
+const envelope = (event: string, payload: OrderEventPayload, id = 'evt-1'): PluginDomainEventEnvelope<OrderEventPayload> => ({
   id,
   event,
   hostId: HOST,
@@ -69,7 +72,7 @@ function setup(connections: Array<Partial<StoredConnection> & { provider: Stored
 
 describe('orders', () => {
   it('subscribes to the same order events the intake takes', () => {
-    expect([...HELP_DESKS_SUBSCRIBED_EVENTS]).toEqual([...HELP_DESKS_ORDER_EVENTS])
+    expect(HELP_DESKS_SUBSCRIBED_EVENTS.map((event) => event.id)).toEqual([...HELP_DESKS_ORDER_EVENTS])
   })
 
   it('reads the public order view, and leaves out test orders and orders with no buyer', () => {
