@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -30,6 +31,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 
 /*
  * The console's upgrade surfaces, drawn the native way (Figma Notice/Upgrade 121:18654, Promo/Add-on card 121:18655), the
@@ -141,6 +146,48 @@ fun PlanUsageCard(detail: String?, title: String, actionTitle: String, reached: 
       }
       OutlinedButton(onClick = onOpen, shape = controlShape(), modifier = Modifier.testTag("plan-card-open")) { Text(actionTitle) }
       Spacer(Modifier.size(0.dp))
+    }
+  }
+}
+
+/**
+ * The plan card at the sidebar's foot, as Figma 98:1048 draws it (the twin of Apple's PlanCard): whose plan it is ("Juniper
+ * Street Bakery · Pro plan"), the console meter's own label and figures with Upgrade ("Pages 84 / 100 · Upgrade"), and the
+ * meter, amber from 80% and red at the limit. A long press (or right click) hides it until the next limit.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun PlanMeterCard(detail: String, label: String, used: Long, limit: Long, onUpgrade: () -> Unit, onHide: () -> Unit, modifier: Modifier = Modifier) {
+  val m = shellMetrics
+  val palette = LocalAglynPalette.current
+  val full = used >= limit
+  val share = if (limit > 0) (used.toFloat() / limit).coerceIn(0f, 1f) else 0f
+  val shape = RoundedCornerShape(m.cardRadius)
+  Column(
+    modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surface)
+      .then(Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape))
+      .combinedClickable(onClick = onUpgrade, onLongClick = onHide)
+      .padding(if (m.compact) 10.dp else 12.dp)
+      .testTag("plan-card")
+      .semantics(mergeDescendants = true) {
+        contentDescription = "$label, $used of $limit. $detail"
+        customActions = listOf(
+          androidx.compose.ui.semantics.CustomAccessibilityAction("Upgrade") { onUpgrade(); true },
+          androidx.compose.ui.semantics.CustomAccessibilityAction("Hide until the next limit") { onHide(); true },
+        )
+      },
+    verticalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    Text(detail, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      Text(label, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+      Spacer(Modifier.weight(1f))
+      Text("$used / $limit · ", fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+      Text("Upgrade", fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1, modifier = Modifier.testTag("plan-card-upgrade"))
+    }
+    // The console's meter: amber from 80%, red at the limit.
+    Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+      Box(Modifier.fillMaxWidth(share).fillMaxSize().clip(RoundedCornerShape(50)).background(if (full) palette.error.main else palette.warning.main))
     }
   }
 }

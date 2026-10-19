@@ -430,21 +430,24 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
         ) { widget.content(context) }
       }
     }
-    // The plan card: the console's own usage notice for this workspace, until it is dismissed here.
-    var planDismissals by remember(uid) { mutableStateOf(0) }
-    val feed = (notificationFeed(services, uid, 50) as? com.aglyn.core.Live.Ready)?.value.orEmpty()
-    val planNotice = remember(feed, workspace.org?.id, planDismissals) { planNoticeFor(feed, workspace.org?.id, uid, services.prefs, com.aglyn.core.nowMillis()) }
+    // The plan card (Figma 98:1048): the console meter closest to its limit where the window stands, until it is hidden for
+    // that limit here.
+    var planHides by remember(uid) { mutableStateOf(0) }
+    val planOrgId = workspace.org?.id
+    val planHostId = workspace.site?.id
+    val planNear by androidx.compose.runtime.produceState<PlanNear?>(null, planOrgId, planHostId, workspace.sites.size) {
+      value = planOrgId?.let { loadPlanNear(services, it, planHostId, workspace.sites.size) }
+    }
     val planFoot: @Composable () -> Unit = {
-      planNotice?.let { notice ->
-        // Figma 98:1048: whose plan it is, the console's notice, and the way to more (its link: plans or billing).
-        val org = workspace.org
-        com.aglyn.ui.PlanUsageCard(
-          detail = org?.let { o -> listOfNotNull(o.name, workspace.orgLogo?.plan?.let { "${it.replaceFirstChar { c -> c.uppercase() }} plan" }).joinToString(" · ") },
-          title = notice.title,
-          actionTitle = if (notice.link?.contains("plans") == true) "Upgrade" else "See plans and usage",
-          reached = notice.level == "error" || notice.level == "critical",
-          onOpen = { notice.link?.let { context.openLink(it) } ?: navigator.select(NavKeys.of("core.billing")) },
-          onDismiss = { services.prefs.set(planCardDismissedKey(uid, notice.id), "1"); planDismissals++ },
+      val near = planNear
+      if (near != null && planOrgId != null && planHides >= 0 && services.prefs.get(planNearDismissedKey(planOrgId, near)) == null) {
+        com.aglyn.ui.PlanMeterCard(
+          detail = "${workspace.site?.name ?: workspace.org?.name ?: ""} · ${near.plan} plan",
+          label = near.label,
+          used = near.used,
+          limit = near.limit,
+          onUpgrade = { navigator.select(NavKeys.of("core.billing")) },
+          onHide = { services.prefs.set(planNearDismissedKey(planOrgId, near), "1"); planHides++ },
           modifier = Modifier.padding(start = com.aglyn.ui.shellMetrics.sidebarPad, end = com.aglyn.ui.shellMetrics.sidebarPad, bottom = 12.dp),
         )
       }
