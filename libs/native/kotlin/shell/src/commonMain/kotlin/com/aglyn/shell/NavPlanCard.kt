@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aglyn.core.KeyValueStore
+import kotlinx.coroutines.async
 import com.aglyn.core.numberField
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.LocalAglynPalette
@@ -80,48 +81,54 @@ internal suspend fun loadPlanReadings(services: ShellServices, orgId: String, ho
   suspend fun api(path: String, query: Map<String, Any?>) = runCatching { services.api.request(path, query = query) }.getOrNull()
   val now = com.aglyn.core.nowMillis()
   val month = utcMonthKey(now)
-  val out = mutableListOf<com.aglyn.contracts.PlanCardReading>()
-  fun add(meter: String, used: Double?, limit: Double?) { out += com.aglyn.contracts.PlanCardReading(meter, used, limit) }
-
-  // Storage: the media library's band (its own allowance; null = unlimited), in MB to one decimal, as the Usage page.
-  api("/api/media/storage", mapOf("orgId" to orgId)).let { body ->
-    val bytes = body.numberField("usedBytes")
-    add("storage", bytes?.let { kotlin.math.round(it / (1024.0 * 1024.0) * 10) / 10.0 }, body.numberField("allowanceMb"))
+  fun reading(meter: String, used: Double?, limit: Double?) = com.aglyn.contracts.PlanCardReading(meter, used, limit)
+  // Every source at once (a console route compiles on its first call in development, and each is its own round trip).
+  val out = kotlinx.coroutines.coroutineScope {
+    val reads = listOfNotNull(
+      // Storage: the media library's band (its own allowance; null = unlimited), in MB to one decimal, as the Usage page.
+      async {
+        val body = api("/api/media/storage", mapOf("orgId" to orgId))
+        val bytes = body.numberField("usedBytes")
+        reading("storage", bytes?.let { kotlin.math.round(it / (1024.0 * 1024.0) * 10) / 10.0 }, body.numberField("allowanceMb"))
+      },
+      // Bandwidth: every site's month plus the org library's, summed (a missing site would understate it, so none is shown).
+      async {
+        val scopes = siteIds.map { "hostId" to it } + ("orgId" to orgId)
+        val each = scopes.map { (key, id) -> async { api("/api/billing/host-usage", mapOf(key to id)).numberField("bandwidthGb") } }.map { it.await() }
+        val used = if (siteIds.isEmpty() || each.any { it == null }) null else kotlin.math.round(each.sumOf { it!! } * 100) / 100.0
+        reading("bandwidth", used, quota("bandwidthGb"))
+      },
+      // Campaign emails this month, shown only once the plan carries any.
+      quota("emailSendsPerMonth")?.takeIf { it > 0 }?.let { limit ->
+        async {
+          val counter = runCatching { services.firestore.get("orgs/$orgId/counters/campaignEmailSends") }
+          val used = counter.getOrNull()?.let { (it.data[month] as? Number)?.toDouble() ?: 0.0 } ?: if (counter.isSuccess) 0.0 else null
+          reading("emailSends", used, limit)
+        }
+      },
+      // AI credits this month: the credits door's own used and limit (null = not capped).
+      async {
+        val credits = (api("/api/ai/billing/credits", mapOf("orgId" to orgId)) as? kotlinx.serialization.json.JsonObject)?.get("credits")
+        reading("aiCredits", credits.numberField("used"), credits.numberField("limit"))
+      },
+      // Data storage: this month's rollup, else last month's.
+      async {
+        var mb: Double? = null
+        for (key in listOf(month, utcMonthKey(now, 1))) {
+          if (mb != null) break
+          mb = runCatching { services.firestore.get("orgs/$orgId/usage/$key") }.getOrNull()?.data?.get("dataStorageMb")?.let { (it as? Number)?.toDouble() }
+        }
+        reading("dataStorage", mb, quota("dataStorageMbPerOrg"))
+      },
+      // Team seats (incl. you).
+      async { reading("seats", api("/api/orgs/members", mapOf("orgId" to orgId, "counts" to "1")).numberField("managerSeats"), quota("managersPerOrg")) },
+      hostId?.let { host -> async { reading("pages", api("/api/hosts/usage", mapOf("hostId" to host)).numberField("screens"), quota("screensPerHost")) } },
+      hostId?.let { host ->
+        async { reading("forms", runCatching { services.firestore.count(com.aglyn.core.FirestoreQuery("hosts/$host/forms")) }.getOrNull()?.toDouble(), quota("formsPerHost")) }
+      },
+    )
+    reads.map { it.await() } + reading("sites", siteIds.size.toDouble(), quota("hostLimit"))
   }
-  // Bandwidth: every site's month plus the org library's, summed (a missing site would understate it, so none is shown).
-  run {
-    val scopes = siteIds.map { "hostId" to it } + ("orgId" to orgId)
-    val each = scopes.map { (key, id) -> api("/api/billing/host-usage", mapOf(key to id)).numberField("bandwidthGb") }
-    val used = if (siteIds.isEmpty() || each.any { it == null }) null else kotlin.math.round(each.sumOf { it!! } * 100) / 100.0
-    add("bandwidth", used, quota("bandwidthGb"))
-  }
-  // Campaign emails this month, shown only once the plan carries any.
-  quota("emailSendsPerMonth")?.takeIf { it > 0 }?.let { limit ->
-    val counter = runCatching { services.firestore.get("orgs/$orgId/counters/campaignEmailSends") }
-    val used = counter.getOrNull()?.let { (it.data[month] as? Number)?.toDouble() ?: 0.0 } ?: if (counter.isSuccess) 0.0 else null
-    add("emailSends", used, limit)
-  }
-  // AI credits this month: the credits door's own used and limit (null = not capped).
-  api("/api/ai/billing/credits", mapOf("orgId" to orgId)).let { body ->
-    val credits = (body as? kotlinx.serialization.json.JsonObject)?.get("credits")
-    add("aiCredits", credits.numberField("used"), credits.numberField("limit"))
-  }
-  // Data storage: this month's rollup, else last month's.
-  run {
-    var mb: Double? = null
-    for (key in listOf(month, utcMonthKey(now, 1))) {
-      if (mb != null) break
-      mb = runCatching { services.firestore.get("orgs/$orgId/usage/$key") }.getOrNull()?.data?.get("dataStorageMb")?.let { (it as? Number)?.toDouble() }
-    }
-    add("dataStorage", mb, quota("dataStorageMbPerOrg"))
-  }
-  // Team seats (incl. you).
-  add("seats", api("/api/orgs/members", mapOf("orgId" to orgId, "counts" to "1")).numberField("managerSeats"), quota("managersPerOrg"))
-  if (hostId != null) {
-    add("pages", api("/api/hosts/usage", mapOf("hostId" to hostId)).numberField("screens"), quota("screensPerHost"))
-    add("forms", runCatching { services.firestore.count(com.aglyn.core.FirestoreQuery("hosts/$hostId/forms")) }.getOrNull()?.toDouble(), quota("formsPerHost"))
-  }
-  add("sites", siteIds.size.toDouble(), quota("hostLimit"))
   return PlanReadings(plan, out)
 }
 

@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -259,9 +260,19 @@ fun PlanMeterCarousel(
         }
       }
     }
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-      Text(shown.figures, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.weight(1f).testTag("plan-card-figures"))
-      if (meters.size > 1) {
+    // The figures never truncate: the dots sit beside them when both fit, and take their own row under them when not (with
+    // seven to nine meters), as Apple's card does. The widest meter's figures decide, so the layout holds as it advances.
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+      val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+      val figureStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, lineHeight = 16.sp)
+      val density = androidx.compose.ui.platform.LocalDensity.current
+      val widest = with(density) { meters.maxOf { measurer.measure(it.figures, figureStyle).size.width }.toDp() }
+      val dotsWidth = 12.dp * meters.size + 4.dp * (meters.size - 1).coerceAtLeast(0)
+      val beside = meters.size <= 1 || widest + 8.dp + dotsWidth <= maxWidth
+      val figures: @Composable () -> Unit = {
+        Text(shown.figures, style = figureStyle, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false, modifier = Modifier.testTag("plan-card-figures"))
+      }
+      val dots: @Composable () -> Unit = {
         // A 6 dot in a 12 cell, 4 apart: the meter in front in the accent, the rest the subtle border's grey.
         Row(Modifier.testTag("plan-card-dots"), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
           meters.forEachIndexed { i, meter ->
@@ -269,6 +280,18 @@ fun PlanMeterCarousel(
               Box(Modifier.size(6.dp).clip(CircleShape).background(if (i == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant))
             }
           }
+        }
+      }
+      if (beside) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+          figures()
+          Spacer(Modifier.weight(1f))
+          if (meters.size > 1) dots()
+        }
+      } else {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+          Box(Modifier.fillMaxWidth()) { figures() }
+          dots()
         }
       }
     }
