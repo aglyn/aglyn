@@ -18,11 +18,13 @@
 'use client'
 
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
   aiAddonName,
+  isCustomPricedPlan,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  planSellsAiTiers,
   planSellsSiteCare,
+  type AiTierId,
   type OrgPlan,
 } from '@aglyn/aglyn'
 import { useConfirmationContext, useLoading } from '@aglyn/shared-ui-jsx'
@@ -33,10 +35,14 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   IconButton,
   Link,
+  ListItemText,
+  MenuItem,
   Stack,
   Switch,
+  TextField,
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
@@ -99,30 +105,31 @@ export function siteCareUnavailableReason(plan: OrgPlan | null): string | null {
 }
 
 /**
- * The AI add-on row's per-plan sentence (AGL-2899): what the add-on unlocks,
- * and the credit band it adds to the workspace's one AI pool. The band is
- * `AI_ADDON_CREDITS_PER_MONTH[plan]`, the figure `resolveOrgEntitlements`
- * folds into `assistCreditsPerMonth`, so the row and the meter agree.
+ * The Aglyn AI row's sentence (AGL-2899, AGL-3965): every AI action draws on
+ * one pool, the plan's included credits pay for it, and a tier adds credits
+ * ON TOP of them. The included figure is the plan's
+ * `assistCreditsPerMonth`, the band a tier is folded onto, so the row and
+ * the meter agree.
  */
 export function aiAddonDescription(plan: OrgPlan | null): string {
-  const unlocks =
-    'Generate pages, components, emails, campaigns, products and more, ' +
-    'then edit anything.'
-  const band = plan ? AI_ADDON_CREDITS_PER_MONTH[plan] : 0
-  return band > 0
-    ? `${unlocks} Adds ${band.toLocaleString()} AI credits a month to your ` +
-        "workspace's pool."
-    : unlocks
+  const pool =
+    'Questions, copy, generated pages, emails, campaigns and products all ' +
+    'draw on one pool of AI credits.'
+  const included = plan ? PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth : 0
+  return included > 0 && Number.isFinite(included)
+    ? `${pool} Your plan includes ${included.toLocaleString()} a month; a ` +
+        'tier adds its credits on top.'
+    : `${pool} A tier adds its credits on top of what your plan includes.`
 }
 
 /**
- * How the AI add-on row is offered on a plan (AGL-2899).
+ * How the Aglyn AI row is offered on a plan (AGL-2899, AGL-3965).
  *
- * - `included`: the plan carries what the add-on unlocks itself (Enterprise,
- *   in the agreement), so there is nothing to buy and no switch.
- * - `upgrade`: the plan sells no add-on and does not include it (Free, whose
- *   generation taste is not the add-on), so the row points at the plan grid.
- * - `sold`: every paid self-serve tier — the switch.
+ * - `included`: the plan's AI is in its agreement (Enterprise), so there is
+ *   nothing to buy and no picker.
+ * - `upgrade`: the plan sells no tier (Free), so the row points at the plan
+ *   grid.
+ * - `sold`: every paid self-serve plan — the tier picker.
  *
  * Read from the plan tables rather than from the catalog's `upgradeRequired`,
  * which is true for Free and Enterprise alike: one of those needs an upgrade
@@ -132,11 +139,86 @@ export function aiAddonOffer(
   plan: OrgPlan | null,
 ): 'included' | 'upgrade' | 'sold' {
   if (!plan) return 'upgrade'
-  // Both flags the add-on unlocks, as `planIncludesAiAddon` in the plan grid
-  // reads them: Free carries `aiGenerative` alone for its taste.
-  const { aiGenerative, aiAssist } = PLAN_ENTITLEMENTS[plan].features
-  if (aiGenerative && aiAssist) return 'included'
-  return PLAN_PRICING[plan].aiAddonMonthlyUsd == null ? 'upgrade' : 'sold'
+  if (planSellsAiTiers(plan)) return 'sold'
+  return isCustomPricedPlan(plan) ? 'included' : 'upgrade'
+}
+
+/** One tier as the add-ons route lists it (AGL-3965). */
+export interface AiTierOption {
+  id: AiTierId
+  label: string
+  credits: number
+  unitUsd: number
+  configured: boolean
+}
+
+/**
+ * The Aglyn AI tier picker (AGL-3965): each tier with its credits and price,
+ * the one held marked, and an Apply that runs the same preview-then-confirm
+ * every add-on change does. "No tier" removes it at the period end.
+ */
+function AiTierPicker(props: {
+  label: string
+  tiers: readonly AiTierOption[]
+  current: AiTierId | null
+  disabled: boolean
+  onApply: (tier: AiTierId | null) => void
+}) {
+  const { label, tiers, current, disabled, onApply } = props
+  const [draft, setDraft] = useState<AiTierId | 'none'>(current ?? 'none')
+  useEffect(() => setDraft(current ?? 'none'), [current])
+  const changed = draft !== (current ?? 'none')
+  return (
+    <Stack
+      useFlexGap
+      direction="row"
+      spacing={1}
+      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+    >
+      <TextField
+        select
+        size="small"
+        label={`${label} tier`}
+        value={draft}
+        disabled={disabled}
+        onChange={(event) => setDraft(event.target.value as AiTierId | 'none')}
+        sx={{ minWidth: 260 }}
+      >
+        <MenuItem value="none">
+          <ListItemText
+            primary="No tier"
+            secondary="Your plan's included credits only"
+          />
+          {current === null ? <Chip size="small" label="Current" sx={{ ml: 1 }} /> : null}
+        </MenuItem>
+        {tiers.map((tier) => (
+          <MenuItem key={tier.id} value={tier.id} disabled={!tier.configured}>
+            <ListItemText
+              primary={`${tier.label} — $${tier.unitUsd}/mo`}
+              secondary={
+                `+${tier.credits.toLocaleString()} credits a month` +
+                (tier.configured ? '' : ' (not configured yet)')
+              }
+            />
+            {tier.id === current ? (
+              <Chip size="small" color="primary" label="Current" sx={{ ml: 1 }} />
+            ) : null}
+          </MenuItem>
+        ))}
+      </TextField>
+      {changed ? (
+        <Button
+          size="small"
+          variant="outlined"
+          color="primary"
+          disabled={disabled}
+          onClick={() => onApply(draft === 'none' ? null : draft)}
+        >
+          {draft === 'none' ? 'Remove' : 'Apply'}
+        </Button>
+      ) : null}
+    </Stack>
+  )
 }
 
 /** The route's plan string as an `OrgPlan`, or null for anything else. */
@@ -238,6 +320,10 @@ interface AddonsState {
   interval: 'month' | 'year'
   quantities: Record<string, number>
   catalog: Record<string, AddonsCatalogEntry>
+  /** The Aglyn AI tier the subscription carries (AGL-3965). */
+  aiTier?: AiTierId | null
+  /** Every tier the plan sells; empty where it sells none. */
+  aiTiers?: readonly AiTierOption[]
 }
 
 export interface BillingAddonsCardProps {
@@ -358,8 +444,11 @@ export default function BillingAddonsCardComponent({
   }, [orgId, user, sendAddonsRequest, retryNonce])
 
   const applyChange = useCallback(
-    async (row: AddonRow, quantity: number) => {
+    async (row: AddonRow, quantity: number, tier?: AiTierId) => {
       if (!state) return
+      const tierOption = tier
+        ? (state.aiTiers ?? []).find((option) => option.id === tier)
+        : undefined
       setBusy(true)
       try {
         // The loading overlay must drop BEFORE the confirm dialog opens —
@@ -372,12 +461,13 @@ export default function BillingAddonsCardComponent({
             action: 'preview',
             kind: row.kind,
             quantity,
+            ...(tier ? { tier } : {}),
           })
         } finally {
           dequeuePreview()
         }
         if (!preview) return
-        const unitUsd = state.catalog[row.kind]?.unitUsd ?? 0
+        const unitUsd = tierOption?.unitUsd ?? state.catalog[row.kind]?.unitUsd ?? 0
         const monthlyUsd = quantity * (unitUsd ?? 0)
         // The true cost of this change: proration lines only (AGL-535) —
         // upcoming.amount_due is the whole next invoice, and nothing is
@@ -410,7 +500,9 @@ export default function BillingAddonsCardComponent({
           ? new Date(String(preview.effectiveAt)).toLocaleDateString()
           : null
         const accepted = await confirm({
-          title: `${row.label}: ${quantity}?`,
+          title: tierOption
+            ? `${row.label} ${tierOption.label}?`
+            : `${row.label}: ${quantity}?`,
           description:
             (preview.defersToPeriodEnd
               ? `Nothing is charged and nothing is refunded. You keep this ` +
@@ -437,6 +529,7 @@ export default function BillingAddonsCardComponent({
             action: 'set',
             kind: row.kind,
             quantity,
+            ...(tier ? { tier } : {}),
           })
           // The charge did not go through on the spot (AGL-3358): the bank
           // wants the customer to confirm it, or the card was declined.
@@ -465,7 +558,11 @@ export default function BillingAddonsCardComponent({
           if (applied?.quantities) {
             setState((previous) =>
               previous
-                ? { ...previous, quantities: applied.quantities }
+                ? {
+                    ...previous,
+                    quantities: applied.quantities,
+                    ...(applied.aiTier !== undefined ? { aiTier: applied.aiTier } : {}),
+                  }
                 : previous)
             setDrafts((previous) => {
               const next = { ...previous }
@@ -614,7 +711,10 @@ export default function BillingAddonsCardComponent({
             <Box sx={{ flex: 1, minWidth: 220 }}>
               <Typography variant="subtitle2">
                 {row.label}
-                {rowPriceSuffix(row, entry?.unitUsd, state.interval)}
+                {/* The AI row prices each tier in its picker instead. */}
+                {row.kind === 'aiAddon'
+                  ? ''
+                  : rowPriceSuffix(row, entry?.unitUsd, state.interval)}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {row.description}
@@ -678,6 +778,15 @@ export default function BillingAddonsCardComponent({
                     ? 'Needs an active subscription'
                     : 'Not configured'}
               </Typography>
+            ) : row.kind === 'aiAddon' ? (
+              <AiTierPicker
+                label={row.label}
+                tiers={state.aiTiers ?? []}
+                current={current >= 1 ? (state.aiTier ?? null) : null}
+                disabled={!canManage || busy}
+                onApply={(tier) =>
+                  void (tier ? applyChange(row, 1, tier) : applyChange(row, 0))}
+              />
             ) : row.toggle ? (
               <Switch
                 checked={draft >= 1}

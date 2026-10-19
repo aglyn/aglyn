@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { aiAddonName } from '@aglyn/aglyn'
+import { aiAddonName, aiTierName } from '@aglyn/aglyn'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
@@ -552,17 +552,17 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
               <Chip
                 size="small"
                 color={data.addon.on ? 'primary' : 'default'}
-                label={data.addon.on ? `${name} on` : `${name} off`}
+                label={
+                  data.addon.on
+                    ? `${data.addon.tier ? aiTierName(data.addon.tier) : name} on`
+                    : `${name} off`
+                }
               />
               {data.addon.priceUsd !== null ? (
                 <Typography variant="body2">
-                  {`${usd(data.addon.priceUsd)}/mo on this plan`}
+                  {`${usd(data.addon.priceUsd)}/mo`}
                 </Typography>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  {'Not sold on this plan'}
-                </Typography>
-              )}
+              ) : null}
               {data.addon.on ? (
                 <Typography variant="body2" color="text.secondary">
                   {data.addon.since

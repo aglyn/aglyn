@@ -56,18 +56,15 @@ your theme and reuses what the site already has, following
 [the building rules](./how-aglyn-ai-builds.md#the-building-rules), and reads your
 [business profile](./business-profile.md).
 
-## Without the add-on {#without-the-add-on}
+## On every plan {#without-the-add-on}
 
-On a paid plan without the [Aglyn AI add-on](./ai-credits.md#the-aglyn-ai-add-on), the
-button is still there. It opens a short window saying what it would make and that
-**Create with AI comes with the Aglyn AI add-on**:
+On every paid plan, **Create with AI** runs on the AI credits your plan includes each
+month; nothing else needs to be bought. An
+[Aglyn AI tier](./ai-credits.md#the-aglyn-ai-add-on) adds more credits on top when you need
+them, and an owner or admin chooses it in **Billing**.
 
-- an owner or admin sees **Add Aglyn AI**, which opens **Billing** to add it, or **Not
-  now**;
-- anyone else is asked to have a workspace owner or admin add it.
-
-A Free workspace does not buy the add-on: its buttons work from the
-[300 AI credits](./ai-credits.md#free-plan) it gets each month.
+A Free workspace's buttons work from the [300 AI credits](./ai-credits.md#free-plan) it
+gets each month.
 
 ## When it is not there {#when-it-is-not-there}
 

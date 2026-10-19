@@ -340,8 +340,9 @@ of your allowance mean nobody first learns about overage from an invoice. The op
 
 Paid plans include a monthly band of **AI assist credits** — the **Aglyn Assist credits**
 meter on the billing page shows how much of it this month's assistant use has drawn. The
-[Aglyn AI add-on](add-ons.md#aglyn-ai) widens that band and opens generative building;
-it is one pool, so everything below applies to the widened band as a whole. What the
+included credits pay for every AI request, building included, and an
+[Aglyn AI tier](add-ons.md#aglyn-ai) adds credits on top; it is one pool, so everything
+below applies to the widened band as a whole. What the
 credits are spent on, and what each kind of request costs relative to the others, is
 under [Aglyn AI](../../ai/overview.md#credits-and-caps). On a plan that sells credits
 past the band, reaching it is not a wall:
@@ -380,7 +381,7 @@ applied unless you set one.
 :::info Plans that sell no overage
 Every paid plan includes AI assist credits and sells credits past them, so the switch
 and the ceiling are on every paid billing page — Starter included, at the same rate as
-Pro, with or without the [Aglyn AI add-on](add-ons.md#aglyn-ai).
+Pro, with or without an [Aglyn AI tier](add-ons.md#aglyn-ai).
 
 A workspace on a plan that sells no credits past its band — Enterprise, whose credits
 are set by agreement, or a Free workspace — stops at the band on its own: the assistant

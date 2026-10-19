@@ -356,7 +356,7 @@
                 },
                 {
                   "when": "data.org.seatAddons.aiAddon && const.aiPrice[@item.id] && preview.droppedAddons !~= aiAddon",
-                  "text": " Your Aglyn AI add-on carries over at ${const.aiPrice[@item.id]}/mo on {item.label}, billed with the plan."
+                  "text": " Your Aglyn AI tier carries over at the same price on {item.label}, billed with the plan."
                 },
                 {
                   "when": "data.billing.subscription.cancelAtPeriodEnd",

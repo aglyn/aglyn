@@ -30,7 +30,8 @@
  */
 
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
+  aiTierQuotaPerUnit,
+  planSellsAiTiers,
   PLAN_ENTITLEMENTS,
   planLabelGrantingFeature,
   registerPluginEntitlements,
@@ -118,7 +119,8 @@ describe('entitlementPurchasable (AGL-3601)', () => {
           key: 'demoUpsellAddon',
           label: 'Demo add-on',
           maxUnits: 1,
-          quota: { key: 'demoUpsellQuota', perUnitByPlan: AI_ADDON_CREDITS_PER_MONTH },
+          quota: { key: 'demoUpsellQuota', perUnit: aiTierQuotaPerUnit },
+          soldOn: planSellsAiTiers,
           features: ['demoUpsell'],
         },
       ],
@@ -138,7 +140,7 @@ describe('entitlementPurchasable (AGL-3601)', () => {
   })
 
   it('answers no on a plan the add-on is not sold on', () => {
-    expect(AI_ADDON_CREDITS_PER_MONTH.free).toBe(0)
+    expect(planSellsAiTiers('free')).toBe(false)
     expect(entitlementPurchasable(['demoUpsell'], live('free'))).toBe(false)
   })
 

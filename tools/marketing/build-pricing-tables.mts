@@ -44,7 +44,8 @@ import {
   PLAN_PRICING,
   PLAN_LABELS,
   UNLIMITED,
-  AI_ADDON_CREDITS_PER_MONTH,
+  AI_TIER_IDS,
+  AI_TIERS,
   aiAddonName,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   SITE_CARE_ADDON_MONTHLY_USD,
@@ -77,13 +78,10 @@ const PAID: Plan[] = ['starter', 'pro', 'business', 'scale', 'advanced', 'agency
 const AI_ADDON = aiAddonName()
 
 /**
- * The plans that sell the add-on: every plan `PLAN_PRICING` prices it on.
- * Free sells none and Enterprise carries generative building in the
- * agreement, so both price it `null` and neither is in this list.
+ * The Aglyn AI tiers (AGL-3965), smallest first: sold on their own to any
+ * paid plan, so the card states each tier once rather than a price per plan.
  */
-const AI_ADDON_PLANS = (Object.keys(PLAN_PRICING) as Plan[]).filter(
-  (p) => PLAN_PRICING[p].aiAddonMonthlyUsd !== null,
-)
+const AI_TIER_ROWS = AI_TIER_IDS.map((id) => AI_TIERS[id])
 
 // ---------------------------------------------------------------- format
 
@@ -373,19 +371,17 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       { label: 'CDN & responsive images', value: (p) => bool(F(p).mediaCdn) },
       { label: 'AI assist', value: (p) => bool(F(p).aiAssist) },
       /*
-       * The generative door, per plan (AGL-2900). A plan that prices the
-       * add-on prints "add-on": the door opens when it is bought, whatever
-       * the plan's own `aiGenerative` says. Free prices none and generates
-       * against its taste, so its cell is the size of that band — the
-       * figure a visitor is deciding on. Enterprise carries generative
-       * building in the agreement and ticks; a plan with neither dashes.
+       * The generative door, per plan (AGL-2900, AGL-3965). One pool: every
+       * paid plan's included credits pay for generation, so the door ticks
+       * on every paid plan and on Enterprise. Free generates against its
+       * taste, so its cell is the size of that band — the figure a visitor
+       * is deciding on. A plan without the door dashes.
        */
       {
         label: `${AI_ADDON}: generate pages, emails, campaigns, products and more`,
         value: (p) => {
-          if (PLAN_PRICING[p].aiAddonMonthlyUsd !== null) return 'add-on'
           if (!F(p).aiGenerative) return NO
-          return p === 'enterprise' ? YES : `${num(E(p).assistCreditsPerMonth)} credits`
+          return p === 'free' ? `${num(E(p).assistCreditsPerMonth)} credits` : YES
         },
       },
       /*
@@ -399,8 +395,13 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
        * bands at zero now, so `perMonth`'s dash is unreachable here;
        * Enterprise talks.
        */
+      // "included" since AGL-3965: the row is the plan's own band, and an
+      // Aglyn AI tier adds on top of it — the figure was being read as the
+      // tier's. `frameLabel` carries the published label until the page is
+      // republished with the new one.
       {
-        label: 'AI credits / mo',
+        label: 'AI credits included / mo',
+        frameLabel: 'AI credits / mo',
         value: talk((p) => perMonth(E(p).assistCreditsPerMonth)),
       },
       {
@@ -1021,36 +1022,31 @@ const addons = {
     },
     {
       label: AI_ADDON,
-      // Priced PER PLAN, unlike the two flat cards above: the line is an
-      // uplift on the tier, so there is no single `priceUsd` to print. `null`
-      // is a plan that does not sell it (Free; Enterprise carries generative
-      // building in the agreement).
-      priceUsdByPlan: Object.fromEntries(
-        PLANS.map((p) => [p, PLAN_PRICING[p].aiAddonMonthlyUsd]),
-      ) as Record<Plan, number | null>,
+      // Priced PER TIER (AGL-3965), unlike the two flat cards above: six
+      // tiers, the same on every paid plan, so there is no single
+      // `priceUsd` to print. Free sells none; Enterprise by agreement.
+      tiers: AI_TIER_ROWS.map((tier) => ({
+        label: tier.label,
+        priceUsd: tier.monthlyUsd,
+        credits: tier.credits,
+      })),
       scope: 'organization',
       maxQuantity: 1,
-      creditsByPlan: AI_ADDON_CREDITS_PER_MONTH,
       /*
        * What the card prints. One headline the way the flat cards print
-       * theirs — the cheapest plan's uplift, as "From $9 / mo" — and the
-       * ladder in the sentence beneath it: every selling plan's price, then
-       * the credits the add-on adds to each plan's band, each beside its
-       * plan's name so the add-on card reconciler can read them back one
-       * token at a time. The sentence is the transcription source for the
-       * page; a figure in it is a figure the page states.
+       * theirs — the cheapest tier, as "From $9 / mo" — and the tiers in the
+       * sentence beneath it: each tier's price, then the credits each adds
+       * on top of the plan's included credits, each beside its tier's name
+       * so the add-on card reconciler can read them back one token at a
+       * time. The sentence is the transcription source for the page; a
+       * figure in it is a figure the page states.
        */
-      priceLabel: `From $${Math.min(
-        ...AI_ADDON_PLANS.map((p) => PLAN_PRICING[p].aiAddonMonthlyUsd as number),
-      )} / mo`,
+      priceLabel: `From $${Math.min(...AI_TIER_ROWS.map((tier) => tier.monthlyUsd))} / mo`,
       blurb:
-        AI_ADDON_PLANS.map(
-          (p) => `${PLAN_LABELS[p]} $${PLAN_PRICING[p].aiAddonMonthlyUsd}`,
-        ).join(' · ') +
-        ' a month, per workspace. Adds AI credits to your plan’s included band — ' +
-        AI_ADDON_PLANS.map(
-          (p) => `${num(AI_ADDON_CREDITS_PER_MONTH[p])} on ${PLAN_LABELS[p]}`,
-        ).join(', ') +
+        AI_TIER_ROWS.map((tier) => `${tier.label} $${tier.monthlyUsd}`).join(' · ') +
+        ' a month, per workspace, on any paid plan. Each tier adds AI credits on top ' +
+        'of the credits your plan includes — ' +
+        AI_TIER_ROWS.map((tier) => `${num(tier.credits)} with ${tier.label}`).join(', ') +
         '. Enterprise by agreement.',
     },
     {
@@ -1248,6 +1244,20 @@ const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
       'Free saves one reusable component per site since AGL-3615; the Figma ' +
       'Pricing frames still print the dash from when components were Starter+.',
   },
+  // One pool (AGL-3965): every paid plan's included credits pay for
+  // generation, so the door ticks; the page prints "add-on" until it is
+  // republished, page first.
+  ...Object.fromEntries(
+    PAID.map((p) => [
+      `${AI_ADDON}: generate pages, emails, campaigns, products and more · ${PLAN_LABELS[p]}`,
+      {
+        frame: 'add-on',
+        why:
+          'AGL-3965 opens generation on every paid plan against its included ' +
+          'credits; /pricing still prints "add-on" until it is republished',
+      },
+    ]),
+  ),
 }
 
 /*
@@ -2074,7 +2084,19 @@ feeLadder.finish()
  * the ceiling `POST /api/billing/addons` enforces, and publishing it beside
  * an $89/mo line is what would give it a surface to be checked against.
  *=========================================*/
-const ADDONS_STALE: Record<string, Divergence> = {}
+const ADDONS_STALE: Record<string, Divergence> = Object.fromEntries(
+  // The Aglyn AI card's sentence names tiers since AGL-3965; the published
+  // page still names a price per plan until it is republished, page first.
+  AI_TIER_IDS.flatMap((id) => {
+    const why =
+      'AGL-3965 sells Aglyn AI as six tiers on any paid plan; /pricing still ' +
+      'prints the per-plan ladder until it is republished with the tiers'
+    return [
+      [`${AI_ADDON} · ${AI_TIERS[id].label}`, { frame: '(not stated)', why }],
+      [`${AI_ADDON} · ${AI_TIERS[id].label} credits`, { frame: '(not stated)', why }],
+    ]
+  }),
+)
 
 /**
  * Cards we publish that the page carries nowhere. Empty since AGL-2900 put
@@ -2138,18 +2160,17 @@ for (const v of frames) {
       addonCards.absent(`the ${row.label} card's sentence`, v.name)
       continue
     }
-    for (const p of AI_ADDON_PLANS) {
-      const label = PLAN_LABELS[p]
+    for (const tier of row.tiers) {
       addonCards.cell(
-        `${row.label} · ${label}`,
-        `$${row.priceUsdByPlan[p]}`,
-        stated(body, new RegExp(`${label} (\\$[\\d.]+)`)),
+        `${row.label} · ${tier.label}`,
+        `$${tier.priceUsd}`,
+        stated(body, new RegExp(`${tier.label} (\\$[\\d.]+)`)),
         v.name,
       )
       addonCards.cell(
-        `${row.label} · ${label} credits`,
-        num(row.creditsByPlan[p]),
-        stated(body, new RegExp(`([\\d,]+) on ${label}\\b`)),
+        `${row.label} · ${tier.label} credits`,
+        num(tier.credits),
+        stated(body, new RegExp(`([\\d,]+) with ${tier.label}\\b`)),
         v.name,
       )
     }

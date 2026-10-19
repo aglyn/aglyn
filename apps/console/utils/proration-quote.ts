@@ -17,28 +17,26 @@
 
 import {
   type AglynOrgBilling,
-  aiAddonName,
+  AI_TIERS,
+  aiTierName,
+  aiTierOfPurchase,
   hasAiAddon,
   PLAN_LABELS,
-  PLAN_PRICING,
+  planSellsAiTiers,
   type OrgPlan,
 } from '@aglyn/aglyn'
 import { taxExplanation } from './tax-explanation'
 
 /**
- * What happens to the org's AI add-on on a plan change (AGL-2899), as
- * the sentence the switch confirm appends — or '' for an org that does not
- * carry it.
+ * What happens to the org's Aglyn AI tier on a plan change (AGL-2899,
+ * AGL-3965), as the sentence the switch confirm appends — or '' for an org
+ * that does not carry it.
  *
- * `/api/billing/subscription` re-prices every add-on item to the target plan
- * in the same update and DROPS a kind the target does not sell, reporting it
- * as `droppedAddons`. The proration figure above this sentence already
- * includes that re-pricing, but a figure cannot say that a $19 line became a
- * $39 one, and a customer who reads "switch to Business" as "the plan moves
- * and nothing else does" is about to be surprised on the invoice. So the
- * add-on is named, with the price it will bill at on the target — read from
- * `PLAN_PRICING` rather than from the preview, because the preview carries
- * the change and not the ongoing line.
+ * A tier is chosen on its own, so `/api/billing/subscription` keeps it at
+ * the same price on any paid plan and only moves it to the target interval
+ * (`addonTargetPriceId`); a target that sells no tier (Free) DROPS it and
+ * reports it as `droppedAddons`. The proration figure above this sentence
+ * cannot say which, so the tier is named with the price it keeps billing at.
  *
  * The drop is stated from the server's own list, never inferred from the
  * price table: the server decides what it deleted.
@@ -50,17 +48,16 @@ export function carriedAiAddonSentence(
 ): string {
   if (!hasAiAddon(org)) return ''
   const label = PLAN_LABELS[targetPlan] ?? targetPlan
-  const price = PLAN_PRICING[targetPlan]?.aiAddonMonthlyUsd ?? null
-  const name = aiAddonName()
-  if ((droppedAddons ?? []).includes('aiAddon') || price === null) {
+  const tier = aiTierOfPurchase(org)
+  if (!tier || (droppedAddons ?? []).includes('aiAddon') || !planSellsAiTiers(targetPlan)) {
     return (
-      ` Your ${name} add-on is not sold on ${label}, so it is removed with ` +
-      'this change and its AI credits go with it.'
+      ` Your ${tier ? aiTierName(tier) : 'AI'} tier is not sold on ${label}, so it is ` +
+      'removed with this change and its AI credits go with it.'
     )
   }
   return (
-    ` Your ${name} add-on carries over at $${price}/mo on ${label}, ` +
-    'billed with the plan.'
+    ` Your ${aiTierName(tier)} tier carries over at $${AI_TIERS[tier].monthlyUsd}/mo on ` +
+    `${label}, billed with the plan.`
   )
 }
 

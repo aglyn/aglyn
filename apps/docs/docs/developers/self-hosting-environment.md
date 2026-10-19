@@ -513,13 +513,21 @@ variable the code looks up:
 | Extra members | `STRIPE_PRICE_{…}_EXTRA_MEMBER[_YEARLY]` |
 | Extra datasets | `STRIPE_PRICE_{…}_EXTRA_DATASET[_YEARLY]` |
 | Extra hosts | `STRIPE_PRICE_{…}_EXTRA_HOST[_YEARLY]` |
-| Aglyn AI | `STRIPE_PRICE_{…}_AI_ADDON[_YEARLY]` |
+| Aglyn AI, bought before tiers (read only, to recognize the item) | `STRIPE_PRICE_{…}_AI_ADDON[_YEARLY]` |
 
 Flat add-ons, priced the same across plans:
 
 ```
 STRIPE_PRICE_POS_REGISTER     STRIPE_PRICE_POS_REGISTER_YEARLY
 STRIPE_PRICE_EVENT_CALENDAR   STRIPE_PRICE_EVENT_CALENDAR_YEARLY
+STRIPE_PRICE_SITE_CARE        STRIPE_PRICE_SITE_CARE_YEARLY
+```
+
+Aglyn AI tiers, the same price on every paid plan, one id per tier and
+interval:
+
+```
+STRIPE_PRICE_AI_{SPARK|BOOST|PLUS|MAX|ULTRA|STUDIO}[_YEARLY]
 ```
 
 :::warning Half-configured add-ons sell and then read back empty

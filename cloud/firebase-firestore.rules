@@ -601,6 +601,11 @@ service cloud.firestore {
       // could write it would hand itself the whole purchased pool on every
       // site — the exact over-entitlement AGL-2439 closes.
       //
+      // `aiTier` joins all three lists beside `seatAddons` (AGL-3965): it
+      // says which Aglyn AI tier the purchase is, so it decides how many
+      // credits the add-on adds. Written only by the billing webhook and
+      // /api/billing/addons, Admin SDK, from the subscription's own item.
+      //
       // `assistOverage` joins all three lists beside `storageOverage`
       // (AGL-2653), and cuts both ways: it is the org's own switch between
       // buying assist credits past the plan band and being refused at it. A
@@ -620,7 +625,7 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'sso',
              'plan', 'entitlements', 'releaseFlags',
-             'seatAddons', 'registerAllocations', 'collaboratorAllocations',
+             'seatAddons', 'aiTier', 'registerAllocations', 'collaboratorAllocations',
              'storageOverage', 'assistOverage',
              'bandwidthCap', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
@@ -634,7 +639,7 @@ service cloud.firestore {
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
              'sso',
              'plan', 'entitlements', 'releaseFlags',
-             'seatAddons', 'registerAllocations', 'collaboratorAllocations',
+             'seatAddons', 'aiTier', 'registerAllocations', 'collaboratorAllocations',
              'storageOverage', 'assistOverage',
              'bandwidthCap', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
@@ -651,7 +656,7 @@ service cloud.firestore {
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'plan',
              'entitlements', 'releaseFlags',
-             'enabledPlugins', 'seatAddons', 'registerAllocations',
+             'enabledPlugins', 'seatAddons', 'aiTier', 'registerAllocations',
              'collaboratorAllocations', 'storageOverage', 'assistOverage',
              'bandwidthCap', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'sso', 'discount',

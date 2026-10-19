@@ -16,6 +16,9 @@
  */
 
 import {
+  AI_TIER_IDS,
+  AI_TIERS,
+  defaultAiTierForPlan,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   EXTRA_HOSTS_ADDON_MAX,
   PLAN_PRICING,
@@ -26,6 +29,9 @@ import {
   SELF_SERVE_PLANS,
   SITE_CARE_ADDON_MONTHLY_USD,
   UNLIMITED,
+  LEGACY_AI_ADDON_TIER_BY_PLAN,
+  planSellsAiTiers,
+  type AiTierId,
   type OrgPlan,
   type OrgSeatAddons,
 } from '@aglyn/aglyn/server'
@@ -36,10 +42,11 @@ import {
  * `PLAN_PRICING` USD amounts. Add-ons bill as extra items on the org's
  * one subscription, so every kind has a monthly and a yearly price
  * (Stripe allows a single interval per subscription; annual orgs attach
- * the `_YEARLY` variants). Seat/member/dataset/host prices and the Aglyn AI
- * add-on (AGL-2896) are per-plan; POS registers, the Event Calendar and
- * Site Care (AGL-3954) are flat. Prices are minted by `tools/scripts/setup-stripe.mjs` — keep the
- * three in sync.
+ * the `_YEARLY` variants). Seat/member/dataset/host prices are per-plan;
+ * POS registers, the Event Calendar and Site Care (AGL-3954) are flat; the
+ * Aglyn AI add-on is priced per TIER (AGL-3965, `STRIPE_PRICE_AI_{TIER}`),
+ * on any paid plan. Prices are minted by `tools/scripts/setup-stripe.mjs` —
+ * keep the three in sync.
  */
 export type AddonKind = keyof Required<OrgSeatAddons>
 
@@ -62,7 +69,6 @@ const PER_PLAN_ENV_SUFFIX: Partial<Record<AddonKind, string>> = {
   members: 'EXTRA_MEMBER',
   datasets: 'EXTRA_DATASET',
   hosts: 'EXTRA_HOST',
-  aiAddon: 'AI_ADDON',
 }
 
 /** Kinds priced flat across plans (env `STRIPE_PRICE_{SUFFIX}[_YEARLY]`). */
@@ -101,15 +107,92 @@ function env(name: string): string | null {
 }
 
 /**
+ * The Stripe price id of an Aglyn AI tier (AGL-3965):
+ * `STRIPE_PRICE_AI_{TIER}[_YEARLY]`, lookup key `aglyn_ai_{tier}[_yearly]`.
+ * The same price on every plan; null when the env isn't configured.
+ */
+export function aiTierPriceId(
+  tier: AiTierId,
+  interval: BillingInterval,
+): string | null {
+  const yearly = interval === 'year' ? '_YEARLY' : ''
+  return env(`STRIPE_PRICE_AI_${tier.toUpperCase()}${yearly}`)
+}
+
+/**
+ * The per-plan AI add-on price sold before tiers existed
+ * (`STRIPE_PRICE_{PLAN}_AI_ADDON[_YEARLY]`, AGL-2897). Never sold again; read
+ * only so an item still carrying one is recognised as the add-on and as the
+ * tier with its price and band until `migrate-ai-addon-tiers.mjs` moves it.
+ */
+export function legacyAiAddonPriceId(
+  plan: OrgPlan,
+  interval: BillingInterval,
+): string | null {
+  if (!PAID_PLANS.includes(plan)) return null
+  const yearly = interval === 'year' ? '_YEARLY' : ''
+  return env(`STRIPE_PRICE_${plan.toUpperCase()}_AI_ADDON${yearly}`)
+}
+
+/**
+ * Which Aglyn AI tier a price id sells (AGL-3965): a tier price, or a legacy
+ * per-plan add-on price read as the tier with the same price and band
+ * (`LEGACY_AI_ADDON_TIER_BY_PLAN`). Null for anything else.
+ */
+export function aiTierFromPriceId(
+  priceId: string | null | undefined,
+): AiTierId | null {
+  if (!priceId) return null
+  for (const interval of ['month', 'year'] as const) {
+    for (const tier of AI_TIER_IDS) {
+      if (aiTierPriceId(tier, interval) === priceId) return tier
+    }
+    for (const plan of PAID_PLANS) {
+      if (legacyAiAddonPriceId(plan, interval) === priceId) {
+        return LEGACY_AI_ADDON_TIER_BY_PLAN[plan] ?? null
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * The tier a subscription's items carry (AGL-3965), or null when none is an
+ * Aglyn AI item with a quantity. Written to `org.aiTier` beside the
+ * `seatAddons` map `addonQuantitiesFromItems` derives from the same items.
+ */
+export function aiTierFromItems(
+  items:
+    | ReadonlyArray<{ price?: { id?: string } | null; quantity?: number | null }>
+    | null
+    | undefined,
+): AiTierId | null {
+  for (const item of items ?? []) {
+    const tier = aiTierFromPriceId(item?.price?.id)
+    if (tier && Number(item?.quantity ?? 1) >= 1) return tier
+  }
+  return null
+}
+
+/**
  * The Stripe price id for an add-on kind on a plan at a billing interval;
  * null when the plan doesn't sell it (free) or the env isn't configured.
+ *
+ * `tier` picks the Aglyn AI tier; absent, the tier a plan-named purchase
+ * means (`defaultAiTierForPlan`). Ignored for every other kind.
  */
 export function addonPriceId(
   kind: AddonKind,
   plan: OrgPlan,
   interval: BillingInterval,
+  tier?: AiTierId | null,
 ): string | null {
   const yearly = interval === 'year' ? '_YEARLY' : ''
+  if (kind === 'aiAddon') {
+    if (!planSellsAiTiers(plan)) return null
+    const chosen = tier ?? defaultAiTierForPlan(plan)
+    return chosen ? aiTierPriceId(chosen, interval) : null
+  }
   const flat = FLAT_ENV_NAME[kind]
   if (flat) return env(`STRIPE_PRICE_${flat}${yearly}`)
   const suffix = PER_PLAN_ENV_SUFFIX[kind]
@@ -125,7 +208,9 @@ export function addonKindFromPriceId(
   priceId: string | null | undefined,
 ): AddonKind | null {
   if (!priceId) return null
+  if (aiTierFromPriceId(priceId)) return 'aiAddon'
   for (const kind of ADDON_KINDS) {
+    if (kind === 'aiAddon') continue
     for (const interval of ['month', 'year'] as const) {
       if (FLAT_ENV_NAME[kind]) {
         if (addonPriceId(kind, 'starter', interval) === priceId) return kind
@@ -137,6 +222,23 @@ export function addonKindFromPriceId(
     }
   }
   return null
+}
+
+/**
+ * The price an add-on item moves to on a target plan/interval: the kind's
+ * price there, and for the Aglyn AI add-on the SAME tier the item carries
+ * now (AGL-3965) — a tier is chosen on its own, so a plan change re-prices
+ * only its interval, and a legacy per-plan item becomes the tier with its
+ * price and band.
+ */
+export function addonTargetPriceId(
+  kind: AddonKind,
+  plan: OrgPlan,
+  interval: BillingInterval,
+  currentPriceId: string | null | undefined,
+): string | null {
+  const tier = kind === 'aiAddon' ? aiTierFromPriceId(currentPriceId) : null
+  return addonPriceId(kind, plan, interval, tier)
 }
 
 /**
@@ -260,9 +362,14 @@ export function findPlanItem<T extends { price?: { id?: string } | null }>(
 /**
  * Monthly USD per unit for an add-on on a plan (yearly prices are ×12 of
  * this); null when the plan doesn't sell the kind. Single pricing source
- * of truth: `PLAN_PRICING` + the three flat add-on constants.
+ * of truth: `PLAN_PRICING`, the three flat add-on constants and `AI_TIERS`
+ * (`tier` as `addonPriceId` reads it).
  */
-export function addonUnitUsd(kind: AddonKind, plan: OrgPlan): number | null {
+export function addonUnitUsd(
+  kind: AddonKind,
+  plan: OrgPlan,
+  tier?: AiTierId | null,
+): number | null {
   const pricing = PLAN_PRICING[plan]
   switch (kind) {
     case 'managers':
@@ -277,8 +384,10 @@ export function addonUnitUsd(kind: AddonKind, plan: OrgPlan): number | null {
       return POS_REGISTER_ADDON_MONTHLY_USD
     case 'eventCalendar':
       return EVENT_CALENDAR_ADDON_MONTHLY_USD
-    case 'aiAddon':
-      return pricing.aiAddonMonthlyUsd
+    case 'aiAddon': {
+      const chosen = planSellsAiTiers(plan) ? (tier ?? defaultAiTierForPlan(plan)) : null
+      return chosen ? AI_TIERS[chosen].monthlyUsd : null
+    }
     case 'siteCare':
       return SITE_CARE_ADDON_MONTHLY_USD
   }
@@ -343,9 +452,9 @@ export function addonMaxForBaseline(
     case 'eventCalendar':
       return 1
     case 'aiAddon':
-      // Org-wide like the Event Calendar: one purchase, and the price map
-      // (null on Free and Enterprise) says whether the plan sells it at all.
-      return 1
+      // Org-wide like the Event Calendar: one purchase, of one tier, on any
+      // plan that sells tiers (AGL-3965) — not Free, not Enterprise.
+      return planSellsAiTiers(plan) ? 1 : 0
     case 'siteCare':
       // Flat-priced, so the price map cannot say "not sold here" the way it
       // does for Aglyn AI. This ceiling is the rule that keeps Free (no

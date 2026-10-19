@@ -17,13 +17,13 @@
 'use client'
 
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
+  AI_TIERS,
   aiAddonName,
-  hasAiAddon,
+  aiTierName,
   isUnlimitedQuota,
-  resolveEffectivePlan,
+  orgCanBuyAiTier,
+  resolveAiTier,
   resolveOrgEntitlements,
-  resolvePlanPricing,
   type AglynOrgBilling,
 } from '@aglyn/aglyn'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
@@ -57,10 +57,11 @@ export interface AiCreditsCardProps {
  * though neither carries `aiAssist` — the band is credits, not the guided
  * rung. What still renders nothing is a band of ZERO, which now reaches this
  * component only as a per-org override, and a "0 of 0" meter is not a
- * readout of anything. ONE meter for one pool: the
- * add-on widens `assistCreditsPerMonth` rather than opening a second band,
- * so the limit here is already plan plus add-on and the caption under it
- * says how much of that the add-on is.
+ * readout of anything. ONE meter for one pool: the plan's included credits
+ * pay for every AI action, generation included (AGL-3965), and an Aglyn AI
+ * tier widens `assistCreditsPerMonth` rather than opening a second band, so
+ * the limit here is already plan plus tier and the caption under it says
+ * how much of that the tier is.
  *
  * From the server, not from Firestore like the platform's meters:
  * `orgs/{orgId}/assistUsage` is default-deny for every client, so a browser
@@ -95,19 +96,19 @@ export default function AiCreditsCard(props: AiCreditsCardProps) {
 
   const entitlements = resolveOrgEntitlements(org)
   if (entitlements.assistCreditsPerMonth <= 0) return null
-  const plan = resolveEffectivePlan(org)
-  const aiAddonCredits = hasAiAddon(org) ? AI_ADDON_CREDITS_PER_MONTH[plan] : 0
+  const aiTier = resolveAiTier(org)
   // Sold to THIS workspace, not merely on its plan: a staff comp has no
-  // subscription to add the item to, so its price list sells none (AGL-3034).
-  const aiAddonSold = resolvePlanPricing(org).aiAddonMonthlyUsd != null
+  // subscription to add the item to, so it sells none (AGL-3034).
+  const tiersSold = orgCanBuyAiTier(org)
   return (
     <CardDisplay
       header={'AI credits'}
       help={pluginDocsHelp('aiCredits', {
         anchor: '#see-your-credits',
         excerpt:
-          'AI credits drawn this month against your included band: your plan’s ' +
-          'credits plus the AI add-on’s. The band resets on the first of the month.',
+          'AI credits drawn this month against one pool: your plan’s included ' +
+          'credits plus your AI tier’s, if you have one. Every AI action draws on ' +
+          'it. The pool resets on the first of the month.',
       })}
       contentGutterX
       contentGutterY
@@ -121,30 +122,29 @@ export default function AiCreditsCard(props: AiCreditsCardProps) {
         unlimited={isUnlimitedQuota(entitlements.assistCreditsPerMonth)}
         upgradeHref={billingHref ? `${billingHref}#plans` : '#plans'}
       />
-      {aiAddonCredits > 0 ? (
+      {aiTier ? (
         <Typography
           variant="caption"
           color="text.secondary"
           sx={{ display: 'block', mt: -1.5, mb: 2 }}
         >
-          {`Includes ${aiAddonCredits.toLocaleString()} credits a month from ` +
-            `the ${aiAddonName()} add-on.`}
+          {`Includes ${AI_TIERS[aiTier].credits.toLocaleString()} credits a month ` +
+            `from ${aiTierName(aiTier)}, on top of your plan's.`}
         </Typography>
       ) : null}
-      {/* A plan with a band that sells the add-on and has not bought it:
-          the one line on the meters that points at more capacity rather
-          than at an upgrade. */}
-      {!entitlements.features.aiGenerative && aiAddonSold ? (
+      {/* A plan that sells tiers and holds none: the one line on the meters
+          that points at more capacity rather than at an upgrade. */}
+      {!aiTier && tiersSold ? (
         <Typography
           variant="caption"
           color="text.secondary"
           sx={{ display: 'block', mt: -1.5, mb: 2 }}
         >
-          {`Generate pages, emails, campaigns and more with ${aiAddonName()}, ` +
-            `and add ${AI_ADDON_CREDITS_PER_MONTH[plan].toLocaleString()} ` +
-            'credits a month to this pool: '}
+          {`Need more? An ${aiAddonName()} tier adds ` +
+            `${AI_TIERS.spark.credits.toLocaleString()} to ` +
+            `${AI_TIERS.studio.credits.toLocaleString()} credits a month to this pool: `}
           <Link href={`${billingHref ?? ''}#addons`} color="primary" underline="hover">
-            {`Add ${aiAddonName()}`}
+            {'Choose a tier'}
           </Link>
           {' in Billing → Plans.'}
         </Typography>

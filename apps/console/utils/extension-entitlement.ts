@@ -20,6 +20,7 @@ import {
   listPluginSeatAddons,
   orgSubscriptionState,
   planGrantingFeature,
+  pluginSeatAddonSoldOn,
   resolveEffectivePlan,
   planLabelGrantingFeature,
   type ConsoleUpgradeNotice,
@@ -115,8 +116,8 @@ export function entitlementPurchasable(
   )
   if (missing.length === 0) return false
   const plan = resolveEffectivePlan(billing)
-  const sold = listPluginSeatAddons().filter(
-    (addon) => !addon.quota || (addon.quota.perUnitByPlan[plan] ?? 0) > 0,
+  const sold = listPluginSeatAddons().filter((addon) =>
+    pluginSeatAddonSoldOn(addon, plan),
   )
   return missing.every((flag) =>
     sold.some((addon) => addon.features?.includes(flag)),

@@ -88,16 +88,101 @@ export const PRICE_FIELD_MAP = Object.freeze([
   { field: 'extraCollaboratorMonthlyUsd', key: (p) => `aglyn_${p}_extra_member_yearly`, mult: 12 },
   { field: 'extraDatasetMonthlyUsd', key: (p) => `aglyn_${p}_extra_dataset`, mult: 1 },
   { field: 'extraDatasetMonthlyUsd', key: (p) => `aglyn_${p}_extra_dataset_yearly`, mult: 12 },
-  // The Aglyn AI add-on (AGL-2896/2897), minted live on 2026-09-14. Its rows
-  // are checked like every other purchasable price: a missing one is
-  // `unreadable` (a deleted or archived price is the fault it looks like),
-  // the amount, interval multiplier and active flag are compared exactly, and
-  // a live price for a plan whose code says null is drift. A row awaiting its
-  // FIRST mint may carry `unminted: true` so the gap is reported daily
-  // without turning the run red for a step only a human can take.
-  { field: 'aiAddonMonthlyUsd', key: (p) => `aglyn_${p}_ai_addon`, mult: 1 },
-  { field: 'aiAddonMonthlyUsd', key: (p) => `aglyn_${p}_ai_addon_yearly`, mult: 12 },
+  // The Aglyn AI add-on is no longer priced per plan (AGL-3965): its tiers
+  // are `AI_TIERS`, checked by `compareAiTiersToStripe` below, and the
+  // per-plan `aglyn_{plan}_ai_addon[_yearly]` prices sold before it are
+  // checked there as grandfathered prices of the tier with their band.
 ])
+
+/** The Aglyn AI tiers (AGL-3965), smallest first, as `AI_TIERS` keys them. */
+export const AI_TIER_IDS = Object.freeze(['spark', 'boost', 'plus', 'max', 'ultra', 'studio'])
+
+/**
+ * Which tier each plan's pre-AGL-3965 AI add-on price is: the tier with the
+ * same price and band (`LEGACY_AI_ADDON_TIER_BY_PLAN`).
+ */
+export const LEGACY_AI_ADDON_TIER_BY_PLAN = Object.freeze({
+  starter: 'spark',
+  pro: 'boost',
+  business: 'plus',
+  scale: 'max',
+  advanced: 'ultra',
+  agency: 'studio',
+})
+
+/**
+ * Compare the Aglyn AI tiers in code against Stripe live (AGL-3965).
+ *
+ * - `aglyn_ai_{tier}` = `monthlyUsd`, `aglyn_ai_{tier}_yearly` = `yearlyUsd`,
+ *   compared exactly with the active flag. A tier price Stripe does not carry
+ *   yet is `unminted`: reported on every run, never fatal, because minting it
+ *   is a step only a human takes (`setup-stripe.mjs`).
+ * - A legacy `aglyn_{plan}_ai_addon[_yearly]` price still active must charge
+ *   what its tier charges — that equality is what lets the migration move an
+ *   item to the tier without moving anyone's bill. Absent (archived after
+ *   the migration) is the expected end state.
+ *
+ * @param tiers - parsed `AI_TIERS` (tier → { monthlyUsd, yearlyUsd, credits })
+ * @param stripe - `indexStripePrices` output
+ */
+export function compareAiTiersToStripe(tiers, stripe) {
+  const verdicts = []
+  if (!AI_TIER_IDS.every((id) => tiers?.[id])) {
+    return [{ status: 'unreadable', key: 'ai-tiers', detail: 'AI_TIERS could not be parsed' }]
+  }
+  const compare = (lookupKey, expected) => {
+    const live = stripe[lookupKey]
+    if (!live) {
+      verdicts.push({
+        status: 'unminted',
+        key: lookupKey,
+        detail: `code says $${cents(expected)} but no live Stripe price exists yet — mint it with setup-stripe.mjs`,
+      })
+    } else if (live.amount !== cents(expected)) {
+      verdicts.push({ status: 'differs', key: lookupKey, detail: `code $${cents(expected)} vs Stripe $${live.amount}` })
+    } else if (!live.active) {
+      verdicts.push({
+        status: 'differs',
+        key: lookupKey,
+        detail: `amount agrees ($${cents(expected)}) but the Stripe price is INACTIVE — checkout would fail`,
+      })
+    } else {
+      verdicts.push({ status: 'in-sync', key: lookupKey, detail: `$${cents(expected)}` })
+    }
+  }
+  for (const id of AI_TIER_IDS) {
+    compare(`aglyn_ai_${id}`, tiers[id].monthlyUsd)
+    compare(`aglyn_ai_${id}_yearly`, tiers[id].yearlyUsd)
+    if (cents(tiers[id].yearlyUsd) !== cents(tiers[id].monthlyUsd * 12)) {
+      verdicts.push({
+        status: 'differs',
+        key: `ai-tier:${id}:yearly`,
+        detail: `yearly $${tiers[id].yearlyUsd} is not monthly $${tiers[id].monthlyUsd} × 12`,
+      })
+    }
+  }
+  for (const [plan, id] of Object.entries(LEGACY_AI_ADDON_TIER_BY_PLAN)) {
+    for (const [suffix, expected] of [
+      ['', tiers[id].monthlyUsd],
+      ['_yearly', tiers[id].yearlyUsd],
+    ]) {
+      const lookupKey = `aglyn_${plan}_ai_addon${suffix}`
+      const live = stripe[lookupKey]
+      if (!live || !live.active) {
+        verdicts.push({ status: 'in-sync', key: lookupKey, detail: 'retired (no active legacy price)' })
+      } else if (live.amount !== cents(expected)) {
+        verdicts.push({
+          status: 'differs',
+          key: lookupKey,
+          detail: `grandfathered at $${live.amount} but its tier (${id}) charges $${cents(expected)} — the migration would move a bill`,
+        })
+      } else {
+        verdicts.push({ status: 'in-sync', key: lookupKey, detail: `$${cents(expected)}, grandfathered as ${id}` })
+      }
+    }
+  }
+  return verdicts
+}
 
 /**
  * Pull one `Record<OrgPlan, …>` object literal's per-plan blocks out of TS
@@ -112,14 +197,16 @@ export const PRICE_FIELD_MAP = Object.freeze([
  *
  * @param source - the .ts file contents
  * @param constName - e.g. `PLAN_PRICING`
+ * @param keys - the record's keys; the plans by default, `AI_TIER_IDS` for
+ *   `AI_TIERS`
  * @returns plan → { field: number | null | boolean }
  */
-export function parsePlanRecord(source, constName) {
+export function parsePlanRecord(source, constName, keys = ALL_PLANS) {
   const start = source.indexOf(`export const ${constName}`)
   if (start === -1) return {}
   const block = source.slice(start)
   const out = {}
-  for (const plan of ALL_PLANS) {
+  for (const plan of keys) {
     const match = block.match(
       new RegExp(`\\n  ${plan}: \\{([\\s\\S]*?)\\n  \\},`),
     )

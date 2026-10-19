@@ -85,7 +85,7 @@ export const PLUGIN_DOCS = {
   aiCredits: {
     path: '/ai/ai-credits',
     title: 'AI credits',
-    excerpt: 'Everything Aglyn AI does draws AI credits from one monthly pool: what each plan includes (300 on Free), what the add-on adds, what jobs cost, the check before a job starts, and when credits come back.',
+    excerpt: 'Everything Aglyn AI does draws AI credits from one monthly pool: what each plan includes (300 on Free), what an Aglyn AI tier adds on top, what jobs cost, the check before a job starts, and when credits come back.',
   },
   aiCrm: {
     path: '/ai/crm-by-ai',
@@ -710,7 +710,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#from-a-brief': 'From a brief',
   },
   aiCreate: {
-    '#without-the-add-on': 'Without the add-on',
+    '#without-the-add-on': 'On every plan',
   },
   aiCredits: {
     '#before-a-job-starts': 'Before a job starts',
