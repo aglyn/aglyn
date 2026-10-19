@@ -37,6 +37,9 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     val splash = installSplashScreen()
     super.onCreate(savedInstanceState)
+    // The window under the app is the splash's own ground (light, or dark at night, resolved now), so nothing else (the
+    // launcher behind a not-yet-drawn window) shows between the splash leaving and the first frame (P14).
+    window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(getColor(R.color.aglyn_splash_ground)))
     enableEdgeToEdge()
     val services = (application as AglynApplication).services
     // The splash stays up until the auth state is known, then hands over with the spec's exit (AGL-3934).
