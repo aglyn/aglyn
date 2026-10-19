@@ -154,8 +154,16 @@
       "why": "Name-search token normalizers, so an app list search matches the console's search index (AGL-3621)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/native-themes.ts",
+      "why": "The native apps' themes, accents, swatches and densities from the Native App Figma variables, and the accent and preview derivations (AGL-3950); no imports at all."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/notification-sounds.ts",
       "why": "The notification sounds a person picks from, with each platform's file name, so the apps' pickers and the push payload name the console's sounds; no imports at all."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/org-role-grants.ts",
+      "why": "The org permission catalog and each role's default grants, with the resolver the console's resolveOrgPermissions mirrors, so native gates match the console (AGL-3950); no imports at all."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/organizations.ts",
@@ -300,6 +308,10 @@
     {
       "path": "libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts",
       "why": "Reached by enabled-plugins: the generated first-party catalog rows; every other import is type-only (AGL-3671)."
+    },
+    {
+      "path": "libs/plugins/ai/src/lib/model/ai-permissions.ts",
+      "why": "The AI plugin's org catalog keys and their role defaults, assembled into the contracts' ORG_ROLE_GRANTS (AGL-3950); type-only imports."
     },
     {
       "path": "libs/plugins/ai/src/lib/model/ai-products-bulk.ts",

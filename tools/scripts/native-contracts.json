@@ -814,6 +814,55 @@
         "PRINTER_STATE_LABELS",
         "PRINTER_OFFLINE_AFTER_MS"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/native-themes.ts": {
+      "types": [
+        "ThemePaletteId",
+        "ThemeColors",
+        "ThemeSource",
+        "ThemePalette",
+        "ThemeAccent",
+        "ThemeNamedAccent",
+        "ThemeAccentSwatch",
+        "ThemeDensityId",
+        "ThemeDensity",
+        "ThemePreview"
+      ],
+      "values": [
+        "THEME_PALETTES",
+        "THEME_ACCENTS",
+        "THEME_ACCENT_SWATCHES",
+        "THEME_DENSITIES",
+        "THEME_PREVIEWS",
+        "THEME_DARK_RAIL_SEEDS",
+        "THEME_TEXT_CONTRAST",
+        "THEME_NON_TEXT_CONTRAST"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/org-role-grants.ts": {
+      "types": [
+        "OrgRoleName",
+        "OrgPermissionEntry",
+        "OrgRoleGrants",
+        "OrgPermissionDeclaration",
+        "OrgPermissionLayer"
+      ],
+      "values": [
+        "ORG_ROLE_GRANTS",
+        "ORG_ROLE_NAMES"
+      ]
+    }
+  },
+  "assembled": {
+    "ORG_ROLE_GRANTS": {
+      "$comment": "The core catalog and grants, with every plugin's declared org catalog keys (assembleOrgRoleGrants). apps/console/specs/native-org-role-grants.spec.ts holds this to the console's DEFAULT_ROLE_PERMISSIONS once the plugins' declarations have registered.",
+      "with": "assembleOrgRoleGrants",
+      "collect": [
+        "AI_ORG_PERMISSIONS"
+      ],
+      "parts": [
+        "libs/plugins/ai/src/lib/model/ai-permissions.ts"
+      ]
     }
   },
   "ints": [
@@ -861,6 +910,31 @@
     "ScreenTrafficRow.total",
     "SeoAuditReport.skipped",
     "SeoPageReport.score",
+    "ThemeDensity.controlHeight",
+    "ThemeDensity.listRowHeight",
+    "ThemeDensity.phoneRowHeight",
+    "ThemeDensity.radius2xl",
+    "ThemeDensity.radiusFull",
+    "ThemeDensity.radiusLg",
+    "ThemeDensity.radiusMd",
+    "ThemeDensity.radiusSm",
+    "ThemeDensity.radiusXl",
+    "ThemeDensity.radiusXs",
+    "ThemeDensity.rowHeight",
+    "ThemeDensity.space10",
+    "ThemeDensity.space12",
+    "ThemeDensity.space16",
+    "ThemeDensity.space2",
+    "ThemeDensity.space20",
+    "ThemeDensity.space24",
+    "ThemeDensity.space32",
+    "ThemeDensity.space4",
+    "ThemeDensity.space40",
+    "ThemeDensity.space48",
+    "ThemeDensity.space6",
+    "ThemeDensity.space64",
+    "ThemeDensity.space8",
+    "ThemeDensity.titlebarHeight",
     "WhereUsedResult.legacyCount",
     "WhereUsedResult.total"
   ],
@@ -25772,6 +25846,232 @@
             "state": "loaded",
             "chargesEnabled": "true",
             "accountLivemode": "x"
+          }
+        ]
+      ]
+    },
+    "deriveAccent": {
+      "module": "libs/aglyn/src/lib/app-utils/native-themes.ts",
+      "args": [
+        [
+          "#00b0ff"
+        ],
+        [
+          "#7a5cf0"
+        ],
+        [
+          "#e040fb"
+        ],
+        [
+          "#3fa77a"
+        ],
+        [
+          "#0073ae"
+        ],
+        [
+          "#2e7d5b"
+        ],
+        [
+          "#c2571a"
+        ],
+        [
+          "#087e8b"
+        ],
+        [
+          "#ffab40"
+        ],
+        [
+          "#4caf50"
+        ],
+        [
+          "#d2462f"
+        ],
+        [
+          "#404c5c"
+        ],
+        [
+          "#ffffff"
+        ],
+        [
+          "#000000"
+        ],
+        [
+          "#00B0FF"
+        ],
+        [
+          "blue"
+        ],
+        [
+          "#12345"
+        ]
+      ]
+    },
+    "deriveThemeFromPreview": {
+      "module": "libs/aglyn/src/lib/app-utils/native-themes.ts",
+      "args": [
+        [
+          {
+            "rail": "#0b3954",
+            "surface": "#f2f8fb",
+            "canvas": "#e3eef4",
+            "accent": "#087e8b"
+          },
+          "#0b3954"
+        ],
+        [
+          {
+            "rail": "#e9dccb",
+            "surface": "#fffaf3",
+            "canvas": "#f5ece0",
+            "accent": "#c2571a"
+          },
+          "#7a5634"
+        ]
+      ]
+    },
+    "themeContrast": {
+      "module": "libs/aglyn/src/lib/app-utils/native-themes.ts",
+      "args": [
+        [
+          "#ffffff",
+          "#000000"
+        ],
+        [
+          "#00b0ff",
+          "#ffffff"
+        ],
+        [
+          "#0073ae",
+          "#ffffff"
+        ],
+        [
+          "#e040fb",
+          "#1e0424"
+        ],
+        [
+          "bad",
+          "#ffffff"
+        ]
+      ]
+    },
+    "themeLerp": {
+      "module": "libs/aglyn/src/lib/app-utils/native-themes.ts",
+      "args": [
+        [
+          "#e3eef4",
+          "#0b3954",
+          0.25
+        ],
+        [
+          "#000000",
+          "#ffffff",
+          0.5
+        ],
+        [
+          "#161c21",
+          "#7a5634",
+          0.22
+        ]
+      ]
+    },
+    "themePalette": {
+      "module": "libs/aglyn/src/lib/app-utils/native-themes.ts",
+      "args": [
+        [
+          "night"
+        ],
+        [
+          "nope"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "isThemeColor": {
+      "module": "libs/aglyn/src/lib/app-utils/native-themes.ts",
+      "args": [
+        [
+          "#00b0ff"
+        ],
+        [
+          "#00b0ff29"
+        ],
+        [
+          "00b0ff"
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "rolePermissions": {
+      "module": "libs/aglyn/src/lib/app-utils/org-role-grants.ts",
+      "leadingValue": "ORG_ROLE_GRANTS",
+      "args": [
+        [
+          "owner",
+          null,
+          null
+        ],
+        [
+          "admin",
+          null,
+          null
+        ],
+        [
+          "editor",
+          null,
+          null
+        ],
+        [
+          "viewer",
+          null,
+          null
+        ],
+        [
+          null,
+          null,
+          null
+        ],
+        [
+          "guest",
+          null,
+          null
+        ],
+        [
+          "editor",
+          {
+            "permissions": {
+              "hosts.create": true,
+              "data.manage": false,
+              "ai.generate": false,
+              "unknown.key": true
+            }
+          },
+          null
+        ],
+        [
+          "viewer",
+          {
+            "permissions": {
+              "billing.view": true
+            }
+          },
+          {
+            "permissions": {
+              "billing.view": false,
+              "ai.use": true
+            }
+          }
+        ],
+        [
+          "admin",
+          null,
+          {
+            "permissions": {
+              "hosts.delete": false
+            }
           }
         ]
       ]
