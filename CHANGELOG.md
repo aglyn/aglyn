@@ -50,11 +50,14 @@ content on the marketing site and is written separately.
 
 ### Documentation
 
+- **ai:** the Start with AI guide's Sites you like section, marked rolling out ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975))
+- **ai:** re-shoot the Style step with the new cards ([AGL-3985](https://linear.app/aglyn/issue/AGL-3985))
 - **ai:** the import job's resumable wave read and page names, in AI_JOBS.md ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976))
 
 <details>
-<summary>Also in this release: 3 test, 1 chore</summary>
+<summary>Also in this release: 3 test, 2 chore</summary>
 
+- **release:** v1.0.0-beta.272 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **native:** production-shaped seed workspace and list tests on both apps ([AGL-3993](https://linear.app/aglyn/issue/AGL-3993))
 - **native:** spell SectionTabs' comment the American way, drop unused tab imports ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **console:** the egress sweep skips fixtures folders, as its own doc says ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976))
