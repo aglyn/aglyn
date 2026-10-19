@@ -119,9 +119,13 @@ public struct AglynWorkspaceTile: View {
     size == AglynShellMetrics.tile ? AglynShellMetrics.tileRadius : size * AglynShellMetrics.tileRadius / AglynShellMetrics.tile
   }
 
+  /// A logo's box on the plate (Figma Rail/Workspace tile, Type=Logo: 22 on 32 Compact, 28 on 40 Touch), so a mark keeps
+  /// the plate's margin round it rather than filling the tile; any other size keeps the proportion.
+  private var logoBox: CGFloat { (size * AglynShellMetrics.tileLogo / AglynShellMetrics.tile).rounded() }
+
   public var body: some View {
     ZStack(alignment: .topTrailing) {
-      AglynBrandPicture(logoURL, darkURL: darkLogoURL, size: size, cornerRadius: radius) { initials }
+      AglynBrandPicture(logoURL, darkURL: darkLogoURL, size: logoBox, cornerRadius: radius * logoBox / size) { initials }
         .frame(width: size, height: size)
         .background(
           RoundedRectangle(cornerRadius: radius, style: .continuous)
