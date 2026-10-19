@@ -41,7 +41,9 @@ struct SitesScreen: View {
         list(selectable: false)
         .sheet(isPresented: $creating) { CreateSiteSheet(context: context, orgID: orgID) }
         .task(id: orgID) {
-          if startNew && canCreate { creating = true }
+          // Create new's Site and the site switcher's Create site land here; the sheet says first when the role or the
+          // plan stops it, as the console's dialog does.
+          if startNew { creating = true }
           model.start(context.firestore, uid: context.uid, orgID: orgID)
         }
       } else {
@@ -307,9 +309,49 @@ struct CreateSiteSheet: View {
   @State private var edited = false
   @State private var suggestions: [String] = []
 
+  /// What the create would refuse anyway, said first (the console's dialog): nil while unknown or when nothing stops it.
+  @State private var blocked: CreateSiteBlock?
+
   private var valid: Bool { !name.trimmed.isEmpty && isValidSubdomain(subdomain) }
 
   var body: some View {
+    if let blocked {
+      blockedSheet(blocked)
+    } else {
+      form.task(id: orgID) { blocked = await createSiteBlock(context, orgID: orgID) }
+    }
+  }
+
+  /// The console's blocked dialog: the reason, Close, and Go to Billing when the plan is what stops it.
+  private func blockedSheet(_ block: CreateSiteBlock) -> some View {
+    NavigationStack {
+      Form {
+        Section { AglynNotice(block.message, tone: block == .role ? .warning : .info) }
+      }
+      .formStyle(.grouped)
+      .navigationTitle("Create a site")
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+        if block != .role {
+          ToolbarItem(placement: .confirmationAction) {
+            Button("Go to Billing") {
+              dismiss()
+              context.navigate("core.billing")
+            }
+            .keyboardShortcut(.defaultAction)
+            .accessibilityIdentifier("create-site-billing")
+          }
+        }
+      }
+    }
+    .aglynSheetMinimumSize(width: 420, height: 220)
+    .accessibilityIdentifier("create-site-blocked")
+  }
+
+  private var form: some View {
     AglynActionSheet(
       "Create a site", message: "You can connect your own domain later.", confirmLabel: "Create site",
       confirmEnabled: valid, busy: runner.busy, error: runner.error, onCancel: { dismiss() },
@@ -327,9 +369,12 @@ struct CreateSiteSheet: View {
       .accessibilityIdentifier("site-name")
       LabeledContent {
         HStack(spacing: 2) {
+          // One label: the row's ("Address"); the field draws none of its own (it read "Address Address" on the Mac).
           TextField(
-            "Address", text: Binding(get: { subdomain }, set: { edited = true; subdomain = cleanSubdomainInput($0) })
+            "Address", text: Binding(get: { subdomain }, set: { edited = true; subdomain = cleanSubdomainInput($0) }),
+            prompt: Text("your-site")
           )
+          .labelsHidden()
           .autocorrectionDisabled()
           #if os(iOS)
             .textInputAutocapitalization(.never)
@@ -377,6 +422,59 @@ struct CreateSiteSheet: View {
       }
     }
   }
+}
+
+/// Why Create site cannot go ahead, as the console's dialog says it before the form (`create-host-dialog`): the role
+/// first, then the plan's site limit.
+enum CreateSiteBlock: Equatable {
+  case role
+  case limit(Int)
+
+  var message: String {
+    switch self {
+    case .role:
+      "Your role in this workspace does not allow creating sites. Ask a workspace owner or admin to create it, or to "
+        + "change your role."
+    case .limit(let limit):
+      "Your plan includes \(limit == 1 ? "one site" : "\(limit) sites"), and this workspace is using all of them. "
+        + "Upgrade or add extra sites from Billing."
+    }
+  }
+}
+
+/// The console's check before Create site: the role may create sites (`hosts.create`), and the workspace's sites (its
+/// `hosts` directory) are under the plan's `hostLimit` (`checkQuota`). Nil when nothing stops it or it cannot tell; the
+/// route still refuses what it must.
+@MainActor
+func createSiteBlock(_ context: NativePluginContext, orgID: String) async -> CreateSiteBlock? {
+  if let role = context.orgRole, !siteCreatorRoles.contains(role) { return .role }
+  guard let entitlements = try? await context.api.request("/api/orgs/entitlements", query: [("orgId", orgID)]),
+    let limit = entitlements["quotas"]?["hostLimit"]?.numberValue
+  else { return nil }
+  let mapped: Int? = await withCheckedContinuation { continuation in
+    var listener: FirestoreListening?
+    var answered = false
+    listener = context.firestore.listenDocument(["orgs", orgID]) { result in
+      guard !answered else { return }
+      answered = true
+      listener?.remove()
+      let hosts = (try? result.get())?.data["hosts"] as? [String: Any]
+      continuation.resume(returning: hosts.map { $0.values.filter { !($0 is NSNull) && ($0 as? Bool) != false }.count })
+    }
+  }
+  // The route counts the larger of the workspace's sites and its directory (`claimHostForOrg`); a workspace whose
+  // directory lags its sites (a seeded one, an older one) is still stopped before the click, not after it.
+  let counted = try? await context.firestore.count(
+    FirestoreQuery(["hosts"], filters: [ListQueryConstraint(path: "orgId", op: .equal, value: orgID)]))
+  guard mapped != nil || counted != nil else { return nil }
+  return siteLimitBlock(limit: Int(limit), mapped: mapped, counted: counted ?? nil)
+}
+
+/// The route's count of a workspace's sites against its plan's `hostLimit`: the larger of the sites that name the
+/// workspace and its `hosts` directory; nil while there is room.
+func siteLimitBlock(limit: Int, mapped: Int?, counted: Int?) -> CreateSiteBlock? {
+  let used = max(mapped ?? 0, counted ?? 0)
+  return used >= limit ? .limit(limit) : nil
 }
 
 /// The picked site's own overview screen.

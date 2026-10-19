@@ -276,5 +276,12 @@ public struct AglynSidebarCount: View {
       .frame(minWidth: 18, minHeight: 18)
       .background(Capsule().fill(AglynColor.primary))
       .accessibilityLabel("\(count) unread")
+      .preference(key: AglynCountKey.self, value: count)
   }
+}
+
+/// The count a row's count view shows (Inbox's unread), handed up so a phone's tab can wear it as its badge.
+public struct AglynCountKey: PreferenceKey {
+  public static let defaultValue: Int? = nil
+  public static func reduce(value: inout Int?, nextValue: () -> Int?) { value = nextValue() ?? value }
 }

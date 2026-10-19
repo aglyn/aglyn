@@ -27,15 +27,23 @@ public struct WorkspaceSite: Equatable, Hashable, Identifiable, Sendable {
   /// The site's favicon as the membership row mirrors it (`favicon`, the host's `seo.favicon`): a reference, a CDN path
   /// or an address, shown through `mediaPreviewURL` as the console's `HostIcon` resolves it.
   public let favicon: String?
+  /// The site's custom domain, as the membership row mirrors it (`cname`); older rows lack it.
+  public let cname: String?
 
-  public init(id: String, orgID: String, name: String, subdomain: String, role: String, favicon: String? = nil) {
+  public init(
+    id: String, orgID: String, name: String, subdomain: String, role: String, favicon: String? = nil, cname: String? = nil
+  ) {
     self.id = id
     self.orgID = orgID
     self.name = name
     self.subdomain = subdomain
     self.role = role
     self.favicon = favicon
+    self.cname = cname
   }
+
+  /// The address a person knows the site by: its custom domain, else its platform address (the Sites list's rule).
+  public var shownAddress: String { cname ?? HostStatus.siteAddress(subdomain) ?? subdomain }
 }
 
 /// What a workspace's own document says about how it looks: its logos (`logoUrl`, `logoDarkUrl`), its brand color
@@ -442,7 +450,8 @@ public final class WorkspaceStore {
       id: doc.id, orgID: doc.string("orgId") ?? "",
       name: doc.string("displayName") ?? (subdomain.isEmpty ? doc.id : subdomain),
       subdomain: subdomain, role: doc.string("role") ?? "",
-      favicon: doc.string("favicon").flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 })
+      favicon: doc.string("favicon").flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 },
+      cname: doc.string("cname").flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 })
   }
 
   /// Which org and site to show, given what is remembered and what exists.

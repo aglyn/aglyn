@@ -18,7 +18,7 @@
  */
 
 import { createMemoryMarketplaceStore } from '../testing/memory-store'
-import { onOrderFulfilled, onStockMoved } from './intake'
+import { onOrderFulfilled, onStockMoved, type OrderFulfilledEnvelope } from './intake'
 import { emptyConnection, marketplaceOrderDocId, type StoredMarketplaceOrder } from './store'
 
 const HOST = 'host1'
@@ -50,7 +50,7 @@ const record = (overrides: Partial<StoredMarketplaceOrder> = {}): StoredMarketpl
   ...overrides,
 })
 
-const fulfilled = (channel = 'marketplace', recordId = 'rec-1') => ({
+const fulfilled = (channel = 'marketplace', recordId = 'rec-1'): OrderFulfilledEnvelope & { payload: Required<OrderFulfilledEnvelope['payload']> } => ({
   id: 'evt1',
   event: 'order.fulfilled',
   hostId: HOST,
@@ -62,6 +62,8 @@ const fulfilled = (channel = 'marketplace', recordId = 'rec-1') => ({
       carrier: 'USPS',
       trackingNumber: ' 9400 ',
       trackingUrl: null,
+      labelUrl: null,
+      labelCostCents: null,
       at: '2026-10-07T12:00:00.000Z',
     },
   },
@@ -95,14 +97,14 @@ describe('order events (AGL-3638)', () => {
     const id = marketplaceOrderDocId(HOST, 'faire', 'bo_1')
     await d.store.createOrder(id, record({ marketplace: 'faire', externalOrderId: 'bo_1' }))
     const event = fulfilled()
-    ;(event.payload.fulfillment as Record<string, unknown>).labelCostCents = 845
+    event.payload.fulfillment.labelCostCents = 845
     expect(await onOrderFulfilled(d, event)).toBe('queued')
     expect(d.store.orders.get(id)!.shipments['ful1'].shippingCostCents).toBe(845)
 
     const other = marketplaceOrderDocId(HOST, 'faire', 'bo_2')
     await d.store.createOrder(other, record({ marketplace: 'faire', externalOrderId: 'bo_2', recordId: 'rec-2' }))
     const fractional = fulfilled('marketplace', 'rec-2')
-    ;(fractional.payload.fulfillment as Record<string, unknown>).labelCostCents = 8.45
+    fractional.payload.fulfillment.labelCostCents = 8.45
     await onOrderFulfilled(d, fractional)
     expect(d.store.orders.get(other)!.shipments['ful1'].shippingCostCents).toBeNull()
   })
@@ -114,7 +116,7 @@ describe('order events (AGL-3638)', () => {
     const id = marketplaceOrderDocId(HOST, 'faire', 'bo_3')
     await d.store.createOrder(id, record({ marketplace: 'faire', externalOrderId: 'bo_3', recordId: 'rec-3' }))
     const free = fulfilled('marketplace', 'rec-3')
-    ;(free.payload.fulfillment as Record<string, unknown>).labelCostCents = 0
+    free.payload.fulfillment.labelCostCents = 0
     expect(await onOrderFulfilled(d, free)).toBe('queued')
     expect(d.store.orders.get(id)!.shipments['ful1'].shippingCostCents).toBe(0)
   })

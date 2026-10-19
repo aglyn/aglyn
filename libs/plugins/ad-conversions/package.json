@@ -36,8 +36,14 @@
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
+    "@aglyn/plugins-commerce": "1.0.0-beta.270",
     "@mui/material": "^9.3.1",
     "react": "^19.2.8"
+  },
+  "peerDependenciesMeta": {
+    "@aglyn/plugins-commerce": {
+      "optional": true
+    }
   },
   "sideEffects": false,
   "description": "Server-side conversion events for a site owner's own ad accounts: the Meta Conversions API, the TikTok Events API and the Pinterest Conversions API, consent-gated and de-duplicated against the browser tags."

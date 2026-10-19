@@ -114,6 +114,13 @@ struct OneBoxCatalog {
     return text.isEmpty ? emptySections : searchSections(text, perGroup: 5, seeAll: true)
   }
 
+  /// The title bar's dropdown (Figma Search/Dropdown, Typing 118:15773): the best match of each group, then "See all
+  /// results", so the whole answer fits under the field; the rest is one Enter away on the results screen.
+  var dropdownSections: [OneBoxSection] {
+    let text = box.query.trimmingCharacters(in: .whitespacesAndNewlines)
+    return text.isEmpty ? emptySections : searchSections(text, perGroup: 1, seeAll: true)
+  }
+
   /// Focused, nothing typed: the account's recent places and what it starred (Figma "Empty" 118:15883).
   var emptySections: [OneBoxSection] {
     var out: [OneBoxSection] = []
@@ -467,7 +474,7 @@ struct OneBoxDropdown: View {
 
   var body: some View {
     let box = navigation.search
-    let sections = OneBoxCatalog(model: model, navigation: navigation, box: box).sections
+    let sections = OneBoxCatalog(model: model, navigation: navigation, box: box).dropdownSections
     let typing = !box.query.trimmingCharacters(in: .whitespaces).isEmpty
     let scope = ShellScope(model: model, navigation: navigation)
     VStack(spacing: 0) {
@@ -552,7 +559,10 @@ struct TitleBarSearch: View {
     .help("Search or jump to (⌘K)")
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("titlebar-search")
-    .onChange(of: focused) { _, now in if now { navigation.showOneBox = true } }
+    .onChange(of: focused) { _, now in
+      guard now, !navigation.showOneBox else { return }
+      if Self.deliberateFocus { navigation.showOneBox = true } else { focused = false }
+    }
     .onChange(of: navigation.showOneBox, initial: true) { _, now in
       if now != focused { focused = now }
       if !now { navigation.search.reset() }
@@ -566,7 +576,7 @@ struct TitleBarSearch: View {
   }
 
   private var flat: [OneBoxItem] {
-    OneBoxCatalog(model: model, navigation: navigation, box: navigation.search).sections.flatMap(\.items)
+    OneBoxCatalog(model: model, navigation: navigation, box: navigation.search).dropdownSections.flatMap(\.items)
   }
 
   private func move(down: Bool) -> KeyPress.Result {
@@ -588,6 +598,23 @@ struct TitleBarSearch: View {
   private func close() {
     navigation.showOneBox = false
     focused = false
+  }
+
+  /// Whether the caret reached the field because a person put it there: a click, or Tab from the field before. A Mac
+  /// also hands the window's focus back to its first field when a popover or sheet closes (Esc on the site switcher
+  /// did); that opens nothing and leaves the caret out of the search (⌘K opens it on its own).
+  private static var deliberateFocus: Bool {
+    #if os(macOS)
+      guard let event = NSApp.currentEvent else { return false }
+      switch event.type {
+      // A click in the window itself: a click in a popover (the site switcher's Create site) only hands focus back.
+      case .leftMouseDown, .leftMouseUp, .rightMouseDown, .otherMouseDown: return event.window != nil && event.window === NSApp.mainWindow
+      case .keyDown: return event.keyCode == 48  // Tab
+      default: return false
+      }
+    #else
+      return true
+    #endif
   }
 }
 

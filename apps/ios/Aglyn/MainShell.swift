@@ -116,6 +116,12 @@ struct ShellChrome: View {
   #endif
   @Bindable var strip: TabStrip
   @State private var unreadFeed = NotificationFeed()
+  #if os(macOS)
+    /// The window this chrome draws, and whether it is full screen: there its own buttons are gone, and so is the room
+    /// the tab row keeps for them (P1).
+    @State private var window: NSWindow?
+    @State private var fullScreen = false
+  #endif
 
   #if os(macOS)
     static let tabRow: CGFloat = 34
@@ -125,21 +131,31 @@ struct ShellChrome: View {
     static let toolRow: CGFloat = 48
   #endif
 
+  /// The room at the tab row's leading edge for the window's close, minimize and zoom buttons.
+  private var windowButtonsRoom: CGFloat {
+    #if os(macOS)
+      fullScreen ? 0 : AglynShellMetrics.trafficLights
+    #else
+      AglynShellMetrics.trafficLights
+    #endif
+  }
+
   var body: some View {
     @Bindable var navigation = navigation
     let unread = unreadFeed.rows?.filter { !$0.read }.count ?? 0
     VStack(spacing: 0) {
       // The tab strip: the window's buttons, the tabs (each as wide as its title, to a cap), "+".
       HStack(spacing: 4) {
-        Color.clear.frame(width: AglynShellMetrics.trafficLights, height: 1)
+        Color.clear.frame(width: windowButtonsRoom, height: 1)
         ForEach(Array(strip.tabs.enumerated()), id: \.offset) { index, tab in
           if index == 0 {
             // The pinned Home tab is the brand's mark alone (Figma Titlebar/Home tab 117:16049).
             HomeMarkTab(selected: index == strip.selected) { strip.select(index, model: model) }
               .accessibilityIdentifier("tab-0")
           } else {
+          let parts = tabTitleParts(tab, model: model)
           ChromeTab(
-            title: index == 0 ? "Home" : tabTitle(tab, model: model), systemImage: index == 0 ? "house" : "square.on.square",
+            owner: parts.owner, place: parts.place, systemImage: tabIcon(tab, model: model),
             selected: index == strip.selected, closable: index > 0
           ) {
             strip.select(index, model: model)
@@ -148,6 +164,9 @@ struct ShellChrome: View {
           }
           .accessibilityIdentifier("tab-\(index)")
           #if os(macOS)
+            // Over a tab the window does not move with the pointer, so a drag takes the tab, not the window (the tab
+            // row's empty space still moves it).
+            .onHover { inside in window?.isMovable = !inside }
             // Dragged down out of the strip, a tab becomes a window of its own.
             .gesture(
               DragGesture(minimumDistance: 12).onEnded { drag in
@@ -174,6 +193,18 @@ struct ShellChrome: View {
       #if os(macOS)
         // Double-clicking the tab row zooms the window, as a title bar does.
         .onTapGesture(count: 2) { NSApp.keyWindow?.performZoom(nil) }
+        .background(
+          WindowReader { found in
+            guard window !== found else { return }
+            window = found
+            fullScreen = found.styleMask.contains(.fullScreen)
+          })
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willEnterFullScreenNotification)) { note in
+          if note.object as? NSWindow === window { fullScreen = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willExitFullScreenNotification)) { note in
+          if note.object as? NSWindow === window { fullScreen = false }
+        }
       #endif
       .overlay(alignment: .bottom) { Rectangle().fill(AglynColor.divider).frame(height: 1) }
       // The toolbar: the rail toggle and history on the left, the bell, Help and AI on the right, and the one search
@@ -186,9 +217,9 @@ struct ShellChrome: View {
           ) {
             withAnimation(.easeOut(duration: 0.2)) { navigation.railHidden.toggle() }
           }
-          TitleBarButton("Back", systemImage: "chevron.left", identifier: "titlebar-back") { navigation.goBack() }
+          TitleBarButton("Back", systemImage: "arrow.left", identifier: "titlebar-back") { navigation.goBack() }
             .disabled(!navigation.canGoBack)
-          TitleBarButton("Forward", systemImage: "chevron.right", identifier: "titlebar-forward") { navigation.goForward() }
+          TitleBarButton("Forward", systemImage: "arrow.right", identifier: "titlebar-forward") { navigation.goForward() }
             .disabled(!navigation.canGoForward)
           RecentPlacesMenu()
           Spacer(minLength: 0)
@@ -211,7 +242,9 @@ struct ShellChrome: View {
       }
       .padding(.horizontal, 12)
       .frame(height: Self.toolRow)
-      .overlay(alignment: .bottom) { Rectangle().fill(AglynColor.divider).frame(height: 1) }
+      // The hairline sits under the toolbar row, not inside it: Figma's Mac/Titlebar 12:910 is 34 + 44 + 1 = 79 points
+      // (iPad 40 + 48 + 1), and the content starts under it.
+      Rectangle().fill(AglynColor.divider).frame(height: 1)
     }
     .background(AglynColor.titlebar)
     .modifier(WindowDragArea())
@@ -289,8 +322,10 @@ struct ShellChrome: View {
           view = current.superview
         }
         guard let bar = button.superview else { continue }
-        let row = ShellChrome.tabRow
-        let y = bar.isFlipped ? (row - button.frame.height) / 2 : bar.bounds.height - row / 2 - button.frame.height / 2
+        // Centred on the tab row, measured from the window's top edge rather than the title bar view's own height,
+        // which grows when anything asks the window for a toolbar (P1: the buttons sat 8 points low).
+        let rowCentre = bar.convert(NSPoint(x: 0, y: window.frame.height - ShellChrome.tabRow / 2), from: nil)
+        let y = (rowCentre.y - button.frame.height / 2).rounded()
         let origin = NSPoint(x: 14 + CGFloat(index) * 20, y: y)
         if button.frame.origin != origin { button.setFrameOrigin(origin) }
       }
@@ -360,7 +395,10 @@ struct HomeMarkTab: View {
 
 /// One tab in the strip: as wide as its title up to a cap, the title cut with an ellipsis past it.
 struct ChromeTab: View {
-  let title: String
+  /// The workspace or site the tab stands in; it gives way first when the tab is narrow.
+  let owner: String?
+  /// The screen in use, always shown whole.
+  let place: String
   let systemImage: String
   let selected: Bool
   let closable: Bool
@@ -368,25 +406,34 @@ struct ChromeTab: View {
   let close: () -> Void
   @State private var hovered = false
 
+  /// Figma Titlebar/Tab 8:111: a 14-point icon, 13-point title (semibold in use), × at rest, 10-point padding, 6 between.
   var body: some View {
+    let font = Font.system(size: 13, weight: selected ? .semibold : .regular)
     HStack(spacing: 6) {
-      Image(systemName: systemImage).font(.system(size: AglynShellMetrics.rowText - 2))
+      Image(systemName: systemImage).font(.system(size: 12))
+        .frame(width: 14, height: 14)
         .foregroundStyle(selected ? AglynColor.accentIcon : AglynColor.secondaryText)
-      Text(title).font(.system(size: AglynShellMetrics.rowText - 1, weight: selected ? .semibold : .regular))
-        .foregroundStyle(selected ? AglynColor.textPrimary : AglynColor.secondaryText)
-        .lineLimit(1).truncationMode(.tail)
+      HStack(spacing: 0) {
+        if let owner {
+          Text("\(owner) — ").lineLimit(1).truncationMode(.tail).layoutPriority(0)
+        }
+        Text(place).lineLimit(1).fixedSize().layoutPriority(1)
+      }
+      .font(font)
+      .foregroundStyle(selected ? AglynColor.textPrimary : AglynColor.secondaryText)
       if closable {
         Button(action: close) {
           Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)).foregroundStyle(AglynColor.textTertiary)
+            .frame(width: 12, height: 12)
         }
         .buttonStyle(.plain)
-        .opacity(selected || hovered ? 1 : 0)
         .accessibilityLabel("Close tab")
       }
     }
     .padding(.horizontal, 10)
     .frame(height: AglynShellMetrics.barButton)
-    .frame(maxWidth: 200, alignment: .leading)
+    // As wide as its title, to a cap; past it the owner truncates and the screen stays whole.
+    .frame(maxWidth: 260, alignment: .leading)
     .fixedSize(horizontal: true, vertical: false)
     .background(
       RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
@@ -1020,6 +1067,8 @@ struct RecentPlacesMenu: View {
 struct PhoneShell: View {
   @Environment(AppModel.self) private var model
   @Bindable var navigation: ShellNavigation
+  /// A tab's count from its row's count view (Inbox's unread), worn as the tab's badge (Figma Phone/Tab bar 22:499).
+  @State private var counts: [String: Int] = [:]
 
   /// The tabs for where the person stands: the busiest area is Orders for a store, Pages for a site without one, and
   /// Sites for the whole workspace.
@@ -1039,6 +1088,33 @@ struct PhoneShell: View {
 
   /// The centre tab's tag: never a section of its own.
   static let createTab = ShellSection.plugin("shell.create")
+
+  /// The manifest row a tab opens ("inbox"), for its count; empty for Home, Create and Menu.
+  private func tabRowID(_ section: ShellSection) -> String {
+    let scope = ShellScope(model: model, navigation: navigation)
+    return scope.mainList.groups.flatMap(\.rows).first { ShellSection.opening($0.screen, $0.params) == section }?.id ?? ""
+  }
+
+  #if os(iOS)
+    /// Figma Phone/Tab item: a grey line icon and secondary label at rest; the accent icon and primary label when in use;
+    /// a count on the accent.
+    static func styleTabBar() {
+      let item = UITabBarItemAppearance()
+      item.normal.iconColor = UIColor(AglynColor.textTertiary)
+      item.normal.titleTextAttributes = [.foregroundColor: UIColor(AglynColor.secondaryText)]
+      item.selected.iconColor = UIColor(AglynColor.primary)
+      item.selected.titleTextAttributes = [.foregroundColor: UIColor(AglynColor.textPrimary)]
+      item.normal.badgeBackgroundColor = UIColor(AglynColor.primary)
+      item.normal.badgeTextAttributes = [.foregroundColor: UIColor(AglynColor.primaryContrast)]
+      let appearance = UITabBarAppearance()
+      appearance.configureWithDefaultBackground()
+      appearance.stackedLayoutAppearance = item
+      appearance.inlineLayoutAppearance = item
+      appearance.compactInlineLayoutAppearance = item
+      UITabBar.appearance().standardAppearance = appearance
+      UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
+  #endif
 
   #if os(iOS)
   /// Create new's tile in the tab bar: a white "+" on the accent, 48 by 36 points with a 12-point radius.
@@ -1065,15 +1141,35 @@ struct PhoneShell: View {
                 // The centre tab is the filled accent "+" tile (Figma Phone/Tab bar, Create), drawn as it is.
                 Image(uiImage: tile.withRenderingMode(.alwaysOriginal)).renderingMode(.original).accessibilityLabel("Create")
               } else {
-                Label(tab.title, systemImage: tab.icon)
+                // Line icons, as Figma's tab bar (a tab bar fills its symbols unless told not to).
+                Label(tab.title, systemImage: tab.icon).environment(\.symbolVariants, .none)
               }
             #else
               Label(tab.title, systemImage: tab.icon)
             #endif
           }
+          .badge(counts[tabRowID(tab.section)] ?? 0)
           .tag(tab.section)
       }
     }
+    // The tabs' rows' count views, unseen, so each tab can wear its count.
+    .background {
+      if let context = model.context(for: navigation) {
+        ForEach(tabs.map { tabRowID($0.section) }.filter { !$0.isEmpty }, id: \.self) { rowID in
+          ForEach(model.registry.widgets(for: model.app, slot: "sidebarCount.\(rowID)")) { widget in
+            widget.make(context).id("\(widget.id):\(context.orgID ?? ""):\(context.hostID ?? "")")
+              .onPreferenceChange(AglynCountKey.self) { count in
+                MainActor.assumeIsolated { counts[rowID] = count ?? 0 }
+              }
+          }
+        }
+        .hidden()
+        .accessibilityHidden(true)
+      }
+    }
+    #if os(iOS)
+      .onAppear { PhoneShell.styleTabBar() }
+    #endif
     .sheet(isPresented: $navigation.showNotifications) {
       NotificationsPopover().environment(model).environment(navigation)
     }
@@ -1131,12 +1227,15 @@ struct PhoneTopBar: ViewModifier {
           } label: {
             Label("Search or jump to", systemImage: "magnifyingglass")
           }
+          // Grey, as Figma's top bar (22:499); the accent is for the action in use.
+          .tint(AglynColor.secondaryText)
           .accessibilityIdentifier("topbar-search")
           Button {
             navigation.showNotifications = true
           } label: {
             Label("Notifications", systemImage: "bell")
           }
+          .tint(AglynColor.secondaryText)
           .accessibilityIdentifier("topbar-bell")
           Button {
             navigation.showAccount = true
@@ -1181,10 +1280,11 @@ struct ScopeChip: View {
         Text(name).font(AglynFont.strongSubheadline).lineLimit(1)
         Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
       }
-      .padding(.horizontal, 8)
+      // Figma Phone/Scope chip 11:313: a filled sunken capsule, no border, 6 points before the picture and 12 after.
+      .padding(.leading, 6)
+      .padding(.trailing, 12)
       .padding(.vertical, 4)
-      .background(Capsule().fill(AglynColor.paper))
-      .overlay(Capsule().strokeBorder(AglynColor.divider))
+      .background(Capsule().fill(AglynColor.sunken))
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Switch, \(name)")

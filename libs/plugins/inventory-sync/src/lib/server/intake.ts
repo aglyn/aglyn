@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type { OrderEventOrder, OrderEventPayload, OrderRefundedEventPayload } from '@aglyn/plugins-commerce/contracts'
 import {
   INVENTORY_PROVIDERS,
   inventoryConnectionId,
@@ -26,9 +28,8 @@ import type { SystemAddress } from '../providers/provider'
 import type { InventoryStore, StoredOrder } from './store'
 
 /**
- * Commerce's order events, taken by name (AGL-3642) through core's plugin
- * event seam (AGL-3611). The plugin never imports commerce: each subscriber
- * restates the fields it reads of the public order view the events carry.
+ * Commerce's order events (AGL-3642), through core's plugin event seam
+ * (AGL-3611). The payload's shape comes from commerce's contracts (AGL-3980).
  *
  * These run where the event outbox is drained — the TENANT — so they only
  * write: a paid order is QUEUED for the site's connected system, and a
@@ -39,40 +40,27 @@ import type { InventoryStore, StoredOrder } from './store'
  * it there.
  */
 
-/** The public order view's fields this plugin reads. */
-export interface OrderEventOrderView {
-  id: string
-  number: number | null
-  status?: string | null
-  currency?: string | null
-  customerName?: string | null
-  customerEmail?: string | null
-  shippingAddress?: Record<string, unknown> | null
-  lineItems?: unknown
-  totals?: {
-    itemsCents?: number
-    shippingCents?: number
-    taxCents?: number
-    discountCents?: number
-    totalCents?: number | null
-  } | null
-  created?: string | null
+/** A line's fields this plugin reads: commerce's contract leaves `lineItems` untyped, so they are restated here. */
+interface OrderLineFields {
+  sku?: unknown
+  quantity?: unknown
+  name?: unknown
+  variantLabel?: unknown
+  unitAmountCents?: unknown
 }
 
-export interface OrderEnvelope<Extra = Record<string, never>> {
-  id: string
-  hostId: string
-  orgId: string | null
-  occurredAtMs: number
-  payload: { order: OrderEventOrderView } & Extra
-}
+/** An envelope as the outbox hands it over. */
+export type OrderEnvelope<Payload extends OrderEventPayload = OrderEventPayload> = Pick<
+  PluginDomainEventEnvelope<Payload>,
+  'id' | 'hostId' | 'orgId' | 'occurredAtMs' | 'payload'
+>
 
 export interface IntakeDeps {
   store: InventoryStore
   now(): number
 }
 
-const displayRefOf = (order: OrderEventOrderView): string =>
+const displayRefOf = (order: Pick<OrderEventOrder, 'id' | 'number'>): string =>
   typeof order.number === 'number' ? `#${order.number}` : `#${String(order.id).slice(0, 8)}`
 
 const cents = (value: unknown): number => {
@@ -103,20 +91,20 @@ export function systemAddress(raw: unknown): SystemAddress | null {
 }
 
 /** The order's lines that carry a SKU, and the names of those that do not. */
-export function orderLines(order: OrderEventOrderView): { lines: InventoryOrderLine[]; skipped: string[] } {
-  const items = Array.isArray(order.lineItems) ? (order.lineItems as Array<Record<string, unknown>>) : []
+export function orderLines(order: Pick<OrderEventOrder, 'lineItems'>): { lines: InventoryOrderLine[]; skipped: string[] } {
+  const items = Array.isArray(order.lineItems) ? (order.lineItems as Array<OrderLineFields | null>) : []
   const lines: InventoryOrderLine[] = []
   const skipped: string[] = []
   items.forEach((item, lineIndex) => {
-    const quantity = Math.max(0, Math.floor(Number(item?.['quantity']) || 0))
+    const quantity = Math.max(0, Math.floor(Number(item?.quantity) || 0))
     if (!quantity) return
-    const name = [item?.['name'], item?.['variantLabel']].filter(Boolean).join(' — ') || 'Item'
-    const sku = String(item?.['sku'] ?? '').trim()
+    const name = [item?.name, item?.variantLabel].filter(Boolean).join(' — ') || 'Item'
+    const sku = String(item?.sku ?? '').trim()
     if (!sku) {
       skipped.push(name)
       return
     }
-    lines.push({ lineIndex, sku, name: name.slice(0, 200), quantity, unitAmountCents: Math.max(0, cents(item?.['unitAmountCents'])) })
+    lines.push({ lineIndex, sku, name: name.slice(0, 200), quantity, unitAmountCents: Math.max(0, cents(item?.unitAmountCents)) })
   })
   return { lines, skipped }
 }
@@ -134,7 +122,7 @@ export async function onOrderPaid(deps: IntakeDeps, envelope: OrderEnvelope): Pr
   const nowMs = deps.now()
   const { lines, skipped } = orderLines(order)
   const label = INVENTORY_PROVIDERS[connection.provider].label
-  const totals = order.totals ?? {}
+  const totals: Partial<OrderEventOrder['totals']> = order.totals ?? {}
   const orderedAtMs = Date.parse(String(order.created ?? '')) || envelope.occurredAtMs || nowMs
   const handOff: StoredOrder = {
     orgId: connection.orgId,
@@ -204,7 +192,7 @@ export async function onOrderCancelled(deps: IntakeDeps, envelope: OrderEnvelope
 
 export async function onOrderRefunded(
   deps: IntakeDeps,
-  envelope: OrderEnvelope<{ refund?: { full?: boolean; lineItemIds?: number[] } }>,
+  envelope: OrderEnvelope<OrderRefundedEventPayload>,
 ): Promise<void> {
   const order = envelope.payload?.order
   if (!order?.id || !envelope.hostId) return
