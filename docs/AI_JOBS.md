@@ -885,14 +885,20 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   rule (`plan-over-free-wall`), and its re-ask gives the count to plan within and how to
   get there: a list's repeated items in one section, and no section the brief does not
   ask for. It only lowers what a plan may ask for, and no prompt line or figure changes.
-  A plan at most `AI_FREE_WALL_SETTLE_MAX_OVER` (2) sections past the wall is trimmed to
-  fit in code instead (`aiSettlePlanFreeWall`, AGL-3737), before the rules read it: the
-  live candle-shop start of 2026-10-12 planned 7 + 2 against a wall of 8 on all three
-  answers. One section goes at a time, the last of its page, from the page furthest past
-  its share (the home at / past its fewest, any other page past two), never a page's
-  opening, a section that places something, one that collects answers or says how to
-  reach the owner, or a storefront's listing parts. A plan further over, past its page
-  cap, or with a list split into sections is still re-asked.
+  A plan past the wall is trimmed to it in code instead (`aiSettlePlanFreeWall`,
+  AGL-3737, AGL-3969), before the rules read it, because a plan over its budget is the
+  model's mistake and never the member's: the live candle-shop start of 2026-10-12
+  planned 7 + 2 against a wall of 8 on all three answers, and the beta.265 eval's Free
+  candle shop asked for 11 and was refused after its re-ask. Exactly as many sections go
+  as the plan is over, so it keeps the whole budget, one at a time, the last of its page,
+  from the page furthest past its share (the home at / past its fewest, any other page
+  past two). They come from the lowest tier any page has: first a section the trim does
+  not hold; then one it holds only by its name (a contact, a call to action, a sign-up or
+  another storefront listing part); last one that places something another section
+  still places. Never a page's opening, a Shop page's product grid, a creation's only
+  placement, a home under its fewest or a page under one section. A plan past its page
+  cap, one with a list split into sections, and one where no section past the wall may
+  go are still re-asked.
 - **A page's header, navigation or footer comes off the page (AGL-3750).** Rule 2's
   `plan-layout-region-section` has one answer, "take the section off the page", so
   `aiSettlePlanLayoutRegionSections` takes it, before the rules and the Free wall read
