@@ -55,6 +55,8 @@ data class AglynEnv(
   val appCheck: String? = null,
   /** Where the published Terms of Service and Privacy Policy live (`AGLYN_LEGAL_ORIGIN`); unset is the default. */
   val legalOrigin: String? = null,
+  /** Where the documentation lives (`AGLYN_DOCS_ORIGIN`); unset is the default. */
+  val docsOrigin: String? = null,
 )
 
 data class AglynConfig(
@@ -85,6 +87,11 @@ data class AglynConfig(
   val appCheck: Boolean = true,
   /** The origin the sign-up's Terms of Service and Privacy Policy links point at, the console's `LEGAL_URLS`. */
   val legalOrigin: String = DEFAULT_LEGAL_ORIGIN,
+  /**
+   * The origin the Documentation and What's new links point at, the console's `NEXT_PUBLIC_DOCS_ORIGIN`: a self-hosted
+   * build's own documentation, never ours presented as theirs.
+   */
+  val docsOrigin: String = DEFAULT_DOCS_ORIGIN,
 ) {
   /** The domain workspace addresses sit under (`acme-inc.aglyn.com`): the console's host without its own label. */
   val workspaceDomain: String
@@ -116,9 +123,15 @@ data class AglynConfig(
     const val DEFAULT_BRAND_NAME = "Aglyn"
     /** The console's `OPERATOR_LEGAL_ORIGIN`. */
     const val DEFAULT_LEGAL_ORIGIN = "https://aglyn.com"
+    /** The console's `NEXT_PUBLIC_DOCS_ORIGIN`. */
+    const val DEFAULT_DOCS_ORIGIN = "https://docs.aglyn.com"
 
     private val ORIGIN = Regex("^(https?)://([A-Za-z0-9.-]+)(:\\d{2,5})?$")
     private val HOST_PORT = Regex("^[A-Za-z0-9.-]+:\\d{2,5}$")
+
+    /** An `https:` origin with no path, lowercased and without a trailing slash; null for anything else. */
+    internal fun httpsOrigin(value: String?): String? =
+      (value ?: "").trim().trimEnd('/').lowercase().takeIf { Regex("^https://[a-z0-9.-]+(:\\d{2,5})?$").matches(it) }
 
     /** True for the hosts a local development stack runs on. */
     fun isLocalHost(host: String): Boolean =
@@ -192,8 +205,8 @@ data class AglynConfig(
         googleDesktopClientId = clean(env.googleDesktopClientId).ifEmpty { null },
         googleDesktopClientSecret = clean(env.googleDesktopClientSecret).ifEmpty { null },
         appCheck = appCheckSetting(env.appCheck, localStack),
-        legalOrigin = clean(env.legalOrigin).trimEnd('/').lowercase()
-          .takeIf { Regex("^https://[a-z0-9.-]+(:\\d{2,5})?$").matches(it) } ?: DEFAULT_LEGAL_ORIGIN,
+        legalOrigin = httpsOrigin(env.legalOrigin) ?: DEFAULT_LEGAL_ORIGIN,
+        docsOrigin = httpsOrigin(env.docsOrigin) ?: DEFAULT_DOCS_ORIGIN,
       )
     }
   }

@@ -65,6 +65,10 @@ import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import { useOrgPlans } from '../../../hooks/use-org-plans'
 import { useOrgScope } from '../../../hooks/use-org-scope'
 import { usePinnedOrgs } from '../../../hooks/use-pinned-orgs'
+import {
+  PinnedFullDialog,
+  type PinnedOrgEntry,
+} from '../../../components/pinned-orgs-dialogs.component'
 import { useWorkspacePage } from '../../../hooks/use-workspace-page'
 import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import { usePendingInvites } from '../../../hooks/use-pending-invites'
@@ -150,7 +154,14 @@ function OrgJump() {
   const orgsComplete = !hasMoreOrgs
   const [orgClauses, setOrgClauses] = useState<ListFilterClause[]>([])
   const [orgSearch, setOrgSearch] = useState<string[]>([])
-  const { pinned: pinnedOrgIds, toggle: togglePinnedOrg } = usePinnedOrgs()
+  const {
+    pinned: pinnedOrgIds,
+    full: pinsFull,
+    toggle: togglePinnedOrg,
+    replace: replacePinnedOrg,
+  } = usePinnedOrgs()
+  // A sixth pin asks which of the five it replaces (AGL-3943).
+  const [pinning, setPinning] = useState<PinnedOrgEntry | null>(null)
   /*
    * The plan is the ORG document's, not the membership row's, so the Plan
    * filter reads each workspace's plan — only while that filter is in force —
@@ -279,17 +290,26 @@ function OrgJump() {
   // account — never on a re-render that merely changed an effect dependency's
   // identity.
   const consumedForRef = useRef<string | null>(null)
+  const currentUidRef = useRef(uid)
+  currentUidRef.current = uid
   useEffect(() => {
     // An intent on the URL already answers the question, and it outranks a
     // remembered one — it is what this visit says, not what a past one did.
     if (urlIntent) return void setStoredIntent(null)
     if (!uid || consumedForRef.current === uid) return void 0
     consumedForRef.current = uid
-    let active = true
+    // NOT cancelled on cleanup. The read happens once per account, so a
+    // result this drops is never read again, and `storedIntent` would stay
+    // `undefined` for good: the workspace provisioning below and the jump
+    // both HOLD on `undefined`, so the account sat on "0 workspaces" with its
+    // sign-up name never claimed. Any re-run of this effect while the read
+    // was in flight did that, and React's development StrictMode re-runs
+    // every effect once on mount, so locally it happened every time. The only
+    // result to discard is one for an account no longer signed in here.
     void consumeOnboardingPlanIntent(firestore, uid).then((intent) => {
-      if (active) setStoredIntent(intent)
+      if (currentUidRef.current === uid) setStoredIntent(intent)
     })
-    return () => void (active = false)
+    return undefined
   }, [firestore, uid, urlIntent])
 
   /**
@@ -713,12 +733,27 @@ function OrgJump() {
                         // The card's own action sits in its header: a pinned
                         // workspace leads the list, on every device.
                         action: (
-                          <Tooltip title={org.pinned ? 'Unpin' : 'Pin to top'}>
+                          <Tooltip
+                            title={
+                              org.pinned
+                                ? 'Unpin'
+                                : pinsFull
+                                  ? 'Pinned is full: pick one to replace'
+                                  : 'Pin to top'
+                            }
+                          >
                             <IconButton
                               aria-label={`${org.pinned ? 'Unpin' : 'Pin'} ${org.orgName ?? org.slug ?? org.$id}`}
                               aria-pressed={org.pinned}
                               color={org.pinned ? 'primary' : 'default'}
-                              onClick={() => togglePinnedOrg(org.$id)}
+                              onClick={() => {
+                                if (togglePinnedOrg(org.$id) === 'full') {
+                                  setPinning({
+                                    id: org.$id,
+                                    name: org.orgName ?? org.slug ?? org.$id,
+                                  })
+                                }
+                              }}
                             >
                               <MdiIcon
                                 path={org.pinned ? mdiPin.path : mdiPinOutline.path}
@@ -806,6 +841,18 @@ function OrgJump() {
                to put it. Landing it on its sites drops the plan exactly where
                it was most wanted. */
             destination={enterOrg}
+          />
+          <PinnedFullDialog
+            pinning={pinning}
+            pins={pinnedOrgIds.map((id) => {
+              const org = orgs.find((entry) => entry.$id === id)
+              return { id, name: org?.orgName ?? org?.slug ?? id }
+            })}
+            onReplace={(replacing) => {
+              if (pinning) replacePinnedOrg(replacing, pinning.id)
+              setPinning(null)
+            }}
+            onClose={() => setPinning(null)}
           />
         </Container>
       )}

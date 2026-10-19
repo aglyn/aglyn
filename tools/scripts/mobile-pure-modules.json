@@ -2,6 +2,10 @@
   "$comment": "Workspace TypeScript modules the native generators may read (AGL-3620, AGL-3651): the contracts, theme and catalog generators refuse any other. check-mobile-isolation admits each one only while its own imports are pure: listed modules, platform-neutral packages, no DOM, no Node built-in, nothing web- or server-only. The list grows only with that proof; a module that mixes pure and web code is split, never listed.",
   "modules": [
     {
+      "path": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "why": "The preferences a person keeps on users/{uid} (pins capped at five, recent workspaces, starred and recent items, workspace colors, the synced theme) and the pure rules over them, so the apps write the shape the console and the rules hold (AGL-3943); no imports at all."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/analytics-summary.ts",
       "why": "The site traffic card's figures: the window comparison, device split and top lists the Analytics page and the native screens show (AGL-3670)."
     },
@@ -150,12 +154,24 @@
       "why": "The push device registry shape, Expo token check, tap data and the account-scope push switch (AGL-3620); no imports at all."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/name-match.ts",
+      "why": "Reached by one-box-search: the console search's matcher and ranking; no imports at all."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/name-search.ts",
       "why": "Name-search token normalizers, so an app list search matches the console's search index (AGL-3621)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "why": "The native apps' navigation as data: the lists and groups, the core's own rows and the assembly that places each plugin's rows (AGL-3943); no imports at all."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/notification-sounds.ts",
       "why": "The notification sounds a person picks from, with each platform's file name, so the apps' pickers and the push payload name the console's sounds; no imports at all."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/one-box-search.ts",
+      "why": "The one-box search payload the apps read from /api/search and the screens-and-settings group from the nav manifest (AGL-3943); imports only name-match and native-nav."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/organizations.ts",
@@ -302,8 +318,16 @@
       "why": "Reached by enabled-plugins: the generated first-party catalog rows; every other import is type-only (AGL-3671)."
     },
     {
+      "path": "libs/plugins/accounting/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
       "path": "libs/plugins/ai/src/lib/model/ai-products-bulk.ts",
       "why": "The copy job a landed product import starts: its brief, inputs and the created ids read from the import's results; no imports, so the native apps replay it (AGL-3671)."
+    },
+    {
+      "path": "libs/plugins/ai/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
       "path": "libs/plugins/bookings/src/lib/model/booking-contact-fields.ts",
@@ -332,6 +356,10 @@
     {
       "path": "libs/plugins/bookings/src/lib/model/bookings.ts",
       "why": "The service shape, slot walk and the 24-hour reminder band the console's Bookings card counts (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/bookings/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
       "path": "libs/plugins/commerce/src/lib/barcode/barcode-decode.ts",
@@ -450,6 +478,10 @@
       "why": "Carrier tracking-link templates over a tracking number, no I/O (AGL-3621)."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/printing/print-document.ts",
       "why": "The receipt print layout as plain ops, which the app renders to a printable page (AGL-3621)."
     },
@@ -522,12 +554,20 @@
       "why": "The Tasks list declaration and its views (AGL-3669)."
     },
     {
+      "path": "libs/plugins/crm/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
       "path": "libs/plugins/data/src/lib/components/dataset-record-filter.ts",
       "why": "The records table query a dataset model plans (`planDatasetRecordQuery`): the native records list asks the same Firestore query for a filter or a search (AGL-3668); type-only imports beside the pure planner and dataset-model-core."
     },
     {
       "path": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
       "why": "The dataset model and field types, a stored value as the records table shows it and as its input reads, the field-id rules and the records filter grammar; the native Data screens read, show and filter records from it (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/data/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
       "path": "libs/plugins/email/src/lib/constants/list-queries.ts",
@@ -538,12 +578,24 @@
       "why": "A new email design's screen and first version (emailDesignDocuments, emailDesignStarterNodes), replayed by the apps' Templates (AGL-3669)."
     },
     {
+      "path": "libs/plugins/email/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
       "path": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
       "why": "The one rule for what an event stores, shared by the Events page, the events import and the native editors (AGL-3670)."
     },
     {
+      "path": "libs/plugins/events-calendar/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
       "path": "libs/plugins/forms/src/lib/components/form-list-query.ts",
       "why": "The forms list query declaration and its options; the native Forms screens plan the same query (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/forms/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
       "path": "libs/plugins/funnels/src/lib/model/drop-off.ts",
@@ -570,6 +622,10 @@
       "why": "A funnel, its steps and a computed result, as the console stores and the results route answers them; the native Funnels screens decode the same shapes (AGL-3669); type-only imports."
     },
     {
+      "path": "libs/plugins/funnels/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
       "path": "libs/plugins/inbox/src/lib/constants/list-queries.ts",
       "why": "The Inbox's list declarations (submissions, site members, leads), so the apps' Inbox lists run the console's own queries (AGL-3669)."
     },
@@ -580,6 +636,10 @@
     {
       "path": "libs/plugins/inbox/src/lib/model/submission-presenter.ts",
       "why": "The Inbox's sender label, initials and routing chips, replayed by the apps' submission rows (AGL-3669)."
+    },
+    {
+      "path": "libs/plugins/inbox/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
       "path": "libs/plugins/logic/src/lib/model/formula-names.ts",
@@ -596,6 +656,10 @@
     {
       "path": "libs/plugins/logic/src/lib/model/structured-value.ts",
       "why": "A dictionary or list variable as rows and back to the stored JSON string; the native Logic editors show and save the same rows (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/logic/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
       "path": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
@@ -622,6 +686,10 @@
       "why": "The site-level Emails and Campaigns declarations as values for the native contracts; no web code imports it (AGL-3669)."
     },
     {
+      "path": "libs/plugins/marketing/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
       "path": "libs/plugins/marketplace/src/lib/model/listing-query.ts",
       "why": "The marketplace browse and licenses list declarations and their audience base; the native marketplace screens plan the same Firestore queries (AGL-3668)."
     },
@@ -634,12 +702,20 @@
       "why": "Artifact type labels, install targets, categories, a plugin's install state and each type's install route and message; the native marketplace screens install from it (AGL-3668); type-only imports."
     },
     {
+      "path": "libs/plugins/marketplace/src/lib/model/marketplace-section-ids.ts",
+      "why": "Reached by the marketplace's native-nav module: the hub's Licenses section id, a stored value; no imports at all."
+    },
+    {
       "path": "libs/plugins/marketplace/src/lib/model/payout-readiness.ts",
       "why": "Whether a publisher's Stripe account can take charges and release payouts, as the seller panel says it (AGL-3668). No imports."
     },
     {
       "path": "libs/plugins/marketplace/src/lib/model/seller-ledger-totals.ts",
       "why": "What a publisher was actually paid: the sums over the seller ledger, net of what was pulled back (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
       "path": "libs/plugins/outreach/src/lib/engine/click-tracking.ts",
@@ -682,8 +758,20 @@
       "why": "The Sequences list declaration the apps plan (AGL-3669)."
     },
     {
+      "path": "libs/plugins/outreach/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
       "path": "libs/plugins/redirects/src/lib/model/redirects.ts",
       "why": "The redirect rule's shape and evaluation order, shared by the console page, the tenant serve path and the Redirects mobile screen."
+    },
+    {
+      "path": "libs/plugins/redirects/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
+    },
+    {
+      "path": "libs/plugins/sms/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
       "path": "libs/plugins/workflows/src/lib/model/webhooks.ts",
@@ -692,6 +780,10 @@
     {
       "path": "libs/plugins/workflows/src/lib/model/workflows.ts",
       "why": "A workflow's shape and its pure runner over site functions and variables, the native test run's (AGL-3670)."
+    },
+    {
+      "path": "libs/plugins/workflows/src/lib/native-nav.ts",
+      "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
       "path": "libs/shared/ui/email-campaigns/src/lib/model/send-report.ts",

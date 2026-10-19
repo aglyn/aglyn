@@ -4488,6 +4488,67 @@ service cloud.firestore {
     // users/{uid}; the AGL-42 hardening dropped the blanket rule without
     // adding this match, which default-denied the collection.
     match /users/{userId} {
+      // The preferences a person keeps on their account (AGL-3943,
+      // `app-utils/account-preferences.ts`): every list and map is capped, so
+      // a client can never park an unbounded value on the document the
+      // console and both native apps read on every launch. Checked only when
+      // a write touches the field, so an ordinary edit beside it lands.
+      //
+      // `pinnedOrgs` is five at most, the console included (Zach,
+      // 2026-10-18). A list pinned before the cap may only SHRINK, so a
+      // person with seven pins can still unpin one, and the console's
+      // "Keep which 5?" answer (a list of five) lands.
+      function prefsBefore() {
+        return resource == null ? {} : resource.data;
+      }
+      function prefTouched(name) {
+        return resource == null ? name in request.resource.data
+          : request.resource.data.diff(resource.data).affectedKeys().hasAny([name]);
+      }
+      function prefListWithin(name, cap) {
+        return !prefTouched(name) || !(name in request.resource.data) ||
+          (request.resource.data[name] is list &&
+           request.resource.data[name].size() <= cap);
+      }
+      function pinnedOrgsValid() {
+        let after = request.resource.data.get('pinnedOrgs', []);
+        let before = prefsBefore().get('pinnedOrgs', []);
+        return !prefTouched('pinnedOrgs') || (after is list &&
+          (after.size() <= 5 ||
+            (before is list && after.size() < before.size())));
+      }
+      function workspaceColorsValid() {
+        return !prefTouched('workspaceColors') ||
+          !('workspaceColors' in request.resource.data) ||
+          (request.resource.data.workspaceColors is map &&
+           request.resource.data.workspaceColors.size() <= 100);
+      }
+      function appThemeValid() {
+        let t = request.resource.data.get('appTheme', {});
+        return !prefTouched('appTheme') || !('appTheme' in request.resource.data) ||
+          (t is map &&
+           t.keys().hasOnly(['appearance', 'theme', 'accent', 'density',
+             'textSize', 'sidebarStyle', 'appIcon', 'useWorkspaceBrand']) &&
+           t.get('appearance', 'system') in ['system', 'light', 'dark'] &&
+           t.get('theme', 'aglyn') in ['aglyn', 'quiet', 'night', 'ocean', 'warm', 'highContrast'] &&
+           t.get('accent', 'theme') is string &&
+           (t.get('accent', 'theme') == 'theme' ||
+             t.get('accent', 'theme').matches('^#[0-9A-Fa-f]{6}$')) &&
+           t.get('density', 'comfortable') in ['comfortable', 'compact'] &&
+           t.get('textSize', 'system') in ['system', 'small', 'medium', 'large', 'extraLarge'] &&
+           t.get('sidebarStyle', 'tinted') in ['tinted', 'plain'] &&
+           t.get('appIcon', 'aglyn') is string &&
+           t.get('appIcon', 'aglyn').size() <= 40 &&
+           t.get('useWorkspaceBrand', true) is bool);
+      }
+      function accountPrefsValid() {
+        return pinnedOrgsValid() &&
+          prefListWithin('recentOrgs', 8) &&
+          prefListWithin('starred', 50) &&
+          prefListWithin('recents', 30) &&
+          workspaceColorsValid() &&
+          appThemeValid();
+      }
       allow read, delete: if isStaff() ||
         (isSignedIn() && request.auth.uid == userId);
       // `acquisition` — where the account came from — is written once, by
@@ -4499,11 +4560,13 @@ service cloud.firestore {
       allow create: if (isStaff() ||
           (isSignedIn() && request.auth.uid == userId)) &&
         !('acquisition' in request.resource.data) &&
-        !('adAudienceOptOut' in request.resource.data);
+        !('adAudienceOptOut' in request.resource.data) &&
+        accountPrefsValid();
       allow update: if (isStaff() ||
           (isSignedIn() && request.auth.uid == userId)) &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-          ['acquisition', 'adAudienceOptOut']);
+          ['acquisition', 'adAudienceOptOut']) &&
+        accountPrefsValid();
 
       // "My organizations" reverse index (AGL-233): API-maintained
       // beside the member docs; each user reads only their own.

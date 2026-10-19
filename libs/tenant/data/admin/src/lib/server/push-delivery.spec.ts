@@ -124,9 +124,33 @@ describe('native push delivery (AGL-3651)', () => {
     expect(apns.calls[0].message).toEqual({
       title: 'New order #1042',
       body: '$12.50 from Acme',
-      data: { type: 'content.order', link: '/acme/hosts/host-1/orders/o1', orgId: 'org-1', hostId: 'host-1' },
+      data: { type: 'content.order', link: '/acme/hosts/host-1/orders/o1', orgId: 'org-1', hostId: 'host-1', uid: 'uid-a' },
       urgent: false,
     })
+    // Each recipient's devices are sent with that account's uid (AGL-3943), so
+    // an app signed in to several accounts opens the tap in the right one.
+    expect(fcm.calls[0].message.data.uid).toBe('uid-b')
+  })
+
+  it('sends each recipient its own uid, one send per account (AGL-3943)', async () => {
+    const { db } = fakeDb(
+      {
+        'uid-a': { phone: { token: APNS, transport: 'apns', apnsEnvironment: 'production', platform: 'ios', app: 'aglyn', lastSeen } },
+        'uid-b': { mac: { token: APNS_MAC, transport: 'apns', apnsEnvironment: 'sandbox', platform: 'macos', app: 'aglyn', lastSeen } },
+      },
+      { 'org-1': { slug: 'acme' } },
+    )
+    const apns = recorder()
+    const result = await deliverNativePush(['uid-a', 'uid-b'], PAYLOAD, {
+      db,
+      now: () => NOW,
+      transport: async () => apns.transport,
+    })
+    expect(result.sent).toBe(2)
+    expect(apns.calls.map((call) => [call.targets.map((target) => target.token), call.message.data.uid])).toEqual([
+      [[APNS], 'uid-a'],
+      [[APNS_MAC], 'uid-b'],
+    ])
   })
 
   it('sends a workspace notification to the Aglyn app only, never a second copy through Aglyn POS', async () => {

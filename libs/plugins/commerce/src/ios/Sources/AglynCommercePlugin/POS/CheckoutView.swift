@@ -55,6 +55,8 @@ struct CheckoutView: View {
           }
         }
       }
+      // "Open payment page" opens on the checkout's own stack, over the sale it belongs to.
+      .aglynBrowserDestination()
     }
     .sensoryFeedback(.success, trigger: isPaid)
     // A typed card: the register's own card fields, over the checkout.

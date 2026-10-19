@@ -91,6 +91,7 @@
 
 import { Route } from '@aglyn/aglyn/app-utils/console-routes'
 import type { ConsoleSearchSource } from '@aglyn/aglyn'
+import { isScreenGroup } from '@aglyn/aglyn/app-utils/screen-route'
 
 /**
  * A class of thing console search can look through: one of the console's own
@@ -593,4 +594,24 @@ export function buildResultHref(
     default:
       return null
   }
+}
+
+/**
+ * Which rows of a shared collection belong to which entity.
+ *
+ * Only `screens` needs it, and it needs it in both directions: an email-kind
+ * screen is an email and is NOT a page, and a soft-deleted screen is
+ * neither. A page group (AGL-3463) is not a page either — it has no detail
+ * view or canvas to open — and it lives in the Pages list, not in search. Written as a total function per entity rather than a filter on one
+ * of them, so adding the second reader of a collection cannot silently change
+ * what the first one sees.
+ */
+export function rowBelongsTo(
+  entity: GlobalSearchEntity,
+  row: Record<string, any>,
+): boolean {
+  if (row?.deletedAt) return false
+  if (entity === 'screens') return row?.kind !== 'email' && !isScreenGroup(row)
+  if (entity === 'emails') return row?.kind === 'email'
+  return true
 }

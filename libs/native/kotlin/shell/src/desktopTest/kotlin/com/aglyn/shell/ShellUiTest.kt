@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.platform.testTag
 import com.aglyn.core.AglynAppId
 import com.aglyn.core.AglynConfig
 import com.aglyn.core.AglynEnv
@@ -342,6 +343,81 @@ class ShellUiTest {
     runOnIdle { navigator.select(ShellNavigator.SETTINGS) }
     onNodeWithTag("settings-notifications").performScrollTo().performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("notification-settings") > 0 }
+  }
+
+  /** A help page is pushed as the browser screen beside the navigation; its menu hands the page to the system (AGL-3935). */
+  @Test
+  fun aHelpPageOpensAsTheBrowserScreenBesideTheNavigation() = runComposeUiTest {
+    val opened = mutableListOf<String>()
+    val system = object : androidx.compose.ui.platform.UriHandler {
+      override fun openUri(uri: String) { opened += uri }
+    }
+    val services = services(userDoc = emptyMap())
+    val navigator = ShellNavigator()
+    setContent {
+      androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalUriHandler provides system) {
+        AglynShell(services, navigator)
+      }
+    }
+    onNodeWithTag("sign-in-email").performTextInput("dana@example.test")
+    onNodeWithTag("sign-in-password").performTextInput("right")
+    onNodeWithTag("sign-in-submit").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("site-header") > 0 }
+    runOnIdle { navigator.select(ShellNavigator.SETTINGS) }
+    onNodeWithTag("help-whats-new").performScrollTo().performClick()
+
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("web-page-screen") > 0 }
+    assertEquals(Route.Web("https://docs.aglyn.com/whats-new"), navigator.current)
+    onNodeWithTag("web-page-heading").assertTextContains("docs.aglyn.com/whats-new", substring = true)
+    // The navigation stays beside the page on a wide window.
+    onNodeWithTag("nav-drawer").assertIsDisplayed()
+    onNodeWithTag("web-page-menu").performClick()
+    onNodeWithTag("web-page-open-browser").performClick()
+    assertEquals(listOf("https://docs.aglyn.com/whats-new"), opened)
+
+    onNodeWithTag("web-page-close").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("web-page-screen") == 0 }
+    assertEquals(null, navigator.current)
+    onNodeWithTag("help-whats-new").assertExists()
+  }
+
+  /** Before there is a shell (the sign-in's legal links) a page covers the screen until it is closed. */
+  @Test
+  fun beforeThereIsAShellAPageCoversTheScreenUntilClosedAndOtherLinksLeave() = runComposeUiTest {
+    val opened = mutableListOf<String>()
+    val secure = mutableListOf<String>()
+    val system = object : androidx.compose.ui.platform.UriHandler {
+      override fun openUri(uri: String) { opened += uri }
+    }
+    setContent {
+      androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalUriHandler provides system) {
+        com.aglyn.webview.ProvideInAppBrowser(secureTab = { secure += it }) {
+          val uri = androidx.compose.ui.platform.LocalUriHandler.current
+          androidx.compose.foundation.layout.Column {
+            for ((tag, link) in listOf(
+              "terms" to "https://aglyn.com/legal/terms",
+              "mail" to "mailto:hello@example.test",
+              "google" to "https://accounts.google.com/o/oauth2/v2/auth?client_id=x",
+            )) {
+              androidx.compose.material3.TextButton(onClick = { uri.openUri(link) }, modifier = androidx.compose.ui.Modifier.testTag(tag)) {
+                androidx.compose.material3.Text(tag)
+              }
+            }
+          }
+        }
+      }
+    }
+    onNodeWithTag("terms").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("web-page-screen") > 0 }
+    onNodeWithTag("web-page-heading").assertTextContains("aglyn.com/legal/terms", substring = true)
+    onNodeWithTag("web-page-close").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("web-page-screen") == 0 }
+
+    onNodeWithTag("mail").performClick()
+    onNodeWithTag("google").performClick()
+    assertEquals(listOf("mailto:hello@example.test"), opened)
+    assertEquals(listOf("https://accounts.google.com/o/oauth2/v2/auth?client_id=x"), secure)
+    assertEquals(0, onAllNodesWithTagCount("web-page-screen"))
   }
 }
 

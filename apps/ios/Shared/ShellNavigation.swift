@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynUI
 import Observation
 import SwiftUI
 
@@ -19,6 +20,8 @@ enum Route: Hashable {
   case notificationSettings
   /// The site's Analytics page.
   case analytics
+  /// A plain web page (a live site, a preview, a docs or legal page) in the in-app browser screen.
+  case web(AglynWebPage)
 }
 
 /// The shell's top-level sections: the sidebar on iPad and Mac, the tab bar on iPhone.
@@ -60,6 +63,15 @@ final class ShellNavigation {
 
   func push(_ route: Route) {
     paths[section, default: []].append(route)
+  }
+
+  /// Opens a plain web page in the in-app browser screen, pushed onto the section on screen: on iPhone over the tab,
+  /// on iPad and the Mac in the main area beside the sidebar.
+  func openWeb(_ page: AglynWebPage, _ disposition: AglynBrowserDisposition = .push) {
+    switch disposition {
+    // A ⌘-click asks for a tab of its own; until the shell has tabs it opens like any other click.
+    case .push, .newTab: push(.web(page))
+    }
   }
 
   func select(_ next: ShellSection) {
