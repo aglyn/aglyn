@@ -1131,8 +1131,11 @@ The apps build against the Firebase emulator stack and test configs by
 default. `tools/scripts/seed-native-emulator.mjs` seeds that stack: a member,
 a workspace on the Pro plan and a site, then each area's rows from
 `tools/scripts/seed-native/` (workspace, people, form submissions, inbox,
-marketing, the store with its orders and bookings, and the POS register with
-its categories, modifiers and quick keys). It prints the member's sign-in. There are no real
+marketing, the store with its orders and bookings, the POS register with
+its categories, modifiers and quick keys, promotions, returns and stays,
+funnels, settled AI jobs, outreach sequences, a token-less sandbox accounting
+connection with its sync log, and marketplace listings). It prints the
+member's sign-in. There are no real
 `GoogleService-Info.plist` or `google-services.json` files: the Firebase SDKs
 are configured in code from build settings (`FirebaseOptions`), which is also
 how the self-hosted builds are configured.
