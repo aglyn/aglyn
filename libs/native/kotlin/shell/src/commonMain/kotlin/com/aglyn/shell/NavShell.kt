@@ -439,24 +439,41 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
         ) { widget.content(context) }
       }
     }
-    // The plan card (Figma 98:1048): the console meter closest to its limit where the window stands, until it is hidden for
-    // that limit here.
+    // The plan card (Figma 98:1048, AGL-3992): a slow carousel of the console's usage meters, the one that fits the screen in
+    // front first (the shared mapping, planCardMeterOrder); shown while the viewer can upgrade or a meter is near its limit.
     var planHides by remember(uid) { mutableStateOf(0) }
     val planOrgId = workspace.org?.id
     val planHostId = workspace.site?.id
-    val planNear by androidx.compose.runtime.produceState<PlanNear?>(null, planOrgId, planHostId, workspace.sites.size) {
-      value = planOrgId?.let { loadPlanNear(services, it, planHostId, workspace.sites.size) }
+    val planSiteIds = workspace.sites.map { it.id }
+    val planReadings by androidx.compose.runtime.produceState<PlanReadings?>(null, planOrgId, planHostId, planSiteIds) {
+      value = planOrgId?.let { loadPlanReadings(services, it, planHostId, planSiteIds) }
     }
+    val planScreen = navigator.current.let { it as? Route.Screen }?.screenId ?: NavKeys.parse(navigator.top)?.first
+      ?: if (navigator.top == ShellNavigator.HOME) NavKeys.HOME_SCREEN else null
+    val planContext = com.aglyn.contracts.planCardContext(planScreen, workspace.site != null)
     val planFoot: @Composable () -> Unit = {
-      val near = planNear
-      if (near != null && planOrgId != null && planHides >= 0 && services.prefs.get(planNearDismissedKey(planOrgId, near)) == null) {
-        com.aglyn.ui.PlanMeterCard(
-          detail = "${workspace.site?.name ?: workspace.org?.name ?: ""} · ${near.plan} plan",
-          label = near.label,
-          used = near.used,
-          limit = near.limit,
-          onUpgrade = { navigator.select(NavKeys.of("core.billing")) },
-          onHide = { services.prefs.set(planNearDismissedKey(planOrgId, near), "1"); planHides++ },
+      val loaded = planReadings
+      val logo = workspace.orgLogo
+      val offersUpgrade = logo?.plan != null && logo.plan !in setOf("agency", "enterprise") && !logo.enterprise &&
+        workspace.org?.role in setOf("owner", "admin")
+      if (loaded != null && planOrgId != null && planHides >= 0 && services.prefs.get(planCardHiddenKey(planOrgId, loaded.plan)) == null &&
+        com.aglyn.contracts.planCardShows(loaded.readings, offersUpgrade)
+      ) {
+        val byMeter = loaded.readings.associateBy { it.meter }
+        val lines = com.aglyn.contracts.planCardMeterOrder(loaded.readings, planContext).mapNotNull { meter ->
+          val reading = byMeter[meter] ?: return@mapNotNull null
+          val used = reading.used ?: return@mapNotNull null
+          val limit = reading.limit ?: return@mapNotNull null
+          com.aglyn.ui.PlanMeterLine(meter, com.aglyn.contracts.Contracts.planCardMeterLabels[meter] ?: meter, planMeterFigures(meter, used, limit), (used / limit).toFloat())
+        }
+        com.aglyn.ui.PlanMeterCarousel(
+          detail = "${workspace.site?.name ?: workspace.org?.name ?: ""} · ${loaded.plan} plan",
+          meters = lines,
+          advanceMs = com.aglyn.contracts.Contracts.planCardAdvanceMs,
+          warningShare = com.aglyn.contracts.Contracts.planCardWarningShare.toFloat(),
+          onUpgrade = if (offersUpgrade) ({ actions.openScreen("core.billing", emptyMap()) }) else null,
+          onOpenUsage = { actions.openScreen("core.billing.usage", emptyMap()) },
+          onHide = { services.prefs.set(planCardHiddenKey(planOrgId, loaded.plan), "1"); planHides++ },
           modifier = Modifier.padding(start = com.aglyn.ui.shellMetrics.sidebarPad, end = com.aglyn.ui.shellMetrics.sidebarPad, bottom = 12.dp),
         )
       }
