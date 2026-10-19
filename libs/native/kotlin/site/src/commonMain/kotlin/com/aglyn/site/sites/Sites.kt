@@ -58,6 +58,8 @@ data class SiteRow(
   val hasCustomDomain: Boolean,
   val favicon: String?,
   val createdAt: FirestoreTimestamp?,
+  /** The site's custom domain as its membership row mirrors it (`cname`); absent on rows older than the mirror. */
+  val cname: String? = null,
 )
 
 fun siteRowOf(doc: FirestoreDoc): SiteRow {
@@ -70,6 +72,7 @@ fun siteRowOf(doc: FirestoreDoc): SiteRow {
     hasCustomDomain = doc.bool("hasCustomDomain") == true,
     favicon = doc.string("favicon")?.ifBlank { null },
     createdAt = doc.data["createdAt"] as? FirestoreTimestamp,
+    cname = doc.string("cname")?.trim()?.ifBlank { null },
   )
 }
 

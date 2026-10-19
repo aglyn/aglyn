@@ -352,17 +352,15 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
 private fun OrderListRow(row: OrderRow, selected: Boolean, ticked: Boolean? = null, onClick: () -> Unit) {
   val now = nowMillis()
   val items = if (row.itemCount == 1L) "1 item" else "${row.itemCount} items"
-  AglynListItem(
+  // Figma List/Order row (11:329): the number and customer over items, channel and time; the total over the status.
+  com.aglyn.ui.ScaffoldListRow(
     title = "${row.label} · ${row.customer}",
-    supporting = listOfNotNull(
-      money(row.netCents),
-      items,
-      row.channelLabel,
-      row.createdAtMs.takeIf { it > 0 }?.let { relativeTime(it, now) },
-    ).joinToString(" · "),
-    icon = AglynIcons.named(if (ticked == true) "check_circle" else if (row.channelLabel == orderChannelLabel("pos")) "point_of_sale" else "receipt"),
+    detail = listOfNotNull(items, row.channelLabel, row.createdAtMs.takeIf { it > 0 }?.let { relativeTime(it, now) }).joinToString(" · "),
+    kind = com.aglyn.ui.ScaffoldRowKind.ORDER,
     selected = selected,
-    trailing = {
+    leading = { com.aglyn.ui.ScaffoldRowTile(if (ticked == true) "check_circle" else if (row.channelLabel == orderChannelLabel("pos")) "point_of_sale" else "receipt") },
+    figure = money(row.netCents),
+    status = {
       Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
         if (row.disputeOpen) StatusChip("Dispute", StatusTone.ERROR)
         if (row.testMode) StatusChip("Test")

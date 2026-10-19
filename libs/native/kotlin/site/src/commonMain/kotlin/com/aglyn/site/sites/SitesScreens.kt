@@ -143,7 +143,8 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null, sta
             )
           } else {
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = space(1f)).testTag("sites-list"), state = listState) {
-              items(rows, key = { it.id }) { row -> SiteListRow(context, row, false) { selected = row.id } }
+              // Opening a site drills into it (the sidebar slides to the site), landing on its Home (P4).
+              items(rows, key = { it.id }) { row -> SiteListRow(context, row, false) { context.selectSite(row.id); context.navigate("shell.home") } }
               if (model.hasMore) item { SkeletonList(rows = 2) }
             }
           }
@@ -162,13 +163,15 @@ private fun SiteListRow(context: NativePluginContext, row: SiteRow, selected: Bo
   // The site's favicon, as the console's Sites list shows it (`HostIcon`): the host's own `seo.favicon`, else the
   // membership row's copy of it; the globe while there is none.
   val favicon = siteFavicon((host as? Live.Ready)?.value) ?: row.favicon
-  AglynListItem(
+  // Figma List/Site row (11:370): the favicon, the name over its address (its custom domain once mirrored, as the console
+  // shows it), and the status.
+  com.aglyn.ui.ScaffoldListRow(
     title = row.name,
-    supporting = listOfNotNull(siteAddress(row.subdomain), row.role?.replaceFirstChar { it.uppercase() }).joinToString(" · "),
-    icon = AglynIcons.named("public"),
-    imageUrl = mediaPreviewUrl(favicon, context.api.origin, row.id, 160),
+    detail = listOfNotNull(row.cname ?: siteAddress(row.subdomain), row.role?.replaceFirstChar { it.uppercase() }).joinToString(" · "),
+    kind = com.aglyn.ui.ScaffoldRowKind.SITE,
     selected = selected,
-    trailing = {
+    leading = { com.aglyn.ui.ScaffoldRowTile("public", mediaPreviewUrl(favicon, context.api.origin, row.id, 160)) },
+    status = {
       Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
         if (row.id == context.hostId) StatusChip("Current", StatusTone.INFO)
         status?.let { StatusChip(it.label, hostStatusTone(it.kind)) }
@@ -218,12 +221,10 @@ fun SiteOverview(context: NativePluginContext, hostId: String) {
           }
           Text(status.detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
           FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-            if (current) {
-              StatusChip("You are working on this site", StatusTone.INFO)
-            } else {
-              Button(onClick = { context.selectSite(hostId) }, modifier = Modifier.testTag("site-switch")) {
-                Icon(AglynIcons.named("swap_horiz"), contentDescription = null)
-                Text("Work on this site", Modifier.padding(start = space(1f)))
+            // Opening a site drills into it (P4): its own sidebar, landing on its Home.
+            if (!current) {
+              Button(onClick = { context.selectSite(hostId); context.navigate("shell.home") }, modifier = Modifier.testTag("site-switch")) {
+                Text("Open site")
               }
             }
             (custom ?: platform)?.let { domain ->
@@ -255,7 +256,7 @@ fun SiteOverview(context: NativePluginContext, hostId: String) {
             }
           }
         } else {
-          NoticeBanner("Switch to this site to manage its pages, media and setup.", StatusTone.INFO)
+          NoticeBanner("Open this site to manage its pages, media and setup.", StatusTone.INFO)
         }
       }
     }

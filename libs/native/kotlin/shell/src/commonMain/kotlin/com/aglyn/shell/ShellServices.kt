@@ -276,7 +276,9 @@ internal class ShellPluginContext(
   }
 
   override fun navigate(screenId: String, params: NativeParams) {
-    if (screenId in topLevelScreens && params.isEmpty()) {
+    if (screenId == NavKeys.HOME_SCREEN) {
+      navigator.select(ShellNavigator.HOME)
+    } else if (screenId in topLevelScreens && params.isEmpty()) {
       navigator.select(ShellNavigator.screenKey(screenId))
     } else {
       navigator.push(Route.Screen(screenId, params))
