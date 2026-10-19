@@ -639,41 +639,46 @@ struct AreaView: View {
     let row = ShellScope(model: model, navigation: navigation).row(for: ShellSection.opening(screen, params))
     let sections = (row?.sections ?? []).filter { model.registry.screen($0.screen) != nil }
     let actions = (row?.actions ?? []).filter { model.registry.screen($0.screen) != nil }
+    // A screen that heads its own list column (Figma Orders 13:483) gets the head's parts instead of the head.
+    let columnHead = wide && AglynListColumnHead.screens.contains(screen)
     PluginScreenView(screenID: screen, params: params)
+      .environment(\.aglynAreaHead, columnHead ? row.map { areaHead($0, sections: sections) } : nil)
       .safeAreaInset(edge: .top, spacing: 0) {
-        VStack(alignment: .leading, spacing: 0) {
-          if wide, let row {
-            // The area's head in its content (Figma Mac Sites 13:3): breadcrumbs, the title with its star, and the one
-            // filled primary button.
-            AglynContentHeader(row.label) {
-              Breadcrumbs(row: row)
-            } accessory: {
-              starButton(row)
-              Spacer(minLength: 8)
-              // The screen's own actions and primary button are drawn over this row from its preferences (below).
-            }
-          }
-          if let row, sections.count > 1, !Self.selfSectioned.contains(row.id) {
-            ScrollView(.horizontal, showsIndicators: false) {
-              HStack(spacing: AglynSpace.one) {
-                ForEach(sections, id: \.id) { section in
-                  let target = ShellSection.opening(section.screen, section.params)
-                  AglynChoiceChip(section.label, selected: target == ShellSection.opening(screen, params)) {
-                    navigation.select(target)
-                  }
-                  .accessibilityIdentifier("area-section-\(section.id)")
-                }
+        if !columnHead {
+          VStack(alignment: .leading, spacing: 0) {
+            if wide, let row {
+              // The area's head in its content (Figma Mac Sites 13:3): breadcrumbs, the title with its star, and the
+              // one filled primary button.
+              AglynContentHeader(row.label) {
+                Breadcrumbs(row: row)
+              } accessory: {
+                starButton(row)
+                Spacer(minLength: 8)
+                // The screen's own actions and primary button are drawn over this row from its preferences (below).
               }
-              .padding(.horizontal, wide ? AglynContentInsets.horizontal : AglynSpace.two)
-              .padding(.vertical, AglynSpace.one)
             }
-            .background(wide ? AnyShapeStyle(AglynColor.paper) : AnyShapeStyle(.bar))
-            .accessibilityIdentifier("area-sections-\(row.id)")
+            if let row, sections.count > 1, !Self.selfSectioned.contains(row.id) {
+              ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: AglynSpace.one) {
+                  ForEach(sections, id: \.id) { section in
+                    let target = ShellSection.opening(section.screen, section.params)
+                    AglynChoiceChip(section.label, selected: target == ShellSection.opening(screen, params)) {
+                      navigation.select(target)
+                    }
+                    .accessibilityIdentifier("area-section-\(section.id)")
+                  }
+                }
+                .padding(.horizontal, wide ? AglynContentInsets.horizontal : AglynSpace.two)
+                .padding(.vertical, AglynSpace.one)
+              }
+              .background(wide ? AnyShapeStyle(AglynColor.paper) : AnyShapeStyle(.bar))
+              .accessibilityIdentifier("area-sections-\(row.id)")
+            }
           }
         }
       }
       .overlayPreferenceValue(AglynScreenChromeKey.self, alignment: .top) { chrome in
-        if wide, let row {
+        if wide, !columnHead, let row {
           // The area's own create action stands in when the screen names no primary action of its own.
           let fallback = (actions.first(where: { $0.params?["new"] == "1" }) ?? actions.first).map { first in
             AglynPrimaryAction(id: "area-action-\(first.id)", title: first.label, systemImage: first.icon.apple, enabled: true) {
@@ -708,6 +713,19 @@ struct AreaView: View {
           }
         }
       }
+  }
+
+  /// The head's parts for a screen that draws them in its list column: title, breadcrumbs, star and sections.
+  private func areaHead(_ row: NativeNavRow, sections: [NativeNavSection]) -> AglynAreaHead {
+    AglynAreaHead(
+      title: row.label, crumbs: AnyView(Breadcrumbs(row: row)), star: AnyView(starButton(row)),
+      sections: sections.count > 1
+        ? sections.map { section in
+          let target = ShellSection.opening(section.screen, section.params)
+          return AglynAreaSection(
+            id: section.id, label: section.label, selected: target == ShellSection.opening(screen, params)
+          ) { navigation.select(target) }
+        } : [])
   }
 
   /// The star beside the area's title: the place on the person's Starred list.
@@ -750,12 +768,8 @@ struct AreaHeaderActions: View {
         .fixedSize()
         .frame(height: 36)
         if let primary {
-          AglynPrimaryHeaderButton(
-            primary.title, systemImage: primary.systemImage, shortcut: primary.shortcut, help: primary.help
-          ) { primary.run() }
-            .disabled(!primary.enabled)
-            .opacity(primary.enabled ? 1 : 0.5)
-            .accessibilityIdentifier(primary.id)
+          // Off for a reason, it says why: on hover on the Mac, on a tap on iPad.
+          AglynPrimaryHeaderButton.blockable(primary)
         }
       }
     }

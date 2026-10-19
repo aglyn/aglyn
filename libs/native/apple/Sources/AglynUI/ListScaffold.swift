@@ -74,12 +74,18 @@ public struct AglynListToolbar<Filter: View>: View {
   @Binding var text: String
   let prompt: String
   let onSubmit: (() -> Void)?
+  let inset: CGFloat?
   let filter: Filter
 
-  public init(text: Binding<String>, prompt: String, onSubmit: (() -> Void)? = nil, @ViewBuilder filter: () -> Filter) {
+  /// `inset` is the side margin when the toolbar heads a list column rather than the whole content.
+  public init(
+    text: Binding<String>, prompt: String, onSubmit: (() -> Void)? = nil, inset: CGFloat? = nil,
+    @ViewBuilder filter: () -> Filter
+  ) {
     _text = text
     self.prompt = prompt
     self.onSubmit = onSubmit
+    self.inset = inset
     self.filter = filter()
   }
 
@@ -111,7 +117,7 @@ public struct AglynListToolbar<Filter: View>: View {
         RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).strokeBorder(AglynColor.divider))
       filter
     }
-    .padding(.horizontal, AglynContentInsets.horizontal)
+    .padding(.horizontal, inset ?? AglynContentInsets.horizontal)
     .padding(.bottom, 10)
     .background(AglynColor.paper)
   }
@@ -471,3 +477,103 @@ extension View {
 // - `aglynScreenToolbar(id:content:)`: the screen's other actions (Select, a ⋯ menu), beside the primary button.
 // - `aglynScreenTitle(_:)`: a pushed screen's title in its head.
 // On a phone each falls back to the navigation bar. The shell (AreaView, PushedScreen) draws the head.
+
+// MARK: A head in the list column (Figma Orders 13:483)
+
+/// One of an area's sections (Orders, Returns, Reservations), for a screen that offers them itself.
+public struct AglynAreaSection: Identifiable {
+  public let id: String
+  public let label: String
+  public let selected: Bool
+  public let open: @MainActor () -> Void
+
+  public init(id: String, label: String, selected: Bool, open: @escaping @MainActor () -> Void) {
+    self.id = id
+    self.label = label
+    self.selected = selected
+    self.open = open
+  }
+}
+
+/// What the shell would draw across an area's content, handed to a screen that draws its head in its list column
+/// instead (Figma Orders 13:483: the title and create action head the list, the breadcrumbs head the detail).
+public struct AglynAreaHead {
+  public let title: String
+  public let crumbs: AnyView
+  public let star: AnyView
+  public let sections: [AglynAreaSection]
+
+  public init(title: String, crumbs: AnyView, star: AnyView, sections: [AglynAreaSection]) {
+    self.title = title
+    self.crumbs = crumbs
+    self.star = star
+    self.sections = sections
+  }
+}
+
+extension EnvironmentValues {
+  /// The area's head on the Mac and iPad when its screen draws the head in its own list column; nil otherwise.
+  @Entry public var aglynAreaHead: AglynAreaHead? = nil
+}
+
+/// The screens that head their own list column on the Mac and iPad. A plugin names its screen when it registers it, so
+/// the shell knows before the first frame and never draws, then removes, a head of its own.
+@MainActor
+public enum AglynListColumnHead {
+  public private(set) static var screens: Set<String> = []
+
+  public static func register(_ screen: String) { screens.insert(screen) }
+}
+
+/// A list column's head (Figma Orders 13:483): the area's title with its star, then its create action and its other
+/// actions as bordered buttons (the detail beside it holds the filled one).
+public struct AglynListColumnHeader<Actions: View>: View {
+  let head: AglynAreaHead
+  let actions: Actions
+
+  public init(_ head: AglynAreaHead, @ViewBuilder actions: () -> Actions) {
+    self.head = head
+    self.actions = actions()
+  }
+
+  public var body: some View {
+    HStack(alignment: .center, spacing: 10) {
+      Text(head.title)
+        .font(.system(size: 22, weight: .semibold))
+        .foregroundStyle(AglynColor.textPrimary)
+        .lineLimit(1)
+        .accessibilityAddTraits(.isHeader)
+      head.star
+      Spacer(minLength: 8)
+      HStack(spacing: 8) { actions }
+        .buttonStyle(AglynHeaderButtonStyle())
+        .menuStyle(.button)
+        .fixedSize()
+    }
+    .frame(height: 36)
+    .padding(.horizontal, AglynListColumnHeader<EmptyView>.inset)
+    .padding(.top, 20)
+    .padding(.bottom, 12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(AglynColor.paper)
+  }
+
+  /// The list column's side margins (Figma: 20 from the column's edges).
+  public static var inset: CGFloat { 20 }
+}
+
+/// The breadcrumbs over the detail column of a screen that heads its own list column (Figma Orders 13:483).
+public struct AglynDetailCrumbs: View {
+  let head: AglynAreaHead
+
+  public init(_ head: AglynAreaHead) { self.head = head }
+
+  public var body: some View {
+    head.crumbs
+      .padding(.horizontal, AglynContentInsets.horizontal)
+      .padding(.top, 20)
+      .padding(.bottom, 4)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(AglynColor.paper)
+  }
+}
