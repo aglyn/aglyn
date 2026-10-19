@@ -1,6 +1,7 @@
 package com.aglyn.shell
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -44,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.Color
@@ -91,6 +93,12 @@ internal val SELF_SECTIONED_ROWS = setOf("crm", "emails", "marketing", "marketpl
 
 /** Room the window leaves at the top for its own controls (the Mac's traffic lights over a transparent title bar). */
 val LocalTitleBarInset = androidx.compose.runtime.staticCompositionLocalOf { 0.dp }
+
+/**
+ * What a double-click on the window's tab row does, as the title bar it stands in for would (the desktop's window
+ * provides it; a Mac follows System Settings' "Double-click a window's title bar to"). Null where there is no window.
+ */
+val LocalWindowDoubleClick = androidx.compose.runtime.staticCompositionLocalOf<(() -> Unit)?> { null }
 
 /**
  * The signed-in app (AGL-3946, the native nav redesign): one scope at a time. Tablets and desktops get the workspace rail,
@@ -439,7 +447,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       // One continuous title bar over the rail, the sidebar and the content (as Figma draws the window), then the flush
       // columns under it. A tablet draws edge to edge: the status bar and the taskbar keep their space.
       Column(Modifier.fillMaxSize().background(shellColors.titleBar).windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing).then(shortcuts)) {
-        WindowTabStrip(tabs, onSelectTab = ::selectTab, onCloseTab = { closeTab(it) }, onNewTab = { newTab() })
+        WindowTabStrip(tabs, onSelectTab = ::selectTab, onCloseTab = { closeTab(it) }, onNewTab = { newTab() }) { HomeTabMark(services, workspace) }
         WideToolbar(services, navigator, chrome, pushed = route != null, uid = uid) {
           HelpButton(help)
           if (assist != null) TitleBarButton(if (chrome.aiPanel) "Close the AI panel" else "AI", "auto_awesome", "ai-panel-toggle") { chrome.toggleAiPanel() }
@@ -709,17 +717,21 @@ internal fun SectionTabs(sections: List<NavSectionItem>, selected: String, onSel
  * tabs (each up to its natural width, ellipsized), and +; a hairline under it.
  */
 @Composable
-private fun WindowTabStrip(tabs: ShellTabs, onSelectTab: (ShellTab) -> Unit, onCloseTab: (ShellTab) -> Unit, onNewTab: () -> Unit) {
+private fun WindowTabStrip(tabs: ShellTabs, onSelectTab: (ShellTab) -> Unit, onCloseTab: (ShellTab) -> Unit, onNewTab: () -> Unit, homeMark: @Composable () -> Unit) {
   val m = com.aglyn.ui.shellMetrics
   // The Mac's traffic lights sit at this row's left edge (a transparent, full-size title bar).
   val lights = if (LocalTitleBarInset.current > 0.dp) 76.dp else 8.dp
+  val doubleClick = LocalWindowDoubleClick.current
   Row(
-    Modifier.fillMaxWidth().background(shellColors.titleBar).height(if (m.compact) 34.dp else 40.dp).padding(start = lights, end = 8.dp).testTag("tab-strip"),
+    Modifier.fillMaxWidth().background(shellColors.titleBar)
+      // The row stands in for the title bar: a double-click on it zooms the window (or what the Mac is set to do).
+      .then(if (doubleClick != null) Modifier.pointerInput(doubleClick) { detectTapGestures(onDoubleTap = { doubleClick() }) } else Modifier)
+      .height(if (m.compact) 34.dp else 40.dp).padding(start = lights, end = 8.dp).testTag("tab-strip"),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {
     Row(Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-      for (tab in tabs.tabs) TitleTab(tab, selected = tab.id == tabs.activeId, closable = !tab.pinned, onSelect = { onSelectTab(tab) }, onClose = { onCloseTab(tab) })
+      for (tab in tabs.tabs) TitleTab(tab, selected = tab.id == tabs.activeId, closable = !tab.pinned, onSelect = { onSelectTab(tab) }, onClose = { onCloseTab(tab) }, homeMark = homeMark)
     }
     TitleBarButton("New tab  ${shortcutText("T")}", "add", "tab-new", onClick = onNewTab)
     // A tablet has no menu bar (Tab ▸ Show all tabs), so its strip offers the overview.
@@ -818,7 +830,7 @@ private fun Breadcrumbs(steps: List<Crumb>, star: com.aglyn.ui.PageStarSlot? = n
 
 /** One tab in the title bar: its place's icon and name, and × (the pinned Home tab has none). */
 @Composable
-private fun TitleTab(tab: ShellTab, selected: Boolean, closable: Boolean, onSelect: () -> Unit, onClose: () -> Unit) {
+private fun TitleTab(tab: ShellTab, selected: Boolean, closable: Boolean, onSelect: () -> Unit, onClose: () -> Unit, homeMark: @Composable () -> Unit) {
   val m = com.aglyn.ui.shellMetrics
   Surface(
     onClick = onSelect,
@@ -831,7 +843,7 @@ private fun TitleTab(tab: ShellTab, selected: Boolean, closable: Boolean, onSele
     if (tab.pinned) {
       // The pinned Home tab is the brand's mark alone (the logo kit's mark, never faded).
       Box(Modifier.padding(horizontal = 9.dp).semantics { contentDescription = "Home: ${tab.title}" }, contentAlignment = Alignment.Center) {
-        com.aglyn.ui.AglynMark(Modifier.size(16.dp))
+        homeMark()
       }
       return@Surface
     }
@@ -987,4 +999,28 @@ private fun rememberScreenSession(
       },
     ),
   )
+}
+
+/**
+ * The Home tab's mark (Figma 117:16049): the logo kit's mark, 16, never faded; a white-label workspace's own mark in its
+ * place, as the console's chrome wears it (`resolveBrandingProfile`: entitled to `whiteLabel` and a mark set).
+ */
+@Composable
+internal fun HomeTabMark(services: ShellServices, workspace: com.aglyn.core.WorkspaceState) {
+  val org = workspace.org
+  val entitlements = org?.let { services.entitlements.state(it.id).collectAsState().value }
+  LaunchedEffect(org?.id) { org?.id?.let { services.entitlements.load(it) } }
+  val logo = workspace.orgLogo
+  val mark = logo?.brandMark?.takeIf { entitlements?.has("whiteLabel") == true }
+  if (mark == null) {
+    com.aglyn.ui.AglynMark(Modifier.size(16.dp).testTag("home-tab-mark"))
+  } else {
+    com.aglyn.ui.BrandPicture(
+      com.aglyn.core.mediaPreviewUrl(mark, services.api.origin, null, 64),
+      com.aglyn.core.mediaPreviewUrl(logo.brandMarkDark, services.api.origin, null, 64),
+      16.dp,
+      androidx.compose.foundation.shape.RoundedCornerShape(3.dp),
+    ) { com.aglyn.ui.AglynMark(Modifier.size(16.dp)) }
+    Box(Modifier.size(0.dp).testTag("home-tab-brand-mark"))
+  }
 }

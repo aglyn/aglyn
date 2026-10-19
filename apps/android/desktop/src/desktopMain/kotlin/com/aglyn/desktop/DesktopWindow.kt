@@ -14,6 +14,7 @@ import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.MenuBarScope
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberWindowState
 import com.aglyn.shell.ShellServices
@@ -68,23 +69,52 @@ fun ApplicationScope.AglynWindow(
     }
     val scope = rememberCoroutineScope()
     MenuBar { menus { scope.launch { services.signOut() } } }
-    content {
-      scope.launch {
-        // Grow about the window's center over the destination's 220 ms.
-        val from = state.size
-        val start = state.position
-        val steps = 12
-        for (step in 1..steps) {
-          val t = step / steps.toFloat()
-          val eased = 1 - (1 - t) * (1 - t) * (1 - t)
-          val size = DpSize(from.width + (WINDOW_SIZE.width - from.width) * eased, from.height + (WINDOW_SIZE.height - from.height) * eased)
-          if (start is WindowPosition.Absolute) {
-            state.position = WindowPosition(start.x - (size.width - from.width) / 2, start.y - (size.height - from.height) / 2)
+    // The app's tab row stands in for the hidden title bar, so its double-click does what the title bar's would.
+    val doubleClick: () -> Unit = {
+      when (titleBarDoubleClickAction()) {
+        TitleBarAction.MINIMIZE -> state.isMinimized = true
+        TitleBarAction.NONE -> Unit
+        TitleBarAction.ZOOM -> state.placement = if (state.placement == WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized
+      }
+    }
+    androidx.compose.runtime.CompositionLocalProvider(com.aglyn.shell.LocalWindowDoubleClick provides doubleClick) {
+      content {
+        scope.launch {
+          // Grow about the window's center over the destination's 220 ms.
+          val from = state.size
+          val start = state.position
+          val steps = 12
+          for (step in 1..steps) {
+            val t = step / steps.toFloat()
+            val eased = 1 - (1 - t) * (1 - t) * (1 - t)
+            val size = DpSize(from.width + (WINDOW_SIZE.width - from.width) * eased, from.height + (WINDOW_SIZE.height - from.height) * eased)
+            if (start is WindowPosition.Absolute) {
+              state.position = WindowPosition(start.x - (size.width - from.width) / 2, start.y - (size.height - from.height) / 2)
+            }
+            state.size = size
+            delay(AuthTokens.Intro.DESTINATION_MS.toLong() / steps)
           }
-          state.size = size
-          delay(AuthTokens.Intro.DESTINATION_MS.toLong() / steps)
         }
       }
     }
+  }
+}
+
+private enum class TitleBarAction { ZOOM, MINIMIZE, NONE }
+
+/**
+ * What a double-click on a title bar does here: on a Mac, System Settings › Desktop & Dock's choice (`AppleActionOnDoubleClick`:
+ * Fill / Zoom, Minimize or Do Nothing); elsewhere it zooms (maximizes or restores), as Windows' title bars do.
+ */
+private fun titleBarDoubleClickAction(): TitleBarAction {
+  if (!System.getProperty("os.name").orEmpty().startsWith("Mac")) return TitleBarAction.ZOOM
+  val value = runCatching {
+    val process = ProcessBuilder("defaults", "read", "-g", "AppleActionOnDoubleClick").redirectErrorStream(true).start()
+    process.inputStream.bufferedReader().readText().trim().also { process.waitFor() }
+  }.getOrDefault("")
+  return when (value) {
+    "Minimize" -> TitleBarAction.MINIMIZE
+    "None", "Do Nothing" -> TitleBarAction.NONE
+    else -> TitleBarAction.ZOOM
   }
 }

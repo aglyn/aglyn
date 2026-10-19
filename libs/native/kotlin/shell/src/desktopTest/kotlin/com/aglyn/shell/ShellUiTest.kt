@@ -38,6 +38,7 @@ import com.aglyn.pluginhost.NativeApp
 import com.aglyn.pluginhost.NativePluginRegistry
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.respondOk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +91,10 @@ internal fun testServices(
   apiCalls: MutableList<String> = mutableListOf(),
   /** The session the shell runs on; one person by default, or several accounts (Add account). */
   authFor: (com.aglyn.core.KeyValueStore) -> AuthSession = { FakeAuth() },
+  /** The workspace's own document (`orgs/o1`), when a test needs its plan or brand. */
+  orgDoc: Map<String, Any?>? = null,
+  /** A JSON body a route answers with (by path); an empty 200 otherwise. */
+  apiBody: (String) -> String? = { null },
 ): ShellServices {
   val prefs = InMemoryKeyValueStore()
   val auth = authFor(prefs)
@@ -107,7 +112,7 @@ internal fun testServices(
         ),
       ),
     ),
-    docs = listOfNotNull(userDoc?.let { "users/u1" to FirestoreDoc("u1", "users/u1", it) }).toMap() + mapOf("hosts/h1" to FirestoreDoc("h1", "hosts/h1", mapOf("screens" to mapOf("home" to emptyMap<String, Any>(), "about" to emptyMap<String, Any>())))),
+    docs = listOfNotNull(userDoc?.let { "users/u1" to FirestoreDoc("u1", "users/u1", it) }, orgDoc?.let { "orgs/o1" to FirestoreDoc("o1", "orgs/o1", it) }).toMap() + mapOf("hosts/h1" to FirestoreDoc("h1", "hosts/h1", mapOf("screens" to mapOf("home" to emptyMap<String, Any>(), "about" to emptyMap<String, Any>())))),
   )
   val config = AglynConfig.read(AglynEnv(consoleUrl = "https://app.example.com", firebaseProjectId = "demo-test"), AglynAppId.AGLYN)
   return ShellServices(
@@ -115,7 +120,14 @@ internal fun testServices(
     config = config,
     auth = auth,
     firestore = firestore,
-    api = ConsoleApiClient(config.consoleOrigin, HttpClient(MockEngine { request -> apiCalls += request.url.encodedPath; respondOk() }), { auth.idToken(it) }),
+    api = ConsoleApiClient(config.consoleOrigin, HttpClient(
+      MockEngine { request ->
+        apiCalls += request.url.encodedPath
+        apiBody(request.url.encodedPath)?.let {
+          respond(it, headers = io.ktor.http.headersOf(io.ktor.http.HttpHeaders.ContentType, "application/json"))
+        } ?: respondOk()
+      },
+    ), { auth.idToken(it) }),
     workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
     prefs = prefs,
     registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES) },

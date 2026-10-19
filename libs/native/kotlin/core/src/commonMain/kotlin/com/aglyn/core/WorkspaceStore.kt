@@ -45,6 +45,12 @@ data class WorkspaceOrgLogo(
   val enabledPlugins: List<String>? = null,
   /** The plan in force, as the console's plan chip names it. */
   val plan: String? = null,
+  /**
+   * The white-label mark (`brandingProfile.faviconUrl` / `faviconDarkUrl`), which the console's chrome wears in place of
+   * the platform's when the workspace is entitled to `whiteLabel` (`resolveBrandingProfile`).
+   */
+  val brandMark: String? = null,
+  val brandMarkDark: String? = null,
 ) {
   companion object {
     fun from(data: Map<String, Any?>?): WorkspaceOrgLogo = WorkspaceOrgLogo(
@@ -53,6 +59,8 @@ data class WorkspaceOrgLogo(
       brandColor = ((data?.get("brandingProfile") as? Map<*, *>)?.get("primaryColor") as? String)?.takeIf { com.aglyn.contracts.isAccountColor(it) },
       enabledPlugins = (data?.get("enabledPlugins") as? List<*>)?.filterIsInstance<String>(),
       plan = data?.let { effectivePlan(it) },
+      brandMark = ((data?.get("brandingProfile") as? Map<*, *>)?.get("faviconUrl") as? String)?.trim()?.ifEmpty { null },
+      brandMarkDark = ((data?.get("brandingProfile") as? Map<*, *>)?.get("faviconDarkUrl") as? String)?.trim()?.ifEmpty { null },
     )
   }
 }

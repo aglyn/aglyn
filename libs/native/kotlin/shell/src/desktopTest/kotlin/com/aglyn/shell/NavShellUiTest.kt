@@ -78,6 +78,38 @@ class NavShellUiTest {
   }
 
   @Test
+  fun theHomeTabWearsAWhiteLabelWorkspacesOwnMark() = runComposeUiTest {
+    setContent {
+      AglynShell(
+        testServices(
+          userDoc = emptyMap(),
+          orgDoc = mapOf("brandingProfile" to mapOf("faviconUrl" to "https://cdn.example.com/acme-mark.png")),
+          apiBody = { path -> if (path == "/api/orgs/entitlements") """{"plan":"agency","features":{"whiteLabel":true},"quotas":{}}""" else null },
+        ),
+      )
+    }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tab-brand-mark") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("home-tab-mark"))
+  }
+
+  @Test
+  fun theHomeTabIsTheMarkWithoutWhiteLabel() = runComposeUiTest {
+    setContent {
+      AglynShell(
+        testServices(
+          userDoc = emptyMap(),
+          orgDoc = mapOf("brandingProfile" to mapOf("faviconUrl" to "https://cdn.example.com/acme-mark.png")),
+          apiBody = { path -> if (path == "/api/orgs/entitlements") """{"plan":"pro","features":{"whiteLabel":false},"quotas":{}}""" else null },
+        ),
+      )
+    }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home-tab-mark") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("home-tab-brand-mark"))
+  }
+
+  @Test
   fun aSiteIsDrilledIntoWithAWayBackAndASwitcher() = runComposeUiTest {
     setContent { AglynShell(testServices(userDoc = emptyMap())) }
     signIn()

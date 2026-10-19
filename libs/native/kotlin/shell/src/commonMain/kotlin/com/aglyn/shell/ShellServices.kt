@@ -76,6 +76,9 @@ class ShellServices(
   /** The signed-out screens and what a sign-up carries across them. */
   val authFlow = AuthFlow()
 
+  /** What each workspace's plan includes (`/api/orgs/entitlements`), read once per workspace and shared. */
+  val entitlements = com.aglyn.core.OrgEntitlementsCache(api)
+
   /** Every account signed in on this device (Add account), when the platform keeps more than one. */
   val accounts: com.aglyn.core.AccountSessions? get() = auth as? com.aglyn.core.AccountSessions
 
