@@ -114,8 +114,10 @@ import { readAiSiteContext } from '../runtime/site-context'
 import { aiInstructionsWithSiteContext, type AiSiteContextInput } from '../model/ai-site-context'
 import {
   AI_BUILD_CREATE_KINDS,
+  AI_BUILD_NEEDS_INPUT_CODE,
   AI_BUILD_STRUCTURAL_OPS,
   aiBuildPageLimit,
+  aiBuildPlanInputFields,
   aiBuildPlanShapeRefusal,
   type AiBuildOps,
 } from '../model/ai-build-job'
@@ -1243,6 +1245,12 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
      *   2026-10-09 16:38Z (600 credits estimated, 164 left).
      * - the 429 "nothing left" still fails the job with its sentence, but as
      *   the customer's limit, which raises no staff alert.
+     *
+     * A plan only the person can complete — a tracking change with no pixel
+     * ID (AGL-3978) — is KEPT too, and waits in `needs_input` with a field per
+     * id, its review beside it: nothing about it failed, and the answer
+     * returns it to the plan card. Only an item that names no tag at all,
+     * so has no field to fill, still ends with the question.
      */
     const refusalOnKeep = async (plan: AiJobPlan, outcome: AiJobStepOutcome): Promise<AiJobStepOutcome | null> => {
       let refusal: Awaited<ReturnType<typeof aiJobAdmissionRefusal>> = null
@@ -1260,6 +1268,10 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
         console.error('ai plan admission failed', { orgId: job.orgId, jobId: job.$id, error })
       }
       if (!refusal || refusal.code === AI_CREDITS_CONFIRM_CODE) return null
+      const fields = refusal.code === AI_BUILD_NEEDS_INPUT_CODE ? aiBuildPlanInputFields(plan, itemOps) : []
+      if (fields.length) {
+        return { ...outcome, plan, review: await planReview(outcome.estCostUsd), input: { message: refusal.error, fields } }
+      }
       return {
         ...outcome,
         failure: refusal.error,

@@ -124,7 +124,8 @@ export const AI_JOB_KINDS: readonly AiJobKind[] = [
  * `queued` — waiting for a runner; `running` — a step holds the lease;
  * `needs_input` — the job stopped for something only the workspace can
  * change (credits, a cap, a switch), and the beat tries it again once that
- * may have changed; `needs_review` — the job stopped for a person's decision
+ * may have changed — or, carrying `input`, for an answer only the person can
+ * give (AGL-3978), which the beat leaves alone; `needs_review` — the job stopped for a person's decision
  * (AGL-2935): its plan is ready to confirm, or an answer broke a building
  * rule on its re-ask. No timer can make that decision, so neither the beat
  * nor anything but that person resumes it. The last three are terminal.
@@ -434,6 +435,30 @@ export interface AiJobReview {
   freeCredits?: AiFreeCreditsLeft
 }
 
+/**
+ * One answer a job waits for (AGL-3978): an id only the person has, which the
+ * operation that needs it describes — a tracking change's Meta pixel ID.
+ */
+export interface AiJobInputField {
+  /** The plan item the answer fills, by its name in the plan. */
+  item: string
+  /** The item's argument the answer is written to. */
+  arg: string
+  /** The field's label, naming the provider: "Meta pixel ID". */
+  label: string
+  /** What an answer looks like, in the words of the card that sets it: "8–20 digits". */
+  shape: string
+  /** The pattern an answer is held to, as a RegExp's source. */
+  pattern: string
+}
+
+/** What a job parked `needs_input` for a person asks (AGL-3978). */
+export interface AiJobInputRequest {
+  /** Customer-safe: the question, in the operation's own words. */
+  message: string
+  fields: AiJobInputField[]
+}
+
 export type AiJobPlanStatus = 'proposed' | 'confirmed'
 
 /** The plan a job builds from, as the job keeps it once its plan step proposed it. */
@@ -588,6 +613,13 @@ export interface AiJob {
   /** What the person is asked to decide while the job is `needs_review`. */
   review?: AiJobReview | null
   /**
+   * What the job waits for while it is `needs_input` for a person rather than
+   * the meter (AGL-3978): the fields only they can fill, an id the planner
+   * must never make up. Its plan and the plan's review are kept beside it,
+   * and the answer returns the job to that review.
+   */
+  input?: AiJobInputRequest | null
+  /**
    * What a person applied from the job's outputs (AGL-2910). Written by the
    * door that applied them, never by a step runner, and absent until then.
    */
@@ -717,6 +749,8 @@ export interface AiJobSummary {
   running: boolean
   plan: AiJobPlanSummary | null
   review: AiJobReview | null
+  /** The fields a `needs_input` job waits for a person to fill (AGL-3978); absent otherwise. */
+  input?: AiJobInputRequest | null
   /** What a person applied from the outputs (AGL-2910); instants as ISO strings. */
   applied?: {
     at: string | null

@@ -28,7 +28,7 @@ import {
   TIKTOK_PIXEL_ID_PATTERN,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
-import type { PluginAiCapabilityArgsSchema } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
+import type { PluginAiCapabilityArgsSchema, PluginAiCapabilityInputField } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
 import { getLockdownVerdict } from '@aglyn/tenant-data-admin/server/lockdown'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
@@ -102,6 +102,8 @@ export interface AiTrackingTag {
   pattern: RegExp
   /** What the card's field says the id looks like. */
   shape: string
+  /** The id's name, as a field asking for it is labeled (AGL-3978): it names the provider. */
+  field: string
   /** Asked when a request names this tag and no usable id, from the card's helper text. */
   ask: string
   /** Words that name this tag in an item's name. */
@@ -116,6 +118,7 @@ export const AI_TRACKING_TAGS: readonly AiTrackingTag[] = [
     label: 'Google Analytics',
     pattern: GA_MEASUREMENT_ID_PATTERN,
     shape: 'G-XXXXXXXXXX',
+    field: 'Google Analytics measurement ID',
     ask: 'What’s your Google Analytics measurement ID? It looks like G-XXXXXXXXXX.',
     named: /google analytics|\bga4?\b|\banalytics\b/i,
   },
@@ -125,6 +128,7 @@ export const AI_TRACKING_TAGS: readonly AiTrackingTag[] = [
     label: 'Google Tag Manager',
     pattern: GTM_CONTAINER_ID_PATTERN,
     shape: 'GTM-XXXXXXX',
+    field: 'Google Tag Manager container ID',
     ask: 'What’s your Google Tag Manager container ID? It looks like GTM-XXXXXXX.',
     named: /tag manager|\bgtm\b/i,
   },
@@ -134,6 +138,7 @@ export const AI_TRACKING_TAGS: readonly AiTrackingTag[] = [
     label: 'the Meta pixel',
     pattern: META_PIXEL_ID_PATTERN,
     shape: '8–20 digits',
+    field: 'Meta pixel ID',
     ask: 'What’s your Meta pixel ID? It’s the number (8–20 digits) shown for your pixel in Meta Events Manager.',
     named: /\bmeta\b|facebook|instagram/i,
   },
@@ -143,6 +148,7 @@ export const AI_TRACKING_TAGS: readonly AiTrackingTag[] = [
     label: 'the Google Ads tag',
     pattern: GOOGLE_ADS_ID_PATTERN,
     shape: 'AW-123456789',
+    field: 'Google Ads conversion ID',
     ask: 'What’s your Google Ads conversion ID? It looks like AW-123456789, from Google Ads.',
     named: /google ads|adwords/i,
   },
@@ -152,6 +158,7 @@ export const AI_TRACKING_TAGS: readonly AiTrackingTag[] = [
     label: 'the LinkedIn Insight Tag',
     pattern: LINKEDIN_PARTNER_ID_PATTERN,
     shape: '4–10 digits',
+    field: 'LinkedIn partner ID',
     ask: 'What’s your LinkedIn partner ID? It’s the number (4–10 digits) in LinkedIn Campaign Manager.',
     named: /linkedin/i,
   },
@@ -161,6 +168,7 @@ export const AI_TRACKING_TAGS: readonly AiTrackingTag[] = [
     label: 'the TikTok pixel',
     pattern: TIKTOK_PIXEL_ID_PATTERN,
     shape: '16–24 capital letters and digits',
+    field: 'TikTok pixel code',
     ask: 'What’s your TikTok pixel code? It’s in TikTok Ads Manager → Events, like C4ABCDEFGH1234567890.',
     named: /tiktok/i,
   },
@@ -170,6 +178,7 @@ export const AI_TRACKING_TAGS: readonly AiTrackingTag[] = [
     label: 'the Pinterest tag',
     pattern: PINTEREST_TAG_ID_PATTERN,
     shape: '10–16 digits',
+    field: 'Pinterest tag ID',
     ask: 'What’s your Pinterest tag ID? It’s the number (10–16 digits) in Pinterest Ads → Conversions.',
     named: /pinterest/i,
   },
@@ -254,16 +263,33 @@ function capitalized(label: string): string {
  * is never built: it asks for the id of the tag its arguments or its name
  * name, in the card's own words, and says why an id given was not one.
  */
-export function aiTrackingMissingInput(item: { name?: string; why?: string; args: Readonly<Record<string, unknown>> }): string | null {
+export function aiTrackingMissingInput(item: AiTrackingItem): string | null {
   const read = aiTrackingRequestOf(item.args)
   if (!aiTrackingRequestEmpty(read.request)) return null
-  // The tags its arguments tried to set, else the ones its name or reason names.
+  const named = aiTrackingTagsAsked(item)
+  const asks = named.length ? named.map((tag) => tag.ask) : [AI_TRACKING_WHICH_COPY]
+  return [...read.problems, ...asks].join(' ')
+}
+
+type AiTrackingItem = { name?: string; why?: string; args: Readonly<Record<string, unknown>> }
+
+/** The tags an item asks about: those its arguments tried to set, else the ones its name or reason names. */
+function aiTrackingTagsAsked(item: AiTrackingItem): AiTrackingTag[] {
   const tried = AI_TRACKING_TAGS.filter((tag) => text(item.args[tag.arg]))
   const naming = (words: string | undefined) => AI_TRACKING_TAGS.filter((tag) => tag.named.test(words ?? ''))
   const byName = naming(item.name)
-  const named = tried.length ? tried : byName.length ? byName : naming(item.why)
-  const asks = named.length ? named.map((tag) => tag.ask) : [AI_TRACKING_WHICH_COPY]
-  return [...read.problems, ...asks].join(' ')
+  return tried.length ? tried : byName.length ? byName : naming(item.why)
+}
+
+/**
+ * The fields a planned tracking change with no usable id waits for (AGL-3978):
+ * one per tag it asks about, labeled with the provider's id and held to the
+ * card's pattern, so the build pauses in `needs_input` for the person to give
+ * it. Empty when the item can be built, or names no tag at all.
+ */
+export function aiTrackingInputFields(item: AiTrackingItem): PluginAiCapabilityInputField[] {
+  if (!aiTrackingMissingInput(item)) return []
+  return aiTrackingTagsAsked(item).map((tag) => ({ arg: tag.arg, label: tag.field, shape: tag.shape, pattern: tag.pattern }))
 }
 
 /** Whether a read request asks for anything at all. */

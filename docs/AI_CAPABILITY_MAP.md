@@ -832,11 +832,19 @@ a console card already sets, and only values that are not secrets.
   can give (`missingInput` on the core contract); `aiBuildPlanMissingInput`
   reads it, and the build's admission refuses such a plan with the question
   ("What’s your Meta pixel ID? It’s the number (8–20 digits) shown for your
-  pixel in Meta Events Manager."), so the plan step does not keep it and the
-  card shows the question. It is not a plan rule: a re-ask cannot supply what
-  only the person knows. The tag is read from the item's arguments, else its
-  name, else its reason; an id of the wrong shape is named before the
-  question.
+  pixel in Meta Events Manager.") under `AI_BUILD_NEEDS_INPUT_CODE`. It is
+  not a plan rule: a re-ask cannot supply what only the person knows. The tag
+  is read from the item's arguments, else its name, else its reason; an id of
+  the wrong shape is named before the question.
+- **Waits for it, never fails (AGL-3978).** The capability also describes a
+  field per id it asks for (`inputFields`: the argument, a label naming the
+  provider — "Meta pixel ID" — the card's shape, and its pattern). Where
+  every asking item has fields (`aiBuildPlanInputFields`), the plan step
+  keeps the plan and the job parks `needs_input` with them
+  ([AI_JOBS.md](./AI_JOBS.md#a-job-that-waits-for-an-answer)); the answer,
+  held to the pattern, is written to the item's arguments and the plan card
+  comes back to confirm. An item that names no tag at all has no field, so
+  the job still ends with "Which tag should be connected…".
 - **The card's own rules.** Each id is held to the pattern the card's field
   and the tenant's loader share (`GA_MEASUREMENT_ID_PATTERN`,
   `GTM_CONTAINER_ID_PATTERN`, `META_PIXEL_ID_PATTERN` and the rest in
