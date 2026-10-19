@@ -21,6 +21,7 @@ import {
   subscribePluginEntitlements,
 } from '../plugin-manager/plugin-entitlements'
 import { ORG_ROLE_PERMISSION_KEYS } from './org-roles'
+import { CORE_ORG_PERMISSION_ENTRIES, CORE_ORG_ROLE_GRANTS } from './org-role-grants'
 
 /**
  * Granular org permissions (AGL-243) layered on the 4 org roles: each
@@ -96,58 +97,9 @@ export interface OrgPermissionDefinition {
  * `apps/console/specs/org-permissions-are-enforced.spec.ts` fails the build if
  * a key here, or a key a plugin declares, gains no server-side consumer.
  */
-const CORE_ORG_PERMISSIONS: readonly OrgPermissionDefinition[] = [
-  {
-    key: 'org.settings',
-    label: 'Organization settings',
-    description: 'Rename the organization, change its slug, transfer it.',
-  },
-  {
-    key: 'org.auditLog',
-    label: 'Activity & audit log',
-    description: 'See the organization activity feed.',
-  },
-  {
-    key: 'billing.view',
-    label: 'View billing',
-    description: 'See the plan, usage meters, and invoices.',
-  },
-  {
-    key: 'billing.manage',
-    label: 'Manage billing',
-    description: 'Change plans, buy add-ons, update payment details.',
-  },
-  {
-    key: 'members.manage',
-    label: 'Manage members',
-    description: 'Invite, remove, and re-role organization members.',
-  },
-  {
-    key: 'hosts.create',
-    label: 'Create sites',
-    description: 'Create new sites in the organization.',
-  },
-  {
-    key: 'hosts.delete',
-    label: 'Delete sites',
-    description: 'Delete sites the member can access.',
-  },
-  {
-    key: 'data.manage',
-    label: 'Manage data',
-    description: 'Create, edit, and delete organization datasets.',
-  },
-  {
-    key: 'marketplace.publish',
-    label: 'Publish to marketplace',
-    description: 'Publish listings under the organization profile.',
-  },
-  {
-    key: 'plugins.install',
-    label: 'Install plugins',
-    description: 'Install or remove marketplace plugins.',
-  },
-]
+const CORE_ORG_PERMISSIONS: readonly OrgPermissionDefinition[] =
+  // One table, shared with the native apps through the contracts (AGL-3950).
+  CORE_ORG_PERMISSION_ENTRIES.map((entry) => ({ ...entry, key: entry.key as CoreOrgPermission }))
 
 /** The core keys: a plugin may add keys beside them and never redefine one. */
 const CORE_ORG_PERMISSION_KEYS: ReadonlySet<string> = new Set(
@@ -159,16 +111,12 @@ const LEGACY_PERMISSION_KEYS: ReadonlySet<string> = new Set<string>(
   ORG_ROLE_PERMISSION_KEYS,
 )
 
-/** The core keys each org role holds when nothing refines it. */
+/** The core keys each org role holds when nothing refines it (`org-role-grants.ts`). */
 const CORE_ROLE_GRANTS: Record<OrgRole, ReadonlySet<string>> = {
-  owner: CORE_ORG_PERMISSION_KEYS,
-  admin: CORE_ORG_PERMISSION_KEYS,
-  editor: new Set<CoreOrgPermission>([
-    'data.manage',
-    'marketplace.publish',
-    'plugins.install',
-  ]),
-  viewer: new Set<string>(),
+  owner: new Set(CORE_ORG_ROLE_GRANTS.owner),
+  admin: new Set(CORE_ORG_ROLE_GRANTS.admin),
+  editor: new Set(CORE_ORG_ROLE_GRANTS.editor),
+  viewer: new Set(CORE_ORG_ROLE_GRANTS.viewer),
 }
 
 const ORG_ROLES: readonly OrgRole[] = ['owner', 'admin', 'editor', 'viewer']

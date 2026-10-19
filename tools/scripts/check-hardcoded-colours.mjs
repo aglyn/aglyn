@@ -90,6 +90,11 @@ const EXEMPT = [
   /^tools\/scripts\/lib\/retired-colours(?:-nodes)?\.mjs$/,
   /^tools\/scripts\/check-hardcoded-colours\.mjs$/,
   /^tools\/scripts\/audit-retired-colours-data\.mjs$/,
+  // The native apps' theme token SOURCE (AGL-3950): Figma's palette values and
+  // the console scheme's, as data the contracts generator emits. Naming colors
+  // is the file's whole job, and no style slot reads it; specs hold every value
+  // to Figma or to the console's resolved theme.
+  /^libs\/aglyn\/src\/lib\/app-utils\/native-themes\.ts$/,
 ]
 
 /**

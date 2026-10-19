@@ -2936,6 +2936,66 @@ public struct OrderUnresolvedLine: Codable, Hashable, Sendable {
   }
 }
 
+public struct OrgPermissionDeclaration: Codable, Hashable, Sendable {
+  public var description: String
+  public var key: String
+  public var label: String
+  public var roleDefaults: [String: Bool]
+
+  public init(description: String, key: String, label: String, roleDefaults: [String: Bool]) {
+    self.description = description
+    self.key = key
+    self.label = label
+    self.roleDefaults = roleDefaults
+  }
+}
+
+public struct OrgPermissionEntry: Codable, Hashable, Sendable {
+  public var description: String
+  public var key: String
+  public var label: String
+  public var pluginId: String?
+
+  public init(description: String, key: String, label: String, pluginId: String? = nil) {
+    self.description = description
+    self.key = key
+    self.label = label
+    self.pluginId = pluginId
+  }
+}
+
+public struct OrgPermissionLayer: Codable, Hashable, Sendable {
+  public var permissions: [String: Bool]?
+
+  public init(permissions: [String: Bool]? = nil) {
+    self.permissions = permissions
+  }
+}
+
+public struct OrgRoleGrants: Codable, Hashable, Sendable {
+  public var grants: [String: [String]]
+  public var permissions: [OrgPermissionEntry]
+
+  public init(grants: [String: [String]], permissions: [OrgPermissionEntry]) {
+    self.grants = grants
+    self.permissions = permissions
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum OrgRoleName: String, Codable, CaseIterable, Hashable, Sendable {
+  case admin = "admin"
+  case editor = "editor"
+  case owner = "owner"
+  case viewer = "viewer"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct PaymentRisk: Codable, Hashable, Sendable {
   public var latestAtMs: Double
   public var latestKind: PaymentRiskSignalKind
@@ -4457,6 +4517,249 @@ public struct TenantEmailEntry: Codable, Hashable, Sendable {
   }
 }
 
+public struct ThemeAccent: Codable, Hashable, Sendable {
+  public var fill: String
+  public var hover: String
+  public var icon: String
+  public var on: String
+  public var pressed: String
+  public var ring: String
+  public var soft: String
+  public var textDark: String
+  public var textLight: String
+
+  public init(fill: String, hover: String, icon: String, on: String, pressed: String, ring: String, soft: String, textDark: String, textLight: String) {
+    self.fill = fill
+    self.hover = hover
+    self.icon = icon
+    self.on = on
+    self.pressed = pressed
+    self.ring = ring
+    self.soft = soft
+    self.textDark = textDark
+    self.textLight = textLight
+  }
+}
+
+public struct ThemeAccentSwatch: Codable, Hashable, Sendable {
+  public var color: String
+  public var id: String
+  public var label: String
+
+  public init(color: String, id: String, label: String) {
+    self.color = color
+    self.id = id
+    self.label = label
+  }
+}
+
+public struct ThemeColors: Codable, Hashable, Sendable {
+  public var borderStrong: String
+  public var borderSubtle: String
+  public var canvas: String
+  public var dangerBg: String
+  public var dangerFg: String
+  public var dangerFill: String
+  public var dangerFillHover: String
+  public var dangerFillPressed: String
+  public var hover: String
+  public var infoBg: String
+  public var infoFg: String
+  public var newBg: String
+  public var newFg: String
+  public var rail: String
+  public var raised: String
+  public var scrim: String
+  public var successBg: String
+  public var successFg: String
+  public var sunken: String
+  public var surface: String
+  public var textPrimary: String
+  public var textSecondary: String
+  public var textTertiary: String
+  public var titlebar: String
+  public var warningBg: String
+  public var warningFg: String
+
+  public init(borderStrong: String, borderSubtle: String, canvas: String, dangerBg: String, dangerFg: String, dangerFill: String, dangerFillHover: String, dangerFillPressed: String, hover: String, infoBg: String, infoFg: String, newBg: String, newFg: String, rail: String, raised: String, scrim: String, successBg: String, successFg: String, sunken: String, surface: String, textPrimary: String, textSecondary: String, textTertiary: String, titlebar: String, warningBg: String, warningFg: String) {
+    self.borderStrong = borderStrong
+    self.borderSubtle = borderSubtle
+    self.canvas = canvas
+    self.dangerBg = dangerBg
+    self.dangerFg = dangerFg
+    self.dangerFill = dangerFill
+    self.dangerFillHover = dangerFillHover
+    self.dangerFillPressed = dangerFillPressed
+    self.hover = hover
+    self.infoBg = infoBg
+    self.infoFg = infoFg
+    self.newBg = newBg
+    self.newFg = newFg
+    self.rail = rail
+    self.raised = raised
+    self.scrim = scrim
+    self.successBg = successBg
+    self.successFg = successFg
+    self.sunken = sunken
+    self.surface = surface
+    self.textPrimary = textPrimary
+    self.textSecondary = textSecondary
+    self.textTertiary = textTertiary
+    self.titlebar = titlebar
+    self.warningBg = warningBg
+    self.warningFg = warningFg
+  }
+}
+
+public struct ThemeDensity: Codable, Hashable, Sendable {
+  public var controlHeight: Int
+  public var id: ThemeDensityId
+  public var label: String
+  public var listRowHeight: Int
+  public var phoneRowHeight: Int
+  public var radius2xl: Int
+  public var radiusFull: Int
+  public var radiusLg: Int
+  public var radiusMd: Int
+  public var radiusSm: Int
+  public var radiusXl: Int
+  public var radiusXs: Int
+  public var rowHeight: Int
+  public var space10: Int
+  public var space12: Int
+  public var space16: Int
+  public var space2: Int
+  public var space20: Int
+  public var space24: Int
+  public var space32: Int
+  public var space4: Int
+  public var space40: Int
+  public var space48: Int
+  public var space6: Int
+  public var space64: Int
+  public var space8: Int
+  public var titlebarHeight: Int
+
+  public init(controlHeight: Int, id: ThemeDensityId, label: String, listRowHeight: Int, phoneRowHeight: Int, radius2xl: Int, radiusFull: Int, radiusLg: Int, radiusMd: Int, radiusSm: Int, radiusXl: Int, radiusXs: Int, rowHeight: Int, space10: Int, space12: Int, space16: Int, space2: Int, space20: Int, space24: Int, space32: Int, space4: Int, space40: Int, space48: Int, space6: Int, space64: Int, space8: Int, titlebarHeight: Int) {
+    self.controlHeight = controlHeight
+    self.id = id
+    self.label = label
+    self.listRowHeight = listRowHeight
+    self.phoneRowHeight = phoneRowHeight
+    self.radius2xl = radius2xl
+    self.radiusFull = radiusFull
+    self.radiusLg = radiusLg
+    self.radiusMd = radiusMd
+    self.radiusSm = radiusSm
+    self.radiusXl = radiusXl
+    self.radiusXs = radiusXs
+    self.rowHeight = rowHeight
+    self.space10 = space10
+    self.space12 = space12
+    self.space16 = space16
+    self.space2 = space2
+    self.space20 = space20
+    self.space24 = space24
+    self.space32 = space32
+    self.space4 = space4
+    self.space40 = space40
+    self.space48 = space48
+    self.space6 = space6
+    self.space64 = space64
+    self.space8 = space8
+    self.titlebarHeight = titlebarHeight
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ThemeDensityId: String, Codable, CaseIterable, Hashable, Sendable {
+  case comfortable = "comfortable"
+  case compact = "compact"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct ThemeNamedAccent: Codable, Hashable, Sendable {
+  public var accent: ThemeAccent
+  public var id: String
+  public var label: String
+
+  public init(accent: ThemeAccent, id: String, label: String) {
+    self.accent = accent
+    self.id = id
+    self.label = label
+  }
+}
+
+public struct ThemePalette: Codable, Hashable, Sendable {
+  public var accent: String
+  public var alwaysDark: Bool?
+  public var brandLabel: Bool?
+  public var dark: ThemeColors
+  public var id: ThemePaletteId
+  public var label: String
+  public var light: ThemeColors
+  public var source: ThemeSource
+
+  public init(accent: String, alwaysDark: Bool? = nil, brandLabel: Bool? = nil, dark: ThemeColors, id: ThemePaletteId, label: String, light: ThemeColors, source: ThemeSource) {
+    self.accent = accent
+    self.alwaysDark = alwaysDark
+    self.brandLabel = brandLabel
+    self.dark = dark
+    self.id = id
+    self.label = label
+    self.light = light
+    self.source = source
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ThemePaletteId: String, Codable, CaseIterable, Hashable, Sendable {
+  case aglyn = "aglyn"
+  case highContrast = "highContrast"
+  case night = "night"
+  case ocean = "ocean"
+  case quiet = "quiet"
+  case warm = "warm"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct ThemePreview: Codable, Hashable, Sendable {
+  public var accent: String
+  public var canvas: String
+  public var rail: String
+  public var surface: String
+
+  public init(accent: String, canvas: String, rail: String, surface: String) {
+    self.accent = accent
+    self.canvas = canvas
+    self.rail = rail
+    self.surface = surface
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum ThemeSource: String, Codable, CaseIterable, Hashable, Sendable {
+  case console = "console"
+  case derived = "derived"
+  case figma = "figma"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct WhereUsedDependent: Codable, Hashable, Sendable {
   public var id: String?
   public var name: String?
@@ -4699,6 +5002,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let orderStatusOptions: [ListFilterOption]
   public let ordersToShipFilterLabel: String
   public let ordersToShipFilterValue: ContractJSON
+  public let orgRoleGrants: OrgRoleGrants
+  public let orgRoleNames: [OrgRoleName]
   public let orgSubmissionListQuery: ListQueryDeclaration
   public let outreachDefaultAllowedCountries: [String]
   public let outreachDoNotContactDomainListQuery: ListQueryDeclaration
@@ -4790,6 +5095,15 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let templateListQuery: ListQueryDeclaration
   public let tenantEmailCollection: String
   public let tenantEmails: [TenantEmailEntry]
+  public let themeAccentSwatches: [ThemeAccentSwatch]
+  public let themeAccents: [ThemeNamedAccent]
+  public let themeConsoleFields: [String]
+  public let themeDarkRailSeeds: [String: String]
+  public let themeDensities: [ThemeDensity]
+  public let themeNonTextContrast: Int
+  public let themePalettes: [ThemePalette]
+  public let themePreviews: [String: ThemePreview]
+  public let themeTextContrast: Double
   public let timeZoneChoices: [String]
   public let timeZoneDefaultLabel: String
   public let workflowMaxSteps: Int
@@ -4983,6 +5297,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case orderStatusOptions = "ORDER_STATUS_OPTIONS"
     case ordersToShipFilterLabel = "ORDERS_TO_SHIP_FILTER_LABEL"
     case ordersToShipFilterValue = "ORDERS_TO_SHIP_FILTER_VALUE"
+    case orgRoleGrants = "ORG_ROLE_GRANTS"
+    case orgRoleNames = "ORG_ROLE_NAMES"
     case orgSubmissionListQuery = "ORG_SUBMISSION_LIST_QUERY"
     case outreachDefaultAllowedCountries = "OUTREACH_DEFAULT_ALLOWED_COUNTRIES"
     case outreachDoNotContactDomainListQuery = "OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY"
@@ -5074,6 +5390,15 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case templateListQuery = "TEMPLATE_LIST_QUERY"
     case tenantEmailCollection = "TENANT_EMAIL_COLLECTION"
     case tenantEmails = "TENANT_EMAILS"
+    case themeAccentSwatches = "THEME_ACCENT_SWATCHES"
+    case themeAccents = "THEME_ACCENTS"
+    case themeConsoleFields = "THEME_CONSOLE_FIELDS"
+    case themeDarkRailSeeds = "THEME_DARK_RAIL_SEEDS"
+    case themeDensities = "THEME_DENSITIES"
+    case themeNonTextContrast = "THEME_NON_TEXT_CONTRAST"
+    case themePalettes = "THEME_PALETTES"
+    case themePreviews = "THEME_PREVIEWS"
+    case themeTextContrast = "THEME_TEXT_CONTRAST"
     case timeZoneChoices = "TIME_ZONE_CHOICES"
     case timeZoneDefaultLabel = "TIME_ZONE_DEFAULT_LABEL"
     case workflowMaxSteps = "WORKFLOW_MAX_STEPS"

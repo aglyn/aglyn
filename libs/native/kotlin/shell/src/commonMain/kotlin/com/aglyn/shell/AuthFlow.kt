@@ -20,6 +20,8 @@ sealed interface AuthScreen {
   data object SignIn : AuthScreen
   data object SignUp : AuthScreen
   data object AccountRecovery : AuthScreen
+  /** Workspace single sign-on's work-email step (`/sso`). */
+  data object SingleSignOn : AuthScreen
   /** An emailed reset link's code (`/reset-password?oobCode=…&mode=resetPassword`); empty when the link carried none. */
   data class ResetPassword(val code: String) : AuthScreen
   /** An emailed verification link's code (`/verify-email?oobCode=…`), opened by someone who may not be signed in. */
@@ -94,6 +96,7 @@ class AuthFlow {
       }
       "/signin" -> screen = AuthScreen.SignIn
       "/account-recovery" -> screen = AuthScreen.AccountRecovery
+      "/sso" -> screen = AuthScreen.SingleSignOn
       "/reset-password" -> {
         val code = query["oobCode"].orEmpty()
         screen = AuthScreen.ResetPassword(if ((query["mode"] ?: "resetPassword") == "resetPassword") code else "")
