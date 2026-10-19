@@ -122,6 +122,7 @@ changes, because every rule is by tag.
 | `plugins-commerce` | `@aglyn/plugins-commerce` | `libs/plugins/commerce` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-crm` | `@aglyn/plugins-crm` | `libs/plugins/crm` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-data` | `@aglyn/plugins-data` | `libs/plugins/data` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
+| `plugins-domains` | `@aglyn/plugins-domains` | `libs/plugins/domains` | `scope:plugin` `type:feature` | no — held `private` until its npm name is created by hand (`publish:packages -- --only @aglyn/plugins-domains --publish`, then `trust:packages --set`); buys a domain for a site through a registrar driver (Vercel's Registrar API first) and connects it through core's `connectHostCustomDomain` with its www twin, renews it, and points a domain an owner already holds here in one click through the Domain Connect standard, on core's `hostDomain` and `hostDomainConnect` zones | `.`, `./*` |
 | `plugins-email` | `@aglyn/plugins-email` | `libs/plugins/email` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-events-calendar` | `@aglyn/plugins-events-calendar` | `libs/plugins/events-calendar` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
 | `plugins-fonts` | `@aglyn/plugins-fonts` | `libs/plugins/fonts` | `scope:plugin` `type:feature` | yes | `.`, `./*` |
