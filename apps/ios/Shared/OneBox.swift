@@ -600,7 +600,8 @@ struct TitleBarSearch: View {
     #if os(macOS)
       guard let event = NSApp.currentEvent else { return false }
       switch event.type {
-      case .leftMouseDown, .leftMouseUp, .rightMouseDown, .otherMouseDown: return true
+      // A click in the window itself: a click in a popover (the site switcher's Create site) only hands focus back.
+      case .leftMouseDown, .leftMouseUp, .rightMouseDown, .otherMouseDown: return event.window != nil && event.window === NSApp.mainWindow
       case .keyDown: return event.keyCode == 48  // Tab
       default: return false
       }
