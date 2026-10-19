@@ -316,6 +316,20 @@ the FAQ and the SEO description. It was written by
 `SITE_CARE_ADDON_MONTHLY_USD`, `PLAN_PRICING.starter` and the 2026-10-19
 Decision Log figures; a change to any of them owes this page a new version.
 
+### 2026-10-19 — `/managed` no longer quotes a price (AGL-3998)
+
+`/managed` (screen `qnuMY13VsS`) is no longer a pricing surface. Version
+`W4VceCRSjF`, which replaced `COCDoTk7vn`, states no price, rate or starting
+figure in its body, its FAQ or its SEO description, so a price change owes it
+nothing. Prices are published on `/pricing`, and only there. The page says
+what is true without one: one price covers the plan and Site Care, monthly or
+yearly, with no build fee; a bigger job has one flat price agreed before work
+starts; extra time is billed only after a yes.
+`tools/scripts/republish-managed-landing-page.mjs` made the change, and
+`publish-managed-landing-page.mjs` no longer carries a figure. Both refuse a
+page or an SEO description that states a dollar figure, so neither can bring
+one back.
+
 ## Enterprise has no price here, but it has bands
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice

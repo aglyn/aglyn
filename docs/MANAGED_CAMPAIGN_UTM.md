@@ -9,20 +9,24 @@ came from (AGL-3960).
 
 | Thing | Where | Id |
 | -- | -- | -- |
-| Landing page `/managed` | `hosts/DXnRbPH4CQ/screens/…`, Landing Pages group, visibility PUBLIC | `qnuMY13VsS`, first version `COCDoTk7vn` |
+| Landing page `/managed` | `hosts/DXnRbPH4CQ/screens/…`, Landing Pages group, visibility PUBLIC | `qnuMY13VsS`, first version `COCDoTk7vn`, live version `W4VceCRSjF` |
 | Form "Managed" | `hosts/DXnRbPH4CQ/forms/…` | `chjqg6-XOD`, first version `cRbJ2BWB3Q` |
 | Campaign "Managed · Events and door to door" | `orgs/jWmGooWE3L/emailCampaigns/…`, label `managed-2026-10` | `h3Gg7rSecF` |
 
 All three were written on 2026-10-19 by
-`tools/scripts/publish-managed-landing-page.mjs` (dry run by default).
+`tools/scripts/publish-managed-landing-page.mjs` (dry run by default). The
+page's live version since is the work of
+`tools/scripts/republish-managed-landing-page.mjs` (AGL-3998), also a dry run
+by default.
 
 The page and the form are both filed under the campaign, so a visit to the
 page counts toward the campaign's reach and a submission is credited to it
 even when the link carried no label at all.
 
 The page sells Managed (a plan plus Site Care, one price) to people who want
-to read about it rather than have a site built on the spot. Its figures are
-listed in `docs/PRICING_SURFACES.md`; a price change owes it a republish.
+to read about it rather than have a site built on the spot. It states no
+price (AGL-3998): prices are published on `/pricing`, so a price change owes
+this page nothing.
 
 ## The link on a QR code
 
