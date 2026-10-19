@@ -1175,7 +1175,21 @@ function SendStep(props: {
                 : '') +
               '.'}
           </Typography>
-          <StaffOrgOwnerHandoff orgId={orgId} orgName={orgName} />
+          {/* Opens on this build's intent, from the record already held
+              here, with the domain for the site the build made. */}
+          <StaffOrgOwnerHandoff
+            orgId={orgId}
+            orgName={orgName}
+            build={record}
+            sites={[
+              {
+                hostId: record.hostId as string,
+                name:
+                  intake.businessName ||
+                  (record.host ?? (record.hostId as string)),
+              },
+            ]}
+          />
         </Stack>
       </Box>
     </Stack>

@@ -22,6 +22,7 @@ import {
   describeBundle,
   normalizeBundleDomain,
 } from '@aglyn/aglyn/app-utils/bundle-intent'
+import type { ClientBuildIntent } from '@aglyn/aglyn/app-utils/client-build'
 import { mdiContentCopy, mdiQrcode } from '@aglyn/shared-data-mdi'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-jsx/components/mdi-icon'
@@ -97,6 +98,27 @@ export function bundleDomainProblem(domain: BundleDomainDraft | null | undefined
   }
   if (!domain.hostId) return 'Choose the site the domain is for'
   return null
+}
+
+/**
+ * The domain line a build for a client left for its hand-off (AGL-3958): the
+ * name the owner picked to register, with both prices its search quoted, for
+ * the site the build made (`hostId`, empty when that site is not one staff
+ * can pick here). A domain the owner already has is connected rather than
+ * bought, so it puts nothing on the link, and neither does no domain at all.
+ */
+export function bundleDomainFromClientBuildIntent(
+  intent: Pick<ClientBuildIntent, 'domain'> | null | undefined,
+  hostId?: string | null,
+): BundleDomainDraft {
+  const domain = intent?.domain
+  if (!domain) return EMPTY_BUNDLE_DOMAIN
+  return {
+    name: domain.name,
+    firstYear: domain.firstYearUsd.toFixed(2),
+    renewal: domain.renewalUsd.toFixed(2),
+    hostId: hostId ?? '',
+  }
 }
 
 /**

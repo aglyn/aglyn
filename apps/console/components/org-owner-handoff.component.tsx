@@ -18,6 +18,10 @@
 
 import type { AglynOrgBilling, OwnerHandoffPreviousOwner } from '@aglyn/aglyn'
 import { describeBundle } from '@aglyn/aglyn/app-utils/bundle-intent'
+import {
+  readClientBuildIntent,
+  type ClientBuildRecord,
+} from '@aglyn/aglyn/app-utils/client-build'
 import { isLiveSubscriptionStatus } from '@aglyn/aglyn/app-utils/org-billing-doc'
 import {
   OWNER_HANDOFF_PREVIOUS_OWNER,
@@ -40,14 +44,16 @@ import {
   Stack,
   TextField,
 } from '@mui/material'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   bundleDraftBody,
+  bundleDraftFromClientBuildIntent,
   DEFAULT_BUNDLE_DRAFT,
   StaffBundleFields,
   type BundleDraft,
 } from './staff-bundle-fields.component'
 import {
+  bundleDomainFromClientBuildIntent,
   EMPTY_BUNDLE_DOMAIN,
   StaffBundleDomainFields,
   StaffBundleLinkActions,
@@ -131,6 +137,52 @@ export async function sendOwnerHandoff(
     : { ok: false, error: payload?.error ?? 'The handoff could not be sent' }
 }
 
+/** What a build for a client leaves its hand-off (AGL-3958): the intent, and the site it made. */
+export type ClientBuildHandoff = Pick<ClientBuildRecord, 'intent' | 'hostId'>
+
+/**
+ * The build for a client a workspace has (AGL-3958), read through
+ * `/api/admin/client-build`: the record is closed to clients by the rules, so
+ * staff read it only through that route. `null` while it is on its way, for
+ * a workspace that was not built for a client, and when the read fails; each
+ * opens the hand-off on the default bundle, as before.
+ */
+export function useStaffClientBuild(orgId: string | null | undefined): ClientBuildHandoff | null {
+  const { data: user } = useUser()
+  // `user` identity churns with token refreshes; the uid names the reader.
+  const userRef = useRef(user)
+  userRef.current = user
+  const uid = user?.uid ?? null
+  const [build, setBuild] = useState<ClientBuildHandoff | null>(null)
+  useEffect(() => {
+    if (!uid || !orgId) return
+    let cancelled = false
+    void authorizedFetch(userRef.current, '/api/admin/client-build', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId, action: 'get' }),
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (cancelled) return
+        const record = payload?.record
+        const intent = readClientBuildIntent(record?.intent)
+        setBuild(
+          intent
+            ? { intent, hostId: typeof record?.hostId === 'string' ? record.hostId : null }
+            : null,
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setBuild(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [uid, orgId])
+  return build
+}
+
 export interface StaffOrgOwnerHandoffProps {
   orgId: string
   /** The organization's name, for the dialog. */
@@ -142,6 +194,12 @@ export interface StaffOrgOwnerHandoffProps {
   org?: Partial<AglynOrgBilling> | null
   /** The workspace's sites, for a bundle link that carries a domain. */
   sites?: readonly BundleSiteOption[]
+  /**
+   * The workspace's build for a client, when it has one (AGL-3958): the
+   * dialog opens on its plan, add-ons, cadence, coupon and domain. Without
+   * one it opens on the default bundle.
+   */
+  build?: ClientBuildHandoff | null
   /** Called once the invitation is sent. */
   onSent?: () => void
 }
@@ -161,10 +219,11 @@ export interface StaffOrgOwnerHandoffProps {
  * invitation and the proposal commit together, and the email carries the
  * bundle checkout link. The dialog header copies that link or shows its QR
  * for an owner standing in front of you (AGL-3955). "Ask to upgrade" stays
- * for an owner who already exists.
+ * for an owner who already exists. A workspace built for a client opens the
+ * dialog on what its build agreed with the owner (AGL-3958).
  */
 export function StaffOrgOwnerHandoff(props: StaffOrgOwnerHandoffProps) {
-  const { orgId, orgName, org, sites = [], onSent } = props
+  const { orgId, orgName, org, sites = [], build, onSent } = props
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [open, setOpen] = useState(false)
@@ -175,10 +234,26 @@ export function StaffOrgOwnerHandoff(props: StaffOrgOwnerHandoffProps) {
   const [domain, setDomain] = useState<BundleDomainDraft>(EMPTY_BUNDLE_DOMAIN)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
+  // The build the fields were last opened on, so what staff change survives
+  // closing and reopening the dialog until the build itself changes.
+  const [seeded, setSeeded] = useState<string | null>(null)
   const emailValid = EMAIL_PATTERN.test(email.trim())
   // A paying workspace has nothing to propose: the handoff goes alone.
   const subscriptionLive = isLiveSubscriptionStatus(org?.billingStatus)
   const domainsAvailable = useDomainsAvailable()
+  const existingDomain = build?.intent.existingDomain ?? null
+
+  const openDialog = () => {
+    const seed = build ? JSON.stringify([build.intent, build.hostId]) : null
+    if (build && seed !== seeded) {
+      // The domain is for the site the build made, where staff can pick it.
+      const hostId = sites.some((site) => site.hostId === build.hostId) ? build.hostId : null
+      setDraft(bundleDraftFromClientBuildIntent(build.intent))
+      setDomain(bundleDomainFromClientBuildIntent(build.intent, hostId))
+      setSeeded(seed)
+    }
+    setOpen(true)
+  }
 
   const send = async () => {
     if (!emailValid || busy) return
@@ -217,7 +292,7 @@ export function StaffOrgOwnerHandoff(props: StaffOrgOwnerHandoffProps) {
       <Button
         size="small"
         variant="outlined"
-        onClick={() => setOpen(true)}
+        onClick={openDialog}
         sx={{ alignSelf: 'flex-start' }}
       >
         {'Hand off'}
@@ -295,6 +370,12 @@ export function StaffOrgOwnerHandoff(props: StaffOrgOwnerHandoffProps) {
                   available={domainsAvailable}
                   disabled={busy}
                 />
+                {existingDomain ? (
+                  <Alert severity="info">
+                    {`${existingDomain} is the owner’s own domain, so the link carries none to ` +
+                      'buy. Connect it with them on the site’s Custom Domain page.'}
+                  </Alert>
+                ) : null}
               </>
             )}
           </Stack>

@@ -98,7 +98,9 @@ import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deli
 import StaffMediaLibraryCard from '../../../../../components/staff-media-library-card.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
-import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
+import StaffOrgOwnerHandoff, {
+  useStaffClientBuild,
+} from '../../../../../components/org-owner-handoff.component'
 import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
 import StaffBundleLinkCard from '../../../../../components/staff-bundle-link.component'
 import { isLiveSubscriptionStatus } from '@aglyn/aglyn/app-utils/org-billing-doc'
@@ -321,6 +323,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       active = false
     }
   }, [isStaff, orgId, user])
+  // A workspace built for a client hands off on its build's intent (AGL-3958).
+  const clientBuild = useStaffClientBuild(isStaff ? orgId : null)
   // The sites a bundle link's domain can be for (AGL-3955).
   const bundleSites = useMemo(
     () =>
@@ -1405,6 +1409,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                           orgName={org?.name}
                           org={org as never}
                           sites={bundleSites}
+                          build={clientBuild}
                           onSent={() => setOrgNonce((nonce) => nonce + 1)}
                         />
                         {/* The separate step after the evaluation: ask the
