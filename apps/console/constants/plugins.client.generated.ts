@@ -307,4 +307,11 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     contributes: {},
     load: () => import('@aglyn/plugins-music/site'),
   },
+  {
+    id: 'domains',
+    apiPrefixes: ["domains"],
+    register: {"console":"registerDomainsConsole"},
+    contributes: {"console":{"slots":["hostDomain","hostDomainConnect"]}},
+    load: () => import('@aglyn/plugins-domains'),
+  },
 ]

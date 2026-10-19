@@ -24,7 +24,10 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
-import { upsertSubdomainRedirect } from '../../../../utils/server/subdomain-redirect'
+import {
+  upsertCustomDomainTwin,
+  upsertSubdomainRedirect,
+} from '../../../../utils/server/subdomain-redirect'
 
 /** Hosts examined per run — a ceiling on time and domain-provider calls. */
 const MAX_HOSTS = 200
@@ -201,6 +204,41 @@ async function handler(request: Request): Promise<Response> {
         .catch(() => undefined)
     }
 
+    // Third arm: the `www.`/apex twin of a domain (AGL-3961) whose redirect
+    // registration did not land at connect time. Registered whatever the
+    // primary's state, as the connect does: it only forwards to the primary.
+    const twinsRegistered: string[] = []
+    const twinPending = await firestore
+      .collection('hosts')
+      .where('cnameTwinPending', '==', true)
+      .limit(MAX_HOSTS)
+      .get()
+
+    for (const hostDoc of twinPending.docs) {
+      examined += 1
+      const domain = String(hostDoc.get('cname') ?? '').trim().toLowerCase()
+      const twin = String(hostDoc.get('cnameTwin') ?? '').trim().toLowerCase()
+      // A pending flag with no twin is a disconnect that raced the sweeper;
+      // nothing to register.
+      if (!domain || !twin) continue
+      if (dryRun) {
+        twinsRegistered.push(twin)
+        continue
+      }
+      const twinned = await upsertCustomDomainTwin({
+        twin,
+        target: domain,
+      }).catch(() => false)
+      if (!twinned) continue
+      twinsRegistered.push(twin)
+      await hostDoc.ref
+        .set(
+          { cnameTwinPending: firebaseAdmin.firestore.FieldValue.delete() },
+          { merge: true },
+        )
+        .catch(() => undefined)
+    }
+
     return Response.json(
       {
         ok: true,
@@ -209,6 +247,7 @@ async function handler(request: Request): Promise<Response> {
         completed,
         stillPending,
         redirectsRegistered,
+        twinsRegistered,
       },
       { status: 200 },
     )

@@ -292,6 +292,11 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'platform',
     why: "The starter site's SEO (AGL-3497): the `image:` marker is `defaultSiteSeo`'s sharing image, `DEFAULT_SITE_IMAGES.hero.src` — a same-origin `/_static/starter/` path to a photo shipped in the tenant app's own public folder. provision-host.ts stores it as a new site's `seo.image`; from then on it is the owner's stored value, rendered through resolveSocialImage like any other. No author string reaches this file and no third-party host is named.",
   },
+  'libs/plugins/domains/src/lib/server/domain-connect/return-page.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: the page a DNS provider sends the owner back to after one-click DNS (AGL-3963), served only by the domains plugin's console API route (`consoleApi` in plugins.config.json; the plugin registers no tenant surface). The marker is its inline <style>, a constant written in this file with no url() in it; no author or visitor string reaches it.",
+  },
   'libs/plugins/ai/src/lib/providers/vertex-image.ts': {
     markers: 3,
     guard: 'off-tenant',

@@ -303,6 +303,19 @@ broadened, general on purpose, before the code that counts them landed:
 - The weight still reads as `count 1.6× toward bandwidth`, the shape
   `check:pricing-tables` parses.
 
+### 2026-10-19 — `/managed` quotes Site Care, Managed and the project prices (AGL-3960)
+
+`/managed` (screen `qnuMY13VsS`, version `COCDoTk7vn`) is a pricing surface.
+It quotes Site Care ($49 a month, $588 a year on yearly billing), Managed
+Starter ($74 a month, $65 a month billed yearly: Starter plus Site Care),
+extra Site Care time ($79 per started hour) and the project starting points
+(landing page from $249, redesign from $749, logo or brand kit from $349), in
+the hero, the "What it costs" section, the fair-use list, the bigger-jobs row,
+the FAQ and the SEO description. It was written by
+`tools/scripts/publish-managed-landing-page.mjs`, whose constants restate
+`SITE_CARE_ADDON_MONTHLY_USD`, `PLAN_PRICING.starter` and the 2026-10-19
+Decision Log figures; a change to any of them owes this page a new version.
+
 ## Enterprise has no price here, but it has bands
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice
