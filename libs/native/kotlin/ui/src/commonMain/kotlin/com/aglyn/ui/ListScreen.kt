@@ -218,7 +218,8 @@ fun ScaffoldListRow(
 @Composable
 fun ScaffoldRowTile(icon: String, imageUrl: String? = null, darkImageUrl: String? = null) {
   BrandPicture(imageUrl, darkImageUrl, 32.dp, androidx.compose.foundation.shape.RoundedCornerShape(8.dp)) {
-    Box(Modifier.size(32.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
+    // A soft ink wash, so the tile reads on the page ground in light and dark alike (Figma's List row tile).
+    Box(Modifier.size(32.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)), contentAlignment = Alignment.Center) {
       Icon(AglynIcons.named(icon), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }

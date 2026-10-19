@@ -185,6 +185,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Percent
@@ -311,6 +312,7 @@ object AglynIcons {
     "share" to Icons.Outlined.Share,
     "schedule" to Icons.Outlined.Schedule,
     "wifi_off" to Icons.Outlined.WifiOff,
+    "more_horiz" to Icons.Outlined.MoreHoriz,
     "more_vert" to Icons.Outlined.MoreVert,
     "pause" to Icons.Outlined.PauseCircle,
     "barcode" to Icons.Outlined.QrCodeScanner,

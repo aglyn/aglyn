@@ -358,7 +358,8 @@ private fun OrderListRow(row: OrderRow, selected: Boolean, ticked: Boolean? = nu
     detail = listOfNotNull(items, row.channelLabel, row.createdAtMs.takeIf { it > 0 }?.let { relativeTime(it, now) }).joinToString(" · "),
     kind = com.aglyn.ui.ScaffoldRowKind.ORDER,
     selected = selected,
-    leading = { com.aglyn.ui.ScaffoldRowTile(if (ticked == true) "check_circle" else if (row.channelLabel == orderChannelLabel("pos")) "point_of_sale" else "receipt") },
+    // The order's glyph is Orders' own (the manifest's bag), the register's for a sale rung up there.
+    leading = { com.aglyn.ui.ScaffoldRowTile(if (ticked == true) "check_circle" else if (row.channelLabel == orderChannelLabel("pos")) "point_of_sale" else "shopping_basket") },
     figure = money(row.netCents),
     status = {
       Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {

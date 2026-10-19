@@ -189,7 +189,13 @@ fun SpecScreen(
           val picked = selection
           val detail = picked?.let { ScreenCatalog.spec(it.screen) }
           if (picked != null && detail != null) {
-            SpecScreen(detail, plugin, picked.params, embedded = true)
+            // An action that ends the detail (a remove with "back") closes the pane and re-reads the list beside it, rather
+            // than leaving the list showing what is gone.
+            val reload = androidx.compose.runtime.rememberCoroutineScope()
+            val paneSession = LocalScreenSession.current.let { outer -> outer.copy(back = { selection = null; reload.launch { model.load() } }) }
+            androidx.compose.runtime.CompositionLocalProvider(LocalScreenSession provides paneSession) {
+              SpecScreen(detail, plugin, picked.params, embedded = true)
+            }
           } else {
             SelectionPlaceholder("Pick a row to see it here", icon = AglynIcons.named("list"))
           }
