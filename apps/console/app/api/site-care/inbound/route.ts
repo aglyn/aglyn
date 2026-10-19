@@ -93,11 +93,7 @@ async function handler(request: Request): Promise<Response> {
     const message = await reads.received(inbound.id)
     if (!message) return acknowledge(202, { filed: false, reason: 'message-gone' })
     const app = firebaseAdmin.app()
-    const result = await fileSiteCareInboundEmail(app.firestore(), {
-      target,
-      message,
-      auth: app.auth(),
-    })
+    const result = await fileSiteCareInboundEmail(app.firestore(), { target, message })
     return acknowledge(result.outcome === 'opened' || result.outcome === 'replied' ? 200 : 202, {
       ...result,
     })

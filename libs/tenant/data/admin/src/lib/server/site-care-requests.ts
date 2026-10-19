@@ -1169,10 +1169,18 @@ export async function correctSiteCareMinutes(
         chargeSeq: seq,
         charge: newCharge({ ticketId: input.ticketId, seq, hours: verdict.billedHours, description, nowMs }),
       }
+    } else if (old.charge?.status === 'failed' && verdict.billedHours === 0) {
+      // A charge Stripe refused never made an item, and the corrected time
+      // no longer owes one: it is settled as voided, so the reconciliation
+      // stops reporting hours that are no longer owed.
+      request = { ...request, charge: { ...old.charge, status: 'voided', updatedAtMs: nowMs } }
     }
     tx.update(ticket.ref, { siteCare: request, updatedAt: FieldValue.serverTimestamp() })
     const history = ticketHistory(firestore, input.ticketId)
-    appendHistoryRow(
+    // The correction's own row id keys its Stripe call: one correction, one
+    // key, so a retried call cannot apply it twice (and a later correction,
+    // with its own row, is never mistaken for a replay of this one).
+    const correctionRef = appendHistoryRow(
       tx,
       firestore,
       history,
@@ -1195,6 +1203,7 @@ export async function correctSiteCareMinutes(
           includedMinutesUsed: allocation.includedMinutesUsed,
           overMinutes: allocation.overMinutes,
           billedHours: verdict.billedHours,
+          chargeStatus: request.charge?.status ?? null,
         },
         subjectId: input.ticketId,
       }),
@@ -1203,7 +1212,16 @@ export async function correctSiteCareMinutes(
     if (stripeStep === 'create' && request.charge) {
       appendHistoryRow(tx, firestore, history, chargeRequestedRow(input.ticketId, request.charge, input.actor, nowMs))
     }
-    return { ticket, old, request, statement: statementNow, stripeStep, live, description }
+    return {
+      ticket,
+      old,
+      request,
+      statement: statementNow,
+      stripeStep,
+      live,
+      description,
+      correctionId: correctionRef.id,
+    }
   })
 
   let request = result.request
@@ -1222,6 +1240,7 @@ export async function correctSiteCareMinutes(
         description: result.description,
         actor: input.actor,
         reason: reason.reason,
+        correctionId: result.correctionId,
       },
       deps,
     )
@@ -1253,6 +1272,15 @@ export async function correctSiteCareMinutes(
   return { request, statement: result.statement }
 }
 
+/**
+ * The idempotency key of a correction's Stripe call: the charge's own key
+ * and the id of the history row that records the correction. A clock would
+ * make every retry a new request to Stripe; the row id makes it the same one.
+ */
+export function siteCareCorrectionKey(chargeKey: string, correctionId: string): string {
+  return `${chargeKey}:fix:${correctionId}`
+}
+
 /** Updates or deletes a pending item after a correction, with its row. */
 async function correctLiveCharge(
   firestore: FirebaseFirestore.Firestore,
@@ -1265,12 +1293,14 @@ async function correctLiveCharge(
     description: string
     actor: SiteCareActor
     reason: string
+    /** The `minutes.corrected` history row this Stripe call carries out. */
+    correctionId: string
   },
   deps: SiteCareDeps,
 ): Promise<SiteCareRequest> {
   const itemId = String(input.live.invoiceItemId)
   const nowMs = nowOf(deps)
-  const seqKey = `${input.live.idempotencyKey}:fix:${nowMs}`
+  const seqKey = siteCareCorrectionKey(input.live.idempotencyKey, input.correctionId)
   const outcome =
     input.step === 'delete'
       ? await deleteExtraTimeItem(itemId, deps.stripe)
@@ -1363,7 +1393,7 @@ export async function reverseSiteCareCharge(
     requestAudit(ticket.orgId, input.ticketId, `charge.${intended}Requested`),
   )
   let next: SiteCareCharge
-  let stripeRef: HistoryStripeRef | null = null
+  let stripeRef: HistoryStripeRef
   if (intended === 'void') {
     const deleted = stage === 'deleted' ? ({ ok: true, deleted: true } as const) : await deleteExtraTimeItem(charge.invoiceItemId, deps.stripe)
     if (deleted.ok === false) throw new SiteCareError(deleted.error, 502)

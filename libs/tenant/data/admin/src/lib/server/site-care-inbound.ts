@@ -33,6 +33,7 @@ import {
   readSiteCareOrg,
   type SiteCareDeps,
 } from './site-care-requests'
+import { findUserByEmailAcrossPools } from './auth-pools'
 import { sendSiteCareEmail } from './site-care-emails'
 
 /**
@@ -57,20 +58,25 @@ export function siteCareInboundTarget(
 ): SiteCareInboundTarget | null {
   let found: SiteCareInboundTarget | null = null
   for (const value of recipients) {
+    // Validated (and lowercased) for the domain, but the local part is read
+    // as written: a request id is a case-sensitive Firestore id, and
+    // lowercasing `care+AbC…` would look up a ticket that does not exist.
     const address = emailAddressOf(value)
     if (!address) continue
-    const at = address.lastIndexOf('@')
-    const local = address.slice(0, at)
-    if (address.slice(at + 1) !== domain.toLowerCase()) continue
-    if (local === SITE_CARE_INBOUND_LOCAL_PART) {
+    const raw = String(value ?? '').trim()
+    const written = (/<([^<>]+)>\s*$/.exec(raw)?.[1] ?? raw).trim()
+    const at = written.lastIndexOf('@')
+    if (at <= 0 || address.slice(address.lastIndexOf('@') + 1) !== domain.toLowerCase()) continue
+    const local = written.slice(0, at)
+    if (local.toLowerCase() === SITE_CARE_INBOUND_LOCAL_PART) {
       found = found ?? { kind: 'new' }
       continue
     }
     const prefix = `${SITE_CARE_INBOUND_LOCAL_PART}+`
-    if (local.startsWith(prefix)) {
+    if (local.toLowerCase().startsWith(prefix)) {
       const requestId = local.slice(prefix.length)
-      // Firestore ids: 20 characters of [A-Za-z0-9]; mail may fold case, so
-      // the id is matched as written and refused when it is not one by shape.
+      // Firestore ids: 20 characters of [A-Za-z0-9]; anything else by shape
+      // is refused rather than looked up.
       if (/^[A-Za-z0-9]{10,40}$/.test(requestId)) return { kind: 'reply', requestId }
     }
   }
@@ -84,19 +90,32 @@ export interface SiteCareSenderMatch {
   email: string
 }
 
+/** The account an address signs in with: its uid, or null when it has none. */
+export type SiteCareAccountLookup = (email: string) => Promise<{ uid: string } | null>
+
+/**
+ * Every pool, not only the project's: an owner who signs in through SSO is a
+ * GCIP tenant user the project pool never returns (AGL-1122), and their mail
+ * would be answered as a stranger's.
+ */
+export const findSiteCareAccount: SiteCareAccountLookup = async (email) => {
+  const found = await findUserByEmailAcrossPools(email).catch(() => null)
+  return found ? { uid: found.record.uid } : null
+}
+
 /**
  * The Site Care workspace a sender belongs to: the account their address
- * signs in with, then the workspaces it is a member of, the first with Site
- * Care in force (by id, so the choice is stable).
+ * signs in with (in any pool), then the workspaces it is a member of, the
+ * first with Site Care in force (by id, so the choice is stable).
  */
 export async function findSiteCareWorkspaceForSender(
   firestore: FirebaseFirestore.Firestore,
-  auth: { getUserByEmail(email: string): Promise<{ uid: string; email?: string }> },
+  findAccount: SiteCareAccountLookup,
   sender: string,
 ): Promise<SiteCareSenderMatch | null> {
   const email = emailAddressOf(sender)
   if (!email) return null
-  const user = await auth.getUserByEmail(email).catch(() => null)
+  const user = await findAccount(email).catch(() => null)
   if (!user) return null
   const memberships = await firestore.collection('users').doc(user.uid).collection('orgs').limit(25).get()
   const orgIds = memberships.docs.map((doc) => doc.id).sort()
@@ -127,7 +146,8 @@ export async function fileSiteCareInboundEmail(
   input: {
     target: SiteCareInboundTarget
     message: ReceivedEmail
-    auth: { getUserByEmail(email: string): Promise<{ uid: string; email?: string }> }
+    /** The seam a spec replaces; every auth pool by default. */
+    findAccount?: SiteCareAccountLookup
   },
   deps: SiteCareDeps = {},
 ): Promise<SiteCareInboundOutcome> {
@@ -137,7 +157,7 @@ export async function fileSiteCareInboundEmail(
   if (input.target.kind === 'reply') {
     const ticket = await firestore.collection('supportTickets').doc(input.target.requestId).get()
     const orgId = String(ticket.get('orgId') ?? '')
-    const match = sender ? await findSiteCareWorkspaceForSender(firestore, input.auth, sender) : null
+    const match = sender ? await findSiteCareWorkspaceForSender(firestore, input.findAccount ?? findSiteCareAccount, sender) : null
     // Only a member of the request's own workspace may add to it.
     const member =
       match && orgId
@@ -159,7 +179,7 @@ export async function fileSiteCareInboundEmail(
     }
     // A reply that cannot join its request is read as a new one below.
   }
-  const match = sender ? await findSiteCareWorkspaceForSender(firestore, input.auth, sender) : null
+  const match = sender ? await findSiteCareWorkspaceForSender(firestore, input.findAccount ?? findSiteCareAccount, sender) : null
   if (!match) {
     if (sender) {
       await (deps.email ?? sendSiteCareEmail)({
