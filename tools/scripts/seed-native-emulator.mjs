@@ -92,10 +92,13 @@ function encode(value) {
   return { mapValue: { fields: Object.fromEntries(Object.entries(value).map(([k, v]) => [k, encode(v)])) } }
 }
 
-/** Writes `data` at `path`; with `merge`, only its own top-level fields, leaving the rest. */
-async function put(path, data, { merge = false } = {}) {
+/**
+ * Writes `data` at `path`; with `merge`, only its own top-level fields, leaving the rest, or only the dotted
+ * `fields` named (one key of a map, as `releaseFlags.release_outreach`).
+ */
+async function put(path, data, { merge = false, fields = null } = {}) {
   const mask = merge
-    ? `?${Object.keys(data)
+    ? `?${(fields ?? Object.keys(data))
         .map((key) => `updateMask.fieldPaths=${encodeURIComponent(key)}`)
         .join('&')}`
     : ''
