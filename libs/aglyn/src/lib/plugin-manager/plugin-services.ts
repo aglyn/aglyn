@@ -32,6 +32,12 @@
  * contract token carries the implementation type with it, so a seam another
  * plugin invents needs no core edit at all.
  *
+ * A plugin's token lives in its contracts module, which another plugin
+ * imports as `@aglyn/plugins-<id>/contracts` after naming that plugin in its
+ * `uses` (AGL-3980, docs/PACKAGES.md), so both sides share one id and one
+ * type. Declaring the same id twice still works, but a second declaration is
+ * a copy that drifts.
+ *
  * Attribution follows every other registry: the owner is the plugin whose
  * register fn is running (`setRegisteringPluginId`), or the `pluginId` the
  * caller names for a registration made at module scope, where the loader's

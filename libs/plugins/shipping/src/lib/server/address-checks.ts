@@ -15,10 +15,12 @@
  * limitations under the License.
  */
 
+import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import type {
   PluginShippingAddress,
   PluginShippingAddressCheck,
 } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
+import type { OrderEventOrder } from '@aglyn/plugins-commerce/contracts'
 import { SHIPPING_COLLECTIONS } from '../constants/bundle-common'
 import { isCompleteAddress, normalizeShippingAddress } from '../model/shipping-settings'
 import { openShippingAccount } from './account-store'
@@ -32,8 +34,8 @@ import { resolveShippingSite } from './site-context'
  *
  * A storefront checkout collects the street address on the payment page, so
  * the first moment the whole address exists on the server is the paid order.
- * The seller raises `order.paid` (a plugin event, subscribed by name — this
- * plugin never imports the seller), and this module asks the carrier platform
+ * The seller raises `order.paid` (a plugin event, its shape from commerce's
+ * contracts — AGL-3980), and this module asks the carrier platform
  * whether the address is deliverable, then keeps the answer beside the order:
  * the order dialog shows an undeliverable or corrected address before anyone
  * buys a label for it, and a re-check from the dialog replaces it.
@@ -99,11 +101,10 @@ export async function writeAddressCheck(
 }
 
 /** The slice of an `order.paid` envelope this module reads. */
-export interface PaidOrderEnvelope {
-  hostId: string
-  attempt: number
-  payload: { order?: { id?: unknown; shippingAddress?: unknown } | null } | null | undefined
-}
+export type PaidOrderEnvelope = Pick<
+  PluginDomainEventEnvelope<{ order: Pick<OrderEventOrder, 'id' | 'shippingAddress'> }>,
+  'hostId' | 'attempt' | 'payload'
+>
 
 /** The seller's address shape (`line1`/`postalCode`, or Stripe's `address.*`) as ours. */
 export function addressFromOrder(value: unknown): PluginShippingAddress | undefined {
