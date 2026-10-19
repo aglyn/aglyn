@@ -24,6 +24,7 @@ import {
   listPluginDomainEventSubscribers,
   resetPluginDomainEventsForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type { OrderEventOrder } from '@aglyn/plugins-commerce/contracts'
 import { randomBytes } from 'node:crypto'
 import { createMemoryFirestore, type MemoryFirestore } from '../testing/memory-firestore'
 import { ensureShippingAccount } from './account-store'
@@ -37,10 +38,11 @@ import { readShippingConfig, setShippingFetchForTests } from './config'
 import { setShippingDbForTests } from './db'
 
 /**
- * The address check taken when an order is paid: subscribed to `order.paid`
- * by name, asks the carrier platform (mocked HTTP) once per order, keeps the
- * answer for the order dialog, never opens a provider account for a shopper,
- * and retries a provider failure through the outbox only so many times.
+ * The address check taken when an order is paid: subscribed to commerce's
+ * `order.paid` token, asks the carrier platform (mocked HTTP) once per order,
+ * keeps the answer for the order dialog, never opens a provider account for a
+ * shopper, and retries a provider failure through the outbox only so many
+ * times.
  */
 
 let db: MemoryFirestore
@@ -81,7 +83,7 @@ function config() {
 
 const open = () => ensureShippingAccount(ORG, config(), { name: 'Rosa', email: 'r@example.com', company: 'Candles' })
 
-const paid = (overrides: Record<string, unknown> = {}, attempt = 1) => ({
+const paid = (overrides: Partial<OrderEventOrder> = {}, attempt = 1) => ({
   hostId: HOST,
   attempt,
   payload: {
@@ -171,7 +173,7 @@ describe('the address check taken when an order is paid', () => {
 describe('the subscription', () => {
   beforeEach(() => resetPluginDomainEventsForTests())
 
-  it('takes order.paid by name, from the server declarations', async () => {
+  it('takes commerce’s order.paid, from the server declarations', async () => {
     jest.isolateModules(() => {
       require('../declarations.server')
     })

@@ -22,8 +22,8 @@ import {
   type PluginShippingRateQuoter,
 } from '@aglyn/aglyn/plugin-manager/plugin-shipping-rates'
 import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usage-meters'
+import { ORDER_PAID_EVENT } from '@aglyn/plugins-commerce/contracts'
 import { SHIPPING_PLUGIN_ID, SHIPPING_USAGE_METER_ID } from './constants/bundle-common'
-import type { PaidOrderEnvelope } from './server/address-checks'
 
 /**
  * Shipping's SERVER declarations (AGL-3612), loaded by both apps' servers
@@ -33,8 +33,8 @@ import type { PaidOrderEnvelope } from './server/address-checks'
  *   cart and buy-now in the tenant, a draft order's link in the console;
  * - the listener that starts following a parcel a merchant shipped by hand;
  * - the usage meter the monthly sweep bills deferred label charges through;
- * - the `order.paid` subscriber that checks a paid order's address, by the
- *   event's name — the seller that raises it is never imported.
+ * - the `order.paid` subscriber that checks a paid order's address, by
+ *   commerce's event token, its shape from commerce's contracts (AGL-3980).
  *
  * Each is registered whether or not the deployment is configured, and each
  * answers as though it were absent when it is not: the quoter is not
@@ -75,8 +75,8 @@ export function registerShippingServerDeclarations(): void {
     },
     { pluginId: SHIPPING_PLUGIN_ID },
   )
-  subscribePluginDomainEvent<PaidOrderEnvelope['payload']>(
-    'order.paid',
+  subscribePluginDomainEvent(
+    ORDER_PAID_EVENT,
     async (envelope) => {
       const { checkPaidOrderAddress } = await import('./server/address-checks')
       await checkPaidOrderAddress(envelope)

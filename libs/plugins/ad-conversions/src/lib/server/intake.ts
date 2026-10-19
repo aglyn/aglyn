@@ -26,6 +26,7 @@ import {
   type VisitorConsentHost,
 } from '@aglyn/aglyn/app-utils/visitor-consent'
 import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import { ORDER_PAID_EVENT, type OrderEventOrder, type OrderEventPayload } from '@aglyn/plugins-commerce/contracts'
 import type {
   AdvertisingLeadRequest,
   AdvertisingOrderConsentRequest,
@@ -265,15 +266,16 @@ function orderItems(lines: unknown): ConversionItem[] {
 /**
  * `order.paid`, from commerce through core's domain-event outbox: a Purchase,
  * owed only where the checkout recorded a consent that granted. Reads only the
- * payload's public order view, never commerce's code.
+ * payload's public order view, typed by commerce's contracts (AGL-3980); each
+ * field is still read defensively, since the payload crossed the outbox.
  */
 export async function intakeOrderPaid(
   deps: IntakeDeps,
-  envelope: PluginDomainEventEnvelope<unknown>,
+  envelope: PluginDomainEventEnvelope<OrderEventPayload>,
 ): Promise<number> {
-  if (envelope.event !== 'order.paid' || !envelope.hostId) return 0
-  const order = ((envelope.payload ?? {}) as Record<string, any>)['order'] as Record<string, any> | undefined
-  const orderId = text(order?.['id'])
+  if (envelope.event !== ORDER_PAID_EVENT.id || !envelope.hostId) return 0
+  const order: Partial<OrderEventOrder> | undefined = envelope.payload?.order
+  const orderId = text(order?.id)
   if (!order || !orderId || !ORDER_KEY.test(orderId)) return 0
   const id = advertisingEventId('purchase', orderId)
   if (!id) return 0
@@ -284,25 +286,25 @@ export async function intakeOrderPaid(
   // Unknown consent is no consent: nothing was recorded for this order.
   if (!consent || consent.hostId !== envelope.hostId) return 0
   const host = await deps.host(envelope.hostId)
-  const totals = (order['totals'] ?? {}) as Record<string, unknown>
-  const address = (order['shippingAddress'] ?? {}) as Record<string, unknown>
+  const totals: Partial<OrderEventOrder['totals']> = order.totals ?? {}
+  const address: Record<string, unknown> = order.shippingAddress ?? {}
   // The browser tag's `purchase` value excludes tax (`purchase-analytics.ts`),
   // so the server's does too: one conversion, one figure.
-  const total = totals['totalCents'] === null || totals['totalCents'] === undefined ? null : cents(totals['totalCents'])
-  const valueCents = total === null ? cents(totals['itemsCents']) : Math.max(0, total - cents(totals['taxCents']))
-  const email = normalizeEmail(order['customerEmail'])
+  const total = totals.totalCents === null || totals.totalCents === undefined ? null : cents(totals.totalCents)
+  const valueCents = total === null ? cents(totals.itemsCents) : Math.max(0, total - cents(totals.taxCents))
+  const email = normalizeEmail(order.customerEmail)
   const event: ConversionEvent = {
     id,
     name: 'purchase',
     occurredAtMs: envelope.occurredAtMs || deps.now(),
     url: consent.url ?? null,
-    currency: (text(order['currency']) ?? 'usd').toUpperCase(),
+    currency: (text(order.currency) ?? 'usd').toUpperCase(),
     valueCents,
     orderId,
-    items: orderItems(order['lineItems']),
+    items: orderItems(order.lineItems),
     user: hashUserData({
-      email: order['customerEmail'],
-      name: text(order['customerName']) ?? text(address['name']),
+      email: order.customerEmail,
+      name: text(order.customerName) ?? text(address['name']),
       city: address['city'],
       state: address['state'],
       postalCode: address['postalCode'],
@@ -311,7 +313,7 @@ export async function intakeOrderPaid(
     browser: { ip: consent.ip ?? null, userAgent: consent.userAgent ?? null, ...(consent.ids ?? {}) },
   }
   // A Stripe test-mode checkout says so in its id (`cs_test_…`).
-  const test = stripeIdIsTestMode(orderId) || order['livemode'] === false
+  const test = stripeIdIsTestMode(orderId) || order.livemode === false
   const count = await owe(deps, connections, host, event, test, email ? sha256Hex(email) : null)
   // The consent has served its order; the owed events carry what they need.
   await deps.store.removeConsent(consentId)

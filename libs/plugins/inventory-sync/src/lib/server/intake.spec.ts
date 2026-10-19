@@ -131,7 +131,7 @@ describe('the order-event intake (AGL-3642)', () => {
   })
 
   it('reads lines and addresses defensively', () => {
-    expect(orderLines({ id: 'o', number: null, lineItems: 'nonsense' })).toEqual({ lines: [], skipped: [] })
+    expect(orderLines({ lineItems: 'nonsense' })).toEqual({ lines: [], skipped: [] })
     expect(systemAddress({ name: 'Only a name' })).toBeNull()
     expect(systemAddress(null)).toBeNull()
   })

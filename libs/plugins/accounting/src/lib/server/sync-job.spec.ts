@@ -23,14 +23,8 @@ import { randomBytes } from 'node:crypto'
 import { asFirestore, memoryFirestore } from '../testing/memory-firestore'
 import { mockFetch } from '../testing/mock-fetch'
 import { registerPluginService, resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
-import {
-  COMMERCE_ORDER_HISTORY,
-  backfillRefund,
-  runBackfillStep,
-  snapshotFromHistoryEntry,
-  startBackfill,
-  type CommerceOrderHistoryEntry,
-} from './backfill'
+import { ORDER_HISTORY_CONTRACT, type OrderHistoryEntry, type OrderHistoryPageRequest } from '@aglyn/plugins-commerce/contracts'
+import { backfillRefund, runBackfillStep, snapshotFromHistoryEntry, startBackfill } from './backfill'
 import { newConnectionRecord, readConnection } from './connection-store'
 import { listPaidPayouts } from './payouts'
 import type { AccountingProvider } from './providers/provider'
@@ -160,7 +154,7 @@ describe('the tick', () => {
 
 describe('backfill', () => {
   /** An entry of commerce's order history, as its reader hands it out. */
-  const entry = (id: string, overrides: Partial<CommerceOrderHistoryEntry> = {}): CommerceOrderHistoryEntry => ({
+  const entry = (id: string, overrides: Partial<OrderHistoryEntry> = {}): OrderHistoryEntry => ({
     id,
     createdAtMs: NOW - 10 * 86_400_000,
     paidAtMs: NOW - 10 * 86_400_000,
@@ -169,9 +163,14 @@ describe('backfill', () => {
     taxRateId: null,
     order: {
       id,
+      object: 'order',
       number: 12,
       status: 'refunded',
+      channel: 'storefront',
       currency: 'usd',
+      customerEmail: null,
+      customerName: null,
+      taxMode: null,
       lineItems: [{ name: 'Mug', quantity: 1, unitAmountCents: 1000 }],
       totals: { itemsCents: 1000, shippingCents: 0, taxCents: 0, discountCents: 0, totalCents: 1000, feeCents: 30 },
       refundedCents: 400,
@@ -182,13 +181,13 @@ describe('backfill', () => {
   afterEach(() => resetPluginServicesForTests())
 
   /** Commerce's reader over `entries`, as commerce registers it. */
-  function registerHistory(entries: CommerceOrderHistoryEntry[]) {
-    const listOrders = jest.fn(async (request: { hostId: string; fromMs: number; untilMs: number; limit: number }) =>
+  function registerHistory(entries: OrderHistoryEntry[]) {
+    const listOrders = jest.fn(async (request: OrderHistoryPageRequest) =>
       entries
         .filter((row) => request.hostId === 'host-1' && row.createdAtMs >= request.fromMs && row.createdAtMs < request.untilMs)
         .slice(0, request.limit),
     )
-    registerPluginService(COMMERCE_ORDER_HISTORY, { listOrders }, { pluginId: 'commerce' })
+    registerPluginService(ORDER_HISTORY_CONTRACT, { listOrders }, { pluginId: 'commerce' })
     return listOrders
   }
 
@@ -213,9 +212,13 @@ describe('backfill', () => {
     const taxed = entry('o-4', {
       order: {
         id: 'o-4',
+        object: 'order',
         number: 13,
         status: 'refunded',
+        channel: 'storefront',
         currency: 'usd',
+        customerEmail: null,
+        customerName: null,
         taxMode: 'stripe-automatic',
         lineItems: [{ name: 'Mug', quantity: 1, unitAmountCents: 1000 }],
         totals: { itemsCents: 1000, shippingCents: 0, taxCents: 80, discountCents: 0, totalCents: 1080, feeCents: 30 },

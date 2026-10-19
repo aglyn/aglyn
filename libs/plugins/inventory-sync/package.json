@@ -36,8 +36,14 @@
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
+    "@aglyn/plugins-commerce": "1.0.0-beta.270",
     "@mui/material": "^9.3.1",
     "react": "^19.2.8"
+  },
+  "peerDependenciesMeta": {
+    "@aglyn/plugins-commerce": {
+      "optional": true
+    }
   },
   "sideEffects": false,
   "description": "Inventory and ERP sync for Aglyn stores: stock levels, products and paid orders kept in step with the merchant's own Cin7 Core, inFlow, Brightpearl or Ordoro account."

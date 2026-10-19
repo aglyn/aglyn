@@ -25,17 +25,16 @@
  * revoked key or a lapsed plan stops it.
  *
  * Where each comes from: commerce and bookings raise theirs on core's
- * domain-event outbox and this plugin subscribes by name; a contact and a
+ * domain-event outbox and this plugin subscribes to them (commerce's names
+ * come from its contracts, AGL-3980; bookings' by name); a contact and a
  * form submission are host events, which this plugin relays onto the same
  * outbox (`zapier.relay`).
  */
 
+import type { CommerceOrderEventName } from '@aglyn/plugins-commerce/contracts'
+
 export type ZapierHookEvent =
-  | 'order.paid'
-  | 'order.fulfilled'
-  | 'order.delivered'
-  | 'order.refunded'
-  | 'order.cancelled'
+  | CommerceOrderEventName
   | 'booking.created'
   | 'booking.rescheduled'
   | 'booking.canceled'

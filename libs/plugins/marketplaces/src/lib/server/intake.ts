@@ -15,12 +15,14 @@
  * limitations under the License.
  */
 
+import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type { OrderEventFulfillment, OrderEventOrder } from '@aglyn/plugins-commerce/contracts'
 import type { MarketplaceStore, StoredShipment } from './store'
 
 /**
  * What this plugin hears of the store's orders (AGL-3638), through
- * commerce's order events by the names commerce raises them under; never
- * commerce's types, which are restated here as far as they are read.
+ * commerce's order events. The payload's shape comes from commerce's
+ * contracts (AGL-3980).
  *
  * Both subscribers only QUEUE: no grant is opened and no marketplace is
  * called from an event, because the outbox drains in the tenant, which
@@ -32,29 +34,14 @@ import type { MarketplaceStore, StoredShipment } from './store'
  *   order, to confirm back with its tracking.
  */
 
-/** An order as commerce's events carry it, as far as this plugin reads it. */
-export interface OrderEventOrder {
-  id: string
-  channel?: string
-}
+/** An envelope as the outbox hands it over. */
+export type OrderEventEnvelope<Payload> = Pick<PluginDomainEventEnvelope<Payload>, 'id' | 'event' | 'hostId' | 'payload'>
 
-export interface OrderEventFulfillment {
-  id: string
-  lines: Array<{ lineItemId: number; quantity: number }>
-  carrier: string | null
-  trackingNumber: string | null
-  trackingUrl: string | null
-  /** What the parcel's label cost, in integer cents of the order's currency; `null` when unknown (AGL-3693). */
-  labelCostCents?: number | null
-  at: string
-}
-
-export interface OrderEventEnvelope<Payload> {
-  id: string
-  event: string
-  hostId: string
-  payload: Payload
-}
+/** A shipment recorded on an order, as far as this plugin reads it. */
+export type OrderFulfilledEnvelope = OrderEventEnvelope<{
+  order?: Pick<OrderEventOrder, 'id' | 'channel'>
+  fulfillment?: OrderEventFulfillment
+}>
 
 export interface IntakeDeps {
   store: MarketplaceStore
@@ -70,7 +57,7 @@ export async function onStockMoved(deps: IntakeDeps, envelope: OrderEventEnvelop
 /** A shipment recorded on an order: queued to confirm when a marketplace sold the order. */
 export async function onOrderFulfilled(
   deps: IntakeDeps,
-  envelope: OrderEventEnvelope<{ order?: OrderEventOrder; fulfillment?: OrderEventFulfillment }>,
+  envelope: OrderFulfilledEnvelope,
 ): Promise<'queued' | 'already' | 'ignored'> {
   const order = envelope?.payload?.order
   const fulfillment = envelope?.payload?.fulfillment

@@ -20,6 +20,13 @@
  */
 
 import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type {
+  OrderEventFulfillment,
+  OrderEventOrder,
+  OrderEventPayload,
+  OrderFulfilledEventPayload,
+  OrderRefundedEventPayload,
+} from '@aglyn/plugins-commerce/contracts'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import {
   registerPluginShipmentRecords,
@@ -36,9 +43,6 @@ import {
   openProtectionPolicy,
   syncNarvarOrder,
   tellRouteShipment,
-  type OrderEventPayload,
-  type OrderFulfilledPayload,
-  type OrderRefundedPayload,
 } from './order-sync'
 import { aftershipWebhookRoute, availabilityRoute, orderRoute, settingsRoute } from './routes'
 
@@ -135,10 +139,12 @@ async function connect(change: Record<string, unknown>) {
   return response.json()
 }
 
-const ORDER = {
+const ORDER: OrderEventOrder = {
   id: 'cs_1',
+  object: 'order',
   number: 1042,
   status: 'paid',
+  channel: 'online',
   currency: 'usd',
   customerEmail: 'ann@example.com',
   customerName: 'Ann Lee',
@@ -147,7 +153,10 @@ const ORDER = {
     { productId: 'pdf', name: 'Guide', quantity: 1, unitAmountCents: 500, productType: 'digital' },
   ],
   shippingAddress: { line1: '2 B St', city: 'Boston', state: 'MA', postalCode: '02108', country: 'US' },
-  fulfillments: [] as any[],
+  totals: { itemsCents: 10_500, shippingCents: 0, taxCents: 0, discountCents: 0, totalCents: 10_698, feeCents: 0, extrasCents: 198 },
+  refundedCents: 0,
+  taxMode: 'none',
+  fulfillments: [],
   extras: [
     { id: 'post-purchase.package-protection', pluginId: 'post-purchase', key: 'package-protection', label: 'Package protection', amountCents: 198, quoteRef: 'q_1' },
   ],
@@ -157,7 +166,19 @@ function envelope<P>(event: string, payload: P, id = `${event}:1`): PluginDomain
   return { id, event, hostId: HOST, orgId: ORG, occurredAtMs: Date.UTC(2026, 9, 7), attempt: 1, payload }
 }
 
-const FULFILLMENT = { id: 'f_1', lines: [{ lineItemId: 0, quantity: 1 }], carrier: 'UPS', trackingNumber: '1Z999' }
+const FULFILLMENT: OrderEventFulfillment = {
+  id: 'f_1',
+  lines: [{ lineItemId: 0, quantity: 1 }],
+  carrier: 'UPS',
+  trackingNumber: '1Z999',
+  trackingUrl: null,
+  labelUrl: null,
+  labelCostCents: null,
+  at: '2026-10-08T00:00:00.000Z',
+}
+
+/** What one refund moved; only `full` decides whether cover ends. */
+const refund = (full: boolean) => ({ id: 're_1', amountCents: full ? 10_698 : 500, lineItemIds: [], full })
 
 function routeCalls(path: string) {
   return calls.filter((call) => call.url.startsWith('https://api.route.com') && call.url.endsWith(path))
@@ -341,7 +362,7 @@ describe('the Route policy', () => {
   })
 
   it('tells each parcel once, and waits for a policy still being opened', async () => {
-    const fulfilled = envelope<OrderFulfilledPayload>('order.fulfilled', { order: ORDER, fulfillment: FULFILLMENT })
+    const fulfilled = envelope<OrderFulfilledEventPayload>('order.fulfilled', { order: ORDER, fulfillment: FULFILLMENT })
     await expect(tellRouteShipment(fulfilled)).resolves.toBeUndefined()
     expect(routeCalls('/shipments')).toHaveLength(0)
     fail.set('/v2/orders', 503)
@@ -361,9 +382,9 @@ describe('the Route policy', () => {
 
   it('ends on a whole refund or a cancel, never on a partial refund', async () => {
     await openProtectionPolicy(envelope<OrderEventPayload>('order.paid', { order: ORDER }))
-    await endProtectionPolicy(envelope<OrderRefundedPayload>('order.refunded', { order: ORDER, refund: { full: false } }))
+    await endProtectionPolicy(envelope<OrderRefundedEventPayload>('order.refunded', { order: ORDER, refund: refund(false) }))
     expect(calls.filter((call) => call.url.endsWith('/cancel'))).toHaveLength(0)
-    await endProtectionPolicy(envelope<OrderRefundedPayload>('order.refunded', { order: ORDER, refund: { full: true } }))
+    await endProtectionPolicy(envelope<OrderRefundedEventPayload>('order.refunded', { order: ORDER, refund: refund(true) }))
     await endProtectionPolicy(envelope<OrderEventPayload>('order.cancelled', { order: ORDER }))
     expect(calls.filter((call) => call.url.endsWith('/orders/pol_1/cancel'))).toHaveLength(1)
     expect(db.docs.get(`orgs/${ORG}/postPurchaseOrders/${HOST}__cs_1`)?.['route']?.status).toBe('cancelled')
@@ -388,7 +409,7 @@ describe('AfterShip', () => {
   const UPDATE = { msg: { tracking_number: '1Z999', tag: 'OutForDelivery', custom_fields: { host_id: HOST, record_id: 'cs_1' } } }
 
   it('follows each shipped parcel once', async () => {
-    const fulfilled = envelope<OrderFulfilledPayload>('order.fulfilled', { order: ORDER, fulfillment: FULFILLMENT })
+    const fulfilled = envelope<OrderFulfilledEventPayload>('order.fulfilled', { order: ORDER, fulfillment: FULFILLMENT })
     await followParcel(fulfilled)
     await followParcel(fulfilled)
     const created = calls.filter((call) => call.url.endsWith('/trackings'))
@@ -397,7 +418,7 @@ describe('AfterShip', () => {
   })
 
   it('records a verified update on the order, and nothing for a forged or unknown one', async () => {
-    await followParcel(envelope<OrderFulfilledPayload>('order.fulfilled', { order: ORDER, fulfillment: FULFILLMENT }))
+    await followParcel(envelope<OrderFulfilledEventPayload>('order.fulfilled', { order: ORDER, fulfillment: FULFILLMENT }))
     expect((await aftershipWebhookRoute(delivery(UPDATE, 'forged'))).status).toBe(401)
     const unknown = await aftershipWebhookRoute(delivery({ msg: { ...UPDATE.msg, tracking_number: 'OTHER' } }))
     await expect(unknown.json()).resolves.toEqual({ ok: true, applied: 'unknown_parcel' })
@@ -427,7 +448,19 @@ describe('Narvar', () => {
     const shipped = {
       ...ORDER,
       status: 'fulfilled',
-      fulfillments: [{ id: 'f_1', status: 'active', carrier: 'UPS', trackingNumber: '1Z999', lines: [{ lineItemId: 0, quantity: 1 }], at: '2026-10-08T00:00:00.000Z' }],
+      fulfillments: [
+        {
+          id: 'f_1',
+          lineItemIds: [0],
+          status: 'active' as const,
+          carrier: 'UPS',
+          trackingNumber: '1Z999',
+          trackingUrl: null,
+          labelUrl: null,
+          lines: [{ lineItemId: 0, quantity: 1 }],
+          at: '2026-10-08T00:00:00.000Z',
+        },
+      ],
     }
     await syncNarvarOrder(envelope<OrderEventPayload>('order.fulfilled', { order: shipped }))
     const sent = calls.filter((call) => call.url.startsWith('https://ws.narvar.com'))
