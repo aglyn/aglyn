@@ -1137,7 +1137,10 @@ funnels, settled AI jobs, outreach sequences, a token-less sandbox accounting
 connection with its sync log, and marketplace listings). The workspace
 gets a logo and every site a favicon, real files from
 `tools/scripts/seed-native/art/` stored the way the console stores them, so
-the rail, the Sites list and the site switcher show pictures. It prints the
+the rail, the Sites list and the site switcher show pictures. The member
+also gets a second workspace, Harbor Light Dental: white-label, on the Agency
+plan, with a brand profile (product name, color and its own mark) stored the
+way the console's white-label settings store it. It prints the
 member's sign-in. There are no real
 `GoogleService-Info.plist` or `google-services.json` files: the Firebase SDKs
 are configured in code from build settings (`FirebaseOptions`), which is also

@@ -74,7 +74,7 @@ function hostSearchTokens({ displayName, subdomain, cname }) {
 }
 
 /** `mediaFilterKeys` (libs/aglyn/src/lib/app-utils/media-metadata.ts) for a still image. */
-function mediaKeys({ fileName, contentType, alt, width, height }) {
+export function mediaKeys({ fileName, contentType, alt, width, height }) {
   const words = String(fileName).replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
   const kind = contentType.startsWith('image/')
     ? 'image'
@@ -92,7 +92,7 @@ function mediaKeys({ fileName, contentType, alt, width, height }) {
   }
 }
 
-const BUCKET = 'demo-aglyn.appspot.com'
+export const BUCKET = 'demo-aglyn.appspot.com'
 
 /** Sample photos the repository ships, one per seeded JPEG, uploaded when the seed is given a Storage emulator. */
 const SAMPLE_PHOTOS = {
