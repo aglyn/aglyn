@@ -111,6 +111,8 @@ final class ShellNavigation {
   var showCreate = false
   /// The AI panel, docked on the right (a sheet on a phone).
   var showAssist = false
+  /// This navigation's identity, for a tab strip that keeps every tab's view alive.
+  var tabID: ObjectIdentifier { ObjectIdentifier(self) }
   /// The sidebar folded away (View ▸ Hide Sidebar, ⌥⌘S), so the place in use takes the width.
   var sidebarHidden = false
   /// The workspace rail hidden (the title bar's toggle, ⌃⌘S): remembered on this device.

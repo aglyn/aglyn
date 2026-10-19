@@ -194,10 +194,15 @@ enum DebugLaunch {
     #endif
   }
 
+  @MainActor private static var routed = false
+
   /// `-AglynSection notifications|settings|more|analytics|home`, `-AglynDemoRoute <screen id>` and `-AglynDemoParams`.
   @MainActor
   static func route(_ navigation: ShellNavigation) {
     #if DEBUG
+      // Once per launch: a tab opened later starts where it was opened, not on the launch's route.
+      guard !routed else { return }
+      routed = true
       let defaults = UserDefaults.standard
       switch defaults.string(forKey: "AglynSection") {
       case "notifications": navigation.section = .notifications
