@@ -272,15 +272,21 @@ public struct AglynScreenChrome {
   public var entries: [AglynScreenToolbarEntry] = []
   /// The screen's own title, for the head of a screen pushed over a list (`aglynScreenTitle`).
   public var title: String?
+
+  /// Adds what an outer modifier publishes to what the screen inside it already did: the screen's own primary action and
+  /// title stay first, actions add up. Every chrome modifier merges this way, so stacking them never hides one.
+  public mutating func merge(_ outer: AglynScreenChrome) {
+    primary = primary ?? outer.primary
+    title = title ?? outer.title
+    entries.append(contentsOf: outer.entries)
+  }
 }
 
 public struct AglynScreenChromeKey: PreferenceKey {
   public static let defaultValue = AglynScreenChrome()
   public static func reduce(value: inout AglynScreenChrome, nextValue: () -> AglynScreenChrome) {
-    let next = nextValue()
-    value.primary = value.primary ?? next.primary
-    value.entries.append(contentsOf: next.entries)
-    value.title = value.title ?? next.title
+    // Siblings: the first one's primary action and title win, every one's actions add up.
+    value.merge(nextValue())
   }
 }
 
@@ -304,7 +310,7 @@ private struct AglynPrimaryActionModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     if wide {
-      content.preference(key: AglynScreenChromeKey.self, value: AglynScreenChrome(primary: action))
+      content.transformPreference(AglynScreenChromeKey.self) { $0.merge(AglynScreenChrome(primary: action)) }
     } else {
       content.toolbar {
         ToolbarItem(placement: .primaryAction) {
@@ -363,9 +369,9 @@ private struct AglynScreenToolbarModifier<Items: View>: ViewModifier {
 
   func body(content view: Content) -> some View {
     if wide {
-      view.preference(
-        key: AglynScreenChromeKey.self,
-        value: AglynScreenChrome(entries: [AglynScreenToolbarEntry(id: id, content: AnyView(content()))]))
+      view.transformPreference(AglynScreenChromeKey.self) {
+        $0.merge(AglynScreenChrome(entries: [AglynScreenToolbarEntry(id: id, content: AnyView(content()))]))
+      }
     } else {
       view.toolbar { ToolbarItemGroup(placement: .primaryAction) { content() } }
     }
@@ -395,7 +401,7 @@ extension View {
   /// A screen's title in its head on the Mac and iPad when it is pushed over a list (a product, a contact); the
   /// navigation title on a phone. Use beside `.navigationTitle` with the same words.
   public func aglynScreenTitle(_ title: String) -> some View {
-    preference(key: AglynScreenChromeKey.self, value: AglynScreenChrome(title: title))
+    transformPreference(AglynScreenChromeKey.self) { $0.merge(AglynScreenChrome(title: title)) }
   }
 }
 
