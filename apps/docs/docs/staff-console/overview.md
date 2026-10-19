@@ -337,12 +337,19 @@ uncapped comp is why the workspace has no AI credit band.
 How staff build a site for a prospect and hand it over. No seat override is needed
 at any step: staff take none of a workspace's seats.
 
-1. **Create the workspace and comp it.** Sign in with your staff account and create
-   a workspace for the client from the workspace chooser. Staff are not held to the
-   [free workspace limit](#free-workspace-limit), and your owner row is marked
-   **staff · no seat**, so the workspace's one Free team seat stays free. In the
-   [entitlement editor](#plan-comps), comp it to the tier you are selling with the
-   reason **Sales trial or proof of concept**.
+1. **Create the workspace and comp it, in one step.** Sign in with your staff
+   account and create a workspace for the client from the workspace chooser. Below
+   the name and address, staff see a **Build for a client** switch. Turn it on,
+   leave **Comp plan** on the tier you are selling (Starter unless you change it)
+   and **Reason** on **Sales trial or proof of concept**, and write the note: the
+   client, the event or the deal, so the comp can be traced later. The note is
+   required. **Create for the client** then makes the workspace already comped,
+   capped at that tier's limits, with the comp's row in the [Audit Log](#audit-log)
+   exactly as if you had granted it from the [entitlement editor](#plan-comps).
+   Staff are not held to the [free workspace limit](#free-workspace-limit), and your
+   owner row is marked **staff · no seat**, so the workspace's one Free team seat
+   stays free. A customer never sees the switch, and the server refuses the comp
+   from anyone without the staff role.
 2. **Build the site.**
 3. **Hand it over.** On the organization's page (or the site's **Ownership** card),
    choose **Hand off to a new owner**, enter the client's email, and choose whether
