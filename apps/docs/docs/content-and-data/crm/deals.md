@@ -283,7 +283,8 @@ opens a dialog with two doors:
   edited before the line is added.
 - **By hand** takes a name and a price with no product behind them. A plan
   without commerce has no catalog to search, so this is the only door it
-  shows.
+  shows, and the dialog says that adding lines from your catalog needs a
+  plan with the store, with **See plans** linking to **Billing**.
 
 Once a deal has a line item, its **amount is the lines' sum**: the Amount field
 in the Edit drawer turns read-only with a caption saying so, and every change

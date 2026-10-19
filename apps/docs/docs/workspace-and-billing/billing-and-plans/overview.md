@@ -49,6 +49,13 @@ With **Manage billing** the card also carries the plan's controls:
 A sentence under the limits says when the current period renews or ends, and any
 [add-ons](add-ons.md) you hold are listed at the bottom.
 
+### Locked features {#locked-features}
+
+A feature your plan doesn't include stays on screen, turned off, with **Included from**
+and the plan that has it, and an **Upgrade** link to the plans on this page; moving to
+that plan turns it on, with nothing else to set up. A dashboard card from a higher plan
+shows its name, what it does and the plan that includes it in place of the card itself.
+
 ### Billing links in emails {#billing-link}
 
 A billing link in an email from Aglyn — a failed-payment notice, say — opens the

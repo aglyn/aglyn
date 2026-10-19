@@ -36,8 +36,14 @@
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
+    "@aglyn/plugins-commerce": "1.0.0-beta.270",
     "@mui/material": "^9.3.1",
     "react": "^19.2.8"
+  },
+  "peerDependenciesMeta": {
+    "@aglyn/plugins-commerce": {
+      "optional": true
+    }
   },
   "sideEffects": false,
   "description": "Marketplaces for Aglyn stores: keep Amazon, eBay, Etsy, TikTok Shop, Walmart and Faire listings in step with the store's stock and prices, and bring their orders in as Aglyn orders."

@@ -18,6 +18,7 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import type { ConsoleProductsHubZoneProps } from './ai-product-zones'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { ListTable, type ListTableProps } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import {
   Alert,
@@ -70,6 +71,15 @@ import { useAiProductsJobs } from './use-ai-products-jobs'
  */
 
 const BRIEF_MAX_CHARS = 4_000
+
+/**
+ * Why "Write copy for products" is off (AGL-3982): it writes for the products
+ * listed on the page, and none are — a new catalog, or filters that match
+ * nothing.
+ */
+export const NO_PRODUCTS_FOR_COPY =
+  'Add a product first, or draft some with Propose products. AI writes copy for the products ' +
+  'listed below, so clear any filters that hide them.'
 
 /** A column of the product picker, in the shared list table's own terms. */
 type GridColDef = NonNullable<ListTableProps['columns']>[number]
@@ -274,9 +284,13 @@ export function AiProductsHubCard(props: ConsoleProductsHubZoneProps) {
           </Link>
         </Stack>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-          <Button size="small" variant="outlined" disabled={!orgId || !products.length} onClick={() => setPicking(true)}>
-            {'Write copy for products'}
-          </Button>
+          {/* Copy is written for the products listed on this page (AGL-3982):
+              with none listed the button says why rather than going dead. */}
+          <BlockedControl blocked={Boolean(orgId) && !products.length} reason={NO_PRODUCTS_FOR_COPY}>
+            <Button size="small" variant="outlined" disabled={!orgId || !products.length} onClick={() => setPicking(true)}>
+              {'Write copy for products'}
+            </Button>
+          </BlockedControl>
           <Button size="small" variant="outlined" disabled={!orgId} onClick={() => setBrief({ kind: 'catalog', text: '' })}>
             {'Propose products'}
           </Button>
@@ -289,6 +303,12 @@ export function AiProductsHubCard(props: ConsoleProductsHubZoneProps) {
             {'Propose categories and discounts'}
           </Button>
         </Stack>
+        {/* The same reason in plain view, for a touch screen with no hover. */}
+        {orgId && !products.length ? (
+          <Typography variant="caption" color="text.secondary">
+            {NO_PRODUCTS_FOR_COPY}
+          </Typography>
+        ) : null}
         {notice ? <Alert severity="warning">{notice}</Alert> : null}
         {bulkJob ? (
           <AiBulkCopyReview key={bulkJob.id} job={bulkJob} applyProductCopy={applyProductCopy} />

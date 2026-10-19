@@ -53,6 +53,7 @@ import {
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import { PlanLockedControl } from '@aglyn/shared-ui-jsx/components/plan-locked-control.component'
 import { openPendingTab, withNewTabHint } from '@aglyn/shared-ui-jsx/utils/new-tab'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -85,6 +86,7 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import {
   applyCommandToSource,
   applyLinkToSource,
@@ -109,10 +111,10 @@ import DashboardLayout from '../layouts/dashboard.layout'
 import MediaPickerDialog from '../media/media-picker-dialog.component'
 import PluginWidgetSlot from '../plugin-widget-slot.component'
 import { docsHelp } from '../../constants/docs-links'
-import { hasEntitlement } from '../../constants/entitlements'
 import { buildRoute, Route } from '../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../constants/shared'
 import useCurrentOrg from '../../hooks/use-current-org'
+import { usePlanFeatureLock } from '../../hooks/use-plan-feature-lock'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import {
@@ -185,6 +187,7 @@ const CARD_NARROW = { xs: 12, md: 6, lg: 4 } as const
  * leave this page naming a tier above the one that would let the writer in.
  */
 const AI_ASSIST_PLAN = planLabelGrantingFeature('aiAssist')
+const AI_ASSIST_LOCK_REASON = planLockReason('Writing with AI', AI_ASSIST_PLAN)
 const AI_ASSIST_NOT_ON_PLAN = AI_ASSIST_PLAN
   ? `AI assist starts on the ${AI_ASSIST_PLAN} plan — see Billing to upgrade`
   : 'AI assist is not on this plan — see Billing to upgrade'
@@ -373,7 +376,10 @@ export function EntryDetailPage() {
   const { confirm } = useConfirmationContext()
   const logActivity = useHostActivityLogger(hostId)
   const { data: user } = useUser()
-  const { org, orgId, ready: orgReady } = useCurrentOrg()
+  const { orgId, ready: orgReady } = useCurrentOrg()
+  // Writing with AI is Starter: on Free the button stays, disabled with the
+  // plan that includes it.
+  const aiAssist = usePlanFeatureLock('aiAssist')
   // Entry creation is server-owned since AGL-2266 (the cap); every other entry
   // write on this page stays client-direct.
   const createResource = useHostResourceApi()
@@ -1859,36 +1865,43 @@ export function EntryDetailPage() {
                         mode={bodyTab}
                         onModeChange={setBodyTab}
                       >
-                        <Button
-                          size="small"
-                          color="primary"
-                          onClick={() => {
-                            // The handler half of AGL-1380: `org` is undefined
-                            // both in flight and on a failed read, and
-                            // `hasEntitlement` on an undefined org answers NO
-                            // — so clicking inside the loading window told a
-                            // Pro org the feature it pays for is not on its
-                            // plan. Pending declines and says so; only a loaded
-                            // plan may make the claim.
-                            if (!orgReady) {
-                              return void enqueueSnackbar(
-                                'Checking your plan — try again in a moment',
-                                { variant: 'info', persist: false },
-                              )
-                            }
-                            if (!hasEntitlement('aiAssist', org)) {
-                              return void enqueueSnackbar(
-                                AI_ASSIST_NOT_ON_PLAN,
-                                { variant: 'warning', persist: false },
-                              )
-                            }
-                            setAiInstruction('')
-                          }}
+                        <PlanLockedControl
+                          locked={aiAssist.locked}
+                          reason={AI_ASSIST_LOCK_REASON}
+                          planLabel={aiAssist.planLabel}
+                          upgradeHref={aiAssist.upgradeHref}
                         >
-                          {editor.body?.trim()
-                            ? 'Improve with AI'
-                            : 'Write with AI'}
-                        </Button>
+                          <Button
+                            size="small"
+                            color="primary"
+                            onClick={() => {
+                              // The handler half of AGL-1380: `org` is undefined
+                              // both in flight and on a failed read, and
+                              // `hasEntitlement` on an undefined org answers NO
+                              // — so clicking inside the loading window told a
+                              // Pro org the feature it pays for is not on its
+                              // plan. Pending declines and says so; only a loaded
+                              // plan may make the claim.
+                              if (!orgReady) {
+                                return void enqueueSnackbar(
+                                  'Checking your plan — try again in a moment',
+                                  { variant: 'info', persist: false },
+                                )
+                              }
+                              if (aiAssist.locked) {
+                                return void enqueueSnackbar(
+                                  AI_ASSIST_NOT_ON_PLAN,
+                                  { variant: 'warning', persist: false },
+                                )
+                              }
+                              setAiInstruction('')
+                            }}
+                          >
+                            {editor.body?.trim()
+                              ? 'Improve with AI'
+                              : 'Write with AI'}
+                          </Button>
+                        </PlanLockedControl>
                       </MarkdownEditorToolbar>
                       {bodyTab === 'visual' ? (
                         // WYSIWYG surface (AGL-582): the editor IS the preview

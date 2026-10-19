@@ -23,18 +23,15 @@ import { aiPlanCapabilitiesFrom } from '../jobs/ai-job-drafts'
 import { aiSitePlanCapabilities } from '../jobs/ai-job-plan-step'
 import type { AiJob } from '../model/ai-jobs.types'
 import { aiDoctrinePlanCheck } from './ai-doctrine'
-import {
-  AI_FREE_WALL_SETTLE_MAX_OVER,
-  aiFreePageSectionsWithin,
-  aiSettlePlanFreeWall,
-  validateAiBuildPlan,
-} from './ai-doctrine-validators'
+import { aiFreePageSectionsWithin, aiSettlePlanFreeWall, validateAiBuildPlan } from './ai-doctrine-validators'
+import { LIVE_CANDLE_ANSWER } from '../jobs/fixtures/ai-candle-shop-free-plan-recording'
 
 /*
- * A Free plan a section or two past the wall is trimmed to fit (AGL-3737).
- * The live candle-shop start of 2026-10-12 planned a home of 7 and a second
- * page of 2 against a wall of 8, on all three answers, and stopped needing
- * input.
+ * A Free plan past the wall is trimmed to fit (AGL-3737, AGL-3969). The live
+ * candle-shop start of 2026-10-12 planned a home of 7 and a second page of 2
+ * against a wall of 8, on all three answers, and stopped needing input; the
+ * beta.265 eval's Free candle shop asked for 11, its re-ask for more than 8,
+ * and was refused.
  */
 
 const FREE_ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: 'free', ownerUid: 'owner-1' }
@@ -91,7 +88,7 @@ const CANDLE_HOME = page('Home', '/', [
 ])
 const CANDLE_SHOP = page('Shop', '/shop', ['shop intro', 'product grid'])
 
-describe('a Free plan a section or two past the wall', () => {
+describe('a Free plan past the wall', () => {
   it('is past the wall of 8 as the live candle-shop start planned it: a home of 7 and a shop of 2', () => {
     expect(wallCodes(plan(CANDLE_HOME, CANDLE_SHOP), FREE_SITE)).toEqual(['plan-over-free-wall'])
   })
@@ -140,19 +137,42 @@ describe('a Free plan a section or two past the wall', () => {
     expect(wallCodes(settled, FREE_SITE)).toEqual([])
   })
 
-  it('never takes the home under five, nor a section it keeps, and leaves the plan for the wall to re-ask', () => {
+  it('never takes the home under five, and then takes a section the other page keeps only by its name', () => {
     const home = page('Home', '/', ['hero', 'bestsellers', 'shop by scent', 'our story', 'newsletter sign-up'])
-    const shop = page('Shop', '/shop', ['shop intro', 'product grid', 'featured candles', 'contact us'])
-    const over = plan(home, shop)
+    const shop = page('Shop', '/shop', ['shop intro', 'product grid', 'visit the studio', 'contact us', 'get started'])
+    const settled = aiSettlePlanFreeWall(plan(home, shop), EMPTY, FREE_SITE)
+    expect(settled.screens[0]).toBe(home)
+    expect(names(settled)[1]).toEqual(['shop intro', 'product grid', 'visit the studio'])
+    expect(wallCodes(settled, FREE_SITE)).toEqual([])
+  })
+
+  it('takes a section that places something only where another section still places it', () => {
+    const home = page('Home', '/', ['hero', 'bestsellers', 'shop by scent', 'our story', 'newsletter sign-up'])
+    const shop = page('Shop', '/shop', ['shop intro', 'product grid', 'newsletter sign-up', 'join the list'])
+    const twice = {
+      ...shop,
+      sections: shop.sections.map((section) => (section.name === 'join the list' ? { ...section, uses: ['new:Newsletter'] } : section)),
+    }
+    const settled = aiSettlePlanFreeWall(plan(home, twice), EMPTY, FREE_SITE)
+    expect(names(settled)[1]).toEqual(['shop intro', 'product grid', 'newsletter sign-up'])
+    expect(wallCodes(settled, FREE_SITE)).toEqual([])
+  })
+
+  it('leaves the plan for the wall to re-ask only when no section past it may go: an opening, a grid, a lone placement', () => {
+    const home = page('Home', '/', ['hero', 'bestsellers', 'shop by scent', 'our story', 'why soy'])
+    const shop = page('Shop', '/shop', ['shop intro', 'product grid', 'newsletter sign-up'])
+    const over = plan(home, { ...shop, sections: [...shop.sections, { name: 'gift finder', uses: ['new:Gift finder'], items: 0 }] })
     expect(aiSettlePlanFreeWall(over, EMPTY, FREE_SITE)).toBe(over)
     expect(wallCodes(over, FREE_SITE)).toEqual(['plan-over-free-wall'])
   })
 
-  it(`is re-asked, untouched, when it is more than ${AI_FREE_WALL_SETTLE_MAX_OVER} past the wall`, () => {
+  it('trims a plan further past the wall to the wall, never under it', () => {
     const shop = page('Shop', '/shop', ['shop intro', 'product grid', 'candle care', 'shipping', 'gift help'])
-    const over = plan(CANDLE_HOME, shop)
-    expect(aiSettlePlanFreeWall(over, EMPTY, FREE_SITE)).toBe(over)
-    expect(wallCodes(over, FREE_SITE)).toEqual(['plan-over-free-wall'])
+    const settled = aiSettlePlanFreeWall(plan(CANDLE_HOME, shop), EMPTY, FREE_SITE)
+    expect(names(settled).flat()).toHaveLength(8)
+    expect(names(settled)[1].slice(0, 2)).toEqual(['shop intro', 'product grid'])
+    expect(settled.screens[0].sections.length).toBeGreaterThanOrEqual(5)
+    expect(wallCodes(settled, FREE_SITE)).toEqual([])
   })
 
   it('is re-asked, untouched, when it splits a list into sections, which the re-ask joins', () => {
@@ -199,5 +219,53 @@ describe('a Free plan a section or two past the wall', () => {
     expect(validateAiBuildPlan(settled, site, null, free).map((violation) => violation.code)).not.toContain(
       'plan-over-free-wall',
     )
+  })
+})
+
+/*
+ * The beta.265 eval's Free candle shop (AGL-3969) asked for 11 sections and
+ * its re-ask for more than 8, and the step stopped. Those bytes were not
+ * kept, so this is the recorded 2026-10-16 answer (laySite reused on an empty
+ * site, a starter screen duplicated, descriptions in every section's uses)
+ * with two more bands, a home's reviews and the shop's contact, to make 11.
+ */
+const overBudgetCandle = (): AiBuildPlan => {
+  const answer = JSON.parse(JSON.stringify(LIVE_CANDLE_ANSWER)) as AiBuildPlan
+  const [home, shop] = answer.screens
+  home.sections.splice(home.sections.length - 1, 0, { name: 'Customer reviews', uses: ['review quotes'], items: 3 })
+  shop.sections.push({ name: 'Contact us', uses: ['contact details'], items: 0 })
+  return answer
+}
+const total = (checked: AiBuildPlan | undefined) =>
+  checked?.screens.reduce((sum, screen) => sum + screen.sections.length, 0)
+
+describe('a Free candle-shop plan over its budget settles, never refuses (AGL-3969)', () => {
+  it('asks for 11 sections against a wall of 8', () => {
+    expect(total(overBudgetCandle())).toBe(11)
+  })
+
+  it('is trimmed to the full 8 by the plan check, with no finding to re-ask or refuse', () => {
+    const checked = aiDoctrinePlanCheck(EMPTY, null, FREE_SITE)(overBudgetCandle() as never)
+    expect(checked.violations).toEqual([])
+    expect(total(checked.value)).toBe(8)
+    const [home, shop] = (checked.value as AiBuildPlan).screens.map((screen) => screen.sections.map((section) => section.name))
+    // The home keeps its opening, its fewest five and its sign-up; the shop its opening and its grid.
+    expect(home[0]).toBe('Hero that sells first')
+    expect(home.length).toBeGreaterThanOrEqual(5)
+    expect(home).toContain('Newsletter sign-up')
+    expect(shop.slice(0, 2)).toEqual(['Short title', 'Product grid'])
+    // The one creation it places is still placed.
+    expect(checked.value?.screens.flatMap((screen) => screen.sections.flatMap((section) => section.uses))).toContain(
+      'new:newsletterForm',
+    )
+  })
+
+  it('keeps a recorded plan inside the wall as it was answered', () => {
+    const answer = JSON.parse(JSON.stringify(LIVE_CANDLE_ANSWER)) as AiBuildPlan
+    answer.screens[1].sections.pop()
+    const asked = answer.screens.map((screen) => screen.sections.map((section) => section.name))
+    const checked = aiDoctrinePlanCheck(EMPTY, null, FREE_SITE)(answer as never)
+    expect(checked.violations).toEqual([])
+    expect(checked.value?.screens.map((screen) => screen.sections.map((section) => section.name))).toEqual(asked)
   })
 })

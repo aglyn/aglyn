@@ -16,7 +16,18 @@
  */
 
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
-import { subscribePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import {
+  subscribePluginDomainEvent,
+  type PluginDomainEvent,
+} from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import {
+  ORDER_CANCELLED_EVENT,
+  ORDER_DELIVERED_EVENT,
+  ORDER_FULFILLED_EVENT,
+  ORDER_PAID_EVENT,
+  ORDER_REFUNDED_EVENT,
+  type OrderEventPayload,
+} from '@aglyn/plugins-commerce/contracts'
 // The registry from its own module, not the runtime barrel: boot needs the
 // registry and nothing else.
 import { registerHostEventListener } from '@aglyn/tenant-runtime/host-event-listeners'
@@ -27,8 +38,9 @@ import { HELP_DESKS_PLUGIN_ID } from './constants'
  * the Admin SDK, loads with the first event that needs it, and a host event
  * other than a form submission returns before loading anything.
  *
- * - Commerce's order events, by name on core's domain-event outbox: each
- *   order is owed to the site's connections that take orders.
+ * - Commerce's order events, by its tokens on core's domain-event outbox
+ *   (the shapes come from commerce's contracts, AGL-3980): each order is
+ *   owed to the site's connections that take orders.
  * - A form submission, heard through the runtime's host event listeners:
  *   owed to the site's connections that send contact form messages.
  * - A person's erasure: what the connections keep about the address.
@@ -38,13 +50,13 @@ import { HELP_DESKS_PLUGIN_ID } from './constants'
  */
 
 /** Mirrors `HELP_DESKS_ORDER_EVENTS` in `server/intake.ts`, kept here so boot loads no server module. */
-export const HELP_DESKS_SUBSCRIBED_EVENTS = [
-  'order.paid',
-  'order.fulfilled',
-  'order.delivered',
-  'order.refunded',
-  'order.cancelled',
-] as const
+export const HELP_DESKS_SUBSCRIBED_EVENTS: readonly PluginDomainEvent<OrderEventPayload>[] = [
+  ORDER_PAID_EVENT,
+  ORDER_FULFILLED_EVENT,
+  ORDER_DELIVERED_EVENT,
+  ORDER_REFUNDED_EVENT,
+  ORDER_CANCELLED_EVENT,
+]
 
 const load = () => Promise.all([import('./server/intake'), import('./server/platform-deps')])
 

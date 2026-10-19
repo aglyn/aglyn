@@ -16,17 +16,18 @@
  */
 
 import { subscribePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import { ORDER_CANCELLED_EVENT, ORDER_REFUNDED_EVENT } from '@aglyn/plugins-commerce/contracts'
 import { COURIERS_PLUGIN_ID } from './constants'
 
 /**
  * The plugin's SERVER declarations (AGL-3695), loaded by both apps' servers:
- * commerce's order events, by the names commerce raises them under. The
- * outbox drains in the tenant, so the subscribers only MARK a run to be
- * called off (`server/intake.ts`); the console job holds the keys and calls
- * the courier. Light at boot: every body is imported when it is first called.
+ * commerce's order events, by the tokens in commerce's contracts
+ * (AGL-3980). The outbox drains in the tenant, so the subscribers only MARK
+ * a run to be called off (`server/intake.ts`); the console job holds the
+ * keys and calls the courier. Light at boot: every body is imported when it is first called.
  */
 
-export const COURIERS_SUBSCRIBED_EVENTS = ['order.cancelled', 'order.refunded'] as const
+export const COURIERS_SUBSCRIBED_EVENTS = [ORDER_CANCELLED_EVENT.id, ORDER_REFUNDED_EVENT.id] as const
 
 async function intake() {
   const [module, { defaultIntakeDeps }] = await Promise.all([import('./server/intake'), import('./server/intake-deps')])
@@ -36,18 +37,18 @@ async function intake() {
 export function registerCouriersServerDeclarations(): void {
   const owner = { pluginId: COURIERS_PLUGIN_ID }
   subscribePluginDomainEvent(
-    'order.cancelled',
+    ORDER_CANCELLED_EVENT,
     async (envelope) => {
       const { module, deps } = await intake()
-      await module.onOrderCancelled(deps, envelope as never)
+      await module.onOrderCancelled(deps, envelope)
     },
     owner,
   )
   subscribePluginDomainEvent(
-    'order.refunded',
+    ORDER_REFUNDED_EVENT,
     async (envelope) => {
       const { module, deps } = await intake()
-      await module.onOrderRefunded(deps, envelope as never)
+      await module.onOrderRefunded(deps, envelope)
     },
     owner,
   )

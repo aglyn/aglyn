@@ -71,11 +71,12 @@ rules deny every client write). Fields:
 | field | meaning |
 | --- | --- |
 | `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout`, `template`, `form`, `component`, `seo`, `page`, `email`, `campaign`, `products` and `site` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
-| `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). |
+| `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). `needs_input` is the meter's pause, or — carrying `input` — a wait for an answer only the person can give ([below](#a-job-that-waits-for-an-answer)). |
 | `brief`, `inputs` | The customer's brief verbatim and the kind-specific scalars a runner reads. |
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`, and `draftIds`, the ids of the drafts the step writes. |
 | `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. An output may carry a customer-safe `note`: what the person decides next about it, and the facts in square brackets its draft holds ([below](#what-a-draft-asks-the-member-to-fill)). |
 | `plan` | The plan a planned kind builds from: `reuse`, `create`, `screens` (each creation and screen the job builds as a draft with the `id` it is written under), the inventory `labels` it references, and `status` `proposed` → `confirmed` with who confirmed it and when. |
+| `input` | While the job is `needs_input` for a person (AGL-3978): the customer-safe `message` (the question, also the job's `error`) and its `fields`, each the plan `item` and `arg` it fills, a `label` naming the provider, the `shape` an answer takes and the `pattern` it is held to. Cleared by the answer. |
 | `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`), the customer-safe `message`, and the rules the last answer broke, each with the node ids or plan paths it names, beside an `outline` of those parts of the refused answer ([below](#what-a-refused-answer-leaves-on-the-job)). |
 | `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step while the job can run — zero while it waits for a person, and a confirmed page or site plan's whole-job estimate where that is more — and the real spend at the plan's credit rate. |
 | `lease` | `{ owner, until }` while a step runs — see below. |
@@ -800,6 +801,37 @@ beat query matches `needs_review`, and only a member resumes it:
 
 `resumeAiJob` is that transition, in one transaction, and cancel ends either.
 
+### A job that waits for an answer
+
+A plan can need something only the person has, an account id the planner
+must never make up: "add my Meta pixel" with no pixel ID (AGL-3978). The
+build's admission refuses such a plan with the operation's question under
+`AI_BUILD_NEEDS_INPUT_CODE`, and where the operation describes the fields
+for it (`inputFields` on the capability, read by `aiBuildPlanInputFields`)
+the plan step does not fail the job with the question. It keeps the plan and
+its plan review, and returns the fields as the outcome's `input`:
+
+- **Parked `needs_input`, not `failed`.** `recordStep` parks the job
+  `needs_input` with `input` and the review beside it, the question as its
+  `error`, and nothing held. The plan step is done and metered as any kept
+  plan; the pause and the answer spend nothing. The person is told once
+  ("needs one detail from you"), and the activity row's reason is `input`.
+- **The beat leaves it alone.** It is a person's to resume, so a sweep that
+  lists it runs nothing and moves its `updatedAt` on, which sends it to the
+  back of the parked query, so it never takes a meter park's place.
+- **The answer.** The console draws one field per entry, labeled with the
+  provider (`AiJobInputForm`, in the Assist build card and the AI jobs
+  drawer), and sends the answers through the resume door as `input`, keyed
+  `item/arg` (`aiJobInputKey`). The door holds each to its pattern
+  (`aiJobInputProblems`) and answers a wrong or empty one with a 400 and
+  `fieldErrors` by key, changing nothing. Every field good, `resumeAiJob`
+  writes each answer to its item's arguments (`aiPlanWithInput`), clears
+  `input` and returns the job to `needs_review` on its plan card, where
+  Confirm builds it as any plan: the admission is asked again then, now with
+  the id in the plan.
+- **Only where there is a field.** An item that asks without one — a
+  tracking change that names no tag — still ends the job with its question.
+
 ### What the plan may create
 
 A plan that names a creation nothing can make is a dead end the member pays for
@@ -885,14 +917,20 @@ create on its site (`src/lib/model/ai-plan-capabilities.ts`):
   rule (`plan-over-free-wall`), and its re-ask gives the count to plan within and how to
   get there: a list's repeated items in one section, and no section the brief does not
   ask for. It only lowers what a plan may ask for, and no prompt line or figure changes.
-  A plan at most `AI_FREE_WALL_SETTLE_MAX_OVER` (2) sections past the wall is trimmed to
-  fit in code instead (`aiSettlePlanFreeWall`, AGL-3737), before the rules read it: the
-  live candle-shop start of 2026-10-12 planned 7 + 2 against a wall of 8 on all three
-  answers. One section goes at a time, the last of its page, from the page furthest past
-  its share (the home at / past its fewest, any other page past two), never a page's
-  opening, a section that places something, one that collects answers or says how to
-  reach the owner, or a storefront's listing parts. A plan further over, past its page
-  cap, or with a list split into sections is still re-asked.
+  A plan past the wall is trimmed to it in code instead (`aiSettlePlanFreeWall`,
+  AGL-3737, AGL-3969), before the rules read it, because a plan over its budget is the
+  model's mistake and never the member's: the live candle-shop start of 2026-10-12
+  planned 7 + 2 against a wall of 8 on all three answers, and the beta.265 eval's Free
+  candle shop asked for 11 and was refused after its re-ask. Exactly as many sections go
+  as the plan is over, so it keeps the whole budget, one at a time, the last of its page,
+  from the page furthest past its share (the home at / past its fewest, any other page
+  past two). They come from the lowest tier any page has: first a section the trim does
+  not hold; then one it holds only by its name (a contact, a call to action, a sign-up or
+  another storefront listing part); last one that places something another section
+  still places. Never a page's opening, a Shop page's product grid, a creation's only
+  placement, a home under its fewest or a page under one section. A plan past its page
+  cap, one with a list split into sections, and one where no section past the wall may
+  go are still re-asked.
 - **A page's header, navigation or footer comes off the page (AGL-3750).** Rule 2's
   `plan-layout-region-section` has one answer, "take the section off the page", so
   `aiSettlePlanLayoutRegionSections` takes it, before the rules and the Free wall read
@@ -1911,6 +1949,89 @@ the `theme` kind's proposal, and no site plan may propose one.
   (Auto by default, bounded by the plan's tiers); the job carries the pick and
   every step — the look, the plan, the layout, each page — runs on it, and the
   estimate is priced by the pick's multiplier. A Free start offers none.
+
+### Sites I like (AGL-3975)
+
+Behind `release_ai_site_inspiration`, OFF by default. While it is on for a
+workspace, the guided start's Style step asks for sites the person likes: one
+on Free, three on a paid plan. A Free workspace sees the second and third
+fields disabled with the reason and an Upgrade link (`BlockedControl` and
+`PrerequisiteNotice`), and the review lists the sites by host.
+
+- **The input.** One scalar, `inputs.inspiration`: the https addresses
+  separated by spaces (`model/ai-site-inspiration.ts`). It is sent only when
+  there are sites. `parseAiSiteJobInputs` refuses an address that is not
+  https on the default port, or more than three. The site admission holds a
+  workspace to its plan's limit while the flag is on. The plan step never
+  prints the input.
+- **The read.** The plan step reads each site once, through
+  `readReferencePage` (`fetchPublicText`: https/443, a pinned public IP on
+  every hop, byte caps). It reads the home page and at most two of its
+  stylesheets, never a crawl. All sites share one clock, the theme job's
+  brand budget (8 s). A site start's plan has that room because its outline
+  ceiling sits far under the `job.plan` row (`ai-site-inspiration.spec.ts`
+  holds the sum). With the flag off, nothing is read and the plan is asked
+  exactly what it was before.
+- **Signals only** (`jobs/ai-site-inspiration-signals.ts`). Code reads each
+  page into closed sets, plus hex colors:
+  - the sections in order (hero, about, services, steps, numbers, gallery,
+    menu, products, pricing, testimonials, logos, team, events, posts, FAQ,
+    newsletter, booking, contact, call to action);
+  - the spacing, the header's alignment and what sets it off;
+  - the brand colors (`referencePageColors`, the theme job's ranking);
+  - the page ground and the mood of the headings' type (serif, sans,
+    display);
+  - the buttons' shape and fill, the cards and the corners;
+  - the motion, as AGL-3941's styles: AOS and animate.css names,
+    server-rendered offsets and keyframes;
+  - on a paid plan, the features (booking, store, blog, forms, gallery,
+    events, menu, testimonials, newsletter).
+
+  A page's words are read only to tell one kind of section from another.
+  No sentence, name, picture address or logo is kept, and the stored
+  signals are held to their sets again when they are read back
+  (`aiReadSiteInspiration`).
+- **Structure goes to the plan.** Each site's sections and shape go in one
+  fenced `<inspiration-structure>` block on the plan's turn, labeled as data.
+  On a paid plan the block also maps each feature onto the part of Aglyn a
+  start really builds (`AI_SITE_INSPIRATION_FEATURE_PARTS`): a booking
+  section that places the site's form, a Shop page's Product grid, the
+  latest posts, an events section, a menu as a ruled list. Every plan rule
+  above it still wins. A feature is offered only where this start can build
+  its part (`aiSiteInspirationBuildable`): the Shop page on a store, the
+  newsletter sign-up (the commerce plugin's) on a store that sells, the
+  latest posts on a blog, the events list on an event-led start the events
+  gate admits (AGL-3755), and a testimonials section where the site has
+  customer words. The live eval of 2026-10-19 found the restaurant plan told
+  an events list and a sign-up no restaurant start can place. The order each
+  site's line gives leaves out those kinds too (`aiSiteInspirationOrder`).
+  The home follows the first site's order that has one
+  (`aiSiteInspirationHomeOrder`), and that order takes the place of the
+  seeded home arc (AGL-3899): told both, every plan in the same eval kept the
+  arc, which says "Keep that order", over the block, which yields to every
+  rule above it. A start without sites keeps its arc. The kept plan
+  carries the signals as `plan.inspiration`. A reused plan's signals are
+  replaced with this job's.
+- **The live eval** (`jobs/ai-site-inspiration-live.spec.ts`, skipped unless
+  `AGLYN_LIVE_AI=1`): six guided starts through the real plan step and look,
+  their sites read from the three recordings through the `readPage` seam (no
+  fetch), then a whole build of the paid and the Free restaurant. It holds
+  that no word, picture, name or address of a recording reaches a prompt,
+  plan, look or page, that no testimonials section is planned without
+  customer words, that Free gets no features, and that the look keeps every
+  pinned dimension. `AGLYN_LIVE_AI_CAP_USD` caps the round's spend.
+- **Style is pinned in the look.** The scaffold hands the look unit the
+  plan's signals (`inspirationSignals`). `aiSiteInspirationLookPins` maps
+  them onto the look's closed sets: what most sites agree on, the first
+  site's value where they split. Brand and hue come from the first site's
+  strongest color. The type is pinned to its mood, and the job's seed picks
+  one of Aglyn's own pairings of that mood, the kind's first. The ground,
+  corners, buttons, cards, header, header alignment, density and motion are
+  pinned as read. `aiSiteStyleFor` lays the pins over every draw, so those
+  dimensions are always kept, where an unpinned dimension keeps the model's
+  pick only 30–35% of the time. A brand the person gave still wins. The
+  look's output names what was pinned (`inspired`). A look with no pins is
+  drawn exactly as before.
 
 ### A site start never reuses another site's records (AGL-3912)
 

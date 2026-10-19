@@ -26,9 +26,12 @@ import {
 } from '@aglyn/aglyn-transfer-ui'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { PlanUpsellNotice } from '@aglyn/shared-ui-jsx/components/plan-upsell-notice.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import {
   Button,
   Dialog,
@@ -43,8 +46,8 @@ import {
 import { useParams } from 'next/navigation'
 import { type ComponentProps, type ReactNode, useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
+import { usePlanFeatureLock } from '../hooks/use-plan-feature-lock'
 import { createSitePackageHttpClient } from '../utils/site-package-http-client'
 import { sitePackagePreviewHref, sitePackageRenderers } from '../utils/site-package-preview'
 import { useSlotWidgets } from './plugin-widget-slot.component'
@@ -109,7 +112,11 @@ export function SiteBackupCard(props: { hostId: string }) {
   const { orgSlug = '', host = '' } = useParams<{ orgSlug?: string; host?: string }>() ?? {}
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { org, ready: orgReady } = useCurrentOrg()
+  const { ready: orgReady } = useCurrentOrg()
+  // Backups and packages are Pro: on a plan without them the buttons stay,
+  // disabled with the plan that includes them.
+  const siteExport = usePlanFeatureLock('siteExport')
+  const siteExportReason = planLockReason('Backup and restore', siteExport.planLabel)
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState<Open>(null)
   const [lastImportId, setLastImportId] = useState<string | null>(null)
@@ -142,13 +149,13 @@ export function SiteBackupCard(props: { hostId: string }) {
       })
       return false
     }
-    if (hasEntitlement('siteExport', org)) return true
-    enqueueSnackbar('Site backups require a Pro plan — see Billing to upgrade', {
+    if (!siteExport.locked) return true
+    enqueueSnackbar(`${siteExportReason} See Billing to upgrade.`, {
       variant: 'warning',
       persist: false,
     })
     return false
-  }, [org, orgReady, enqueueSnackbar])
+  }, [siteExport.locked, siteExportReason, orgReady, enqueueSnackbar])
 
   const handleBackup = useCallback(async () => {
     if (!gate() || busy) return
@@ -196,15 +203,21 @@ export function SiteBackupCard(props: { hostId: string }) {
                 {'Undo import'}
               </Button>
             )}
-            <Button size="small" disabled={busy} onClick={() => openIfAllowed('import')}>
-              {'Import package'}
-            </Button>
-            <Button size="small" disabled={busy} onClick={() => openIfAllowed('export')}>
-              {'Export items'}
-            </Button>
-            <Button variant="contained" size="small" disabled={busy} onClick={handleBackup}>
-              {busy ? 'Working…' : 'Download backup'}
-            </Button>
+            <BlockedControl blocked={siteExport.locked} reason={siteExportReason}>
+              <Button size="small" disabled={busy} onClick={() => openIfAllowed('import')}>
+                {'Import package'}
+              </Button>
+            </BlockedControl>
+            <BlockedControl blocked={siteExport.locked} reason={siteExportReason}>
+              <Button size="small" disabled={busy} onClick={() => openIfAllowed('export')}>
+                {'Export items'}
+              </Button>
+            </BlockedControl>
+            <BlockedControl blocked={siteExport.locked} reason={siteExportReason}>
+              <Button variant="contained" size="small" disabled={busy} onClick={handleBackup}>
+                {busy ? 'Working…' : 'Download backup'}
+              </Button>
+            </BlockedControl>
           </Stack>
         ),
       }}
@@ -218,6 +231,16 @@ export function SiteBackupCard(props: { hostId: string }) {
           'your sites. An import shows each item against this site’s copy and ' +
           'asks how to handle it before it writes anything.'}
       </Typography>
+      {siteExport.locked ? (
+        <PlanUpsellNotice
+          planLabel={siteExport.planLabel}
+          upgradeHref={siteExport.upgradeHref}
+          sx={{ mt: 2 }}
+        >
+          {'Keep a downloadable backup of this site, and move pages, forms ' +
+            'and content between your sites.'}
+        </PlanUpsellNotice>
+      ) : null}
       {open === 'import' && (
         <CardDialog title="Import a site package" id="site-package-import-title" onClose={close}>
           <SitePackageImport

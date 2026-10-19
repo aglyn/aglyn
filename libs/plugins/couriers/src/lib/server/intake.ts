@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type { OrderEventPayload, OrderRefundedEventPayload } from '@aglyn/plugins-commerce/contracts'
 import { courierStateIsFinal } from '../model/couriers'
 import type { CourierStore } from './store'
 
@@ -28,13 +30,11 @@ import type { CourierStore } from './store'
  *   rest to deliver, so it changes nothing.
  */
 
-export interface OrderEnvelope<Extra = Record<string, never>> {
-  id: string
-  hostId: string
-  orgId: string | null
-  occurredAtMs: number
-  payload: { order: { id: string } } & Extra
-}
+/** An envelope as the outbox hands it over; the payload's shape comes from commerce's contracts (AGL-3980). */
+export type OrderEnvelope<Payload extends OrderEventPayload = OrderEventPayload> = Pick<
+  PluginDomainEventEnvelope<Payload>,
+  'id' | 'hostId' | 'orgId' | 'occurredAtMs' | 'payload'
+>
 
 export interface IntakeDeps {
   store: CourierStore
@@ -80,7 +80,7 @@ export async function onOrderCancelled(deps: IntakeDeps, envelope: OrderEnvelope
 
 export async function onOrderRefunded(
   deps: IntakeDeps,
-  envelope: OrderEnvelope<{ refund?: { full?: boolean } }>,
+  envelope: OrderEnvelope<OrderRefundedEventPayload>,
 ): Promise<void> {
   const orderId = envelope.payload?.order?.id
   if (!orderId || !envelope.hostId || envelope.payload.refund?.full !== true) return

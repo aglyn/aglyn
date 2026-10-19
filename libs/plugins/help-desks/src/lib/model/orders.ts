@@ -20,11 +20,12 @@
  * how it is read out of commerce's public order view.
  *
  * Commerce's order events and its order history both carry the order in the
- * public API's shape (`GET /v1/sites/{siteId}/orders/{orderId}`). This
- * plugin restates only the fields it reads and reads them defensively: it
- * never imports commerce, and a field commerce adds later changes nothing
- * here.
+ * public API's shape (`GET /v1/sites/{siteId}/orders/{orderId}`); the shape
+ * comes from commerce's contracts (AGL-3980). It is still read defensively,
+ * so an order stored before a field existed reads as well as a new one.
  */
+
+import type { OrderEventOrder } from '@aglyn/plugins-commerce/contracts'
 
 export interface HelpDeskOrderItem {
   /** The product's id at the site, when the line names one. */
@@ -89,19 +90,19 @@ function readTime(value: unknown): number | null {
  * to file it under.
  */
 export function helpDeskOrderFromView(
-  view: unknown,
+  order: OrderEventOrder | null | undefined,
   fallbackAtMs: number,
 ): { order: HelpDeskOrder; buyer: HelpDeskOrderBuyer } | null {
-  if (!view || typeof view !== 'object') return null
-  const order = view as Record<string, unknown>
-  const id = text(order['id'])
+  if (!order || typeof order !== 'object') return null
+  const id = text(order.id)
   if (!id) return null
-  if (order['livemode'] === false) return null
-  const email = String(order['customerEmail'] ?? '').trim().toLowerCase()
+  if (order.livemode === false) return null
+  const email = String(order.customerEmail ?? '').trim().toLowerCase()
   if (!EMAIL.test(email)) return null
-  const totals = (order['totals'] ?? {}) as Record<string, unknown>
-  const lines = Array.isArray(order['lineItems']) ? (order['lineItems'] as unknown[]) : []
+  const totals: Partial<OrderEventOrder['totals']> = order.totals ?? {}
+  const lines = Array.isArray(order.lineItems) ? (order.lineItems as unknown[]) : []
   const items: HelpDeskOrderItem[] = lines.slice(0, 50).flatMap((line) => {
+    // Commerce types `lineItems` as `unknown`; the line fields read here are this plugin's own reading.
     const record = (line ?? {}) as Record<string, unknown>
     const quantity = Math.max(0, Math.floor(Number(record['quantity'] ?? 0)))
     if (!quantity) return []
@@ -116,15 +117,15 @@ export function helpDeskOrderFromView(
     ]
   })
   return {
-    buyer: { email, name: text(order['customerName']) },
+    buyer: { email, name: text(order.customerName) },
     order: {
       id,
-      number: typeof order['number'] === 'number' ? `#${order['number']}` : null,
-      createdAtMs: readTime(order['created']) ?? fallbackAtMs,
-      currency: (text(order['currency']) ?? 'usd').toUpperCase(),
-      totalCents: cents(totals['totalCents'] ?? totals['itemsCents']),
-      refundedCents: cents(order['refundedCents']),
-      status: text(order['status']) ?? 'open',
+      number: typeof order.number === 'number' ? `#${order.number}` : null,
+      createdAtMs: readTime(order.created) ?? fallbackAtMs,
+      currency: (text(order.currency) ?? 'usd').toUpperCase(),
+      totalCents: cents(totals.totalCents ?? totals.itemsCents),
+      refundedCents: cents(order.refundedCents),
+      status: text(order.status) ?? 'open',
       items,
       url: null,
     },

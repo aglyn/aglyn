@@ -166,7 +166,8 @@ the order that site shows them, with whether its default bar and popup are on.
 
 Creating and editing happen on the site — **New overlay** asks which site, and **Edit**
 opens that site's Overlays section — because an overlay is written against one site's
-pages, variables and order. Ten sites show at a time, with up to ten overlays each; a
+pages, variables and order. In an organization with no sites yet, **New overlay** is
+grayed out and says to add a site first. Ten sites show at a time, with up to ten overlays each; a
 site with more says so and links to its own list.
 
 ## Related

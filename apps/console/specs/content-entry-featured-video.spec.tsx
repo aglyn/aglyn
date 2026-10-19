@@ -77,6 +77,14 @@ jest.mock('@aglyn/aglyn', () => ({
   hostPublicOrigin: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/host-naming',
   ).hostPublicOrigin,
+  // The REAL plan rules (AGL-3977): the Schedule and "Write with AI"
+  // controls are drawn locked or open from them on every render.
+  checkEntitlement: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).checkEntitlement,
+  planLabelGrantingFeature: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).planLabelGrantingFeature,
   isHostCollectionKind: () => () => true,
   COLLECTION_CATEGORIES_MAX: 20,
   findCollectionSlugOwner: () => null,

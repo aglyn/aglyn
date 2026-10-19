@@ -21,8 +21,13 @@ import {
   type PluginDomainEventEnvelope,
 } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import { registerPluginTrackingPage } from '@aglyn/aglyn/plugin-manager/plugin-tracking-pages'
+import {
+  ORDER_CANCELLED_EVENT,
+  ORDER_FULFILLED_EVENT,
+  ORDER_PAID_EVENT,
+  ORDER_REFUNDED_EVENT,
+} from '@aglyn/plugins-commerce/contracts'
 import { POST_PURCHASE_PLUGIN_ID } from './constants/bundle-common'
-import type { OrderEventPayload, OrderFulfilledPayload, OrderRefundedPayload } from './server/order-sync'
 
 /**
  * Post-purchase's SERVER declarations (AGL-3635), loaded by both apps'
@@ -32,9 +37,10 @@ import type { OrderEventPayload, OrderFulfilledPayload, OrderRefundedPayload } f
  *   checkout extras;
  * - the branded tracking page the order-status page asks through core's
  *   tracking pages;
- * - the seller's order events, by name — `order.paid`, `order.fulfilled`,
- *   `order.refunded`, `order.cancelled` — one subscriber per service, so a
- *   vendor that is down is retried alone.
+ * - the seller's order events — `order.paid`, `order.fulfilled`,
+ *   `order.refunded`, `order.cancelled`, by commerce's contract tokens
+ *   (AGL-3980) — one subscriber per service, so a vendor that is down is
+ *   retried alone.
  *
  * Each is registered whether or not the deployment is configured, and each
  * answers as though it were absent when it is not. Every handler reaches its
@@ -62,35 +68,35 @@ export function registerPostPurchaseServerDeclarations(): void {
     const { trackingPageFor } = await import('./server/offers')
     return trackingPageFor(request)
   }, owner)
-  subscribePluginDomainEvent<OrderEventPayload>('order.paid', sync((m) => m.openProtectionPolicy), {
+  subscribePluginDomainEvent(ORDER_PAID_EVENT, sync((m) => m.openProtectionPolicy), {
     ...owner,
     name: 'route-policy',
   })
-  subscribePluginDomainEvent<OrderEventPayload>('order.paid', sync((m) => m.syncNarvarOrder), {
+  subscribePluginDomainEvent(ORDER_PAID_EVENT, sync((m) => m.syncNarvarOrder), {
     ...owner,
     name: 'narvar-paid',
   })
-  subscribePluginDomainEvent<OrderFulfilledPayload>('order.fulfilled', sync((m) => m.followParcel), {
+  subscribePluginDomainEvent(ORDER_FULFILLED_EVENT, sync((m) => m.followParcel), {
     ...owner,
     name: 'aftership-parcel',
   })
-  subscribePluginDomainEvent<OrderFulfilledPayload>('order.fulfilled', sync((m) => m.tellRouteShipment), {
+  subscribePluginDomainEvent(ORDER_FULFILLED_EVENT, sync((m) => m.tellRouteShipment), {
     ...owner,
     name: 'route-shipment',
   })
-  subscribePluginDomainEvent<OrderFulfilledPayload>('order.fulfilled', sync((m) => m.syncNarvarOrder), {
+  subscribePluginDomainEvent(ORDER_FULFILLED_EVENT, sync((m) => m.syncNarvarOrder), {
     ...owner,
     name: 'narvar-fulfilled',
   })
-  subscribePluginDomainEvent<OrderRefundedPayload>('order.refunded', sync((m) => m.endProtectionPolicy), {
+  subscribePluginDomainEvent(ORDER_REFUNDED_EVENT, sync((m) => m.endProtectionPolicy), {
     ...owner,
     name: 'route-refund',
   })
-  subscribePluginDomainEvent<OrderEventPayload>('order.cancelled', sync((m) => m.endProtectionPolicy), {
+  subscribePluginDomainEvent(ORDER_CANCELLED_EVENT, sync((m) => m.endProtectionPolicy), {
     ...owner,
     name: 'route-cancel',
   })
-  subscribePluginDomainEvent<OrderEventPayload>('order.cancelled', sync((m) => m.syncNarvarOrder), {
+  subscribePluginDomainEvent(ORDER_CANCELLED_EVENT, sync((m) => m.syncNarvarOrder), {
     ...owner,
     name: 'narvar-cancelled',
   })
