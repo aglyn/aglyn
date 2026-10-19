@@ -538,7 +538,9 @@ private fun OneBoxResult(services: ShellServices, workspace: WorkspaceState, pre
         WorkspaceTile(row.label, null, null, null, size = 28.dp, cornerRadius = 8.dp)
       }
       else -> Box(Modifier.size(28.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-        Icon(AglynIcons.named(if (row.group == SEE_ALL_GROUP) "search" else oneBoxIcon(row.group)), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        // A result's glyph by its group, else by its heading's words (a server group id the app does not know yet).
+        val glyph = if (row.group == SEE_ALL_GROUP) "search" else oneBoxIcon(row.group).takeUnless { it == "search" } ?: oneBoxIcon(line.heading.lowercase())
+        Icon(AglynIcons.named(glyph), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
     Column(Modifier.weight(1f)) {
