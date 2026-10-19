@@ -49,6 +49,7 @@ import {
   siteSpelling,
   slackPayload,
   spellingCapacity,
+  supersededBy,
   takeTurn,
 } from './prod-canary.mjs'
 
@@ -230,6 +231,22 @@ test('every verdict a human must read exits non-zero', () => {
   for (const verdict of ['rollback', 'degraded', 'not-serving', 'inconclusive', 'error']) {
     assert.notEqual(EXIT[verdict], 0, verdict)
   }
+})
+
+test('a candidate a newer deployment replaced before it was served is superseded, not an alert', () => {
+  assert.equal(EXIT.superseded, 0)
+  // 2026-10-19: the beta.270 merge built 18:38Z; an env change redeployed the
+  // same commit 18:44Z and production served that before the run began.
+  const candidate = { uid: 'dpl_FNfxz', created: Date.parse('2026-10-19T18:38:51Z'), readyState: 'READY', target: 'production' }
+  const redeploy = { uid: 'dpl_F8VMcb', created: Date.parse('2026-10-19T18:44:07Z'), readyState: 'READY', target: 'production' }
+  assert.equal(supersededBy(candidate, redeploy), true)
+  // What production served BEFORE the candidate is not newer: still not-serving.
+  assert.equal(supersededBy(candidate, { ...redeploy, created: Date.parse('2026-10-19T01:24:50Z') }), false)
+  // The candidate itself, a deployment still building, or a preview never supersede it.
+  assert.equal(supersededBy(candidate, candidate), false)
+  assert.equal(supersededBy(candidate, { ...redeploy, readyState: 'BUILDING' }), false)
+  assert.equal(supersededBy(candidate, { ...redeploy, target: 'preview' }), false)
+  assert.equal(supersededBy(candidate, null), false)
 })
 
 // ---------------------------------------------------------------- rollback --
