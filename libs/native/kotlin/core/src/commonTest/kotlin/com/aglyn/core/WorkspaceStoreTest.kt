@@ -50,7 +50,7 @@ class WorkspaceStoreTest {
     assertEquals(null, WorkspaceStore.siteFromMembership("h", mapOf("favicon" to " ")).favicon)
     // A workspace's logos live on its own document; the membership index carries none.
     assertEquals(
-      WorkspaceOrgLogo("/api/media/cdn/org:o/logo", null),
+      WorkspaceOrgLogo("/api/media/cdn/org:o/logo", null, plan = "free"),
       WorkspaceOrgLogo.from(mapOf("logoUrl" to "/api/media/cdn/org:o/logo", "logoDarkUrl" to "")),
     )
     assertEquals(WorkspaceOrgLogo(null, null), WorkspaceOrgLogo.from(null))

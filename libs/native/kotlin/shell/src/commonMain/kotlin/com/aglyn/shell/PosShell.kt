@@ -1,5 +1,7 @@
 package com.aglyn.shell
 
+import androidx.compose.ui.graphics.graphicsLayer
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,8 +71,15 @@ internal const val POS_DEVICE_MODE_KEY = "aglyn.pos.deviceMode"
  * plugins contribute (`apps` names POS); the shell names none of them.
  */
 @Composable
-fun PosShell(services: ShellServices, autoSignIn: Boolean = false, dark: Boolean? = null) {
-  AglynTheme(dark = dark ?: androidx.compose.foundation.isSystemInDarkTheme()) {
+fun PosShell(
+  services: ShellServices,
+  autoSignIn: Boolean = false,
+  dark: Boolean? = null,
+  /** The desktop's first window plays the launch intro (Android's splash screen plays instead). */
+  playIntro: Boolean = false,
+  onIntroRevealed: () -> Unit = {},
+) {
+  AglynTheme(dark = dark ?: appearanceDark(services)) {
     com.aglyn.webview.ProvideInAppBrowser(secureTab = services.openHostedPage) {
     // Remote pictures (product photos on the register and the kiosk) load through the app's image loader, as in the Aglyn app.
     androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalImageLoader provides services.imageLoader) {
@@ -92,14 +101,21 @@ fun PosShell(services: ShellServices, autoSignIn: Boolean = false, dark: Boolean
         services.prefs.set(POS_DEVICE_MODE_KEY, chosen.id)
         deviceMode = chosen.id
       }
-      when (val state = auth) {
-        AuthState.Restoring -> Loading()
-        AuthState.SignedOut -> SignedOutScreen(services, autoSignIn, deviceScreens, onDeviceMode)
-        // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
-        is AuthState.SignedIn if services.authFlow.landing -> SignedOutScreen(services, autoSignIn, deviceScreens, onDeviceMode)
-        // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
-        is AuthState.SignedIn if !state.user.emailVerified && impersonation == null -> VerifyEmailScreen(services, state.user.email)
-        is AuthState.SignedIn -> PosSignedIn(services, state.user.uid)
+      val state = auth
+      val authScreen = state is AuthState.SignedOut ||
+        (state is AuthState.SignedIn && (services.authFlow.landing || (!state.user.emailVerified && impersonation == null)))
+      LaunchHost(services, ready = state !is AuthState.Restoring, backdrop = authScreen, playIntro = playIntro, onRevealed = onIntroRevealed) { reveal ->
+        when (state) {
+          AuthState.Restoring -> Unit
+          AuthState.SignedOut -> SignedOutScreen(services, autoSignIn, deviceScreens, onDeviceMode)
+          // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
+          is AuthState.SignedIn if services.authFlow.landing -> SignedOutScreen(services, autoSignIn, deviceScreens, onDeviceMode)
+          // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
+          is AuthState.SignedIn if !state.user.emailVerified && impersonation == null -> VerifyEmailScreen(services, state.user.email)
+          is AuthState.SignedIn -> androidx.compose.foundation.layout.Box(
+            androidx.compose.ui.Modifier.graphicsLayer { alpha = reveal.alpha; translationY = reveal.rise.dp.toPx() },
+          ) { PosSignedIn(services, state.user.uid) }
+        }
       }
     }
   }

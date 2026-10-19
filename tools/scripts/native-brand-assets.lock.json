@@ -61,5 +61,105 @@
       512,
       1024
     ]
+  },
+  "launchArt": {
+    "apps/ios/Aglyn/Assets.xcassets/LaunchBackground.imageset/LaunchBackground-iphone.png": {
+      "size": [
+        1320,
+        2868
+      ],
+      "svg": "d63f870d001e22e306fbc4b15a8818f7ad33f90488af98ecafea5c93522c5b7e"
+    },
+    "apps/ios/Aglyn/Assets.xcassets/LaunchBackground.imageset/LaunchBackground-iphone-dark.png": {
+      "size": [
+        1320,
+        2868
+      ],
+      "svg": "2608ea45ef3e7b03e0c854ad982d2b755eee3edfd55342363c03e8f8e075363e"
+    },
+    "apps/ios/Aglyn/Assets.xcassets/LaunchBackground.imageset/LaunchBackground-ipad.png": {
+      "size": [
+        2752,
+        2752
+      ],
+      "svg": "5e26a562765c5b88cc878d58599c907d5c46bb98ce268f4b9c7a1fea71b417b3"
+    },
+    "apps/ios/Aglyn/Assets.xcassets/LaunchBackground.imageset/LaunchBackground-ipad-dark.png": {
+      "size": [
+        2752,
+        2752
+      ],
+      "svg": "be4b79055b4c03e43a2a52bf0141541b58bddecc54d866b5b17da36449e4e1db"
+    },
+    "apps/ios/AglynPOS/Assets.xcassets/LaunchBackground.imageset/LaunchBackground-iphone.png": {
+      "size": [
+        1320,
+        2868
+      ],
+      "svg": "d63f870d001e22e306fbc4b15a8818f7ad33f90488af98ecafea5c93522c5b7e"
+    },
+    "apps/ios/AglynPOS/Assets.xcassets/LaunchBackground.imageset/LaunchBackground-iphone-dark.png": {
+      "size": [
+        1320,
+        2868
+      ],
+      "svg": "2608ea45ef3e7b03e0c854ad982d2b755eee3edfd55342363c03e8f8e075363e"
+    },
+    "apps/ios/AglynPOS/Assets.xcassets/LaunchBackground.imageset/LaunchBackground-ipad.png": {
+      "size": [
+        2752,
+        2752
+      ],
+      "svg": "5e26a562765c5b88cc878d58599c907d5c46bb98ce268f4b9c7a1fea71b417b3"
+    },
+    "apps/ios/AglynPOS/Assets.xcassets/LaunchBackground.imageset/LaunchBackground-ipad-dark.png": {
+      "size": [
+        2752,
+        2752
+      ],
+      "svg": "be4b79055b4c03e43a2a52bf0141541b58bddecc54d866b5b17da36449e4e1db"
+    },
+    "apps/ios/Aglyn/Assets.xcassets/LaunchLogo.imageset/LaunchLogo@1x.png": {
+      "size": [
+        120,
+        120
+      ],
+      "svg": "42f5bdcb3a3938cc0f7a6df78a9442fcb2034721d75dc690d704fa2ff52f71d0"
+    },
+    "apps/ios/Aglyn/Assets.xcassets/LaunchLogo.imageset/LaunchLogo@2x.png": {
+      "size": [
+        240,
+        240
+      ],
+      "svg": "42f5bdcb3a3938cc0f7a6df78a9442fcb2034721d75dc690d704fa2ff52f71d0"
+    },
+    "apps/ios/Aglyn/Assets.xcassets/LaunchLogo.imageset/LaunchLogo@3x.png": {
+      "size": [
+        360,
+        360
+      ],
+      "svg": "42f5bdcb3a3938cc0f7a6df78a9442fcb2034721d75dc690d704fa2ff52f71d0"
+    },
+    "apps/ios/AglynPOS/Assets.xcassets/LaunchLogo.imageset/LaunchLogo@1x.png": {
+      "size": [
+        120,
+        120
+      ],
+      "svg": "42f5bdcb3a3938cc0f7a6df78a9442fcb2034721d75dc690d704fa2ff52f71d0"
+    },
+    "apps/ios/AglynPOS/Assets.xcassets/LaunchLogo.imageset/LaunchLogo@2x.png": {
+      "size": [
+        240,
+        240
+      ],
+      "svg": "42f5bdcb3a3938cc0f7a6df78a9442fcb2034721d75dc690d704fa2ff52f71d0"
+    },
+    "apps/ios/AglynPOS/Assets.xcassets/LaunchLogo.imageset/LaunchLogo@3x.png": {
+      "size": [
+        360,
+        360
+      ],
+      "svg": "42f5bdcb3a3938cc0f7a6df78a9442fcb2034721d75dc690d704fa2ff52f71d0"
+    }
   }
 }

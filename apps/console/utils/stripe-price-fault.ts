@@ -32,6 +32,12 @@ export function configuredPriceFault(
    * on whether that item was configured — the caller knows, this cannot.
    */
   aiAddonItemIndex: number | null = null,
+  /**
+   * Where the Site Care item sits (AGL-3954), when the checkout attached one.
+   * It follows the AI add-on when both were bought, so again only the caller
+   * knows the index.
+   */
+  siteCareItemIndex: number | null = null,
 ): string | null {
   if (!error || error.code !== 'resource_missing') return null
   const param = String(error.param ?? '')
@@ -41,9 +47,12 @@ export function configuredPriceFault(
   // twin — naming the monthly var for a failed ANNUAL checkout would send
   // someone to fix a variable that was never consulted.
   const yearly = interval === 'year' ? '_YEARLY' : ''
-  const envVar =
-    aiAddonItemIndex !== null && param.includes(`[${aiAddonItemIndex}]`)
-      ? `STRIPE_PRICE_${plan.toUpperCase()}_AI_ADDON${yearly}`
+  const at = (index: number | null) =>
+    index !== null && param.includes(`[${index}]`)
+  const envVar = at(aiAddonItemIndex)
+    ? `STRIPE_PRICE_${plan.toUpperCase()}_AI_ADDON${yearly}`
+    : at(siteCareItemIndex)
+      ? `STRIPE_PRICE_SITE_CARE${yearly}`
       : param.includes('[1]')
         ? `STRIPE_PRICE_METERED${yearly}`
         : `STRIPE_PRICE_${plan.toUpperCase()}${yearly}`

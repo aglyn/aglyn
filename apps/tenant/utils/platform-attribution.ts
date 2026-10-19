@@ -23,15 +23,17 @@ import getOrgBilling from './get-org-billing'
  * May THIS host's pages carry the Aglyn fingerprint? (AGL-2088)
  *
  * Resolves a tenant host (subdomain, `cname--` sentinel, or alias) to its org
- * and asks the one shared predicate. Two consumers — `generateMetadata`, for
- * the `<meta name="generator">` tag, and the lockdown-verdict route, which
- * carries the answer out to the edge middleware for `x-powered-by` — so the
- * rule is derived ONCE and cannot drift between the head and the headers the
+ * and asks the one shared predicate, for `generateMetadata`'s
+ * `<meta name="generator">` tag. The lockdown-verdict route asks the same
+ * predicate of its own request-time read for `x-powered-by`, so the rule is
+ * derived in one place and cannot drift between the head and the headers the
  * way `removeBranding` drifted across surfaces before `resolveBrandingProfile`
  * pulled it together.
  *
- * Costs no extra Firestore read on the render path: both lookups are the same
- * `withRenderCache` entries `loadPageData` already populated for this request.
+ * Render-only: it reads the `scope: 'render'` org entry, the same one
+ * `loadPageData` already populated for this request, so it costs no extra
+ * Firestore read and does not shorten the page's ISR window. A request-time
+ * caller must not use it.
  *
  * ⚠️ FAILS CLOSED, on every branch — unknown host, missing org, thrown error.
  * The tempting shape is `!checkEntitlement(org, 'whiteLabel')`, and it is
@@ -47,7 +49,10 @@ export async function hostShowsPlatformAttribution(
   try {
     const hostRes = await getHost({ host: host as never })
     if (!hostRes.host?.$id) return false
-    const orgRes = await getOrgBilling({ hostId: hostRes.host.$id })
+    const orgRes = await getOrgBilling({
+      hostId: hostRes.host.$id,
+      scope: 'render',
+    })
     return showsPlatformAttribution(orgRes.org)
   } catch (error) {
     console.error('[platform-attribution] failed', error)

@@ -54,6 +54,7 @@
   "functions": {
     "predeploy": [
       "npm --prefix \"$RESOURCE_DIR\" run check-deploy-env",
+      "npm --prefix \"$RESOURCE_DIR\" run stamp-source",
       "npm --prefix \"$RESOURCE_DIR\" run lint",
       "npm --prefix \"$RESOURCE_DIR\" run build"
     ],

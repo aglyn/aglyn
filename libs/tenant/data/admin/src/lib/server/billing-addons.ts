@@ -19,10 +19,12 @@ import {
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   EXTRA_HOSTS_ADDON_MAX,
   PLAN_PRICING,
+  planSellsSiteCare,
   POS_REGISTER_ADDON_MONTHLY_USD,
   POS_REGISTERS_ADDON_MAX,
   resolveOrgEntitlements,
   SELF_SERVE_PLANS,
+  SITE_CARE_ADDON_MONTHLY_USD,
   UNLIMITED,
   type OrgPlan,
   type OrgSeatAddons,
@@ -35,8 +37,8 @@ import {
  * one subscription, so every kind has a monthly and a yearly price
  * (Stripe allows a single interval per subscription; annual orgs attach
  * the `_YEARLY` variants). Seat/member/dataset/host prices and the Aglyn AI
- * add-on (AGL-2896) are per-plan; POS registers and the Event Calendar are
- * flat. Prices are minted by `tools/scripts/setup-stripe.mjs` — keep the
+ * add-on (AGL-2896) are per-plan; POS registers, the Event Calendar and
+ * Site Care (AGL-3954) are flat. Prices are minted by `tools/scripts/setup-stripe.mjs` — keep the
  * three in sync.
  */
 export type AddonKind = keyof Required<OrgSeatAddons>
@@ -49,6 +51,7 @@ export const ADDON_KINDS: readonly AddonKind[] = [
   'posRegisters',
   'eventCalendar',
   'aiAddon',
+  'siteCare',
 ]
 
 export type BillingInterval = 'month' | 'year'
@@ -66,6 +69,7 @@ const PER_PLAN_ENV_SUFFIX: Partial<Record<AddonKind, string>> = {
 const FLAT_ENV_NAME: Partial<Record<AddonKind, string>> = {
   posRegisters: 'POS_REGISTER',
   eventCalendar: 'EVENT_CALENDAR',
+  siteCare: 'SITE_CARE',
 }
 
 /**
@@ -256,7 +260,7 @@ export function findPlanItem<T extends { price?: { id?: string } | null }>(
 /**
  * Monthly USD per unit for an add-on on a plan (yearly prices are ×12 of
  * this); null when the plan doesn't sell the kind. Single pricing source
- * of truth: `PLAN_PRICING` + the two flat add-on constants.
+ * of truth: `PLAN_PRICING` + the three flat add-on constants.
  */
 export function addonUnitUsd(kind: AddonKind, plan: OrgPlan): number | null {
   const pricing = PLAN_PRICING[plan]
@@ -275,6 +279,8 @@ export function addonUnitUsd(kind: AddonKind, plan: OrgPlan): number | null {
       return EVENT_CALENDAR_ADDON_MONTHLY_USD
     case 'aiAddon':
       return pricing.aiAddonMonthlyUsd
+    case 'siteCare':
+      return SITE_CARE_ADDON_MONTHLY_USD
   }
 }
 
@@ -305,8 +311,10 @@ export function addonQuantitiesFromItems(
  * Max purchasable quantity per kind, from a purchases-free entitlement
  * resolution (plan defaults + staff overrides only) so the ceiling does not
  * drift as the org buys: seat/dataset kinds stop at the plan's hard max,
- * hosts/registers use flat ceilings, the Event Calendar and Aglyn AI are 0/1
- * toggles. POS registers additionally require the `pos` feature.
+ * hosts/registers use flat ceilings, the Event Calendar, Aglyn AI and Site
+ * Care are 0/1 toggles. POS registers additionally require the `pos`
+ * feature, and Site Care a plan that sells it (`planSellsSiteCare`), which is
+ * why the plan travels with the baseline.
  *
  * Lives here rather than inside `/api/billing/addons` because a PLAN CHANGE
  * needs the same ceiling for a different plan. The addons route asks "how many
@@ -317,6 +325,7 @@ export function addonQuantitiesFromItems(
 export function addonMaxForBaseline(
   kind: AddonKind,
   baseline: ReturnType<typeof resolveOrgEntitlements>,
+  plan: OrgPlan,
 ): number {
   const bounded = (included: number, max: number) =>
     Number.isFinite(max) ? Math.max(0, max - included) : EXTRA_HOSTS_ADDON_MAX
@@ -337,10 +346,19 @@ export function addonMaxForBaseline(
       // Org-wide like the Event Calendar: one purchase, and the price map
       // (null on Free and Enterprise) says whether the plan sells it at all.
       return 1
+    case 'siteCare':
+      // Flat-priced, so the price map cannot say "not sold here" the way it
+      // does for Aglyn AI. This ceiling is the rule that keeps Free (no
+      // subscription) and Enterprise (quoted per deal) from buying it.
+      return planSellsSiteCare(plan) ? 1 : 0
   }
 }
 
 /** The ceiling a PLAN would impose on an add-on kind, purchases excluded. */
 export function addonMaxForPlan(kind: AddonKind, plan: OrgPlan): number {
-  return addonMaxForBaseline(kind, resolveOrgEntitlements({ plan } as never))
+  return addonMaxForBaseline(
+    kind,
+    resolveOrgEntitlements({ plan } as never),
+    plan,
+  )
 }

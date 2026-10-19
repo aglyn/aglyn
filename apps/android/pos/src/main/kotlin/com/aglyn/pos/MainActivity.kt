@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.aglyn.shell.handOver
 import androidx.lifecycle.lifecycleScope
 import com.aglyn.camera.CameraXBarcodeScanner
 import com.aglyn.ui.LocalCameraScanner
@@ -33,11 +34,13 @@ class MainActivity : ComponentActivity() {
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
-    installSplashScreen()
+    val splash = installSplashScreen()
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     val app = application as AglynPosApplication
     val services = app.services
+    // The splash stays up until the auth state is known, then hands over with the spec's exit (AGL-3934).
+    splash.handOver(services)
     app.permissionGate = readerGate
     // Stripe's card form registers for its result now, before this activity starts.
     app.keyedCards.attach(this)

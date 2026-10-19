@@ -129,6 +129,29 @@ describe('configuredPriceFault (AGL-1137)', () => {
     expect(metered).not.toContain('AI_ADDON')
   })
 
+  it('names the Site Care env at the index it was given (AGL-3954)', () => {
+    // Bought with the AI add-on: metered [1], AI [2], Site Care [3].
+    const message = configuredPriceFault(
+      { ...REAL_DEAD_PRICE_ERROR, param: 'items[3][price]' },
+      'pro',
+      'year',
+      2,
+      3,
+    )
+    expect(message).toContain('STRIPE_PRICE_SITE_CARE_YEARLY')
+    expect(message).not.toContain('AI_ADDON')
+    // Alone and with no metered price, it took slot [1].
+    expect(
+      configuredPriceFault(
+        { ...REAL_DEAD_PRICE_ERROR, param: 'items[1][price]' },
+        'starter',
+        'month',
+        null,
+        1,
+      ),
+    ).toContain('STRIPE_PRICE_SITE_CARE')
+  })
+
   it('stays out of the way of every other Stripe failure', () => {
     // The control that keeps this honest: if it matched broadly, a genuine
     // outage would be relabelled as a config fault and nobody would look at

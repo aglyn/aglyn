@@ -115,6 +115,7 @@ import {
   AI_JOB_FORM_MAX_TOKENS,
   AI_JOB_FORM_TOOL,
   aiFormOutputNote,
+  aiFormPlaceholderIsMarker,
   aiJobFormPrompt,
   createAiJobFormStep,
   parseAiFormAnswer,
@@ -738,6 +739,33 @@ describe('the form step', () => {
     expect(outcome.outputs[0]?.note).toBe(
       `${EXPECTED['newsletterSignup'].note} Before you publish, replace the facts in square brackets, which the brief did not give: [send day].`,
     )
+  })
+
+  it('drops a field’s placeholder that is a bracketed marker, and asks the owner to fill in no fact for it (AGL-3942)', async () => {
+    // The beta.267 Copper Hollow Film & Portrait contact form (job gPcsOz5Djk)
+    // showed "[Phone number]" in its phone field.
+    const golden = GOLDENS['roofingQuote']
+    const answer = structuredClone(golden.answer) as Golden['answer'] & { tree: { nodes: Record<string, { props?: Record<string, unknown> }> } }
+    answer.tree.nodes['phoneInput'].props = { ...answer.tree.nodes['phoneInput'].props, type: 'tel', placeholder: '[Phone number]' }
+    mockRunAiRequest.mockResolvedValueOnce(completion(answer))
+    const outcome = await createAiJobFormStep()(context())
+    const stored = mockDocs.get(`hosts/host-1/forms/${FORM_ID}`) as Record<string, unknown>
+    const nodes = Object.values(decodeStoredNodes<Record<string, { props?: Record<string, unknown> }>>(stored['nodes']) ?? {})
+    const named = (name: string) => nodes.find((node) => node?.props?.['name'] === name)?.props
+    expect(named('phone')).toEqual(expect.objectContaining({ type: 'tel' }))
+    expect(named('phone')).not.toHaveProperty('placeholder')
+    // A hint in a visitor's words stays.
+    expect(named('damageDescription')?.['placeholder']).toBe(answer.tree.nodes['damageInput'].props?.['placeholder'])
+    expect(outcome.outputs[0]?.note).toBe(EXPECTED['roofingQuote'].note)
+    expect(outcome.outputs[0]?.note).not.toContain('[Phone number]')
+  })
+
+  it('reads a placeholder as a marker only when it is a bracketed fact or a template token (AGL-3942)', () => {
+    expect(aiFormPlaceholderIsMarker('[Phone number]')).toBe(true)
+    expect(aiFormPlaceholderIsMarker('{{phone}}')).toBe(true)
+    expect(aiFormPlaceholderIsMarker('<Your phone number>')).toBe(true)
+    expect(aiFormPlaceholderIsMarker('(828) 555-0142')).toBe(false)
+    expect(aiFormPlaceholderIsMarker('Where is the leak or damage, and when did you first notice it?')).toBe(false)
   })
 
   it('reports the draft an earlier run wrote, without asking the model again', async () => {

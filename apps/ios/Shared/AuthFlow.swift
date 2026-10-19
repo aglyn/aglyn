@@ -14,6 +14,8 @@ final class AuthFlow {
     case signIn
     case signUp
     case accountRecovery
+    /// Workspace single sign-on's work-email step (`/sso`).
+    case singleSignOn
     /// An emailed reset link's code (`/reset-password?oobCode=…&mode=resetPassword`).
     case resetPassword(code: String)
     /// An emailed verification link's code (`/verify-email?oobCode=…`), opened by someone who may not be signed in.
@@ -68,8 +70,8 @@ final class AuthFlow {
     case "/account-recovery", "/account-recovery/":
       screen = .accountRecovery
     case "/sso", "/sso/":
-      // Single sign-on runs on the console, from the sign-in screen's button.
-      screen = .signIn
+      // The work email first; the organization's own sign-in runs on the console from there.
+      screen = .singleSignOn
     case "/reset-password", "/reset-password/":
       guard let code = query["oobCode"], !code.isEmpty, (query["mode"] ?? "resetPassword") == "resetPassword" else {
         screen = .resetPassword(code: "")

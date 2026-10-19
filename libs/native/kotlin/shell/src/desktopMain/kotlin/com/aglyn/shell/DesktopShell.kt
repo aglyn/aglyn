@@ -106,15 +106,26 @@ object DesktopShell {
     }
     val appCheck: com.aglyn.core.AppCheckTokenProvider = consoleAppCheck ?: com.aglyn.core.NoAppCheck
     val http = defaultHttpClient().let { if (config.appCheck) it.withAppCheck(appCheck) else it }
-    // One kept session per app and Firebase project, so an emulator run never restores into production.
-    val auth = IdentityToolkitAuthSession(
-      http,
-      config.firebase.apiKey,
-      config.authEmulatorHost,
-      credentials = com.aglyn.core.CredentialStores.forOs(),
-      credentialKey = "Aglyn/${config.app.wire}/${config.firebase.projectId}",
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Swing)
+    // One kept session per app, Firebase project and account (Add account), so an emulator run never restores into
+    // production and each account's sign-in is its own entry in the credential store.
+    val credentials = com.aglyn.core.CredentialStores.forOs()
+    val baseKey = "Aglyn/${config.app.wire}/${config.firebase.projectId}"
+    val auth = com.aglyn.core.AccountSessions(
+      scope,
+      { slot ->
+        IdentityToolkitAuthSession(
+          http,
+          config.firebase.apiKey,
+          config.authEmulatorHost,
+          credentials = credentials,
+          credentialKey = if (slot == com.aglyn.core.AccountSessions.PRIMARY) baseKey else "$baseKey/$slot",
+        )
+      },
+      prefs,
+      restore = { (it as? IdentityToolkitAuthSession)?.restore() },
     )
-    consoleAppCheck?.idToken = { auth.currentIdToken() }
+    consoleAppCheck?.idToken = { (auth.sessionOf(auth.active.value) as? IdentityToolkitAuthSession)?.currentIdToken() }
     val firestore = RestFirestoreReader(
       http,
       config.firebase.projectId,
@@ -125,8 +136,7 @@ object DesktopShell {
       ),
       freshIdToken = { auth.idToken(true) },
     )
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Swing)
-    scope.launch { auth.restore() }
+    scope.launch { (auth.sessionOf(com.aglyn.core.AccountSessions.PRIMARY) as? IdentityToolkitAuthSession)?.restore() }
     val registry = NativePluginRegistry()
     registry.load(PLATFORM_ENTRIES + manifest).failed.forEach { System.err.println("Aglyn: plugin ${it.pluginId}: ${it.error}") }
     // The seeded emulator member (tools/scripts/seed-native-emulator.mjs) fills the
