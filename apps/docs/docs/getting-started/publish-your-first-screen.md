@@ -52,8 +52,8 @@ Every page is created with one working version, and **Save** updates that versio
 every plan — the core loop above needs nothing extra. Keeping *more* than one — named
 snapshots you can reopen, publish to roll back to, or schedule — requires **Pro or
 above**, and scheduling a version requires **Business or above**. On Free and Starter the
-editor answers *"Versioning requires a Pro plan — see Billing to upgrade"* instead of
-opening the name dialog. See
+Versions dialog still shows **New version**, disabled, with a note naming the plan that
+includes it and an **Upgrade** button to the plans on Billing. See
 [Versions & scheduled publishing](../building-sites/screens-and-layouts/versions-and-publishing.md).
 :::
 

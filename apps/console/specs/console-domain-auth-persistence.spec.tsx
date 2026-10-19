@@ -82,6 +82,14 @@ jest.mock('@mui/material', () => ({
   NoSsr: ({ children }: { children: ReactNode }) => children,
 }))
 
+// The widget slot draws a locked card with MUI's styled Card, which the
+// MUI mock above leaves out; this spec never draws a dashboard.
+jest.mock('../components/plan-locked-widget.component', () => ({
+  __esModule: true,
+  PlanLockedWidget: () => null,
+  default: () => null,
+}))
+
 jest.mock('@aglyn/aglyn/app-utils/analytics-events', () => ({
   __esModule: true,
   configureAnalyticsTransport: jest.fn(),

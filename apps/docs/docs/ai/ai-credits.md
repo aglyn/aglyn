@@ -1,7 +1,7 @@
 ---
 sidebar_position: 11.9
 title: AI credits
-description: "Everything Aglyn AI does draws AI credits from one monthly pool: what each plan includes (300 on Free), what the add-on adds, what jobs cost, the check before a job starts, and when credits come back."
+description: "Everything Aglyn AI does draws AI credits from one monthly pool: what each plan includes (300 on Free), what an Aglyn AI tier adds on top, what jobs cost, the check before a job starts, and when credits come back."
 ---
 
 # AI credits
@@ -12,25 +12,27 @@ emails: they all draw on the same credits.
 
 ## Credits each month {#monthly-credits}
 
-Each plan includes a band of credits every month, and the
-[Aglyn AI add-on](#the-aglyn-ai-add-on) widens it:
+Each plan includes credits every month, and they pay for **all** of Aglyn AI: answers,
+copy, and building pages, forms, emails, products and the rest. An
+[Aglyn AI tier](#the-aglyn-ai-add-on) adds more on top:
 
-| Plan | Included each month | Added by the Aglyn AI add-on |
-| --- | --- | --- |
-| Free | 300 | Not sold on Free |
-| Starter | 750 | 4,000 |
-| Pro | 2,750 | 9,000 |
-| Business | 7,500 | 19,000 |
-| Scale | 10,000 | 34,000 |
-| Advanced | 13,000 | 49,000 |
-| Agency | 58,000 | 149,000 |
-| Enterprise | Set in your agreement | Included in your agreement |
+| Plan | Included each month |
+| --- | --- |
+| Free | 300 |
+| Starter | 750 |
+| Pro | 2,750 |
+| Business | 7,500 |
+| Scale | 10,000 |
+| Advanced | 13,000 |
+| Agency | 58,000 |
+| Enterprise | Set in your agreement |
 
-The band **resets on the first of each month** (UTC). Credits you did not use do not
+The pool **resets on the first of each month** (UTC). Credits you did not use do not
 carry over.
 
-On **Starter**, the included credits pay for the assistant: answers, page-aware guidance
-and offers to open a page. Building pages, forms, emails and the rest needs the add-on.
+On a paid plan, credits past the pool are billed per 1,000 at your plan's rate, unless you
+turn on the stop at the included band in **Billing**. See
+[Billing & Plans](../workspace-and-billing/billing-and-plans/overview.md).
 
 ## The Free plan {#free-plan}
 
@@ -46,12 +48,27 @@ together: enough to [start a site with AI](./start-with-ai.md) or try a few buil
   starts again.
 - A new account can use its credits straight away. There is no waiting period.
 
-## The Aglyn AI add-on {#the-aglyn-ai-add-on}
+## Aglyn AI tiers {#the-aglyn-ai-add-on}
 
-The **Aglyn AI** add-on is bought once for the whole workspace, on any paid plan. It adds the
-credits in the table above to the same pool and turns on building with AI on every site.
-Its price is on [aglyn.com/pricing](https://aglyn.com/pricing) and in **Billing** before you
-confirm. See [Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai).
+Need more than your plan includes? An **Aglyn AI tier** adds credits to the same pool every
+month, **on top of** what your plan includes. You choose the tier on its own: any paid plan
+can have any tier, and changing your plan keeps your tier.
+
+| Tier | Adds each month |
+| --- | --- |
+| Spark | 4,000 |
+| Boost | 9,000 |
+| Plus | 19,000 |
+| Max | 34,000 |
+| Ultra | 49,000 |
+| Studio | 149,000 |
+
+A tier is bought once for the whole workspace. Free has no tiers, and on Enterprise more AI
+is part of your agreement. Each tier's price is on
+[aglyn.com/pricing](https://aglyn.com/pricing) and in **Billing** before you confirm. Moving
+up is charged now, for the rest of the period; moving down or removing it takes effect at the
+end of the period you have paid for. See
+[Add-ons](../workspace-and-billing/billing-and-plans/add-ons.md#aglyn-ai).
 
 ## What things cost {#what-things-cost}
 
@@ -142,7 +159,7 @@ does not come out is never charged in the first place.
 ## See your credits {#see-your-credits}
 
 - **Billing → Usage → AI credits** shows the credits drawn this month against the
-  included band, and what the add-on adds. A workspace whose plan includes no AI
+  pool, and how many of them your tier adds. A workspace whose plan includes no AI
   credits sees that said here instead, with **See plans** linking to Billing.
 - **Who is generating what**, on the same page, lists each member's credits by month.
   See [Billing & Plans](../workspace-and-billing/billing-and-plans/overview.md#who-is-generating-what).

@@ -19,7 +19,7 @@ import { join } from 'node:path'
 import {
   PLAN_ENTITLEMENTS,
   PLAN_LABELS,
-  PLAN_PRICING,
+  planSellsAiTiers,
   SELF_SERVE_PLANS,
 } from '@aglyn/aglyn'
 
@@ -27,8 +27,9 @@ import {
  * The native plan-change screen restates what the console's plan cards and
  * `overLimitSummary` read from code: the self-serve plans in order, their
  * names, what each plan includes of the three capacities a downgrade can
- * strand, and the AI add-on's price. A change to any of them must change the
- * screen.
+ * strand, and which plans sell an Aglyn AI tier (AGL-3965: a tier keeps its
+ * own price across a plan change, so the screen names no per-plan price). A
+ * change to any of them must change the screen.
  */
 const plans = (
   JSON.parse(
@@ -57,12 +58,14 @@ describe('native plan change', () => {
     }
   })
 
-  it('knows the AI add-on price of each plan that sells it', () => {
+  it('knows which plans sell an Aglyn AI tier', () => {
     const sold = Object.fromEntries(
-      Object.entries(PLAN_PRICING)
-        .filter(([, pricing]) => pricing.aiAddonMonthlyUsd != null)
-        .map(([plan, pricing]) => [plan, pricing.aiAddonMonthlyUsd]),
+      Object.keys(PLAN_ENTITLEMENTS)
+        .filter((plan) => planSellsAiTiers(plan))
+        .map((plan) => [plan, true]),
     )
-    expect(plans.aiPrice).toEqual(sold)
+    expect(plans.aiTiersSold).toEqual(sold)
+    // No per-plan AI price is restated: the tier keeps its own.
+    expect(plans.aiPrice).toBeUndefined()
   })
 })

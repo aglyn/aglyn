@@ -24,6 +24,8 @@ let siteCreatorRoles: Set<String> = ["owner", "admin"]
 struct SitesScreen: View {
   let context: NativePluginContext
   var initialSiteID: String?
+  /// Opens Create site on arrival (Create new's Site, `new=1`).
+  var startNew = false
   @State private var model = SitesListModel()
   @State private var selection: String?
   @State private var searchText = ""
@@ -50,7 +52,10 @@ struct SitesScreen: View {
           }
         }
         .sheet(isPresented: $creating) { CreateSiteSheet(context: context, orgID: orgID) }
-        .task(id: orgID) { model.start(context.firestore, uid: context.uid, orgID: orgID) }
+        .task(id: orgID) {
+          if startNew && canCreate { creating = true }
+          model.start(context.firestore, uid: context.uid, orgID: orgID)
+        }
       } else {
         AglynEmptyState("Pick a workspace first", systemImage: "square.stack.3d.up")
       }

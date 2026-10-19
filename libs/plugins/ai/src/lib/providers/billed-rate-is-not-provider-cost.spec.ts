@@ -359,7 +359,7 @@ describe('the margin the split corrects', () => {
       org: ORG,
       pool,
       overage: composeStaffOrgAiOverage(ORG, pool.billedUsd),
-      addon: { on: false, priceUsd: null, since: null, sinceSource: 'no-subscription' },
+      addon: { on: false, tier: null, priceUsd: null, since: null, sinceSource: 'no-subscription' },
       thresholdUsd: 25,
       multiple: 0,
       contribution: { month: null, marginPct: null, rating: null },

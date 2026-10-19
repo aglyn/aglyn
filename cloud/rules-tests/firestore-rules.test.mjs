@@ -9089,6 +9089,64 @@ describe('discount/enterprise/brandingProfile/billingStatus are Admin-SDK-only �
 })
 
 /**
+ * AGL-3965: `aiTier` says which Aglyn AI tier `seatAddons.aiAddon` is, so it
+ * decides how many credits the add-on adds to the org's one AI pool — an
+ * ENTITLEMENT INPUT beside `seatAddons`. It is written only by the billing
+ * webhook, `/api/billing/addons`, the plan-switch route and the tier
+ * migration, all Admin SDK, from the subscription's own item. A client that
+ * could write it would buy Spark and resolve Studio's 149,000 credits.
+ *
+ * Denied on all three update branches: the org owner/admin, super staff and
+ * billing staff.
+ */
+describe('the Aglyn AI tier is Admin-SDK-only for every client (AGL-3965)', () => {
+  const PRINCIPALS = [
+    ['the org owner', OWNER, {}],
+    ['super staff', STAFF, { staff: true, staffRole: 'super' }],
+    ['billing staff', STAFF, { staff: true, staffRole: 'billing' }],
+  ]
+
+  beforeEach(async () => {
+    // It must EXIST for clearing to be a change (affectedKeys compares values).
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'orgs', ORG), {
+        seatAddons: { aiAddon: 1 },
+        aiTier: 'spark',
+      })
+    })
+  })
+
+  it('refuses setting, clearing, merge-setting and smuggling it, for each principal', async () => {
+    for (const [who, uid, tokens] of PRINCIPALS) {
+      const db = authed(uid, tokens)
+      await mustDeny(
+        `${who} setting orgs/{orgId}.aiTier`,
+        updateDoc(doc(db, 'orgs', ORG), { aiTier: 'studio' }),
+      )
+      await mustDeny(
+        `${who} clearing orgs/{orgId}.aiTier`,
+        updateDoc(doc(db, 'orgs', ORG), { aiTier: deleteField() }),
+      )
+      await mustDeny(
+        `${who} merge-setting orgs/{orgId}.aiTier`,
+        setDoc(doc(db, 'orgs', ORG), { aiTier: 'studio' }, { merge: true }),
+      )
+      await mustDeny(
+        `${who} smuggling aiTier inside an org rename`,
+        updateDoc(doc(db, 'orgs', ORG), { name: 'Innocent Rename', aiTier: 'studio' }),
+      )
+    }
+  })
+
+  it('the positive control: re-sending it unchanged is not a change', async () => {
+    await mustAllow(
+      'the owner renaming the org while re-sending aiTier unchanged',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { name: 'Acme Goods', aiTier: 'spark' }),
+    )
+  })
+})
+
+/**
  * AGL-1824: the AGL-1028 vestigial billing trio (`seatAddons`,
  * `stripeCustomerId`, `subscription`) is Admin-SDK-only for EVERY client,
  * staff included — and the identity quartet (`sso`, `slug`, `ownerUid`,
