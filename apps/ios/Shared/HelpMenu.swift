@@ -21,7 +21,7 @@ struct HelpMenuItems: View {
         let row = scope.row(for: navigation.section)
         let page = HelpPages.docs(for: row, section: navigation.section, base: docs.url)
         // The screen's own help when the console's page for it offers one; the docs' front page otherwise.
-        Button(page != docs.url ? "\(row?.label ?? "Aglyn") help" : "Documentation", systemImage: "book") {
+        Button(page != docs.url ? "\(row?.label ?? model.brandName) help" : "Documentation", systemImage: "book") {
           navigation.openWeb(AglynWebPage(page), .newTab)
         }
         .accessibilityIdentifier("help-docs")

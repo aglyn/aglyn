@@ -60,9 +60,17 @@ final class OrgAccess {
   }
 
   /// The workspace's answers for each permission the keys name (an absent key is not held).
+  ///
+  /// The verdict stamped on the member (`resolvedPermissions`, every layer applied) when there is one; else the role's
+  /// grants from the catalog (`ORG_ROLE_GRANTS`), then the member's custom role, then their own overrides.
   func permissions(_ keys: [String]) -> [String: Bool] {
-    Dictionary(
-      keys.map { ($0, orgPermissionGranted($0, member: member.document?.data, customRole: role.document?.data)) },
+    let data = member.document?.data
+    let stamped = data?["resolvedPermissions"] as? [String: Any]
+    let resolved = rolePermissions(
+      ContractValues.shared.orgRoleGrants, role: data?["role"] as? String,
+      customRole: data?["roleId"] as? String != nil ? role.document?.data : nil, overrides: data)
+    return Dictionary(
+      keys.map { key in (key, data == nil ? false : (stamped?[key] as? Bool) ?? resolved[key] ?? false) },
       uniquingKeysWith: { a, _ in a })
   }
 

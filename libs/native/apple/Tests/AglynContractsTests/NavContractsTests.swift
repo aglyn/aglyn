@@ -161,6 +161,23 @@ final class NavContractsTests: XCTestCase {
     }
   }
 
+  func testAccentsDeriveAsTheConsoleDerivesThem() throws {
+    for item in cases("deriveAccent") {
+      let expected = item.result is NSNull ? nil : try decode(ThemeAccent.self, item.result)
+      XCTAssertEqual(deriveAccent(item.args[0] as? String ?? ""), expected, item.label)
+    }
+  }
+
+  func testRolesGrantAsTheConsoleResolvesThem() throws {
+    for item in cases("rolePermissions") {
+      XCTAssertEqual(
+        rolePermissions(
+          ContractValues.shared.orgRoleGrants, role: item.args[0] as? String, customRole: item.args[1] as? [String: Any],
+          overrides: item.args[2] as? [String: Any]),
+        item.result as? [String: Bool], item.label)
+    }
+  }
+
   func testTheOneBoxPagesAndFindsScreensAsTheRouteDoes() throws {
     for item in cases("oneBoxLimit") { XCTAssertEqual(oneBoxLimit(item.args[0]), number(item.result), item.label) }
     for item in cases("oneBoxCursor") { XCTAssertEqual(oneBoxCursor(item.args[0]), number(item.result), item.label) }

@@ -13,6 +13,48 @@ import SwiftUI
 // Whole-app theming (AGL-3945, Phase 4; Figma Themes 2:8): the look saved on the account (`appTheme`, synced like the
 // notification sound), with a per-device override kept on the device only.
 
+/// The themes and accents the apps offer, from the theme contract (`THEME_PALETTES`, `THEME_ACCENT_SWATCHES`,
+/// `deriveAccent`; AGL-3950), the same values the console and the Kotlin apps read.
+@MainActor
+enum ContractThemes {
+  static var palettes: [ThemePalette] { ContractValues.shared.themePalettes.filter { $0.id != .unknown } }
+
+  /// A theme's name as the picker shows it: the brand's own theme is named after the configured brand.
+  static func label(_ palette: ThemePalette, brandName: String) -> String {
+    palette.brandLabel == true ? brandName : palette.label
+  }
+
+  /// A theme's surfaces for the shared tokens.
+  static func spec(_ id: String) -> AglynThemeSpec {
+    let palette = themePalette(id)
+    return AglynThemeSpec(
+      id: palette.id.rawValue, light: surfaces(palette.light, palette), dark: surfaces(palette.dark, palette),
+      accent: palette.accent, alwaysDark: palette.alwaysDark == true)
+  }
+
+  private static func surfaces(_ colors: ThemeColors, _ palette: ThemePalette) -> AglynSurfaces {
+    // The words on the rail: the appearance's secondary text where it reads there, else the other appearance's (a
+    // dark rail in a light theme, as Ocean's).
+    let candidates = [colors.textSecondary, palette.light.textSecondary, palette.dark.textSecondary]
+    let railText = candidates.max { themeContrast($0, colors.rail) < themeContrast($1, colors.rail) } ?? colors.textSecondary
+    func color(_ hex: String) -> Color { Color(aglynCSS: hex) }
+    return AglynSurfaces(
+      canvas: color(colors.canvas), surface: color(colors.surface), rail: color(colors.rail), railText: color(railText),
+      border: color(colors.borderSubtle), textPrimary: color(colors.textPrimary), textSecondary: color(colors.textSecondary))
+  }
+
+  /// An accent's shades for both appearances, or nil for a value that is not a color.
+  static func accent(_ hex: String) -> (light: AglynIntent, dark: AglynIntent)? {
+    guard let accent = deriveAccent(hex) else { return nil }
+    func color(_ hex: String) -> Color { Color(aglynCSS: hex) }
+    let (fill, on, pressed) = (color(accent.fill), color(accent.on), color(accent.pressed))
+    return (
+      AglynIntent.accent(fill: fill, on: on, text: color(accent.textLight), pressed: pressed),
+      AglynIntent.accent(fill: fill, on: on, text: color(accent.textDark), pressed: pressed)
+    )
+  }
+}
+
 /// The theme this device draws: its own override when it keeps one, else the account's.
 enum DeviceTheme {
   private static let key = "aglyn.theme.device"
@@ -55,8 +97,9 @@ enum ThemeApplier {
       case .extraLarge: 1.22
       default: 1
       }
+    let spec = ContractThemes.spec(prefs.theme == .unknown ? "aglyn" : prefs.theme.rawValue)
     AglynThemeRuntime.shared.apply(
-      theme: prefs.theme == .unknown ? "aglyn" : prefs.theme.rawValue, accentHex: accent, compact: prefs.density == .compact,
+      theme: spec, accent: ContractThemes.accent(accent ?? spec.accent), compact: prefs.density == .compact,
       tintedSidebar: prefs.sidebarStyle != .plain, textScale: scale)
     return [prefs.theme.rawValue, accent ?? "theme", prefs.density.rawValue, prefs.sidebarStyle.rawValue, prefs.textSize.rawValue]
       .joined(separator: "|")
@@ -115,9 +158,9 @@ struct ThemeSettingsView: View {
           Button { update { $0.accent = "theme" } } label: { AglynColorSwatch(hex: nil, selected: prefs.accent == "theme") }
             .buttonStyle(.plain)
             .accessibilityLabel("The theme's own accent")
-          ForEach(AglynThemes.accentSwatches, id: \.id) { swatch in
-            Button { update { $0.accent = swatch.hex } } label: {
-              AglynColorSwatch(hex: swatch.hex, selected: prefs.accent.uppercased() == swatch.hex)
+          ForEach(ContractValues.shared.themeAccentSwatches, id: \.id) { swatch in
+            Button { update { $0.accent = swatch.color } } label: {
+              AglynColorSwatch(hex: swatch.color, selected: prefs.accent.lowercased() == swatch.color.lowercased())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(swatch.label)
@@ -204,19 +247,15 @@ struct ThemeSettingsView: View {
 
 /// One theme in the picker: a small preview of its rail, surface and accent, light and dark.
 private struct ThemeTile: View {
+  @Environment(AppModel.self) private var model
   let name: AppThemeName
   let selected: Bool
   let action: () -> Void
 
-  private var label: String {
-    switch name {
-    case .highContrast: "High contrast"
-    default: name.rawValue.capitalized
-    }
-  }
+  private var label: String { ContractThemes.label(themePalette(name.rawValue), brandName: model.brandName) }
 
   var body: some View {
-    let spec = AglynThemes.spec(name.rawValue)
+    let spec = ContractThemes.spec(name.rawValue)
     Button(action: action) {
       VStack(alignment: .leading, spacing: 6) {
         HStack(spacing: 0) {
@@ -245,11 +284,12 @@ private struct ThemeTile: View {
     }
   }
 
-  private var spec: AglynThemeSpec { AglynThemes.spec(name.rawValue) }
+  private var spec: AglynThemeSpec { ContractThemes.spec(name.rawValue) }
 }
 
 /// The alternate app icons this build ships (the logo kit's art), on iPhone and iPad.
 struct AppIconPicker: View {
+  @Environment(AppModel.self) private var model
   let selection: String
   let pick: (String) -> Void
 
@@ -259,7 +299,7 @@ struct AppIconPicker: View {
       let alternates =
         ((Bundle.main.object(forInfoDictionaryKey: "CFBundleIcons") as? [String: Any])?["CFBundleAlternateIcons"]
         as? [String: Any])?.keys.sorted() ?? []
-      return [("aglyn", "Aglyn")] + alternates.map { ($0, $0.replacingOccurrences(of: "AppIcon-", with: "")) }
+      return [("aglyn", model.brandName)] + alternates.map { ($0, $0.replacingOccurrences(of: "AppIcon-", with: "")) }
     #else
       return []
     #endif
