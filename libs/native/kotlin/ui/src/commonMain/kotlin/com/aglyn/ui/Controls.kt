@@ -84,7 +84,15 @@ fun AmountRow(
   /** A plain detail column's size (Figma 13:483 / 13:2167: 14/20 for every row, the total in semibold, not larger). */
   size: androidx.compose.ui.unit.TextUnit? = null,
 ) {
-  val style = size?.let { MaterialTheme.typography.bodyMedium.copy(fontSize = it, lineHeight = (it.value + 6).sp) }
+  // The whole line height, not trimmed to the glyphs: Figma's row is the 20 line plus its padding.
+  val style = size?.let {
+    MaterialTheme.typography.bodyMedium.copy(
+      fontSize = it, lineHeight = (it.value + 6).sp,
+      lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
+        androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center, androidx.compose.ui.text.style.LineHeightStyle.Trim.None,
+      ),
+    )
+  }
     ?: if (emphasized) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge
   val color = if (muted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
   Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
