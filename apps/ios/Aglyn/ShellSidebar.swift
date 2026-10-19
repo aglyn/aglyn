@@ -288,7 +288,9 @@ struct SidebarList: View {
   }
 
   private func isOpen(_ group: NativeNavGroup, holding: String?) -> Bool {
-    !group.foldable || !filter.isEmpty || group.id == holding || navigation.openGroups.contains(groupKey(group))
+    // Starred stays open at rest (Figma 12:703) until the person folds it; the other groups open with the place in use.
+    if group.dynamic == "starred" { return !navigation.openGroups.contains(groupKey(group) + ".folded") }
+    return !group.foldable || !filter.isEmpty || group.id == holding || navigation.openGroups.contains(groupKey(group))
   }
 
   /// The fold state is remembered per scope kind and group (`site.sell`), on this device.
@@ -369,7 +371,7 @@ struct SidebarList: View {
 
   /// Folds or opens a group, remembered for the scope kind (Figma Motion: about 200 ms).
   private func toggle(_ group: NativeNavGroup) {
-    let key = groupKey(group)
+    let key = group.dynamic == "starred" ? groupKey(group) + ".folded" : groupKey(group)
     withAnimation(AglynShellMotion.fold) {
       if navigation.openGroups.contains(key) { navigation.openGroups.remove(key) } else { navigation.openGroups.insert(key) }
     }

@@ -186,7 +186,10 @@ struct OneBoxCatalog {
           id: "remote:\(group.group)", heading: group.heading,
           items: group.rows.prefix(perGroup).map { row in
             OneBoxItem(
-              id: "\(group.group):\(row.id)", label: row.label, detail: row.detail, icon: Self.icon(group.group),
+              // The server's own line, else what kind of record it is (the group's noun: "Contact").
+              id: "\(group.group):\(row.id)", label: row.label,
+              detail: row.detail?.isEmpty == false ? row.detail : group.noun.prefix(1).uppercased() + group.noun.dropFirst(),
+              icon: Self.icon(group.group),
               action: row.link.map { .link($0, orgID: row.orgId, hostID: row.hostId) }
                 ?? row.screen.map { .screen($0, row.params ?? [:]) } ?? .screen("", [:]))
           }))
@@ -293,11 +296,14 @@ struct OneBoxCatalog {
 /// A section heading in the box (Figma "Recent places", 12 points semibold).
 struct OneBoxHeading: View {
   let title: String
+  /// The phone's full-screen box (Figma 69:744): 13-point regular headings, 16 points in.
+  var phone = false
 
   var body: some View {
-    Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(AglynColor.secondaryText)
-      .padding(EdgeInsets(top: 8, leading: 10, bottom: 4, trailing: 10))
-      .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+    Text(title).font(.system(size: phone ? 13 : 12, weight: phone ? .regular : .semibold))
+      .foregroundStyle(AglynColor.secondaryText)
+      .padding(phone ? EdgeInsets(top: 12, leading: 10, bottom: 4, trailing: 10) : EdgeInsets(top: 8, leading: 10, bottom: 4, trailing: 10))
+      .frame(maxWidth: .infinity, minHeight: phone ? 33 : 28, alignment: .leading)
       .accessibilityAddTraits(.isHeader)
   }
 }
@@ -324,17 +330,20 @@ struct OneBoxRowView: View {
   let item: OneBoxItem
   let selected: Bool
   var showsReturn = true
+  /// The phone's rows (Figma 69:744): a 15-point regular title over a 13-point line, 56 points tall.
+  var phone = false
   let open: () -> Void
   @State private var hovered = false
 
   var body: some View {
     Button(action: open) {
-      HStack(spacing: 10) {
+      HStack(spacing: phone ? 12 : 10) {
         picture
-        VStack(alignment: .leading, spacing: 0) {
-          Text(item.label).font(.system(size: 13, weight: .semibold)).foregroundStyle(AglynColor.textPrimary).lineLimit(1)
+        VStack(alignment: .leading, spacing: phone ? 2 : 0) {
+          Text(item.label).font(.system(size: phone ? 15 : 13, weight: phone ? .regular : .semibold))
+            .foregroundStyle(AglynColor.textPrimary).lineLimit(1)
           if let detail = item.detail, !detail.isEmpty {
-            Text(detail).font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText).lineLimit(1)
+            Text(detail).font(.system(size: phone ? 13 : 12)).foregroundStyle(AglynColor.secondaryText).lineLimit(1)
           }
         }
         Spacer(minLength: 6)
@@ -344,7 +353,7 @@ struct OneBoxRowView: View {
         if selected && showsReturn { OneBoxKey("↵") }
       }
       .padding(.horizontal, 10)
-      .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+      .frame(maxWidth: .infinity, minHeight: phone ? 56 : 44, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: 6, style: .continuous)
           .fill(selected ? AglynColor.accentSoft : hovered ? AglynColor.hover : .clear))
@@ -380,6 +389,7 @@ struct OneBoxResultsList: View {
   let sections: [OneBoxSection]
   let selected: String?
   var showsReturn = true
+  var phone = false
   let open: (OneBoxItem) -> Void
 
   var body: some View {
@@ -390,9 +400,10 @@ struct OneBoxResultsList: View {
             if section.ruled {
               Rectangle().fill(AglynColor.divider).frame(height: 1).padding(.horizontal, 10).padding(.vertical, 4)
             }
-            if !section.heading.isEmpty { OneBoxHeading(title: section.heading) }
+            if !section.heading.isEmpty { OneBoxHeading(title: section.heading, phone: phone) }
             ForEach(section.items) { item in
-              OneBoxRowView(item: item, selected: item.id == selected, showsReturn: showsReturn) { open(item) }.id(item.id)
+              OneBoxRowView(item: item, selected: item.id == selected, showsReturn: showsReturn, phone: phone) { open(item) }
+                .id(item.id)
             }
           }
         }
@@ -667,7 +678,7 @@ struct PhoneSearchView: View {
           .accessibilityIdentifier("onebox-empty")
         Spacer()
       } else {
-        OneBoxResultsList(sections: sections, selected: nil, showsReturn: false) { open($0) }
+        OneBoxResultsList(sections: sections, selected: nil, showsReturn: false, phone: true) { open($0) }
       }
     }
     .background(AglynColor.paper)

@@ -472,7 +472,7 @@ struct ShellFrame<Content: View>: View {
         recordRecent(section)
         // At rest only the group holding the place in use is open (Figma 12:703); a group opened by hand stays open
         // until the next place is opened.
-        if !compact { navigation.openGroups = [] }
+        if !compact { navigation.openGroups = navigation.openGroups.filter { $0.hasSuffix(".folded") } }
       }
       // Another account in use, or a support session: nothing open belonged to it.
       .onChange(of: model.auth?.user?.uid) {
