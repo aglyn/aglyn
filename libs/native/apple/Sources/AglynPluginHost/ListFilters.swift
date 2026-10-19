@@ -53,15 +53,19 @@ public struct ListFilterState {
 /// The list's one Filter control: its statuses, its sorts, and Add a filter.
 public struct ListFilterMenu: View {
   let state: ListFilterState
+  let shows: [AglynAreaSection]
   let setStatus: (String?) -> Void
   let setSort: (ListQuerySort?) -> Void
   let add: () -> Void
 
+  /// `shows` are the area's sections (Orders, Returns, Reservations) when the screen offers them in its Filter rather
+  /// than as chips across the top (Figma draws no section control there).
   public init(
-    _ state: ListFilterState, setStatus: @escaping (String?) -> Void, setSort: @escaping (ListQuerySort?) -> Void,
-    add: @escaping () -> Void
+    _ state: ListFilterState, shows: [AglynAreaSection] = [], setStatus: @escaping (String?) -> Void,
+    setSort: @escaping (ListQuerySort?) -> Void, add: @escaping () -> Void
   ) {
     self.state = state
+    self.shows = shows
     self.setStatus = setStatus
     self.setSort = setSort
     self.add = add
@@ -69,6 +73,18 @@ public struct ListFilterMenu: View {
 
   public var body: some View {
     AglynFilterMenu(active: state.filtering ? "Filter" : nil) {
+      if !shows.isEmpty {
+        Section("Show") {
+          ForEach(shows) { section in
+            Button {
+              section.open()
+            } label: {
+              if section.selected { Label(section.label, systemImage: "checkmark") } else { Text(section.label) }
+            }
+            .accessibilityIdentifier("list-show-\(section.id)")
+          }
+        }
+      }
       if !state.statuses.isEmpty {
         Section(state.statusName) {
           ForEach(state.statuses, id: \.value) { choice in

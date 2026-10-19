@@ -41,24 +41,32 @@ struct OrdersScreen: View {
   @State private var exporting: TransferExportRequest?
   @State private var notice: String?
   @State private var addingFilter = false
+  /// On the Mac and iPad the shell hands Orders its head's parts: the title and create action head the list column, the
+  /// breadcrumbs head the detail (Figma Orders 13:483).
+  @Environment(\.aglynAreaHead) private var areaHead
 
   var body: some View {
-    WideLayoutReader { wide in
-      if wide {
-        AglynListDetailColumns(listWidth: 380) {
-          list(selectable: true)
-        } detail: {
-          if let selection {
-            OrderDetailView(context: context, orderID: selection, titled: false)
-              .id(selection)
-          } else {
-            AglynSelectionPlaceholder("No order selected", systemImage: "bag")
+    searchable(
+      WideLayoutReader { wide in
+        if wide {
+          AglynListDetailColumns(listWidth: areaHead == nil ? 380 : 440) {
+            headed(list(selectable: true))
+          } detail: {
+            VStack(spacing: 0) {
+              if let areaHead { AglynDetailCrumbs(areaHead) }
+              if let selection {
+                OrderDetailView(context: context, orderID: selection, titled: false)
+                  .id(selection)
+              } else {
+                AglynSelectionPlaceholder("No order selected", systemImage: "bag")
+              }
+            }
           }
+        } else {
+          headed(list(selectable: false))
         }
-      } else {
-        list(selectable: false)
       }
-    }
+    )
     .navigationTitle("Orders")
     .aglynScreenTitle("Orders")
     // Draft order is the list's primary action; Select and the shipping tools sit beside it (in the head on the Mac
@@ -70,30 +78,7 @@ struct OrdersScreen: View {
         picked = []
       }
       .accessibilityIdentifier("orders-select")
-      Menu {
-        Section("Export for shipping") {
-          ForEach(ContractValues.shared.orderShippingPresetChoices, id: \.id) { preset in
-            Button {
-              Task { await exportForShipping(preset.id) }
-            } label: {
-              Text(preset.label)
-              if let description = preset.description { Text(description) }
-            }
-          }
-        }
-        if canImportProducts(context) {
-          Button {
-            context.navigate(coreDataImportScreen, trackingImportParams(hostID: context.hostID))
-          } label: {
-            Label("Import tracking", systemImage: "square.and.arrow.down")
-          }
-          .accessibilityIdentifier("orders-import-tracking")
-        }
-      } label: {
-        Label("More", systemImage: "ellipsis")
-      }
-      .menuIndicator(.hidden)
-      .accessibilityIdentifier("orders-export-shipping")
+      moreMenu(select: false)
     }
     .onAppear {
       guard startNew, !startedNew else { return }
@@ -141,11 +126,6 @@ struct OrdersScreen: View {
     } message: {
       Text("Each order is checked on its own: one that cannot be fulfilled is skipped and the rest go ahead. Customers are emailed as they are for a single order.")
     }
-    // Calm rule 3 (Figma Orders 13:483, Filter on 122:7056): a search and ONE Filter at rest; the chips show only once a
-    // filter is on.
-    .aglynSearchable(text: $searchText, prompt: "Order, customer or email", onSubmit: { model.search = searchText }) {
-      filterMenu
-    }
     // The selected order leaves the detail pane once a filter or search leaves it out of the list.
     .onChange(of: model.rows.map(\.id)) { _, ids in
       if let selection, model.ready, !ids.contains(selection) { self.selection = nil }
@@ -160,6 +140,94 @@ struct OrdersScreen: View {
       model.stop()
       disputes.stop()
     }
+  }
+
+  /// Calm rule 3 (Figma Orders 13:483, Filter on 122:7056): a search and ONE Filter at rest; the chips show only once a
+  /// filter is on. With a head in the list column the search heads the list column too; otherwise the scaffold puts it.
+  @ViewBuilder
+  private func searchable<V: View>(_ view: V) -> some View {
+    if areaHead == nil {
+      view.aglynSearchable(text: $searchText, prompt: "Order, customer or email", onSubmit: { model.search = searchText }) {
+        filterMenu
+      }
+    } else {
+      view
+    }
+  }
+
+  /// The list column under its head on the Mac and iPad: the title with its star, Draft order and More, then the search
+  /// and the one Filter. Elsewhere the list as it is.
+  @ViewBuilder
+  private func headed<V: View>(_ list: V) -> some View {
+    if let areaHead {
+      VStack(spacing: 0) {
+        AglynListColumnHeader(areaHead) {
+          if selecting {
+            Button("Done") {
+              selecting = false
+              picked = []
+            }
+            .accessibilityIdentifier("orders-select")
+          } else {
+            Button {
+              drafting = true
+            } label: {
+              Label("Draft order", systemImage: "plus").labelStyle(.titleAndIcon)
+            }
+            .keyboardShortcut("n", modifiers: .command)
+            .accessibilityIdentifier("orders-draft")
+            moreMenu(select: true).labelStyle(.iconOnly)
+          }
+        }
+        AglynListToolbar(
+          text: $searchText, prompt: "Order, customer or email", onSubmit: { model.search = searchText },
+          inset: AglynListColumnHeader<EmptyView>.inset
+        ) {
+          filterMenu
+        }
+        list
+      }
+    } else {
+      list
+    }
+  }
+
+  /// Orders' other actions in one More menu: Select (in the list column's head), the shipping export and the tracking
+  /// import.
+  private func moreMenu(select: Bool) -> some View {
+    Menu {
+      if select {
+        Button {
+          selecting = true
+          picked = []
+        } label: {
+          Label("Select orders", systemImage: "checkmark.circle")
+        }
+        .accessibilityIdentifier("orders-select")
+      }
+      Section("Export for shipping") {
+        ForEach(ContractValues.shared.orderShippingPresetChoices, id: \.id) { preset in
+          Button {
+            Task { await exportForShipping(preset.id) }
+          } label: {
+            Text(preset.label)
+            if let description = preset.description { Text(description) }
+          }
+        }
+      }
+      if canImportProducts(context) {
+        Button {
+          context.navigate(coreDataImportScreen, trackingImportParams(hostID: context.hostID))
+        } label: {
+          Label("Import tracking", systemImage: "square.and.arrow.down")
+        }
+        .accessibilityIdentifier("orders-import-tracking")
+      }
+    } label: {
+      Label("More", systemImage: "ellipsis")
+    }
+    .menuIndicator(.hidden)
+    .accessibilityIdentifier("orders-export-shipping")
   }
 
   private func exportForShipping(_ presetID: String) async {
@@ -197,7 +265,9 @@ struct OrdersScreen: View {
 
   /// The list's one Filter control (in the list's toolbar on the Mac and iPad).
   private var filterMenu: some View {
-    ListFilterMenu(filterState, setStatus: setStatus, setSort: { model.sort = $0 }) { addingFilter = true }
+    ListFilterMenu(filterState, shows: areaHead?.sections ?? [], setStatus: setStatus, setSort: { model.sort = $0 }) {
+      addingFilter = true
+    }
   }
 
   /// The filters that are on, as chips; nothing at rest on the Mac and iPad.

@@ -5,6 +5,7 @@ import AglynContracts
 import AglynHardware
 import AglynPluginHost
 import AglynScreens
+import AglynUI
 import SwiftUI
 
 public let commerceRegisterScreen = "commerce.register"
@@ -64,6 +65,8 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   // a spec screen drawn by AglynScreens (Resources/commerce.screens.json).
   SpecScreens.register(ScreenCatalog.load(from: .module), into: r)
 
+  // Orders heads its own list column on the Mac and iPad (Figma Orders 13:483).
+  AglynListColumnHead.register(commerceOrdersScreen)
   r.screen(commerceOrdersScreen, title: "Orders", requiresSite: true, icon: "bag") { context, params in
     OrdersScreen(
       context: context, initialFilter: params["filter"].flatMap(OrderFilter.init(rawValue:)) ?? .all,
