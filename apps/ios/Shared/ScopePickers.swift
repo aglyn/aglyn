@@ -315,7 +315,7 @@ struct SitePickerList: View {
       done()
     } label: {
       AglynRow(
-        site.name, subtitle: HostStatus.siteAddress(site.subdomain) ?? site.subdomain, systemImage: "globe",
+        site.name, subtitle: site.shownAddress, systemImage: "globe",
         imageURL: model.mediaURL(site.favicon, hostID: site.id)
       ) {
         if site.id == model.scopedSite(navigation)?.id {

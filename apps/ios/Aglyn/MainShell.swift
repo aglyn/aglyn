@@ -153,8 +153,9 @@ struct ShellChrome: View {
             HomeMarkTab(selected: index == strip.selected) { strip.select(index, model: model) }
               .accessibilityIdentifier("tab-0")
           } else {
+          let parts = tabTitleParts(tab, model: model)
           ChromeTab(
-            title: index == 0 ? "Home" : tabTitle(tab, model: model), systemImage: index == 0 ? "house" : "square.on.square",
+            owner: parts.owner, place: parts.place, systemImage: tabIcon(tab, model: model),
             selected: index == strip.selected, closable: index > 0
           ) {
             strip.select(index, model: model)
@@ -321,8 +322,10 @@ struct ShellChrome: View {
           view = current.superview
         }
         guard let bar = button.superview else { continue }
-        let row = ShellChrome.tabRow
-        let y = bar.isFlipped ? (row - button.frame.height) / 2 : bar.bounds.height - row / 2 - button.frame.height / 2
+        // Centred on the tab row, measured from the window's top edge rather than the title bar view's own height,
+        // which grows when anything asks the window for a toolbar (P1: the buttons sat 8 points low).
+        let rowCentre = bar.convert(NSPoint(x: 0, y: window.frame.height - ShellChrome.tabRow / 2), from: nil)
+        let y = (rowCentre.y - button.frame.height / 2).rounded()
         let origin = NSPoint(x: 14 + CGFloat(index) * 20, y: y)
         if button.frame.origin != origin { button.setFrameOrigin(origin) }
       }
@@ -392,7 +395,10 @@ struct HomeMarkTab: View {
 
 /// One tab in the strip: as wide as its title up to a cap, the title cut with an ellipsis past it.
 struct ChromeTab: View {
-  let title: String
+  /// The workspace or site the tab stands in; it gives way first when the tab is narrow.
+  let owner: String?
+  /// The screen in use, always shown whole.
+  let place: String
   let systemImage: String
   let selected: Bool
   let closable: Bool
@@ -400,25 +406,34 @@ struct ChromeTab: View {
   let close: () -> Void
   @State private var hovered = false
 
+  /// Figma Titlebar/Tab 8:111: a 14-point icon, 13-point title (semibold in use), × at rest, 10-point padding, 6 between.
   var body: some View {
+    let font = Font.system(size: 13, weight: selected ? .semibold : .regular)
     HStack(spacing: 6) {
-      Image(systemName: systemImage).font(.system(size: AglynShellMetrics.rowText - 2))
+      Image(systemName: systemImage).font(.system(size: 12))
+        .frame(width: 14, height: 14)
         .foregroundStyle(selected ? AglynColor.accentIcon : AglynColor.secondaryText)
-      Text(title).font(.system(size: AglynShellMetrics.rowText - 1, weight: selected ? .semibold : .regular))
-        .foregroundStyle(selected ? AglynColor.textPrimary : AglynColor.secondaryText)
-        .lineLimit(1).truncationMode(.tail)
+      HStack(spacing: 0) {
+        if let owner {
+          Text("\(owner) — ").lineLimit(1).truncationMode(.tail).layoutPriority(0)
+        }
+        Text(place).lineLimit(1).fixedSize().layoutPriority(1)
+      }
+      .font(font)
+      .foregroundStyle(selected ? AglynColor.textPrimary : AglynColor.secondaryText)
       if closable {
         Button(action: close) {
           Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)).foregroundStyle(AglynColor.textTertiary)
+            .frame(width: 12, height: 12)
         }
         .buttonStyle(.plain)
-        .opacity(selected || hovered ? 1 : 0)
         .accessibilityLabel("Close tab")
       }
     }
     .padding(.horizontal, 10)
     .frame(height: AglynShellMetrics.barButton)
-    .frame(maxWidth: 200, alignment: .leading)
+    // As wide as its title, to a cap; past it the owner truncates and the screen stays whole.
+    .frame(maxWidth: 260, alignment: .leading)
     .fixedSize(horizontal: true, vertical: false)
     .background(
       RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)

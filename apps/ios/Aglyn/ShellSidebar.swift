@@ -202,6 +202,15 @@ private struct SiteTitleRow: View {
   let site: WorkspaceSite
   @State private var switching = false
 
+  /// Where the switcher's arrow points under the title row so the popover's 344 points start 8 in from the sidebar's
+  /// edge: the row starts after the header's two insets and spans the sidebar less both sides of them.
+  static var switcherAnchor: UnitPoint {
+    let lead = AglynShellMetrics.headerPadding.leading + AglynShellMetrics.scopeHeadPadding.leading
+    let width = AglynShellMetrics.sidebarWidth - lead - AglynShellMetrics.headerPadding.trailing
+      - AglynShellMetrics.scopeHeadPadding.trailing
+    return UnitPoint(x: (8 - lead + 344 / 2) / width, y: 1)
+  }
+
   var body: some View {
     Button {
       switching = true
@@ -233,7 +242,9 @@ private struct SiteTitleRow: View {
     .accessibilityLabel("Site, \(site.name)")
     .accessibilityHint("Switches to another site of the workspace")
     .accessibilityIdentifier("sidebar-site-picker")
-    .popover(isPresented: $switching, arrowEdge: .bottom) {
+    // Anchored so the 344-point popover starts 8 points in from the sidebar's edge, under the title row, as Figma 121:6735
+    // draws it, rather than centred on the row and over the rail.
+    .popover(isPresented: $switching, attachmentAnchor: .point(Self.switcherAnchor), arrowEdge: .bottom) {
       SiteSwitcherPopover { switching = false }
         .environment(model)
         .environment(navigation)
@@ -342,7 +353,7 @@ struct SiteSwitcherPopover: View {
       }
       VStack(alignment: .leading, spacing: 0) {
         Text(site.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(AglynColor.textPrimary).lineLimit(1)
-        Text(HostStatus.siteAddress(site.subdomain) ?? site.subdomain).font(.system(size: 12))
+        Text(site.shownAddress).font(.system(size: 12))
           .foregroundStyle(AglynColor.secondaryText).lineLimit(1)
       }
       Spacer(minLength: 0)

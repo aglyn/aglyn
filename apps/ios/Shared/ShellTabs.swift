@@ -89,6 +89,22 @@ extension ShellNavigation {
   }
 }
 
+/// A tab's title in two parts, for a tab that truncates the owner before the screen: the workspace or site it stands in,
+/// and the screen in use (Figma Titlebar/Tab: "Juniper Street Bakery — Orders").
+@MainActor
+func tabTitleParts(_ navigation: ShellNavigation, model: AppModel) -> (owner: String?, place: String) {
+  let title = tabTitle(navigation, model: model)
+  guard let split = title.range(of: " — ", options: .backwards) else { return (nil, title) }
+  return (String(title[..<split.lowerBound]), String(title[split.upperBound...]))
+}
+
+/// A tab's icon: the screen's own (the bag for Orders, the card for CRM), the house for Home.
+@MainActor
+func tabIcon(_ navigation: ShellNavigation, model: AppModel) -> String {
+  guard navigation.section != .home else { return "house" }
+  return ShellScope(model: model, navigation: navigation).row(for: navigation.section)?.appleIcon ?? "square.on.square"
+}
+
 /// Tab titles: the place, then the site or workspace ("Bakery — Orders").
 @MainActor
 func tabTitle(_ navigation: ShellNavigation, model: AppModel) -> String {
