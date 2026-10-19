@@ -309,12 +309,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'WORKSPACE_DOMAIN — the console reader of NEXT_PUBLIC_WORKSPACE_DOMAIN.',
   },
   {
-    file: 'apps/console/utils/tenant-dns.ts',
-    count: 1,
-    reason:
-      'Reader of NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME; the literal is its default.',
-  },
-  {
     file: 'apps/docs/docusaurus.config.ts',
     count: 1,
     reason:
@@ -654,6 +648,24 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
     count: 1,
     reason:
       'Reader of CONSOLE_BASE_URL; the literal is its default.',
+  },
+  {
+    file: 'libs/aglyn/src/lib/app-utils/tenant-dns-targets.ts',
+    count: 1,
+    reason:
+      'Reader of NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME; the literal is its default. The console card, the DNS check and the domains plugin all read it here (AGL-3963).',
+  },
+  {
+    file: 'libs/plugins/domains/src/lib/server/domain-connect/config.ts',
+    count: 1,
+    reason:
+      "AGL-3963. The Domain Connect provider id Aglyn's own templates are published under — an identifier in the DNS providers' template catalog, not a host any deployment resolves — and the default of `DOMAIN_CONNECT_PROVIDER_ID`, which nothing else reads. A self-host operator publishes templates under their own id and sets the variable; until they also set `DOMAIN_CONNECT_PRIVATE_KEY`, one-click DNS is off and the id is never sent.",
+  },
+  {
+    file: 'tools/scripts/domain-connect-key.mjs',
+    count: 1,
+    reason:
+      "AGL-3963. Operator-only tooling that makes the Domain Connect signing key and prints, or with `--publish` writes, its public-key TXT records. The literal is the default of `--zone` / `DOMAIN_CONNECT_PUB_KEY_DOMAIN`, the zone Aglyn's templates name as `syncPubKeyDomain`; an operator passes their own. Ships in no app or server.",
   },
 ]
 

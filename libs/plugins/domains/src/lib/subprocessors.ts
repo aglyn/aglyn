@@ -26,6 +26,20 @@ import type { PluginSubprocessorsAnswer } from '@aglyn/aglyn/plugin-manager/plug
  * contact, which the published row's data does not yet name.
  *
  * ⚑ Nothing reaches the registrar until `DOMAINS_REGISTRAR` names `vercel`.
+ *
+ * ONE-CLICK DNS (AGL-3963) adds no row, and that is the registry's own rule
+ * rather than an omission. Its discovery and template check call the
+ * Domain Connect API of the customer's OWN DNS provider, at an address the
+ * customer's DNS publishes (`_domainconnect.<their domain>` TXT) and that
+ * Aglyn's code never names. The registry's header
+ * (`apps/console/constants/subprocessor-inventory.ts`, "A host an AUTHOR
+ * typed") is explicit: a destination only the customer names has no literal
+ * to declare and gets no entry, `not-a-subprocessor` is for a customer-chosen
+ * host OUR CODE NAMES, and the sweep refuses a declaration whose host no
+ * literal in the tree carries. What the calls send is the zone root alone —
+ * `GET /v2/<root>/settings` and the template check — never an account, a
+ * site or a person, and they go through `readConfiguredPublicUrl`, so only
+ * a public https server is ever reached.
  */
 export function domainsSubprocessors(): PluginSubprocessorsAnswer {
   return {

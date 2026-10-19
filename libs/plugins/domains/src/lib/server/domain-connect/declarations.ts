@@ -15,7 +15,34 @@
  * limitations under the License.
  */
 
-/** One-click DNS's server registrations (AGL-3963), from the console server. */
+import { registerPluginConsoleCron } from '@aglyn/aglyn/plugin-manager/plugin-console-crons'
+import { BUNDLE_ID, DOMAIN_CONNECT_JOB_ID } from '../../constants/bundle-common'
+
+/**
+ * One-click DNS's server registrations (AGL-3963), from the console server:
+ * the sweep that finishes a session whose owner closed the tab. Each tick it
+ * re-checks the open sessions' records, connects a domain whose records now
+ * resolve (after asking again that its owner may), and closes a session
+ * after 48 hours.
+ */
 export function registerDomainConnectDeclarations(): void {
-  // Filled in by AGL-3963.
+  registerPluginConsoleCron(
+    {
+      id: DOMAIN_CONNECT_JOB_ID,
+      label: 'One-click DNS',
+      drives:
+        'Connects a domain whose DNS provider applied the site’s records after its owner closed the page, once the records resolve, and closes a request after 48 hours. If it stops, those domains stay unconnected until their owner presses Verify & connect.',
+      run: async (context) => {
+        const [{ readDomainConnectConfig }, { sweepDomainConnectSessions }, { platformDomainConnectEngine }] =
+          await Promise.all([import('./config'), import('./engine'), import('./platform')])
+        // No key, no one-click DNS: a deployment that never set one has no
+        // sessions, so the tick costs it no read.
+        if (!readDomainConnectConfig()) return { checked: 0, configured: false }
+        return sweepDomainConnectSessions(platformDomainConnectEngine({ recheckOwner: true }), {
+          deadlineMs: context.deadlineMs,
+        })
+      },
+    },
+    { pluginId: BUNDLE_ID },
+  )
 }

@@ -42,4 +42,9 @@ export const DOMAINS_API_ROUTES = {
   connectDiscover: 'domain-connect/discover',
   connectStart: 'domain-connect/start',
   connectFinish: 'domain-connect/finish',
+  /** Where a DNS provider sends the owner's browser back to; no session. */
+  connectReturn: 'domain-connect/return',
 } as const
+
+/** The console job that finishes one-click DNS sessions (AGL-3963). */
+export const DOMAIN_CONNECT_JOB_ID = 'domains-connect-sessions'
