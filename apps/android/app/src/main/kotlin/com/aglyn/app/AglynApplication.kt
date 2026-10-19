@@ -13,8 +13,11 @@ import com.aglyn.shell.ShellServices
 class AglynApplication : Application() {
   override fun onCreate() {
     super.onCreate()
-    // Debug builds expose their web views (the Besigner) to chrome://inspect, as the console tab is in a desktop browser.
-    if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
+    // Debug builds expose their web views (the Besigner) to chrome://inspect, as the console tab is in a desktop browser. It
+    // loads the WebView provider (about a second on an emulator), so it waits until the launch has drawn.
+    if (BuildConfig.DEBUG) {
+      android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ WebView.setWebContentsDebuggingEnabled(true) }, 3_000)
+    }
   }
 
   val services: ShellServices by lazy {

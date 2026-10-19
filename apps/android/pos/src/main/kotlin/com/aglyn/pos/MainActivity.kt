@@ -63,6 +63,15 @@ class MainActivity : ComponentActivity() {
     // Single sign-on's console page hands its code back to `aglyn-pos://auth/handoff`.
     services.handleConsoleHandoffReturn(intent?.dataString, lifecycleScope)
     setContent {
+      // The intro moves once the splash has gone; if the system removed it without telling the app, it moves anyway shortly
+      // after the first frame (SPLASH_HAND_OVER_LIMIT_MS).
+      if (playIntro) {
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+          androidx.compose.runtime.withFrameNanos { }
+          kotlinx.coroutines.delay(com.aglyn.shell.SPLASH_HAND_OVER_LIMIT_MS)
+          splashGone = true
+        }
+      }
       // The register's camera button scans with CameraX + ML Kit.
       CompositionLocalProvider(
         LocalCameraScanner provides CameraXBarcodeScanner,

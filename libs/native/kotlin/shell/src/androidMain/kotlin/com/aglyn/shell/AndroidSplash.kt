@@ -53,9 +53,17 @@ fun SplashScreen.handOverToIntro(onGone: () -> Unit) {
   setOnExitAnimationListener { splash ->
     val iconEnds = runCatching { splash.iconAnimationStartMillis + splash.iconAnimationDurationMillis }.getOrDefault(0L)
     val wait = (iconEnds - android.os.SystemClock.uptimeMillis()).coerceIn(0L, AuthTokens.Intro.ANDROID_ICON_MS.toLong())
-    splash.view.postDelayed({
-      splash.remove()
+    // The main looper, not the splash view's own queue: a view that is never attached (a slow hand-over) never runs it.
+    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+      runCatching { splash.remove() }
       onGone()
     }, wait)
   }
 }
+
+/**
+ * How long after the app's first frame the launch intro waits for the splash before it moves anyway. When the system cannot
+ * hand its splash over in time (a busy first launch), it removes the splash itself and never calls the exit listener, so the
+ * intro must not wait on that call alone.
+ */
+const val SPLASH_HAND_OVER_LIMIT_MS = 1_200L

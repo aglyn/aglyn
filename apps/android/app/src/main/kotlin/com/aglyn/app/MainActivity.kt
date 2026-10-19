@@ -60,6 +60,15 @@ class MainActivity : ComponentActivity() {
       services.auth.state.collect { state -> if (state is AuthState.SignedIn) askForNotificationsOnce() }
     }
     setContent {
+      // The intro moves once the splash has gone; if the system removed it without telling the app, it moves anyway shortly
+      // after the first frame (SPLASH_HAND_OVER_LIMIT_MS).
+      if (playIntro) {
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+          androidx.compose.runtime.withFrameNanos { }
+          kotlinx.coroutines.delay(com.aglyn.shell.SPLASH_HAND_OVER_LIMIT_MS)
+          splashGone = true
+        }
+      }
       // Scan stock reads barcodes with CameraX + ML Kit.
       CompositionLocalProvider(
         LocalCameraScanner provides CameraXBarcodeScanner,

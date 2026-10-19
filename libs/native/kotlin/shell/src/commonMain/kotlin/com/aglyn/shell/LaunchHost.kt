@@ -10,6 +10,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.runtime.setValue
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.ui.FacetsBackground
 import com.aglyn.ui.LaunchIntro
@@ -37,7 +39,10 @@ internal fun LaunchHost(
   content: @Composable (AuthReveal) -> Unit,
 ) {
   val intro = remember { if (playIntro) LaunchIntro.create() else LaunchIntro.skipped() }
-  val isReady by rememberUpdatedState(ready)
+  // The destination counts as ready once it has been laid out under the lockup, not when the auth state is known: its
+  // first composition can take a while, and the lockup holds over it until then rather than leave a bare ground (P14).
+  var placed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+  val isReady by rememberUpdatedState(ready && (placed || intro.finished))
   val reduce = com.aglyn.ui.reduceMotion()
   LaunchedEffect(intro) {
     intro.run(reduceMotion = reduce, isReady = { isReady }, mayStart = mayStart)
@@ -47,9 +52,13 @@ internal fun LaunchHost(
   val brand = services.config.brandName
   Box(Modifier.fillMaxSize()) {
     if (backdrop || !intro.finished) FacetsBackground(Modifier.fillMaxSize(), frame.settle, frame.light, flatStart = launchMark != null && !intro.finished)
-    if (ready) {
+    // The destination composes once the wordmark has wiped in (or with no intro), so its first composition never holds up
+    // the splash's hand-over or the wipe (P14).
+    if (ready && (intro.wiped || intro.finished)) {
       val reveal = AuthReveal(frame.rise, frame.reveal)
-      CompositionLocalProvider(LocalAuthReveal provides reveal) { content(reveal) }
+      Box(Modifier.fillMaxSize().onGloballyPositioned { if (!placed) placed = true }) {
+        CompositionLocalProvider(LocalAuthReveal provides reveal) { content(reveal) }
+      }
     }
     if (!intro.finished) {
       LaunchMark(

@@ -509,6 +509,12 @@ class LaunchIntro internal constructor(played: Boolean) {
     private set
   var lockupVisible by mutableStateOf(played)
     private set
+  /**
+   * The wordmark has wiped in. The destination is composed only from here on, so its first (heavy) composition never stalls
+   * the hand-over from the splash or the wipe itself.
+   */
+  var wiped by mutableStateOf(played)
+    private set
   var waiting by mutableStateOf(false)
     private set
   var revealed by mutableStateOf(played)
@@ -528,6 +534,7 @@ class LaunchIntro internal constructor(played: Boolean) {
     val t = AuthTokens.Intro
     if (reduceMotion) {
       crossFades = true
+      wiped = true
       while (!isReady()) delay(16)
       settled = true
       lockupVisible = true
@@ -542,6 +549,9 @@ class LaunchIntro internal constructor(played: Boolean) {
     markAtLockup = true
     lockupVisible = true
     delay((t.LOCKUP_END_MS - t.LOCKUP_START_MS).toLong())
+    wiped = true
+    // The destination composes under the lockup now; a frame or two lets that land before anything moves again.
+    delay(32)
     if (!isReady()) {
       waiting = true
       while (!isReady()) delay(16)
