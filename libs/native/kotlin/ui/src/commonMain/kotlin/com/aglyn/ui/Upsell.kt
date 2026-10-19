@@ -165,9 +165,9 @@ data class PlanMeterLine(val key: String, val label: String, val figures: String
 
 /**
  * The plan card at the sidebar's foot (Figma 98:1048; AGL-3992, the twin of Apple's): whose plan it is ("Juniper Street
- * Bakery · Pro plan"), then a slow carousel of the console's usage meters, the one that fits the screen first. Each shows
- * its label and figures with Upgrade and the meter (amber from the warning share, red at the limit), and page dots step
- * through them. It moves on every [advanceMs], and holds while hovered, focused or touched, while a screen reader is on,
+ * Bakery · Pro plan"), then a slow carousel of the console's usage meters, the one that fits the screen first: its name with
+ * Upgrade in the accent, its 6 bar (the accent, the warning amber from the warning share, danger at the limit), then its
+ * figures with the page dots at the trailing edge, which step through them. It moves on every [advanceMs], and holds while hovered, focused or touched, while a screen reader is on,
  * and with animations off (the dots then step by hand). A tap opens Billing › Usage; Upgrade opens the plans; a long press
  * (or right click) hides it.
  */
@@ -236,11 +236,11 @@ fun PlanMeterCarousel(
       contentKey = { it.key },
       label = "plan-meter",
     ) { meter ->
+      // Figma 98:1048 (216:1660–216:1921): the meter's name with Upgrade in the accent, its 6 bar, then its figures with the
+      // page dots at the trailing edge.
       Column(Modifier.fillMaxWidth().testTag("plan-card-meter-${meter.key}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text(meter.label, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-          Spacer(Modifier.weight(1f))
-          Text(if (onUpgrade != null) "${meter.figures} · " else meter.figures, fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+          Text(meter.label, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
           if (onUpgrade != null) {
             Text(
               "Upgrade", fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1,
@@ -248,26 +248,27 @@ fun PlanMeterCarousel(
             )
           }
         }
-        // The console's meter: the accent below the warning share, amber from it, red at the limit.
+        // The console's meter: the accent below the warning share, the warning amber from it, danger at the limit.
         val fill = when {
-          meter.share >= 1f -> palette.error.main
+          meter.share >= 1f -> MaterialTheme.colorScheme.error
           meter.share >= warningShare -> palette.warning.main
           else -> MaterialTheme.colorScheme.primary
         }
         Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)) {
-          Box(Modifier.fillMaxWidth(meter.share.coerceIn(0f, 1f)).fillMaxSize().clip(RoundedCornerShape(50)).background(fill))
+          Box(Modifier.fillMaxWidth(meter.share.coerceIn(0f, 1f)).fillMaxSize().background(fill))
         }
       }
     }
-    if (meters.size > 1) {
-      Row(Modifier.align(Alignment.CenterHorizontally).testTag("plan-card-dots"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        meters.forEachIndexed { i, meter ->
-          Box(
-            Modifier.size(6.dp).clip(CircleShape)
-              .background(if (i == index) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outlineVariant)
-              .clickable { index = i }
-              .testTag("plan-card-dot-${meter.key}"),
-          )
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+      Text(shown.figures, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.weight(1f).testTag("plan-card-figures"))
+      if (meters.size > 1) {
+        // A 6 dot in a 12 cell, 4 apart: the meter in front in the accent, the rest the subtle border's grey.
+        Row(Modifier.testTag("plan-card-dots"), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+          meters.forEachIndexed { i, meter ->
+            Box(Modifier.size(12.dp).clip(CircleShape).clickable { index = i }.testTag("plan-card-dot-${meter.key}"), contentAlignment = Alignment.Center) {
+              Box(Modifier.size(6.dp).clip(CircleShape).background(if (i == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant))
+            }
+          }
         }
       }
     }
