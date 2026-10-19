@@ -545,7 +545,16 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
               sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
             }
             Row(Modifier.weight(1f).fillMaxWidth()) {
-              Box(Modifier.weight(1f).fillMaxHeight()) { CompositionLocalProvider(com.aglyn.ui.LocalPageCrumbs provides crumbsSlot) { body() } }
+              // The content area brings every screen in by E − 16, so a screen that pads its content by 16 lands on the one
+              // content edge E (Zach 10/19); an in-app browser page stays full-bleed.
+              val bodyInset = if (route is Route.Web) 0.dp else (com.aglyn.ui.contentInset() - com.aglyn.ui.DetailPanePadding).coerceAtLeast(0.dp)
+              Box(Modifier.weight(1f).fillMaxHeight().padding(horizontal = bodyInset)) {
+                CompositionLocalProvider(
+                  com.aglyn.ui.LocalPageCrumbs provides crumbsSlot,
+                  com.aglyn.ui.LocalBodyInset provides bodyInset,
+                  com.aglyn.ui.LocalContentInset provides com.aglyn.ui.DetailPanePadding,
+                ) { body() }
+              }
               if (assist != null && chrome.aiPanel && route !is Route.Web) {
                 VerticalDivider(color = shellColors.divider)
                 Column(Modifier.width(380.dp).fillMaxHeight().background(shellColors.sidebar).testTag("ai-panel")) {
@@ -745,7 +754,8 @@ internal fun SectionTabs(sections: List<NavSectionItem>, selected: String, onSel
   val index = sections.indexOfFirst { it.key == selected }.coerceAtLeast(0)
   PrimaryScrollableTabRow(
     selectedTabIndex = index,
-    edgePadding = 16.dp,
+    // A tab pads its label by 16, so the first label sits on the content edge E.
+    edgePadding = (com.aglyn.ui.contentInset() - 16.dp).coerceAtLeast(0.dp),
     containerColor = MaterialTheme.colorScheme.background,
     modifier = Modifier.testTag("section-tabs"),
     divider = { HorizontalDivider(color = shellColors.divider) },
@@ -855,7 +865,8 @@ private data class Crumb(val label: String, val open: (() -> Unit)?)
 @Composable
 private fun Breadcrumbs(steps: List<Crumb>, star: com.aglyn.ui.PageStarSlot? = null) {
   // On the column's content edge E: a step that leads back pads its own text by 2 for its hover, so the row starts 2 in.
-  val edge = com.aglyn.ui.contentInset()
+  // E above the content area; inside it (atop a detail column) what is left of E there.
+  val edge = com.aglyn.ui.LocalContentInset.current ?: com.aglyn.ui.contentInset()
   val firstPads = steps.firstOrNull()?.let { it.open != null && steps.size > 1 } == true
   Row(
     Modifier.fillMaxWidth().padding(start = if (firstPads) edge - 2.dp else edge, end = edge, top = 12.dp, bottom = 4.dp).testTag("title-crumb"),

@@ -172,7 +172,8 @@ fun ListScreenScaffold(
   val compactHead = metrics.compact || currentWidthClass() != WidthClass.COMPACT
   val groups = filters.groupBy { it.group }
   val active = groups.mapNotNull { (group, options) -> options.firstOrNull { it.key == picked[group] }?.takeIf { it != options.first() } }
-  val edge = contentInset()
+  // E, or what is left of it inside a list pane that already brings its content in (LocalContentInset).
+  val edge = LocalContentInset.current ?: contentInset()
   Column(modifier.fillMaxSize().testTag("$tag-screen")) {
     Row(
       Modifier.fillMaxWidth().padding(start = edge, end = edge, top = space(1f), bottom = space(1.5f)),
@@ -289,7 +290,7 @@ fun ScaffoldListRow(
   val gap = if (site) 14.dp else 12.dp
   val shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
   // The tile and the trailing figure sit on the column's content inset E; the selection's fill reaches past them.
-  val outer = (contentInset() - padH).coerceAtLeast(0.dp)
+  val outer = ((LocalContentInset.current ?: contentInset()) - padH).coerceAtLeast(0.dp)
   Row(
     modifier.fillMaxWidth().padding(horizontal = outer, vertical = 1.dp).clip(shape)
       .background(if (selected) shellColors.selected else Color.Transparent)

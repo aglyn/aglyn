@@ -280,19 +280,22 @@ fun AglynListDetail(
             onDispose { crumbs.claimed = false }
           }
         }
-        // One edge E per column: the list's rows and head sit on it, and so do the detail column's crumbs and content
-        // (a detail pane pads its own content by 16, so the column adds the rest).
+        // One edge E per column. A list pane and a detail pane each pad their own content by 16 (DetailPanePadding), so
+        // the column adds the rest; the list's own rows read the 16 that is left (LocalContentInset).
         val edge = contentInset()
+        val extra = (edge - DetailPanePadding).coerceAtLeast(0.dp)
+        // Inside the shell's content area the outer edges are already brought in; only the edges at the divider are left.
+        val body = LocalBodyInset.current != null
         Row(Modifier.fillMaxSize()) {
-          Box(Modifier.weight(0.4f).fillMaxHeight()) {
-            CompositionLocalProvider(LocalContentInset provides edge) { panes.SaveableStateProvider("list") { list(selected) { selected = it } } }
+          Box(Modifier.weight(0.4f).fillMaxHeight().padding(start = if (body) 0.dp else extra, end = extra)) {
+            CompositionLocalProvider(LocalContentInset provides DetailPanePadding) { panes.SaveableStateProvider("list") { list(selected) { selected = it } } }
           }
           VerticalDivider()
-          Column(Modifier.weight(0.6f).fillMaxHeight()) {
+          Column(Modifier.weight(0.6f).fillMaxHeight().padding(start = if (body) extra else 0.dp)) {
             crumbs?.crumbs?.invoke()
             AnimatedContent(
               selected,
-              modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = (edge - DetailPanePadding).coerceAtLeast(0.dp)),
+              modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = if (body) 0.dp else extra),
               transitionSpec = { fadeIn() togetherWith fadeOut() },
             ) { key ->
               CompositionLocalProvider(LocalContentInset provides null, LocalDetailPane provides true) { panes.SaveableStateProvider("detail:$key") { detail(key) } }
@@ -311,13 +314,16 @@ fun AglynListDetail(
           },
         ) { key ->
           val edge = contentInset()
+          val extra = if (LocalBodyInset.current != null) 0.dp else (edge - DetailPanePadding).coerceAtLeast(0.dp)
           if (key == null) {
-            CompositionLocalProvider(LocalContentInset provides edge) { panes.SaveableStateProvider("list") { list(null) { selected = it } } }
+            Box(Modifier.fillMaxSize().padding(horizontal = extra)) {
+              CompositionLocalProvider(LocalContentInset provides DetailPanePadding) { panes.SaveableStateProvider("list") { list(null) { selected = it } } }
+            }
           } else {
             panes.SaveableStateProvider("detail:$key") {
               Column(Modifier.fillMaxSize()) {
-                Column(Modifier.padding(horizontal = edge).testTag("list-detail-banner"), verticalArrangement = Arrangement.spacedBy(space(1f))) { detailBanner() }
-                Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = (edge - DetailPanePadding).coerceAtLeast(0.dp))) {
+                Column(Modifier.padding(horizontal = extra + DetailPanePadding).testTag("list-detail-banner"), verticalArrangement = Arrangement.spacedBy(space(1f))) { detailBanner() }
+                Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = extra)) {
                   CompositionLocalProvider(LocalDetailPane provides true) { detail(key) }
                 }
               }
@@ -351,12 +357,18 @@ val LocalContentInset = androidx.compose.runtime.compositionLocalOf<Dp?> { null 
 /** What a detail pane pads its own content by (`space(2f)`); the two-pane column adds E minus this. */
 val DetailPanePadding: Dp = 16.dp
 
+/**
+ * Set by the shell around a screen: how far it has already brought the screen in from the content area's edges (E − 16),
+ * so a screen that pads its content by 16 (LocalContentInset) lands on E. Null outside the shell's content area.
+ */
+val LocalBodyInset = androidx.compose.runtime.compositionLocalOf<Dp?> { null }
+
 /** True inside a list-detail's detail pane, whose column already brings its content to E. */
 val LocalDetailPane = androidx.compose.runtime.compositionLocalOf { false }
 
 /** A screen's horizontal padding: E for a screen of its own, 16 in a detail pane (its column adds the rest). */
 @Composable
-fun paneInset(): Dp = if (LocalDetailPane.current) DetailPanePadding else contentInset()
+fun paneInset(): Dp = if (LocalDetailPane.current) DetailPanePadding else LocalContentInset.current ?: contentInset()
 
 /** A padded pane's horizontal padding: E, the column's content inset. */
 @Composable
