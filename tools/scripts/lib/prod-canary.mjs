@@ -599,6 +599,10 @@ export const EXIT = {
   'candidate-red': 1,
   degraded: 1,
   'not-serving': 1,
+  // A candidate production never served because a NEWER deployment took its
+  // place first, such as a redeploy of the same commit for an env change. The
+  // newer one gets its own canary run, so this one has nothing to report.
+  superseded: 0,
   error: 2,
   inconclusive: 3,
 }
@@ -696,6 +700,23 @@ export function servingState({ alias, project }, deploymentId) {
   }
 }
 
+/**
+ * Did a newer deployment take production before this candidate was served?
+ *
+ * The candidate's run can start long after it built: on 2026-10-19 the run
+ * for the beta.270 merge's deployment (18:38Z) began at 19:00Z, and an env
+ * change had redeployed the same commit at 18:44Z. Production served that
+ * redeploy, so the candidate never would be, and waiting for it ended in a
+ * false `not-serving` alert. A READY production deployment created after the
+ * candidate replaces it; anything older, or not READY, does not.
+ */
+export function supersededBy(candidate, serving) {
+  if (!idOf(candidate) || !idOf(serving) || idOf(serving) === idOf(candidate)) return false
+  if ((serving.readyState ?? serving.state) !== 'READY') return false
+  if (serving.target && serving.target !== 'production') return false
+  return created(serving) > created(candidate)
+}
+
 const describe = (deployment) =>
   deployment
     ? `${idOf(deployment)} (${(sha(deployment) ?? '?').slice(0, 10)})`
@@ -748,6 +769,7 @@ export function slackPayload({ project, verdict, deployment, rollback = null, ru
     degraded: 'pages are failing on some hosts; not enough at once to roll back',
     inconclusive: 'the canary could not see production (challenged or unreachable)',
     'not-serving': 'the new deployment is READY but production is not serving it',
+    superseded: 'a newer deployment took production before this one was served; it has its own run',
     recovered: 'failed, then recovered within the run',
   }[verdict] ?? verdict
   const headline = `${label}Prod canary ${project.name}: ${what}`

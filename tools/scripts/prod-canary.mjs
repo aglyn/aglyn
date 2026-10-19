@@ -84,6 +84,7 @@ import {
   projectForEnvironment,
   recordDescription,
   servingState,
+  supersededBy,
   slackPayload,
   statusContext,
 } from './lib/prod-canary.mjs'
@@ -425,7 +426,7 @@ async function raiseOperatorAlert({ verdict, deployment, rollback }) {
 
 async function finish(input) {
   report(input)
-  if (input.verdict !== 'green') {
+  if (input.verdict !== 'green' && input.verdict !== 'superseded') {
     await notify(input)
     await raiseOperatorAlert(input)
   }
@@ -499,6 +500,20 @@ if (deploymentHost) {
 
 if (candidateMode && !deploymentHost && vercelToken) {
   const state = await waitUntilServing(deployment.id, config.serveWaitMs)
+  const servingNow = !state.serving && state.productionId
+    ? await readDeployment(state.productionId).catch(() => null)
+    : null
+  if (!state.serving && supersededBy(deployment, servingNow)) {
+    await finish({
+      verdict: 'superseded',
+      deployment,
+      rounds: [],
+      note:
+        `Production serves ${state.productionId}` +
+        ` (${(servingNow?.meta?.githubCommitSha ?? '?').slice(0, 10)}), created after this deployment;` +
+        ' its own canary run grades it.',
+    })
+  }
   if (!state.serving) {
     await finish({
       verdict: 'not-serving',
