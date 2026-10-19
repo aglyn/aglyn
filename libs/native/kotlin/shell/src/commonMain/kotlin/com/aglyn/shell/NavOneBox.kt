@@ -397,7 +397,8 @@ internal fun InlineSearchField(
   }
   Box(modifier) {
     Row(
-      Modifier.fillMaxWidth().heightIn(min = if (m.compact) 30.dp else 36.dp).clip(RoundedCornerShape(m.controlRadius))
+      // Figma Titlebar/Search field: 28 tall at Compact.
+      Modifier.fillMaxWidth().heightIn(min = if (m.compact) 28.dp else 36.dp).clip(RoundedCornerShape(m.controlRadius))
         .background(if (open) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerHigh)
         .border(1.dp, if (open) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(m.controlRadius))
         .padding(horizontal = 10.dp),

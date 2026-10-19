@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -152,10 +151,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
               MenuAction("page-from-template", "From a template", "widgets", enabled = canEdit) { dialog = PageDialog.Gallery },
             ),
           )
-          Button(onClick = { dialog = PageDialog.NewPage }, enabled = canEdit, modifier = Modifier.testTag("add-page")) {
-            Icon(AglynIcons.named("add"), contentDescription = null)
-            Text("New page", Modifier.padding(start = space(1f)))
-          }
+          com.aglyn.ui.ListHeaderAction("New page", "add", { dialog = PageDialog.NewPage }, Modifier.testTag("add-page"), enabled = canEdit)
           // Create with AI and anything else a plugin puts beside New page (the console's `hostScreens` zone).
           SlotWidgets(context, ListCreateZone.PAGES, SlotPlacement.HEADER)
         }

@@ -122,10 +122,7 @@ fun FormsScreen(context: NativePluginContext, initialFormId: String? = null, sta
       LoadMoreEffect(listState, model.hasMore, onLoadMore = model::loadMore)
       Column(Modifier.fillMaxSize()) {
         ListHeader("Forms") {
-          Button(onClick = { dialog = FormDialog.Create }, enabled = canEdit, modifier = Modifier.testTag("add-form")) {
-            Icon(AglynIcons.named("add"), contentDescription = null)
-            Text("New form", Modifier.padding(start = space(1f)))
-          }
+          com.aglyn.ui.ListHeaderAction("New form", "add", { dialog = FormDialog.Create }, Modifier.testTag("add-form"), enabled = canEdit)
           // Create with AI and anything else a plugin puts beside New form (the console's `hostForms` zone).
           SlotWidgets(context, ListCreateZone.FORMS, SlotPlacement.HEADER)
         }

@@ -135,10 +135,7 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
           if (kind != ArtifactKind.TEMPLATE) {
             OutlinedButton(onClick = { dialog = ArtifactDialog.Gallery }, enabled = canEdit, modifier = Modifier.testTag("from-template-${kind.singular}")) { Text("From a template") }
           }
-          Button(onClick = { dialog = ArtifactDialog.Create }, enabled = canEdit, modifier = Modifier.testTag("add-${kind.singular}")) {
-            Icon(AglynIcons.named("add"), contentDescription = null)
-            Text("New ${kind.singular}", Modifier.padding(start = space(1f)))
-          }
+          com.aglyn.ui.ListHeaderAction("New ${kind.singular}", "add", { dialog = ArtifactDialog.Create }, Modifier.testTag("add-${kind.singular}"), enabled = canEdit)
           // Create with AI and anything else a plugin puts beside New (the console's zone for this list).
           SlotWidgets(context, kind.createZone, SlotPlacement.HEADER)
         }

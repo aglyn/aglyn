@@ -142,10 +142,7 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
         val none = (datasets as? Live.Ready)?.value?.isEmpty() == true
         ListHeader("Datasets") {
           if (!none) {
-            Button(onClick = { dialog = DatasetDialog.Create }, enabled = canWrite, modifier = Modifier.testTag("add-dataset")) {
-              Icon(AglynIcons.named("add"), contentDescription = null)
-              Text("New dataset", Modifier.padding(start = space(1f)))
-            }
+            com.aglyn.ui.ListHeaderAction("New dataset", "add", { dialog = DatasetDialog.Create }, Modifier.testTag("add-dataset"), enabled = canWrite)
           }
         }
         Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {

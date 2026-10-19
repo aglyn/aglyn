@@ -1,6 +1,8 @@
 package com.aglyn.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.draw.clip
@@ -57,6 +59,66 @@ val LocalPageStar = staticCompositionLocalOf<PageStarSlot?> { null }
 /** One filter choice in a list's Filter menu: a group heading's options, one picked per group. */
 data class FilterChoice(val group: String, val key: String, val label: String)
 
+/**
+ * A desktop (Compact) button as Figma's Button, Density = Compact draws it: radius 6, semibold. Regular is 28 tall with a
+ * 14 icon and 13/18 text, padding 10, gap 6 (the list toolbar's Filter, a list column's action); [tall] is 36 with a 16
+ * icon and 14/20 text, padding 14, gap 8 (a full-width title row's primary). [filled] takes the accent; otherwise the
+ * surface with the strong border.
+ */
+@Composable
+fun CompactButton(
+  label: String,
+  icon: String?,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+  enabled: Boolean = true,
+  filled: Boolean = false,
+  tall: Boolean = false,
+) {
+  val metrics = LocalShellMetrics.current
+  val shape = androidx.compose.foundation.shape.RoundedCornerShape(metrics.controlRadius)
+  val scheme = MaterialTheme.colorScheme
+  val ink = if (filled) scheme.onPrimary else scheme.onSurface
+  Row(
+    modifier
+      .heightIn(min = if (tall) 36.dp else 28.dp)
+      .alpha(if (enabled) 1f else 0.38f)
+      .clip(shape)
+      .background(if (filled) scheme.primary else scheme.surface)
+      .then(if (filled) Modifier else Modifier.border(1.dp, scheme.outline, shape))
+      .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+      .padding(horizontal = if (tall) 14.dp else 10.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(if (tall) 8.dp else 6.dp),
+  ) {
+    if (icon != null) Icon(AglynIcons.named(icon), contentDescription = null, modifier = Modifier.size(if (tall) 16.dp else 14.dp), tint = ink)
+    Text(
+      label,
+      color = ink,
+      fontSize = if (tall) 14.sp else 13.sp,
+      lineHeight = if (tall) 20.sp else 18.sp,
+      fontWeight = FontWeight.SemiBold,
+      maxLines = 1,
+    )
+  }
+}
+
+/**
+ * A list column's action beside its heading (New page, New form…): on the desktop the Compact 28 button, as Figma's
+ * list column draws it (Orders 13:483); elsewhere the filled button with its icon.
+ */
+@Composable
+fun ListHeaderAction(label: String, icon: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+  if (LocalShellMetrics.current.compact) {
+    CompactButton(label, icon, onClick, modifier, enabled = enabled)
+  } else {
+    Button(onClick = onClick, enabled = enabled, modifier = modifier) {
+      Icon(AglynIcons.named(icon), contentDescription = null)
+      Text(label, Modifier.padding(start = space(1f)))
+    }
+  }
+}
+
 /** The primary action of a list screen: its one filled button. */
 data class PrimaryAction(val id: String, val label: String, val icon: String = "add", val enabled: Boolean = true, val run: () -> Unit)
 
@@ -79,6 +141,11 @@ fun ListScreenScaffold(
   /** The picked key per group; a group whose pick is its first option counts as not filtering. */
   picked: Map<String, String> = emptyMap(),
   onPick: (FilterChoice) -> Unit = {},
+  /**
+   * The list sits in a list column beside its detail (Orders): on the desktop its title row is Figma 13:483's, 28 tall
+   * with a Compact 28 action. Otherwise (Sites, Figma 13:3) the primary is the filled 36 button.
+   */
+  inListColumn: Boolean = false,
   content: @Composable ColumnScope.() -> Unit,
 ) {
   val star = LocalPageStar.current
@@ -97,14 +164,26 @@ fun ListScreenScaffold(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
-      Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
+      Text(
+        title,
+        // Figma's list title: 22/28 bold on the desktop.
+        style = if (metrics.compact) MaterialTheme.typography.headlineSmall.copy(fontSize = 22.sp, lineHeight = 28.sp) else MaterialTheme.typography.headlineSmall,
+        fontWeight = FontWeight.Bold,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.semantics { heading() },
+      )
       star?.star?.invoke()
       Box(Modifier.weight(1f))
       if (more.isNotEmpty()) OverflowMenu(more, contentDescription = "More actions")
       primary?.let { action ->
-        Button(onClick = action.run, enabled = action.enabled, shape = controlShape(), modifier = Modifier.testTag(action.id)) {
-          Icon(AglynIcons.named(action.icon), contentDescription = null, Modifier.size(18.dp))
-          Text(action.label, Modifier.padding(start = space(1f)), maxLines = 1)
+        if (metrics.compact) {
+          CompactButton(action.label, action.icon, action.run, Modifier.testTag(action.id), enabled = action.enabled, filled = !inListColumn, tall = !inListColumn)
+        } else {
+          Button(onClick = action.run, enabled = action.enabled, shape = controlShape(), modifier = Modifier.testTag(action.id)) {
+            Icon(AglynIcons.named(action.icon), contentDescription = null, Modifier.size(18.dp))
+            Text(action.label, Modifier.padding(start = space(1f)), maxLines = 1)
+          }
         }
       }
     }
@@ -117,13 +196,16 @@ fun ListScreenScaffold(
       if (groups.isNotEmpty()) {
         var open by remember { mutableStateOf(false) }
         Box {
-          OutlinedButton(
-            onClick = { open = true },
-            shape = controlShape(),
-            modifier = Modifier.testTag("$tag-filter").semantics { contentDescription = if (active.isEmpty()) "Filter" else "Filter, ${active.size} set" },
-          ) {
-            Icon(AglynIcons.named("filter_list"), contentDescription = null, Modifier.size(18.dp))
-            Text(if (active.isEmpty()) "Filter" else "Filter · ${active.size}", Modifier.padding(start = space(0.75f)))
+          val filterLabel = if (active.isEmpty()) "Filter" else "Filter · ${active.size}"
+          val filterTag = Modifier.testTag("$tag-filter").semantics { contentDescription = if (active.isEmpty()) "Filter" else "Filter, ${active.size} set" }
+          if (metrics.compact) {
+            // Figma's list toolbar Button: 28, the surface with the strong border.
+            CompactButton(filterLabel, "filter_list", { open = true }, filterTag)
+          } else {
+            OutlinedButton(onClick = { open = true }, shape = controlShape(), modifier = filterTag) {
+              Icon(AglynIcons.named("filter_list"), contentDescription = null, Modifier.size(18.dp))
+              Text(filterLabel, Modifier.padding(start = space(0.75f)))
+            }
           }
           DropdownMenu(open, onDismissRequest = { open = false }, modifier = Modifier.testTag("$tag-filter-menu")) {
             groups.entries.forEachIndexed { index, (group, options) ->

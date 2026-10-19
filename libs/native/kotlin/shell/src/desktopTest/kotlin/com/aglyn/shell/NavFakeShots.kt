@@ -8,6 +8,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import kotlin.test.Test
 
@@ -61,6 +63,11 @@ class NavFakeShots {
         onNodeWithTag("site-picker-button").performClick()
         mainClock.advanceTimeBy(300)
         shoot("fake-site-switcher$suffix")
+        onNodeWithTag("site-switcher-search").performKeyInput { pressKey(androidx.compose.ui.input.key.Key.Escape) }
+        mainClock.advanceTimeBy(300)
+        onAllNodes(androidx.compose.ui.test.hasText("Site settings")).onLast().performClick()
+        mainClock.advanceTimeBy(600)
+        shoot("fake-site-settings$suffix")
       }
       runDesktopComposeUiTest(width = 1440, height = 900) {
         setContent { AglynShell(testServices(userDoc = emptyMap()), dark = dark) }

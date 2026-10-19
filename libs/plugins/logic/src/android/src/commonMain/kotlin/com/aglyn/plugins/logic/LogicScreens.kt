@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -108,16 +107,13 @@ fun LogicScreen(context: NativePluginContext, initialTab: String? = null) {
 
   Column(Modifier.fillMaxSize()) {
     ListHeader("Functions & Variables") {
-      if (tab != LogicTab.HEALTH) Button(
-        onClick = {
-          if (tab == LogicTab.VARIABLES) dialog = LogicDialog.EditVariable(VariableDraft(null)) else context.navigate(LOGIC_FUNCTION_SCREEN)
-        },
+      if (tab != LogicTab.HEALTH) com.aglyn.ui.ListHeaderAction(
+        if (tab == LogicTab.VARIABLES) "Add variable" else "Add function",
+        "add",
+        { if (tab == LogicTab.VARIABLES) dialog = LogicDialog.EditVariable(VariableDraft(null)) else context.navigate(LOGIC_FUNCTION_SCREEN) },
+        Modifier.testTag("logic-add"),
         enabled = canEdit,
-        modifier = Modifier.testTag("logic-add"),
-      ) {
-        Icon(AglynIcons.named("add"), contentDescription = null)
-        Text(if (tab == LogicTab.VARIABLES) "Add variable" else "Add function", Modifier.padding(start = space(1f)))
-      }
+      )
     }
     Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
       if (dialog == null) {

@@ -127,6 +127,8 @@ fun ListHeader(title: String, modifier: Modifier = Modifier, actions: @Composabl
     modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1f)),
     horizontalArrangement = Arrangement.spacedBy(space(1f), Alignment.End),
     verticalArrangement = Arrangement.spacedBy(space(1f)),
+    // A Compact 28 action sits centered beside the ⋯ button's taller touch box.
+    itemVerticalAlignment = Alignment.CenterVertically,
   ) {
     // The title keeps its whole width: actions that do not fit beside it wrap to the next line rather than squeezing it to "…".
     val style = MaterialTheme.typography.titleSmall

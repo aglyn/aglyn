@@ -168,6 +168,9 @@ data class ShellMetrics(
   /** A site's name in its own sidebar's title row, and a settings mode's title. */
   val siteTitleText: androidx.compose.ui.unit.TextUnit = 15.sp,
   val modeTitleText: androidx.compose.ui.unit.TextUnit = 17.sp,
+  /** The workspace header's logo and its radius (Figma Sidebar, Scope = Workspace: 20 r5 Compact, 28 r8 Touch). */
+  val workspaceLogo: androidx.compose.ui.unit.Dp = 20.dp,
+  val workspaceLogoRadius: androidx.compose.ui.unit.Dp = 5.dp,
 )
 
 val CompactShellMetrics = ShellMetrics(
@@ -184,6 +187,7 @@ val TouchShellMetrics = ShellMetrics(
   headerLogoRadius = 6.dp, titleBar = 56.dp, controlRadius = 8.dp, cardRadius = 12.dp, sheetRadius = 16.dp, barButton = 40.dp, barIcon = 20.dp,
   ringBox = 48.dp, ringRadius = 14.dp, selectionBar = 22.dp, utilityRadius = 10.dp, avatar = 32.dp, groupHeader = 28.dp, tileInitial = 16.sp,
   sidebarPad = 12.dp, rowPad = 10.dp, rowGap = 10.dp, groupIndent = 12.dp, groupChevron = 14.dp, dividerPad = 6.dp, siteTitleText = 16.sp, modeTitleText = 18.sp,
+  workspaceLogo = 28.dp, workspaceLogoRadius = 8.dp,
 )
 
 val LocalShellMetrics = staticCompositionLocalOf { TouchShellMetrics }

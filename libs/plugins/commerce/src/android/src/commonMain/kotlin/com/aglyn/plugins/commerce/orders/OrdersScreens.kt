@@ -220,6 +220,7 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
     placeholder = "Order, customer or email",
     tag = "orders",
     primary = com.aglyn.ui.PrimaryAction("orders-draft", "Draft order") { drafting = true },
+    inListColumn = true,
     more = moreActions,
     filters = filterChoices,
     picked = mapOf("Show" to COMMERCE_ORDERS_SCREEN, "Status" to model.filter.name) + (sortKey?.let { mapOf("Sort" to it) } ?: emptyMap()),

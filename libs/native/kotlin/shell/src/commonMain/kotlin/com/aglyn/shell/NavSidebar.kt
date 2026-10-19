@@ -166,16 +166,17 @@ private fun SidebarScope(
   val m = com.aglyn.ui.shellMetrics
   var filter by remember(content.modeTitle) { mutableStateOf("") }
   Column(Modifier.fillMaxSize()) {
-    Column(Modifier.fillMaxWidth().padding(m.sidebarPad)) {
+    // Figma Sidebar's Header: 8 around it at Compact; 12 at the top and sides and 8 under it at Touch.
+    Column(Modifier.fillMaxWidth().padding(start = m.sidebarPad, end = m.sidebarPad, top = m.sidebarPad, bottom = 8.dp)) {
       if (content.modeTitle != null) {
-        ModeHeader(content.modeBack ?: "Back", content.modeTitle, content.onExitMode)
-        Spacer(Modifier.height(8.dp))
-        SettingsSearchField(filter) { filter = it }
+        ModeHeader(content.modeBack ?: "Back", content.modeTitle, content.onExitMode) { SettingsSearchField(filter) { filter = it } }
       } else {
         ScopeHeader(services, workspace, chrome)
       }
     }
-    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = m.sidebarPad, end = m.sidebarPad, top = 0.dp, bottom = 12.dp)) {
+    // Figma Sidebar's Rows: 4 above and 12 below, 2 between items. Every item keeps 1 above and below itself, so the
+    // column's own padding is 1 less.
+    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = m.sidebarPad, end = m.sidebarPad, top = 3.dp, bottom = 11.dp)) {
       NavGroupsList(
         groups = content.groups,
         listOrder = content.groups,
@@ -191,28 +192,37 @@ private fun SidebarScope(
   }
 }
 
-/** A settings mode's head: "‹ Juniper Street Bakery" back, then its title (Figma Sidebar, Scope = Settings). */
+/**
+ * A settings mode's head: "‹ Juniper Street Bakery" back, its title, then its search, 8 apart (Figma Sidebar, Scope =
+ * Settings).
+ */
 @Composable
-private fun ModeHeader(back: String, title: String, onBack: () -> Unit) {
+private fun ModeHeader(back: String, title: String, onBack: () -> Unit, search: @Composable () -> Unit) {
   val m = com.aglyn.ui.shellMetrics
-  Column(Modifier.fillMaxWidth().padding(horizontal = m.rowPad, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+  Column(Modifier.fillMaxWidth().padding(scopeHeaderPadding(m)), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     BackLine(back, tag = "settings-mode-back", onClick = onBack)
     Text(
       title,
       fontSize = m.modeTitleText,
+      lineHeight = 24.sp,
       fontWeight = FontWeight.SemiBold,
       color = MaterialTheme.colorScheme.onSurface,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
       modifier = Modifier.semantics { heading() }.testTag("settings-mode-title"),
     )
+    search()
   }
 }
+
+/** Figma Sidebar/Scope header's padding: 8 at the sides and 6 above and below (Compact); 10, 6 and 8 (Touch). */
+private fun scopeHeaderPadding(m: com.aglyn.ui.ShellMetrics) =
+  androidx.compose.foundation.layout.PaddingValues(start = m.rowPad, end = m.rowPad, top = 6.dp, bottom = if (m.compact) 6.dp else 8.dp)
 
 /** "Search settings": settings get their own search, which narrows the list as you type. */
 @Composable
 private fun SettingsSearchField(value: String, onChange: (String) -> Unit) {
-  CompactSearchField(value, "Search settings", "settings-mode-search", Modifier.padding(horizontal = com.aglyn.ui.shellMetrics.rowPad), onChange = onChange)
+  CompactSearchField(value, "Search settings", "settings-mode-search", onChange = onChange)
 }
 
 /** A small search field (Figma Menu/Search field): 28 to 32 tall, a 14 icon, 13 text, the control radius. */
@@ -266,7 +276,7 @@ internal fun ScopeHeader(services: ShellServices, workspace: WorkspaceState, chr
     )
     workspaceMenuAnchor(services, workspace, chrome)
   } else {
-    Column(Modifier.fillMaxWidth().padding(horizontal = m.rowPad, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().padding(scopeHeaderPadding(m)), verticalArrangement = Arrangement.spacedBy(8.dp)) {
       BackLine(org.name, tag = "scope-back-to-workspace") { services.workspace.selectWholeWorkspace() }
       SiteTitleRow(services, workspace, site)
     }
@@ -283,18 +293,24 @@ private fun WorkspaceHeaderRow(services: ShellServices, workspace: WorkspaceStat
   val (color) = rememberWorkspaceColor(org.id, workspace, prefs, services.api.origin)
   val m = com.aglyn.ui.shellMetrics
   Row(
-    Modifier.fillMaxWidth().clip(RoundedCornerShape(m.controlRadius)).clickable(onClick = onClick).padding(horizontal = m.rowPad, vertical = 6.dp)
+    Modifier.fillMaxWidth().clip(RoundedCornerShape(m.controlRadius)).clickable(onClick = onClick).padding(horizontal = m.rowPad, vertical = if (m.compact) 6.dp else 8.dp)
       .testTag(tag).semantics(mergeDescendants = true) { role = Role.Button; contentDescription = description },
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(10.dp),
   ) {
-    WorkspaceTile(org.name, light, dark, color, size = m.headerLogo, cornerRadius = m.headerLogoRadius, initialSize = m.rowText * 0.8f)
+    WorkspaceTile(org.name, light, dark, color, size = m.workspaceLogo, cornerRadius = m.workspaceLogoRadius, initialSize = m.rowText * 0.8f)
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-      Text(org.name, style = MaterialTheme.typography.titleSmall.copy(fontSize = m.rowText), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Text(
+        org.name,
+        style = MaterialTheme.typography.titleSmall.copy(fontSize = if (m.compact) 13.sp else 14.sp, lineHeight = if (m.compact) 18.sp else 20.sp),
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
       workspace.orgLogo?.plan?.let { PlanChip(it) }
     }
     androidx.compose.material3.IconButton(onClick = { chrome.workspaceMenu = true }, modifier = Modifier.size(m.barButton).testTag("workspace-menu-chevron")) {
-      Icon(AglynIcons.named("expand_more"), "${org.name} menu", Modifier.size(m.rowIcon), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+      Icon(AglynIcons.named("expand_more"), "${org.name} menu", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }
 }
@@ -324,7 +340,7 @@ private fun SiteTitleRow(services: ShellServices, workspace: WorkspaceState, sit
         WorkspaceTile(site.name, null, null, null, size = m.headerLogo, cornerRadius = m.headerLogoRadius, initialSize = m.rowText * 0.7f)
       }
       Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(site.name, fontSize = m.siteTitleText, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        Text(site.name, fontSize = m.siteTitleText, lineHeight = if (m.compact) 18.sp else 20.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         Icon(AglynIcons.named("expand_more"), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
@@ -441,9 +457,9 @@ private fun SwitcherAction(label: String, icon: String, tag: String, onClick: ()
 internal fun PlanChip(plan: String) {
   Text(
     plan.replaceFirstChar { it.uppercase() },
-    style = MaterialTheme.typography.labelSmall,
+    style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold),
     color = MaterialTheme.colorScheme.onPrimaryContainer,
-    modifier = Modifier.padding(top = 2.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 6.dp, vertical = 1.dp),
+    modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 7.dp, vertical = 1.dp),
   )
 }
 
@@ -456,7 +472,7 @@ internal fun BackLine(label: String, tag: String, onClick: () -> Unit) {
     horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {
     Icon(AglynIcons.named("chevron_left"), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-    Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Text(label, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
 }
 
@@ -528,14 +544,14 @@ internal fun NavGroupsList(
     CompositionLocalProvider(LocalSelectionPill provides pill, LocalPillOrigin provides origin) {
       Column(Modifier.fillMaxWidth()) {
         // The workspace's header has a hairline under it (Figma Sidebar, Scope = Workspace).
-        if (dense && listId == com.aglyn.contracts.NativeNavListId.WORKSPACE && query.isEmpty()) NavDivider()
+        if (dense && listId == com.aglyn.contracts.NativeNavListId.WORKSPACE && query.isEmpty()) NavDivider(Modifier.padding(vertical = 1.dp))
         var previous: NavGroupItem? = null
         for (group in groups) {
           val isStarred = group.dynamic == "starred"
           val rows = if (query.isEmpty()) group.rows else group.rows.filter { it.label.contains(query, ignoreCase = true) || it.keywords.any { k -> k.contains(query, ignoreCase = true) } }
           if (isStarred && (starred.isEmpty() || query.isNotEmpty())) continue
           if (!isStarred && rows.isEmpty()) continue
-          if (query.isEmpty() && dividerBefore(listId, group, previous)) NavDivider()
+          if (query.isEmpty() && dividerBefore(listId, group, previous)) NavDivider(Modifier.padding(vertical = 1.dp))
           previous = group
           val holdsCurrent = rows.any { selectedKey in it.keys }
           val open = query.isNotEmpty() || !group.foldable || chrome.isOpen(listId, group.id, holdsCurrent)
@@ -593,9 +609,9 @@ private fun SelectionPillLayer(pill: SelectionPill, dense: Boolean, reduce: Bool
 
 /** A hairline in the border-subtle token, inset to the row padding (Figma Sidebar/Divider). */
 @Composable
-internal fun NavDivider() {
+internal fun NavDivider(modifier: Modifier = Modifier) {
   val m = com.aglyn.ui.shellMetrics
-  HorizontalDivider(Modifier.padding(horizontal = m.rowPad, vertical = m.dividerPad), thickness = 1.dp, color = shellColors.divider)
+  HorizontalDivider(modifier.padding(horizontal = m.rowPad, vertical = m.dividerPad), thickness = 1.dp, color = shellColors.divider)
 }
 
 /** A group's heading: 11 semibold in the secondary color, the chevron after it, and its count at the right while folded. */
@@ -604,7 +620,7 @@ private fun GroupHeading(label: String, open: Boolean, count: Int, dense: Boolea
   val m = com.aglyn.ui.shellMetrics
   val turn by androidx.compose.animation.core.animateFloatAsState(if (open) 90f else 0f, ShellMotion.fold(), label = "chevron")
   Row(
-    Modifier.fillMaxWidth().clip(RoundedCornerShape(if (dense) m.pillRadius else 8.dp))
+    Modifier.fillMaxWidth().padding(vertical = 1.dp).clip(RoundedCornerShape(if (dense) m.pillRadius else 8.dp))
       .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
       .heightIn(min = if (dense) m.groupHeader else 36.dp)
       .padding(horizontal = if (dense) m.rowPad else 10.dp)
@@ -613,7 +629,7 @@ private fun GroupHeading(label: String, open: Boolean, count: Int, dense: Boolea
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {
-    Text(label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+    Text(label, fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
     if (onClick != null) {
       Icon(AglynIcons.named("chevron_right"), null, Modifier.size(m.groupChevron).rotate(turn), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
