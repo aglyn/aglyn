@@ -95,12 +95,10 @@ internal fun WorkspaceRail(
   val rail = railWorkspaces(workspace.orgs.map { it.id }, prefs.pinned, prefs.recentOrgs)
   val byId = workspace.orgs.associateBy { it.id }
   Column(
-    modifier.width(m.railWidth).fillMaxHeight().background(shell.rail).padding(top = 10.dp, bottom = 12.dp).testTag("workspace-rail"),
+    // PINNED starts the rail at the gap between its sections (17, Figma Rail 12:338); the brand's mark is the Home tab.
+    modifier.width(m.railWidth).fillMaxHeight().background(shell.rail).padding(top = 17.dp, bottom = 12.dp).testTag("workspace-rail"),
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
-    // The brand's mark, small, at the top (the logo kit's multi-color mark, never faded).
-    com.aglyn.ui.AglynMark(Modifier.size(if (m.compact) 20.dp else 24.dp).testTag("rail-brand-mark"), contentDescription = services.config.brandName)
-    Spacer(Modifier.height(10.dp))
     Column(
       Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
       horizontalAlignment = Alignment.CenterHorizontally,

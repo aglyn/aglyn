@@ -821,8 +821,15 @@ private fun TitleTab(tab: ShellTab, selected: Boolean, closable: Boolean, onSele
     modifier = Modifier.height(if (m.compact) 28.dp else 36.dp).widthIn(max = 220.dp).testTag("tab-${tab.id}")
       .semantics { this.selected = selected; role = Role.Tab },
   ) {
+    if (tab.pinned) {
+      // The pinned Home tab is the brand's mark alone (the logo kit's mark, never faded).
+      Box(Modifier.padding(horizontal = 9.dp).semantics { contentDescription = "Home: ${tab.title}" }, contentAlignment = Alignment.Center) {
+        com.aglyn.ui.AglynMark(Modifier.size(16.dp))
+      }
+      return@Surface
+    }
     Row(Modifier.padding(start = 10.dp, end = if (closable) 2.dp else 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-      Icon(AglynIcons.named(if (tab.pinned) "home" else "tab"), null, Modifier.size(m.rowIcon - 2.dp), tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+      Icon(AglynIcons.named("tab"), null, Modifier.size(m.rowIcon - 2.dp), tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
       Text(
         tab.title,
         style = MaterialTheme.typography.labelLarge.copy(fontSize = m.rowText),

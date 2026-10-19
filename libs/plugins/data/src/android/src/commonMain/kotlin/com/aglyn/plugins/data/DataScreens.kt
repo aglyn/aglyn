@@ -159,7 +159,7 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
             val scoped = (access as? Live.Ready)?.value?.let { !it.orgWide && it.tokens.isEmpty() } == true
             EmptyState(
               if (scoped) "No datasets are shared with you" else "No datasets yet",
-              body = if (scoped) "Ask an owner or admin to share a dataset with one of your sites." else "Create a dataset (e.g. Products) and repeat a component over its records with {{item.field}} bindings.",
+              body = if (scoped) "Ask an owner or admin to share a dataset with one of your sites." else "Create a dataset, like Products, then add a repeating section to any page to show one item per record.",
               icon = AglynIcons.named("dataset"),
             )
           } else {

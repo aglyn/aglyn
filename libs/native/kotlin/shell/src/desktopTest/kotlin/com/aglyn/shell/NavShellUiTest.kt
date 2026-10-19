@@ -49,7 +49,7 @@ class NavShellUiTest {
     onNodeWithTag("nav-site-media").assertIsDisplayed()
     onNodeWithTag("nav-site-pages").performClick()
     waitUntil(timeoutMillis = 3_000) { navigator.top == NavKeys.of("site.pages") }
-    onNode(androidx.compose.ui.test.hasText("Pages", substring = true) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("tab-strip"))).assertIsDisplayed()
+    onNode(androidx.compose.ui.test.hasText("Pages", substring = true) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("title-crumb"))).assertIsDisplayed()
     // The old drawer's double site heading is gone.
     assertEquals(0, onAllNodesWithTextCount("Site · Acme Shop"))
   }
@@ -164,7 +164,7 @@ class NavShellUiTest {
     assertEquals(0, onAllNodesWithTagCount("tab-1"))
     runOnIdle { navigator.command = ShellCommand.NEW_TAB }
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-1") > 0 }
-    onNodeWithTag("tab-0").assertTextContains("Home", substring = true)
+    onNode(androidx.compose.ui.test.hasTestTag("tab-0") and androidx.compose.ui.test.hasContentDescription("Home", substring = true)).assertExists()
     onNodeWithTag("nav-group-website").performClick()
     onNodeWithTag("nav-site-pages").performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodes(androidx.compose.ui.test.hasTestTag("tab-1") and androidx.compose.ui.test.hasText("Pages", substring = true)).fetchSemanticsNodes().isNotEmpty() }
