@@ -7,6 +7,7 @@ import androidx.compose.material3.Text
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,8 +34,10 @@ fun SignInScreen(
   onDeviceMode: (com.aglyn.pluginhost.NativeScreen) -> Unit = {},
 ) {
   val flow = services.authFlow
-  LaunchedEffect(Unit) { services.debugSignIn?.first?.let { if (flow.email.isEmpty()) flow.email = it } }
-  var password by remember { mutableStateOf(services.debugSignIn?.second ?: "") }
+  // A debug build fills its seeded member in, but never while adding a second account (that member is already in).
+  val adding = services.accounts?.adding?.collectAsState()?.value != null
+  LaunchedEffect(Unit) { if (!adding) services.debugSignIn?.first?.let { if (flow.email.isEmpty()) flow.email = it } }
+  var password by remember { mutableStateOf(if (adding) "" else services.debugSignIn?.second ?: "") }
   var busy by remember { mutableStateOf(false) }
   var error by remember { mutableStateOf<String?>(null) }
   val scope = rememberCoroutineScope()

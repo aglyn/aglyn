@@ -9,9 +9,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -78,17 +75,13 @@ fun ListToolbar(
       }
     }
     if (view != null) {
-      SingleChoiceSegmentedButtonRow(Modifier.testTag("$tag-view")) {
-        ListView.entries.forEachIndexed { index, option ->
-          SegmentedButton(
-            selected = view == option,
-            onClick = { onView(option) },
-            shape = SegmentedButtonDefaults.itemShape(index, ListView.entries.size),
-            icon = {},
-            modifier = Modifier.testTag("$tag-view-${option.name.lowercase()}").semantics { contentDescription = if (option == ListView.GRID) "Grid" else "List" },
-            label = { Icon(AglynIcons.named(if (option == ListView.GRID) "grid_view" else "view_list"), contentDescription = null) },
-          )
-        }
+      // One button that switches to the other view, so a narrow list pane keeps its room for search.
+      val next = if (view == ListView.GRID) ListView.LIST else ListView.GRID
+      OutlinedButton(
+        onClick = { onView(next) },
+        modifier = Modifier.testTag("$tag-view-${next.name.lowercase()}").semantics { contentDescription = if (next == ListView.GRID) "Show as a grid" else "Show as a list" },
+      ) {
+        Icon(AglynIcons.named(if (next == ListView.GRID) "grid_view" else "view_list"), contentDescription = null)
       }
     }
   }

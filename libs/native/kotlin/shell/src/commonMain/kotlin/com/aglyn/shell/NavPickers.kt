@@ -211,7 +211,8 @@ private fun WorkspaceRow(
         modifier = Modifier.testTag("picker-pin-${org.id}").semantics { contentDescription = if (isPinned) "Unpin ${org.name}" else "Pin ${org.name}" },
       ) {
         Icon(AglynIcons.named("keep"), null, Modifier.size(16.dp))
-        Text(if (isPinned) " Pinned" + if (index in 0..4) "  ${shortcutLabel(index + 1)}" else "" else " Pin", style = MaterialTheme.typography.labelMedium)
+        val showKeys = LocalShowShortcuts.current
+        Text(if (isPinned) " Pinned" + if (index in 0..4 && showKeys) "  ${shortcutLabel(index + 1)}" else "" else " Pin", style = MaterialTheme.typography.labelMedium)
       }
     },
   ) { onPick(org) }

@@ -94,7 +94,7 @@ internal fun WorkspaceMenu(services: ShellServices, workspace: WorkspaceState, c
     }
     HorizontalDivider()
     MenuRow("Invite people", "person_add", tag = "workspace-menu-invite") { chrome.workspaceMenu = false; actions.openScreen("core.team", emptyMap()) }
-    MenuRow("Workspace settings", "settings", trailing = shortcutText(","), tag = "workspace-menu-settings") {
+    MenuRow("Workspace settings", "settings", trailing = shortcutText(",").takeIf { LocalShowShortcuts.current }, tag = "workspace-menu-settings") {
       chrome.workspaceMenu = false
       actions.enterSettings(NativeNavListId.WORKSPACE_SETTINGS)
     }
@@ -210,7 +210,7 @@ internal fun PinnedFullDialog(services: ShellServices, workspace: WorkspaceState
           ) {
             RadioButton(replacing == id, onClick = null, modifier = Modifier.padding(horizontal = 8.dp))
             Text(names[id] ?: id, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(shortcutLabel(index + 1), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
+            if (LocalShowShortcuts.current) Text(shortcutLabel(index + 1), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
           }
         }
       }

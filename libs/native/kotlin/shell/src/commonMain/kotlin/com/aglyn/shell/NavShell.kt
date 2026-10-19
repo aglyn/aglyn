@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -187,7 +189,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   // A workspace's color tints the app while it is on screen (it stands in for the accent); the sidebar wears it too unless
   // the Sidebar setting is Plain.
   val brand = orgColor?.takeIf { tints }
-  val tint = if (brand != null && prefs.theme.sidebarStyle != com.aglyn.contracts.AppSidebarStyle.PLAIN) workspaceTint(brand, shellColors.sidebar, dark) else null
+  val tintsSidebar = brand != null && prefs.theme.sidebarStyle != com.aglyn.contracts.AppSidebarStyle.PLAIN
 
   val openInBrowser = com.aglyn.webview.rememberSystemBrowser()
   val actions = remember(navigator, chrome, services) {
@@ -301,10 +303,14 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
 
   WorkspaceBrandTheme(services, dark, brand) {
   val shell = com.aglyn.ui.shellColors(MaterialTheme.colorScheme, LocalAglynPalette.current, com.aglyn.ui.LocalThemeSurfaces.current)
+  // The sidebar's tint over this theme's own sidebar ground, and its ink, both read after the theme is in force.
+  val tint = if (tintsSidebar && brand != null) workspaceTint(brand, shell.sidebar, dark) else null
   CompositionLocalProvider(
+    androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface,
     com.aglyn.screens.LocalScreenSession provides screenSession,
     LocalShellActions provides actions,
     LocalShellColors provides shell,
+    LocalShowShortcuts provides wide,
   ) {
   var openRecentHolder by remember { mutableStateOf<((com.aglyn.contracts.AccountItemRef) -> Unit)?>(null) }
   val bellPopover: @Composable (Boolean, () -> Unit) -> Unit = { expanded, dismiss ->
@@ -400,7 +406,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     val starred = prefs.starred.filter { it.orgId == workspace.org?.id && (it.hostId == null || it.hostId == workspace.site?.id) }
     val onStar: (com.aglyn.contracts.StarredItem) -> Unit = { item -> openRef(item.toRef()) }
     if (wide) {
-      Column(Modifier.fillMaxSize().then(shortcuts)) {
+      // A tablet draws edge to edge: the status bar and the taskbar keep their space, in the rail's color.
+      Column(Modifier.fillMaxSize().background(shellColors.rail).windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing).then(shortcuts)) {
       if (tabs.tabs.size > 1) {
         Box(Modifier.background(shellColors.rail).padding(top = LocalTitleBarInset.current)) {
           TabStrip(tabs, onSelect = ::selectTab, onClose = { closeTab(it) }, onNew = { newTab() })

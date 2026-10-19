@@ -147,7 +147,7 @@ internal fun ThemeSettingsScreen(services: ShellServices, workspace: WorkspaceSt
       }
     }
     services.appIcons?.let { icons ->
-      SettingsGroup("App icon", footer = "The icon on your home screen. Some launchers take a moment to show it.") {
+      SettingsGroup("App icon", footer = "The icon on your home screen. It changes when you leave the app; some launchers take a moment to show it.") {
         val current = icons.choices.firstOrNull { it.id == theme.appIcon } ?: icons.choices.first()
         Choice(icons.choices, current, { it.label }, "theme-app-icon") { choice ->
           save(theme.copy(appIcon = choice.id))
@@ -201,6 +201,11 @@ private fun <T> Choice(options: List<T>, selected: T, label: (T) -> String, tag:
         selected = option == selected,
         onClick = { onPick(option) },
         shape = SegmentedButtonDefaults.itemShape(index, options.size),
+        // The selected choice wears the accent's wash, not the secondary (pink) container.
+        colors = SegmentedButtonDefaults.colors(
+          activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+          activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
         modifier = Modifier.testTag("$tag-$index"),
         label = { Text(label(option), maxLines = 1, overflow = TextOverflow.Ellipsis) },
       )

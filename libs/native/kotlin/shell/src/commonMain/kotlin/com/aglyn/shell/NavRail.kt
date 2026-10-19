@@ -320,6 +320,9 @@ internal fun AccountAvatar(user: AuthUser?, size: Int, onClick: (() -> Unit)?, m
   }
 }
 
+/** Whether keyboard shortcuts are shown beside what they do: on wide windows (a keyboard is likely), never on a phone. */
+internal val LocalShowShortcuts = androidx.compose.runtime.staticCompositionLocalOf { true }
+
 /** ⌘1 on a Mac, Ctrl+1 elsewhere. */
 internal fun shortcutLabel(n: Int): String = shortcutText(n.toString())
 

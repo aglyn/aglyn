@@ -132,7 +132,7 @@ internal fun HomeScreen(
           recents.chunked(columns).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
               row.forEach { item ->
-                RecentCard(item, now, workspace, Modifier.weight(1f)) { openRecent?.invoke(item.toRef()) }
+                RecentCard(item, now, workspace, services.registry.screen(item.screen)?.icon, Modifier.weight(1f)) { openRecent?.invoke(item.toRef()) }
               }
               repeat(columns - row.size) { Box(Modifier.weight(1f)) }
             }
@@ -172,7 +172,7 @@ internal fun planPaymentProblem(org: Map<String, Any?>?): String? {
 
 /** One recent place as a card: what it was, where, and when. */
 @Composable
-private fun RecentCard(item: com.aglyn.contracts.RecentItem, now: Long, workspace: WorkspaceState, modifier: Modifier, onClick: () -> Unit) {
+private fun RecentCard(item: com.aglyn.contracts.RecentItem, now: Long, workspace: WorkspaceState, screenIcon: String?, modifier: Modifier, onClick: () -> Unit) {
   Surface(
     onClick = onClick,
     shape = MaterialTheme.shapes.large,
@@ -181,7 +181,8 @@ private fun RecentCard(item: com.aglyn.contracts.RecentItem, now: Long, workspac
     modifier = modifier.testTag("recent-${item.id}"),
   ) {
     Column(Modifier.padding(space(1.5f)), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-      Icon(AglynIcons.named(oneBoxIcon(item.kind.takeIf { it != "record" && it != "screen" } ?: "screen")), null, tint = MaterialTheme.colorScheme.primary)
+      // The place's own screen icon (Orders' basket), else its kind's.
+      Icon(AglynIcons.named(screenIcon ?: oneBoxIcon(item.kind.takeIf { it != "record" && it != "screen" } ?: "screen")), null, tint = MaterialTheme.colorScheme.primary)
       Text(item.label, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
       val where = item.hostId?.let { id -> workspace.sites.firstOrNull { it.id == id }?.name }
       Text(listOfNotNull(where, relativeTime(item.openedAtMs, now)).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)

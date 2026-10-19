@@ -66,6 +66,12 @@ class MainActivity : ComponentActivity() {
     }
   }
 
+  /** A new home-screen icon (Theme ▸ App icon) goes on as the app leaves the screen, so switching never closes it. */
+  override fun onStop() {
+    super.onStop()
+    (application as AglynApplication).services.appIcons?.flush()
+  }
+
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     val services = (application as AglynApplication).services

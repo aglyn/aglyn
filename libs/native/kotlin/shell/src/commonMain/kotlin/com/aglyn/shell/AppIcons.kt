@@ -18,6 +18,12 @@ interface AppIconSwitcher {
   val choices: List<AppIconChoice>
   /** The icon on the home screen now. */
   fun current(): String
-  /** Wears [id] (an unknown one is the app's own); a no-op when it already does. */
+  /**
+   * Wears [id] (an unknown one is the app's own) once the app leaves the screen: switching the launcher's entry closes
+   * the task it started, so the switch waits for [flush].
+   */
   fun apply(id: String)
+
+  /** Puts the icon asked for by [apply] on the home screen; the platform calls it as the app goes to the background. */
+  fun flush() = Unit
 }

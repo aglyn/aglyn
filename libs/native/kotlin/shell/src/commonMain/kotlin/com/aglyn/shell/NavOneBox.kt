@@ -322,8 +322,8 @@ private fun OneBoxResult(services: ShellServices, workspace: WorkspaceState, pre
     }
     if (line.group == PINNED_GROUP) {
       val at = prefs.pinned.indexOf(row.id)
-      if (at in 0..4) KeyCap(shortcutLabel(at + 1))
-    } else if (selected) {
+      if (at in 0..4 && LocalShowShortcuts.current) KeyCap(shortcutLabel(at + 1))
+    } else if (selected && LocalShowShortcuts.current) {
       KeyCap("↵")
     }
   }

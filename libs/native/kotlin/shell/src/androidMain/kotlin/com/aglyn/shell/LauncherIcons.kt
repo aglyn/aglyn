@@ -25,8 +25,15 @@ class LauncherIconSwitcher(private val context: Context) : AppIconSwitcher {
     }?.id ?: APP_ICON_CHOICES.first().id
   }
 
+  @Volatile private var pending: String? = null
+
   override fun apply(id: String) {
-    val target = choices.firstOrNull { it.id == id }?.id ?: choices.first().id
+    pending = choices.firstOrNull { it.id == id }?.id ?: choices.first().id
+  }
+
+  override fun flush() {
+    val target = pending ?: return
+    pending = null
     if (target == current()) return
     val pm = context.packageManager
     // The new alias first, so the launcher always has one to show.
