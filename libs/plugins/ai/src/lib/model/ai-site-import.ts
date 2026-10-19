@@ -509,6 +509,8 @@ export function aiSiteImportLedger(state: AiSiteImportState): AiJobItemLedger[] 
 export type AiSiteImportWork =
   | { kind: 'inventory' }
   | { kind: 'start-wave'; wave: AiSiteImportWave }
+  /** Pages of the running wave its read did not reach before its clock ran out. */
+  | { kind: 'read'; wave: AiSiteImportWave; pages: AiSiteImportPage[] }
   | { kind: 'frame'; wave: AiSiteImportWave }
   | { kind: 'images'; wave: AiSiteImportWave; page: AiSiteImportPage }
   | { kind: 'page'; wave: AiSiteImportWave; page: AiSiteImportPage }
@@ -550,6 +552,11 @@ export function aiSiteImportNextWork(
     const next = aiSiteImportNextWave(state)
     return next ? { kind: 'start-wave', wave: next } : { kind: 'done' }
   }
+  // A page the wave's read has not reached yet is read before anything is built.
+  const unread = running.slots
+    .map((slot) => state.pages.find((page) => page.slot === slot))
+    .filter((page): page is AiSiteImportPage => !!page && !page.read && !page.refused && aiSiteImportItemOpen(items, page.slot))
+  if (unread.length) return { kind: 'read', wave: running, pages: unread }
   if (running.frame && state.frame && aiSiteImportItemOpen(items, AI_SITE_IMPORT_FRAME_SLOT)) {
     return { kind: 'frame', wave: running }
   }
@@ -584,11 +591,20 @@ export function aiSiteImportWaveStarted(
   reads: ReadonlyMap<string, AiSiteImportPageRead | AiSiteImportLeftOutReason>,
 ): AiSiteImportState {
   // The wave reviewed before this one is done: starting the next is the person's say-so.
-  let next = withWave(
+  const next = withWave(
     { ...state, waves: state.waves.map((wave) => (wave.status === 'review' ? { ...wave, status: 'done' as const } : wave)) },
     index,
     { status: 'running', startedAt: at, finishedAt: null },
   )
+  return aiSiteImportPagesRead(next, reads)
+}
+
+/** More of a running wave's pages, read now. */
+export function aiSiteImportPagesRead(
+  state: AiSiteImportState,
+  reads: ReadonlyMap<string, AiSiteImportPageRead | AiSiteImportLeftOutReason>,
+): AiSiteImportState {
+  let next = state
   for (const [slot, read] of reads) {
     next =
       typeof read === 'string'

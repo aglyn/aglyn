@@ -277,6 +277,41 @@ describe('a wave reads its pages again, and leaves out what changed', () => {
     expect(result.siteImport?.waves[0].status).toBe('running')
   })
 
+  it('reads the rest of a wave on the next pass when the clock cut its read short, leaving nothing out for it', async () => {
+    const state = harborState()
+    const ledger = aiSiteImportLedger(state)
+    const real = deps().crawlSeams
+    let calls = 0
+    // The first read reaches two pages before its clock runs out; the next reads the rest.
+    const crawl = (async (options, seams) => {
+      calls += 1
+      const { crawlSiteForImport } = await import('../site-import/site-import-crawl')
+      const only = options.only ?? []
+      const result = await crawlSiteForImport({ ...options, only: calls === 1 ? only.slice(0, 2) : only }, seams ?? real)
+      return calls === 1 ? { ...result, stoppedBy: 'time' as const } : result
+    }) as NonNullable<AiSiteImportStepDeps['crawl']>
+    const step = createAiJobImportStep(deps({ crawl }))
+    const first = await run(step, importJob({ siteImport: state, items: ledger }))
+    const after = (result: typeof first) => result.siteImport?.pages.map((page) => [page.path, page.refused ?? (page.read ? 'read' : null)])
+    expect(after(first)).toEqual([
+      ['/', 'read'],
+      ['/about', 'read'],
+      ['/members/login', null],
+      ['/services', null],
+      ['/team', null],
+    ])
+    expect(first.items?.filter((row) => row.status === 'skipped')).toEqual([])
+    const second = await run(step, importJob({ siteImport: first.siteImport, items: first.items }))
+    expect(after(second)).toEqual([
+      ['/', 'read'],
+      ['/about', 'read'],
+      ['/members/login', 'login-form'],
+      ['/services', 'read'],
+      ['/team', 'read'],
+    ])
+    expect(aiSiteImportRunMinimumMs(importJob({ siteImport: first.siteImport, items: first.items }))).toBe(AI_SITE_IMPORT_PASS_MINIMUM_MS.wave)
+  })
+
   it('stops for the person when robots.txt cannot be read, reading nothing else', async () => {
     const asked: string[] = []
     const step = createAiJobImportStep(
@@ -370,7 +405,12 @@ describe('each pass’s least time', () => {
     const state = harborState()
     const ledger = aiSiteImportLedger(state)
     expect(aiSiteImportRunMinimumMs(importJob({ siteImport: state, items: ledger }))).toBe(AI_SITE_IMPORT_PASS_MINIMUM_MS.wave)
-    let started = aiSiteImportWaveStarted(state, 0, 'x', new Map())
+    // Started, nothing read yet: the read goes on first.
+    expect(aiSiteImportRunMinimumMs(importJob({ siteImport: aiSiteImportWaveStarted(state, 0, 'x', new Map()), items: ledger }))).toBe(
+      AI_SITE_IMPORT_PASS_MINIMUM_MS.wave,
+    )
+    const read = new Map(state.waves[0].slots.map((slot) => [slot, { at: 'x', title: 'T', text: 'words', sections: ['Hero'], images: [] }]))
+    let started = aiSiteImportWaveStarted(state, 0, 'x', read)
     const framed = ledger.map((row): AiJobItemLedger => (row.slot === 'frame' ? { ...row, status: 'succeeded' } : row))
     expect(aiSiteImportRunMinimumMs(importJob({ siteImport: started, items: framed }))).toBe(AI_SITE_IMPORT_PASS_MINIMUM_MS.photos)
     started = { ...started, pages: started.pages.map((page) => ({ ...page, photos: { brought: 0, reused: 0, skipped: 0, assets: [] } })) }

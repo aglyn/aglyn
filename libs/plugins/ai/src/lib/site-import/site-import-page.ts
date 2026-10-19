@@ -56,12 +56,27 @@ export function siteImportPageWords(page: Pick<SiteImportPage, 'title' | 'blocks
   return page.blocks.reduce((total, block) => total + (block.kind === 'image' ? 0 : wordsIn(block.text)), 0)
 }
 
+/** Between a page's own name and its site's in a browser title: "About | Rosie's Bakery". */
+const TITLE_SEPARATOR = /\s+[|\u2013\u2014\u00b7:-]\s+/
+
+/**
+ * A page's name on the new site: "Home" for the home page, else its browser
+ * title without the old site's name after a separator ("About | Rosie's
+ * Bakery" is "About"), else its first heading.
+ */
+export function siteImportPageTitle(page: Pick<SiteImportPage, 'path' | 'title' | 'blocks'>): string {
+  if ((page.path.replace(/\/+$/, '') || '/') === '/') return 'Home'
+  const own = siteImportLabel((page.title ?? '').split(TITLE_SEPARATOR)[0] ?? '')
+  if (own.length >= 2) return own
+  return siteImportLabel(page.blocks.find((block) => block.kind === 'heading')?.text ?? '')
+}
+
 /** The page as the inventory lists it. */
 export function siteImportListedPage(page: SiteImportPage): AiSiteImportListedPage {
   return {
     url: page.url,
     path: page.path,
-    title: siteImportLabel(page.title || page.blocks.find((block) => block.kind === 'heading')?.text || ''),
+    title: siteImportPageTitle(page),
     foundBy: page.foundBy,
     words: siteImportPageWords(page),
     images: page.images.length,
@@ -127,7 +142,7 @@ export function siteImportPageText(page: Pick<SiteImportPage, 'title' | 'descrip
 export function siteImportPageRead(page: SiteImportPage, at: string): AiSiteImportPageRead {
   return {
     at,
-    title: siteImportLabel(page.title || ''),
+    title: siteImportPageTitle(page),
     text: siteImportPageText(page),
     sections: siteImportPageSections(page),
     images: siteImportPageImages(page),

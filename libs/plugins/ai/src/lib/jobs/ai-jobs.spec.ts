@@ -3446,12 +3446,12 @@ describe('a site import brings a proved site in, wave by wave, each started by a
   })
 
   it('gives back a page that failed on our side, alone, and the wave goes on', async () => {
-    failing = new Set(['Services | Harbor Dental'])
+    failing = new Set(['Services'])
     const read = await untilParked((await importJob()).$id)
     await resumeAiJob(firestore, ORG, read.$id, { uid: 'uid-1' }, NOW)
     const first = await untilParked(read.$id)
     expect(first.status).toBe('needs_review')
-    const row = first.items?.find((entry) => entry.label === 'Services | Harbor Dental')
+    const row = first.items?.find((entry) => entry.label === 'Services')
     expect(row).toMatchObject({ status: 'failed', failure: { ours: true }, creditsRefunded: 6 })
     expect(first.items?.filter((entry) => entry.status === 'succeeded')).toHaveLength(6)
     expect(first.refundedCredits).toBe(6)

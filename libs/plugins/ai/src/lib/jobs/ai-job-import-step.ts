@@ -69,6 +69,7 @@ import {
   aiSiteImportLedger,
   aiSiteImportNextWork,
   aiSiteImportPageSettled,
+  aiSiteImportPagesRead,
   aiSiteImportPhotosIn,
   aiSiteImportWaveClosed,
   aiSiteImportWaveMessage,
@@ -338,6 +339,7 @@ export function aiSiteImportRunMinimumMs(job: AiJob, runnerFor: typeof aiJobStep
     case 'inventory':
       return AI_SITE_IMPORT_PASS_MINIMUM_MS.read
     case 'start-wave':
+    case 'read':
       return AI_SITE_IMPORT_PASS_MINIMUM_MS.wave
     case 'images':
       return AI_SITE_IMPORT_PASS_MINIMUM_MS.photos
@@ -508,12 +510,15 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
           deps.crawlSeams,
         )
         if (crawled.stoppedBy === 'robots-unreachable') return unspent({ review: waveReview(AI_SITE_IMPORT_COPY.robots(domain)) })
-        for (const [slot, read] of siteImportWaveReads(toRead, crawled, nowIso)) reads.set(slot, read)
+        // A read the clock cut short leaves its other pages for the next pass, never "unreadable".
+        for (const [slot, read] of siteImportWaveReads(toRead, crawled, nowIso, { cutShort: crawled.stoppedBy === 'time' })) {
+          reads.set(slot, read)
+        }
       }
       let ledger = withLeftOutRows(items, reads)
       // A wave none of whose pages could be read builds no header for them.
       const anyRead = [...reads.values()].some((read) => typeof read !== 'string')
-      if (wave.frame && !anyRead) {
+      if (wave.frame && !anyRead && reads.size === pages.length) {
         ledger = ledger.map((row) =>
           row.slot === AI_SITE_IMPORT_FRAME_SLOT && (row.status === 'pending' || row.status === 'running')
             ? { ...row, status: 'skipped', note: 'Not built: no page of this wave could be read.' }
@@ -527,6 +532,24 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
     }
 
     const wave = work.wave
+
+    // ── 2b. The rest of a wave's read, where the clock cut it short ──
+    if (work.kind === 'read') {
+      const crawled = await crawl(
+        {
+          domain,
+          maxPages: work.pages.length,
+          only: work.pages.map((page) => page.url),
+          timeBudgetMs: AI_SITE_IMPORT_WAVE_READ_MS,
+          ...(signal ? { signal } : {}),
+        },
+        deps.crawlSeams,
+      )
+      if (crawled.stoppedBy === 'robots-unreachable') return unspent({ review: waveReview(AI_SITE_IMPORT_COPY.robots(domain)) })
+      const reads = siteImportWaveReads(work.pages, crawled, nowIso, { cutShort: crawled.stoppedBy === 'time' })
+      const ledger = withLeftOutRows(items, reads)
+      return closing(aiSiteImportPagesRead(state, reads), ledger, wave, unspent({ items: ledger }))
+    }
 
     // ── 3. The header and footer ──
     if (work.kind === 'frame') {
@@ -659,6 +682,10 @@ export function siteImportWaveReads(
   asked: readonly AiSiteImportPage[],
   crawled: Pick<SiteImportInventory, 'pages' | 'skipped'>,
   at: string,
+  options: {
+    /** The read's clock ran out: a page it did not reach is left for the next pass, not left out. */
+    cutShort?: boolean
+  } = {},
 ): Map<string, AiSiteImportPageRead | AiSiteImportLeftOutReason> {
   const reads = new Map<string, AiSiteImportPageRead | AiSiteImportLeftOutReason>()
   const pathKey = (url: string) => {
@@ -693,7 +720,8 @@ export function siteImportWaveReads(
   }
   for (const page of pending) {
     const found = unmatched.shift()
-    reads.set(page.slot, found ? siteImportReadOrEmpty(found, at) : 'unreadable')
+    if (found) reads.set(page.slot, siteImportReadOrEmpty(found, at))
+    else if (!options.cutShort) reads.set(page.slot, 'unreadable')
   }
   return reads
 }

@@ -28,7 +28,7 @@ import type { AiLayoutPictureSlot } from '../layout-language/ai-layout-pictures'
 import { aiLayoutPagePhotoSource, aiLayoutPagePhotosOf } from '../jobs/ai-layout-owner-photos'
 import { crawlSiteForImport } from './site-import-crawl'
 import { bringInSiteImportPhotos, siteImportImageKey, siteImportImageUrl } from './site-import-images'
-import { siteImportLabel, siteImportListedPage, siteImportPageRead, siteImportPageSections } from './site-import-page'
+import { siteImportLabel, siteImportListedPage, siteImportPageRead, siteImportPageSections, siteImportPageTitle } from './site-import-page'
 import {
   HARBOR_DOMAIN,
   HARBOR_INJECTION,
@@ -112,13 +112,27 @@ describe('a page as an import keeps it', () => {
     expect(listed).toEqual({
       url: `${HARBOR_ORIGIN}/about`,
       path: '/about',
-      title: 'About us | Harbor Dental',
+      // Its own name: the old site's after the separator is left off.
+      title: 'About us',
       foundBy: 'link',
       words: expect.any(Number),
       images: 2,
     })
     expect(listed.words).toBeGreaterThan(20)
     expect(listed).not.toHaveProperty('text')
+  })
+
+  it('names a page by its own part of its title, home as Home, else its first heading', () => {
+    const page = (path: string, title: string, heading = '') => ({
+      path,
+      title,
+      blocks: heading ? [{ kind: 'heading' as const, level: 1 as const, text: heading, region: 'main' as const }] : [],
+    })
+    expect(siteImportPageTitle(page('/', 'Gentle dentistry | Harbor Dental'))).toBe('Home')
+    expect(siteImportPageTitle(page('/about', 'About us | Harbor Dental'))).toBe('About us')
+    expect(siteImportPageTitle(page('/team', 'Our team – Harbor Dental'))).toBe('Our team')
+    expect(siteImportPageTitle(page('/faq', 'Questions patients ask'))).toBe('Questions patients ask')
+    expect(siteImportPageTitle(page('/x', '', 'From the chair'))).toBe('From the chair')
   })
 
   it('plans its sections from its headings, the opening first', async () => {
