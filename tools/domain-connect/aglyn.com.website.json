@@ -4,7 +4,7 @@
   "serviceId": "website",
   "serviceName": "Aglyn website",
   "version": 1,
-  "logoUrl": "https://aglyn.com/_static/images/brand/aglyn-logo-500x500.png",
+  "logoUrl": "https://raw.githubusercontent.com/aglyn/aglyn/main/apps/tenant/public/_static/images/brand/aglyn-logo-500x500.png",
   "description": "Points a domain's root at an Aglyn website, and its www subdomain at the same site. Aglyn serves the name the owner chose and redirects the other one to it.",
   "variableDescription": "No variables. The records name Aglyn's hosting edge, which is the same for every website.",
   "syncPubKeyDomain": "aglyn.com",

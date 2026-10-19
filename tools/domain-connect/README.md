@@ -76,13 +76,10 @@ done
 installing one (or a release binary) was not done unattended. Run the loop
 above before opening the pull request; every exit code must be 0.
 
-⚠️ `-logos` fetches `logoUrl`
-(`https://aglyn.com/_static/images/brand/aglyn-logo-500x500.png`, a file in
-`apps/tenant/public/_static/images/brand/`). From the build machine every
-non-browser request to `aglyn.com` answered **429** (the edge's bot
-protection), so the linter, and a DNS provider's own logo fetch, may be
-refused too. Check it, and if so give `/_static/images/brand/*` a scoped
-bypass before submitting.
+`-logos` fetches `logoUrl`, which is the logo's file in this public
+repository on `raw.githubusercontent.com`. It is not on `aglyn.com` on purpose:
+the edge's bot protection answers every non-browser request there with 429,
+which would refuse the linter and a DNS provider's own logo fetch alike.
 
 Then test both templates in the online editor,
 <https://domainconnect.paulonet.eu/dc/free/templateedit>: paste each file,
@@ -140,7 +137,7 @@ Subject: Domain Connect onboarding: aglyn.com (website, website-subdomain)
 >
 > - **syncPubKeyDomain TXT records:** `_dcpubkeyv1.aglyn.com`
 > - **Logo:** attached as SVG (`aglyn-logo-mark-blue.svg`). The templates'
->   `logoUrl` is https://aglyn.com/_static/images/brand/aglyn-logo-500x500.png.
+>   `logoUrl` is https://raw.githubusercontent.com/aglyn/aglyn/main/apps/tenant/public/_static/images/brand/aglyn-logo-500x500.png.
 > - **Default proxy status:** DNS only (not proxied) for every record, the A
 >   and both CNAMEs. Our hosting edge issues the site's certificate itself and
 >   needs to receive the traffic directly.

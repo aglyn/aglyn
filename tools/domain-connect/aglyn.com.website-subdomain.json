@@ -4,7 +4,7 @@
   "serviceId": "website-subdomain",
   "serviceName": "Aglyn website on a subdomain",
   "version": 1,
-  "logoUrl": "https://aglyn.com/_static/images/brand/aglyn-logo-500x500.png",
+  "logoUrl": "https://raw.githubusercontent.com/aglyn/aglyn/main/apps/tenant/public/_static/images/brand/aglyn-logo-500x500.png",
   "description": "Points one subdomain (for example shop.example.com) at an Aglyn website.",
   "variableDescription": "No variables. The subdomain is the host the template is applied to.",
   "syncPubKeyDomain": "aglyn.com",
