@@ -31,6 +31,8 @@ fun main() = runBlocking {
   aglyn.auth.signInWithEmail(aglyn.debugSignIn!!.first, aglyn.debugSignIn!!.second)
   delay(3000)
   val site = System.getProperty("aglyn.snapshotSite")
+  // A site in another workspace than the account's first opens through its workspace (-Daglyn.snapshotOrg).
+  System.getProperty("aglyn.snapshotOrg")?.let { org -> aglyn.workspace.select(org, site); delay(2000) }
   // A theme state shoots on this device's own copy, so the seeded account's theme is never changed.
   val original = aglyn.accountPrefs.state.value.theme
   fun theme(change: (com.aglyn.contracts.AppThemePrefs) -> com.aglyn.contracts.AppThemePrefs) = aglyn.accountPrefs.setTheme(change(original), deviceOnly = true)

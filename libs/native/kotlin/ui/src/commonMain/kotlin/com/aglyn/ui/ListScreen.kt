@@ -284,12 +284,13 @@ fun ScaffoldListRow(
   ) {
     leading()
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-      Text(title, fontSize = if (phone) 17.sp else 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      detail?.let { Text(it, fontSize = if (phone) 13.sp else 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+      // Figma's line heights (14/18 over 12/16; the phone's 17/22 over 13/18), so the row keeps its 64 (68 on a phone).
+      Text(title, fontSize = if (phone) 17.sp else 14.sp, lineHeight = if (phone) 22.sp else 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      detail?.let { Text(it, fontSize = if (phone) 13.sp else 12.sp, lineHeight = if (phone) 18.sp else 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
     }
     if (figure != null || status != null) {
       Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        figure?.let { Text(it, fontSize = if (phone) 15.sp else 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1) }
+        figure?.let { Text(it, fontSize = if (phone) 15.sp else 14.sp, lineHeight = if (phone) 20.sp else 18.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1) }
         status?.invoke()
       }
     }
