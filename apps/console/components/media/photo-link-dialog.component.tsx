@@ -74,6 +74,8 @@ export interface PhotoLinkDialogProps {
   hostId: string
   open: boolean
   onClose: () => void
+  /** Called once the closing transition has finished. */
+  onExited?: () => void
 }
 
 const shortDate = (at: number): string =>
@@ -92,7 +94,7 @@ const photoCount = (count: number): string => `${count} ${count === 1 ? 'photo' 
  * it is made, and never again.
  */
 export function PhotoLinkDialog(props: PhotoLinkDialogProps) {
-  const { hostId, open, onClose } = props
+  const { hostId, open, onClose, onExited } = props
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -208,7 +210,13 @@ export function PhotoLinkDialog(props: PhotoLinkDialogProps) {
   const blocked = list.kind === 'error' && list.blocked
 
   return (
-    <Dialog open={open} onClose={() => (busy ? undefined : onClose())} maxWidth="xs" fullWidth>
+    <Dialog
+      open={open}
+      onClose={() => (busy ? undefined : onClose())}
+      maxWidth="xs"
+      fullWidth
+      slotProps={{ transition: { onExited } }}
+    >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         {'Get photos from a phone'}
         <HelpTip {...docsHelp('media', { anchor: '#photo-link' })} sx={{ fontSize: '0.7em' }} />
@@ -333,4 +341,25 @@ export function PhotoLinkDialog(props: PhotoLinkDialogProps) {
   )
 }
 
-export default PhotoLinkDialog
+/**
+ * {@link PhotoLinkDialog} as a page header mounts it: nothing until it is
+ * first opened, so a closed dialog reads no user and fetches nothing, and
+ * unmounted again once its closing transition has played.
+ */
+export function PhotoLinkDialogOnOpen(props: PhotoLinkDialogProps) {
+  const { open, onExited } = props
+  const [mounted, setMounted] = useState(open)
+  if (open && !mounted) setMounted(true)
+  if (!mounted) return null
+  return (
+    <PhotoLinkDialog
+      {...props}
+      onExited={() => {
+        setMounted(false)
+        onExited?.()
+      }}
+    />
+  )
+}
+
+export default PhotoLinkDialogOnOpen

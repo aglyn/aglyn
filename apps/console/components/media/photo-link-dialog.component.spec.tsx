@@ -16,7 +16,7 @@
  */
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { PhotoLinkDialog, type PhotoLinkRow } from './photo-link-dialog.component'
+import { PhotoLinkDialog, PhotoLinkDialogOnOpen, type PhotoLinkRow } from './photo-link-dialog.component'
 
 const URL_ONCE = 'https://console.example.test/p/aaaaaaaaaaaaaaaaaaaaaaaa#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
 const DAY = 24 * 60 * 60 * 1000
@@ -131,5 +131,18 @@ describe('the photo link dialog (AGL-3957)', () => {
     render(<PhotoLinkDialog hostId="host-1" open onClose={() => undefined} />)
     await screen.findByText('No open links.')
     expect((screen.getByRole('button', { name: 'New link' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('mounts nothing while closed, and the dialog once it is opened', async () => {
+    const { rerender } = render(<PhotoLinkDialogOnOpen hostId="host-1" open={false} onClose={() => undefined} />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(mockState.posts).toEqual([])
+
+    rerender(<PhotoLinkDialogOnOpen hostId="host-1" open onClose={() => undefined} />)
+    await screen.findAllByTestId('photo-link-row')
+    expect(mockState.posts).toEqual([{ hostId: 'host-1', action: 'list' }])
+
+    rerender(<PhotoLinkDialogOnOpen hostId="host-1" open={false} onClose={() => undefined} />)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 })

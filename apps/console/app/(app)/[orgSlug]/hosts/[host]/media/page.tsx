@@ -29,7 +29,7 @@ import DashboardLayout from '../../../../../../components/layouts/dashboard.layo
 import MainLayout from '../../../../../../components/layouts/main.layout'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import MediaLibraryComponent from '../../../../../../components/media/media-library.component'
-import PhotoLinkDialog from '../../../../../../components/media/photo-link-dialog.component'
+import { PhotoLinkDialogOnOpen } from '../../../../../../components/media/photo-link-dialog.component'
 import { useOrgDataScope } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
@@ -120,7 +120,7 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
           ) : null}
         </CardDisplay>
       </Container>
-      <PhotoLinkDialog hostId={hostId} open={photoLinkOpen} onClose={() => setPhotoLinkOpen(false)} />
+      <PhotoLinkDialogOnOpen hostId={hostId} open={photoLinkOpen} onClose={() => setPhotoLinkOpen(false)} />
     </DashboardLayout>
   )
 }

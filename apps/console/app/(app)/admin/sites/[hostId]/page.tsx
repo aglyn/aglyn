@@ -55,7 +55,7 @@ import PluginWidgetSlot, {
 } from '../../../../../components/plugin-widget-slot.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
 import StaffMediaLibraryCard from '../../../../../components/staff-media-library-card.component'
-import PhotoLinkDialog from '../../../../../components/media/photo-link-dialog.component'
+import { PhotoLinkDialogOnOpen } from '../../../../../components/media/photo-link-dialog.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
 import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
@@ -619,7 +619,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
           />
         </StaffOnly>
       </Container>
-      <PhotoLinkDialog hostId={hostId} open={photoLinkOpen} onClose={() => setPhotoLinkOpen(false)} />
+      <PhotoLinkDialogOnOpen hostId={hostId} open={photoLinkOpen} onClose={() => setPhotoLinkOpen(false)} />
     </DashboardLayout>
   )
 }
