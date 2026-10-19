@@ -56,6 +56,22 @@ describe('the guided start for a client build (AGL-3958)', () => {
     expect(long.city.length).toBeLessThanOrEqual(AI_SITE_INPUT_MAX_CHARS)
   })
 
+  it('with no address given, the towns are the place (AGL-3995)', () => {
+    const answers = aiSiteStartAnswersFromClientBuild(INTAKE)
+    expect(answers).toMatchObject({ street: '', postalCode: '', city: '' })
+    expect(aiSiteStartClientInputs(INTAKE, answers).city).toBe('Austin and Round Rock')
+  })
+
+  it('with a street or a postal code, the place is that address’s own city, never the towns (AGL-3995)', () => {
+    const answers = aiSiteStartAnswersFromClientBuild(INTAKE)
+    expect(aiSiteStartClientInputs(INTAKE, { ...answers, street: '214 Main Street', city: 'Round Rock' }).city).toBe(
+      'Round Rock',
+    )
+    expect(aiSiteStartClientInputs(INTAKE, { ...answers, postalCode: '78701', city: ' Austin ' }).city).toBe('Austin')
+    // An address without its city names no city at all, rather than the towns.
+    expect(aiSiteStartClientInputs(INTAKE, { ...answers, street: '214 Main Street' }).city).toBe('')
+  })
+
   it('adds how to reach the business, its hours and the owner’s words to the brief', () => {
     expect(aiSiteStartClientBrief(INTAKE)).toBe(
       'The business is called Harbor Plumbing. It serves Austin and Round Rock. Visitors reach it to call ' +

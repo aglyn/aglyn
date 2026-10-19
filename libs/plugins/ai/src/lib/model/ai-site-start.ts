@@ -535,13 +535,23 @@ export function aiSiteStartAnswersFromClientBuild(intake: ClientBuildIntake): Ai
  * The per-site inputs the intake fills, which the guided start's own
  * questions leave empty: the business's name for the header and footer, and
  * the towns it serves as its place.
+ *
+ * The towns are the place only while no address is given. The Entity reads
+ * `city` as the address's own locality wherever there is a street or a
+ * postal code (`aiSiteEntity`), so once the answers carry either, `city` is
+ * the city the Details step was given with that address, never the towns
+ * (AGL-3995). The intake asks no address, so today that is the Details step's
+ * own, typed on the review; the towns still reach the site as the areas it
+ * serves.
  */
 export function aiSiteStartClientInputs(
   intake: ClientBuildIntake,
+  answers?: Pick<AiSiteStartAnswers, 'street' | 'postalCode' | 'city'> | null,
 ): Pick<AiSiteJobInputs, 'businessName' | 'city'> {
+  const addressed = Boolean(answers?.street.trim() || answers?.postalCode.trim())
   return {
     businessName: bounded(intake.businessName, AI_SITE_INPUT_MAX_CHARS),
-    city: bounded(intake.towns, AI_SITE_INPUT_MAX_CHARS),
+    city: bounded(addressed ? (answers?.city ?? '') : intake.towns, AI_SITE_INPUT_MAX_CHARS),
   }
 }
 
