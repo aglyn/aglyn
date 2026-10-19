@@ -114,6 +114,7 @@ import {
   aiCustomerSafeReview,
 } from '../model/ai-job-failure-copy'
 import { aiSiteStartInputsOf } from '../model/ai-site-start'
+import { aiSiteImportWire, type AiSiteImportState } from '../model/ai-site-import'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import {
   AI_JOB_CANCELED_ITEM_NOTE,
@@ -782,6 +783,8 @@ export function aiJobSummary(job: AiJob, now = new Date()): AiJobSummary {
     ...(job.kind === 'build' && job.inputs?.['publish'] === true ? { publishAsked: true } : {}),
     ...(aiJobCancelPending(job) ? { cancelRequested: true } : {}),
     ...(job.siteRemoved ? { siteRemoved: true } : {}),
+    // A site import's waves (AGL-3976), without the page text its waves read.
+    ...(job.siteImport ? { siteImport: aiSiteImportWire(job.siteImport) } : {}),
   }
 }
 
@@ -1043,6 +1046,8 @@ export interface RecordStepInput {
    * transaction, with what was given back for it.
    */
   item?: AiJobItemRecord
+  /** An `import` job's waves after this pass (AGL-3976), kept in this write. */
+  siteImport?: AiSiteImportState
 }
 
 /** One `build` pass as its item's row records it (AGL-3616). */
@@ -1235,6 +1240,7 @@ export async function recordStep(
       // now, for the reason its credits are.
       ...(input.plan ? { plan: input.plan } : {}),
       ...(input.sitePublish ? { sitePublish: input.sitePublish } : {}),
+      ...(input.siteImport ? { siteImport: input.siteImport } : {}),
       ...(items ? { items } : {}),
       ...(input.item?.creditsRefunded
         ? { refundedCredits: (job.refundedCredits ?? 0) + input.item.creditsRefunded }
@@ -1246,7 +1252,13 @@ export async function recordStep(
       ...(parksForReview && input.review
         ? {
             review: input.review,
-            error: input.input ? input.input.message : input.review.reason === 'plan' ? null : input.review.message,
+            // A plan to confirm and a site import's wave to review (AGL-3976)
+            // are decisions waiting, not errors.
+            error: input.input
+              ? input.input.message
+              : input.review.reason === 'plan' || input.review.reason === 'wave'
+                ? null
+                : input.review.message,
             input: input.input ?? null,
           }
         : {}),
@@ -1579,7 +1591,9 @@ async function failOurFailure(
  * item gives back its own spend and the rest goes on.
  */
 export function aiJobSettlesByItem(kind: AiJobKind): boolean {
-  return kind === 'build' || kind === 'site'
+  // A site import's pages are its items too (AGL-3976): one that fails on
+  // our side gives back its own spend, and its wave goes on.
+  return kind === 'build' || kind === 'site' || kind === 'import'
 }
 
 /**
@@ -1595,6 +1609,10 @@ export function aiBuildRetryable(job: Pick<AiJob, 'kind' | 'status'>): boolean {
 /** What a build that delivered nothing says; its planning was given back too. */
 export const AI_BUILD_NOTHING_BUILT_COPY =
   'Nothing in this request could be built. Try again, or ask for less at once.'
+
+/** What a site import that brought no page in says (AGL-3976); every page's spend was given back. */
+export const AI_SITE_IMPORT_NOTHING_BUILT_COPY =
+  'No page of your site could be brought in. Nothing was charged for the pages that failed; try again later.'
 
 /** What an item the build never reached says when the build stopped early. */
 export const AI_BUILD_NOT_REACHED_COPY = 'Not built: the build stopped before it reached this.'
@@ -1794,7 +1812,12 @@ export async function settleAiBuildJob(
           updatedAt: now,
         },
   )
-  const nothing = job.kind === 'site' ? AI_SITE_GUIDED_BUILD_FAILED_COPY : AI_BUILD_NOTHING_BUILT_COPY
+  const nothing =
+    job.kind === 'site'
+      ? AI_SITE_GUIDED_BUILD_FAILED_COPY
+      : job.kind === 'import'
+        ? AI_SITE_IMPORT_NOTHING_BUILT_COPY
+        : AI_BUILD_NOTHING_BUILT_COPY
   return failAiJob(firestore, orgId, jobId, stopped?.message ?? nothing, {
     error: 'build delivered nothing',
     // Ours unless every item that failed was the model declining (AGL-3616).
@@ -2555,6 +2578,7 @@ export async function runAiJobStep(
       ...(review ? { review } : {}),
       ...(review && outcome.input ? { input: outcome.input } : {}),
       ...(outcome.sitePublish ? { sitePublish: outcome.sitePublish } : {}),
+      ...(job.kind === 'import' && outcome.siteImport ? { siteImport: outcome.siteImport } : {}),
       ...(aiJobSettlesByItem(job.kind) && outcome.items ? { items: outcome.items } : {}),
       ...(itemRecord ? { item: itemRecord } : {}),
       // A park this call resolves at once (an auto-confirmed plan) or gives

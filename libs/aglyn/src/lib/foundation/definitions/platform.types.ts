@@ -997,6 +997,13 @@ export interface AglynHostMedia {
   ownerPhoto?: true
   /** The photo link the asset came through (AGL-3957), with `ownerPhoto`. */
   photoLinkId?: string
+  /**
+   * The website a photo was brought in from by a site import (AGL-3976),
+   * written by the server ingest that copied it. `key` is what the site's
+   * library is searched by before the same picture is copied again, so one
+   * photo is stored once per site however many imported pages show it.
+   */
+  importedFrom?: AglynHostMediaImportSource
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
   deletedAt?: ITimestamp
@@ -1026,6 +1033,20 @@ export interface AglynHostMediaStockSource {
   attributionRequired: boolean
   /** The search words that found it. */
   query?: string
+  importedAt?: ITimestamp
+}
+
+/**
+ * Where a photo a site import brought in came from (AGL-3976): the proved
+ * website and the picture's own address there.
+ */
+export interface AglynHostMediaImportSource {
+  /** `import:<hash of the address>`: the key a site's library reuses the asset by. */
+  key: string
+  /** The picture's address on the website it was brought in from. */
+  url: string
+  /** The proved domain the import read. */
+  domain: string
   importedAt?: ITimestamp
 }
 

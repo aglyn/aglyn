@@ -52,6 +52,8 @@ const mockPush = jest.fn()
 jest.mock('next/navigation', () => ({
   __esModule: true,
   useRouter: () => ({ push: mockPush }),
+  // The upgrade link Bring my site draws on a Free plan is an AppLink (AGL-3976).
+  usePathname: () => '/acme/hosts',
 }))
 
 const mockTrack = jest.fn()
@@ -165,7 +167,8 @@ afterEach(() => {
   // The whole flow is the jobs route. Nothing here writes a draft, publishes
   // anything or touches the site the person is standing on.
   // The model list a paid start reads to price a pick is a read too (AGL-3660).
-  for (const [url] of mockFetch.mock.calls) expect(String(url)).toMatch(/^\/api\/ai\/(jobs|models)/)
+  // Bring my site's ownership door is the AI plugin's too (AGL-3976).
+  for (const [url] of mockFetch.mock.calls) expect(String(url)).toMatch(/^\/api\/ai\/(jobs|models|site-import\/ownership)/)
 })
 
 /** Renders the dialog on its first step, once the jobs route has admitted this workspace. */
@@ -303,7 +306,7 @@ describe('whether the guided start is here at all', () => {
     const { container, rerender } = render(<Widget {...zoneProps()} />)
     rerender(<Widget {...zoneProps()} />)
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
-    expect(String(mockFetch.mock.calls[0][0])).toBe('/api/ai/jobs?orgId=org-1&limit=1')
+    expect(String(mockFetch.mock.calls[0][0])).toBe('/api/ai/jobs?orgId=org-1&limit=1&siteImport=1')
     expectNothingDrawn(container)
   })
 
@@ -1666,6 +1669,96 @@ describe('the guided start reports where people get lost (AGL-3898)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Skip and start blank' }))
     const sent = JSON.stringify(mockTrack.mock.calls)
     expect(sent).not.toMatch(/Zelda|zelda|bakery|friends/)
+  })
+})
+
+/*
+ * "Bring my site" on the choice step (AGL-3976): absent while its flag is off,
+ * drawn DISABLED with the reason and an upgrade link where the workspace can
+ * change what stands in the way, and otherwise the flow that proves the site
+ * is the reader's before anything is read.
+ */
+describe('Bring my site on the first step', () => {
+  const claim = (current: boolean) => ({
+    domain: 'harbor-dental.com',
+    status: current ? 'proven' : 'pending',
+    current,
+    provenMethod: current ? 'dns' : null,
+    provenAt: current ? Date.parse('2026-10-19T12:00:00.000Z') : null,
+    provenDetail: null,
+    lastChecks: {},
+    dns: { host: '_aglyn-challenge.harbor-dental.com', type: 'TXT', value: 'aglyn-domain-verification=tok123' },
+    meta: { name: 'aglyn-site-verification', content: 'tok123', tag: '<meta name="aglyn-site-verification" content="tok123">' },
+    email: { domain: 'harbor-dental.com', pendingAddress: null, expiresAt: null, attemptsLeft: null },
+  })
+  const card = () => screen.queryByRole('button', { name: /Bring my site/ })
+
+  it('is not drawn while its release flag is off', async () => {
+    await openChoice()
+    expect(card()).toBeNull()
+    expect(screen.getByRole('button', { name: 'Start with AI' })).toBeTruthy()
+  })
+
+  it('is drawn disabled on the Free plan, with the reason and a way to upgrade', async () => {
+    await openChoice({}, { jobs: [], freeTaste: true, siteImport: 'plan' })
+    const button = card() as HTMLButtonElement
+    expect(button).toBeTruthy()
+    expect(button.disabled).toBe(true)
+    expect(screen.getAllByText('Bring your current website in, every page and photo, on any paid plan. Upgrade to bring yours in.').length).toBeGreaterThan(0)
+    // The notice's action is a button-styled link to Billing's plans.
+    const upgrade = screen.getByRole('button', { name: 'Upgrade' })
+    expect(upgrade.getAttribute('href')).toBe('/acme/billing#plans')
+    fireEvent.click(button)
+    expect(screen.queryByText('Your current website')).toBeNull()
+  })
+
+  it('is drawn disabled for a member who cannot bring a site in, with no upgrade to offer', async () => {
+    await openChoice({}, { jobs: [], siteImport: 'role' })
+    expect((card() as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getAllByText('Only the workspace owner or an admin can bring a site in.').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Upgrade' })).toBeNull()
+  })
+
+  it('asks the address, proves the site is the reader’s, then reads it on a new job: nothing built yet', async () => {
+    await openChoice({}, { jobs: [], siteImport: 'ready' })
+    fireEvent.click(card() as HTMLElement)
+    await screen.findByRole('heading', { level: 1, name: 'Bring my site' })
+    typeAnswer('Website address', 'https://www.harbor-dental.com/')
+    // Not yet verified: the three ways are shown, and Next waits for one.
+    mockFetch.mockResolvedValueOnce(json({ claim: claim(false) }))
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByText('Add a DNS record')
+    expect(screen.getByText('Add a tag to your home page')).toBeTruthy()
+    expect(screen.getByText('Get a code by email')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Next' }) as HTMLButtonElement).disabled).toBe(true)
+    mockFetch.mockResolvedValueOnce(json({ result: { method: 'dns', status: 'proven', message: 'Found the DNS record. Your site is verified.', claim: claim(true) } }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check the DNS record' }))
+    await screen.findByText('Verified')
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByRole('button', { name: 'Read my site' })
+    mockFetch.mockResolvedValueOnce(json({ job: siteJob({ id: 'import-1', kind: 'import' }) }))
+    fireEvent.click(screen.getByRole('button', { name: 'Read my site' }))
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/acme/hosts/demo-legal/ai-jobs/import-1'))
+    const [ownershipUrl, ownershipInit] = mockFetch.mock.calls[1]
+    expect(ownershipUrl).toBe('/api/ai/site-import/ownership')
+    expect(JSON.parse(ownershipInit.body)).toEqual({ orgId: 'org-1', action: 'claim', domain: 'https://www.harbor-dental.com/' })
+    expect(JSON.parse(postCall()[1].body)).toEqual({
+      orgId: 'org-1',
+      hostId: 'demo-legal',
+      kind: 'import',
+      brief: 'Bring in harbor-dental.com',
+      inputs: { domain: 'harbor-dental.com' },
+    })
+    expect(mockTrack).toHaveBeenCalledWith('site_start_choice', { choice: 'import' })
+  })
+
+  it('goes back to how the site starts from the first question', async () => {
+    await openChoice({}, { jobs: [], siteImport: 'ready' })
+    fireEvent.click(card() as HTMLElement)
+    await screen.findByText('Your current website')
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await screen.findByText('How do you want to start?')
+    expect(mockStartBlank).not.toHaveBeenCalled()
   })
 })
 

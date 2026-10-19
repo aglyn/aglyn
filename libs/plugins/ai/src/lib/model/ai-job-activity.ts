@@ -286,6 +286,7 @@ const KIND_NOUNS: Partial<Record<AiJobKind, string>> = {
   settings: 'settings',
   media: 'media library change',
   tracking: 'tracking',
+  import: 'site import',
 }
 
 /** The noun for what a job of this kind makes, or `AI job` for a kind with none. */
@@ -294,11 +295,11 @@ export function aiJobKindNoun(kind: AiJobKind): string {
 }
 
 /**
- * The job kinds that build a site's pages (AGL-3765): a page, a guided start
- * and a build from the Assist chat. Two at once on one site each plan against
+ * The job kinds that build a site's pages (AGL-3765): a page, a guided start,
+ * a build from the Assist chat and a site import (AGL-3976). Two at once on one site each plan against
  * the site as it was, and race for what its plan holds one of.
  */
-export const AI_PAGE_BUILDING_JOB_KINDS: readonly AiJobKind[] = ['page', 'site', 'build']
+export const AI_PAGE_BUILDING_JOB_KINDS: readonly AiJobKind[] = ['page', 'site', 'build', 'import']
 
 /**
  * How long a plan waiting for its confirmation still counts as a build on its

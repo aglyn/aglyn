@@ -154,6 +154,13 @@
       "description": "Aglyn AI: generative building and automation behind the AI add-on (AGL-2903). ON for every workspace since 2026-09-29; generative routes answer 404 when off. It sends customer briefs and site content to Anthropic under the Assist disclosure (AGL-1909).",
       "valueType": "JSON"
     },
+    "release_ai_site_import": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "Bring my site (AGL-3973): a paid workspace proves it owns a domain (DNS, meta tag or emailed code), then AglynBot reads the site within robots.txt. OFF by default; the doors answer 404 while off.",
+      "valueType": "JSON"
+    },
     "release_crm_assist_whole_record": {
       "defaultValue": {
         "value": "{\"enabled\":true,\"rolloutPercent\":0,\"note\":\"AGL-3520: legal v10 (Privacy §2 + Subprocessors) published 2026-10-05; beta.225 live\"}"

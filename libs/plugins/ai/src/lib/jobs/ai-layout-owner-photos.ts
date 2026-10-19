@@ -110,14 +110,63 @@ export function aiAssignOwnerPhotos(
   return answers
 }
 
+/** The unit input carrying the photos a page brought in from the owner's own site (AGL-3976). */
+export const AI_LAYOUT_PAGE_PHOTOS_INPUT = 'pagePhotos'
+
+/** The page's own photos a job's inputs carry, read defensively: library assets with their sizes only. */
+export function aiLayoutPagePhotosOf(inputs: Readonly<Record<string, unknown>> | null | undefined): PluginMediaAsset[] {
+  const raw = inputs?.[AI_LAYOUT_PAGE_PHOTOS_INPUT]
+  if (!Array.isArray(raw)) return []
+  const photos: PluginMediaAsset[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue
+    const { mediaId, src, width, height, alt } = entry as Record<string, unknown>
+    if (typeof mediaId !== 'string' || typeof src !== 'string' || !src.startsWith('media:')) continue
+    if (typeof width !== 'number' || typeof height !== 'number' || width <= 0 || height <= 0) continue
+    photos.push({ mediaId, src, width, height, ...(typeof alt === 'string' && alt.trim() ? { alt: alt.trim() } : {}) })
+  }
+  return photos
+}
+
+/**
+ * The photos a page brought in from the owner's own site placed first
+ * (AGL-3976): the page's own pictures, already in the site's library, fill
+ * the slots they fit, in the same order an owner's photos do and with no
+ * job-wide repeat rule, since a team photo the old site showed twice is the
+ * owner's to show twice. The slots left go to `next`.
+ */
+export function aiLayoutPagePhotoSource(
+  photos: readonly PluginMediaAsset[],
+  next: AiLayoutPictureSource | null,
+): AiLayoutPictureSource | null {
+  if (!photos.length) return next
+  return async (slots) => {
+    const answers = aiAssignOwnerPhotos(slots, photos)
+    if (!next) return answers
+    const open = slots.filter((_slot, index) => !answers[index])
+    if (!open.length) return answers
+    const found = await next(open)
+    let index = 0
+    return answers.map((answer) => answer ?? found[index++] ?? null)
+  }
+}
+
 /**
  * The source for one page: the owner's photos for the slots they fit, the
  * stock library for the rest. `null` only when neither can answer — no
  * media door and no stock library — which leaves every slot to the starters.
+ * A page a site import brings in (AGL-3976) places its own pictures first.
  */
 export function aiLayoutSitePhotoSource(
-  input: AiLayoutStockPhotoSourceInput,
+  input: AiLayoutStockPhotoSourceInput & { pagePhotos?: readonly PluginMediaAsset[] },
   deps: AiLayoutOwnerPhotoDeps = {},
+): AiLayoutPictureSource | null {
+  return aiLayoutPagePhotoSource(input.pagePhotos ?? [], aiLayoutOwnerAndStockSource(input, deps))
+}
+
+function aiLayoutOwnerAndStockSource(
+  input: AiLayoutStockPhotoSourceInput,
+  deps: AiLayoutOwnerPhotoDeps,
 ): AiLayoutPictureSource | null {
   const stock = (deps.stock ?? aiLayoutStockPhotoSource)(input, deps)
   const ingest = (deps.ingest ?? pluginMediaIngest)()

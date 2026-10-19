@@ -2333,6 +2333,19 @@ service cloud.firestore {
       match /sendingDomains/{domain} {
         allow read, write: if false;
       }
+
+      // Website ownership claims (AGL-3974): "this org proved it controls
+      // this domain", which a site import requires before it reads a page.
+      // An owner or admin reads the claim, because it holds the token they
+      // publish in DNS or on their home page. Nobody writes it from a
+      // client: `status: 'proven'` IS the proof, and a client able to set it
+      // could import, and clone, any website. The emailed code is stored
+      // only as an HMAC under a server secret, so a reader learns nothing
+      // that shortcuts the code. Admin SDK only (domain-ownership.ts).
+      match /domainOwnershipClaims/{domain} {
+        allow read: if canManageOrg();
+        allow write: if false;
+      }
     }
 
     // Workspace-subdomain resolution ({slug}.aglyn.com): public read so

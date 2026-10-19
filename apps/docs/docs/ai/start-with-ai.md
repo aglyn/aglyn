@@ -26,6 +26,9 @@ offers two cards:
 - **Start with AI** (marked **Recommended**) asks the questions below and builds the site
   for you. On the Free plan the card says how many pages a Free start makes.
 
+**Bring my site** (rolling out, not yet available) is a third card for moving the website
+you have now into Aglyn. See [Bring my site](./bring-my-site.md).
+
 No site exists until you choose. **Start from the starter site** and **Skip** (in the
 bar at the top) create the site with the starter home page and open it. **Plan my site**
 creates the site and starts planning it. The close control and the Escape key create

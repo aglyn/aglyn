@@ -32,6 +32,7 @@ import { registerAiProductsJob } from './jobs/ai-job-products-step'
 import { registerAiEmailJob } from './jobs/ai-job-email-step'
 import { registerAiCampaignJob } from './jobs/ai-job-campaign-step'
 import { registerAiSiteJob } from './jobs/ai-job-site-step'
+import { registerAiSiteImportJob } from './jobs/ai-job-import-step'
 import { registerAiBuildJob } from './jobs/ai-job-build-step'
 import { registerAiBuildCapabilities } from './jobs/ai-build-capabilities'
 import { registerAiWorkflowJob } from './jobs/ai-job-workflow-step'
@@ -75,6 +76,11 @@ import { GET as aiUsage } from './server/ai-usage'
 import { GET as aiAllotments } from './server/ai-allotments'
 import { GET as aiInsightAnswer } from './server/ai-insight-answer'
 import { POST as runAiInsightsDigest } from './server/ai-insight-digest-route'
+import {
+  listSiteImportOwnership,
+  postSiteImportCrawl,
+  postSiteImportOwnership,
+} from './server/ai-site-import-route'
 import { AI_INSIGHTS_DIGEST_PATH } from './insights/ai-insight-digest'
 import { GET as aiModels } from './server/ai-models'
 import { GET as billingCredits } from './server/billing-credits'
@@ -158,6 +164,9 @@ function registerAiJobKinds(): void {
   // The site scaffold, which builds a whole site through the steps above
   // (AGL-2911).
   registerAiSiteJob()
+  // Bring my site (AGL-3976): a proved website brought in as draft pages, in
+  // waves a person starts one at a time, through the page and layout steps.
+  registerAiSiteImportJob()
   // A build from one request (AGL-3616): pages, creations and other
   // plugins' drafts, through the steps above and the writers those plugins
   // register, settled item by item. What this plugin lets a build make is
@@ -268,6 +277,14 @@ export function registerAiConsoleApi(): void {
   // illustrations, stored through the media upload route. POST only — the
   // button draws from the shell's gates and asks nothing until it is used.
   registerPluginApiRoute('ai/media/images', { web: createAiMediaImages })
+  // "Bring my site" (AGL-3974): proving the workspace owns a website, and
+  // reading it once it has. Behind `release_ai_site_import`, paid plans,
+  // owners and admins; the crawl refuses a domain without a current proof.
+  registerPluginApiRoute('ai/site-import/ownership', {
+    web: (request) =>
+      request.method === 'GET' ? listSiteImportOwnership(request) : postSiteImportOwnership(request),
+  })
+  registerPluginApiRoute('ai/site-import/crawl', { web: (request) => postSiteImportCrawl(request) })
   registerPluginApiRoute('ai/billing/credits', { web: billingCredits })
   registerPluginApiRoute('ai/billing/overage', { web: billingOverage })
   registerPluginApiRoute('ai/usage', { web: aiUsage })
