@@ -214,4 +214,10 @@ export const CONSOLE_PLUGIN_SERVER_MANIFEST: PluginLoadManifest = [
     register: {"consoleApi":"registerLiveChatConsoleApi"},
     load: () => import('@aglyn/plugins-live-chat/server'),
   },
+  {
+    id: 'domains',
+    apiPrefixes: ["domains"],
+    register: {"consoleApi":"registerDomainsConsoleApi"},
+    load: () => import('@aglyn/plugins-domains/server'),
+  },
 ]

@@ -52,28 +52,31 @@ const mockLogHostActivity = jest.fn(async (..._args: unknown[]) => undefined)
 const mockHostData = jest.fn()
 const mockSyncHostProjection = jest.fn(async (..._args: unknown[]) => undefined)
 
-jest.mock('@aglyn/tenant-data-admin', () => ({
-  __esModule: true,
-  firebaseAdmin: {
-    app: () => ({
-      auth: () => ({
-        verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
-      }),
-      firestore: () => ({
-        collection: () => ({
-          doc: () => ({
-            get: async () => ({
-              exists: true,
-              get: (field: string) => mockHostData()[field],
-              data: () => mockHostData(),
-              ref: { set: mockHostSet },
-            }),
+const mockFirebaseAdmin = {
+  app: () => ({
+    auth: () => ({
+      verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
+    }),
+    firestore: () => ({
+      collection: () => ({
+        doc: () => ({
+          set: (...args: unknown[]) => mockHostSet(...args),
+          get: async () => ({
+            exists: true,
+            get: (field: string) => mockHostData()[field],
+            data: () => mockHostData(),
+            ref: { set: mockHostSet },
           }),
         }),
       }),
     }),
-    firestore: { FieldValue: { delete: () => 'FIELD_DELETE' } },
-  },
+  }),
+  firestore: { FieldValue: { delete: () => 'FIELD_DELETE' } },
+}
+
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  __esModule: true,
+  firebaseAdmin: mockFirebaseAdmin,
   getOrgForHost: async () => ({ orgId: 'org-1', org: {} }),
   lockdownRefusal: async () => null,
   isImpersonationSession: () => false,
@@ -89,6 +92,37 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   logHostActivity: (...args: unknown[]) => mockLogHostActivity(...args),
   // CAPTURED (AGL-3321): the members' site rows drop the released domain.
   syncHostProjectionForMembers: (...args: unknown[]) => mockSyncHostProjection(...args),
+  // The REAL release sequence (AGL-3961), which moved out of the route into
+  // the library. Its own imports are pointed at the same doubles below.
+  ...jest.requireActual('../../../../../../libs/tenant/data/admin/src/lib/server/host-custom-domain'),
+}))
+
+jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/firebase-admin', () => ({
+  __esModule: true,
+  default: mockFirebaseAdmin,
+  firebaseAdmin: mockFirebaseAdmin,
+}))
+jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/workspace-domains', () => ({
+  __esModule: true,
+  attachProjectDomain: (...args: unknown[]) => mockAttachProjectDomain(...args),
+  detachProjectDomain: (...args: unknown[]) => mockDetachProjectDomain(...args),
+  projectDomainStatus: async () => ({ state: 'unknown', verification: [], conflicts: [] }),
+}))
+jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/organizations', () => ({
+  __esModule: true,
+  logHostActivity: (...args: unknown[]) => mockLogHostActivity(...args),
+}))
+jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/host-memberships', () => ({
+  __esModule: true,
+  syncHostProjectionForMembers: (...args: unknown[]) => mockSyncHostProjection(...args),
+}))
+jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/hosted-page-review', () => ({
+  __esModule: true,
+  flagLookalikeCustomDomain: async () => 'clean',
+}))
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-events', () => ({
+  __esModule: true,
+  runPluginEventHandlers: (...args: unknown[]) => mockRunPluginEventHandlers(...args),
 }))
 
 const mockRunPluginEventHandlers = jest.fn(async (..._args: unknown[]) => ({
@@ -377,5 +411,51 @@ describe('the release is recorded once, and only where it happened', () => {
     expect(
       (mockLogHostActivity.mock.calls[0] as unknown as unknown[])[3],
     ).toMatchObject({ name: 'shop.example.com' })
+  })
+})
+
+describe('the www twin goes with the domain it forwards to (AGL-3961)', () => {
+  it('releases the twin and clears its claim', async () => {
+    mockHostData.mockReturnValue({
+      memberRoles: { 'u-1': 'admin' },
+      cname: 'example.com',
+      cnameTwin: 'www.example.com',
+      subdomain: 'shop',
+      orgId: 'org-1',
+    })
+
+    expect((await post()).status).toBe(200)
+    expect(mockDetachProjectDomain).toHaveBeenCalledWith(
+      'www.example.com',
+      'tenant',
+    )
+    const cleared = mockHostSet.mock.calls
+      .map(([patch]) => patch as Record<string, unknown>)
+      .find((patch) => 'cname' in patch)
+    expect(cleared).toMatchObject({
+      cname: 'FIELD_DELETE',
+      cnameTwin: 'FIELD_DELETE',
+      cnameTwinPending: 'FIELD_DELETE',
+    })
+  })
+
+  it('clears the claim even when the twin release fails', async () => {
+    mockHostData.mockReturnValue({
+      memberRoles: { 'u-1': 'admin' },
+      cname: 'example.com',
+      cnameTwin: 'www.example.com',
+      orgId: 'org-1',
+    })
+    mockDetachProjectDomain.mockImplementation(async (domain: string) =>
+      domain === 'www.example.com'
+        ? { outcome: 'failed', domain }
+        : detached(domain),
+    )
+
+    expect((await post()).status).toBe(200)
+    const cleared = mockHostSet.mock.calls
+      .map(([patch]) => patch as Record<string, unknown>)
+      .find((patch) => 'cname' in patch)
+    expect(cleared).toMatchObject({ cnameTwin: 'FIELD_DELETE' })
   })
 })
