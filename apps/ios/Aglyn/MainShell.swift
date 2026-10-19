@@ -163,6 +163,9 @@ struct ShellChrome: View {
           }
           .accessibilityIdentifier("tab-\(index)")
           #if os(macOS)
+            // Over a tab the window does not move with the pointer, so a drag takes the tab, not the window (the tab
+            // row's empty space still moves it).
+            .onHover { inside in window?.isMovable = !inside }
             // Dragged down out of the strip, a tab becomes a window of its own.
             .gesture(
               DragGesture(minimumDistance: 12).onEnded { drag in
