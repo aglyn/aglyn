@@ -60,10 +60,20 @@ struct ShellTabs: View {
     let current = strip.current
     VStack(spacing: 0) {
       ShellChrome(strip: strip).environment(current)
-      ShellFrame(navigation: current, compact: false) { WideShell(navigation: current) }
-        .id(ObjectIdentifier(current))
-        .environment(current)
-        .focusedSceneValue(\.shellNavigation, current)
+      // Every open tab stays alive, only the one in front shown and touchable, so each keeps its own path, selection,
+      // scroll and unsaved fields while another is in front.
+      ZStack {
+        ForEach(strip.tabs, id: \.tabID) { tab in
+          let front = tab === current
+          ShellFrame(navigation: tab, compact: false) { WideShell(navigation: tab) }
+            .environment(tab)
+            .opacity(front ? 1 : 0)
+            .allowsHitTesting(front)
+            .accessibilityHidden(!front)
+            .zIndex(front ? 1 : 0)
+        }
+      }
+      .focusedSceneValue(\.shellNavigation, current)
     }
     .focusedSceneValue(\.shellTabs, strip)
     // The tab in front keeps the workspace and site it stands in as its own, so the others never follow it.
