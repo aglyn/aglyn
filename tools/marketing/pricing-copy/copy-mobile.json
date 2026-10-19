@@ -5,7 +5,7 @@
   "frameName": "Pricing — Mobile",
   "frameSize": {
     "width": 375,
-    "height": 11220
+    "height": 11876
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -47,14 +47,14 @@
         },
         {
           "figmaNodeId": "247:3571",
-          "name": "Every paid plan includes the full platform — Besigner, CRM, commerce, forms, media, and workflows. Beta pricing — plans and limits may change as Aglyn evolves.",
+          "name": "Every paid plan includes the full platform — Besigner, CRM, commerce, forms, media, workflows and a band of Aglyn AI credits. Start free with one website; upgrade for your own domain and a store.",
           "widthPx": 335,
           "records": [
             {
               "figmaNodeId": "247:3571",
               "name": null,
               "cells": [
-                "Every paid plan includes the full platform — Besigner, CRM, commerce, forms, media, and workflows. Beta pricing — plans and limits may change as Aglyn evolves."
+                "Every paid plan includes the full platform — Besigner, CRM, commerce, forms, media, workflows and a band of Aglyn AI credits. Start free with one website; upgrade for your own domain and a store."
               ]
             }
           ]
@@ -528,7 +528,7 @@
               "figmaNodeId": "268:2039",
               "name": "row",
               "cells": [
-                "Screen versioning",
+                "Page versioning",
                 "✓ Included"
               ]
             },
@@ -892,7 +892,7 @@
               "figmaNodeId": "268:2152",
               "name": "row",
               "cells": [
-                "Per-screen analytics",
+                "Per-page analytics",
                 "✓ Included"
               ]
             },
@@ -946,7 +946,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 375,
-      "heightPx": 1317,
+      "heightPx": 1391,
       "groups": [
         {
           "figmaNodeId": "268:2170",
@@ -1175,6 +1175,14 @@
                 "Aglyn AI",
                 "From $9 / mo"
               ]
+            },
+            {
+              "figmaNodeId": "2542:3028",
+              "name": "fa",
+              "cells": [
+                "Site Care",
+                "$49 / mo"
+              ]
             }
           ]
         }
@@ -1187,7 +1195,7 @@
       "name": "FAQ",
       "order": 4,
       "widthPx": 375,
-      "heightPx": 2085,
+      "heightPx": 2642,
       "groups": [
         {
           "figmaNodeId": "247:4567",
@@ -1208,14 +1216,6 @@
           "name": "grid",
           "widthPx": 335,
           "records": [
-            {
-              "figmaNodeId": "247:4569",
-              "name": "qa",
-              "cells": [
-                "Is there really a free plan?",
-                "Yes — the Free plan gives you one site, with the Besigner builder, forms, and media included. No credit card required."
-              ]
-            },
             {
               "figmaNodeId": "247:4572",
               "name": "qa",
@@ -1277,7 +1277,39 @@
               "name": "qa",
               "cells": [
                 "Do you offer SSO or an SLA?",
-                "SAML / OIDC single sign-on is available on Enterprise today — you set it up yourself in the console after proving your domain. Enterprise also includes dedicated support with a named manager and a 24–48 hour first response. We do not offer a contractual uptime SLA during public beta."
+                "SAML / OIDC single sign-on is available on Enterprise today — you set it up yourself in the console after proving your domain. Enterprise also includes dedicated support with a named manager and a 24–48 hour first response. We do not offer a contractual uptime SLA."
+              ]
+            },
+            {
+              "figmaNodeId": "2309:15012",
+              "name": "qa",
+              "cells": [
+                "How much does it cost to build a website on Aglyn?",
+                "Nothing to build and publish on the free plan: one site, up to five pages, forms, media and AI credits. Your own domain, the store, bookings and the CRM come with Starter; the pricing page lists every plan."
+              ]
+            },
+            {
+              "figmaNodeId": "2309:15015",
+              "name": "qa",
+              "cells": [
+                "Is the free plan a trial?",
+                "No. It does not expire or downgrade. It is capped rather than billed: one site, five pages, 250 MB of storage and 2 GB of bandwidth a month."
+              ]
+            },
+            {
+              "figmaNodeId": "2345:9789",
+              "name": "qa",
+              "cells": [
+                "How does Aglyn compare to alternatives?",
+                "Our comparison pages set Aglyn beside Webflow, Wix, Squarespace, WordPress, Shopify and Duda, dated, and say where each of them is the better answer."
+              ]
+            },
+            {
+              "figmaNodeId": "2345:9792",
+              "name": "qa",
+              "cells": [
+                "What is Aglyn?",
+                "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start."
               ]
             }
           ]
@@ -1323,14 +1355,14 @@
         },
         {
           "figmaNodeId": "247:4590",
-          "name": "No credit card required. Beta pricing — plans, prices, and included features may change as Aglyn evolves.",
+          "name": "No credit card required. Upgrade, downgrade or cancel anytime from the billing page.",
           "widthPx": 335,
           "records": [
             {
               "figmaNodeId": "247:4590",
               "name": null,
               "cells": [
-                "No credit card required. Beta pricing — plans, prices, and included features may change as Aglyn evolves."
+                "No credit card required. Upgrade, downgrade or cancel anytime from the billing page."
               ]
             }
           ]

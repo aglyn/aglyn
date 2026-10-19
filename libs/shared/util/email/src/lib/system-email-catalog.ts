@@ -76,6 +76,7 @@ const SAMPLE_SUPPORT_URL: string =
 // page's chunks for one brand constant.
 import { BRAND } from '@aglyn/shared-data-enums/aglyn'
 import { EMAIL_NODE_ROOT_ID } from './email-render'
+import { domainSystemEmailTemplates } from './domain-emails'
 import { RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES } from './risk-notice-emails'
 import { retentionSystemEmailTemplates } from './retention-emails'
 import { SITE_CARE_SYSTEM_EMAIL_TEMPLATES } from './site-care-emails'
@@ -1708,6 +1709,9 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
     ...retentionSystemEmailTemplates(SAMPLE_CONSOLE_ORIGIN, SAMPLE_DOCS_ORIGIN),
     // Site Care requests (AGL-3959), beside their own sender's notes.
     ...SITE_CARE_SYSTEM_EMAIL_TEMPLATES,
+    // A domain bought through the domains plugin (AGL-3962), whose keys and
+    // copy live in `domain-emails.ts`.
+    ...domainSystemEmailTemplates(SAMPLE_CONSOLE_ORIGIN),
   ].map((entry) => ({
     ...entry,
     mergeTokens: [...entry.mergeTokens, ...BRAND_MERGE_TOKENS],

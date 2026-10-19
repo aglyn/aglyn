@@ -42,6 +42,11 @@ export type AglynNotificationType =
   // disappearing at exactly the instant the consequence arrived.
   | 'billing.subscriptionCanceled'
   | 'billing.usage'
+  // A domain bought through the domains plugin (AGL-3962): bought, renewed,
+  // refunded, its registrant email to confirm, or about to expire. `billing`
+  // because each is about money the workspace paid or will pay, and the
+  // emitter stamps the level. A failed renewal charge is `paymentFailed`.
+  | 'billing.domain'
   | 'team.invite'
   | 'team.roleChanged'
   | 'team.hostAccessGranted'
@@ -316,6 +321,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> = {
   'billing.paymentFailed': 'Payment failed',
   'billing.subscriptionCanceled': 'Subscription canceled',
   'billing.usage': 'Usage threshold',
+  'billing.domain': 'Domain',
   'team.invite': 'Team invite',
   'team.roleChanged': 'Role changed',
   'team.hostAccessGranted': 'Site access granted',
@@ -424,6 +430,9 @@ export const NOTIFICATION_TYPE_LEVELS: Record<
   'billing.subscriptionCanceled': 'critical',
   // At a limit. A step on the way to it is stamped `info` by its emitter.
   'billing.usage': 'warning',
+  // Stamped by the emitter: success for a purchase or renewal, warning for a
+  // refund, a registrant email to confirm, or an expiry.
+  'billing.domain': 'info',
   'team.invite': 'info',
   'team.roleChanged': 'info',
   'team.hostAccessGranted': 'info',
@@ -950,6 +959,9 @@ export const NOTIFICATION_TYPE_CHANNEL_DEFAULTS: Partial<
   // The workspace's bill. A usage crossing sends its own email and passes
   // `skipEmail`, so this default never mails it twice.
   'billing.invoice': { email: true },
+  // The domains plugin sends its own designed email for each and passes
+  // `skipEmail`, so this default never mails one twice.
+  'billing.domain': { email: true },
   'billing.paymentFailed': { email: true },
   'billing.subscriptionCanceled': { email: true },
   'billing.usage': { email: true },
@@ -984,6 +996,7 @@ const NOTIFICATION_EMAIL_ACTIONS: Partial<Record<AglynNotificationType, string>>
   'content.leadAssigned': 'Open lead',
   'billing.invoice': 'Open billing',
   'billing.paymentFailed': 'Update payment method',
+  'billing.domain': 'Open domain',
   'billing.subscriptionCanceled': 'Open billing',
   'billing.usage': 'Open billing',
   'support.ticketOpened': 'Open ticket',
