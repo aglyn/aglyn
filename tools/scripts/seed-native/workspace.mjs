@@ -255,6 +255,15 @@ export async function seedWorkspace({ put, uid, orgId, hostId, now, putObject = 
     })
   }
 
+  // The workspace's directory of its sites, as the console's create-site path claims one (provision-host.ts merges
+  // `hosts: { <site>: true }` into the org, registerOrgHost writes the same key): the plan's site limit counts it, so
+  // without it a seeded Pro workspace with three sites never reached its "3 of 3" notice.
+  await put(
+    `orgs/${orgId}`,
+    { hosts: Object.fromEntries([hostId, ...sites.map((site) => site.id)].map((id) => [id, true])) },
+    { merge: true, fields: ['hosts'] },
+  )
+
   // --- Media: the demo site's library, a folder, and the workspace's. ----
   await put(`hosts/${hostId}/mediaFolders/seed-storefront`, { name: 'Storefront', parentId: null, order: 0, createdAt: ago(20) })
   await put(`orgs/${orgId}/mediaFolders/seed-brand`, {
