@@ -738,3 +738,36 @@ fun InboxNeedsYouWidget(context: NativePluginContext) {
     onClick = { context.navigate(INBOX_SCREEN, mapOf("read" to "false")) },
   )
 }
+
+/**
+ * The Inbox row's count in the sidebar (`inbox.sidebar-count`, slot `sidebarCount.inbox`): messages nobody has read,
+ * in the site, or across the workspace's sites in the workspace's own scope; nothing while there are none.
+ */
+@Composable
+fun InboxSidebarCount(context: NativePluginContext) {
+  val hostId = context.hostId
+  val orgId = context.orgId
+  val query = when {
+    hostId != null -> submissionsQuery(hostId, ReadFilter.UNREAD, null, "", SIDEBAR_COUNT_LIMIT)
+    orgId != null -> workspaceSubmissionsQuery(orgId, ReadFilter.UNREAD, "", SIDEBAR_COUNT_LIMIT)
+    else -> return
+  }
+  val flow = remember(query, context.firestore) { context.firestore.observe(query) }
+  val live by flow.collectAsState(Live.Loading)
+  val count = (live as? Live.Ready)?.value?.size?.takeIf { it > 0 } ?: return
+  val shown = if (count >= SIDEBAR_COUNT_LIMIT) "${SIDEBAR_COUNT_LIMIT - 1}+" else count.toString()
+  Text(
+    shown,
+    style = MaterialTheme.typography.labelSmall,
+    color = MaterialTheme.colorScheme.onPrimary,
+    modifier = Modifier
+      .clip(CircleShape)
+      .background(MaterialTheme.colorScheme.primary)
+      .padding(horizontal = 6.dp)
+      .semantics { contentDescription = "$count unread" }
+      .testTag("inbox-sidebar-count"),
+  )
+}
+
+/** One more than the most the sidebar counts (99+, as the Apple app shows it). */
+private const val SIDEBAR_COUNT_LIMIT = 100
