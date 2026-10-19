@@ -81,7 +81,8 @@ fun main() = runBlocking {
   val only = System.getProperty("aglyn.snapshotOnly")?.split(',')
   val lightOnly = System.getProperty("aglyn.snapshotLightOnly") == "true"
   for ((name, prepare) in states + sweep) {
-    if (only != null && name !in only) continue
+    // snapshotOnly names states; a sweep state passes unless snapshotOnly names sweep states of its own.
+    if (only != null && name !in only && !(name.startsWith("sweep-") && only.none { it.startsWith("sweep-") })) continue
     for ((size, dims) in sizes) {
       if (name == "phone-menu" && size != "phone") continue
       for (dark in if (lightOnly) listOf(false) else listOf(false, true)) {
