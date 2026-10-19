@@ -1,0 +1,213 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * WHAT EACH ORG ROLE MAY DO, AS DATA (AGL-243, AGL-3950).
+ *
+ * The core permission catalog and the core keys each org role holds when
+ * nothing refines it. `org-permissions.ts` builds the console's live
+ * catalog from these (adding the keys plugins declare, with their own role
+ * defaults), and the native apps read the same grants through the generated
+ * contracts, so a native gate (`hosts.create`, `data.manage`) answers as the
+ * console does for a member row that carries no `resolvedPermissions` stamp.
+ *
+ * `ORG_ROLE_GRANTS` in the contracts is this table with every plugin's
+ * declared catalog keys added (`assembleOrgRoleGrants`, run by
+ * `generate:native-contracts` over each plugin's declarations), which is
+ * exactly the set the console's `DEFAULT_ROLE_PERMISSIONS` holds once the
+ * plugins have registered.
+ *
+ * NO IMPORTS, on purpose: the native apps read it through the generated
+ * contracts.
+ */
+
+/** The four org roles. */
+export type OrgRoleName = 'owner' | 'admin' | 'editor' | 'viewer'
+
+/** One key of the org permission catalog. */
+export interface OrgPermissionEntry {
+  key: string
+  label: string
+  description: string
+  /** The plugin that declared it; absent for a core key. */
+  pluginId?: string
+}
+
+/** The catalog and each role's default grants. */
+export interface OrgRoleGrants {
+  /** Every key, in the order the role editor lists them. */
+  permissions: OrgPermissionEntry[]
+  /** The keys each role holds when no custom role or per-member override sets them. */
+  grants: Record<OrgRoleName, string[]>
+}
+
+/** A key a plugin declares into the catalog, as `PluginOrgPermissionDeclaration` carries it. */
+export interface OrgPermissionDeclaration {
+  key: string
+  label: string
+  description: string
+  roleDefaults: Record<OrgRoleName, boolean>
+}
+
+/** A custom role (`orgs/{orgId}/roles/{roleId}`) or a member's overrides: explicit verdicts per key. */
+export interface OrgPermissionLayer {
+  permissions?: Record<string, boolean>
+}
+
+export const ORG_ROLE_NAMES: readonly OrgRoleName[] = ['owner', 'admin', 'editor', 'viewer']
+
+/**
+ * The core keys, in display order for role editors. Every key here is
+ * enforced server-side (`apps/console/specs/org-permissions-are-enforced.spec.ts`).
+ */
+export const CORE_ORG_PERMISSION_ENTRIES: readonly OrgPermissionEntry[] = [
+  {
+    key: 'org.settings',
+    label: 'Organization settings',
+    description: 'Rename the organization, change its slug, transfer it.',
+  },
+  {
+    key: 'org.auditLog',
+    label: 'Activity & audit log',
+    description: 'See the organization activity feed.',
+  },
+  {
+    key: 'billing.view',
+    label: 'View billing',
+    description: 'See the plan, usage meters, and invoices.',
+  },
+  {
+    key: 'billing.manage',
+    label: 'Manage billing',
+    description: 'Change plans, buy add-ons, update payment details.',
+  },
+  {
+    key: 'members.manage',
+    label: 'Manage members',
+    description: 'Invite, remove, and re-role organization members.',
+  },
+  {
+    key: 'hosts.create',
+    label: 'Create sites',
+    description: 'Create new sites in the organization.',
+  },
+  {
+    key: 'hosts.delete',
+    label: 'Delete sites',
+    description: 'Delete sites the member can access.',
+  },
+  {
+    key: 'data.manage',
+    label: 'Manage data',
+    description: 'Create, edit, and delete organization datasets.',
+  },
+  {
+    key: 'marketplace.publish',
+    label: 'Publish to marketplace',
+    description: 'Publish listings under the organization profile.',
+  },
+  {
+    key: 'plugins.install',
+    label: 'Install plugins',
+    description: 'Install or remove marketplace plugins.',
+  },
+]
+
+const CORE_KEYS = CORE_ORG_PERMISSION_ENTRIES.map((entry) => entry.key)
+
+/**
+ * The core keys each org role holds when nothing refines it: owners and
+ * admins hold every core key (owner-only acts like deleting the
+ * organization stay role-checked, not permission-checked); editors work on
+ * content and see no money or roster controls; viewers read only.
+ */
+export const CORE_ORG_ROLE_GRANTS: Readonly<Record<OrgRoleName, readonly string[]>> = {
+  owner: CORE_KEYS,
+  admin: CORE_KEYS,
+  editor: ['data.manage', 'marketplace.publish', 'plugins.install'],
+  viewer: [],
+}
+
+/** The core's catalog and grants; the contracts' value adds the plugins' keys. */
+export const ORG_ROLE_GRANTS: OrgRoleGrants = {
+  permissions: CORE_ORG_PERMISSION_ENTRIES.map((entry) => ({ ...entry })),
+  grants: {
+    owner: [...CORE_ORG_ROLE_GRANTS.owner],
+    admin: [...CORE_ORG_ROLE_GRANTS.admin],
+    editor: [...CORE_ORG_ROLE_GRANTS.editor],
+    viewer: [...CORE_ORG_ROLE_GRANTS.viewer],
+  },
+}
+
+/**
+ * The catalog with plugins' declared keys after the core ones, each role
+ * holding a declared key when its declaration's `roleDefaults` says so. A
+ * declaration naming a core key is refused, as the console's catalog refuses
+ * it: the core key keeps its meaning and defaults.
+ */
+export function assembleOrgRoleGrants(
+  core: OrgRoleGrants,
+  declarations: readonly (OrgPermissionDeclaration & { pluginId?: string })[],
+): OrgRoleGrants {
+  const permissions = [...core.permissions]
+  const grants = Object.fromEntries(ORG_ROLE_NAMES.map((role) => [role, [...core.grants[role]]])) as Record<
+    OrgRoleName,
+    string[]
+  >
+  const taken = new Set(permissions.map((entry) => entry.key))
+  for (const declaration of declarations) {
+    if (!declaration?.key || taken.has(declaration.key)) continue
+    taken.add(declaration.key)
+    permissions.push({
+      key: declaration.key,
+      label: declaration.label,
+      description: declaration.description,
+      ...(declaration.pluginId ? { pluginId: declaration.pluginId } : {}),
+    })
+    for (const role of ORG_ROLE_NAMES) {
+      if (declaration.roleDefaults?.[role] === true) grants[role].push(declaration.key)
+    }
+  }
+  return { permissions, grants }
+}
+
+/**
+ * A member's effective permissions, as the console's `resolveOrgPermissions`
+ * answers them: the role's defaults, then the custom role's explicit
+ * verdicts (when the member has one), then the member's own overrides,
+ * later layers winning key by key, over the catalog's keys only. A missing
+ * role reads as viewer; a role the catalog does not know holds nothing.
+ */
+export function rolePermissions(
+  catalog: OrgRoleGrants,
+  role: string | null | undefined,
+  customRole?: OrgPermissionLayer | null,
+  overrides?: OrgPermissionLayer | null,
+): Record<string, boolean> {
+  const keys = catalog.permissions.map((entry) => entry.key)
+  const name = role ?? 'viewer'
+  const held = new Set((catalog.grants as Record<string, string[] | undefined>)[name] ?? [])
+  const out: Record<string, boolean> = Object.fromEntries(keys.map((key) => [key, held.has(key)]))
+  for (const layer of [customRole, overrides]) {
+    const values = layer?.permissions
+    if (!values) continue
+    for (const key of keys) {
+      if (typeof values[key] === 'boolean') out[key] = values[key]
+    }
+  }
+  return out
+}
