@@ -199,7 +199,8 @@ class ShellUiTest {
     )
     // Both land on their own coroutines; a loaded test machine can take seconds, so wait generously rather than flake.
     waitUntil(timeoutMillis = 10_000) { "/api/auth/send-verification" in calls }
-    // The pending workspace is written beside the verification send, on its own coroutine: wait for it rather than race it.
+    // The verify screen sends its email as soon as the account is signed in, while sign-up is still holding the
+    // workspace name, so the write is awaited on its own rather than read the instant the email call lands.
     waitUntil(timeoutMillis = 10_000) { merges.any { it.startsWith("users/u2") && "pendingSignUpWorkspace" in it } }
   }
 
