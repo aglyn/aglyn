@@ -53,6 +53,9 @@ class CrmCurrencyFieldTest {
     }
     assertTrue(fieldProblems(listOf(jpy.spec), mapOf(jpy.spec.key to "¥1,500")).isEmpty())
     assertEquals("Enter an amount", fieldProblems(listOf(jpy.spec), mapOf(jpy.spec.key to "lots"))[jpy.spec.key])
+
+    // The create sheet sends the value nested under `custom`, in minor units, in the ONE contacts-create call.
+    assertEquals(mapOf("budget" to 1500L), createdFields(listOf(jpy), mapOf(jpy.spec.key to "¥1,500"))["custom"])
   }
 
   /** The field drawer's types and currencies are the console's (`CONTACT_FIELD_TYPES`, the deal currencies). */

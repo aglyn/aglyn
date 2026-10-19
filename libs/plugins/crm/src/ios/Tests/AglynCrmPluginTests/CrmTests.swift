@@ -76,6 +76,10 @@ final class CrmTests: XCTestCase {
     XCTAssertEqual(fieldDisplay(usd.spec, "1250.50"), 1250.5.formatted(.currency(code: "USD").precision(.fractionLength(2))))
     XCTAssertTrue(fieldProblems([jpy.spec], [jpy.spec.key: "¥1,500"]).isEmpty)
     XCTAssertEqual(fieldProblems([jpy.spec], [jpy.spec.key: "lots"])[jpy.spec.key], "Enter an amount")
+
+    // The create sheet sends the value nested under `custom`, in minor units, in the ONE contacts-create call.
+    let created = createdFields([jpy], [jpy.spec.key: "¥1,500"])
+    XCTAssertEqual((created["custom"] as? [String: Any])?["budget"] as? Int64, 1500)
   }
 
   /// The field drawer's types and currencies are the console's (`CONTACT_FIELD_TYPES`, the deal currencies).
