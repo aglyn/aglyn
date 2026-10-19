@@ -2333,6 +2333,19 @@ allow read, write: if false;
 match /sendingDomains/{domain} {
 allow read, write: if false;
 }
+
+
+
+
+
+
+
+
+
+match /domainOwnershipClaims/{domain} {
+allow read: if canManageOrg();
+allow write: if false;
+}
 }
 
 

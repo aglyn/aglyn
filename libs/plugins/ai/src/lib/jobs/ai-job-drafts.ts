@@ -436,6 +436,30 @@ export async function aiDraftAllowanceRefusal(
 }
 
 /**
+ * The site's pages against its plan's page count (AGL-3976), counted as the
+ * draft writer counts them (`billableScreenIds` over the screens and the
+ * routing map): `limit` is `null` when the plan sets none. A site import
+ * reads it before it plans its waves and again before each one, so an
+ * import never plans past the plan; the writer still refuses at the limit.
+ */
+export async function readAiScreenRoom(
+  firestore: Firestore,
+  input: { hostId: string; org: Partial<AglynOrgBilling> | null },
+): Promise<{ limit: number | null; used: number }> {
+  const [snapshot, host] = await Promise.all([
+    siblingsOf(draftCollection(firestore, input.hostId, 'screen')).get(),
+    firestore.collection('hosts').doc(input.hostId).get(),
+  ])
+  const rows = siblingRows(snapshot)
+  const used = billableScreenIds(
+    rows.map((row) => ({ id: row.id, kind: row.kind, deletedAt: row.deletedAt })),
+    (host.get('screens') ?? undefined) as never,
+  ).size
+  const { limit } = checkQuota(input.org, 'screensPerHost', used)
+  return { limit: Number.isFinite(limit) ? limit : null, used }
+}
+
+/**
  * A stored instant in milliseconds, whatever wrote it: a Firestore
  * `Timestamp`, a `Date`, a number or an ISO string. `null` when unreadable.
  */

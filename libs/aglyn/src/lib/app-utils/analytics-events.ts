@@ -234,9 +234,10 @@ export interface AnalyticsEventParams {
   site_published: { first_publish?: boolean }
   /**
    * Custom: no GA4 equivalent (AGL-3594). How a person chose to start a new
-   * site in the guided start: the ready-made starter, or AI.
+   * site in the guided start: the ready-made starter, AI, or bringing in the
+   * site they have now (AGL-3976).
    */
-  site_start_choice: { choice: 'starter' | 'ai' }
+  site_start_choice: { choice: 'starter' | 'ai' | 'import' }
   /**
    * Custom: no GA4 equivalent (AGL-3898). The guided start's steps, as a
    * funnel: a step was drawn. `step` is the closed step id (`choose`,

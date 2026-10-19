@@ -9385,6 +9385,17 @@
               "accounts"
             ]
           }
+        ],
+        [
+          {},
+          {
+            "enabledPlugins": [],
+            "disabledPlugins": []
+          }
+        ],
+        [
+          {},
+          {}
         ]
       ]
     },
@@ -27651,6 +27662,97 @@
       "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
       "leadingValue": "NATIVE_NAV_MANIFEST",
       "args": [
+        [
+          "site",
+          [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "bookings",
+            "commerce",
+            "marketplace",
+            "crm",
+            "outreach",
+            "data",
+            "email",
+            "events-calendar",
+            "inbox",
+            "logic",
+            "marketing",
+            "redirects",
+            "workflows",
+            "accounting",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "couriers",
+            "lightbox",
+            "review-platforms",
+            "music",
+            "help-desks",
+            "ad-conversions",
+            "domains"
+          ],
+          true
+        ],
+        [
+          "workspace",
+          [
+            "mui",
+            "forms",
+            "ai",
+            "theme-presets",
+            "funnels",
+            "accounts",
+            "bookings",
+            "commerce",
+            "marketplace",
+            "crm",
+            "outreach",
+            "data",
+            "email",
+            "events-calendar",
+            "inbox",
+            "logic",
+            "marketing",
+            "redirects",
+            "workflows",
+            "accounting",
+            "shipping",
+            "tax-engines",
+            "sales-channels",
+            "marketing-platforms",
+            "fonts",
+            "post-purchase",
+            "fulfillment-networks",
+            "marketplaces",
+            "print-on-demand",
+            "inventory-sync",
+            "delivery-apps",
+            "loyalty",
+            "couriers",
+            "lightbox",
+            "live-chat",
+            "review-platforms",
+            "weglot",
+            "music",
+            "help-desks",
+            "ad-conversions",
+            "domains"
+          ],
+          true
+        ],
         [
           "site",
           [

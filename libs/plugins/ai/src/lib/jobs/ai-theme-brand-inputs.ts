@@ -316,43 +316,126 @@ function deadline(signal: AbortSignal | undefined, ms: number) {
   }
 }
 
-async function readCapped(body: ReadableStream<Uint8Array>, maxBytes: number): Promise<string> {
+/**
+ * The body as text, to `maxBytes`. Past the cap it is cut there, or with
+ * `refuseOver` it is not read at all: `null`, the read canceled.
+ */
+async function readCapped(
+  body: ReadableStream<Uint8Array>,
+  maxBytes: number,
+  refuseOver = false,
+  binary = false,
+): Promise<{ text: string; bytes: number; truncated: boolean; data?: Uint8Array } | null> {
   const reader = body.getReader()
   const chunks: Uint8Array[] = []
   let total = 0
+  let truncated = false
   for (;;) {
     const { done, value } = await reader.read()
     if (done || !value) break
     const room = maxBytes - total
-    if (value.byteLength >= room) {
-      chunks.push(value.subarray(0, room))
+    if (value.byteLength > room) {
       await reader.cancel().catch(() => undefined)
+      if (refuseOver) return null
+      chunks.push(value.subarray(0, room))
+      total += room
+      truncated = true
       break
     }
     chunks.push(value)
     total += value.byteLength
   }
-  const joined = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0))
+  const joined = new Uint8Array(total)
   let offset = 0
   for (const chunk of chunks) {
     joined.set(chunk, offset)
     offset += chunk.byteLength
   }
-  return new TextDecoder().decode(joined)
+  // A picture's bytes are kept as they came (AGL-3976), never decoded as text.
+  if (binary) return { text: '', bytes: total, truncated, data: joined }
+  return { text: new TextDecoder().decode(joined), bytes: total, truncated }
+}
+
+/** Why {@link fetchPublicTextDetailed} read nothing. */
+export type PublicFetchRefusal =
+  /** Not https, a port, credentials, or not a URL at all. */
+  | 'refused-url'
+  /** The name resolves to a private address, or not at all. */
+  | 'private-address'
+  /** A redirect the caller's `redirectAllowed` refused. */
+  | 'redirect-refused'
+  | 'too-many-redirects'
+  /** An answer that was not 2xx; `status` says which. */
+  | 'http-status'
+  /** A 2xx whose content type the caller does not accept. */
+  | 'content-type'
+  /** Past `maxBytes` with `refuseOver` set. */
+  | 'too-large'
+  /** The socket, the clock or the caller's signal ended it. */
+  | 'network'
+
+/**
+ * One shape for both outcomes, read by `ok`: a union does not narrow across
+ * this repo's library boundaries (`strictNullChecks` is off), so a caller
+ * could not reach either arm's fields.
+ */
+export interface PublicFetchResult {
+  ok: boolean
+  /** The address read, after redirects; or the one that was refused. */
+  url: string
+  /** Empty unless `ok`. */
+  text: string
+  bytes: number
+  /** Cut at `maxBytes` (never with `refuseOver`). */
+  truncated: boolean
+  contentType: string
+  /** Null when `ok`. */
+  refusal: PublicFetchRefusal | null
+  status?: number
+  /** Where a refused redirect pointed. */
+  location?: string
+  /** The body's bytes, with `binary`; absent otherwise. */
+  data?: Uint8Array
+}
+
+function refusedFetch(
+  refusal: PublicFetchRefusal,
+  url: string,
+  extra: { status?: number; location?: string } = {},
+): PublicFetchResult {
+  return { ok: false, url, text: '', bytes: 0, truncated: false, contentType: '', refusal, ...extra }
+}
+
+export interface PublicFetchOptions {
+  maxBytes: number
+  accept: RegExp
+  signal?: AbortSignal
+  timeoutMs?: number
+  /** Sent as `User-Agent`; the runtime's own when absent. */
+  userAgent?: string
+  /** Sent as `Accept`. */
+  acceptHeader?: string
+  /** Asked of every redirect hop before it is followed; the SSRF checks run as well. */
+  redirectAllowed?: (from: URL, to: URL) => boolean
+  /** Refuse a body over `maxBytes` rather than cut it. */
+  refuseOver?: boolean
+  /** Keep the body's bytes as `data` rather than decode them as text (a picture, AGL-3976). */
+  binary?: boolean
 }
 
 /**
  * A public https resource as text, through the plugin fetch proxy's SSRF
  * guard: the host must resolve only to public addresses and the socket is
  * pinned to the address checked; no credentials in the URL and no port but
- * the default; every redirect re-enters the same checks; the body is read to
- * a byte cap under a clock, and only a content type the caller accepts is
- * read at all. `null` for anything that does not hold.
+ * the default; every redirect re-enters the same checks and the caller's own
+ * `redirectAllowed`; the body is read to a byte cap under a clock, and only a
+ * content type the caller accepts is read at all. Says why when it reads
+ * nothing.
  */
-export async function fetchPublicText(
+export async function fetchPublicTextDetailed(
   url: string,
-  options: { maxBytes: number; accept: RegExp; signal?: AbortSignal; timeoutMs?: number },
-): Promise<{ text: string; url: string } | null> {
+  options: PublicFetchOptions,
+): Promise<PublicFetchResult> {
   const { createPinnedDispatcher, resolvePublicIp } = await import('./ai-theme-brand-server')
   let current = url
   for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
@@ -360,12 +443,16 @@ export async function fetchPublicText(
     try {
       parsed = new URL(current)
     } catch {
-      return null
+      return refusedFetch('refused-url', current)
     }
-    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return null
-    if (parsed.port && parsed.port !== '443') return null
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+      return refusedFetch('refused-url', current)
+    }
+    if (parsed.port && parsed.port !== '443') {
+      return refusedFetch('refused-url', current)
+    }
     const pinned = await resolvePublicIp(parsed.hostname)
-    if (!pinned) return null
+    if (!pinned) return refusedFetch('private-address', parsed.toString())
     const dispatcher = createPinnedDispatcher(pinned)
     const clock = deadline(options.signal, options.timeoutMs ?? FETCH_TIMEOUT_MS)
     try {
@@ -376,26 +463,66 @@ export async function fetchPublicText(
         redirect: 'manual' as const,
         signal: clock.signal,
         dispatcher,
-        headers: { Accept: 'text/html, text/css;q=0.9' },
+        headers: {
+          Accept: options.acceptHeader ?? 'text/html, text/css;q=0.9',
+          ...(options.userAgent ? { 'User-Agent': options.userAgent } : {}),
+        },
       }
       const response = await fetch(parsed.toString(), init as RequestInit)
       if (REDIRECT_STATUSES.has(response.status)) {
+        await response.body?.cancel().catch(() => undefined)
         const location = response.headers.get('location')
-        if (!location) return null
-        current = new URL(location, parsed).toString()
+        if (!location) {
+          return refusedFetch('http-status', parsed.toString(), { status: response.status })
+        }
+        let next: URL
+        try {
+          next = new URL(location, parsed)
+        } catch {
+          return refusedFetch('redirect-refused', parsed.toString(), { location })
+        }
+        if (options.redirectAllowed && !options.redirectAllowed(parsed, next)) {
+          return refusedFetch('redirect-refused', parsed.toString(), { location: next.toString() })
+        }
+        current = next.toString()
         continue
       }
-      if (!response.ok || !response.body) return null
-      if (!options.accept.test(response.headers.get('content-type') ?? '')) return null
-      return { text: await readCapped(response.body, options.maxBytes), url: parsed.toString() }
+      if (!response.ok || !response.body) {
+        await response.body?.cancel().catch(() => undefined)
+        return refusedFetch('http-status', parsed.toString(), { status: response.status })
+      }
+      const contentType = response.headers.get('content-type') ?? ''
+      if (!options.accept.test(contentType)) {
+        await response.body.cancel().catch(() => undefined)
+        return refusedFetch('content-type', parsed.toString(), { status: response.status })
+      }
+      const declared = Number(response.headers.get('content-length') ?? '')
+      if (options.refuseOver && Number.isFinite(declared) && declared > options.maxBytes) {
+        await response.body.cancel().catch(() => undefined)
+        return refusedFetch('too-large', parsed.toString(), { status: response.status })
+      }
+      const body = await readCapped(response.body, options.maxBytes, options.refuseOver, options.binary === true)
+      if (!body) {
+        return refusedFetch('too-large', parsed.toString(), { status: response.status })
+      }
+      return { ok: true, url: parsed.toString(), contentType, refusal: null, ...body }
     } catch {
-      return null
+      return refusedFetch('network', parsed.toString())
     } finally {
       clock.done()
       await dispatcher.close().catch(() => undefined)
     }
   }
-  return null
+  return refusedFetch('too-many-redirects', current)
+}
+
+/** {@link fetchPublicTextDetailed}, answering `null` for anything it refused. */
+export async function fetchPublicText(
+  url: string,
+  options: { maxBytes: number; accept: RegExp; signal?: AbortSignal; timeoutMs?: number },
+): Promise<{ text: string; url: string } | null> {
+  const result = await fetchPublicTextDetailed(url, options)
+  return result.ok ? { text: result.text, url: result.url } : null
 }
 
 /**

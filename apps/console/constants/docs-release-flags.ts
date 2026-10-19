@@ -307,6 +307,26 @@ export const FLAG_DOC_PAGES: Partial<
     },
   ],
 
+  // AGL-3976. The flag closes "Bring my site": the ownership and crawl doors
+  // (AGL-3974), the import job's admission and each of its waves, and the
+  // choice card on Create site. The one page about it is ABOUT the feature,
+  // so it takes the admonition, whole-file, and is `unlisted: true` until the
+  // flag is on.
+  release_ai_site_import: [
+    {
+      path: 'docs/ai/bring-my-site.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    // The guided start's page names the third card beside the two it
+    // documents, and discloses the rollout in the same sentence.
+    {
+      path: 'docs/ai/start-with-ai.md',
+      disclosure: [/\*\*Bring my site\*\* \(rolling out, not yet available\) is a third card/],
+      checkNoPriceClaim: true,
+    },
+  ],
+
   // AGL-3614. The flag closes the organization's Accounting tab, and each of
   // the three guides is ABOUT connecting one ledger to it, so all take the
   // admonition, whole-file. They are also `unlisted: true` until the flag is

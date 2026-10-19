@@ -46,6 +46,7 @@ export type ReleaseFlagKey =
   | 'release_video_uploads'
   | 'release_video_delivery'
   | 'release_ai_generative'
+  | 'release_ai_site_import'
   | 'release_crm_assist_whole_record'
   | 'release_ai_site_inspiration'
   | 'release_ad_audience_sync'
@@ -195,6 +196,24 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'on the same ANTHROPIC_API_KEY and under the same subprocessor ' +
       'disclosure as Assist (AGL-1909).',
     defaultEnabled: true,
+  },
+  // "Bring my site" (AGL-3973): proving a workspace owns a website, and the
+  // crawl that reads it once it has. OFF by default so a code change can
+  // never be what releases it; the doors answer 404 while it is off, with a
+  // staff preview. Its own flag rather than `release_ai_generative`, because
+  // reading someone's website is a different thing to disclose than
+  // writing from a brief.
+  {
+    key: 'release_ai_site_import',
+    label: 'Bring my site',
+    description:
+      'Bring an existing website into a workspace on a paid plan (AGL-3973): ' +
+      'the workspace proves it owns the domain (a DNS record, a home page ' +
+      'meta tag, or a code emailed to an address at the domain), then ' +
+      'AglynBot reads the site within robots.txt, same-origin only, under ' +
+      'page, byte and time budgets. OFF by default: the ownership and crawl ' +
+      'doors answer 404 while it is off.',
+    defaultEnabled: false,
   },
   // What CRM assistance hands the model provider, not whether it runs:
   // `release_ai_generative` opens the doors, this widens what a record sends
