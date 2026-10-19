@@ -101,6 +101,13 @@ const PLATFORM_SENDERS: Record<string, string> = {
     'metered as platform mail (`meterPlatformEmail`). It was a console route ' +
     'until AGL-3080 moved it into the CRM, which changed nothing about who ' +
     'the mail is from.',
+  [join('libs', 'plugins', 'domains', 'src', 'lib', 'server', 'domain-emails.ts')]:
+    "A bought domain's lifecycle mail — registered, renewing, renewed, " +
+    "failed, expiring (AGL-3962) — to the workspace's own owners and admins. " +
+    "The recipient is Aglyn's customer, about a name Aglyn registered and " +
+    "charged them for, never a site's visitor or contact; the send carries " +
+    'the workspace system brand and is metered as platform mail ' +
+    '(`meterPlatformEmail`).',
   [join('libs', 'plugins', 'crm', 'src', 'lib', 'server', 'task-reminders-route.ts')]:
     "A task's reminder to the workspace member it is assigned to — Aglyn's " +
     "customer, never a site's visitor or contact — metered as platform mail " +
@@ -279,9 +286,16 @@ describe('the platform senders are named, not inferred', () => {
    * platform sender that used to sit outside this tree now sits inside it.
    * That is a move, not a new kind of sender; a sixth entry is the moment to
    * ask whether the sweep still means anything.
+   *
+   * Asked at the sixth (AGL-3962): the domains plugin's lifecycle mail is
+   * Aglyn writing to its own customer about a name Aglyn registered and
+   * charged for, under its own catalog keys, so it cannot ride core's
+   * single-template `sendOrgMemberNotice`. Every other send in the tree
+   * still declares `tenant`, so the sweep still holds; a seventh is the
+   * moment to ask again.
    */
   it('keeps the exemption list short', () => {
-    expect(Object.keys(PLATFORM_SENDERS).length).toBeLessThan(6)
+    expect(Object.keys(PLATFORM_SENDERS).length).toBeLessThan(7)
   })
 })
 

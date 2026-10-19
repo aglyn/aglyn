@@ -64,7 +64,8 @@
 //
 // ── HOW IT DECIDES ────────────────────────────────────────────────────────
 //
-// A path is COVERED when its file calls `logHostActivity(` or `logOrgActivity(`,
+// A path is COVERED when its file calls `logHostActivity(` or `logOrgActivity(`
+// (or a helper that does, see `LOG_CALL`),
 // or when it is classified in `NOT_LOGGED` with a written reason. A path that
 // is neither fails the check. `NOT_LOGGED` is ratcheted: its size may fall and
 // may not rise, so removing a reason is free and adding one is a deliberate,
@@ -86,7 +87,14 @@ const args = process.argv.slice(2)
 const SELF_TEST = args.includes('--self-test')
 
 /** The call that satisfies the check, in either scope. */
-const LOG_CALL = /\blog(?:Host|Org)Activity\s*\(/
+// The two custom-domain helpers write the site's entry themselves (AGL-3961):
+// `connectHostCustomDomain` logs "Attached a custom domain" at its one
+// terminal success and `disconnectHostCustomDomain` logs "Released the custom
+// domain", so a route that delegates to either is covered the way one that
+// calls the logger is — and a second entry from the route would put two rows
+// on one act.
+const LOG_CALL =
+  /\blog(?:Host|Org)Activity\s*\(|\b(?:connect|disconnect)HostCustomDomain\s*\(/
 
 /**
  * The durable-object mutation surface, listed rather than globbed.

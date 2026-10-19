@@ -1285,6 +1285,19 @@ describe('hosts', () => {
         cnameDetachmentPending: false,
       }),
     )
+    // The `www.`/apex twin is a name claimed for the site in the same
+    // transaction as `cname` (AGL-3961); a forged one reserves another
+    // site's address, and clearing its retry flag strands the redirect.
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), {
+        cnameTwin: 'www.someone-elses.example',
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        cnameTwinPending: false,
+      }),
+    )
     // Theme provenance is written by the install route; a client rewrite
     // makes `isOverrideForCurrentTheme()` lie about which theme an override
     // belongs to. The Enterprise project pointers have no client writer.
@@ -14504,6 +14517,61 @@ describe('ShipStation credentials are server-only (AGL-3613)', () => {
 })
 
 /**
+ * One-click DNS sessions (AGL-3963).
+ *
+ * A session names the domain a site asked its DNS provider to point here and
+ * the member who asked, and its id is the hash of the state token the
+ * provider echoes back. The domains plugin's routes and its sweep are its only
+ * reader and writer, on the Admin SDK, so no client — the site's own admin and
+ * staff included — reads, lists or writes one.
+ */
+describe('one-click DNS sessions are server-only (AGL-3963)', () => {
+  const SESSION = 'a'.repeat(64)
+  const session = (db) => doc(db, 'domainConnectSessions', SESSION)
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(session(context.firestore()), {
+        orgId: ORG,
+        hostId: HOST,
+        domain: 'example.com',
+        status: 'started',
+        createdBy: OWNER,
+        createdAtMs: 1,
+      })
+    })
+  })
+
+  it('no client reads or lists a session: not the site admin, not staff, not a visitor', async () => {
+    await mustDeny('the site owner reading a session', getDoc(session(authed(OWNER))))
+    await mustDeny('a site editor reading a session', getDoc(session(authed(EDITOR))))
+    await mustDeny('staff reading a session', getDoc(session(authed(STAFF, { staff: true }))))
+    await mustDeny('a visitor reading a session', getDoc(session(anon())))
+    await mustDeny(
+      'the site owner listing their workspace’s sessions',
+      getDocs(query(collection(authed(OWNER), 'domainConnectSessions'), where('orgId', '==', ORG), limit(10))),
+    )
+  })
+
+  it('no client writes one: the routes start, finish and expire them on the Admin SDK', async () => {
+    await mustDeny(
+      'the site owner marking their own session connected',
+      updateDoc(session(authed(OWNER)), { status: 'connected' }),
+    )
+    await mustDeny(
+      'the site owner minting a session',
+      setDoc(doc(authed(OWNER), 'domainConnectSessions', 'b'.repeat(64)), {
+        orgId: ORG,
+        hostId: HOST,
+        domain: 'example.com',
+        status: 'applied',
+      }),
+    )
+    await mustDeny('staff deleting a session', deleteDoc(session(authed(STAFF, { staff: true }))))
+  })
+})
+
+/**
  * A site's shopping-channel state (AGL-3637).
  *
  * A feed document holds the token that is the only lock on the store's
@@ -14943,5 +15011,46 @@ describe('bundle checkout links are server-only (AGL-3955)', () => {
       updateDoc(linkDoc(authed(STAFF, { staff: true })), { expiresAt: Date.now() + 86_400_000 }),
     )
     await mustDeny('staff deleting a link from the browser', deleteDoc(linkDoc(authed(STAFF, { staff: true }))))
+  })
+})
+
+describe('bought domains are the server’s alone (AGL-3962)', () => {
+  const registrationDoc = (db) => doc(db, 'domainRegistrations', 'testbakery.com')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(registrationDoc(context.firestore()), {
+        domain: 'testbakery.com',
+        orgId: ORG,
+        hostId: HOST,
+        status: 'active',
+        autoRenew: true,
+        costUsd: 11.25,
+      })
+    })
+  })
+
+  it('no member and no staff reads, lists or writes a registration', async () => {
+    const readers = [
+      ['viewer', authed(VIEWER)],
+      ['editor', authed(EDITOR)],
+      ['admin', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]
+    for (const [role, db] of readers) {
+      await mustDeny(`a ${role} reading a registration`, getDoc(registrationDoc(db)))
+      await mustDeny(
+        `a ${role} listing registrations`,
+        getDocs(query(collection(db, 'domainRegistrations'), limit(10))),
+      )
+      await mustDeny(
+        `a ${role} turning a name's renewals off`,
+        updateDoc(registrationDoc(db), { autoRenew: false }),
+      )
+      await mustDeny(
+        `a ${role} moving a name to another workspace`,
+        setDoc(doc(db, 'domainRegistrations', 'other.com'), { orgId: 'theirs', status: 'active' }),
+      )
+    }
   })
 })

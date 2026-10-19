@@ -15,29 +15,16 @@
  * limitations under the License.
  */
 
+import { checkEntitlement, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
-  checkEntitlement,
-  pluginRequestFromWeb,
-  runPluginEventHandlers,
-} from '@aglyn/aglyn/server'
-import {
-  attachProjectDomain,
-  domainProvider,
-  domainStateServes,
+  connectHostCustomDomain,
   emailUnverifiedResponse,
   firebaseAdmin,
-  flagLookalikeCustomDomain,
   getOrgForHost,
   isImpersonationSession,
   lockdownRefusal,
-  logHostActivity,
-  projectDomainStatus,
-  syncHostProjectionForMembers,
   validatePlatformDomain,
 } from '@aglyn/tenant-data-admin'
-// Shared with the AGL-2010 completer cron so there is exactly one
-// implementation of the edge redirect. Moved out of this file unchanged.
-import { upsertSubdomainRedirect } from '../../../../utils/server/subdomain-redirect'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -143,198 +130,34 @@ async function handler(request: Request): Promise<Response> {
       }, { status: 403 })
     }
 
-    // Cname uniqueness (AGL-166): middleware resolution maps hostname ->
-    // host 1:1; a duplicate would make it ambiguous.
-    //
-    // Claiming the domain and persisting `host.cname` happen in ONE
-    // transaction (AGL-743). The write used to be a client-side `updateDoc`
-    // that ran BEFORE this check, so losing the 409 still left the losing host
-    // holding the domain — and `get-host.ts` then resolved the duplicate by
-    // Firestore document order, i.e. one org could be served on another org's
-    // domain. A cross-document invariant cannot be enforced from the client, so
-    // this route is now the only writer of `cname`.
-    const firestore = firebaseAdmin.app().firestore()
-    const claimed = await firestore.runTransaction(async (tx) => {
-      const duplicates = await tx.get(
-        firestore.collection('hosts').where('cname', '==', domain).limit(2),
-      )
-      if (duplicates.docs.some((docSnapshot) => docSnapshot.id !== hostId)) {
-        return false
-      }
-      tx.set(hostSnapshot.ref, { cname: domain }, { merge: true })
-      return true
-    })
-    if (!claimed) {
-      return Response.json({ error: 'That domain is already connected to another site' }, { status: 409 })
-    }
-    // Every member's row of this site carries the domain for the Sites list's
-    // search and its Custom domain filter (AGL-3321, `membershipRow`), so the
-    // rows follow the write. Best-effort, as the rename's re-sync is: a row
-    // left behind is re-derived by the next re-sync of this site.
-    {
-      const orgId = String(hostSnapshot.get('orgId') ?? '')
-      if (orgId) await syncHostProjectionForMembers(orgId, hostId).catch(() => undefined)
-      // A domain that wears a brand (`paypal-secure.com`) goes to staff in
-      // the abuse queue — flagged, not refused (AGL-3356). Never throws.
-      await flagLookalikeCustomDomain({ hostId, orgId: orgId || null, domain })
-    }
-
-    // Ask the provider whether this deployment can register a name at all,
-    // rather than testing one vendor's credentials. A self-host behind its own
-    // proxy answers yes; a deployment that leaves names to somebody else
-    // answers no, and the wizard says so instead of reporting an outage.
-    const notConfigured = async () => {
-      // Backfill path (AGL-166): remember the attachment never happened
-      // so the wizard can show it honestly and offer a retry.
-      await hostSnapshot.ref
-        .set({ cnameAttachmentPending: true }, { merge: true })
-        .catch(() => undefined)
-      return Response.json({
-        error:
-          'Domain attachment is not configured on this deployment ' +
-          '(no domain provider — set AGLYN_DOMAIN_PROVIDER).',
-      }, { status: 501 })
-    }
-    if (!domainProvider().configured('tenant')) return await notConfigured()
-
-    // The `already-exists` tolerance lives in the provider, not here: a name
-    // already registered is success for a create path and a retry alike, and a
-    // second copy of that judgement at the door is a second copy to drift.
-    const attach = await attachProjectDomain(domain, {}, 'tenant')
-    if (attach.outcome === 'skipped') {
-      // Configured, and still nothing registered — a provider that does not
-      // manage this particular name. Same honest answer as no provider at all.
-      return await notConfigured()
-    }
-    if (attach.outcome === 'failed') {
-      await hostSnapshot.ref
-        .set({ cnameAttachmentPending: true }, { merge: true })
-        .catch(() => undefined)
-      return Response.json(
-        { error: attach.detail ?? 'Attach failed at the platform' },
-        { status: 502 },
-      )
-    }
-
-    // What the registration said is not what the customer gets (AGL-1913).
-    //
-    // Two outcomes come back from a SUCCESSFUL add and mean the domain serves
-    // nothing:
-    //
-    //  - `already-exists` was tolerated above as idempotency, but it is also
-    //    the answer when the name is registered to a DIFFERENT deployment —
-    //    including one outside this account. `projectDomainStatus` asks whether
-    //    the name is on OUR deployment rather than inferring it from the
-    //    tolerated outcome, so the tolerance stops doubling as a green light
-    //    for a domain we do not hold.
-    //  - A provider accepts a name whose apex belongs to another account and
-    //    then withholds routing and the certificate until a TXT challenge is
-    //    answered. That returned `attached: true` and a green chip forever.
-    //
-    // `unknown`/`skipped` fall through to the previous behaviour: a status API
-    // that could not answer must not block an otherwise-successful attach.
-    const status = await projectDomainStatus(domain, { scope: 'tenant' })
-    // `certificate-pending` is NOT serving (AGL-1996). It used to count as
-    // serving, which contradicted the comment on the redirect below in the
-    // one case that comment describes: a domain Vercel has accepted and
-    // routed but for which no certificate exists yet. Treating it as live
-    // deleted `cnameAttachmentPending` and registered the edge redirect, so
-    // the subdomain stopped serving (it now redirects) and the destination
-    // answered with a TLS error — the site lost BOTH addresses, which is
-    // exactly the outcome the redirect guard was written to prevent.
-    //
-    // A cert normally issues in seconds, so the honest state is "not yet",
-    // not "no". `admin/finish-domain-attachments` re-probes and completes it
-    // without a human (AGL-2010) — the two changes only make sense together,
-    // because without the sweeper this would strand every new domain on the
-    // manual Re-attach button.
-    //
-    // The predicate itself now lives beside `projectDomainStatus` as
-    // `domainStateServes` (AGL-2011) rather than inline here — it had two
-    // hand-kept copies, and the staff re-attach at `/api/admin/host` would
-    // have been a third.
-    const serves = domainStateServes(status.state)
-    if (status.state === 'not-attached') {
-      await hostSnapshot.ref
-        .set({ cnameAttachmentPending: true }, { merge: true })
-        .catch(() => undefined)
-      return Response.json({
-        error:
-          'That domain is already registered to another account on our ' +
-          'hosting platform, so it could not be attached. Contact support ' +
-          'with the domain name.',
-        state: status.state,
-      }, { status: 409 })
-    }
-    await hostSnapshot.ref
-      .set(
-        {
-          cnameAttachmentPending: serves
-            ? firebaseAdmin.firestore.FieldValue.delete()
-            : // Not a lie about the attach: it landed. But the field is what
-              // `liveCustomDomain` reads to decide whether it is safe to send
-              // visitors here, and a domain awaiting an ownership challenge or
-              // pointed elsewhere is exactly what that guard exists for.
-              true,
-        },
-        { merge: true },
-      )
-      .catch(() => undefined)
-
-    // Query-preserving edge redirect from the platform subdomain (AGL-1273).
-    //
-    // Only once the domain actually serves. Registering it against a domain
-    // that does not is how a working site loses BOTH its addresses: the
-    // subdomain stops serving because it now redirects, and the destination
-    // has no certificate and no routing. The app-level redirect already
-    // refuses on `cnameAttachmentPending` (`liveCustomDomain`); this is the
-    // edge-level twin of that refusal, which had none.
-    const subdomain = String(hostSnapshot.get('subdomain') ?? '')
-      .trim()
-      .toLowerCase()
-    if (subdomain && serves) {
-      const redirected = await upsertSubdomainRedirect({
-        subdomain,
-        target: domain,
-      }).catch(() => false)
-      await hostSnapshot.ref
-        .set(
-          redirected
-            ? {
-                subdomainRedirectPending:
-                  firebaseAdmin.firestore.FieldValue.delete(),
-              }
-            : { subdomainRedirectPending: true },
-          { merge: true },
-        )
-        .catch(() => undefined)
-    }
-    // The site's public address changed hands (AGL-118). One entry, at the
-    // single terminal success — the earlier returns are refusals and a
-    // pending state, and a log line on either would record an attachment that
-    // did not happen.
-    await logHostActivity(
-      hostId,
-      { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
-      'Attached a custom domain',
-      { type: 'host', id: hostId, name: domain },
-    )
-    // Plugins that register the domain somewhere of their own — commerce's
-    // Stripe payment method domains, so Apple Pay shows on it (AGL-3629).
-    // After the claim and the attach, so the name is this site's; isolated,
-    // so a plugin that fails cannot fail the connect.
-    await runPluginEventHandlers('host.domain.attached', {
-      orgId: String(hostSnapshot.get('orgId') ?? '') || null,
+    // Cname uniqueness (AGL-166), the attach, its status probe, the edge
+    // redirect, the activity entry and the plugin event all live in
+    // `connectHostCustomDomain` (AGL-3961), so a plugin that bought the name
+    // connects it through exactly this claim. Authorization stays here: the
+    // admin role, lockdown and the plan were checked above.
+    const connected = await connectHostCustomDomain({
       hostId,
       domain,
+      actor: {
+        uid: decoded.uid,
+        email: decoded.email ? String(decoded.email) : null,
+      },
     })
+    if (connected.ok === 'refused') {
+      return Response.json(
+        connected.state
+          ? { error: connected.error, state: connected.state }
+          : { error: connected.error },
+        { status: connected.status },
+      )
+    }
     return Response.json({
       attached: true,
       // The wizard renders these rather than a bare tick: which of "still
       // issuing", "prove ownership", and "DNS points elsewhere" it is.
-      state: status.state,
-      verification: status.verification,
-      conflicts: status.conflicts,
+      state: connected.state,
+      verification: connected.verification,
+      conflicts: connected.conflicts,
     }, { status: 200 })
   } catch (error) {
     // A refused credential is a 401, not a fault of ours (AGL-1993). Null

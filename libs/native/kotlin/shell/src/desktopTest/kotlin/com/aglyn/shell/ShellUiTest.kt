@@ -187,7 +187,9 @@ class ShellUiTest {
       calls.take(3),
     )
     waitUntil(timeoutMillis = 3_000) { "/api/auth/send-verification" in calls }
-    assertEquals(true, merges.any { it.startsWith("users/u2") && "pendingSignUpWorkspace" in it })
+    // The verify screen sends its email as soon as the account is signed in, while sign-up is still holding the
+    // workspace name, so the write is awaited on its own rather than read the instant the email call lands.
+    waitUntil(timeoutMillis = 3_000) { merges.any { it.startsWith("users/u2") && "pendingSignUpWorkspace" in it } }
   }
 
   @Test
