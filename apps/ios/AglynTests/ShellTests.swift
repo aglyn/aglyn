@@ -62,6 +62,24 @@ final class ShellTests: XCTestCase {
     XCTAssertEqual(navigation.paths[.home] ?? [], [])
   }
 
+  /// Decision 5: a white-label workspace's brand color is the accent while you are in it (switch-off-able), never a
+  /// picked or logo-derived color, never a brand color the workspace is not white-label for; your own accent wins.
+  func testOnlyAWhiteLabelBrandBecomesTheAccent() {
+    let theme = ContractValues.shared.defaultAppTheme
+    var mine = theme
+    mine.accent = "#E040FB"
+    let brand = resolveWorkspaceColor(picked: nil, brandColor: "#0F7B6C", logoColor: nil, useWorkspaceBrand: true)
+    let brandOff = resolveWorkspaceColor(picked: nil, brandColor: "#0F7B6C", logoColor: nil, useWorkspaceBrand: false)
+    let picked = resolveWorkspaceColor(picked: "#FF6D00", brandColor: "#0F7B6C", logoColor: nil, useWorkspaceBrand: true)
+    let logo = resolveWorkspaceColor(picked: nil, brandColor: nil, logoColor: "#123456", useWorkspaceBrand: true)
+    XCTAssertEqual(ThemeApplier.accent(theme, workspace: brand, whiteLabel: true), "#0F7B6C")
+    XCTAssertNil(ThemeApplier.accent(theme, workspace: brand, whiteLabel: false))
+    XCTAssertNil(ThemeApplier.accent(theme, workspace: brandOff, whiteLabel: true))
+    XCTAssertNil(ThemeApplier.accent(theme, workspace: picked, whiteLabel: true))
+    XCTAssertNil(ThemeApplier.accent(theme, workspace: logo, whiteLabel: true))
+    XCTAssertEqual(ThemeApplier.accent(mine, workspace: brand, whiteLabel: true), "#E040FB")
+  }
+
   /// Firebase Auth's app-delegate proxy hands the APNs device token only to a delegate class that implements the
   /// callback itself, and SwiftUI's forwards it to `PushAppDelegate`: with the proxy on, the token never reaches `PushCenter`.
   func testBothAppsKeepFirebasesAppDelegateProxyOff() throws {

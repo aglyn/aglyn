@@ -94,11 +94,8 @@ enum ThemeApplier {
   @discardableResult
   static func apply(_ prefs: AppThemePrefs, model: AppModel) -> String {
     let workspace = model.workspaceColor(model.workspace?.org?.id)
-    // A white-label workspace's brand color is the accent while you are in it (switch-off-able); your own accent wins.
-    let accent: String? =
-      prefs.accent != "theme"
-      ? prefs.accent
-      : (workspace.source == .brand && workspace.tintsApp ? workspace.color : nil)
+    let whiteLabel = model.orgAccess.features(["whiteLabel"])["whiteLabel"] == true
+    let accent = accent(prefs, workspace: workspace, whiteLabel: whiteLabel)
     let scale: CGFloat =
       switch prefs.textSize {
       case .small: 0.92
@@ -113,6 +110,15 @@ enum ThemeApplier {
       tintedSidebar: prefs.sidebarStyle != .plain, textScale: scale)
     return [prefs.theme.rawValue, accent ?? "theme", prefs.density.rawValue, prefs.sidebarStyle.rawValue, prefs.textSize.rawValue]
       .joined(separator: "|")
+  }
+
+  /// The accent in force (Zach's decision 5, 10/18): your own accent when you picked one; else, in a white-label
+  /// workspace with "Use each workspace's brand" on, its brand color (`brandingProfile.primaryColor`, which the console
+  /// reads only for a white-label workspace); else the theme's. A picked or logo-derived workspace color never becomes
+  /// the accent: it colors the rail tile and the sidebar's wash only.
+  static func accent(_ prefs: AppThemePrefs, workspace: WorkspaceColor, whiteLabel: Bool) -> String? {
+    if prefs.accent != "theme" { return prefs.accent }
+    return whiteLabel && workspace.source == .brand && workspace.tintsApp ? workspace.color : nil
   }
 
   /// The color scheme a window takes: Night is dark in both; otherwise the appearance's.
