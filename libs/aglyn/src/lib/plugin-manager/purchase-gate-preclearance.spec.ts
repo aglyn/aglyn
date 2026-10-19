@@ -100,7 +100,7 @@ describe('core.purchase-gate-preclearance (AGL-3955)', () => {
   })
 
   it('refuses an implementation without both halves', () => {
-    expect(() => registerPurchaseGatePreclearance({ check: async () => null } as never, { pluginId: 'x' })).toThrow(
+    expect(() => registerPurchaseGatePreclearance({ check: async (): Promise<null> => null } as never, { pluginId: 'x' })).toThrow(
       /check and consume/,
     )
   })

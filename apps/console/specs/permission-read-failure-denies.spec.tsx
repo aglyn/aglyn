@@ -314,6 +314,9 @@ jest.mock('../hooks/use-branding', () => ({
   default: () => mockBranding,
 }))
 jest.mock('next/navigation', () => ({
+  // The Billing page sends the owner on to the bundle's domain after paying
+  // (AGL-3955), so it reads the router too.
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), prefetch: jest.fn(), back: jest.fn(), refresh: jest.fn() }),
   useSearchParams: () => new URLSearchParams(''),
   // The section rail resolves the active tab from the path (AGL-2501).
   usePathname: () => '/test-org/billing',
