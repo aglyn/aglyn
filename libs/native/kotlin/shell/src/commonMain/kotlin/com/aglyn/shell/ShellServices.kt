@@ -122,7 +122,11 @@ val PLATFORM_ENTRIES: List<com.aglyn.pluginhost.NativePluginManifestEntry> = lis
 const val SITE_PAGES_SCREEN_ID = "site.pages"
 
 /** What the desktop's menu bar can ask of the shell. */
-enum class ShellCommand { FIND, SWITCH_WORKSPACE, SWITCH_SITE, SETTINGS, TOGGLE_SIDEBAR, TOGGLE_RAIL, ADD_ACCOUNT, PIN_1, PIN_2, PIN_3, PIN_4, PIN_5 }
+enum class ShellCommand {
+  FIND, SWITCH_WORKSPACE, SWITCH_SITE, SETTINGS, TOGGLE_SIDEBAR, TOGGLE_RAIL, ADD_ACCOUNT, SHORTCUTS, AI_PANEL, HELP_DOCS,
+  HOME, NOTIFICATIONS, BACK, NEW_TAB, CLOSE_TAB, REOPEN_TAB, TAB_OVERVIEW,
+  PIN_1, PIN_2, PIN_3, PIN_4, PIN_5,
+}
 
 class ShellNavigator(initialTop: String = HOME) {
   var top by mutableStateOf(initialTop)

@@ -126,6 +126,51 @@ class NavShellUiTest {
   }
 
   @Test
+  fun tabsKeepTheirOwnPlaceAndReopenWhenClosed() = runComposeUiTest {
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-overview") > 0 }
+    // One tab draws no strip; the desktop's menu bar opens another (Tab ▸ New tab).
+    assertEquals(0, onAllNodesWithTagCount("tab-strip"))
+    runOnIdle { navigator.command = ShellCommand.NEW_TAB }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-strip") > 0 }
+    onNodeWithTag("tab-0").assertTextContains("Home")
+    onNodeWithTag("nav-group-website").performClick()
+    onNodeWithTag("nav-site-pages").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodes(androidx.compose.ui.test.hasTestTag("tab-1") and androidx.compose.ui.test.hasText("Pages", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+    // The Home tab kept its own place.
+    assertEquals(ShellNavigator.HOME, navigator.top)
+    onNodeWithTag("tab-0").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("home") > 0 }
+    // The pinned Home tab never closes.
+    runOnIdle { navigator.command = ShellCommand.CLOSE_TAB }
+    waitForIdle()
+    onNodeWithTag("tab-1").assertIsDisplayed()
+    // Closing the other tab drops the strip; Reopen brings it back where it was.
+    onNodeWithTag("tab-close-1").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-strip") == 0 }
+    runOnIdle { navigator.command = ShellCommand.REOPEN_TAB }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-1") > 0 }
+    onNodeWithTag("tab-1").assertTextContains("Pages", substring = true)
+    runOnIdle { navigator.command = ShellCommand.TAB_OVERVIEW }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-overview-dialog") > 0 }
+    onNodeWithTag("overview-tab-0").assertIsDisplayed()
+    onNodeWithTag("overview-tab-1").assertIsDisplayed()
+  }
+
+  @Test
+  fun theTitleBarHasHelpAndTheShortcutsList() = runComposeUiTest {
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("title-bar") > 0 }
+    runOnIdle { navigator.command = ShellCommand.SHORTCUTS }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("keyboard-shortcuts") > 0 }
+    onNodeWithText("Reopen the last closed tab").assertIsDisplayed()
+  }
+
+  @Test
   fun addAccountSignsInASecondAccountAndSwitchesBack() = runComposeUiTest {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     val services = testServices(userDoc = emptyMap(), authFor = { prefs ->

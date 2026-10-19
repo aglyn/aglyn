@@ -31,6 +31,8 @@ data class NavItem(
   val actions: List<NativeNavAction>,
   val pluginId: String?,
   val keywords: List<String>,
+  /** Where the row's twin lives in the console, for the page the AI panel says it is reading. */
+  val console: com.aglyn.contracts.NativeNavConsoleRef? = null,
 ) {
   /** Every navigator key that belongs to this row: its own and its sections'. */
   val keys: Set<String> get() = setOf(key) + sections.map { it.key }
@@ -122,6 +124,7 @@ fun navGroups(
         actions = row.actions.orEmpty().filter { available(it.screen) },
         pluginId = row.pluginId,
         keywords = row.keywords.orEmpty(),
+        console = row.console,
       )
     }
     if (rows.isEmpty() && group.dynamic == null) null else NavGroupItem(group.id, group.label, group.foldable, group.dynamic, rows)
@@ -143,4 +146,23 @@ fun phoneTabRows(groups: List<NavGroupItem>, inSite: Boolean): Pair<NavItem?, Na
   val busiest = if (inSite) rows.firstOrNull { it.rowId == "orders" } ?: rows.firstOrNull { it.rowId == "pages" } else rows.firstOrNull { it.rowId == "sites" }
   val inbox = rows.firstOrNull { it.rowId == "inbox" }
   return busiest to inbox
+}
+
+/**
+ * The console path of the page on screen (`/acme/hosts/bakery/products/orders`), what the AI panel's context says it is
+ * reading: the workspace (and site) prefix, then the row's console href where its twin is a plugin tab or section.
+ */
+fun consolePathOf(orgSlug: String?, hostSlug: String?, row: NavItem?): String {
+  val base = buildString {
+    orgSlug?.let { append("/").append(it) }
+    if (orgSlug != null && hostSlug != null) append("/hosts/").append(hostSlug)
+  }
+  val ref = row?.console ?: return base
+  val href = when (ref.surface) {
+    com.aglyn.contracts.NativeNavConsoleSurface.HOST_PLUGIN_TAB, com.aglyn.contracts.NativeNavConsoleSurface.ORG_PLUGIN_TAB,
+    com.aglyn.contracts.NativeNavConsoleSurface.HOST_PLUGIN_SECTION, com.aglyn.contracts.NativeNavConsoleSurface.ORG_PLUGIN_SECTION,
+    -> ref.id
+    else -> ""
+  }
+  return base + href
 }

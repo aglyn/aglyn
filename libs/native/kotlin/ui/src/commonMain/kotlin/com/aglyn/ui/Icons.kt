@@ -89,6 +89,7 @@ import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.SupervisorAccount
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Tab
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.ToggleOn
 import androidx.compose.material.icons.outlined.TravelExplore
@@ -305,6 +306,7 @@ object AglynIcons {
     "sell" to Icons.Outlined.Sell,
     "percent" to Icons.Outlined.Percent,
     "history" to Icons.Outlined.History,
+    "tab" to Icons.Outlined.Tab,
     "refresh" to Icons.Outlined.Refresh,
     "share" to Icons.Outlined.Share,
     "schedule" to Icons.Outlined.Schedule,

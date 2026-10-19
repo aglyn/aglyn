@@ -2,3 +2,6 @@ package com.aglyn.shell
 
 /** Whether the app runs on macOS, where shortcuts take ⌘ (Ctrl everywhere else). */
 internal expect val isMacPlatform: Boolean
+
+/** Whether the window has a menu bar whose shortcuts reach the shell as commands (the desktop), not as key events. */
+internal expect val hasMenuBar: Boolean

@@ -47,6 +47,8 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.isCtrlPressed as isCtrlHeld
+import androidx.compose.ui.input.pointer.isMetaPressed as isMetaHeld
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -70,6 +72,9 @@ import com.aglyn.ui.shellColors
 import com.aglyn.ui.workspaceTint
 import kotlinx.coroutines.launch
 
+/** The slot the AI panel's widget is drawn in (its plugin's, e.g. Assist). */
+internal const val ASSIST_PANEL_SLOT = "assistPanel"
+
 /** Areas whose screens draw their own section chips (the CRM, Emails, Marketing and Marketplace hubs): no tabs over them. */
 internal val SELF_SECTIONED_ROWS = setOf("crm", "emails", "marketing", "marketplace")
 
@@ -83,7 +88,10 @@ val LocalTitleBarInset = androidx.compose.runtime.staticCompositionLocalOf { 0.d
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, uid: String, pendingLink: String?, onLinkOpened: () -> Unit) {
+internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: String, pendingLink: String?, onLinkOpened: () -> Unit) {
+  // The window's tabs (wide windows): the root navigator is the pinned Home tab, and every other tab holds its own place.
+  val tabs = remember(uid) { ShellTabs(root) }
+  val navigator = tabs.active.navigator
   val impersonation by services.auth.impersonation.collectAsState()
   // A support session reads the customer's workspaces but never registers this device's notifications under their account.
   LaunchedEffect(uid) { if (services.auth.impersonation.value == null) services.push.register(uid) }
@@ -195,12 +203,27 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
     )
   }
 
+  fun newTab(key: String = ShellNavigator.HOME) {
+    chrome.closeMenus()
+    tabs.open(services.workspace, workspace.org?.id, workspace.site?.id, key)
+  }
+  fun closeTab(tab: ShellTab = tabs.active) = tabs.close(tab, services.workspace, workspace.org?.id, workspace.site?.id)
+  fun selectTab(tab: ShellTab) {
+    chrome.settingsMode = null
+    tabs.activate(tab, services.workspace, workspace.org?.id, workspace.site?.id)
+  }
+  fun reopenTab() = tabs.reopen(services.workspace, workspace.org?.id, workspace.site?.id)
+
+  // Ctrl/⌘-click on a row opens it in a new tab, on windows wide enough for tabs.
+  val windowInfo = androidx.compose.ui.platform.LocalWindowInfo.current
   fun openRow(row: NavItem) {
+    val mods = windowInfo.keyboardModifiers
+    val newTabClick = wide && row.opensSettings == null && (if (isMacPlatform) mods.isMetaHeld else mods.isCtrlHeld)
     val mode = row.opensSettings
-    if (mode != null) {
-      actions.enterSettings(mode)
-    } else {
-      navigator.select(row.key)
+    when {
+      newTabClick -> newTab(row.key)
+      mode != null -> actions.enterSettings(mode)
+      else -> navigator.select(row.key)
     }
   }
 
@@ -222,16 +245,32 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
     when {
       pin >= 0 -> prefs.pinned.getOrNull(pin)?.let { services.workspace.selectOrg(it); true } ?: false
       event.key == Key.K -> { chrome.oneBox = true; true }
+      event.key == Key.Slash -> { chrome.shortcuts = true; true }
       event.key == Key.LeftBracket -> navigator.back()
       event.key == Key.Comma && !event.isShiftPressed -> { actions.enterSettings(if (inSite) NativeNavListId.SITE_SETTINGS else NativeNavListId.WORKSPACE_SETTINGS); true }
+      // Tabs: the desktop's menu bar owns these keys there, so only a window without one handles them here.
+      !wide || hasMenuBar -> false
+      event.key == Key.T && event.isShiftPressed -> { reopenTab(); true }
+      event.key == Key.T -> { newTab(); true }
+      event.key == Key.W && !tabs.active.pinned -> { closeTab(); true }
+      event.key == Key.Backslash && event.isShiftPressed -> { tabs.overview = true; true }
       else -> false
     }
   }
 
-  LaunchedEffect(navigator.command) {
-    val command = navigator.command ?: return@LaunchedEffect
-    navigator.command = null
+  val help = helpEntries(services, navigator::openWeb, { screen -> chrome.settingsMode = null; navigator.select(NavKeys.of(screen)) }, { chrome.shortcuts = true })
+  // Commands come in on the root navigator (the desktop's menu bar) and act on the tab on screen.
+  LaunchedEffect(root.command) {
+    val command = root.command ?: return@LaunchedEffect
+    root.command = null
     when (command) {
+      ShellCommand.HOME -> { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) }
+      ShellCommand.NOTIFICATIONS -> { chrome.settingsMode = null; navigator.select(ShellNavigator.NOTIFICATIONS) }
+      ShellCommand.BACK -> navigator.back()
+      ShellCommand.NEW_TAB -> if (wide) newTab()
+      ShellCommand.CLOSE_TAB -> if (!tabs.active.pinned) closeTab()
+      ShellCommand.REOPEN_TAB -> if (wide) reopenTab()
+      ShellCommand.TAB_OVERVIEW -> if (wide) tabs.overview = true
       ShellCommand.FIND -> chrome.oneBox = true
       ShellCommand.SWITCH_WORKSPACE -> chrome.picker = PickerStep.WORKSPACE
       ShellCommand.SWITCH_SITE -> chrome.picker = PickerStep.SITE
@@ -239,6 +278,9 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
       ShellCommand.TOGGLE_SIDEBAR -> chrome.toggleSidebar()
       ShellCommand.TOGGLE_RAIL -> chrome.toggleRail()
       ShellCommand.ADD_ACCOUNT -> actions.addAccount()
+      ShellCommand.SHORTCUTS -> chrome.shortcuts = true
+      ShellCommand.AI_PANEL -> chrome.toggleAiPanel()
+      ShellCommand.HELP_DOCS -> help.firstOrNull()?.open?.invoke()
       else -> prefs.pinned.getOrNull(command.ordinal - ShellCommand.PIN_1.ordinal)?.let { orgId ->
         chrome.settingsMode = null
         services.workspace.selectOrg(orgId)
@@ -265,13 +307,14 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
   // Every plain web page a screen opens is pushed onto this stack as the browser screen (AGL-3935).
   com.aglyn.webview.ProvideInAppBrowser(secureTab = services.openHostedPage, openPage = navigator::openWeb) {
     val entries = rememberSaveableStateHolder()
-    val liveKeys = navigator.keys
+    // Each tab's places hold their own saved state.
+    val tabKey = "tab${tabs.activeId}/"
+    val liveKeys = navigator.keys.map { tabKey + it }
     val pushedKeys = remember { mutableSetOf<String>() }
     // A popped screen's saved state goes with it: opening it again starts it fresh.
     LaunchedEffect(liveKeys) {
-      pushedKeys.filter { it !in liveKeys }.forEach(entries::removeState)
-      pushedKeys.retainAll(liveKeys.toSet())
-      pushedKeys += liveKeys.filter { ShellNavigator.isPushedKey(it) }
+      pushedKeys.filter { it.startsWith(tabKey) && it !in liveKeys }.forEach { entries.removeState(it); pushedKeys.remove(it) }
+      pushedKeys += liveKeys.filter { ShellNavigator.isPushedKey(it.removePrefix(tabKey)) }
     }
     val screenTitle = remember(navigator.currentKey) { mutableStateOf<String?>(null) }
     val route = navigator.current
@@ -279,6 +322,9 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
     val title = titleFor(services, navigator, route, row, screenTitle.value)
     // Where the person is, as an account item: what ☆ stars and what Recents remember.
     val here = placeRef(navigator, route, row, title, workspace)
+    // The tab names where it stands: the place, then its site or workspace.
+    val tabTitle = listOfNotNull(title.takeIf { it.isNotBlank() }, workspace.site?.name ?: workspace.org?.name).joinToString(" · ")
+    LaunchedEffect(tabTitle, tabs.activeId) { tabs.active.title = tabTitle.ifBlank { "Home" } }
     LaunchedEffect(here) {
       val item = here ?: return@LaunchedEffect
       // A screen names itself once its data is in; the visit counts once it has stayed a moment.
@@ -298,7 +344,7 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
     }
     val body: @Composable () -> Unit = {
       CompositionLocalProvider(com.aglyn.ui.LocalScreenTitle provides screenTitle) {
-        entries.SaveableStateProvider(navigator.currentKey) {
+        entries.SaveableStateProvider(tabKey + navigator.currentKey) {
           ShellBody(services, context, navigator, workspace, widthClass, uid, route, openInBrowser, banner, screenSession.claims.isStaff)
         }
       }
@@ -315,10 +361,29 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
       },
       onExitMode = { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) },
     )
+    // The AI panel is a plugin's (slot "assistPanel"), shown while that plugin runs here; it reads where the person is.
+    val assist = remember(version) { context.slotWidgets(ASSIST_PANEL_SLOT) }.firstOrNull { it.pluginId in enabled || it.pluginId in orgEnabled }
+    val assistContent: @Composable () -> Unit = {
+      assist?.let { widget ->
+        CompositionLocalProvider(
+          com.aglyn.pluginhost.LocalSlotParams provides mapOf(
+            "route" to consolePathOf(workspace.org?.slug, workspace.site?.subdomain?.ifEmpty { null }, row),
+            "title" to listOfNotNull(title.takeIf { it.isNotBlank() }, workspace.site?.name ?: workspace.org?.name).joinToString(" · "),
+          ),
+        ) { widget.content(context) }
+      }
+    }
     val starred = prefs.starred.filter { it.orgId == workspace.org?.id && (it.hostId == null || it.hostId == workspace.site?.id) }
     val onStar: (com.aglyn.contracts.StarredItem) -> Unit = { item -> openRef(item.toRef()) }
     if (wide) {
-      Row(Modifier.fillMaxSize().then(shortcuts).testTag("nav-shell-wide")) {
+      Column(Modifier.fillMaxSize().then(shortcuts)) {
+      if (tabs.tabs.size > 1) {
+        Box(Modifier.background(shellColors.rail).padding(top = LocalTitleBarInset.current)) {
+          TabStrip(tabs, onSelect = ::selectTab, onClose = { closeTab(it) }, onNew = { newTab() })
+        }
+      }
+      CompositionLocalProvider(LocalTitleBarInset provides if (tabs.tabs.size > 1) 0.dp else LocalTitleBarInset.current) {
+      Row(Modifier.weight(1f).fillMaxWidth().testTag("nav-shell-wide")) {
         if (!chrome.railHidden) {
           Box(Modifier.fillMaxHeight().background(shellColors.rail).padding(top = LocalTitleBarInset.current)) {
             WorkspaceRail(
@@ -349,19 +414,41 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
         }
         Column(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
           if (route !is Route.Web) {
-            WideTitleBar(services, navigator, chrome, title, route != null, uid, here, prefs)
+            WideTitleBar(services, navigator, chrome, title, route != null, uid, here, prefs) {
+              // The desktop opens tabs from its menu bar (Tab ▸ New tab); a tablet has no menu bar, so the title bar offers it.
+              if (tabs.tabs.size == 1 && !hasMenuBar) TitleBarButton("New tab  ${shortcutText("T")}", "tab", "tab-new-title") { newTab() }
+              HelpButton(help)
+              if (assist != null) TitleBarButton(if (chrome.aiPanel) "Close the AI panel" else "AI", "auto_awesome", "ai-panel-toggle") { chrome.toggleAiPanel() }
+            }
             banner()
             sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
           }
-          Box(Modifier.weight(1f).fillMaxWidth()) { body() }
+          Row(Modifier.weight(1f).fillMaxWidth()) {
+            Box(Modifier.weight(1f).fillMaxHeight()) { body() }
+            if (assist != null && chrome.aiPanel && route !is Route.Web) {
+              VerticalDivider(color = shellColors.divider)
+              Column(Modifier.width(380.dp).fillMaxHeight().background(shellColors.sidebar).testTag("ai-panel")) {
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                  Text(assist.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                  TitleBarButton("Close", "close", "ai-panel-close") { chrome.toggleAiPanel(false) }
+                }
+                Box(Modifier.weight(1f)) { assistContent() }
+              }
+            }
+          }
         }
       }
+      }
+      }
+      if (tabs.overview) TabOverview(tabs, onSelect = ::selectTab, onReopen = { tab -> tabs.closed.remove(tab); tabs.closed.add(0, tab); reopenTab() })
     } else {
       PhoneShell(
         services, navigator, chrome, workspace, prefs, user, uid, title, route, scopeGroups, settingsGroups, sidebar, starred,
         sections, banner, actions, enabled, onRow = { openRow(it) }, onStar = onStar, body = body,
+        assistTitle = assist?.title, assistContent = assistContent, help = help,
       )
     }
+    if (chrome.shortcuts) KeyboardShortcutsDialog { chrome.shortcuts = false }
     if (chrome.oneBox) {
       OneBox(
         services, workspace, prefs, enabled, hostAdmin, fullScreen = !wide,
@@ -550,6 +637,7 @@ private fun WideTitleBar(
   uid: String,
   here: com.aglyn.contracts.AccountItemRef?,
   prefs: com.aglyn.core.AccountPreferences,
+  trailing: @Composable () -> Unit = {},
 ) {
   Row(
     Modifier.fillMaxWidth().background(shellColors.titleBar).padding(top = LocalTitleBarInset.current).height(52.dp).padding(horizontal = 8.dp).testTag("title-bar"),
@@ -566,21 +654,23 @@ private fun WideTitleBar(
       val openRecent = LocalOpenRecent.current
       RecentHistoryButton(prefs) { item -> openRecent?.invoke(item) }
     }
-    Text(
-      title,
-      style = MaterialTheme.typography.titleMedium,
-      fontWeight = FontWeight.SemiBold,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-      modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false).semantics { heading() },
-    )
-    here?.let { StarButton(services, it, prefs) }
-    Box(Modifier.weight(1f))
+    // The title and the search box share the room the buttons leave (search up to its width); the title ellipsizes.
+    Row(Modifier.weight(1.5f), verticalAlignment = Alignment.CenterVertically) {
+      Text(
+        title,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false).semantics { heading() },
+      )
+      here?.let { StarButton(services, it, prefs) }
+    }
     Surface(
       onClick = { chrome.oneBox = true },
       shape = RoundedCornerShape(10.dp),
       color = MaterialTheme.colorScheme.surfaceContainerHigh,
-      modifier = Modifier.widthIn(min = 220.dp, max = 340.dp).height(36.dp).testTag("search-or-jump").semantics { contentDescription = "Search or jump to" },
+      modifier = Modifier.weight(1f, fill = false).widthIn(min = 160.dp, max = 340.dp).height(36.dp).testTag("search-or-jump").semantics { contentDescription = "Search or jump to" },
     ) {
       Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(AglynIcons.named("search"), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -590,6 +680,7 @@ private fun WideTitleBar(
     }
     Spacer(Modifier.width(4.dp))
     BellButton(services, uid) { navigator.select(ShellNavigator.NOTIFICATIONS) }
+    trailing()
   }
 }
 

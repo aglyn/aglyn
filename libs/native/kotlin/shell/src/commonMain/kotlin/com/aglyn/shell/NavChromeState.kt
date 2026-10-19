@@ -36,6 +36,18 @@ internal class NavChromeState(private val device: KeyValueStore) {
   /** The settings list swapped in for the sidebar ("‹ Juniper Street Co. settings"), null for the everyday list. */
   var settingsMode by mutableStateOf<NativeNavListId?>(null)
   var picker by mutableStateOf<PickerStep?>(null)
+  /** The AI panel, docked right on wide windows and a sheet on phones; whether it is open is remembered on this device. */
+  var aiPanel by mutableStateOf(device.get("aglyn.nav.aiPanel") == "1")
+    private set
+
+  fun toggleAiPanel(open: Boolean = !aiPanel) {
+    aiPanel = open
+    device.set("aglyn.nav.aiPanel", if (open) "1" else null)
+  }
+
+  /** The keyboard shortcuts sheet (Help → Keyboard shortcuts). */
+  var shortcuts by mutableStateOf(false)
+
   /** The one box (Ctrl/⌘K, "Search or jump to"). */
   var oneBox by mutableStateOf(false)
   var accountMenu by mutableStateOf(false)

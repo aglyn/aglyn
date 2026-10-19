@@ -27,6 +27,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -72,6 +77,9 @@ internal fun PhoneShell(
   onRow: (NavItem) -> Unit,
   onStar: (StarredItem) -> Unit,
   body: @Composable () -> Unit,
+  assistTitle: String? = null,
+  assistContent: @Composable () -> Unit = {},
+  help: List<HelpEntry> = emptyList(),
 ) {
   val (busiest, inbox) = phoneTabRows(scopeGroups, workspace.site != null)
   val top = navigator.top
@@ -139,7 +147,7 @@ internal fun PhoneShell(
   ) { padding ->
     Box(Modifier.padding(padding).fillMaxSize()) {
       if (menuOpen) {
-        PhoneMenu(services, workspace, chrome, sidebar, top, starred, onRow, onStar)
+        PhoneMenu(services, workspace, chrome, sidebar, top, starred, onRow, onStar, assistTitle, help)
       } else {
         body()
       }
@@ -149,6 +157,15 @@ internal fun PhoneShell(
     ModalBottomSheet(onDismissRequest = { chrome.accountMenu = false }, modifier = Modifier.testTag("account-sheet")) {
       Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 16.dp)) {
         AccountMenuItems(services, user) { chrome.accountMenu = false }
+      }
+    }
+  }
+  if (chrome.aiPanel && assistTitle != null) {
+    // The AI panel on a phone: a sheet, never floating over content.
+    ModalBottomSheet(onDismissRequest = { chrome.toggleAiPanel(false) }, modifier = Modifier.testTag("ai-sheet")) {
+      Column(Modifier.fillMaxWidth().heightIn(min = 420.dp).navigationBarsPadding()) {
+        Text(assistTitle, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp))
+        Box(Modifier.fillMaxWidth().heightIn(min = 360.dp, max = 620.dp)) { assistContent() }
       }
     }
   }
@@ -219,9 +236,22 @@ private fun PhoneMenu(
   starred: List<StarredItem>,
   onRow: (NavItem) -> Unit,
   onStar: (StarredItem) -> Unit,
+  assistTitle: String?,
+  help: List<HelpEntry>,
 ) {
+  var helpOpen by remember { mutableStateOf(false) }
   Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp).testTag("phone-menu")) {
     Text("Menu", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp))
+    // The AI panel and help sit here and under the scope chip, never floating over content.
+    Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      assistTitle?.let { androidx.compose.material3.AssistChip(onClick = { chrome.toggleAiPanel(true) }, label = { Text(it) }, leadingIcon = { Icon(AglynIcons.named("auto_awesome"), null, Modifier.size(18.dp)) }, modifier = Modifier.testTag("menu-ai")) }
+      Box {
+        androidx.compose.material3.AssistChip(onClick = { helpOpen = true }, label = { Text("Help and docs") }, leadingIcon = { Icon(AglynIcons.named("help_outline"), null, Modifier.size(18.dp)) }, modifier = Modifier.testTag("menu-help"))
+        androidx.compose.material3.DropdownMenu(helpOpen, onDismissRequest = { helpOpen = false }) {
+          for (entry in help) MenuRow(entry.label, entry.icon, tag = entry.id) { helpOpen = false; entry.open() }
+        }
+      }
+    }
     if (sidebar.modeTitle != null) {
       BackLink(sidebar.modeTitle, tag = "settings-mode-back", onClick = sidebar.onExitMode)
     } else {
