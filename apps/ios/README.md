@@ -9,6 +9,11 @@ Catalyst):
 | **Aglyn** | `com.aglyn.app` | Manages the workspace: Home (plugin widgets and quick actions), plugin screens, notifications, settings, and the console in an authenticated WebView. |
 | **Aglyn POS** | `com.aglyn.pos` | The register: sign in, pick the store, then the plugins' POS contributions. |
 
+A Debug build has its own identity (AGL-3994): "Aglyn Debug" (`com.aglyn.app.debug`) and "Aglyn POS Debug"
+(`com.aglyn.pos.debug`), set in `Config/Emulator.xcconfig`. It runs beside the TestFlight or App Store app without
+taking its Dock item, keychain items or settings. Address it by that id in a test or a script (`xcrun simctl launch
+<device> com.aglyn.app.debug`), and never install a debug build into /Applications.
+
 The architecture is `docs/mobile/native-architecture.md`. In short:
 
 - `libs/native/apple` is the Swift package **AglynKit**: `AglynCore` (config,
