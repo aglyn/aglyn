@@ -95,6 +95,7 @@ import {
   postSiteImportOwnership,
   SITE_IMPORT_DOOR_MAX_PAGES,
   SITE_IMPORT_RELEASE_FLAG,
+  siteImportOfferFor,
 } from './ai-site-import-route'
 
 const PAID_ORG = { plan: 'pro', name: 'Rosie’s' }
@@ -270,5 +271,33 @@ describe('the crawl door', () => {
     mockConsumeRateLimit.mockResolvedValue({ allowed: false })
     expect((await crawl({ domain: 'rosies-bakery.com' })).status).toBe(429)
     expect(mockCrawl).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * What Create site's choice card is told (AGL-3976), in the doors' own order:
+ * nothing while the flag is off, then the role, then the plan.
+ */
+describe('the offer Create site reads for its Bring my site card', () => {
+  const offer = (role: string | null, org: Record<string, unknown> = PAID_ORG, staff = false) =>
+    siteImportOfferFor({ orgId: 'org-1', staff, org, member: role ? ({ uid: 'uid-1', role } as never) : null })
+
+  it('is nothing while the flag is off, so the card is not drawn', async () => {
+    mockFlagOn.mockResolvedValue(false)
+    expect(await offer('owner')).toBeNull()
+    // Staff preview it, as they preview the doors.
+    expect(await offer('owner', PAID_ORG, true)).toBe('ready')
+  })
+
+  it('names the role, then the plan, as the doors refuse them, and is ready for a paid owner or admin', async () => {
+    expect(await offer('editor')).toBe('role')
+    expect(await offer('owner', { plan: 'free' })).toBe('plan')
+    expect(await offer('admin')).toBe('ready')
+    expect(await offer('owner')).toBe('ready')
+  })
+
+  it('never fails the read it rides: an unreadable flag is the flag off', async () => {
+    mockFlagOn.mockRejectedValue(new Error('remote config down'))
+    expect(await offer('owner')).toBeNull()
   })
 })

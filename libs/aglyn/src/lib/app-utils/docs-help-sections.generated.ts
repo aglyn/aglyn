@@ -100,6 +100,11 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#shapes-and-how-many': 'Shape: Square 1:1, Landscape 4:3, Portrait 3:4, Wide 16:9 or Tall 9:16.',
     '#who-can-use-it': 'Creating images needs the Generate with AI permission and a plan that includes AI generation — see who can use Aglyn AI.',
   },
+  aiImport: {
+    '#prove-it-is-yours': 'Use one of these three ways. The status at the top shows Verified once one of them works.',
+    '#waves': 'The first wave brings in your main pages: home, then the pages in your menu, then your other top-level pages.',
+    '#your-current-website': 'Under Website address, type the address people use to reach your site today, for example example.com, and choose Next.',
+  },
   aiInsights: {
     '#asking-a-question': 'Choose Ask a question on the Ask AI about these numbers card — on a site\'s dashboard, its Analytics page, and your organization\'s Sites page — or open the Assist panel on one of these pages and choose Ask about your…',
   },

@@ -46,6 +46,7 @@ import { readFreeAiCreditsLeft } from '../usage/free-ai-credits-left'
 import { aiCreditsConfirmation, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import { aiUsageMeter } from '../usage/ai-usage-meter'
 import { aiJobsGate } from './ai-jobs-gate'
+import { siteImportOfferFor } from './ai-site-import-route'
 import { withoutErasedSites } from './ai-jobs-live-sites'
 import { AI_JOB_ACTIVE_STATUSES } from '../model/ai-job-activity'
 import { reportServerError } from '@aglyn/tenant-data-admin/server/client-error-report'
@@ -409,6 +410,12 @@ export async function GET(request: Request): Promise<Response> {
   const freeCredits = freeTaste
     ? await readFreeAiCreditsLeft(gate.firestore, { orgId: gate.orgId, org: gate.org as object | null, now })
     : null
+  // Whether Create site offers "Bring my site" (AGL-3976), asked only by the
+  // guided start's own read, so the card costs no other caller anything.
+  const siteImport =
+    url.searchParams.get('siteImport') === '1'
+      ? await siteImportOfferFor({ orgId: gate.orgId, staff: gate.staff, org: gate.org, member: gate.member })
+      : null
   return Response.json(
     {
       jobs: jobs.map((job) => aiJobSummary(job, now)),
@@ -416,6 +423,7 @@ export async function GET(request: Request): Promise<Response> {
       // start offers the Free page band from the request it already makes.
       freeTaste,
       ...(freeCredits ? { freeCredits } : {}),
+      ...(siteImport ? { siteImport } : {}),
     },
     { status: 200, headers: { 'Cache-Control': 'no-store' } },
   )

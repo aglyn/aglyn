@@ -712,6 +712,17 @@ describe('GET /api/ai/jobs — the read gate and the list', () => {
     expect((await listJobs(get(`/api/ai/jobs?orgId=${ORG}`))).status).toBe(423)
   })
 
+  it('says whether Create site offers Bring my site, only when its card asks (AGL-3976)', async () => {
+    // Every other caller of the list pays nothing for it.
+    expect(await (await listJobs(get(`/api/ai/jobs?orgId=${ORG}`))).json()).not.toHaveProperty('siteImport')
+    // A reader with no owner or admin role is offered the card disabled.
+    expect((await (await listJobs(get(`/api/ai/jobs?orgId=${ORG}&limit=1&siteImport=1`))).json()).siteImport).toBe('role')
+    mockGetOrgForUser.mockImplementation(async (_uid: string, orgId: string) =>
+      orgId === ORG ? { orgId: ORG, org: ENTITLED_ORG, member: { uid: 'uid-1', role: 'owner' } } : null,
+    )
+    expect((await (await listJobs(get(`/api/ai/jobs?orgId=${ORG}&limit=1&siteImport=1`))).json()).siteImport).toBe('ready')
+  })
+
   it('lists the org’s jobs newest first, and filters by status', async () => {
     await seedJobs()
     const response = await listJobs(get(`/api/ai/jobs?orgId=${ORG}`))

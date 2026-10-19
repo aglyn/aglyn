@@ -112,6 +112,11 @@ export const PLUGIN_DOCS = {
     title: 'Create images with AI',
     excerpt: 'An AI image generator in the Aglyn media library: describe a picture and get an SVG icon or logo mark, a realistic photo, a watercolor, a 3D render or a banner, with alt text. Metered in AI credits.',
   },
+  aiImport: {
+    path: '/ai/bring-my-site',
+    title: 'Bring my site',
+    excerpt: 'Bring the website you have now into Aglyn, its pages, words and photos, in waves you review and start yourself, once you have proved the site is yours. Rolling out.',
+  },
   aiInsights: {
     path: '/marketing-and-automation/analytics/insights',
     title: 'Insights',
@@ -573,6 +578,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aiExperiments: ['#it-proposes-you-write', '#write-variants', '#putting-them-in', '#draft-versions', '#what-it-will-not-write', '#read-a-result', '#the-verdict', '#the-words', '#undecided', '#what-is-sent', '#who-can-use-it', '#related'],
   aiForm: ['#describe-the-form', '#what-the-form-gets', '#what-a-form-cannot-collect', '#nothing-is-live-until-you-place-it', '#who-can-use-it', '#related'],
   aiImages: ['#make-a-picture', '#shapes-and-how-many', '#what-each-picture-gets', '#credits', '#safety', '#declined-pictures', '#what-is-sent', '#who-can-use-it', '#related'],
+  aiImport: ['#start', '#your-current-website', '#prove-it-is-yours', '#read-my-site', '#waves', '#review-a-wave', '#photos', '#never-brought-in', '#when-an-import-waits'],
   aiInsights: ['#asking-a-question', '#how-an-answer-is-made', '#asking-about-datasets', '#weekly-insights', '#privacy'],
   aiJobs: ['#the-ai-jobs-page', '#statuses', '#one-jobs-page', '#ai-jobs-in-assist', '#cancel-a-job', '#cancel-a-new-site', '#ai-activity', '#how-long-jobs-are-kept', '#related'],
   aiLayout: ['#what-a-layout-is', '#find-a-layout', '#nested-layouts', '#layout-properties', '#restyle-the-layout-on-one-page', '#duplicate', '#generate-a-layout-with-aglyn-ai', '#used-by', '#layouts-vs-reusable-components', '#related'],
@@ -739,6 +745,11 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#make-a-picture': 'Make a picture',
     '#shapes-and-how-many': 'Shapes and how many',
     '#who-can-use-it': 'Who can use it',
+  },
+  aiImport: {
+    '#prove-it-is-yours': 'Prove it is yours',
+    '#waves': 'Waves',
+    '#your-current-website': 'Your current website',
   },
   aiInsights: {
     '#asking-a-question': 'Asking a question',

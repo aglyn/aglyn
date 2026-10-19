@@ -157,6 +157,10 @@ const PLUGIN_TOPICS = {
   aiSite: '/ai/generate-a-site',
   aiSiteLooks: '/ai/site-looks',
   aiStart: '/ai/start-with-ai',
+  // "Bring my site" on Create site's start and its import job's page
+  // (AGL-3976). Unlisted while `release_ai_site_import` is off; see
+  // PLUGIN_UNLISTED_TOPICS.
+  aiImport: '/ai/bring-my-site',
   aiTemplate: '/building-sites/site-templates/templates-library',
   aiMarketing: '/ai/marketing-with-ai',
   // The Ad conversions card on a site's setup page (AGL-3694), whose guide
@@ -369,6 +373,9 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // The Rewards account card draws nothing until the console holds
   // LOYALTY_CONNECTORS_TOKEN_KEY, the gate the guide waits on (AGL-3677).
   'loyaltyConnectors',
+  // "Bring my site" draws nothing until `release_ai_site_import` is on for
+  // the workspace, the flag the guide waits on (AGL-3976).
+  'aiImport',
 ])
 
 // ── Docs parsing ──────────────────────────────────────────────────────────

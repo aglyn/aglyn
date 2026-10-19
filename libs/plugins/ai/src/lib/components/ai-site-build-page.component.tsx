@@ -74,6 +74,7 @@ import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
 import { aiCreditRangeText, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import { useAiJobSite } from './ai-job-site'
 import { AiSiteStarterFallback } from './ai-site-starter-fallback.component'
+import { AiSiteImportJob } from './ai-site-import-job.component'
 import { AiJobCancelButton } from './ai-job-cancel.component'
 import { AI_JOB_CANCELING_COPY } from '../model/ai-job-cancel-copy'
 import {
@@ -379,6 +380,24 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           </Box>
         ) : null}
       </Frame>
+    )
+  }
+
+  // Bring my site (AGL-3976): its waves, reviewed and started here.
+  if (ready.kind === 'import') {
+    return (
+      <AiSiteImportJob
+        job={ready}
+        orgId={orgId}
+        orgSlug={orgSlug}
+        host={hostSubdomain}
+        {...(siteName ? { siteName } : {})}
+        user={user}
+        busy={busy}
+        notice={notice}
+        onResume={() => void confirmPlan(ready)}
+        onJob={setJob}
+      />
     )
   }
 

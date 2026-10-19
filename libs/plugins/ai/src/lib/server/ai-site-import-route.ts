@@ -163,6 +163,29 @@ export async function siteImportGate(
   return { uid: decoded.uid, decoded, staff, orgId, org, member, firestore: app.firestore() }
 }
 
+/**
+ * Whether "Bring my site" is offered to this reader (AGL-3976), in the
+ * doors' own order, for Create site's choice card: `null` while the flag is
+ * off (the card is not drawn), `role` or `plan` for a refusal the workspace
+ * can change (the card is drawn disabled with the reason), `ready` otherwise.
+ * Read by the jobs list only when the card asks, so no other read pays for it.
+ */
+export async function siteImportOfferFor(input: {
+  orgId: string
+  staff: boolean
+  org: Partial<AglynOrganization> | null
+  member: AglynOrgMember | null
+}): Promise<'ready' | 'role' | 'plan' | null> {
+  try {
+    if (!input.staff && !(await isServerReleaseFlagOnForOrg(SITE_IMPORT_RELEASE_FLAG, input.orgId))) return null
+  } catch {
+    return null
+  }
+  if (!input.member || (input.member.role !== 'owner' && input.member.role !== 'admin')) return 'role'
+  if (resolveEffectivePlan(input.org ?? {}) === 'free') return 'plan'
+  return 'ready'
+}
+
 async function audit(
   gate: SiteImportGateContext,
   action: string,

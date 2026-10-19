@@ -70,13 +70,13 @@ rules deny every client write). Fields:
 
 | field | meaning |
 | --- | --- |
-| `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout`, `template`, `form`, `component`, `seo`, `page`, `email`, `campaign`, `products` and `site` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
+| `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout`, `template`, `form`, `component`, `seo`, `page`, `email`, `campaign`, `products`, `site` and `import` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
 | `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). |
 | `brief`, `inputs` | The customer's brief verbatim and the kind-specific scalars a runner reads. |
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`, and `draftIds`, the ids of the drafts the step writes. |
 | `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. An output may carry a customer-safe `note`: what the person decides next about it, and the facts in square brackets its draft holds ([below](#what-a-draft-asks-the-member-to-fill)). |
 | `plan` | The plan a planned kind builds from: `reuse`, `create`, `screens` (each creation and screen the job builds as a draft with the `id` it is written under), the inventory `labels` it references, and `status` `proposed` → `confirmed` with who confirmed it and when. |
-| `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`), the customer-safe `message`, and the rules the last answer broke, each with the node ids or plan paths it names, beside an `outline` of those parts of the refused answer ([below](#what-a-refused-answer-leaves-on-the-job)). |
+| `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`, and for a site import `wave` or `ownership`), the customer-safe `message`, and the rules the last answer broke, each with the node ids or plan paths it names, beside an `outline` of those parts of the refused answer ([below](#what-a-refused-answer-leaves-on-the-job)). |
 | `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step while the job can run — zero while it waits for a person, and a confirmed page or site plan's whole-job estimate where that is more — and the real spend at the plan's credit rate. |
 | `lease` | `{ owner, until }` while a step runs — see below. |
 | `expiresAt` | 180 days from creation, the assist exchange's clock: the brief is verbatim customer text (`docs/DATA_RETENTION.md`). |
@@ -2194,8 +2194,9 @@ to NAME the org (AGL-1934).
 ### Bring my site: ownership and the crawl (AGL-3974)
 
 The server half of importing a person's existing website (AGL-3973), behind
-`release_ai_site_import` (OFF by default). It spends no credits and creates
-no job; the import job that turns an inventory into pages is its own lane.
+`release_ai_site_import` (OFF by default). These doors spend no credits and
+create no job; the `import` job that turns a proved site into pages is
+[below](#bring-my-site-the-import-job-agl-3976).
 Every door is `siteImportGate` in `server/ai-site-import-route.ts`: a named
 org, its owner or an admin, a paid plan (`resolveEffectivePlan` is not
 `free`), the flag (404 while off, staff preview) and lockdown.
@@ -2230,6 +2231,75 @@ org, its owner or an admin, a paid plan (`resolveEffectivePlan` is not
 - **To a model, only fenced.** `siteImportPagePromptText` wraps a page with
   `fenceUntrustedText` (`@aglyn/shared-util-tools/untrusted-text`), and the
   prompt that reads it carries `UNTRUSTED_TEXT_RULE`.
+
+### Bring my site: the import job (AGL-3976)
+
+`import` brings a proved website in as draft pages of a site, in WAVES a
+person starts one at a time, behind the same flag. The plan of record is pure,
+`model/ai-site-import.ts`; the step is `jobs/ai-job-import-step.ts`, one step
+whose passes each do one unit (`aiSiteImportNextWork`):
+
+1. **Read** (no model): the crawler reads the site as AglynBot with
+   `shallowFirst` (a sitemap's shallow addresses before its deep tail), up to
+   the site's room under the plan's page count plus one wave, capped at
+   `AI_SITE_IMPORT_MAX_PAGES` (200). `aiSiteImportInventory` groups the pages
+   (the MAIN pages: home, the home menu's, every top-level page and any page of
+   no collection; then each COLLECTION, an address prefix with at least three
+   pages, a dated archive as Posts), keeps them in that order until the room is
+   used, lists the rest as left out with the reason, and cuts the kept pages
+   into waves of at most `AI_SITE_IMPORT_WAVE_PAGES` (10): the main pages with
+   the site's header and footer first, then each collection's slices. Every
+   page and the header get a row of the job's item ledger and a draft id. The
+   job then parks `needs_review`, reason `wave`: nothing is built until a
+   person starts the first wave through the resume door.
+2. **Start a wave** (no model): the flag, a CURRENT proof (else reason
+   `ownership`), the day's limit (`consumeRateLimit('ai-import:'+orgId)`, 12
+   waves a day with the read, else reason `limit`) and the plan's room again
+   (`readAiScreenRoom`). The wave's pages are read again with `only` (robots.txt,
+   then exactly those addresses); a page that is now a sign-in page, gone, off
+   limits to AglynBot, empty or past the room is left out and its row skipped.
+3. **The header and footer**, in the first wave: the layout step's own pass on
+   a derived `layout` job in the layout language, linking the wave's pages.
+4. **Each page**: its photos first (no model), through `pluginMediaIngest()
+   .ingest` with `importedFrom` and the key `import:<sha256 of the address>`,
+   asked of `findImportedPhoto` before anything is fetched, so a photo is stored
+   once per site (an ingest that cannot answer stores nothing); then the page
+   step's own passes on a derived `page` job: one screen at the page's new
+   one-segment address, its sections from the old page's headings, its photos
+   in `pagePhotos` (placed before owner and stock photos), its text in
+   `importedPage`, which the page prompt shows only FENCED
+   (`aiLayoutImportedPageLines`) under `UNTRUSTED_TEXT_RULE`, a static system
+   block of its own (`aiJobPageLanguageInstructions`). The old page's text
+   counts as given facts, so its phone and address are not "invented".
+5. **Close the wave**: the job parks again, reason `wave`, with the wave's
+   pages as drafts to review, until the next wave is started. The last wave
+   ends the job.
+
+- **Settled by item.** `import` is one of `aiJobSettlesByItem`'s kinds: a page
+  that fails on our side gives back its own spend (`refundBuildCredits`), its
+  row says why, and the wave goes on. The machine keeps `siteImport` on the job
+  from the outcome in the pass's own write; the summary carries it without any
+  page text (`aiSiteImportWire`).
+- **Priced as an AI page.** `AI_MEASURED_IMPORT_CREDITS`: a page is the paid
+  table's page (27 / 47), the header its layout; each wave is quoted before it
+  starts (`aiSiteImportWaveCreditRange`), its ceiling two passes a page.
+- **Nothing is published.** Every output is a draft; the job writes no
+  `sitePublish`, and the site created for it is created empty.
+- **Trust & Safety.** Every import files one `abuseReports` row
+  (`site-import/site-import-review.ts`, `source: 'site-import'`, category
+  `impersonation`, severity `normal`, the outbound screen's shape), rewritten
+  at the read and at each wave's start and finish, `reportCount` counting the
+  waves. It holds nothing.
+- **Admission.** `createAiSiteImportAdmission`, asked by the create and resume
+  doors: the flag, a site (or one about to be created), a paid plan, the
+  owner or an admin, and a current proof for `inputs.domain`.
+- **The console.** "Bring my site" is a card on Create site's start, shown
+  disabled with the reason and an upgrade link on Free (the ownership door's
+  `reason: 'plan'`), absent while the flag is off. Its flow asks the address,
+  the proof (`AiSiteOwnershipProof`) and then "Read my site", which creates
+  the site and the job; the job's page (`AiSiteImportJob`, under the site's
+  `/ai-jobs/{jobId}`) shows the read, each wave and its review, and the next
+  wave's button with its quote.
 
 ## The theme kind
 
