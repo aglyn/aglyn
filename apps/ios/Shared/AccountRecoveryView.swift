@@ -18,34 +18,32 @@ struct AccountRecoveryView: View {
     if let sentTo {
       AuthCard(
         "Check your email",
-        subtitle: "We sent a password reset link to \(sentTo). Open it to choose a new password — the link expires after a short while."
+        subtitle: "We sent a password reset link to \(sentTo). Open it to choose a new password — the link expires after a short while.",
+        systemImage: "envelope"
       ) {
         if let error { AuthMessage(text: error) }
         HStack(spacing: 4) {
           Text("Didn’t get it?")
-          Button("Resend") { send(sentTo) }.buttonStyle(.borderless).disabled(busy)
-          Text("or")
-          Button("back to sign in") { flow.reset() }.buttonStyle(.borderless)
+          AuthLink("Resend", identifier: "recovery-resend") { send(sentTo) }.disabled(busy)
         }
-        .font(AglynFont.subheadline)
+        .font(AglynAuthFont.small)
+        .foregroundStyle(AglynAuthTokens.Colors.textSecondary.color)
+        .frame(maxWidth: .infinity)
+      } footer: {
+        AuthFooterLine(lead: nil, link: "Back to sign in", identifier: "recovery-back") { flow.reset() }
       }
     } else {
       AuthCard("Account recovery", subtitle: "Enter your email and we’ll send a link to reset your password") {
         AuthField(
-          label: "Email", text: $flow.email, content: .email, message: tried ? SignUpRules.email(flow.email) : nil,
-          identifier: "recovery-email")
-        if let error { AuthMessage(text: error) }
+          label: "Email", text: $flow.email, content: .email, placeholder: "you@example.com",
+          message: tried ? SignUpRules.email(flow.email) ?? error : error, identifier: "recovery-email")
         AuthPrimaryButton(title: "Send reset link", busy: busy) {
           tried = true
           if SignUpRules.email(flow.email) == nil { send(flow.email) }
         }
         .accessibilityIdentifier("recovery-submit")
       } footer: {
-        HStack(spacing: 4) {
-          Text("Remembered your password?")
-          Button("Sign in") { flow.reset() }.buttonStyle(.borderless)
-        }
-        .font(AglynFont.subheadline)
+        AuthFooterLine(lead: "Remembered your password?", link: "Sign in", identifier: "recovery-sign-in") { flow.reset() }
       }
     }
   }
@@ -88,7 +86,10 @@ struct ResetPasswordView: View {
       case .invalid:
         AuthCard("Link expired", subtitle: "This password reset link is invalid or has already been used.") {
           if let error { AuthMessage(text: error) }
-          Button("Request a new reset link") { flow.screen = .accountRecovery }.buttonStyle(.borderless)
+          AuthPrimaryButton(title: "Request a new reset link", busy: false) { flow.screen = .accountRecovery }
+            .accessibilityIdentifier("reset-request")
+        } footer: {
+          AuthFooterLine(lead: nil, link: "Back to sign in", identifier: "reset-back") { flow.reset() }
         }
       case .done:
         AuthCard("Password updated", subtitle: "Your password has been reset. Sign in with your new password.") {
@@ -96,18 +97,17 @@ struct ResetPasswordView: View {
         }
       case .ready(let email):
         AuthCard("Choose a new password", subtitle: email.isEmpty ? "Enter a new password for your account" : "for \(email)") {
-          VStack(spacing: 12) {
-            AuthField(
-              label: "Password", text: $password, secure: true, content: .newPassword,
-              message: tried ? SignUpRules.password(password) : nil, identifier: "reset-password")
-            AuthField(
-              label: "Confirm password", text: $confirm, secure: true, content: .newPassword,
-              message: tried ? SignUpRules.confirm(confirm, password: password) : nil, identifier: "reset-confirm")
-          }
+          AuthField(
+            label: "Password", text: $password, secure: true, content: .newPassword,
+            message: tried ? SignUpRules.password(password) : nil, supporting: SignUpView.passwordHelp,
+            identifier: "reset-password")
+          AuthField(
+            label: "Confirm password", text: $confirm, secure: true, content: .newPassword,
+            message: tried ? SignUpRules.confirm(confirm, password: password) : nil, identifier: "reset-confirm")
           if let error { AuthMessage(text: error) }
           AuthPrimaryButton(title: "Reset password", busy: busy, action: submit).accessibilityIdentifier("reset-submit")
         } footer: {
-          Button("Back to sign in") { flow.reset() }.buttonStyle(.borderless).font(AglynFont.subheadline)
+          AuthFooterLine(lead: nil, link: "Back to sign in", identifier: "reset-back") { flow.reset() }
         }
       }
     }
@@ -161,6 +161,7 @@ struct ConfirmEmailView: View {
     case .confirm:
       AuthCard("Verify your email", subtitle: "Confirm this is your email address") {
         Text("Press the button to finish setting up your \(model.brandName) account. If you didn’t sign up, close this page and nothing happens.")
+          .font(AglynAuthFont.body).fixedSize(horizontal: false, vertical: true)
         AuthPrimaryButton(title: "Confirm my email", busy: false) { apply() }.accessibilityIdentifier("confirm-email")
       }
     case .applying:
@@ -175,6 +176,7 @@ struct ConfirmEmailView: View {
     case .failed:
       AuthCard("Verify your email", subtitle: "This link has expired or was already used") {
         Text("If you already opened it once, your email is verified — sign in to continue. If not, sign in and we’ll send you a new link.")
+          .font(AglynAuthFont.body).fixedSize(horizontal: false, vertical: true)
         AuthPrimaryButton(title: "Sign in", busy: false) {
           flow.pendingVerificationCode = nil
           flow.reset()

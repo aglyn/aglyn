@@ -279,10 +279,14 @@ export default async function HostLayout({
    * transient read failure on an Agency site would otherwise put our mark back
    * in their tab.
    *
-   * No new Firestore read: `getOrgBilling` is render-cached on a 60s TTL and
-   * `load-page-data` already calls it for this same request.
+   * No new Firestore read: `getOrgBilling` is render-cached and
+   * `load-page-data` already reads the same `scope: 'render'` entry for this
+   * request.
    */
-  const orgRes = await getOrgBilling({ hostId: hostRes.host?.$id })
+  const orgRes = await getOrgBilling({
+    hostId: hostRes.host?.$id,
+    scope: 'render',
+  })
   const brandFavicon = resolveMediaSrc(orgBrandFavicon(orgRes.org), {
     hostId: hostRes.host?.$id,
   })

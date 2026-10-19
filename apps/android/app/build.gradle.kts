@@ -67,8 +67,10 @@ android {
       // Firebase App Check: off, since the emulators do not enforce it (there is no App Check emulator).
       buildConfigField("String", "APP_CHECK", quoted(setting("appCheck", "off")))
       // The seeded emulator member (tools/scripts/seed-native-emulator.mjs), for the debug sign-in form only.
-      buildConfigField("String", "PASSKEY_RP_ID", quoted(""))
-      buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(""))
+      // Empty on the emulator stack; a design drive may set -Paglyn.debugPasskeyRpId / -Paglyn.debugGoogleWebClientId so the
+      // provider buttons draw (a tap stops at the provider hand-off; nothing signs in to Google locally).
+      buildConfigField("String", "PASSKEY_RP_ID", quoted(setting("debugPasskeyRpId", "")))
+      buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(setting("debugGoogleWebClientId", "")))
       buildConfigField("String", "DEBUG_EMAIL", quoted("mobile-owner@example.test"))
       buildConfigField("String", "DEBUG_PASSWORD", quoted("seed-$emulatorProject-mobile"))
     }

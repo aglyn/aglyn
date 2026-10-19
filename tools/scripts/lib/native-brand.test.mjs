@@ -31,6 +31,8 @@ import {
   groundGradient,
   iconContainerCount,
   iconRasters,
+  LAUNCH_LOGO,
+  launchLogoRasters,
   launcherBackground,
   imageSetContents,
   layerPaths,
@@ -279,7 +281,7 @@ test('.ico and .icns hold PNGs and count back', () => {
   assert.equal(iconContainerCount(Buffer.from('nope'), 'icns'), null)
 })
 
-test('the launch logo is the full logo, sized on its root element, light and dark, in both apps', () => {
+test('the launch logo is the mark as PNGs at 1x-3x, sized from its SVG, in both apps', () => {
   const source =
     '<?xml version="1.0"?><svg width="100%" height="100%" viewBox="0 0 79 24"><path d="M0,0z"/></svg>'
   assert.equal(
@@ -294,26 +296,37 @@ test('the launch logo is the full logo, sized on its root element, light and dar
     () => sizedSvg('<path/>', 1, 1, 'x.svg'),
     /x\.svg: no <svg> element/,
   )
-  const outputs = brandTextOutputs((name) =>
-    name.startsWith('app-icon/')
-      ? readIcon(name)
-      : Buffer.from(
-          name.includes('full')
-            ? `<svg width="100%" height="100%" viewBox="0 0 79 24" data-ink="${name}"><path d="M0,0z" style="fill:#00b0ff;"/></svg>`
-            : mark,
-        ),
-  )
+  const read = (name) =>
+    name.startsWith('app-icon/') ? readIcon(name) : Buffer.from(mark)
+  const outputs = brandTextOutputs(read)
+  const rasters = launchLogoRasters(read)
   for (const app of ['Aglyn', 'AglynPOS']) {
     const set = `apps/ios/${app}/Assets.xcassets/LaunchLogo.imageset`
-    const light = outputs.find(({ file }) => file === `${set}/LaunchLogo.svg`)
-    const dark = outputs.find(
-      ({ file }) => file === `${set}/LaunchLogo-dark.svg`,
+    const contents = outputs.find(({ file }) => file === `${set}/Contents.json`)
+    assert.deepEqual(
+      JSON.parse(contents.content).images.map((image) => image.filename),
+      ['LaunchLogo@1x.png', 'LaunchLogo@2x.png', 'LaunchLogo@3x.png'],
     )
-    assert.match(
-      light.content,
-      /width="184" height="56".*data-ink="aglyn-logo-full-dark\.svg"/,
+    assert.ok(
+      !outputs.some(
+        ({ file }) => file.startsWith(set) && file.endsWith('.svg'),
+      ),
     )
-    assert.match(dark.content, /data-ink="aglyn-logo-full-light\.svg"/)
-    assert.ok(outputs.some(({ file }) => file === `${set}/Contents.json`))
+    const own = rasters.filter(({ file }) => file.startsWith(set))
+    assert.deepEqual(
+      own.map(({ width, height }) => [width, height]),
+      [1, 2, 3].map((scale) => [
+        LAUNCH_LOGO.width * scale,
+        LAUNCH_LOGO.height * scale,
+      ]),
+    )
+    for (const raster of own) {
+      assert.match(
+        raster.svg,
+        new RegExp(
+          `width="${LAUNCH_LOGO.width}"[^>]*height="${LAUNCH_LOGO.height}"|height="${LAUNCH_LOGO.height}"[^>]*width="${LAUNCH_LOGO.width}"`,
+        ),
+      )
+    }
   }
 })

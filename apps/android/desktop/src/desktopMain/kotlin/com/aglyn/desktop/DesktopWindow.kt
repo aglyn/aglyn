@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyShortcut
 import androidx.compose.ui.unit.DpSize
@@ -17,7 +18,9 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberWindowState
 import com.aglyn.shell.ShellServices
 import com.aglyn.ui.AglynTokens
+import com.aglyn.ui.AuthTokens
 import com.aglyn.ui.aglynMarkPainter
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.awt.Color
 
@@ -27,19 +30,24 @@ private val isMac = System.getProperty("os.name").orEmpty().startsWith("Mac")
 fun shortcut(key: Key, shift: Boolean = false) =
   KeyShortcut(key, meta = isMac, ctrl = !isMac, shift = shift)
 
+/** The first window's size during the launch intro (spec 53:1638), and the size it grows to once the app is ready. */
+private val INTRO_SIZE = DpSize(960.dp, 640.dp)
+private val WINDOW_SIZE = DpSize(1280.dp, 840.dp)
+
 /**
  * One app window: the Aglyn mark as its icon, the window's own background in
  * the token background (so resizing never flashes white), a menu bar with
- * shortcuts, and the shell inside.
+ * shortcuts, and the shell inside. It opens at the intro's 960 × 640, centered,
+ * and grows to its working size as the intro hands over ([content]'s callback).
  */
 @Composable
 fun ApplicationScope.AglynWindow(
   title: String,
   services: ShellServices,
   menus: @Composable MenuBarScope.(signOut: () -> Unit) -> Unit,
-  content: @Composable FrameWindowScope.() -> Unit,
+  content: @Composable FrameWindowScope.(onIntroRevealed: () -> Unit) -> Unit,
 ) {
-  val state = rememberWindowState(size = DpSize(1280.dp, 840.dp), position = WindowPosition.PlatformDefault)
+  val state = rememberWindowState(size = INTRO_SIZE, position = WindowPosition(Alignment.Center))
   Window(onCloseRequest = ::exitApplication, title = title, state = state, icon = aglynMarkPainter()) {
     val dark = isSystemInDarkTheme()
     LaunchedEffect(dark) {
@@ -53,6 +61,23 @@ fun ApplicationScope.AglynWindow(
     }
     val scope = rememberCoroutineScope()
     MenuBar { menus { scope.launch { services.signOut() } } }
-    content()
+    content {
+      scope.launch {
+        // Grow about the window's center over the destination's 220 ms.
+        val from = state.size
+        val start = state.position
+        val steps = 12
+        for (step in 1..steps) {
+          val t = step / steps.toFloat()
+          val eased = 1 - (1 - t) * (1 - t) * (1 - t)
+          val size = DpSize(from.width + (WINDOW_SIZE.width - from.width) * eased, from.height + (WINDOW_SIZE.height - from.height) * eased)
+          if (start is WindowPosition.Absolute) {
+            state.position = WindowPosition(start.x - (size.width - from.width) / 2, start.y - (size.height - from.height) / 2)
+          }
+          state.size = size
+          delay(AuthTokens.Intro.DESTINATION_MS.toLong() / steps)
+        }
+      }
+    }
   }
 }
