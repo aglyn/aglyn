@@ -102,6 +102,7 @@ import { countManagerSeats, isStaffSeat } from '@aglyn/aglyn/app-utils/organizat
 import { StaffSiteRowActions } from '../../../../../components/staff-site-row-actions.component'
 import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
 import StaffSiteCareMonthCard from '../../../../../components/site-care/staff-site-care-month-card.component'
+import StaffSiteCareProjectsCard from '../../../../../components/site-care/staff-site-care-projects-card.component'
 import StaffOrgSubscriptionCard from '../../../../../components/staff-org-subscription-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import StaffOrgUsageTable, {
@@ -2446,6 +2447,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 statement. Full width: one line per request, read across.
               */}
               <StaffSiteCareMonthCard orgId={orgId} siteCare={siteCare} />
+              {/*
+                "Charge for work" (AGL-3970): flat-quoted projects, the owner's
+                recorded yes, and the one-off invoices with their pay links.
+              */}
+              <StaffSiteCareProjectsCard orgId={orgId} />
               <StaffOrgAdminActionsCard
                 entries={orgAudit}
                 ready={orgReady}

@@ -38,6 +38,12 @@ import {
   SiteCareError,
   siteCareStatementLine,
 } from '@aglyn/tenant-data-admin/server/site-care-requests'
+import { readSiteCareProjects } from '@aglyn/tenant-data-admin/server/site-care-projects'
+import {
+  SITE_CARE_PROJECT_STATUS_LABELS,
+  siteCareProjectInvoiceLine,
+  siteCareProjectSplitSentence,
+} from '@aglyn/aglyn/app-utils/site-care-project'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — a Site Care request is a support ticket, and support must stay
@@ -58,6 +64,12 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * `GET ?orgId&month` is the month's statement for the Site Care card on
  * Billing: the requests, the minutes used of the included hour, the extra
  * time billed and every recorded row in plain words. Needs `billing.view`.
+ *
+ * `GET ?orgId&view=projects` is the workspace's flat-quoted projects
+ * (AGL-3970) for Billing, as past charges: what each covers, its price and
+ * split, where it stands, each invoice (with its pay link while unpaid) and
+ * every recorded row in the owner's words. Needs `billing.view`, with or
+ * without Site Care: a project is billed whether or not the add-on is on.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, query, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -107,6 +119,45 @@ async function handler(request: Request): Promise<Response> {
     // may ask, since any member may request a change.
     if (method === 'GET' && String(query['view'] ?? '') === 'status') {
       return Response.json({ siteCare: orgHasSiteCare(org) }, { status: 200 })
+    }
+
+    if (method === 'GET' && String(query['view'] ?? '') === 'projects') {
+      if (
+        decoded['staff'] !== true &&
+        !(await memberHasOrgPermission(orgId, membership?.member, 'billing.view'))
+      ) {
+        return Response.json({ error: 'You need permission to view billing' }, { status: 403 })
+      }
+      const projects = await readSiteCareProjects(firestore, orgId)
+      // The owner's telling: never a staff member's address or a Stripe id,
+      // and only invoices that reached them.
+      return Response.json(
+        {
+          projects: projects.map(({ projectId, project, history }) => ({
+            projectId,
+            title: project.title,
+            scope: project.scope,
+            priceUsd: project.quote.priceUsd,
+            split: siteCareProjectSplitSentence(project.quote),
+            status: project.status,
+            statusLabel: SITE_CARE_PROJECT_STATUS_LABELS[project.status],
+            createdAtMs: project.createdAtMs,
+            invoices: project.invoices
+              .filter((invoice) => invoice.status !== 'creating' && invoice.status !== 'failed')
+              .map((invoice) => ({
+                seq: invoice.seq,
+                line: siteCareProjectInvoiceLine(invoice),
+                number: invoice.number,
+                payUrl: invoice.status === 'open' ? invoice.hostedInvoiceUrl : null,
+              })),
+            history: history
+              .filter((row) => row.kind !== 'email.notSent' && row.kind !== 'invoice.failed')
+              .filter((row) => !row.kind.endsWith('Requested') && row.kind !== 'invoice.requested')
+              .map((row) => ({ atMs: row.atMs, summary: row.summary, reason: row.reason })),
+          })),
+        },
+        { status: 200 },
+      )
     }
 
     if (method === 'GET') {

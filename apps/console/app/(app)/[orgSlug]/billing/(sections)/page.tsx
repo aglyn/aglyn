@@ -134,6 +134,7 @@ import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import useCurrentOrg from '../../../../../hooks/use-current-org'
 import SiteCareBillingCard from '../../../../../components/site-care/site-care-billing-card.component'
+import SiteCareProjectsBillingCard from '../../../../../components/site-care/site-care-projects-billing-card.component'
 import { hasSiteCare } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import useConfirmedDoc from '../../../../../hooks/use-confirmed-doc'
 import useOrgPermissions from '../../../../../hooks/use-org-permissions'
@@ -1769,6 +1770,16 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         {
                           size: { xs: 12 },
                           children: <SiteCareBillingCard orgId={orgId} />,
+                        },
+                      ]
+                    : []),
+                  // Flat-quoted projects (AGL-3970), with or without Site
+                  // Care: the card draws nothing until there is one.
+                  ...(orgId && can('billing.view')
+                    ? [
+                        {
+                          size: { xs: 12 },
+                          children: <SiteCareProjectsBillingCard orgId={orgId} />,
                         },
                       ]
                     : []),
