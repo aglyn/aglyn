@@ -3039,6 +3039,12 @@ data class ThemeColors(
 )
 
 @Serializable
+data class ThemeColorsPair(
+    val dark: ThemeColors,
+    val light: ThemeColors,
+)
+
+@Serializable
 data class ThemeDensity(
     val controlHeight: Long,
     val id: ThemeDensityId,
@@ -3476,14 +3482,15 @@ internal data class ContractValuesPart6(
     @SerialName("THEME_CONSOLE_FIELDS") val themeConsoleFields: List<String>,
     @SerialName("THEME_DARK_RAIL_SEEDS") val themeDarkRailSeeds: Map<String, String>,
     @SerialName("THEME_DENSITIES") val themeDensities: List<ThemeDensity>,
+    @SerialName("THEME_FIGMA_BASE") val themeFigmaBase: ThemeColorsPair,
     @SerialName("THEME_NON_TEXT_CONTRAST") val themeNonTextContrast: Long,
     @SerialName("THEME_PALETTES") val themePalettes: List<ThemePalette>,
     @SerialName("THEME_PREVIEWS") val themePreviews: Map<String, ThemePreview>,
-    @SerialName("THEME_TEXT_CONTRAST") val themeTextContrast: Double,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
+    @SerialName("THEME_TEXT_CONTRAST") val themeTextContrast: Double,
     @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
     @SerialName("TIME_ZONE_DEFAULT_LABEL") val timeZoneDefaultLabel: String,
     @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
@@ -3789,10 +3796,11 @@ class ContractValues internal constructor(
     val themeConsoleFields: List<String> get() = part6.themeConsoleFields
     val themeDarkRailSeeds: Map<String, String> get() = part6.themeDarkRailSeeds
     val themeDensities: List<ThemeDensity> get() = part6.themeDensities
+    val themeFigmaBase: ThemeColorsPair get() = part6.themeFigmaBase
     val themeNonTextContrast: Long get() = part6.themeNonTextContrast
     val themePalettes: List<ThemePalette> get() = part6.themePalettes
     val themePreviews: Map<String, ThemePreview> get() = part6.themePreviews
-    val themeTextContrast: Double get() = part6.themeTextContrast
+    val themeTextContrast: Double get() = part7.themeTextContrast
     val timeZoneChoices: List<String> get() = part7.timeZoneChoices
     val timeZoneDefaultLabel: String get() = part7.timeZoneDefaultLabel
     val workflowMaxSteps: Long get() = part7.workflowMaxSteps

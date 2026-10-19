@@ -4611,6 +4611,16 @@ public struct ThemeColors: Codable, Hashable, Sendable {
   }
 }
 
+public struct ThemeColorsPair: Codable, Hashable, Sendable {
+  public var dark: ThemeColors
+  public var light: ThemeColors
+
+  public init(dark: ThemeColors, light: ThemeColors) {
+    self.dark = dark
+    self.light = light
+  }
+}
+
 public struct ThemeDensity: Codable, Hashable, Sendable {
   public var controlHeight: Int
   public var id: ThemeDensityId
@@ -5100,6 +5110,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let themeConsoleFields: [String]
   public let themeDarkRailSeeds: [String: String]
   public let themeDensities: [ThemeDensity]
+  public let themeFigmaBase: ThemeColorsPair
   public let themeNonTextContrast: Int
   public let themePalettes: [ThemePalette]
   public let themePreviews: [String: ThemePreview]
@@ -5395,6 +5406,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case themeConsoleFields = "THEME_CONSOLE_FIELDS"
     case themeDarkRailSeeds = "THEME_DARK_RAIL_SEEDS"
     case themeDensities = "THEME_DENSITIES"
+    case themeFigmaBase = "THEME_FIGMA_BASE"
     case themeNonTextContrast = "THEME_NON_TEXT_CONTRAST"
     case themePalettes = "THEME_PALETTES"
     case themePreviews = "THEME_PREVIEWS"
