@@ -134,13 +134,3 @@ private struct AglynOptionalPrimaryActionModifier: ViewModifier {
     }
   }
 }
-
-extension AglynScreenChrome {
-  /// Adds what an outer modifier publishes to what the screen inside it already did: the screen's own primary action and
-  /// title stay first, actions add up. Every chrome modifier merges this way, so stacking them never hides one.
-  public mutating func merge(_ outer: AglynScreenChrome) {
-    primary = primary ?? outer.primary
-    title = title ?? outer.title
-    entries.append(contentsOf: outer.entries)
-  }
-}
