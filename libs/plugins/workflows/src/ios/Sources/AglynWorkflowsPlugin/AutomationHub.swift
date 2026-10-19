@@ -139,7 +139,8 @@ struct AutomationHubScreen: View {
     } icon: {
       Image(systemName: section.icon).foregroundStyle(AglynColor.tint)
     }
-    .aglynSelectableRow(section, selection: picked, density: .sidebar)
+    // A content column's row, on the column's content edges like every column's (not the shell sidebar's inset).
+    .aglynSelectableRow(section, selection: picked)
   }
 
   private var sidebar: some View {
