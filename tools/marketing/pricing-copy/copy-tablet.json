@@ -5,7 +5,7 @@
   "frameName": "Pricing — Tablet",
   "frameSize": {
     "width": 768,
-    "height": 9930
+    "height": 9954
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -543,7 +543,7 @@
               "name": "row",
               "cells": [
                 "Reusable components",
-                "—",
+                "1",
                 "✓",
                 "✓",
                 "✓",
@@ -1187,12 +1187,12 @@
               "cells": [
                 "Aglyn AI: generate pages, emails, campaigns, products and more",
                 "300 credits",
-                "add-on",
-                "add-on",
-                "add-on",
-                "add-on",
-                "add-on",
-                "add-on",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
+                "✓",
                 "✓"
               ]
             },
@@ -1200,7 +1200,7 @@
               "figmaNodeId": "2141:694",
               "name": "row",
               "cells": [
-                "AI credits / mo",
+                "AI credits included / mo",
                 "300 / mo",
                 "750 / mo",
                 "2.75k / mo",
@@ -1304,7 +1304,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 768,
-      "heightPx": 1637,
+      "heightPx": 1661,
       "groups": [
         {
           "figmaNodeId": "572:4087",
@@ -1516,7 +1516,7 @@
               "figmaNodeId": "2146:640",
               "name": null,
               "cells": [
-                "Starter $9 · Pro $19 · Business $39 · Scale $69 · Advanced $99 · Agency $299 a month, per workspace. Adds AI credits to your plan’s included band — 4,000 on Starter, 9,000 on Pro, 19,000 on Business, 34,000 on Scale, 49,000 on Advanced, 149,000 on Agency. Enterprise by agreement."
+                "Spark $9 · Boost $19 · Plus $39 · Max $69 · Ultra $99 · Studio $299 a month, per workspace, on any paid plan. Each tier adds AI credits on top of the credits your plan includes — 4,000 with Spark, 9,000 with Boost, 19,000 with Plus, 34,000 with Max, 49,000 with Ultra, 149,000 with Studio. Enterprise by agreement."
               ]
             },
             {
@@ -1553,6 +1553,13 @@
               "name": null,
               "cells": [
                 "Any paid plan."
+              ]
+            },
+            {
+              "figmaNodeId": "2548:3006",
+              "name": null,
+              "cells": [
+                "Learn more"
               ]
             }
           ]

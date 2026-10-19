@@ -397,11 +397,9 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
        */
       // "included" since AGL-3965: the row is the plan's own band, and an
       // Aglyn AI tier adds on top of it — the figure was being read as the
-      // tier's. `frameLabel` carries the published label until the page is
-      // republished with the new one.
+      // tier's.
       {
         label: 'AI credits included / mo',
-        frameLabel: 'AI credits / mo',
         value: talk((p) => perMonth(E(p).assistCreditsPerMonth)),
       },
       {
@@ -1237,28 +1235,7 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
  * matching and is reported as resolved, so it cannot outlive its reason. An
  * exemption that outlives its reason is just an untested cell.
  */
-const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
-  'Reusable components · Free': {
-    frame: '—',
-    why:
-      'Free saves one reusable component per site since AGL-3615; the Figma ' +
-      'Pricing frames still print the dash from when components were Starter+.',
-  },
-  // One pool (AGL-3965): every paid plan's included credits pay for
-  // generation, so the door ticks; the page prints "add-on" until it is
-  // republished, page first.
-  ...Object.fromEntries(
-    PAID.map((p) => [
-      `${AI_ADDON}: generate pages, emails, campaigns, products and more · ${PLAN_LABELS[p]}`,
-      {
-        frame: 'add-on',
-        why:
-          'AGL-3965 opens generation on every paid plan against its included ' +
-          'credits; /pricing still prints "add-on" until it is republished',
-      },
-    ]),
-  ),
-}
+const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
 
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
@@ -2064,39 +2041,27 @@ feeLadder.finish()
 /*==========================================
  * THE OPTIONAL ADD-ON CARDS.
  *
- * Three cards. The two flat ones carry a single price, and the frame writes
+ * Four cards. The three flat ones carry a single price, and the frame writes
  * it two ways: bare on the wide breakpoints, with the scope appended on
  * mobile. Both renderings are assembled from the same code value, so either
  * is matched EXACTLY and neither can carry a stale figure — where a "starts
  * with the price" rule would pass `$89 / mo · per organization` on a per-site
  * add-on.
  *
- * The AI card is priced per plan (AGL-2900), so its headline is the cheapest
- * plan's uplift and the ladder lives in the sentence beneath it. The wide
+ * The AI card is priced per tier (AGL-3965), so its headline is the cheapest
+ * tier and the six tiers live in the sentence beneath it. The wide
  * breakpoints draw that sentence as the one-cell record after the heading and
- * every figure in it is read back beside its plan's name; mobile draws the
+ * every figure in it is read back beside its tier's name; mobile draws the
  * heading only, so there the headline is all there is to compare. A card
  * whose sentence a wide breakpoint has dropped is reported, because the
- * sentence is where six prices and six bands are published.
+ * sentence is where six prices and six credit amounts are published.
  *
  * NOT reconciled: `maxQuantity`, `scope` and the per-plan `included` counts.
  * The frame states none of them. `POS_REGISTERS_ADDON_MAX` in particular is
  * the ceiling `POST /api/billing/addons` enforces, and publishing it beside
  * an $89/mo line is what would give it a surface to be checked against.
  *=========================================*/
-const ADDONS_STALE: Record<string, Divergence> = Object.fromEntries(
-  // The Aglyn AI card's sentence names tiers since AGL-3965; the published
-  // page still names a price per plan until it is republished, page first.
-  AI_TIER_IDS.flatMap((id) => {
-    const why =
-      'AGL-3965 sells Aglyn AI as six tiers on any paid plan; /pricing still ' +
-      'prints the per-plan ladder until it is republished with the tiers'
-    return [
-      [`${AI_ADDON} · ${AI_TIERS[id].label}`, { frame: '(not stated)', why }],
-      [`${AI_ADDON} · ${AI_TIERS[id].label} credits`, { frame: '(not stated)', why }],
-    ]
-  }),
-)
+const ADDONS_STALE: Record<string, Divergence> = {}
 
 /**
  * Cards we publish that the page carries nowhere. Empty since AGL-3954 put
