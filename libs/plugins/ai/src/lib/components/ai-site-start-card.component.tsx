@@ -815,7 +815,7 @@ export function AiSiteStartCard({
   const heading = importing
     ? {
         title: 'Bring my site',
-        lede: 'Bring the website you have now into Aglyn: its pages, words and photos. First, prove it is yours.',
+        lede: `Bring the website you have now into ${PLATFORM_BRAND_NAME}: its pages, words and photos. First, prove it is yours.`,
       }
     : HEADINGS[step]
   // Enter in a text answer is Next. A select, a card or a button keeps its own Enter.
@@ -988,7 +988,7 @@ export function AiSiteStartCard({
                       icon={mdiWebSync.path}
                       iconId="web-sync"
                       title="Bring my site"
-                      description="Bring the website you have now into Aglyn: its pages, words and photos, rewritten in your new design."
+                      description={`Bring the website you have now into ${PLATFORM_BRAND_NAME}: its pages, words and photos, rewritten in your new design.`}
                       blocked={importAvailability.state === 'blocked' ? importAvailability.message : null}
                       onChoose={chooseImport}
                     >
