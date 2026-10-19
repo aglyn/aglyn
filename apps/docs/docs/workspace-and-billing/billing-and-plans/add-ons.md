@@ -271,6 +271,20 @@ Nothing on it is ever rewritten. If we correct the time on a request, or remove,
 credit or refund a charge, a new record says what it was, what it is now and why, and
 we email you the same. We can also email you the whole month's statement; just ask.
 
+### Projects on Billing {#site-care-projects}
+
+A project is billed on its own invoice, separate from your plan. Before we send one, we
+email you a confirmation of what it covers and the price you agreed to. Each invoice
+then comes by email with a link to pay it by card on your phone or computer, and we
+email you a receipt when it is paid. A larger project is billed in two halves: the
+first before we start, the second when it launches.
+
+The **Projects** card on **Billing** lists each project with what it covers, the price
+and how it is split, where it stands, and each invoice with a **Pay** button while it is
+unpaid. **Everything we recorded** shows every step in order, including any correction
+and why. The invoices are also in your billing history with your other charges.
+Anyone who can view billing sees it.
+
 ## How changes bill
 
 - Adding units shows a **prorated preview** of today's charge before you confirm. It is

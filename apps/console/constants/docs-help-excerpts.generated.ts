@@ -292,6 +292,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   addOns: {
     '#assigning-collaborator-seats': 'Collaborator seats work exactly like register seats: a seat is bought once for your workspace and then assigned to one site.',
     '#assigning-register-seats': 'Unlike every other add-on, a POS register seat is bought once for your workspace and then assigned to one site.',
+    '#site-care-projects': 'A project is billed on its own invoice, separate from your plan.',
     '#site-care-statement': 'The Site Care card on Billing is the month\'s statement, kept up to date as we work.',
     '#what-you-can-add': 'Buy extra capacity for the whole workspace on the Plan add-ons card under Billing → Plan: manager seats, datasets and extra sites apply straight away, while collaborator seats and POS registers become pools you then…',
   },
@@ -1026,6 +1027,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   supportTriage: {
     '#site-care-month': 'The Site Care card on the staff page for the workspace shows the month: every request with its minutes, billing and history, the totals, and the month\'s own records.',
+    '#site-care-projects': 'Work that adds something new (a page, a form, a redesign, logo or brand work, a campaign) is a project with one flat price, never hourly.',
     '#site-care-working': 'The Site Care card in the ticket\'s thread is where every step is taken.',
   },
   tasks: {

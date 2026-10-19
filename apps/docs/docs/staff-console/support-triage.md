@@ -212,10 +212,50 @@ the extra time and every correction.
 ### When the reconciliation alerts {#site-care-reconciliation}
 
 Once a day each closed request's charge is compared with its Stripe invoice item, and
-each month's total with Stripe's, for this month and the last. A difference raises
-**Site Care extra time does not match Stripe** (Should know) for that workspace and month.
-It changes nothing on either side. Open the request it names: retry a charge that is
-stuck or failed, and fix anything edited in Stripe from the request.
+each month's total with Stripe's, for this month and the last. The same check compares
+each project's invoices with Stripe (see below). A difference raises **Site Care billing
+does not match Stripe** (Should know) for that workspace and month, or for its projects.
+It changes nothing on either side. Open the request or project it names: retry a charge
+or invoice that is stuck or failed, use **Check payments** on a project whose invoice
+was paid without being recorded, and fix anything edited in Stripe from the record.
+
+### Charging for a project {#site-care-projects}
+
+Work that adds something new (a page, a form, a redesign, logo or brand work, a
+campaign) is a project with one flat price, never hourly. It is billed from **Charge
+for work** on the staff page for the workspace, on its own invoice that the owner pays
+on their phone. Never build a project invoice by hand in the Stripe dashboard.
+
+1. **Quote it.** Press **Charge for work**. Name the project, list what the price
+   covers (one deliverable per line), choose the kind and enter the hours you estimate.
+   The quote is the hours rounded up to the whole hour at the extra-time rate, and never
+   below the kind's starting price on aglyn.com/pricing. You can raise the price; you
+   cannot lower it. **What the owner sees** shows the quote as they will read it.
+2. **Get the owner's yes.** Tell them the price and what it covers. When they agree (at
+   the booth, by phone, by text or by email), choose **Record the owner's yes** and enter
+   how and when. Saving it emails them a confirmation of the scope and price, which is
+   the written record. Nothing can be invoiced before this.
+3. **Send the invoice.** A larger project is billed half up front and half at launch; a
+   smaller one in full up front, and the quote says which. **Send deposit
+   invoice** (or **Send invoice**) makes the invoice and emails the owner the pay link.
+   The card shows the link and a QR code: the owner can scan it and pay on the spot.
+4. **Paid.** The project records the payment by itself and emails the owner a receipt.
+   If it still shows the invoice as waiting after they paid, press **Check payments**.
+5. **Launch.** When the work is live, press **Mark launched**. A half-and-half project
+   sends the balance invoice in the same step.
+
+**Corrections.** Every correction needs a reason, is kept in the project's history and
+emails the owner.
+
+- **Edit quote** changes the name, scope or price until the first invoice is sent. The
+  owner's yes must then be recorded again, for the new quote. After the first invoice
+  is sent, the price is fixed: an overrun is ours. A different price is a new project.
+- **Correct the yes** records a new version of how and when the owner agreed, and
+  re-sends the corrected confirmation.
+- **Void** cancels an unpaid invoice. **Credit note** clears what is owed on an unpaid
+  invoice, with its tax. **Refund** returns a paid invoice, with its tax, to the card.
+- **Retry invoice** appears when Stripe refused or did not answer. It finds and reuses
+  what the first try made, so it cannot invoice twice.
 
 ## Related
 
