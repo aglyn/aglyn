@@ -241,7 +241,9 @@ struct ShellChrome: View {
       }
       .padding(.horizontal, 12)
       .frame(height: Self.toolRow)
-      .overlay(alignment: .bottom) { Rectangle().fill(AglynColor.divider).frame(height: 1) }
+      // The hairline sits under the toolbar row, not inside it: Figma's Mac/Titlebar 12:910 is 34 + 44 + 1 = 79 points
+      // (iPad 40 + 48 + 1), and the content starts under it.
+      Rectangle().fill(AglynColor.divider).frame(height: 1)
     }
     .background(AglynColor.titlebar)
     .modifier(WindowDragArea())
