@@ -146,7 +146,7 @@ export default function AiCreditsCard(props: AiCreditsCardProps) {
           <Link href={`${billingHref ?? ''}#addons`} color="primary" underline="hover">
             {'Choose a tier'}
           </Link>
-          {' in Billing → Plans.'}
+          {' in Billing → Plan.'}
         </Typography>
       ) : null}
     </CardDisplay>

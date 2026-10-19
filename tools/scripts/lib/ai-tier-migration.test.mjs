@@ -25,6 +25,8 @@ import {
   moveParams,
   pairLegacyPrices,
   planAiTierMoves,
+  stripeKeyMode,
+  summarizeAiTierMoves,
 } from './ai-tier-migration.mjs'
 
 const TIER_USD = { spark: 9, boost: 19, plus: 39, max: 69, ultra: 99, studio: 299 }
@@ -78,11 +80,51 @@ test('REFUSES a pair whose amount differs — the move would change a bill', () 
   assert.match(problems[0], /aglyn_pro_ai_addon .*would change a bill/)
 })
 
-test('REFUSES to run before the tier prices are minted', () => {
+test('an unminted tier price is named, and its legacy items still counted, never moved', () => {
   const prices = allPrices()
   delete prices.aglyn_ai_studio_yearly
-  const { problems } = pairLegacyPrices(prices)
-  assert.match(problems[0], /aglyn_ai_studio_yearly is not minted/)
+  const { pairs, problems, unminted } = pairLegacyPrices(prices)
+  // Not a mismatch: the commit refuses on `unminted`, the dry run counts.
+  assert.deepEqual(problems, [])
+  assert.equal(unminted.length, 1)
+  assert.match(unminted[0], /aglyn_ai_studio_yearly is not minted/)
+  const pending = pairs.find((pair) => pair.from === 'aglyn_agency_ai_addon_yearly')
+  assert.equal(pending.toPriceId, null)
+  assert.equal(pairs.length, 12)
+  // A move to an unminted price cannot be sent.
+  assert.throws(() => moveParams({ itemId: 'si_1', toPriceId: null, to: 'aglyn_ai_studio_yearly' }), /not minted/)
+})
+
+test('before ANY tier price is minted, the dry run still sees every legacy item', () => {
+  const prices = allPrices()
+  for (const key of Object.keys(prices)) if (key.startsWith('aglyn_ai_')) delete prices[key]
+  const { pairs, unminted } = pairLegacyPrices(prices)
+  assert.equal(pairs.length, 12)
+  assert.equal(unminted.length, 12)
+  const subscription = {
+    id: 'sub_1',
+    status: 'active',
+    metadata: { orgId: 'org_1' },
+    items: { data: [{ id: 'si_ai', price: { id: 'price_aglyn_scale_ai_addon_yearly' }, quantity: 1 }] },
+  }
+  const { moves, skipped } = planAiTierMoves([subscription], pairs)
+  assert.equal(moves.length, 1)
+  assert.equal(moves[0].tier, 'max')
+  assert.equal(moves[0].toPriceId, null)
+  assert.deepEqual(summarizeAiTierMoves(moves, skipped), {
+    toMove: 1,
+    skipped: 0,
+    subscriptions: 1,
+    byFrom: [{ from: 'aglyn_scale_ai_addon_yearly', to: 'aglyn_ai_max_yearly', tier: 'max', items: 1 }],
+    skips: {},
+  })
+})
+
+test('the mode is read off the key', () => {
+  assert.equal(stripeKeyMode('sk_live_x'), 'LIVE')
+  assert.equal(stripeKeyMode('rk_live_x'), 'LIVE')
+  assert.equal(stripeKeyMode('sk_test_x'), 'test')
+  assert.equal(stripeKeyMode(undefined), 'test')
 })
 
 test('an archived legacy price is simply not migrated', () => {

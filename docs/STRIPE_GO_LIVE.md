@@ -61,7 +61,12 @@ The twelve per-plan `aglyn_{plan}_ai_addon[_yearly]` prices minted on
 tier with the same price, and `tools/scripts/migrate-ai-addon-tiers.mjs`
 (dry run by default, `--commit` to apply) moves each such item to its tier's
 price, after the console that reads the tier prices is deployed. Archive the
-per-plan prices only once the migration reports nothing left to move. An
+per-plan prices only once the migration reports nothing left to move. The dry
+run makes GET requests only and counts every item on a legacy price even
+before the tier prices exist; its live run on 2026-10-19 found all twelve
+per-plan prices and **no** subscription item on any of them, so today the
+`--commit` step has nothing to move. Run the dry run again just before
+`--commit`, because a checkout between now and then could add one. An
 unset tier env refuses the purchase (501 naming the env), and
 `npm run check:pricing-drift` reports an unminted tier as `UNMINTED` and a
 legacy price that no longer charges its tier's amount as `DIFFERS`.

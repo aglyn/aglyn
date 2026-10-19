@@ -117,9 +117,11 @@ add-ons.
 
 Every plan's included **AI credits** pay for all of **Aglyn AI**: the assistant's
 answers and building for you — pages, components, emails, campaigns, products and more.
-An **Aglyn AI tier** adds more credits on top, every month. Choose it under
-**Billing → Add-ons → Aglyn AI**: the picker lists every tier with the credits it adds and
-its price, and marks the one you have. What each AI door does is under
+An **Aglyn AI tier** adds more credits on top, every month. Choose it in the **Aglyn AI**
+row of the **Plan add-ons** card under **Billing → Plan**: the **Aglyn AI tier** field
+lists every tier with the credits it adds and its price, and marks the one you have as
+**Current**. Pick one and choose **Apply**, or pick **No tier** and choose **Remove**; the
+change is shown with what it costs before you confirm it. What each AI door does is under
 [Aglyn AI](../../ai/overview.md).
 
 - **Six tiers, chosen on their own.** Spark, Boost, Plus, Max, Ultra and Studio, from

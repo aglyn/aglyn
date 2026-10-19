@@ -29,9 +29,12 @@
 // same tier meanwhile — so the org write is a convenience, never a step.
 //
 // SAFE BY CONSTRUCTION:
-//  - dry run by default; nothing is written without --commit;
-//  - refuses to run when any tier price is unminted or any legacy price does
-//    not charge exactly what its tier charges (amount, currency, interval);
+//  - dry run by default; nothing is written without --commit. The dry run
+//    makes GET requests only (prices, subscriptions) and counts every item on
+//    a legacy price even before the tier prices are minted;
+//  - --commit refuses when any tier price is unminted or any legacy price
+//    does not charge exactly what its tier charges (amount, currency,
+//    interval), and then changes nothing;
 //  - the item keeps its id and quantity, and `proration_behavior: none`, so
 //    no invoice line is raised — the amount is the same either side;
 //  - a subscription a schedule manages is skipped (its future phase would put
@@ -44,10 +47,12 @@
 // add-on as gone on the event each move raises.
 
 import {
+  legacyToTierLookupKeys,
   moveParams,
   pairLegacyPrices,
   planAiTierMoves,
-  legacyToTierLookupKeys,
+  stripeKeyMode,
+  summarizeAiTierMoves,
 } from './lib/ai-tier-migration.mjs'
 
 const COMMIT = process.argv.includes('--commit')
@@ -115,15 +120,17 @@ async function orgWriter() {
 
 const keys = legacyToTierLookupKeys()
 const prices = await pricesByLookupKey([...new Set(keys.flatMap((key) => [key.from, key.to]))])
-const mode = Object.values(prices)[0]?.livemode ? 'LIVE' : 'test'
-console.log(`Stripe mode: ${mode} · ${COMMIT ? 'COMMIT' : 'dry run'}`)
+console.log(`Stripe mode: ${stripeKeyMode(SECRET)} · ${COMMIT ? 'COMMIT' : 'dry run'}`)
 
-const { pairs, problems } = pairLegacyPrices(prices)
-if (problems.length) {
-  for (const problem of problems) console.error(`REFUSED  ${problem}`)
+const { pairs, problems, unminted } = pairLegacyPrices(prices)
+if (COMMIT && (problems.length || unminted.length)) {
+  for (const problem of [...problems, ...unminted]) console.error(`REFUSED  ${problem}`)
   console.error('\nNothing was changed.')
   process.exit(1)
 }
+// A dry run reports the same faults and still counts what would move.
+for (const problem of problems) console.log(`WOULD REFUSE  ${problem}`)
+for (const missing of unminted) console.log(`not yet  ${missing}`)
 
 const subscriptions = new Map()
 for (const pair of pairs) {
@@ -134,7 +141,11 @@ for (const pair of pairs) {
 const { moves, skipped } = planAiTierMoves([...subscriptions.values()], pairs)
 
 for (const move of moves) {
-  console.log(`${COMMIT ? 'move' : 'would move'}  ${move.subscriptionId} item ${move.itemId} (org ${move.orgId ?? '?'}): ${move.from} → ${move.to}`)
+  console.log(
+    `${COMMIT ? 'move' : 'would move'}  ${move.subscriptionId} item ${move.itemId} ` +
+      `(org ${move.orgId ?? '?'}): ${move.from} → ${move.to}` +
+      (move.toPriceId ? '' : ' (tier price not minted yet)'),
+  )
 }
 for (const skip of skipped) {
   console.log(`skip  ${skip.subscriptionId} (org ${skip.orgId ?? '?'}): ${skip.reason}`)
@@ -153,5 +164,12 @@ if (COMMIT) {
       (writeOrg ? ' · org aiTier written' : ' · org aiTier left to the webhook'),
   )
 } else {
-  console.log(`\n${moves.length} to move, ${skipped.length} skipped — re-run with --commit to apply`)
+  const summary = summarizeAiTierMoves(moves, skipped)
+  console.log(
+    `\n${summary.toMove} item(s) on ${summary.subscriptions} subscription(s) to move, ` +
+      `${summary.skipped} skipped`,
+  )
+  for (const row of summary.byFrom) console.log(`  ${row.from} → ${row.to}: ${row.items}`)
+  for (const [reason, count] of Object.entries(summary.skips)) console.log(`  skipped (${reason}): ${count}`)
+  console.log('Dry run: nothing was changed. Re-run with --commit to apply.')
 }

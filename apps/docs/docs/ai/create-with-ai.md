@@ -66,6 +66,13 @@ them, and an owner or admin chooses it in **Billing**.
 A Free workspace's buttons work from the [300 AI credits](./ai-credits.md#free-plan) it
 gets each month.
 
+If Create with AI is switched off for your workspace, the button is still there and
+opens a short window saying what it would make:
+
+- an owner or admin sees **Add Aglyn AI**, which opens **Billing** to choose a tier, or
+  **Not now**;
+- anyone else is asked to have a workspace owner or admin choose one.
+
 ## When it is not there {#when-it-is-not-there}
 
 **Create with AI** is hidden when you lack the **Generate with AI** permission, or when AI

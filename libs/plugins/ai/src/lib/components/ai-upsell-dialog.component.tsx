@@ -42,11 +42,13 @@ import {
 } from '../model/ai-upsell-copy'
 
 /**
- * "Create with AI" on a plan that could buy the AI add-on and has not
- * (AGL-3601). The shell mounts the entry with `entitled={false}` only where
- * the add-on is sold to this workspace, and the jobs route has said the plan
- * is the one thing missing; the entry then keeps its place on the page and
- * opens this instead of the brief, so the reader sees where the add-on is used.
+ * "Create with AI" where generation is switched off for a workspace that
+ * could buy an Aglyn AI tier (AGL-3601, AGL-3965). Since AGL-3965 every paid
+ * plan's own credits pay for generation, so this is reached only where a
+ * per-org setting closed it. The shell mounts the entry with
+ * `entitled={false}` only where a tier is sold to this workspace, and the
+ * jobs route has said that is the one thing missing; the entry then keeps its
+ * place on the page and opens this instead of the brief.
  */
 
 // The entries' words are the model's, which the native apps' door reads too
@@ -65,7 +67,7 @@ export interface AiUpsellDialogProps {
 const aiUpsellHelp = () =>
   pluginDocsHelp('aiCreate', {
     anchor: '#without-the-add-on',
-    excerpt: `Create with AI needs the ${aiAddonName()} add-on on a paid plan. An owner or admin adds it from Billing; on Free, the monthly AI credits cover it.`,
+    excerpt: `On every paid plan, Create with AI runs on the AI credits the plan includes. Where it is switched off for a workspace, an ${aiAddonName()} tier switches it on; an owner or admin chooses one in Billing.`,
   })
 
 export function AiUpsellDialog({ kind, open, onClose, upgrade }: AiUpsellDialogProps) {

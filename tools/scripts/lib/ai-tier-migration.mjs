@@ -43,18 +43,27 @@ export function legacyToTierLookupKeys() {
  * Pair each legacy price with its tier price, refusing any pair whose amount,
  * currency or interval differ — the move must not change a charge.
  *
+ * A legacy price whose tier price is not minted yet is still PAIRED, with
+ * `toPriceId: null`, and named in `unminted`: the dry run can then count and
+ * list every item that will move (the figure the go-live runbook needs before
+ * anyone mints anything), while `--commit` refuses on a non-empty `unminted`
+ * exactly as it does on `problems`.
+ *
  * @param prices - lookup key → `{ id, unit_amount, currency, recurring: { interval } }`
- * @returns `{ pairs, problems }`; a non-empty `problems` means do not run.
+ * @returns `{ pairs, problems, unminted }`; a non-empty `problems` or
+ *   `unminted` means do not commit.
  */
 export function pairLegacyPrices(prices) {
   const pairs = []
   const problems = []
+  const unminted = []
   for (const key of legacyToTierLookupKeys()) {
     const from = prices[key.from]
     const to = prices[key.to]
     if (!from) continue // never minted or already archived: nothing to move
     if (!to) {
-      problems.push(`${key.to} is not minted — run setup-stripe.mjs first`)
+      unminted.push(`${key.to} is not minted — run setup-stripe.mjs first`)
+      pairs.push({ ...key, fromPriceId: from.id, toPriceId: null })
       continue
     }
     if (
@@ -71,7 +80,7 @@ export function pairLegacyPrices(prices) {
     }
     pairs.push({ ...key, fromPriceId: from.id, toPriceId: to.id })
   }
-  return { pairs, problems }
+  return { pairs, problems, unminted }
 }
 
 /**
@@ -116,8 +125,42 @@ export function planAiTierMoves(subscriptions, pairs) {
   return { moves, skipped }
 }
 
+/**
+ * The dry run's figures: items to move per legacy price, and skips per
+ * reason — what the go-live runbook quotes.
+ *
+ * @param moves - `planAiTierMoves(...).moves`
+ * @param skipped - `planAiTierMoves(...).skipped`
+ */
+export function summarizeAiTierMoves(moves, skipped) {
+  const byFrom = {}
+  for (const move of moves) {
+    const row = (byFrom[move.from] ??= { from: move.from, to: move.to, tier: move.tier, items: 0 })
+    row.items += 1
+  }
+  const skips = {}
+  for (const skip of skipped) skips[skip.reason] = (skips[skip.reason] ?? 0) + 1
+  return {
+    toMove: moves.length,
+    skipped: skipped.length,
+    subscriptions: new Set(moves.map((move) => move.subscriptionId)).size,
+    byFrom: Object.values(byFrom).sort((a, b) => a.from.localeCompare(b.from)),
+    skips,
+  }
+}
+
+/**
+ * `sk_live_…` / `rk_live_…` is live mode; everything else is test. Read off
+ * the key rather than a fetched price, so an account with no matching price
+ * still says which mode it ran against.
+ */
+export function stripeKeyMode(secret) {
+  return /^(sk|rk)_live_/.test(String(secret ?? '')) ? 'LIVE' : 'test'
+}
+
 /** The Stripe form body for one move. */
 export function moveParams(move) {
+  if (!move?.toPriceId) throw new Error(`${move?.to ?? 'tier price'} is not minted: nothing to move to`)
   return new URLSearchParams({
     'items[0][id]': move.itemId,
     'items[0][price]': move.toPriceId,
