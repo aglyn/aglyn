@@ -93,15 +93,35 @@ function readAliases(): Record<string, string> {
 }
 
 /**
- * A part of a starter photo, as a picture given whole: `crop` is its left,
- * top, width and height in the photo's own pixels, so one photo can open two
- * kinds' pages on different subjects (the café's shelves, the owner).
+ * The photos only the previews draw (AGL-3985), each credited in the
+ * CREDITS.md beside them: render inputs, never a site's starter photo, so a
+ * new site starts as it always has.
+ */
+const PREVIEW_PHOTOS = join(ROOT, 'libs/plugins/ai/scripts/style-preview-photos')
+
+/** The photo a `{ photo }` or `{ file }` entry names: a starter's, or one of the previews' own, which must be credited. */
+function photoFile(photo: Dict): string {
+  if (typeof photo['file'] === 'string') {
+    const name = photo['file'] as string
+    const credits = existsSync(join(PREVIEW_PHOTOS, 'CREDITS.md')) ? readFileSync(join(PREVIEW_PHOTOS, 'CREDITS.md'), 'utf8') : ''
+    if (!credits.includes(`\`${name}\``)) throw new Error(`style-preview-photos/${name} is not credited in its CREDITS.md`)
+    return join(PREVIEW_PHOTOS, name)
+  }
+  if (!STARTER_FILES[photo['photo']]) throw new Error(`no starter photo named ${photo['photo']}`)
+  return join(STARTERS, STARTER_FILES[photo['photo']] as string)
+}
+
+/**
+ * A picture given whole: a starter photo or one of the previews' own
+ * (`file`), whole or a part of it (`crop`: its left, top, width and height in
+ * the photo's own pixels), so one photo can open two kinds' pages on
+ * different subjects (the café's shelves, the owner).
  */
 async function cropped(photo: Dict): Promise<Dict> {
   const sharp = require('sharp')
-  const [left, top, width, height] = photo['crop'] as number[]
-  const file = join(STARTERS, STARTER_FILES[photo['photo']] ?? '')
-  if (!STARTER_FILES[photo['photo']]) throw new Error(`no starter photo named ${photo['photo']}`)
+  const file = photoFile(photo)
+  const meta = await sharp(file).metadata()
+  const [left, top, width, height] = (photo['crop'] as number[] | undefined) ?? [0, 0, meta.width as number, meta.height as number]
   const scale = Math.min(1, 1200 / width)
   const out = { width: Math.round(width * scale), height: Math.round(height * scale) }
   const jpeg: Buffer = await sharp(file).extract({ left, top, width, height }).resize(out.width, out.height).jpeg({ quality: 82 }).toBuffer()
