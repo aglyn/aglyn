@@ -1,0 +1,524 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*==========================================
+ * THE SITE-IMPORT CRAWLER (AGL-3974, parent AGL-3973).
+ *
+ * Reads a website a workspace has PROVED it owns (domain-ownership.ts in
+ * tenant-data-admin; the doors check the proof before calling this) into a
+ * typed inventory: each page's title, description, headings and text in
+ * order, images and menu links. It writes nothing; the import job decides
+ * what becomes a page.
+ *
+ * Every request goes through `fetchPublicTextDetailed`, the theme job's
+ * SSRF-guarded fetch: https on the default port only, public addresses only,
+ * the socket pinned to the address checked. On top of that:
+ *
+ * - **One site.** The site is `https://<domain>` and `https://www.<domain>`,
+ *   one site to its owner. Every redirect hop and every discovered link must
+ *   stay on it; a page that redirects anywhere else is refused, not followed.
+ * - **AglynBot.** Every request says `AglynBot/1.0 (+https://aglyn.com/bot)`,
+ *   and robots.txt is read first and honored for every page: the AglynBot
+ *   group, else `*`. A robots.txt that answers 404 allows everything; one
+ *   that cannot be read at all (5xx, no answer) stops the crawl, because
+ *   "could not ask" is not "allowed".
+ * - **Sitemap first.** The sitemaps robots.txt names, else /sitemap.xml (an
+ *   index's children included), then same-site links found on the pages read,
+ *   for whatever the sitemap missed.
+ * - **Budgets.** Pages (the caller's, from the plan), bytes per page (a page
+ *   over it is refused, not cut), bytes in total, and wall-clock time.
+ * - **No lookalikes.** A domain that wears a brand it is not
+ *   (`lookalikeBrandForHost`) is refused before any request.
+ * - **No sign-in pages.** A page with a password field is refused and
+ *   reported; forms with payment fields, scripts, iframes and embeds never
+ *   reach the inventory (site-import-html.ts).
+ *=========================================*/
+
+import { lookalikeBrandForHost } from '@aglyn/shared-util-email/outbound-phishing-screen'
+import { fenceUntrustedText } from '@aglyn/shared-util-tools/untrusted-text'
+import {
+  fetchPublicTextDetailed,
+  type PublicFetchOptions,
+  type PublicFetchResult,
+} from '../jobs/ai-theme-brand-inputs'
+import {
+  extractSiteImportPage,
+  readMetaValues,
+  type SiteImportBlock,
+  type SiteImportForm,
+  type SiteImportImage,
+  type SiteImportNavLink,
+} from './site-import-html'
+import {
+  AGLYN_BOT_TOKEN,
+  parseRobotsTxt,
+  parseSitemap,
+  robotsAllows,
+  robotsRulesFor,
+  type RobotsRule,
+} from './site-import-robots'
+
+/** What every crawler request says it is. */
+export const AGLYN_BOT_USER_AGENT = 'AglynBot/1.0 (+https://aglyn.com/bot)'
+
+export const SITE_IMPORT_DEFAULTS = {
+  maxPageBytes: 2 * 1024 * 1024,
+  maxTotalBytes: 24 * 1024 * 1024,
+  timeBudgetMs: 60_000,
+  /** One request's own clock, inside the whole crawl's. */
+  requestTimeoutMs: 8_000,
+  robotsMaxBytes: 256 * 1024,
+  sitemapMaxBytes: 4 * 1024 * 1024,
+  /** Sitemap documents read, an index's children included. */
+  maxSitemaps: 6,
+  /** URLs a sitemap may contribute to the queue. */
+  maxSitemapUrls: 2_000,
+  /** Reasons kept in `skipped` before the list stops growing. */
+  maxSkipped: 200,
+} as const
+
+/** Never a page: files a link may point at that are not HTML. */
+const NON_PAGE_EXTENSION =
+  /\.(?:pdf|jpe?g|png|gif|webp|avif|svg|ico|bmp|tiff?|zip|gz|tgz|rar|7z|mp4|m4v|mov|webm|mp3|wav|ogg|m4a|docx?|xlsx?|pptx?|csv|txt|css|js|mjs|json|xml|rss|atom|woff2?|ttf|otf|eot|exe|dmg|apk)$/i
+
+const TRACKING_PARAM = /^(?:utm_[a-z]+|fbclid|gclid|msclkid|mc_cid|mc_eid|_ga|ref)$/i
+
+const DOMAIN_PATTERN = /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/
+
+export type SiteImportSkipReason =
+  /** The page has a password field: a sign-in page, refused outright. */
+  | 'login-form'
+  /** robots.txt keeps AglynBot off this path. */
+  | 'robots'
+  /** A redirect left the site. */
+  | 'off-origin-redirect'
+  /** Over the per-page byte cap. */
+  | 'too-large'
+  /** Answered with something that is not HTML. */
+  | 'not-html'
+  /** Answered 4xx or 5xx. */
+  | 'http-error'
+  /** No answer, a private address, or a refused address. */
+  | 'unreachable'
+
+export interface SiteImportSkipped {
+  url: string
+  reason: SiteImportSkipReason
+  status?: number
+  /** Where an off-origin redirect pointed. */
+  location?: string
+}
+
+export interface SiteImportPage {
+  /** The address the page was read from, after any same-site redirect. */
+  url: string
+  path: string
+  /** Where the crawler learned of the page. */
+  foundBy: 'home' | 'sitemap' | 'link'
+  title: string
+  description: string
+  lang: string | null
+  canonical: string | null
+  blocks: SiteImportBlock[]
+  images: SiteImportImage[]
+  navLinks: SiteImportNavLink[]
+  /** Same-site page addresses this page links to. */
+  links: string[]
+  forms: { kept: SiteImportForm[]; removed: number }
+  bytes: number
+}
+
+export type SiteImportStop =
+  | 'page-budget'
+  | 'total-bytes'
+  | 'time'
+  /** robots.txt could not be read, so nothing was asked of the site. */
+  | 'robots-unreachable'
+
+export interface SiteImportInventory {
+  domain: string
+  /** The site's origins: the bare name and its `www.` twin. */
+  origins: string[]
+  /** Set when nothing was fetched at all. */
+  refused: 'invalid-domain' | 'lookalike' | null
+  pages: SiteImportPage[]
+  skipped: SiteImportSkipped[]
+  /** Skips past {@link SITE_IMPORT_DEFAULTS.maxSkipped}, counted only. */
+  skippedOverflow: number
+  robots: { found: boolean; sitemaps: string[] }
+  /** Page addresses the sitemaps listed (same-site, before robots and budget). */
+  sitemapUrls: number
+  stoppedBy: SiteImportStop | null
+  bytesRead: number
+  startedAt: number
+  finishedAt: number
+}
+
+export interface SiteImportCrawlOptions {
+  /** The proved domain; `www.` is folded in. */
+  domain: string
+  /** The most pages the inventory may hold: the plan's page count. */
+  maxPages: number
+  maxPageBytes?: number
+  maxTotalBytes?: number
+  timeBudgetMs?: number
+  signal?: AbortSignal
+}
+
+export interface SiteImportCrawlSeams {
+  fetch?: (url: string, options: PublicFetchOptions) => Promise<PublicFetchResult>
+  now?: () => number
+}
+
+/** The site's two origins for a domain. */
+export function siteImportOrigins(domain: string): string[] {
+  const bare = domain.replace(/^www\./, '')
+  return [`https://${bare}`, `https://www.${bare}`]
+}
+
+/** A crawlable page address on the site, normalized for de-duplication; else null. */
+export function siteImportPageKey(url: URL, origins: readonly string[]): string | null {
+  if (url.protocol !== 'https:' || url.username || url.password) return null
+  if (url.port && url.port !== '443') return null
+  if (!origins.includes(url.origin)) return null
+  if (NON_PAGE_EXTENSION.test(url.pathname)) return null
+  const clean = new URL(url.toString())
+  clean.hash = ''
+  for (const key of [...clean.searchParams.keys()]) {
+    if (TRACKING_PARAM.test(key)) clean.searchParams.delete(key)
+  }
+  clean.search = clean.searchParams.toString() ? `?${clean.searchParams.toString()}` : ''
+  return clean.toString()
+}
+
+function skipReasonFor(result: PublicFetchResult): SiteImportSkipReason {
+  switch (result.refusal) {
+    case 'redirect-refused':
+      return 'off-origin-redirect'
+    case 'content-type':
+      return 'not-html'
+    case 'too-large':
+      return 'too-large'
+    case 'http-status':
+      return 'http-error'
+    default:
+      return 'unreachable'
+  }
+}
+
+/** Read a proved site into an inventory. Never throws for anything the site does. */
+export async function crawlSiteForImport(
+  options: SiteImportCrawlOptions,
+  seams: SiteImportCrawlSeams = {},
+): Promise<SiteImportInventory> {
+  const now = seams.now ?? Date.now
+  const fetchText = seams.fetch ?? fetchPublicTextDetailed
+  const domain = String(options.domain ?? '').trim().toLowerCase().replace(/\.+$/, '').replace(/^www\./, '')
+  const origins = DOMAIN_PATTERN.test(domain) ? siteImportOrigins(domain) : []
+  const startedAt = now()
+  const inventory: SiteImportInventory = {
+    domain,
+    origins,
+    refused: null,
+    pages: [],
+    skipped: [],
+    skippedOverflow: 0,
+    robots: { found: false, sitemaps: [] },
+    sitemapUrls: 0,
+    stoppedBy: null,
+    bytesRead: 0,
+    startedAt,
+    finishedAt: startedAt,
+  }
+  const finish = () => {
+    inventory.finishedAt = now()
+    return inventory
+  }
+  if (!origins.length) {
+    inventory.refused = 'invalid-domain'
+    return finish()
+  }
+  if (lookalikeBrandForHost(domain)) {
+    inventory.refused = 'lookalike'
+    return finish()
+  }
+
+  const maxPages = Math.max(0, Math.floor(options.maxPages))
+  const maxPageBytes = options.maxPageBytes ?? SITE_IMPORT_DEFAULTS.maxPageBytes
+  const maxTotalBytes = options.maxTotalBytes ?? SITE_IMPORT_DEFAULTS.maxTotalBytes
+  const deadlineAt = startedAt + (options.timeBudgetMs ?? SITE_IMPORT_DEFAULTS.timeBudgetMs)
+  const controller = new AbortController()
+  const onAbort = () => controller.abort()
+  options.signal?.addEventListener('abort', onAbort)
+  if (options.signal?.aborted) controller.abort()
+  const timer = setTimeout(() => controller.abort(), Math.max(0, deadlineAt - startedAt))
+
+  const sameSite = (url: URL) => origins.includes(url.origin) && url.protocol === 'https:'
+  const remainingBytes = () => maxTotalBytes - inventory.bytesRead
+  const outOfTime = () => controller.signal.aborted || now() >= deadlineAt
+  const request = (url: string, accept: RegExp, acceptHeader: string, maxBytes: number) =>
+    fetchText(url, {
+      maxBytes,
+      accept,
+      acceptHeader,
+      userAgent: AGLYN_BOT_USER_AGENT,
+      signal: controller.signal,
+      timeoutMs: Math.max(1, Math.min(SITE_IMPORT_DEFAULTS.requestTimeoutMs, deadlineAt - now())),
+      redirectAllowed: (_from, to) => sameSite(to),
+      refuseOver: true,
+    })
+  const skip = (entry: SiteImportSkipped) => {
+    if (inventory.skipped.length < SITE_IMPORT_DEFAULTS.maxSkipped) inventory.skipped.push(entry)
+    else inventory.skippedOverflow += 1
+  }
+
+  try {
+    // robots.txt, before anything else is asked of the site.
+    const home = `${origins[0]}/`
+    let rules: RobotsRule[] = []
+    const robots = await request(
+      `${origins[0]}/robots.txt`,
+      /text\/plain|text\/html|^$/i,
+      'text/plain',
+      Math.min(SITE_IMPORT_DEFAULTS.robotsMaxBytes, remainingBytes()),
+    )
+    if (robots.ok) {
+      inventory.bytesRead += robots.bytes
+      const parsed = parseRobotsTxt(robots.text)
+      rules = robotsRulesFor(parsed, AGLYN_BOT_TOKEN)
+      inventory.robots = { found: true, sitemaps: parsed.sitemaps }
+    } else if (
+      !(robots.refusal === 'http-status' && (robots.status ?? 0) >= 400 && (robots.status ?? 0) < 500)
+    ) {
+      inventory.stoppedBy = outOfTime() ? 'time' : 'robots-unreachable'
+      return finish()
+    }
+    const allowed = (key: string) => {
+      const url = new URL(key)
+      return robotsAllows(rules, `${url.pathname}${url.search}`)
+    }
+
+    // Sitemaps: the ones robots.txt names on this site, else /sitemap.xml.
+    const sitemapQueue: string[] = []
+    for (const raw of inventory.robots.sitemaps) {
+      try {
+        const url = new URL(raw)
+        if (sameSite(url)) sitemapQueue.push(url.toString())
+      } catch {
+        // A malformed Sitemap line names nothing.
+      }
+    }
+    if (!sitemapQueue.length) sitemapQueue.push(`${origins[0]}/sitemap.xml`)
+    const sitemapSeen = new Set<string>()
+    const fromSitemap: string[] = []
+    let sitemapsRead = 0
+    while (sitemapQueue.length && sitemapsRead < SITE_IMPORT_DEFAULTS.maxSitemaps && !outOfTime()) {
+      const next = sitemapQueue.shift() as string
+      if (sitemapSeen.has(next)) continue
+      sitemapSeen.add(next)
+      if (/\.gz$/i.test(new URL(next).pathname)) continue
+      if (!allowed(next)) continue
+      const room = Math.min(SITE_IMPORT_DEFAULTS.sitemapMaxBytes, remainingBytes())
+      if (room <= 0) break
+      sitemapsRead += 1
+      const sitemap = await request(next, /xml|text\/plain/i, 'application/xml, text/xml;q=0.9', room)
+      if (!sitemap.ok) continue
+      inventory.bytesRead += sitemap.bytes
+      const entries = parseSitemap(sitemap.text)
+      for (const location of entries.locations) {
+        let url: URL
+        try {
+          url = new URL(location)
+        } catch {
+          continue
+        }
+        if (entries.index) {
+          if (sameSite(url)) sitemapQueue.push(url.toString())
+          continue
+        }
+        const key = siteImportPageKey(url, origins)
+        if (key && fromSitemap.length < SITE_IMPORT_DEFAULTS.maxSitemapUrls) fromSitemap.push(key)
+      }
+    }
+    inventory.sitemapUrls = fromSitemap.length
+
+    // Pages: home, then the sitemap's, then links the pages themselves name.
+    const queue: { key: string; foundBy: SiteImportPage['foundBy'] }[] = [{ key: home, foundBy: 'home' }]
+    const queued = new Set<string>([home])
+    for (const key of fromSitemap) {
+      if (queued.has(key)) continue
+      queued.add(key)
+      queue.push({ key, foundBy: 'sitemap' })
+    }
+    const read = new Set<string>()
+    // The site's two names are one site: once the home page says which one
+    // it answers on, every address is read on that one, so /about is not
+    // read twice as example.com/about and www.example.com/about.
+    let preferred = origins[0]
+    const canon = (raw: string) => {
+      const url = new URL(raw)
+      return origins.includes(url.origin) && url.origin !== preferred
+        ? `${preferred}${url.pathname}${url.search}`
+        : raw
+    }
+    const maxAttempts = maxPages * 3 + 10
+    let attempts = 0
+    while (queue.length) {
+      if (inventory.pages.length >= maxPages) {
+        inventory.stoppedBy = 'page-budget'
+        break
+      }
+      if (outOfTime()) {
+        inventory.stoppedBy = 'time'
+        break
+      }
+      if (remainingBytes() <= 0) {
+        inventory.stoppedBy = 'total-bytes'
+        break
+      }
+      if (attempts >= maxAttempts) {
+        inventory.stoppedBy = 'page-budget'
+        break
+      }
+      const next = queue.shift() as (typeof queue)[number]
+      const key = canon(next.key)
+      const foundBy = next.foundBy
+      if (read.has(key)) continue
+      if (!allowed(key)) {
+        skip({ url: key, reason: 'robots' })
+        continue
+      }
+      attempts += 1
+      read.add(key)
+      const cap = Math.min(maxPageBytes, remainingBytes())
+      const page = await request(key, /text\/html|application\/xhtml\+xml/i, 'text/html, application/xhtml+xml;q=0.9', cap)
+      if (!page.ok) {
+        if (page.refusal === 'too-large' && cap < maxPageBytes) {
+          inventory.stoppedBy = 'total-bytes'
+          break
+        }
+        if (page.refusal === 'network' && outOfTime()) {
+          inventory.stoppedBy = 'time'
+          break
+        }
+        skip({
+          url: key,
+          reason: skipReasonFor(page),
+          ...(page.status ? { status: page.status } : {}),
+          ...(page.location ? { location: page.location } : {}),
+        })
+        continue
+      }
+      inventory.bytesRead += page.bytes
+      if (foundBy === 'home') preferred = new URL(page.url).origin
+      const finalKey = canon(siteImportPageKey(new URL(page.url), origins) ?? page.url)
+      if (finalKey !== key) {
+        if (read.has(finalKey)) continue
+        read.add(finalKey)
+        if (!allowed(finalKey)) {
+          skip({ url: finalKey, reason: 'robots' })
+          continue
+        }
+      }
+      const extract = extractSiteImportPage(page.text, page.url, sameSite)
+      if (extract.loginForm) {
+        skip({ url: finalKey, reason: 'login-form' })
+        continue
+      }
+      const links: string[] = []
+      for (const link of extract.links) {
+        const linkKey = siteImportPageKey(new URL(link), origins)
+        if (!linkKey) continue
+        links.push(linkKey)
+        if (!queued.has(linkKey)) {
+          queued.add(linkKey)
+          queue.push({ key: linkKey, foundBy: 'link' })
+        }
+      }
+      inventory.pages.push({
+        url: finalKey,
+        path: new URL(finalKey).pathname,
+        foundBy,
+        title: extract.title,
+        description: extract.description,
+        lang: extract.lang,
+        canonical: extract.canonical,
+        blocks: extract.blocks,
+        images: extract.images,
+        navLinks: extract.navLinks,
+        links: [...new Set(links.map(canon))],
+        forms: extract.forms,
+        bytes: page.bytes,
+      })
+    }
+    return finish()
+  } finally {
+    clearTimeout(timer)
+    options.signal?.removeEventListener('abort', onAbort)
+  }
+}
+
+/**
+ * The home page's `aglyn-site-verification` values, for the meta-tag proof:
+ * the same fetch, user agent and same-site redirects as the crawl, but no
+ * robots.txt, because the person asked for this one page to be read.
+ * `answered: false` when the page could not be read at all.
+ */
+export async function readSiteVerificationMeta(
+  domain: string,
+  metaName: string,
+  seams: SiteImportCrawlSeams = {},
+): Promise<{ answered: boolean; values: string[]; url?: string }> {
+  const fetchText = seams.fetch ?? fetchPublicTextDetailed
+  const bare = String(domain ?? '').trim().toLowerCase().replace(/^www\./, '')
+  if (!DOMAIN_PATTERN.test(bare) || lookalikeBrandForHost(bare)) return { answered: false, values: [] }
+  const origins = siteImportOrigins(bare)
+  const result = await fetchText(`${origins[0]}/`, {
+    maxBytes: SITE_IMPORT_DEFAULTS.maxPageBytes,
+    accept: /text\/html|application\/xhtml\+xml/i,
+    acceptHeader: 'text/html, application/xhtml+xml;q=0.9',
+    userAgent: AGLYN_BOT_USER_AGENT,
+    timeoutMs: SITE_IMPORT_DEFAULTS.requestTimeoutMs,
+    redirectAllowed: (_from, to) => to.protocol === 'https:' && origins.includes(to.origin),
+  })
+  if (!result.ok) {
+    // An answer that is not the page (a 404, a redirect off the site) is
+    // still an answer: the tag is not where it must be.
+    const answered = result.refusal === 'http-status' || result.refusal === 'redirect-refused' || result.refusal === 'content-type'
+    return { answered, values: [], url: result.url }
+  }
+  const head = result.text.split(/<body\b/i)[0] ?? ''
+  return { answered: true, values: readMetaValues(head, metaName), url: result.url }
+}
+
+/**
+ * One page as text for a prompt: its title, description and blocks in order,
+ * fenced as untrusted data. The importer's prompt carries `UNTRUSTED_TEXT_RULE`.
+ */
+export function siteImportPagePromptText(page: SiteImportPage, maxChars = 12_000): string {
+  const lines: string[] = []
+  if (page.title) lines.push(`Title: ${page.title}`)
+  if (page.description) lines.push(`Description: ${page.description}`)
+  for (const block of page.blocks) {
+    if (block.kind === 'heading') lines.push(`${'#'.repeat(block.level)} ${block.text}`)
+    else if (block.kind === 'image') lines.push(`[image: ${block.alt || 'no description'}]`)
+    else if (block.kind === 'list-item') lines.push(`- ${block.text}`)
+    else if (block.kind === 'quote') lines.push(`> ${block.text}`)
+    else lines.push(block.text)
+  }
+  return fenceUntrustedText(`Page ${page.path} of the site being imported`, lines.join('\n'), { maxChars })
+}
