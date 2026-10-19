@@ -470,6 +470,9 @@ struct ShellFrame<Content: View>: View {
       .onChange(of: navigation.section) { _, section in
         navigation.record(section)
         recordRecent(section)
+        // At rest only the group holding the place in use is open (Figma 12:703); a group opened by hand stays open
+        // until the next place is opened.
+        if !compact { navigation.openGroups = [] }
       }
       // Another account in use, or a support session: nothing open belonged to it.
       .onChange(of: model.auth?.user?.uid) {
@@ -1022,6 +1025,18 @@ struct PhoneShell: View {
   /// The centre tab's tag: never a section of its own.
   static let createTab = ShellSection.plugin("shell.create")
 
+  #if os(iOS)
+  /// Create new's tile in the tab bar: a white "+" on the accent, 48 by 36 points with a 12-point radius.
+  @MainActor static var createTile: UIImage? {
+    let tile = Image(systemName: "plus").font(.system(size: 20, weight: .semibold)).foregroundStyle(.white)
+      .frame(width: 48, height: 36)
+      .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AglynColor.primary))
+    let renderer = ImageRenderer(content: tile)
+    renderer.scale = 3
+    return renderer.uiImage
+  }
+  #endif
+
   var body: some View {
     let tabs = tabs
     TabView(selection: $navigation.section) {
@@ -1029,7 +1044,18 @@ struct PhoneShell: View {
         Group {
           if tab.section == PhoneShell.createTab { Color.clear } else { ShellStack(navigation: navigation, section: tab.section) }
         }
-          .tabItem { Label(tab.title, systemImage: tab.icon) }
+          .tabItem {
+            #if os(iOS)
+              if tab.section == PhoneShell.createTab, let tile = PhoneShell.createTile {
+                // The centre tab is the filled accent "+" tile (Figma Phone/Tab bar, Create), drawn as it is.
+                Image(uiImage: tile).renderingMode(.original).accessibilityLabel("Create")
+              } else {
+                Label(tab.title, systemImage: tab.icon)
+              }
+            #else
+              Label(tab.title, systemImage: tab.icon)
+            #endif
+          }
           .tag(tab.section)
       }
     }
@@ -1182,7 +1208,7 @@ struct MenuScreen: View {
       }
       SidebarList(scope: scope, push: true)
     }
-    .background(AglynColor.page)
+    .background(AglynColor.paper)
     .navigationTitle(scope.modeTitle ?? "Menu")
   }
 
@@ -1199,8 +1225,7 @@ struct MenuScreen: View {
     }
     .padding(.horizontal, 14)
     .frame(maxWidth: .infinity, minHeight: 44)
-    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AglynColor.paper))
-    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(AglynColor.divider))
+    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AglynColor.sunken))
     .contentShape(Rectangle())
   }
 }

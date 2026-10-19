@@ -312,7 +312,14 @@ struct SidebarList: View {
         }
       }
     } else if !rows.isEmpty {
-      if push {
+      if push && group.id == "more" && group.foldable && filter.isEmpty {
+        // More is a row of its own on the phone too (Figma 22:176, "··· More ›"), opening its rows under it.
+        PhoneMenuRow(title: "More", action: { toggle(group) }) {
+          Image(systemName: "ellipsis").font(.system(size: 18)).foregroundStyle(AglynColor.accentIcon)
+        }
+        .accessibilityValue(open ? "Open" : "Folded")
+        .accessibilityIdentifier("sidebar-group-more")
+      } else if push {
         if let label = group.label {
           PhoneMenuSectionHead(
             title: label, foldable: group.foldable, open: open, count: rows.count,
@@ -385,7 +392,7 @@ struct SidebarList: View {
   private func rowView(_ row: NativeNavRow, indent: Int = 0) -> some View {
     if push {
       PhoneMenuRow(title: row.label, action: { activate(ShellScope.target(of: row)) }) {
-        Image(systemName: row.appleIcon).font(.system(size: 18)).foregroundStyle(AglynColor.secondaryText)
+        Image(systemName: row.appleIcon).font(.system(size: 18)).foregroundStyle(AglynColor.accentIcon)
       }
       .contextMenu { starMenu(row) }
       .accessibilityIdentifier("sidebar-\(row.id)")
@@ -396,7 +403,7 @@ struct SidebarList: View {
 
   private func sidebarRow(_ row: NativeNavRow, indent: Int) -> some View {
     let target = ShellScope.target(of: row)
-    let selected = !push && ShellScope.row(row, holds: navigation.section)
+    let selected = !push && navigation.starKey == nil && ShellScope.row(row, holds: navigation.section)
     return AglynSidebarRow(row.label, selected: selected, indent: indent, pill: pill, action: { activate(target) }) {
       AglynSidebarIcon(row.appleIcon)
     } trailing: {
@@ -420,11 +427,13 @@ struct SidebarList: View {
       if push {
         PhoneMenuRow(title: item.label, action: { activate(.section(section)) }) { dot }
       } else {
-        // One row is selected: a starred place shows it only when no row of the list stands for the same place.
-        let rowHolds = scope.currentList.groups.flatMap(\.rows).contains { ShellScope.row($0, holds: section) }
+        // One row is selected: the one the place was opened through (a starred shortcut, or its group's row).
         AglynSidebarRow(
-          item.label, selected: navigation.section == section && !rowHolds, indent: 1, pill: pill,
-          action: { activate(.section(section)) }
+          item.label, selected: navigation.section == section && navigation.starKey == item.key, indent: 1, pill: pill,
+          action: {
+            activate(.section(section))
+            navigation.starKey = item.key
+          }
         ) { dot }
       }
     }
@@ -528,6 +537,10 @@ struct PhoneMenuRow<Leading: View>: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.aglynRow)
+    // A hairline under each row, from the label on (Figma Phone/List row).
+    .overlay(alignment: .bottom) {
+      Rectangle().fill(AglynColor.divider).frame(height: 1).padding(.leading, 52).accessibilityHidden(true)
+    }
   }
 }
 
