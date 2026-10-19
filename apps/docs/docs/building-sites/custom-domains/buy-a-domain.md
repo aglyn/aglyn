@@ -13,9 +13,8 @@ and connects it to your site, with its security certificate, so there are **no D
 records to add**. `www.yourbusiness.com` forwards to it as well.
 
 :::info Plan availability
-**Starter and above.** On a paid **annual** plan, the first year of one domain per
-site is free for standard endings like `.com`, `.net` and `.org`. On Free, the card
-says domains are included from the Starter plan, with a **See plans** button.
+**Starter and above.** On Free, the card says domains can be bought on the Starter
+plan and above, with a **See plans** button.
 :::
 
 ## Steps {#steps}
@@ -25,12 +24,12 @@ says domains are included from the Starter plan, with a **See plans** button.
 2. Type your business name or the domain you want into **Search for a domain**. Results
    appear as you type, each with its price: **this year and every year after**. A name
    someone already owns shows as **Taken**.
-3. Press **Buy** (or **Get it**, when the first year is free) beside the name you want.
+3. Press **Buy** beside the name you want.
 4. Fill in **Who the domain is registered to**. Every domain is registered to a real
    person or business, who owns it. These details go to the registrar and are hidden
    from public domain lookups.
 5. Tick the box to agree to the domain registration terms, then press
-   **Buy for $…** (or **Get yourdomain.com**).
+   **Buy for $…**.
 
 The card switches to **Your domain** and follows the setup: **Registering…**, then
 **Connecting to your site…**. Most domains are live within a few minutes, and you can

@@ -67,8 +67,8 @@ function tokens(origin: string): Record<string, SystemEmailMergeToken> {
     },
     firstYear: {
       name: 'domain.firstYear',
-      description: 'What the first year cost, or that it was included',
-      sample: 'Included with your annual plan',
+      description: 'What the first year cost',
+      sample: '$15.99',
     },
     renewalPrice: { name: 'domain.renewalPrice', description: 'The yearly renewal price', sample: '$15.99' },
     renewsOn: { name: 'domain.renewsOn', description: 'The date the domain renews', sample: 'Oct 19, 2027' },

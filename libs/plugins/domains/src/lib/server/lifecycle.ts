@@ -34,7 +34,7 @@ import {
 } from './db'
 import type { DomainsActor } from './gates'
 import type { RegistrantContact, RegistrarDriver } from './registrar'
-import { offerFor, type FreeYearContext } from './search'
+import { offerFor } from './search'
 import type { DomainChargeResult } from './stripe'
 
 /*
@@ -237,7 +237,6 @@ export async function purchaseDomain(
     domain: string
     expectedFirstYearCents: number
     contact: RegistrantContact
-    freeYear: FreeYearContext
   },
 ): Promise<PurchaseOutcome> {
   const domain = input.domain.trim().toLowerCase()
@@ -256,7 +255,7 @@ export async function purchaseDomain(
   const quoted = await effects.driver.search([domain])
   if (quoted.ok === 'no') return refused('registrar-unavailable', 503)
   const quote = quoted.value.find((row) => row.domain === domain)
-  const offer = quote ? offerFor(quote, input.freeYear) : null
+  const offer = quote ? offerFor(quote) : null
   if (!quote || !offer || !offer.available) return refused('unavailable', 409)
   if (offer.firstYearCents !== input.expectedFirstYearCents) {
     return refused('price-changed', 409, {
@@ -284,7 +283,6 @@ export async function purchaseDomain(
       status: 'charging',
       autoRenew: true,
       firstYearCents: offer.firstYearCents,
-      freeFirstYear: offer.freeFirstYear,
       renewalCents: offer.renewalCents,
       costUsd: quote.purchaseUsd,
       renewalCostUsd: quote.renewalUsd,
@@ -313,7 +311,7 @@ export async function purchaseDomain(
   })
   if (!held) return refused('taken', 409)
 
-  // The charge. A first year included with the plan charges nothing.
+  // The charge.
   if (offer.firstYearCents > 0) {
     const charged = await effects.charge({
       orgId: actor.orgId,
@@ -491,9 +489,7 @@ async function markRegistered(
 
 export function purchasedMerge(registration: DomainRegistrationDoc): Record<string, string> {
   return {
-    'domain.firstYear': registration.freeFirstYear
-      ? 'Included with your annual plan'
-      : formatUsdCents(registration.firstYearCents),
+    'domain.firstYear': formatUsdCents(registration.firstYearCents),
     'domain.renewalPrice': formatUsdCents(registration.renewalCents),
     'domain.renewsOn': formatDate(registration.expiresAtMs),
     'domain.registrant': registration.registrant?.name ?? '',

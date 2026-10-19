@@ -40,7 +40,6 @@ import {
   type LifecycleEffects,
 } from './lifecycle'
 import type { RegistrarDriver, RegistrarQuote, RegistrarResult } from './registrar'
-import type { FreeYearContext } from './search'
 
 const DAY = 24 * 60 * 60 * 1000
 const T0 = Date.parse('2026-11-01T12:00:00Z')
@@ -81,7 +80,9 @@ function fakeDriver(overrides: Partial<RegistrarDriver> = {}): jest.Mocked<Regis
   }
   for (const key of Object.keys(driver) as (keyof RegistrarDriver)[]) {
     const value = driver[key]
-    if (typeof value === 'function') (driver as never as Record<string, unknown>)[key] = jest.fn(value)
+    if (typeof value === 'function') {
+      ;(driver as never as Record<string, unknown>)[key] = jest.fn(value as (...args: never[]) => unknown)
+    }
   }
   return driver as jest.Mocked<RegistrarDriver>
 }
@@ -170,12 +171,6 @@ const CONTACT = {
   country: 'us',
 }
 
-const MONTHLY: FreeYearContext = {
-  interval: 'month',
-  subscriptionLive: true,
-  comped: false,
-  siteUsedFreeDomain: false,
-}
 
 beforeEach(() => {
   mockStore.current = new MemoryFirestore()
@@ -184,12 +179,11 @@ beforeEach(() => {
 
 afterEach(() => jest.useRealTimers())
 
-function buy(effects: LifecycleEffects, expected = 1599, freeYear = MONTHLY) {
+function buy(effects: LifecycleEffects, expected = 1599) {
   return purchaseDomain(effects, ACTOR, {
     domain: 'TestBakery.com',
     expectedFirstYearCents: expected,
     contact: CONTACT,
-    freeYear,
   })
 }
 
@@ -230,17 +224,6 @@ describe('buying a domain (AGL-3962)', () => {
     })
     // The registrant's address and phone are the registrar's to hold.
     expect(JSON.stringify(saved)).not.toContain('Main St')
-  })
-
-  it('charges nothing for a first year included with an annual plan', async () => {
-    const { effects, recorded } = effectsWith(fakeDriver())
-    const outcome = await buy(effects, 0, { ...MONTHLY, interval: 'year' })
-    expect(outcome.ok).toBe('active')
-    expect(recorded.charges).toEqual([])
-    expect(await readRegistration('testbakery.com')).toMatchObject({
-      freeFirstYear: true,
-      firstYearCents: 0,
-    })
   })
 
   it('refuses a price that moved since the search, before holding or charging', async () => {
@@ -359,7 +342,6 @@ function registrationDoc(patch: Partial<DomainRegistrationDoc> = {}): DomainRegi
     status: 'active',
     autoRenew: true,
     firstYearCents: 1599,
-    freeFirstYear: false,
     renewalCents: 1599,
     costUsd: 11.25,
     renewalCostUsd: 11.25,

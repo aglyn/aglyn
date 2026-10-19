@@ -35,7 +35,7 @@ import {
 } from './lifecycle'
 import { platformEffects } from './platform-effects'
 import type { RegistrantContact } from './registrar'
-import { freeYearContext, searchDomains } from './search'
+import { searchDomains } from './search'
 import { domainProductId } from './stripe'
 
 /*
@@ -83,8 +83,7 @@ export async function searchRoute(request: Request): Promise<Response> {
       code: 'rate-limited',
     })
   }
-  const context = await freeYearContext(gate.actor.orgId, gate.actor.org, gate.actor.hostId)
-  const found = await searchDomains(platformEffects().driver, query, context)
+  const found = await searchDomains(platformEffects().driver, query)
   if (!found.ok) {
     return domainsError(503, 'Search isn’t answering right now. Try again in a minute.', {
       code: 'registrar-unavailable',
@@ -122,7 +121,6 @@ export async function registrationsRoute(request: Request): Promise<Response> {
   ])
   const configured = sellingConfigured()
   const refusal = configured ? await purchaseRefusal(actor, '').catch(() => null) : null
-  const context = await freeYearContext(actor.orgId, actor.org, actor.hostId)
   return domainsJson({
     configured,
     billingPermission: billing,
@@ -135,13 +133,6 @@ export async function registrationsRoute(request: Request): Promise<Response> {
             code: 'billing-permission',
             message: 'Only a workspace member who manages billing can buy a domain.',
           },
-    // Whether the site's next purchase can have its first year included —
-    // the plan half; the price half is on each offer.
-    freeYearAvailable:
-      context.interval === 'year' &&
-      context.subscriptionLive &&
-      !context.comped &&
-      !context.siteUsedFreeDomain,
     registrations: forSite.map(registrationView),
     // Names this workspace holds that no site shows, which this site may take.
     unassigned: forOrg
@@ -188,7 +179,6 @@ export async function purchaseRoute(request: Request): Promise<Response> {
     domain,
     expectedFirstYearCents: Math.round(Number(body['expectedFirstYearCents'] ?? -1)),
     contact: contact as RegistrantContact,
-    freeYear: await freeYearContext(actor.orgId, actor.org, actor.hostId),
   })
   if (outcome.ok === 'refused') {
     return domainsError(outcome.status, outcome.error, {

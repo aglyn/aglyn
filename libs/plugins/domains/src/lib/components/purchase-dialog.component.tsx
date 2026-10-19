@@ -179,7 +179,6 @@ export function PurchaseDialog(props: PurchaseDialogProps) {
     }
   }
 
-  const free = offer.freeFirstYear
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>{`Buy ${offer.domain}`}</DialogTitle>
@@ -187,9 +186,7 @@ export function PurchaseDialog(props: PurchaseDialogProps) {
         <Stack spacing={2.5} sx={{ pt: 0.5 }}>
           <Stack spacing={0.5}>
             <Typography variant="body1">
-              {free
-                ? 'First year: included with your annual plan'
-                : `First year: ${formatMoney(offer.firstYearCents)}`}
+              {`First year: ${formatMoney(offer.firstYearCents)}`}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               {`Then ${formatMoney(offer.renewalCents)} a year. We email you about 45 days before each renewal and charge the card on file about 30 days before. Turn auto-renew off at any time.`}
@@ -272,11 +269,7 @@ export function PurchaseDialog(props: PurchaseDialogProps) {
           {'Cancel'}
         </Button>
         <Button variant="contained" onClick={() => void submit()} disabled={busy || !agreed}>
-          {busy
-            ? 'Buying…'
-            : free
-              ? `Get ${offer.domain}`
-              : `Buy for ${formatMoney(offer.firstYearCents)}`}
+          {busy ? 'Buying…' : `Buy for ${formatMoney(offer.firstYearCents)}`}
         </Button>
       </DialogActions>
     </Dialog>

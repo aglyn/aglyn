@@ -16,7 +16,7 @@
  */
 
 import { METERED_MARKUP, STRIPE_PROCESSOR_FEE_PCT } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import { STRIPE_FIXED_FEE_USD, domainRetailCents, formatUsdCents, freeFirstYear } from './pricing'
+import { STRIPE_FIXED_FEE_USD, domainRetailCents, formatUsdCents } from './pricing'
 
 describe('domain pricing (AGL-3962)', () => {
   it('prices a .com at $15.99 from the registrar\'s $11.25', () => {
@@ -37,20 +37,4 @@ describe('domain pricing (AGL-3962)', () => {
       )
     },
   )
-
-  it('includes the first year only on a paid annual plan, once per site, within the allowance', () => {
-    const base = {
-      interval: 'year' as const,
-      subscriptionLive: true,
-      comped: false,
-      firstYearCostUsd: 11.25,
-      siteUsedFreeDomain: false,
-    }
-    expect(freeFirstYear(base)).toBe(true)
-    expect(freeFirstYear({ ...base, interval: 'month' })).toBe(false)
-    expect(freeFirstYear({ ...base, subscriptionLive: false })).toBe(false)
-    expect(freeFirstYear({ ...base, comped: true })).toBe(false)
-    expect(freeFirstYear({ ...base, siteUsedFreeDomain: true })).toBe(false)
-    expect(freeFirstYear({ ...base, firstYearCostUsd: 29.99 })).toBe(false)
-  })
 })

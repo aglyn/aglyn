@@ -88,10 +88,8 @@ export interface DomainRegistrationDoc {
   status: DomainRegistrationStatus
   /** Whether WE renew it: charge the customer, then renew at the registrar. */
   autoRenew: boolean
-  /** What the customer was charged for the first year, in cents (0 if free). */
+  /** What the customer was charged for the first year, in cents. */
   firstYearCents: number
-  /** Whether the first year was included with an annual plan. */
-  freeFirstYear: boolean
   /** The renewal price quoted at purchase, in cents. */
   renewalCents: number
   /** The registrar's own prices at purchase, in dollars. Never shown. */
@@ -149,7 +147,6 @@ export interface DomainRegistrationView {
   renewalCents: number
   expiresAtMs: number | null
   registeredAtMs: number | null
-  freeFirstYear: boolean
   registrantEmail: string
   /** Set while ICANN's registrant email check is outstanding. */
   verifyByMs: number | null
@@ -169,7 +166,6 @@ export function registrationView(doc: DomainRegistrationDoc): DomainRegistration
     renewalCents: doc.renewalCents ?? 0,
     expiresAtMs: doc.expiresAtMs ?? null,
     registeredAtMs: doc.registeredAtMs ?? null,
-    freeFirstYear: doc.freeFirstYear === true,
     registrantEmail: doc.registrant?.email ?? '',
     verifyByMs:
       verification && !verification.verified ? (verification.verifyByMs ?? null) : null,

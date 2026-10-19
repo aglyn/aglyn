@@ -72,9 +72,7 @@ export interface DomainOfferView {
   domain: string
   available: boolean
   firstYearCents: number
-  listFirstYearCents: number
   renewalCents: number
-  freeFirstYear: boolean
 }
 
 export interface RegistrationsAnswer {
@@ -82,7 +80,6 @@ export interface RegistrationsAnswer {
   billingPermission: boolean
   canBuy: boolean
   refusal: { code: string; message: string } | null
-  freeYearAvailable: boolean
   registrations: DomainRegistrationView[]
   unassigned: DomainRegistrationView[]
   contactDefaults: { firstName: string; lastName: string; email: string }

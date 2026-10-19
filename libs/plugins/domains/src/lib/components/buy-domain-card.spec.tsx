@@ -43,7 +43,6 @@ const READY: RegistrationsAnswer = {
   billingPermission: true,
   canBuy: true,
   refusal: null,
-  freeYearAvailable: false,
   registrations: [],
   unassigned: [],
   contactDefaults: { firstName: 'Alex', lastName: 'Test', email: 'alex@testbakery.com' },
@@ -67,7 +66,7 @@ beforeEach(() => {
 describe('Get a domain', () => {
   it('names the plan that includes domains on a plan without them, and reads nothing', () => {
     render(<BuyDomainCard {...props} entitled={false} upgrade={{ billingHref: '/test-org/billing', canManageBilling: true }} />)
-    expect(screen.getByText(/included from the Starter plan/)).toBeTruthy()
+    expect(screen.getByText(/Starter plan and above/)).toBeTruthy()
     expect(screen.getByText('See plans')).toBeTruthy()
     expect(request).not.toHaveBeenCalled()
   })
@@ -85,7 +84,7 @@ describe('Get a domain', () => {
         canBuy: false,
         refusal: { code: 'site-has-domain', message: 'This site already has a domain connected. Disconnect it first to give the site a new one.' },
       },
-      [{ domain: 'testbakery.com', available: true, firstYearCents: 1599, listFirstYearCents: 1599, renewalCents: 1599, freeFirstYear: false }],
+      [{ domain: 'testbakery.com', available: true, firstYearCents: 1599, renewalCents: 1599 }],
     )
     render(<BuyDomainCard {...props} entitled />)
     expect(await screen.findByText(/already has a domain connected/)).toBeTruthy()
@@ -96,8 +95,8 @@ describe('Get a domain', () => {
 
   it('shows each result with both prices, and a taken name as taken', async () => {
     answer({}, [
-      { domain: 'testbakery.shop', available: true, firstYearCents: 499, listFirstYearCents: 499, renewalCents: 5199, freeFirstYear: false },
-      { domain: 'testbakery.com', available: false, firstYearCents: 0, listFirstYearCents: 0, renewalCents: 0, freeFirstYear: false },
+      { domain: 'testbakery.shop', available: true, firstYearCents: 499, renewalCents: 5199 },
+      { domain: 'testbakery.com', available: false, firstYearCents: 0, renewalCents: 0 },
     ])
     render(<BuyDomainCard {...props} entitled />)
     await screen.findByText(/Search for a name for your site/)
@@ -112,7 +111,7 @@ describe('Get a domain', () => {
         {
           domain: 'testbakery.com', hostId: 'host-1', status: 'active', autoRenew: true,
           renewalCents: 1599, expiresAtMs: Date.parse('2027-10-19T00:00:00Z'), registeredAtMs: 1,
-          freeFirstYear: false, registrantEmail: 'alex@testbakery.com',
+          registrantEmail: 'alex@testbakery.com',
           verifyByMs: Date.parse('2026-11-02T00:00:00Z'), verificationEmail: 'alex@testbakery.com',
           renewalFailing: false, failure: null,
         },
@@ -127,9 +126,9 @@ describe('Get a domain', () => {
 })
 
 describe('priceLine', () => {
-  it('reads the same price once, and the included year as free', () => {
-    const base = { domain: 'a.com', available: true, listFirstYearCents: 1599, renewalCents: 1599 }
-    expect(priceLine({ ...base, firstYearCents: 1599, freeFirstYear: false })).toBe('$15.99 a year')
-    expect(priceLine({ ...base, firstYearCents: 0, freeFirstYear: true })).toBe('Free for the first year, then $15.99 a year')
+  it('reads the same price once, and both when the renewal differs', () => {
+    const base = { domain: 'a.com', available: true, renewalCents: 1599 }
+    expect(priceLine({ ...base, firstYearCents: 1599 })).toBe('$15.99 a year')
+    expect(priceLine({ ...base, firstYearCents: 999 })).toBe('$9.99 the first year, then $15.99 a year')
   })
 })

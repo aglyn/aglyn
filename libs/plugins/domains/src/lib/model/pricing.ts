@@ -32,19 +32,12 @@ import {
  * person reads in a search result is a round one, and rounding up is the only
  * direction that never sells under the rule. For a `.com` at $11.25 that is
  * $15.99 a year, which sits under what site builders charge for the same
- * name ($20 and up) while every sale clears its cost.
+ * name ($20 and up) while every sale clears its cost. Every year is paid for,
+ * the first included: nothing is given away below cost.
  */
 
 /** Stripe's fixed fee on a card charge, in dollars. */
 export const STRIPE_FIXED_FEE_USD = 0.3
-
-/**
- * The most a first year may cost US for it to be included free on an annual
- * plan. Covers every standard ending (`.com`, `.net`, `.org`, `.co` …) and
- * leaves out the premium-priced ones, the way site builders' free-domain
- * offers do.
- */
-export const FREE_FIRST_YEAR_MAX_COST_USD = 20
 
 /**
  * The most a domain may cost us to register or renew for it to be offered
@@ -68,36 +61,4 @@ export function domainRetailCents(costUsd: number): number {
 /** `1599` → `$15.99`. */
 export function formatUsdCents(cents: number): string {
   return `$${(Math.max(0, cents) / 100).toFixed(2)}`
-}
-
-/** What the free-first-year decision needs to know about the workspace. */
-export interface FreeFirstYearInput {
-  /** `orgs/{id}/billing/stripe`'s subscription interval. */
-  interval: 'month' | 'year' | null | undefined
-  /** Whether the subscription is live (`orgSubscriptionState === 'live'`). */
-  subscriptionLive: boolean
-  /** A plan staff granted for free: nothing was paid for it to include. */
-  comped: boolean
-  /** The first year's registrar cost, in dollars. */
-  firstYearCostUsd: number
-  /** Whether a domain was already bought free for this SITE. */
-  siteUsedFreeDomain: boolean
-}
-
-/**
- * Whether this purchase's first year is included with the plan.
- *
- * One domain per site, on a paid annual plan, within the standard-ending
- * allowance — the offer site builders make. A monthly plan pays for the
- * first year; every plan pays for renewals.
- */
-export function freeFirstYear(input: FreeFirstYearInput): boolean {
-  return (
-    input.interval === 'year' &&
-    input.subscriptionLive &&
-    !input.comped &&
-    !input.siteUsedFreeDomain &&
-    input.firstYearCostUsd > 0 &&
-    input.firstYearCostUsd <= FREE_FIRST_YEAR_MAX_COST_USD
-  )
 }

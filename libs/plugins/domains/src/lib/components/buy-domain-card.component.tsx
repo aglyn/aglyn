@@ -29,7 +29,6 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Button,
-  Chip,
   CircularProgress,
   Divider,
   InputAdornment,
@@ -165,7 +164,7 @@ export default function BuyDomainCard(props: BuyDomainCardProps) {
             href={upgrade?.billingHref}
             actionLabel="See plans"
           >
-            {'Domains are included from the Starter plan, with the first year free on annual plans.'}
+            {'Domains can be bought on the Starter plan and above.'}
           </PrerequisiteNotice>
         </Stack>
       </CardDisplay>
@@ -205,14 +204,6 @@ export default function BuyDomainCard(props: BuyDomainCardProps) {
         <Typography variant="body2" color="text.secondary">
           {'Search for a name for your site. We register it to you and connect it for you, so there are no DNS records to add.'}
         </Typography>
-        {state.freeYearAvailable ? (
-          <Chip
-            color="success"
-            variant="outlined"
-            label="First year free with your annual plan"
-            sx={{ alignSelf: 'flex-start' }}
-          />
-        ) : null}
         {state.refusal ? (
           <PrerequisiteNotice
             href={
@@ -292,7 +283,7 @@ export default function BuyDomainCard(props: BuyDomainCardProps) {
                   offer.available ? (
                     <BlockedControl blocked={blocked} reason={blockedReason}>
                       <Button variant="outlined" size="small" onClick={() => setBuying(offer)}>
-                        {offer.freeFirstYear ? 'Get it' : 'Buy'}
+                        {'Buy'}
                       </Button>
                     </BlockedControl>
                   ) : (
@@ -344,9 +335,6 @@ export default function BuyDomainCard(props: BuyDomainCardProps) {
 
 /** "$15.99 a year", or the first year and the renewal when they differ. */
 export function priceLine(offer: DomainOfferView): string {
-  if (offer.freeFirstYear) {
-    return `Free for the first year, then ${formatMoney(offer.renewalCents)} a year`
-  }
   if (offer.firstYearCents === offer.renewalCents) {
     return `${formatMoney(offer.firstYearCents)} a year`
   }

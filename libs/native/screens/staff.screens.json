@@ -14017,8 +14017,8 @@
             },
             {
               "name": "domain.firstYear",
-              "description": "What the first year cost, or that it was included",
-              "sample": "Included with your annual plan"
+              "description": "What the first year cost",
+              "sample": "$15.99"
             },
             {
               "name": "domain.renewalPrice",
