@@ -894,7 +894,9 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // budget, which the same fields now need. Up 139 at AGL-3825: the form
       // catalog lists the Date Picker and Time Picker with their settings, and
       // the instructions say a day and a time of day are answers a form takes.
-      form: { prefixTokens: 3_504, minimum: 512, caches: true, toolsStable: true },
+      // Up 50 at AGL-3942: the instructions say a placeholder is an example
+      // answer, never a note in square brackets.
+      form: { prefixTokens: 3_554, minimum: 512, caches: true, toolsStable: true },
       'page-section': { prefixTokens: 4_598, minimum: 512, caches: true, toolsStable: true },
       // The layout language (AGL-3660). Read four characters a token these
       // err low: the token counting endpoint puts the page's cached span at
