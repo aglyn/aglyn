@@ -17,6 +17,7 @@
 
 import { aiAsksToGetInTouch } from '../runtime/ai-doctrine-validators'
 import { aiPageLinkSection } from '../runtime/ai-page-links'
+import type { AiSiteContact } from '../model/ai-site-details'
 import type { AiLayoutListing } from './ai-layout-listings'
 
 /**
@@ -73,6 +74,13 @@ export interface AiLayoutTargets {
    * `ai-layout-listings.ts`). Absent or empty, a page shows only its words.
    */
   listings?: readonly AiLayoutListing[]
+  /**
+   * The business's phone number and email, where the job was given them
+   * (AGL-3979): a link to `phone` calls the number and one to `email` writes
+   * to the address, and the footer and the page that places the site's form
+   * show them. Absent, neither link goes anywhere.
+   */
+  contact?: AiSiteContact | null
 }
 
 /** Where a link resolved to. */
@@ -86,6 +94,8 @@ export type AiLayoutDestination =
    * that page had and the name it now goes by (AGL-3676).
    */
   | { kind: 'path'; href: string; standsInFor?: string; label?: string }
+  /** The business's phone (`tel:`) or email (`mailto:`) the job was given (AGL-3979). */
+  | { kind: 'contact'; href: string }
 
 /**
  * A link's words for where it now goes (AGL-3676): a button that named a
@@ -245,6 +255,10 @@ function resolveNamed(
   if (lower.startsWith('https://')) {
     return targets.facts.includes(to) ? { kind: 'href', href: to } : null
   }
+  // A call or an email goes only to the number and the address the job was
+  // given (AGL-3979), however the link spells them.
+  const contact = contactDestination(lower, targets.contact)
+  if (contact !== undefined) return contact
   const section = lower.startsWith('#')
     ? to.slice(1)
     : lower.startsWith('section:')
@@ -262,4 +276,29 @@ function resolveNamed(
   }
   const page = pageNamed(lower.startsWith('page:') ? to.slice(5) : to, targets)
   return pageDestination(page, label, targets)
+}
+
+/**
+ * Where a link to the business's phone or email goes (AGL-3979): `phone`,
+ * `call` or a `tel:` link with the given number's digits is the number;
+ * `email` or a `mailto:` link to the given address is the address. `null` is
+ * such a link with nothing given to go to, which is left out; `undefined` is
+ * a link that names neither.
+ */
+function contactDestination(
+  lower: string,
+  contact: AiSiteContact | null | undefined,
+): AiLayoutDestination | null | undefined {
+  const digits = (value: string) => value.replace(/\D/g, '')
+  if (lower === 'phone' || lower === 'call' || lower === 'tel' || lower.startsWith('tel:')) {
+    if (!contact?.phoneHref) return null
+    if (lower.startsWith('tel:') && digits(lower) !== digits(contact.phoneHref)) return null
+    return { kind: 'contact', href: contact.phoneHref }
+  }
+  if (lower === 'email' || lower === 'mail' || lower.startsWith('mailto:')) {
+    if (!contact?.emailHref) return null
+    if (lower.startsWith('mailto:') && lower.slice(7).split('?')[0] !== contact.email.toLowerCase()) return null
+    return { kind: 'contact', href: contact.emailHref }
+  }
+  return undefined
 }

@@ -16,7 +16,7 @@
  */
 
 import { AI_SITE_INPUT_MAX_CHARS, AI_SITE_SUBMISSIONS, aiSitePagesBand } from './ai-site-job'
-import type { AiSiteStartAnswers } from './ai-site-start'
+import { aiSiteStartExtraProblem, type AiSiteStartAnswers, type AiSiteStartExtraKey } from './ai-site-start'
 
 /**
  * The guided start's steps (AGL-3898): the same questions `ai-site-start.ts`
@@ -49,15 +49,36 @@ export const AI_SITE_START_STEP_LABELS: Readonly<Record<AiSiteStartStep, string>
 }
 
 /** An answer a step asks for, by its key on {@link AiSiteStartAnswers}. */
-export type AiSiteStartField = 'siteType' | 'audience' | 'kind' | 'pages' | 'submissions' | 'welcomeEmail'
+export type AiSiteStartField =
+  | 'siteType'
+  | 'audience'
+  | 'kind'
+  | 'pages'
+  | 'submissions'
+  | 'welcomeEmail'
+  | AiSiteStartExtraKey
 
-/** The answers each step holds. */
+/**
+ * The extras each step's "More details" offers (AGL-3979), in the order it
+ * draws them. The phone number and the email are on the Details step itself,
+ * above where messages go: they are the two a new site most needs.
+ */
+export const AI_SITE_START_MORE_FIELDS: Readonly<Record<AiSiteStartStep, readonly AiSiteStartExtraKey[]>> = {
+  choose: [],
+  kind: ['tagline', 'founded'],
+  audience: ['serviceArea', 'priceRange', 'languages'],
+  style: ['brand'],
+  details: ['street', 'city', 'region', 'postalCode', 'country', 'hours', 'social'],
+  review: [],
+}
+
+/** The answers each step holds, its "More details" last. */
 export const AI_SITE_START_STEP_FIELDS: Readonly<Record<AiSiteStartStep, readonly AiSiteStartField[]>> = {
   choose: [],
-  kind: ['siteType'],
-  audience: ['audience'],
-  style: ['kind'],
-  details: ['submissions', 'pages', 'welcomeEmail'],
+  kind: ['siteType', ...AI_SITE_START_MORE_FIELDS.kind],
+  audience: ['audience', ...AI_SITE_START_MORE_FIELDS.audience],
+  style: ['kind', ...AI_SITE_START_MORE_FIELDS.style],
+  details: ['phone', 'email', 'submissions', 'pages', 'welcomeEmail', ...AI_SITE_START_MORE_FIELDS.details],
   review: [],
 }
 
@@ -107,7 +128,19 @@ export function aiSiteStartFieldErrors(
   if (!(AI_SITE_SUBMISSIONS as readonly string[]).includes(answers.submissions)) {
     errors.submissions = { message: 'Say where the contact form’s submissions go.', code: 'invalid' }
   }
+  // Every extra is optional; one given is held to its own rule (AGL-3979).
+  for (const field of Object.values(AI_SITE_START_STEP_FIELDS).flat()) {
+    if (field in errors) continue
+    const problem = isExtra(field) ? aiSiteStartExtraProblem(field, answers[field] ?? '') : null
+    if (problem) errors[field] = problem
+  }
   return errors
+}
+
+const CORE_FIELDS: ReadonlySet<AiSiteStartField> = new Set(['siteType', 'audience', 'kind', 'pages', 'submissions', 'welcomeEmail'])
+
+function isExtra(field: AiSiteStartField): field is AiSiteStartExtraKey {
+  return !CORE_FIELDS.has(field)
 }
 
 /** One step's reasons not to go forward, in the order its fields are drawn; empty when it may. */

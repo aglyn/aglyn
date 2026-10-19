@@ -39,6 +39,7 @@ import {
 } from '../layout-language/ai-layout-frame-hollows'
 import type { AiJob, AiJobOutput, AiJobSitePublish } from '../model/ai-jobs.types'
 import { AI_SITE_BLOG_SLUGS } from '../model/ai-site-job'
+import { aiSiteEntityUpdates, aiSiteEntityValues } from '../model/ai-site-entity'
 import { aiLayoutWithStoreLinks, type AiStoreLayoutLinks } from '../model/ai-layout-store-links'
 import { aiLayoutWithMenuChanges, aiNoMenuChanges } from '../model/ai-layout-menus'
 import { AI_STORE_LINKS_SOURCE_FIELD as STORE_LINKS_SOURCE_FIELD } from './ai-job-store-links-layout'
@@ -374,7 +375,7 @@ export function aiMergeSitePublish(previous: AiJobSitePublish, retried: AiJobSit
 export async function aiPublishGuidedSite(
   firestore: Firestore,
   input: {
-    job: Pick<AiJob, '$id' | 'orgId' | 'hostId'>
+    job: Pick<AiJob, '$id' | 'orgId' | 'hostId'> & Partial<Pick<AiJob, 'inputs'>>
     outputs: readonly AiJobOutput[]
     now: Date
     /** The start owed its blog's posts and wrote none (AGL-3660): its links to the blog come out. */
@@ -522,7 +523,14 @@ export async function aiPublishGuidedSite(
     input.language,
   )
   if (language) Object.assign(hostUpdates, language)
-  const entireHost = layoutWrites.length > 0 || language !== null
+  // Who publishes the site, from the start's answers (AGL-3979): its Setup ->
+  // SEO -> Entity and AI agents fields, each only where empty, so every page's
+  // structured data and the site's /llms.txt name its business type, phone,
+  // email, address, hours, areas and profiles. Every page carries the entity,
+  // so the announce asks for the whole site when any of it changes.
+  const entity = aiSiteEntityUpdates(host.get('seo'), aiSiteEntityValues(job.inputs, { language: input.language ?? null }))
+  Object.assign(hostUpdates, entity)
+  const entireHost = layoutWrites.length > 0 || language !== null || Object.keys(entity).length > 0
   batch.update(hostRef, hostUpdates)
   for (const page of accepted) {
     batch.set(hostRef.collection('screens').doc(page.id), { slug: page.slug, publishedAt: now }, { merge: true })

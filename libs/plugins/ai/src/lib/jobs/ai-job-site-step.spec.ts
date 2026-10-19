@@ -64,6 +64,7 @@ import {
   aiFreeSitePrompt,
   aiFreeSiteCreditRange,
   aiFreeCreditsNoneLeftText,
+  parseAiSiteJobInputs,
 } from '../model/ai-site-job'
 import { AI_LAYOUT_SITE_PAGES_INPUT, aiLayoutSiteAliases, aiLayoutSitePages, aiLayoutWithSitePages } from './ai-job-layout-site-pages'
 import { aiLayoutPageTargets } from './ai-job-page-language'
@@ -92,6 +93,7 @@ import {
   aiCreationUnit,
   aiRunJobUnit,
   aiSiteBuiltRefs,
+  aiSiteBriefLines,
   aiSiteInitialLedger,
   aiSiteJobRunMinimumMs,
   aiSiteJobUnits,
@@ -2329,5 +2331,27 @@ describe('an event-led start’s first events (AGL-3755)', () => {
     const home = units.find((unit) => unit.slot === 'p0') as AiSiteUnit
     const job = aiSiteUnitJob(siteJob({ plan, outputs: [LOOK] }), home, new Map())
     expect(aiLayoutListingsOf(job.inputs).some((listing) => listing.kind === 'events')).toBe(false)
+  })
+})
+
+describe('what every unit is told about the business (AGL-3979)', () => {
+  const parsed = (inputs: Record<string, unknown>) => {
+    const value = parseAiSiteJobInputs({ businessType: 'a family plumber', pages: 5, businessName: 'Pipeworks', ...inputs })
+    if (typeof value === 'string') throw new Error(value)
+    return value
+  }
+
+  it('the phone, email, address and hours given, and that the pages show the phone and email as written', () => {
+    const lines = aiSiteBriefLines('A 5-page website.', parsed({ phone: '(512) 555-0142', email: 'hello@pipeworks.co', city: 'Austin', street: '214 Main Street' }))
+    expect(lines).toContain('Contact — phone: (512) 555-0142; email: hello@pipeworks.co; address: 214 Main Street, Austin.')
+    expect(lines.join('\n')).toContain('a link that calls goes to "phone"')
+  })
+
+  it('nothing new for a start that gave none', () => {
+    expect(aiSiteBriefLines('A 5-page website.', parsed({}))).toEqual([
+      'A 5-page website.',
+      'Site — name: Pipeworks; business: a family plumber.',
+      expect.stringContaining('“Pipeworks”'),
+    ])
   })
 })

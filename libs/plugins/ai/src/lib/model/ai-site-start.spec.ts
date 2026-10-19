@@ -32,6 +32,7 @@ import {
   AI_SITE_SUBMISSIONS,
   parseAiSiteJobInputs,
 } from './ai-site-job'
+import { AI_SITE_NO_DETAILS } from './ai-site-details'
 import {
   AI_SITE_START_ANSWERS,
   AI_SITE_START_EXAMPLES,
@@ -115,6 +116,7 @@ describe('the answers are a site job the door already admits', () => {
       answered({ audience: ' local dog owners ', example: 'business', pages: 6 }),
     )
     expect(parseAiSiteJobInputs({ ...inputs, batchId: null })).toEqual({
+      ...AI_SITE_NO_DETAILS,
       businessType: 'a neighborhood dog groomer',
       audience: 'local dog owners',
       starter: 'business',
@@ -205,6 +207,7 @@ describe('where the contact form’s submissions go', () => {
 describe('a failed start reopens on its own answers (AGL-3596)', () => {
   it('reads the job’s inputs back into the questions, and back again into the same inputs', () => {
     const answers = {
+      ...AI_SITE_START_ANSWERS,
       siteType: 'dog grooming salon',
       audience: 'dog owners in Hillside',
       example: 'business',
@@ -222,6 +225,7 @@ describe('a failed start reopens on its own answers (AGL-3596)', () => {
   it('holds what it reads to the questions and the workspace’s band', () => {
     expect(start.aiSiteStartAnswersFromInputs({ businessType: '' })).toBeNull()
     expect(start.aiSiteStartAnswersFromInputs({ businessType: 'a cafe', pages: 6, starter: 'gone', submissions: 'nowhere' }, { freeTaste: true })).toEqual({
+      ...AI_SITE_START_ANSWERS,
       siteType: 'a cafe',
       audience: '',
       example: null,
@@ -255,5 +259,45 @@ describe('a failed start reopens on its own answers (AGL-3596)', () => {
     )
     expect(copy.aiJobRefundCopy({ status: 'canceled', creditsSpent: 13 })).toBe('This job used 13 credits before it stopped.')
     expect(copy.aiJobRefundCopy({ status: 'failed', creditsSpent: 13 })).toBeNull()
+  })
+})
+
+describe('a failed start keeps its business details (AGL-3979)', () => {
+  it('reads every detail back into the questions, and back again into the same inputs', () => {
+    const answers = {
+      ...AI_SITE_START_ANSWERS,
+      siteType: 'a family plumbing company',
+      phone: '(512) 555-0142',
+      email: 'hello@pipeworks.co',
+      tagline: 'Fixed right the first time',
+      founded: '2009',
+      serviceArea: 'Austin\nRound Rock',
+      priceRange: '$$',
+      languages: 'English, Spanish',
+      brand: '#1565c0',
+      street: '214 Main Street',
+      city: 'Austin',
+      region: 'TX',
+      postalCode: '78701',
+      country: 'US',
+      hours: 'Mo-Fr 08:00-18:00',
+      social: 'https://instagram.com/pipeworks',
+    }
+    const inputs = start.aiSiteStartInputs(answers)
+    expect(parseAiSiteJobInputs(inputs)).toMatchObject({ phone: '(512) 555-0142', email: 'hello@pipeworks.co', city: 'Austin' })
+    // The summary a failed start carries back holds every detail.
+    const summary = start.aiSiteStartInputsOf({ ...inputs, autoConfirm: true })
+    // The kind and example come back as the kind the words suggested; every detail as given.
+    expect(start.aiSiteStartAnswersFromInputs(summary)).toEqual({ ...answers, example: expect.anything(), kind: expect.any(String) })
+  })
+
+  it('sends a detail only where it was given, so a start without them asks the plan nothing new', () => {
+    const inputs = start.aiSiteStartInputs({ ...AI_SITE_START_ANSWERS, siteType: 'a bakery', phone: ' ', email: 'hi@bakery.co' })
+    expect(inputs).not.toHaveProperty('phone')
+    expect(inputs).toMatchObject({ email: 'hi@bakery.co' })
+    expect(start.aiSiteStartExtrasGiven({ ...AI_SITE_START_ANSWERS, siteType: 'x', email: 'hi@bakery.co', hours: 'Mo 09:00-17:00' })).toEqual([
+      'email',
+      'hours',
+    ])
   })
 })

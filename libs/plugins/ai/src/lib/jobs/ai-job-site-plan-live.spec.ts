@@ -103,7 +103,7 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
 import { aiSitePlanIsHome } from '../model/ai-site-job'
-import { aiSiteStartBrief, aiSiteStartInputs, type AiSiteStartAnswers } from '../model/ai-site-start'
+import { AI_SITE_START_ANSWERS, aiSiteStartBrief, aiSiteStartInputs, type AiSiteStartAnswers } from '../model/ai-site-start'
 import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
@@ -270,6 +270,7 @@ describeLanguages("a guided start's plan in another language, from the real mode
     const results = await Promise.all(
       LANGUAGE_BRIEFS.map(async (entry, index) => {
         const answers: AiSiteStartAnswers = {
+          ...AI_SITE_START_ANSWERS,
           siteType: entry.siteType,
           audience: entry.audience,
           example: null,

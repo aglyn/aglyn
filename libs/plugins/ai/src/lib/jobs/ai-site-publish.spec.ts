@@ -578,3 +578,53 @@ describe('the site publishes in the language its brief was written in (AGL-3750)
     expect(docs.get('hosts/host-1')).toMatchObject({ locales: ['en', 'fr'], defaultLocale: 'en' })
   })
 })
+
+/*
+ * Who publishes the site (AGL-3979): the start's answers fill the host's
+ * Setup -> SEO -> Entity and AI agents fields in the publish's own batch, only
+ * where empty, and the announce asks for the whole site, since every page
+ * carries the entity.
+ */
+describe('a guided start fills the site’s Entity and AI-agent fields (AGL-3979)', () => {
+  const DETAILED = {
+    ...JOB,
+    inputs: {
+      businessType: 'a family plumbing company',
+      siteKind: 'trades',
+      businessName: 'Pipeworks',
+      city: 'Austin',
+      phone: '(512) 555-0142',
+      email: 'hello@pipeworks.co',
+      hours: 'Mo-Fr 08:00-18:00',
+      social: 'https://instagram.com/pipeworks',
+    },
+  }
+
+  it('writes the business type, phone, email, hours, profiles and guidance, and announces the whole site', async () => {
+    seedSite()
+    docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), seo: { title: 'Pipeworks', entity: { telephone: '(512) 555-9999' } } })
+    dropCache.mockResolvedValueOnce({ dropped: 0, skipped: 0, complete: false })
+    await aiPublishGuidedSite(firestore, { job: DETAILED, outputs: OUTPUTS, now: NOW }, { sendSitePublished: sendSitePublished as never, dropCache })
+    const seo = (docs.get('hosts/host-1') as Record<string, Record<string, Record<string, unknown>>>)['seo']
+    expect(seo['title']).toBe('Pipeworks')
+    expect(seo['entity']).toMatchObject({
+      name: 'Pipeworks',
+      // The owner's own number is kept.
+      telephone: '(512) 555-9999',
+      email: 'hello@pipeworks.co',
+      businessType: 'Plumber',
+      areaServed: ['Austin'],
+      openingHours: 'Mo-Fr 08:00-18:00',
+      sameAs: ['https://instagram.com/pipeworks'],
+    })
+    expect(seo['agent']).toMatchObject({ whenToUse: expect.stringContaining('Pipeworks'), howToUse: expect.stringContaining('hello@pipeworks.co') })
+    const outbox = [...docs.entries()].filter(([key]) => key.startsWith('publishOutbox/')).map(([, value]) => value)
+    expect(outbox).toEqual([expect.objectContaining({ entireHost: true })])
+  })
+
+  it('a job with no inputs writes no Entity field', async () => {
+    seedSite()
+    await publish()
+    expect((docs.get('hosts/host-1') as Record<string, unknown>)['seo']).toBeUndefined()
+  })
+})

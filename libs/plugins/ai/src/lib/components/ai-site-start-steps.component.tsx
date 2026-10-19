@@ -22,6 +22,8 @@ import {
   mdiBookOpenPageVariant,
   mdiBriefcaseOutline,
   mdiCalendarHeart,
+  mdiCheck,
+  mdiChevronDown,
   mdiCreation,
   mdiHandHeart,
   mdiScaleBalance,
@@ -30,9 +32,13 @@ import {
   mdiViewGridOutline,
   mdiWrench,
 } from '@aglyn/shared-data-mdi'
-import { HelpTip } from '@aglyn/shared-ui-jsx'
+import { HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { OptionCardGrid } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
+import { OpeningHoursPicker } from '@aglyn/shared-ui-jsx/components/weekly-hours-picker.component'
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Box,
   Divider,
   LinearProgress,
@@ -45,13 +51,21 @@ import {
   StepLabel,
   Stepper,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
-import { Fragment, useId, type ReactNode, type Ref } from 'react'
+import { Fragment, useId, useState, type ReactNode, type Ref } from 'react'
+import { aiSiteHoursSentence, aiSiteServiceAreas, aiSiteSocialLinks } from '../model/ai-site-details'
 import { AI_SITE_FREE_PAGES_NOTE, AI_SITE_SUBMISSION_CHOICES, type AiSiteSubmissions } from '../model/ai-site-job'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
-import { AI_SITE_START_TYPES, aiSiteStartKind, type AiSiteStartAnswers } from '../model/ai-site-start'
 import {
+  AI_SITE_START_TYPES,
+  aiSiteStartKind,
+  type AiSiteStartAnswers,
+  type AiSiteStartExtraKey,
+} from '../model/ai-site-start'
+import {
+  AI_SITE_START_MORE_FIELDS,
   AI_SITE_START_STEP_LABELS,
   AI_SITE_START_STEPS,
   aiSiteStartStepIndex,
@@ -93,7 +107,7 @@ export const START_STEP_HELP = {
   details: pluginDocsHelp('aiStart', {
     anchor: '#details',
     excerpt:
-      'Where contact form messages go, how many pages to write, and on paid plans whether to draft a welcome email. All can be changed later.',
+      'Your phone number and email, which your pages show, where contact form messages go, how many pages to write, and on paid plans whether to draft a welcome email. All can be changed later.',
   }),
 }
 
@@ -292,6 +306,51 @@ export function DetailsStep({
   return (
     <Stack spacing={3}>
       {/*
+        How a customer reaches the business (AGL-3979), first: given, the
+        pages show them as links — the contact page, the footer, the buttons
+        that ask a visitor to call or write — and the site's search listing
+        and AI-agent details carry them. Optional, and never a placeholder.
+      */}
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <Box data-start-area="field-phone" sx={{ flex: 1 }}>
+          <TextField
+            fullWidth
+            type="tel"
+            inputRef={fieldRef('phone')}
+            label="Business phone"
+            placeholder="(512) 555-0142"
+            autoComplete="tel"
+            value={answers.phone}
+            onChange={(event) => {
+              answer({ phone: event.target.value })
+              tracker.fieldChanged('phone')
+            }}
+            {...typed(tracker, 'phone')}
+            error={Boolean(errors.phone)}
+            helperText={errors.phone?.message ?? 'Optional. Shown on your site so customers can call.'}
+            slotProps={{ htmlInput: { inputMode: 'tel' } }}
+          />
+        </Box>
+        <Box data-start-area="field-email" sx={{ flex: 1 }}>
+          <TextField
+            fullWidth
+            type="email"
+            inputRef={fieldRef('email')}
+            label="Business email"
+            placeholder="hello@yourbusiness.com"
+            autoComplete="email"
+            value={answers.email}
+            onChange={(event) => {
+              answer({ email: event.target.value })
+              tracker.fieldChanged('email')
+            }}
+            {...typed(tracker, 'email')}
+            error={Boolean(errors.email)}
+            helperText={errors.email?.message ?? 'Optional. Shown on your site so customers can write.'}
+          />
+        </Box>
+      </Stack>
+      {/*
         The one setting a new site owner has to make, asked where they are
         already answering: a contact form nobody routed files its messages
         somewhere the person has not looked.
@@ -362,6 +421,326 @@ export function DetailsStep({
 }
 
 /**
+ * The brand colors "More details" offers on the Style step (AGL-3979), by
+ * name: picking one makes it the site's primary color, held to contrast by
+ * the look like any brand color; none leaves the style to choose. Picked,
+ * never typed: a color code is not something a site owner should need.
+ */
+export const AI_SITE_START_BRAND_COLORS: ReadonlyArray<{ label: string; hex: string }> = [
+  { label: 'Red', hex: '#c62828' },
+  { label: 'Orange', hex: '#e65100' },
+  { label: 'Gold', hex: '#b28704' },
+  { label: 'Green', hex: '#2e7d32' },
+  { label: 'Teal', hex: '#00796b' },
+  { label: 'Blue', hex: '#1565c0' },
+  { label: 'Navy', hex: '#1a237e' },
+  { label: 'Purple', hex: '#6a1b9a' },
+  { label: 'Pink', hex: '#ad1457' },
+  { label: 'Brown', hex: '#5d4037' },
+  { label: 'Charcoal', hex: '#37474f' },
+]
+
+/** The price ranges offered, as a search listing writes them. */
+const PRICE_RANGES: ReadonlyArray<{ value: string; label: string }> = [
+  { value: '$', label: '$ — budget' },
+  { value: '$$', label: '$$ — moderate' },
+  { value: '$$$', label: '$$$ — premium' },
+  { value: '$$$$', label: '$$$$ — luxury' },
+]
+
+/** What each step's "More details" says it holds, under its title. */
+const MORE_SUMMARY: Readonly<Partial<Record<AiSiteStartStep, string>>> = {
+  kind: 'Optional: a tagline and the year you started',
+  audience: 'Optional: areas you serve, price range and languages',
+  style: 'Optional: your brand color',
+  details: 'Optional: address, opening hours and social profiles',
+}
+
+/** A typed extra's field. */
+function ExtraText({
+  field,
+  answers,
+  answer,
+  tracker,
+  errors,
+  fieldRef,
+  label,
+  placeholder,
+  helper,
+  autoComplete = 'off',
+  multiline = false,
+  inputMode,
+}: StepProps & {
+  field: AiSiteStartExtraKey
+  label: string
+  placeholder?: string
+  helper?: string
+  autoComplete?: string
+  multiline?: boolean
+  inputMode?: 'numeric' | 'url'
+}) {
+  const error = errors[field]
+  return (
+    <Box data-start-area={`field-${field}`} sx={{ flex: 1, minWidth: 0 }}>
+      <TextField
+        fullWidth
+        inputRef={fieldRef(field)}
+        label={label}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        multiline={multiline}
+        minRows={multiline ? 2 : undefined}
+        value={answers[field]}
+        onChange={(event) => {
+          answer({ [field]: event.target.value })
+          tracker.fieldChanged(field)
+        }}
+        {...typed(tracker, field)}
+        error={Boolean(error)}
+        helperText={error?.message ?? helper}
+        slotProps={inputMode ? { htmlInput: { inputMode } } : undefined}
+      />
+    </Box>
+  )
+}
+
+/** The price range, picked from how search results show one. */
+function PriceRangeField({ answers, answer, tracker, errors, fieldRef }: StepProps) {
+  const own = answers.priceRange && !PRICE_RANGES.some((option) => option.value === answers.priceRange)
+  const options = own ? [...PRICE_RANGES, { value: answers.priceRange, label: answers.priceRange }] : PRICE_RANGES
+  return (
+    <Box data-start-area="field-priceRange" sx={{ flex: 1, minWidth: 0 }}>
+      <TextField
+        select
+        fullWidth
+        inputRef={fieldRef('priceRange')}
+        label="Price range"
+        value={answers.priceRange}
+        onChange={(event) => {
+          answer({ priceRange: event.target.value })
+          tracker.fieldPicked('priceRange')
+        }}
+        error={Boolean(errors.priceRange)}
+        helperText={errors.priceRange?.message ?? 'How your prices compare, as search results show it.'}
+      >
+        <MenuItem value="">{'Not said'}</MenuItem>
+        {options.map((option) => (
+          <MenuItem key={option.value} value={option.value}>
+            {option.label}
+          </MenuItem>
+        ))}
+      </TextField>
+    </Box>
+  )
+}
+
+/** The brand color, picked from named swatches. */
+function BrandField({ answers, answer, tracker }: StepProps) {
+  const labelId = useId()
+  return (
+    <Stack spacing={1} data-start-area="field-brand">
+      <Typography variant="body2" color="text.secondary" id={labelId}>
+        {'Brand color'}
+      </Typography>
+      <Stack direction="row" role="radiogroup" aria-labelledby={labelId} sx={{ flexWrap: 'wrap', gap: 1 }}>
+        {[{ label: 'Let the style choose', hex: '' }, ...AI_SITE_START_BRAND_COLORS].map((color) => {
+          const picked = (answers.brand || '') === color.hex
+          return (
+            <Tooltip key={color.label} title={color.label}>
+              <Box
+                component="button"
+                type="button"
+                role="radio"
+                aria-checked={picked}
+                aria-label={color.label}
+                onClick={() => {
+                  answer({ brand: color.hex })
+                  tracker.fieldPicked('brand')
+                }}
+                sx={{
+                  width: 36,
+                  height: 36,
+                  p: 0,
+                  borderRadius: '50%',
+                  border: 2,
+                  borderColor: picked ? 'text.primary' : 'divider',
+                  bgcolor: color.hex || 'background.paper',
+                  color: color.hex ? 'common.white' : 'text.secondary',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+              >
+                {picked ? <MdiIcon path={mdiCheck.path} fontSize="small" /> : null}
+              </Box>
+            </Tooltip>
+          )
+        })}
+      </Stack>
+      <Typography variant="caption" color="text.secondary">
+        {'Picked, it is your site’s main color, kept readable everywhere it is used.'}
+      </Typography>
+    </Stack>
+  )
+}
+
+/** The opening hours, picked a day at a time: the same editor as Setup → SEO. */
+function HoursField({ answers, answer, tracker, errors }: StepProps) {
+  return (
+    <Box data-start-area="field-hours">
+      <OpeningHoursPicker
+        label="Opening hours"
+        value={answers.hours}
+        onChange={(hours) => {
+          answer({ hours })
+          tracker.fieldPicked('hours')
+        }}
+        helperText={errors.hours?.message ?? 'Leave every day closed if you work by appointment.'}
+      />
+    </Box>
+  )
+}
+
+/** One extra's field, as "More details" draws it. */
+function ExtraField({ field, ...props }: StepProps & { field: AiSiteStartExtraKey }) {
+  switch (field) {
+    case 'tagline':
+      return <ExtraText {...props} field={field} label="Tagline" placeholder="Calm, gentle grooming your dog will love" helper="A short line about the business, in your words." />
+    case 'founded':
+      return <ExtraText {...props} field={field} label="Year founded" placeholder="2015" inputMode="numeric" />
+    case 'serviceArea':
+      return <ExtraText {...props} field={field} label="Areas you serve" placeholder={'Austin\nRound Rock'} helper="Cities, towns or neighborhoods, one a line." multiline />
+    case 'priceRange':
+      return <PriceRangeField {...props} />
+    case 'languages':
+      return <ExtraText {...props} field={field} label="Languages you serve customers in" placeholder="English, Spanish" />
+    case 'brand':
+      return <BrandField {...props} />
+    case 'street':
+      return <ExtraText {...props} field={field} label="Street address" placeholder="214 Main Street" autoComplete="street-address" />
+    case 'city':
+      return <ExtraText {...props} field={field} label="City or town" placeholder="Austin" autoComplete="address-level2" />
+    case 'region':
+      return <ExtraText {...props} field={field} label="State or region" placeholder="TX" autoComplete="address-level1" />
+    case 'postalCode':
+      return <ExtraText {...props} field={field} label="ZIP or postal code" placeholder="78701" autoComplete="postal-code" />
+    case 'country':
+      return <ExtraText {...props} field={field} label="Country" placeholder="United States" autoComplete="country-name" />
+    case 'hours':
+      return <HoursField {...props} />
+    case 'social':
+      return (
+        <ExtraText
+          {...props}
+          field={field}
+          label="Social profiles"
+          placeholder="instagram.com/yourbusiness"
+          helper="One link a line. Your site links them, and its search listing names them as yours."
+          multiline
+          inputMode="url"
+        />
+      )
+    default:
+      return null
+  }
+}
+
+/** Fields "More details" draws side by side. */
+const PAIRS: ReadonlyArray<readonly [AiSiteStartExtraKey, AiSiteStartExtraKey]> = [
+  ['tagline', 'founded'],
+  ['priceRange', 'languages'],
+  ['city', 'region'],
+  ['postalCode', 'country'],
+]
+
+/**
+ * A step's "More details" (AGL-3979): a collapsed section of optional extras
+ * that fit the step, so a person who wants the site to say more can, and one
+ * who does not never has to open it. Open from the start where something in
+ * it is already filled in (a start reopened on its answers), and opened by a
+ * Next refused on one of its fields.
+ */
+export function MoreDetails({ step, ...props }: StepProps & { step: AiSiteStartStep }) {
+  const fields = AI_SITE_START_MORE_FIELDS[step]
+  const { answers, errors, tracker } = props
+  const [open, setOpen] = useState(() => fields.some((field) => (answers[field] ?? '').trim() !== ''))
+  if (!fields.length) return null
+  const expanded = open || fields.some((field) => errors[field])
+  const rows: Array<readonly AiSiteStartExtraKey[]> = []
+  for (const field of fields) {
+    if (rows.some((row) => row.includes(field))) continue
+    const pair = PAIRS.find((entry) => entry[0] === field && fields.includes(entry[1]))
+    rows.push(pair ?? [field])
+  }
+  return (
+    <Accordion
+      disableGutters
+      variant="outlined"
+      expanded={expanded}
+      onChange={(_, next) => {
+        setOpen(next)
+        if (next) tracker.moreDetails()
+      }}
+      data-start-area="more-details"
+    >
+      <AccordionSummary expandIcon={<MdiIcon path={mdiChevronDown.path} />}>
+        <Stack spacing={0.25}>
+          <Typography variant="subtitle2" component="span">
+            {'More details'}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" component="span">
+            {MORE_SUMMARY[step]}
+          </Typography>
+        </Stack>
+      </AccordionSummary>
+      <AccordionDetails>
+        <Stack spacing={2.5}>
+          {rows.map((row) =>
+            row.length > 1 ? (
+              <Stack key={row.join('-')} direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                {row.map((field) => (
+                  <ExtraField key={field} field={field} {...props} />
+                ))}
+              </Stack>
+            ) : (
+              <ExtraField key={row[0]} field={row[0]} {...props} />
+            ),
+          )}
+        </Stack>
+      </AccordionDetails>
+    </Accordion>
+  )
+}
+
+/** The extras on the review, each as a person reads it, with the step that asks it. */
+export function aiSiteStartExtraRows(answers: AiSiteStartAnswers): Array<{ label: string; value: string; step: AiSiteStartStep }> {
+  const rows: Array<{ label: string; value: string; step: AiSiteStartStep }> = []
+  const add = (label: string, value: string, step: AiSiteStartStep) => {
+    if (value.trim()) rows.push({ label, value: value.trim(), step })
+  }
+  add('Phone', answers.phone, 'details')
+  add('Email', answers.email, 'details')
+  add('Tagline', answers.tagline, 'kind')
+  add('Year founded', answers.founded, 'kind')
+  add('Areas you serve', aiSiteServiceAreas(answers.serviceArea).join(', '), 'audience')
+  add('Price range', answers.priceRange, 'audience')
+  add('Languages', answers.languages, 'audience')
+  const brand = AI_SITE_START_BRAND_COLORS.find((color) => color.hex === answers.brand)
+  add('Brand color', brand?.label ?? answers.brand, 'style')
+  const regional = [answers.region, answers.postalCode].map((part) => part.trim()).filter(Boolean).join(' ')
+  const address = [answers.street, answers.city, regional, answers.country]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(', ')
+  add('Address', address, 'details')
+  add('Opening hours', aiSiteHoursSentence(answers.hours), 'details')
+  const links = aiSiteSocialLinks(answers.social) ?? []
+  add('Social profiles', links.map((link) => link.replace(/^https:\/\//, '')).join(', '), 'details')
+  return rows
+}
+
+/**
  * One answer on the review, as one button back to the step that asks it. The
  * whole row is the target, not only "Edit" at its end: people clicked the
  * answer itself to change it, and nothing happened.
@@ -411,6 +790,8 @@ export function ReviewStep({
     { label: 'Form submissions', value: submissions?.label ?? answers.submissions, step: 'details' },
     { label: 'Pages', value: String(answers.pages), step: 'details' },
     ...(freeTaste ? [] : [{ label: 'Welcome email', value: answers.welcomeEmail ? 'Draft one' : 'No', step: 'details' as const }]),
+    // Everything "More details" and the contact fields were given (AGL-3979), each with Edit.
+    ...aiSiteStartExtraRows(answers),
   ]
   return (
     <Stack spacing={3}>

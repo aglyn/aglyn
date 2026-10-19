@@ -65,6 +65,7 @@ import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
 } from '../model/ai-site-start-seo'
+import { aiSiteDetailsBriefLines } from '../model/ai-site-details'
 import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
@@ -558,6 +559,9 @@ export function aiSiteBriefLines(
   ].filter(Boolean)
   lines.push(`Site — ${site.join('; ')}.`)
   if (inputs.businessName) lines.push(aiSiteNameSentence(inputs.businessName))
+  // The business details the person gave (AGL-3979): how to reach it, where
+  // and when, and that the pages show the phone and email as written.
+  lines.push(...aiSiteDetailsBriefLines(inputs, { city: inputs.city }))
   return lines
 }
 

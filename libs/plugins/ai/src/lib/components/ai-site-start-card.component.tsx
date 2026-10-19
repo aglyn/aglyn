@@ -82,6 +82,7 @@ import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
 import {
   AI_SITE_START_ANSWERS,
   aiSiteStartBrief,
+  aiSiteStartExtrasGiven,
   aiSiteStartInputs,
   aiSiteStartRefusal,
   type AiSiteStartAnswers,
@@ -93,6 +94,7 @@ import {
   aiSiteStartPreviousStep,
   aiSiteStartStepErrors,
   aiSiteStartStepIndex,
+  AI_SITE_START_STEPS,
   AI_SITE_START_STEP_FIELDS,
   type AiSiteStartField,
   type AiSiteStartStep,
@@ -104,6 +106,7 @@ import {
   AudienceStep,
   DetailsStep,
   KindStep,
+  MoreDetails,
   ReviewStep,
   StartProgress,
   StepHelp,
@@ -562,6 +565,13 @@ export function AiSiteStartCard({
       publishAiJob(created)
       // A removed start's answers have been used (AGL-3936).
       clearAiSiteStartAnswers()
+      // Which optional details the site was asked for with (AGL-3979), by id only.
+      tracker.detailsGiven(
+        aiSiteStartExtrasGiven(asked).map((field) => ({
+          field,
+          step: AI_SITE_START_STEPS.find((at) => AI_SITE_START_STEP_FIELDS[at].includes(field)) ?? 'details',
+        })),
+      )
       // The funnel's last step: the site is started, and nothing after is leaving it.
       tracker.complete()
       tracker.finish()
@@ -698,6 +708,7 @@ export function AiSiteStartCard({
       answers.siteType.trim() ||
         answers.audience.trim() ||
         answers.kind !== null ||
+        aiSiteStartExtrasGiven(answers).length > 0 ||
         (creating && pendingSite?.dirty),
     )
   // Escape and the close control: a dismissal, never a choice. Escape that
@@ -776,7 +787,10 @@ export function AiSiteStartCard({
       title: 'Choose a style',
       lede: 'Each picture is an example home page in that style. Yours is written for your business, with its own colors and fonts within the style you pick.',
     },
-    details: { title: 'A few details', lede: 'Where messages go, how many pages, and what else to draft. All can be changed later.' },
+    details: {
+      title: 'A few details',
+      lede: 'How customers reach you, where messages go, how many pages, and what else to draft. All can be changed later.',
+    },
     review: {
       title: 'Review your site',
       lede: started
@@ -955,6 +969,12 @@ export function AiSiteStartCard({
                 {step === 'audience' && <AudienceStep {...stepProps} />}
                 {step === 'style' && <StyleStep {...stepProps} />}
                 {step === 'details' && <DetailsStep {...stepProps} freeTaste={freeTaste} band={band} />}
+                {/* Each question step's optional extras, collapsed, after its own answers (AGL-3979). */}
+                {step !== 'review' && (
+                  <Box sx={{ mt: 3 }}>
+                    <MoreDetails key={step} step={step} {...stepProps} />
+                  </Box>
+                )}
                 {step === 'review' && (
                   <ReviewStep answers={answers} freeTaste={freeTaste} onEdit={edit}>
                     {!noneLeft && prompt && (
