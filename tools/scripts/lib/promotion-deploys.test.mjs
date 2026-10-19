@@ -26,8 +26,8 @@
 // history — the commit that last touched `cloud/functions` and its parent — so
 // the range-to-target mapping is exercised against actual git output rather
 // than a fixture that could drift from it. Only the Cloud Functions API is
-// stubbed, and it is fed a deployment older than that commit: the assertion is
-// the CLI's real exit code.
+// stubbed, and it is fed a deployment stamped with that commit's parent: the
+// assertion is the CLI's real exit code.
 
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
@@ -44,7 +44,12 @@ import {
   targetsForChangedFiles,
   withEveryTarget,
 } from './promotion-deploys.mjs'
-import { FUNCTIONS_ENTRY_FILE, parseFunctionExports } from './functions-drift.mjs'
+import {
+  FUNCTIONS_ENTRY_FILE,
+  FUNCTIONS_SOURCE_PATHSPECS,
+  SOURCE_STAMP_ENV,
+  parseFunctionExports,
+} from './functions-drift.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(here, '..', '..', '..')
@@ -171,13 +176,20 @@ const declaredIds = parseFunctionExports(
 )
 
 /** The last commit that touched the deployed package, and its parent. */
-const functionsSha = git(['log', '-1', '--format=%H', 'HEAD', '--', 'cloud/functions'])
+const functionsSha = git([
+  'log', '-1', '--format=%H', 'HEAD', '--', ...FUNCTIONS_SOURCE_PATHSPECS,
+])
 const functionsCommitMs =
   Number(git(['log', '-1', '--format=%ct', functionsSha])) * 1000
 const functionsRange = `${functionsSha}^..${functionsSha}`
 
-function deploymentAt(ms) {
-  const updateTime = new Date(ms).toISOString()
+/**
+ * A whole-project deployment built from `stampSha`, dated AFTER the commit in
+ * both cases: the drift check grades the source stamp, never the deploy time
+ * (AGL-3968), so "not deployed" is a deploy of the parent's source.
+ */
+function deploymentOf(stampSha) {
+  const updateTime = new Date(functionsCommitMs + 3_600_000).toISOString()
   return declaredIds.map((id) => ({
     name: `projects/${PROJECT}/locations/${
       id === 'beforeSignupCreate' ? 'us-east1' : 'us-central1'
@@ -185,8 +197,11 @@ function deploymentAt(ms) {
     state: 'ACTIVE',
     environment: 'GEN_2',
     updateTime,
+    serviceConfig: { environmentVariables: { [SOURCE_STAMP_ENV]: stampSha } },
   }))
 }
+const deployed = () => deploymentOf(functionsSha)
+const notDeployed = () => deploymentOf(git(['rev-parse', `${functionsSha}^`]))
 
 async function withStub(body, run) {
   const requests = []
@@ -242,7 +257,7 @@ describe('the CLI, over a real promotion range', () => {
 
   it('EXITS 1 when the range changed cloud/functions and the deploy did not happen', async () => {
     await withStub(
-      { functions: deploymentAt(functionsCommitMs - 86_400_000) },
+      { functions: notDeployed() },
       async ({ base }) => {
         const { code, out } = await runCli({
           base,
@@ -258,7 +273,7 @@ describe('the CLI, over a real promotion range', () => {
 
   it('passes the same range once the deploy has happened', async () => {
     await withStub(
-      { functions: deploymentAt(functionsCommitMs + 3_600_000) },
+      { functions: deployed() },
       async ({ base }) => {
         const { code, out } = await runCli({
           base,
@@ -275,7 +290,7 @@ describe('the CLI, over a real promotion range', () => {
     // range reaches no manual path: scoped to the range, the CLI verifies
     // nothing and passes, which is how the next promotion went green over it.
     await withStub(
-      { functions: deploymentAt(functionsCommitMs - 86_400_000) },
+      { functions: notDeployed() },
       async ({ base, requests }) => {
         const scoped = await runCli({
           base,
@@ -298,7 +313,7 @@ describe('the CLI, over a real promotion range', () => {
 
   it('--every-target passes once that deploy has happened', async () => {
     await withStub(
-      { functions: deploymentAt(functionsCommitMs + 3_600_000) },
+      { functions: deployed() },
       async ({ base }) => {
         const { code, out } = await runCli({
           base,

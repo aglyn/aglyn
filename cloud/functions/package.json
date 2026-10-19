@@ -3,6 +3,7 @@
   "scripts": {
     "lint": "eslint .",
     "check-deploy-env": "node scripts/check-deploy-env.mjs",
+    "stamp-source": "node scripts/stamp-source.mjs",
     "build": "tsc",
     "test": "npm run build && node --test 'test/**/*.test.mjs'",
     "serve": "npm run build && firebase emulators:start --only functions",
