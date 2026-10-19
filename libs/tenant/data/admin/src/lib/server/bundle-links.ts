@@ -43,7 +43,7 @@
  * writes them; the rules deny every client, staff included.
  */
 
-import type { OrgPlan } from '@aglyn/aglyn/server'
+import type { AiTierId, OrgPlan } from '@aglyn/aglyn/server'
 import {
   fitBundleAddonsToPlan,
   normalizeBundleDomain,
@@ -120,6 +120,8 @@ export interface BundleLinkDoc {
     addons?: BundleAddons
     interval?: 'month' | 'year'
     coupon?: string
+    /** The Aglyn AI tier an `ai:<tier>` entry named (AGL-3965). */
+    aiTier?: AiTierId
   }
   domain?: BundleLinkDomain
 }
@@ -195,6 +197,8 @@ export async function mintBundleLink(options: MintBundleLinkOptions): Promise<Mi
     addons: fitted.addons,
     interval: options.interval,
     coupon: options.coupon,
+    // The tier an `ai:<tier>` entry named (AGL-3965), kept with the AI add-on.
+    aiTier: parsed.aiTier,
   })
   const intent: BundleLinkDoc['intent'] = { plan, ...bundle }
 

@@ -31,7 +31,7 @@ import { isAiTierId, isCustomPricedPlan } from './plan-entitlements'
  * `app.aglyn.com/signup?plan=pro&interval=year`, optionally `&ai=1` for the
  * Aglyn AI add-on (AGL-2897), or `&ai=<tier>` (`&ai=boost`) for a named
  * Aglyn AI tier (AGL-3965). The bundle checkout link (AGL-3955) adds
- * `&addons=siteCare,ai,extraHost:2` for any add-on the plan sells and
+ * `&addons=siteCare,ai:boost,extraHost:2` for any add-on the plan sells and
  * `&coupon=<code>` for a promotion code to apply at checkout.
  *
  * This is a CONTRACT with a site we do not control and cannot deploy in
@@ -78,9 +78,10 @@ export interface OnboardingPlanIntent {
    */
   ai?: true
   /**
-   * The Aglyn AI tier the link named (AGL-3965): `?ai=boost`. Present only
-   * with `ai`; absent, `ai=1` means the tier with the plan's old price and
-   * band (`defaultAiTierForPlan`), which is what checkout sells.
+   * The Aglyn AI tier the link named (AGL-3965): `?ai=boost`, or an
+   * `ai:boost` token in `addons=` (AGL-3955). Present only with `ai`; absent,
+   * `ai=1` means the tier with the plan's old price and band
+   * (`defaultAiTierForPlan`), which is what checkout sells.
    */
   aiTier?: AiTierId
   /**
@@ -166,7 +167,9 @@ export function parseOnboardingPlanIntent(
   const parsedAddons = parseBundleAddons(rawParam('addons'))
   const addons: BundleAddons = { ...parsedAddons.addons }
   const coupon = normalizeBundleCoupon(rawParam('coupon'))
-  const aiTier = isAiTierId(ai) ? ai : null
+  // `?ai=<tier>` names the tier outright; otherwise an `ai:<tier>` token in
+  // `addons=` does (AGL-3965).
+  const aiTier = isAiTierId(ai) ? ai : (parsedAddons.aiTier ?? null)
   const aiStated = ai === '1' || ai === 'true' || ai === 'yes' || aiTier !== null
   return {
     plan: plan as OrgPlan,
@@ -217,7 +220,7 @@ export function onboardingPlanQuery(intent: OnboardingPlanIntent): string {
     (others
       ? // Fixed tokens, letters, digits, `:` and `,` only, so the link stays
         // readable when it is read aloud or typed off a QR's caption.
-        `&addons=${bundleAddonsParam(addons)}`
+        `&addons=${bundleAddonsParam(addons, intent.aiTier)}`
       : addons.aiAddon
         ? `&ai=${intent.aiTier ?? '1'}`
         : '') +

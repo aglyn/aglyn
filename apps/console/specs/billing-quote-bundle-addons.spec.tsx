@@ -28,6 +28,7 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { BundleAddons } from '@aglyn/aglyn/app-utils/bundle-intent'
+import type { AiTierId } from '@aglyn/aglyn'
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   useLoading: () => ({ queueLoading: () => () => undefined }),
@@ -91,6 +92,7 @@ function mount(props: {
   plan?: string
   addons?: BundleAddons
   onAddonsChange?: (next: BundleAddons) => void
+  aiTier?: AiTierId
   initialCoupon?: string
   linkNotice?: string
   onAppliedCodeChange?: (code: string) => void
@@ -106,6 +108,7 @@ function mount(props: {
       onAppliedCodeChange={props.onAppliedCodeChange ?? (() => undefined)}
       addons={addons}
       onAddonsChange={props.onAddonsChange}
+      aiTier={props.aiTier}
       initialCoupon={props.initialCoupon}
       linkNotice={props.linkNotice}
       onQuoted={props.onQuoted}
@@ -151,6 +154,22 @@ describe('the bundle’s add-ons on the quote (AGL-3955)', () => {
     await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
     expect(posted[0]['addons']).toEqual({ siteCare: 1 })
     expect(screen.queryByLabelText(/POS register/)).toBeNull()
+  })
+
+  it('preselects the Aglyn AI tier the link named, worded, priced and quoted as that tier (AGL-3965)', async () => {
+    // `addons=siteCare,ai:studio` on a Starter link: Studio, not Starter's Spark.
+    mount({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'studio', onAddonsChange: () => undefined })
+    await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
+    expect(posted[0]).toMatchObject({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'studio' })
+    const ai = screen.getByLabelText(/AI Studio/) as HTMLInputElement
+    expect(ai.checked).toBe(true)
+    expect(screen.getByText(/\$299\/mo/)).toBeTruthy()
+  })
+
+  it('CONTROL: the tier rides only with the AI add-on', async () => {
+    mount({ addons: { siteCare: 1 }, aiTier: 'studio', onAddonsChange: () => undefined })
+    await waitFor(() => expect(screen.getByText('Subtotal')).toBeTruthy())
+    expect(posted[0]['aiTier']).toBeUndefined()
   })
 
   it('shows the page’s one-line notice for what the link left off', async () => {

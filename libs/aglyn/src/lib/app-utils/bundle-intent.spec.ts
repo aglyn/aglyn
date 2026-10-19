@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { AI_TIER_IDS, aiTierAddonKey } from './plan-entitlements'
 import {
   ADDON_KINDS,
   addonMaxForPlan,
@@ -26,6 +27,7 @@ import {
   normalizeBundleDomain,
   parseBundleAddons,
   planSellsAddon,
+  resolveAiAddonTier,
 } from './bundle-intent'
 import {
   intentAddons,
@@ -61,8 +63,30 @@ describe('the bundle link’s add-ons (AGL-3955)', () => {
     expect(parseBundleAddons('siteCare:5,ai:3').addons).toEqual({ siteCare: 1, aiAddon: 1 })
   })
 
-  it('leaves `ai:<tier>` unsold until AI tiers exist (AGL-3965), rather than selling the one add-on', () => {
+  it('reads `ai:<tier>` as that Aglyn AI tier (AGL-3965), and drops a tier nobody sells', () => {
+    expect(parseBundleAddons('siteCare,ai:boost')).toEqual({
+      addons: { siteCare: 1, aiAddon: 1 },
+      dropped: [],
+      aiTier: 'boost',
+    })
+    // Every tier id, in any case, through the one `ai:<tier>` spelling.
+    for (const tier of AI_TIER_IDS) {
+      expect(resolveAiAddonTier(tier.toUpperCase())).toEqual({ kind: 'aiAddon', quantity: 1, tier })
+      expect(parseBundleAddons(aiTierAddonKey(tier)).aiTier).toBe(tier)
+    }
+    expect(parseBundleAddons({ ai: 'studio' })).toMatchObject({ addons: { aiAddon: 1 }, aiTier: 'studio' })
+    // Not a tier: left off with the notice, never read as "whichever tier".
     expect(parseBundleAddons('ai:pro')).toEqual({ addons: {}, dropped: ['ai:pro'] })
+    // A bare `ai` names no tier: checkout sells the plan's default one.
+    expect(parseBundleAddons('ai').aiTier).toBeUndefined()
+  })
+
+  it('writes and words the tier with the add-on (AGL-3965)', () => {
+    expect(bundleAddonsParam({ siteCare: 1, aiAddon: 1 }, 'max')).toBe('ai:max,siteCare')
+    expect(bundleAddonsParam({ siteCare: 1 }, 'max')).toBe('siteCare')
+    expect(
+      describeBundle({ plan: 'pro', addons: { aiAddon: 1 }, aiTier: 'studio' }, { brand: 'Aglyn' }),
+    ).toBe('Pro with Aglyn AI Studio')
   })
 
   it('accepts every kind Billing sells, and only those', () => {
@@ -156,5 +180,17 @@ describe('the Billing link carries the bundle (AGL-3955)', () => {
   it('keeps `ai=1` as the spelling when Aglyn AI is the only add-on', () => {
     const intent = parseOnboardingPlanIntent(query('plan=pro&addons=ai'))
     expect(onboardingPlanQuery(intent!)).toBe('plan=pro&ai=1')
+  })
+
+  it('carries an `ai:<tier>` token as the intent’s tier, through every hop (AGL-3965)', () => {
+    const intent = parseOnboardingPlanIntent(query('plan=starter&addons=siteCare,ai:studio'))
+    expect(intent).toMatchObject({ ai: true, aiTier: 'studio', addons: { siteCare: 1, aiAddon: 1 } })
+    expect(onboardingPlanQuery(intent!)).toBe('plan=starter&addons=ai:studio,siteCare')
+    expect(parseOnboardingPlanIntent(query(onboardingPlanQuery(intent!)))?.aiTier).toBe('studio')
+    // Alone, the tier keeps the pricing CTAs' `ai=<tier>` spelling.
+    const alone = parseOnboardingPlanIntent(query('plan=pro&addons=ai:max'))
+    expect(onboardingPlanQuery(alone!)).toBe('plan=pro&ai=max')
+    // `?ai=<tier>` is the explicit statement and wins over a token.
+    expect(parseOnboardingPlanIntent(query('plan=pro&ai=plus&addons=ai:max'))?.aiTier).toBe('plus')
   })
 })

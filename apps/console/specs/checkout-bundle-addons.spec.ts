@@ -144,6 +144,8 @@ const METERED = {
 const AI_ADDON = {
   STRIPE_PRICE_AI_BOOST: 'price_ai_boost',
   STRIPE_PRICE_AI_BOOST_YEARLY: 'price_ai_boost_yearly',
+  STRIPE_PRICE_AI_STUDIO: 'price_ai_studio',
+  STRIPE_PRICE_AI_STUDIO_YEARLY: 'price_ai_studio_yearly',
 }
 const SITE_CARE = {
   STRIPE_PRICE_SITE_CARE: 'price_site_care',
@@ -289,6 +291,27 @@ describe('a bundle checkout sells every add-on in one subscription (AGL-3955)', 
     expect(body?.get('items[2][price]')).toBe('price_pro_extra_host_yearly')
     expect(body?.get('items[2][quantity]')).toBe('2')
     expect(body?.get('items[3][price]')).toBe('price_site_care_yearly')
+  })
+
+  it('sells the Aglyn AI tier an `ai:<tier>` entry names (AGL-3965)', async () => {
+    const handler = loadCheckout(EVERYTHING)
+    await post(handler, { addons: 'siteCare,ai:studio', interval: 'year' })
+    const body = subscribeBody()
+    // Studio on Pro: the tier is chosen on its own, not the plan's Boost.
+    expect(body?.get('items[2][price]')).toBe('price_ai_studio_yearly')
+    expect(body?.get('items[3][price]')).toBe('price_site_care_yearly')
+  })
+
+  it('lets `aiTier`, the explicit statement, win over an `ai:<tier>` entry (AGL-3965)', async () => {
+    await post(loadCheckout(EVERYTHING), { addons: 'ai:studio', aiTier: 'boost' })
+    expect(subscribeBody()?.get('items[2][price]')).toBe('price_ai_boost')
+  })
+
+  it('refuses an `ai:<tier>` entry no tier answers to, with the other unknown add-ons', async () => {
+    const refused = await post(loadCheckout(EVERYTHING), { addons: 'ai:pro' })
+    expect(refused.status).toBe(400)
+    expect((await refused.json()).code).toBe('unknown_addon')
+    expect(subscribeBody()).toBeNull()
   })
 
   it('keeps the two flags the Billing page sent before the map', async () => {

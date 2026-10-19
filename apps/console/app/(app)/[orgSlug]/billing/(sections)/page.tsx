@@ -297,7 +297,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const [bundleAddons, setBundleAddons] = useState<BundleAddons>({})
   /**
    * The checkout body for a set of add-ons: the map, and the Aglyn AI tier
-   * the link named (`?ai=boost`, AGL-3965) when the AI add-on is in it.
+   * the link named (`?ai=boost`, or `ai:boost` in `addons=`, AGL-3965) when
+   * the AI add-on is in it. The quote's AI switch is worded and priced as
+   * that tier, so the tier the link preselected is the one quoted and paid.
    */
   const linkAiTier = planIntent?.aiTier ?? null
   const withAiTier = useCallback(
@@ -1614,6 +1616,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         onAppliedCodeChange={setAppliedPromotionCode}
                         addons={bundleAddons}
                         onAddonsChange={setBundleAddons}
+                        aiTier={linkAiTier}
                         initialCoupon={planIntent?.coupon ?? null}
                         linkNotice={bundleLinkNotice}
                         onQuoted={onQuoted}
@@ -2156,6 +2159,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           plan={collectingForPlan}
           interval={interval}
           addons={bundleAddons}
+          aiTier={linkAiTier}
           orgId={orgId}
           profile={billingProfile}
           canManage={can('billing.manage')}

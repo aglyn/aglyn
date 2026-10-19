@@ -172,6 +172,15 @@ describe('minting a bundle link (AGL-3955)', () => {
     ])
   })
 
+  it('keeps the Aglyn AI tier an `ai:<tier>` entry names, on the record and the link (AGL-3965)', async () => {
+    const minted = await mint({ addons: 'siteCare,ai:studio' })
+    expect(minted.url).toBe(
+      'https://app.aglyn.test/acme/billing?plan=starter&interval=year&addons=ai:studio,siteCare&coupon=BOOTH25',
+    )
+    expect(minted.intent).toMatchObject({ addons: { aiAddon: 1, siteCare: 1 }, aiTier: 'studio' })
+    expect(links()[0]).toMatchObject({ intent: { aiTier: 'studio' } })
+  })
+
   it('refuses a plan nobody buys through checkout, and a workspace that already pays', async () => {
     await expect(mint({ plan: 'enterprise' })).rejects.toBeInstanceOf(BundleLinkError)
     store.set(`orgs/${ORG}/billing/stripe`, { subscription: { status: 'active' } })

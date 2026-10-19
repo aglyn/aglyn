@@ -40,12 +40,16 @@ import type {
   OrgSeatAddons,
 } from '../foundation/definitions/org-billing.types'
 import {
+  AI_TIER_IDS,
   AI_TIERS,
   aiAddonName,
+  aiTierAddonKey,
+  aiTierName,
   defaultAiTierForPlan,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   EXTRA_HOSTS_ADDON_MAX,
   PLAN_LABELS,
+  parseAiTierAddonKey,
   PLAN_PRICING,
   planSellsAiTiers,
   planSellsSiteCare,
@@ -223,32 +227,45 @@ const TOKEN_KINDS: Record<string, AddonKind> = (() => {
 /** The most of a quantity kind a link may ask for, before the plan's ceiling. */
 const MAX_LINK_QUANTITY = 999
 
-/**
- * THE EXTENSION POINT FOR `ai:<tier>` (AGL-3965).
- *
- * Aglyn AI is one add-on per plan today, so `ai` and `ai:1` both mean "add
- * it". When AI becomes a tier chosen on its own, the tier names are added
- * here and resolve to whatever the tier model stores; until then a named
- * tier is not something Billing sells, and the token is dropped with the
- * notice like any other unknown add-on rather than read as "add the one AI
- * add-on there is" — which would sell a tier nobody chose.
- */
-export const AI_ADDON_TIER_TOKENS: Readonly<Record<string, never>> = {}
+/** One add-on a token names, with the Aglyn AI tier when it names one. */
+interface ParsedToken {
+  kind: AddonKind
+  quantity: number
+  tier?: AiTierId
+}
 
-export function resolveAiAddonTier(tier: string): { kind: AddonKind; quantity: number } | null {
-  return Object.prototype.hasOwnProperty.call(AI_ADDON_TIER_TOKENS, tier.toLowerCase())
-    ? { kind: 'aiAddon', quantity: 1 }
-    : null
+/**
+ * THE `ai:<tier>` TOKENS (AGL-3965).
+ *
+ * Aglyn AI is a tier chosen on its own, on any paid plan: `ai:boost` adds
+ * Aglyn AI Boost. The words are the tier ids, lower-cased as every token is,
+ * and resolve through `parseAiTierAddonKey`, the one spelling of the
+ * `ai:<tier>` key. A bare `ai` (or `ai:1`) still means "add it" and sells
+ * the plan's default tier (`defaultAiTierForPlan`). An unknown tier is
+ * dropped with the notice like any other unknown add-on, never read as
+ * "add whichever tier": that would sell a tier nobody chose.
+ */
+export const AI_ADDON_TIER_TOKENS: Readonly<Record<string, AiTierId>> = Object.freeze(
+  Object.fromEntries(AI_TIER_IDS.map((tier) => [tier.toLowerCase(), tier])),
+)
+
+export function resolveAiAddonTier(tier: string): ParsedToken | null {
+  const word = tier.trim().toLowerCase()
+  if (!Object.prototype.hasOwnProperty.call(AI_ADDON_TIER_TOKENS, word)) return null
+  const parsed = parseAiTierAddonKey(aiTierAddonKey(AI_ADDON_TIER_TOKENS[word]))
+  return parsed ? { kind: 'aiAddon', quantity: 1, tier: parsed } : null
 }
 
 export interface ParsedBundleAddons {
   addons: BundleAddons
   /** The tokens nothing understood, as they were written. */
   dropped: string[]
+  /** The Aglyn AI tier an `ai:<tier>` token named (AGL-3965), if any. */
+  aiTier?: AiTierId
 }
 
 /** One token, `kind` or `kind:quantity`, or null when nothing understands it. */
-function parseToken(raw: string): { kind: AddonKind; quantity: number } | null {
+function parseToken(raw: string): ParsedToken | null {
   const token = raw.trim()
   if (!token) return null
   const [name, ...rest] = token.split(':')
@@ -278,12 +295,15 @@ function parseToken(raw: string): { kind: AddonKind; quantity: number } | null {
 export function parseBundleAddons(input: unknown): ParsedBundleAddons {
   const addons: BundleAddons = {}
   const dropped: string[] = []
-  const take = (parsed: { kind: AddonKind; quantity: number } | null, raw: string) => {
+  let aiTier: AiTierId | undefined
+  const take = (parsed: ParsedToken | null, raw: string) => {
     if (!parsed) {
       if (raw.trim()) dropped.push(raw.trim().slice(0, 40))
       return
     }
     addons[parsed.kind] = Math.max(addons[parsed.kind] ?? 0, parsed.quantity)
+    // The first tier named wins: one workspace holds one tier.
+    if (parsed.tier && !aiTier) aiTier = parsed.tier
   }
   if (typeof input === 'string') {
     for (const raw of input.split(/[,\s]+/)) take(parseToken(raw), raw)
@@ -311,7 +331,7 @@ export function parseBundleAddons(input: unknown): ParsedBundleAddons {
       take(parseToken(quantity ? `${name}:${quantity}` : name), name)
     }
   }
-  return { addons, dropped }
+  return { addons, dropped, ...(aiTier ? { aiTier } : {}) }
 }
 
 export interface FittedBundleAddons {
@@ -344,10 +364,18 @@ export function fitBundleAddonsToPlan(
   return { addons: fitted, notSold }
 }
 
-/** The add-ons as the link writes them: `siteCare,ai,extraHost:2`. */
-export function bundleAddonsParam(addons: BundleAddons | null | undefined): string {
+/**
+ * The add-ons as the link writes them: `siteCare,ai:boost,extraHost:2`.
+ * Aglyn AI is written with its tier when one is named (AGL-3965), as bare
+ * `ai` otherwise.
+ */
+export function bundleAddonsParam(
+  addons: BundleAddons | null | undefined,
+  aiTier?: AiTierId | null,
+): string {
   return ADDON_KINDS.filter((kind) => (addons?.[kind] ?? 0) > 0)
     .map((kind) => {
+      if (kind === 'aiAddon' && aiTier) return aiTierAddonKey(aiTier)
       const quantity = addons?.[kind] ?? 0
       return quantity > 1 ? `${BUNDLE_ADDON_TOKENS[kind]}:${quantity}` : BUNDLE_ADDON_TOKENS[kind]
     })
@@ -359,8 +387,15 @@ export function hasBundleAddons(addons: BundleAddons | null | undefined): boolea
   return ADDON_KINDS.some((kind) => (addons?.[kind] ?? 0) > 0)
 }
 
-/** How each kind is named to a customer, singular. */
-export function bundleAddonLabel(kind: AddonKind, brand?: string): string {
+/**
+ * How each kind is named to a customer, singular. Aglyn AI carries its tier
+ * when one is named: "Aglyn AI Boost" (AGL-3965).
+ */
+export function bundleAddonLabel(
+  kind: AddonKind,
+  brand?: string,
+  aiTier?: AiTierId | null,
+): string {
   switch (kind) {
     case 'managers':
       return 'Extra manager seat'
@@ -375,15 +410,20 @@ export function bundleAddonLabel(kind: AddonKind, brand?: string): string {
     case 'eventCalendar':
       return 'Event Calendar'
     case 'aiAddon':
-      return aiAddonName(brand)
+      return aiTier ? aiTierName(aiTier, brand) : aiAddonName(brand)
     case 'siteCare':
       return 'Site Care'
   }
 }
 
-/** "Site Care", "2 × Extra site". */
-export function describeBundleAddon(kind: AddonKind, quantity: number, brand?: string): string {
-  const label = bundleAddonLabel(kind, brand)
+/** "Site Care", "2 × Extra site", "Aglyn AI Boost". */
+export function describeBundleAddon(
+  kind: AddonKind,
+  quantity: number,
+  brand?: string,
+  aiTier?: AiTierId | null,
+): string {
+  const label = bundleAddonLabel(kind, brand, aiTier)
   return quantity > 1 ? `${quantity} × ${label}` : label
 }
 
@@ -456,11 +496,13 @@ export function describeBundle(
     addons?: BundleAddons | null
     interval?: 'month' | 'year' | null
     coupon?: string | null
+    /** The Aglyn AI tier, named with the AI add-on (AGL-3965). */
+    aiTier?: AiTierId | null
   },
   options: { brand?: string } = {},
 ): string {
   const parts = ADDON_KINDS.filter((kind) => (bundle.addons?.[kind] ?? 0) > 0).map((kind) =>
-    describeBundleAddon(kind, bundle.addons?.[kind] ?? 0, options.brand),
+    describeBundleAddon(kind, bundle.addons?.[kind] ?? 0, options.brand, bundle.aiTier),
   )
   const addons =
     parts.length === 0

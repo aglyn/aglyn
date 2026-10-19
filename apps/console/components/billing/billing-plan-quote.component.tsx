@@ -18,7 +18,7 @@
 'use client'
 
 import { parseLockdownRefusal, type LockdownRefusalNotice } from '@aglyn/aglyn'
-import type { OrgPlan } from '@aglyn/aglyn'
+import type { AiTierId, OrgPlan } from '@aglyn/aglyn'
 import {
   ADDON_KINDS,
   addonUnitUsd,
@@ -101,6 +101,12 @@ export interface BillingPlanQuoteProps {
   /** Present when the add-ons can be changed here: the switches render. */
   onAddonsChange?: (next: BundleAddons) => void
   /**
+   * The Aglyn AI tier the link named (AGL-3965): the AI switch is worded and
+   * priced as that tier, and the quote prices it, so the total shown is the
+   * tier the purchase sends. Absent, the plan's default tier.
+   */
+  aiTier?: AiTierId | null
+  /**
    * A promotion code the link carried (AGL-3955), tried on the first quote.
    * One that Stripe refuses is left off with a one-line notice, never an
    * error: the owner is mid-purchase on a phone.
@@ -117,8 +123,13 @@ export interface BillingPlanQuoteProps {
 const ADDON_ROW_KINDS = TOGGLE_ADDON_KIND_LIST as readonly string[]
 
 /** "$49/mo", "$588/yr", "$15/mo each". */
-function addonPrice(kind: AddonKind, plan: OrgPlan, interval: 'month' | 'year'): string {
-  const unit = addonUnitUsd(kind, plan)
+function addonPrice(
+  kind: AddonKind,
+  plan: OrgPlan,
+  interval: 'month' | 'year',
+  aiTier?: AiTierId | null,
+): string {
+  const unit = addonUnitUsd(kind, plan, aiTier)
   if (unit == null) return ''
   const each = ADDON_ROW_KINDS.includes(kind) ? '' : ' each'
   return interval === 'year' ? `$${unit * 12}/yr${each}` : `$${unit}/mo${each}`
@@ -170,6 +181,7 @@ export default function BillingPlanQuoteComponent({
   onAppliedCodeChange,
   addons,
   onAddonsChange,
+  aiTier,
   initialCoupon,
   linkNotice,
   footer,
@@ -177,8 +189,10 @@ export default function BillingPlanQuoteComponent({
 }: BillingPlanQuoteProps) {
   const knownPlan = plan ? (plan as OrgPlan) : null
   const quotedAddons = knownPlan ? fitBundleAddonsToPlan(addons, knownPlan).addons : {}
-  // A stable key for the effect below: the add-ons as the link writes them.
-  const addonsKey = bundleAddonsParam(quotedAddons)
+  // A stable key for the effect below: the add-ons as the link writes them,
+  // the AI tier included.
+  const quotedAiTier = (quotedAddons.aiAddon ?? 0) > 0 ? (aiTier ?? null) : null
+  const addonsKey = bundleAddonsParam(quotedAddons, quotedAiTier)
   // The link's code is tried once, on the first quote, and then belongs to
   // the box like any typed code.
   const linkCoupon = useRef<string | null>(initialCoupon?.trim() || null)
@@ -220,6 +234,7 @@ export default function BillingPlanQuoteComponent({
             // Quoted on the same invoice as the plan, so the total shown is
             // the total charged (AGL-3955).
             ...(addonsKey ? { addons: quotedAddons } : {}),
+            ...(quotedAiTier ? { aiTier: quotedAiTier } : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -352,9 +367,9 @@ export default function BillingPlanQuoteComponent({
               }
               label={
                 <Typography variant="body2">
-                  {describeBundleAddon(kind, Math.max(1, quantity))}
+                  {describeBundleAddon(kind, Math.max(1, quantity), undefined, aiTier)}
                   <Typography component="span" variant="body2" color="text.secondary">
-                    {` · ${addonPrice(kind, knownPlan, interval)}`}
+                    {` · ${addonPrice(kind, knownPlan, interval, aiTier)}`}
                   </Typography>
                 </Typography>
               }

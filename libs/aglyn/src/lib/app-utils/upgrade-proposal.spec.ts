@@ -129,5 +129,29 @@ describe('upgrade proposals (AGL-3466)', () => {
         'Starter with 2 × Extra site and Site Care, billed yearly, code BOOTH25',
       )
     })
+
+    it('keeps the Aglyn AI tier an `ai:<tier>` entry names, only with the AI add-on (AGL-3965)', () => {
+      const stored = normalizeUpgradeProposalBundle('starter', { addons: 'siteCare,ai:studio' })
+      expect(stored).toEqual({ addons: { siteCare: 1, aiAddon: 1 }, aiTier: 'studio' })
+      const tiered = { ...proposal, ...stored }
+      expect(readUpgradeProposal({ upgradeProposal: tiered } as never)).toEqual(tiered)
+      expect(upgradeProposalDestination('acme', tiered as never)).toBe(
+        '/acme/billing?plan=starter&addons=ai:studio,siteCare',
+      )
+      expect(upgradeProposalSummary(tiered as never, { brand: 'Aglyn' })).toBe(
+        'Starter with Aglyn AI Studio and Site Care',
+      )
+      // A stored tier with no AI add-on, or one no tier answers to, is dropped.
+      expect(
+        readUpgradeProposal({
+          upgradeProposal: { ...proposal, addons: { siteCare: 1 }, aiTier: 'studio' },
+        } as never),
+      ).toEqual({ ...proposal, addons: { siteCare: 1 } })
+      expect(
+        readUpgradeProposal({
+          upgradeProposal: { ...proposal, addons: { aiAddon: 1 }, aiTier: 'mega' },
+        } as never),
+      ).toEqual({ ...proposal, addons: { aiAddon: 1 } })
+    })
   })
 })

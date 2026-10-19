@@ -317,14 +317,19 @@ function promotionCodeFullUseMetadata(
  * The add-ons a checkout asks for (AGL-3955): the `addons` map or link form
  * the bundle sends, read by the same parser the link and the proposal use,
  * plus the two flags the Billing page sent before it (`aiAddon`, AGL-2897;
- * `siteCare`, AGL-3954).
+ * `siteCare`, AGL-3954). An `ai:<tier>` entry names the Aglyn AI tier
+ * (AGL-3965), as `aiTier` does.
  */
-function requestedAddons(body: any): { addons: BundleAddons; dropped: string[] } {
+function requestedAddons(body: any): {
+  addons: BundleAddons
+  dropped: string[]
+  aiTier: AiTierId | null
+} {
   const parsed = parseBundleAddons(body?.addons)
   const addons: BundleAddons = { ...parsed.addons }
   if (body?.aiAddon === true) addons.aiAddon = 1
   if (body?.siteCare === true) addons.siteCare = 1
-  return { addons, dropped: parsed.dropped }
+  return { addons, dropped: parsed.dropped, aiTier: parsed.aiTier ?? null }
 }
 
 /**
@@ -401,17 +406,20 @@ async function handler(request: Request): Promise<Response> {
   // add-on the visitor clicked would bill less and deliver less than shown.
   //
   // Since AGL-3965 the add-on is a TIER chosen on its own: `aiTier` names it
-  // (`?ai=boost`), and `aiAddon: true` alone means the tier with the plan's
-  // old price and band (`defaultAiTierForPlan`), so a link published before
-  // tiers still sells what it quoted. An unknown tier is refused, not
-  // guessed.
+  // (`?ai=boost`), as does an `ai:<tier>` entry in the bundle's `addons`
+  // (AGL-3955; `aiTier` wins when both are sent), and `aiAddon: true` alone
+  // means the tier with the plan's old price and band
+  // (`defaultAiTierForPlan`), so a link published before tiers still sells
+  // what it quoted. An unknown tier is refused, not guessed.
   if (body?.aiTier != null && !isAiTierId(body.aiTier)) {
     return Response.json({ error: 'Unknown AI tier' }, { status: 400 })
   }
   const aiAddonWanted =
     (requested.addons.aiAddon ?? 0) > 0 || isAiTierId(body?.aiTier)
   const aiTier: AiTierId | null = aiAddonWanted
-    ? (isAiTierId(body?.aiTier) ? body.aiTier : defaultAiTierForPlan(plan))
+    ? (isAiTierId(body?.aiTier)
+        ? body.aiTier
+        : (requested.aiTier ?? defaultAiTierForPlan(plan)))
     : null
   if (aiAddonWanted && addonUnitUsd('aiAddon', plan as OrgPlan, aiTier) === null) {
     return Response.json(
