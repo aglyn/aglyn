@@ -126,8 +126,19 @@ function mockMakeFirestore(): any {
         (path === 'hosts/host-1' ? mockHostData() : (docs.get(path) ?? {}))[field],
       data: () => (path === 'hosts/host-1' ? mockHostData() : docs.get(path)),
     }),
-    set: async (data: Record<string, unknown>) => {
-      docs.set(path, { ...data })
+    set: async (data: Record<string, unknown>, options?: { merge?: boolean }) => {
+      // `{ merge: true }` deep-merges maps, as Firestore does, so a merged
+      // `hostAccess` keeps the hosts the row already held.
+      const prior = options?.merge ? (docs.get(path) ?? {}) : {}
+      const merged: Record<string, unknown> = { ...prior }
+      for (const [key, value] of Object.entries(data)) {
+        const before = merged[key]
+        merged[key] =
+          options?.merge && value && typeof value === 'object' && before && typeof before === 'object'
+            ? { ...(before as Record<string, unknown>), ...(value as Record<string, unknown>) }
+            : value
+      }
+      docs.set(path, merged)
       return undefined
     },
     update: async (data: Record<string, unknown>) => {
@@ -146,21 +157,29 @@ function mockMakeFirestore(): any {
       docs.set(`${prefix}/auto-${docs.size}`, { ...data })
       return { id: `auto-${docs.size}` }
     },
-    where: (field: string, _op: string, value: unknown) => ({
-      limit: () => ({
-        get: async () => {
-          const matched = [...docs.entries()].filter(
-            ([path, data]) => path.startsWith(`${prefix}/`) && data[field] === value,
-          )
-          return {
-            empty: matched.length === 0,
-            docs: matched.map(([path, data]) => ({
-              id: path.split('/').pop(),
-              data: () => data,
-            })),
-          }
-        },
-      }),
+    where: (field: string, _op: string, value: unknown) => makeQuery(prefix, [[field, value]]),
+  })
+  // `==` filters, chainable: every one must hold. A field the row lacks reads
+  // as null, which is how Firestore matches `acceptedAt == null` only on rows
+  // that carry it as null, and never on rows without it at all.
+  const makeQuery = (prefix: string, filters: Array<[string, unknown]>): any => ({
+    where: (field: string, _op: string, value: unknown) => makeQuery(prefix, [...filters, [field, value]]),
+    limit: () => ({
+      get: async () => {
+        const matched = [...docs.entries()].filter(
+          ([path, data]) =>
+            path.startsWith(`${prefix}/`) &&
+            !path.slice(prefix.length + 1).includes('/') &&
+            filters.every(([field, value]) => field in data && data[field] === value),
+        )
+        return {
+          empty: matched.length === 0,
+          docs: matched.map(([path, data]) => ({
+            id: path.split('/').pop(),
+            data: () => data,
+          })),
+        }
+      },
     }),
   })
   return { collection: (name: string) => makeCollection(name) }
@@ -270,6 +289,67 @@ describe('every membership change reaches the log, from the server (AGL-118)', (
     })
 
     expect(entry().action).toBe('Invited member')
+  })
+
+  it('adds the site to the pending invite an address already has, never a second invite (AGL-3984)', async () => {
+    // The Mac drive that found it: an address invited to the workspace, then
+    // added on a site's Users screen, sat twice under Pending invites with two
+    // accept links. One pending invite per address, as `/api/orgs/invites`
+    // keeps it (AGL-1111); the site joins that invite's grants.
+    mockFindUserByEmail.mockResolvedValue(null)
+    docs.set('orgs/org-1/invites/inv-1', {
+      email: 'casey@example.test',
+      role: 'viewer',
+      allHosts: false,
+      hostAccess: { 'host-2': 'author' },
+      invitedBy: 'u-1',
+      acceptedAt: null,
+    })
+
+    const response = await call(POST, 'POST', {
+      hostId: 'host-1',
+      email: 'casey@example.test',
+      role: 'viewer',
+    })
+
+    expect(response.status).toBe(200)
+    const invites = [...docs.keys()].filter((path) => path.startsWith('orgs/org-1/invites/'))
+    expect(invites).toEqual(['orgs/org-1/invites/inv-1'])
+    // This site joins the grants it already carried; its role and reach stay.
+    expect(docs.get('orgs/org-1/invites/inv-1')).toMatchObject({
+      role: 'viewer',
+      allHosts: false,
+      hostAccess: { 'host-2': 'author', 'host-1': 'viewer' },
+      acceptedAt: null,
+    })
+    expect(docs.get('hosts/host-1/members/generated-id')).toMatchObject({
+      email: 'casey@example.test',
+      status: 'invited',
+    })
+  })
+
+  it('writes a new invite when the address has none pending (an accepted one does not count)', async () => {
+    mockFindUserByEmail.mockResolvedValue(null)
+    docs.set('orgs/org-1/invites/old', {
+      email: 'casey@example.test',
+      role: 'viewer',
+      hostAccess: { 'host-2': 'author' },
+      acceptedAt: '__accepted__',
+    })
+
+    await call(POST, 'POST', { hostId: 'host-1', email: 'casey@example.test', role: 'editor' })
+
+    const fresh = [...docs.entries()].filter(
+      ([path, data]) => path.startsWith('orgs/org-1/invites/') && data['acceptedAt'] === null,
+    )
+    expect(fresh).toHaveLength(1)
+    expect(fresh[0][1]).toMatchObject({
+      email: 'casey@example.test',
+      role: 'viewer',
+      allHosts: false,
+      hostAccess: { 'host-1': 'editor' },
+    })
+    expect(docs.get('orgs/org-1/invites/old')).toMatchObject({ hostAccess: { 'host-2': 'author' } })
   })
 
   it('writes NOTHING when the seat cap refuses the add', async () => {
