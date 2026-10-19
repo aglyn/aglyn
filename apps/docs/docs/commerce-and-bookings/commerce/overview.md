@@ -490,6 +490,11 @@ The card only lists the methods the platform offers. A method missing from
 your card is not available for storefronts yet. Anyone who manages the store
 can read the card; only a site admin can change it.
 
+Until Stripe is connected, each method you have on reads **Connect Stripe
+first**, and a note at the top of the card links to the **Payments** card
+above it, where you connect. You can still choose your methods in the
+meantime; they show at checkout once Stripe is connected and approves them.
+
 **What each chip means.** Buy-now-pay-later, Cash App Pay, Amazon Pay and
 stablecoins also need Stripe to enable them on your payout account. Saving the
 card asks Stripe for that. **Stripe is reviewing** means it is still checking,
