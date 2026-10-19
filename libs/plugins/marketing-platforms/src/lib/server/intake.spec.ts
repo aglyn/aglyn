@@ -110,6 +110,13 @@ describe('commerce’s events, in the plugin’s words', () => {
     })
   })
 
+  it('takes no order paid in Stripe test mode, so a rehearsal never reaches the merchant’s list as a sale', () => {
+    for (const name of ['order.paid', 'order.fulfilled', 'order.refunded', 'order.cancelled'] as const) {
+      expect(marketingEventFromEnvelope(envelope(name, { order: { ...order, livemode: false } }))).toBeNull()
+    }
+    expect(marketingEventFromEnvelope(envelope('order.paid', { order: { ...order, livemode: true } }))).not.toBeNull()
+  })
+
   it('takes nothing it does not subscribe to, nor an order with no address', () => {
     expect(marketingEventFromEnvelope(envelope('return.requested', { order }))).toBeNull()
     expect(marketingEventFromEnvelope(envelope('order.paid', { order: { ...order, customerEmail: null } }))).toBeNull()

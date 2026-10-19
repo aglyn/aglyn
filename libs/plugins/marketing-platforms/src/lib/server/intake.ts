@@ -87,7 +87,9 @@ function items(lines: unknown, unitKey: 'unitAmountCents' | 'unitCents'): Market
 
 /**
  * One envelope in the plugin's words, or `null` for one it does not take: an
- * event it does not subscribe to, or one with no address to attach it to.
+ * event it does not subscribe to, one with no address to attach it to, or an
+ * order paid in Stripe's test mode (`livemode: false`), which never reaches a
+ * merchant's email platform as a real sale (as in help-desks).
  */
 export function marketingEventFromEnvelope(
   envelope: PluginDomainEventEnvelope<MarketingEnvelopePayload>,
@@ -116,6 +118,7 @@ export function marketingEventFromEnvelope(
   }
 
   const order: Partial<OrderEventOrder> = payload.order ?? {}
+  if (order.livemode === false) return null
   const email = String(order.customerEmail ?? '').trim().toLowerCase()
   if (!EMAIL.test(email)) return null
   const totals: Partial<OrderEventOrder['totals']> = order.totals ?? {}
