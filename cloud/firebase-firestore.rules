@@ -2826,6 +2826,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // One-click DNS sessions (AGL-3963), written and read only by the domains
+    // plugin's console routes and its sweep on the Admin SDK. Deny ALL client
+    // access: a session names the domain a site asked its DNS provider to
+    // point here and the member who asked, and its id is the hash of the
+    // state token the provider echoes back, so a client that could list them
+    // could watch another workspace's connect, or finish it.
+    match /domainConnectSessions/{sessionId} {
+      allow read, write: if false;
+    }
+
     // Storefront commerce tax records (AGL-1904), written by the commerce
     // webhook and read only by the same staff tax-return route. Deny ALL
     // client access: a row carries a shopper's address beside the amounts,

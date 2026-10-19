@@ -15,10 +15,59 @@
  * limitations under the License.
  */
 
+import { registerPluginApiRoute } from '@aglyn/aglyn/server'
+import { DOMAINS_API_ROUTES } from '../../constants/bundle-common'
+import type { DomainConnectRouteDeps } from './handlers'
+
 /**
  * One-click DNS routes (AGL-3963): discover a domain's DNS provider, start a
- * signed Domain Connect hand-off, and finish it once the records resolve.
+ * signed Domain Connect hand-off, finish it once the records resolve, and the
+ * page the provider sends the owner back to. Each handler, and the platform
+ * wiring behind it, loads on the first request.
  */
+
+let deps: DomainConnectRouteDeps | null = null
+
+async function load() {
+  const [handlers, platform] = await Promise.all([import('./handlers'), import('./platform')])
+  deps ??= platform.platformDomainConnectRouteDeps()
+  return { handlers, deps }
+}
+
 export function registerDomainConnectRoutes(): void {
-  // Filled in by AGL-3963.
+  registerPluginApiRoute(DOMAINS_API_ROUTES.connectDiscover, {
+    web: async (request) => {
+      const { handlers, deps } = await load()
+      return handlers.createDiscoverRoute(deps)(request)
+    },
+  })
+  registerPluginApiRoute(DOMAINS_API_ROUTES.connectStart, {
+    web: async (request) => {
+      const { handlers, deps } = await load()
+      return handlers.createStartRoute(deps)(request)
+    },
+  })
+  registerPluginApiRoute(DOMAINS_API_ROUTES.connectFinish, {
+    web: async (request) => {
+      const { handlers, deps } = await load()
+      return handlers.createFinishRoute(deps)(request)
+    },
+  })
+  // A browser coming back from the DNS provider names no site and carries no
+  // token: the release gate asks about the organization its state belongs to.
+  registerPluginApiRoute(
+    DOMAINS_API_ROUTES.connectReturn,
+    {
+      web: async (request) => {
+        const { handlers, deps } = await load()
+        return handlers.createReturnRoute(deps)(request)
+      },
+    },
+    {
+      subject: async (request) => {
+        const { handlers, deps } = await load()
+        return handlers.createReturnSubject(deps)(request)
+      },
+    },
+  )
 }

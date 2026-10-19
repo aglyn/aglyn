@@ -40,6 +40,9 @@ export type {
 export * from './lib/server/auth-handoff'
 export * from './lib/server/console-domains'
 export * from './lib/server/dns-probe'
+// Whether a name points at the tenant edge, for the verify route and the
+// domains plugin's one-click DNS (AGL-3963).
+export * from './lib/server/tenant-dns-check'
 export * from './lib/server/sending-domains'
 export * from './lib/server/sender-readiness'
 export * from './lib/server/host-sending-domain'

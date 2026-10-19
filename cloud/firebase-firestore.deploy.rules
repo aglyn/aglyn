@@ -2832,6 +2832,16 @@ allow read, write: if false;
 
 
 
+match /domainConnectSessions/{sessionId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
 
 
 
