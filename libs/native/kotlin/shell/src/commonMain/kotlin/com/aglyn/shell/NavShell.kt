@@ -207,8 +207,12 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   // setting is Plain). Only a white-label workspace's brand color stands in for the accent ([workspaceAccent]); a picked
   // or logo color never does, so the accent stays the account theme's (Aglyn blue unless the person picked one).
   val brand = orgColor?.takeIf { tints }
-  val accent = workspace.org?.id?.let { id -> workspaceAccent(workspace.orgLogos[id]?.brandColor, prefs.theme.useWorkspaceBrand) }
-    ?.let { com.aglyn.ui.colorOfHex(it) }
+  val accentOrg = workspace.org?.id
+  val accentEntitlements = accentOrg?.let { services.entitlements.state(it).collectAsState().value }
+  LaunchedEffect(accentOrg) { accentOrg?.let { services.entitlements.load(it) } }
+  val accent = accentOrg?.let { id ->
+    workspaceAccent(workspace.orgLogos[id]?.brandColor, whiteLabel = accentEntitlements?.has("whiteLabel") == true, useWorkspaceBrand = prefs.theme.useWorkspaceBrand)
+  }?.let { com.aglyn.ui.colorOfHex(it) }
   val tintsSidebar = brand != null && prefs.theme.sidebarStyle != com.aglyn.contracts.AppSidebarStyle.PLAIN
 
   val openInBrowser = com.aglyn.webview.rememberSystemBrowser()
@@ -511,6 +515,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
             VerticalDivider(color = shellColors.divider)
           }
           Column(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
+            val crumbsSlot = remember { com.aglyn.ui.PageCrumbsSlot() }
             if (route !is Route.Web) {
               // Where the screen sits, as Figma heads every page: the scope, the group, the destination, then a pushed screen.
               if (row != null || route != null) {
@@ -524,13 +529,15 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
                   row?.sections?.firstOrNull { it.key == navigator.top && it.key != row.key }?.takeIf { row.rowId in SELF_SECTIONED_ROWS }?.let { add(Crumb(it.label, null)) }
                   if (route != null && title.isNotBlank() && title != place) add(Crumb(title, null))
                 }.filter { it.label.isNotBlank() }
-                Breadcrumbs(steps, star = starSlot?.takeIf { !it.claimed })
+                // A list beside its detail draws them atop its detail column instead (it claims the slot).
+                androidx.compose.runtime.SideEffect { crumbsSlot.crumbs = { Breadcrumbs(steps, star = starSlot?.takeIf { !it.claimed }) } }
+                if (!crumbsSlot.claimed) Breadcrumbs(steps, star = starSlot?.takeIf { !it.claimed })
               }
               banner()
               sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
             }
             Row(Modifier.weight(1f).fillMaxWidth()) {
-              Box(Modifier.weight(1f).fillMaxHeight()) { body() }
+              Box(Modifier.weight(1f).fillMaxHeight()) { CompositionLocalProvider(com.aglyn.ui.LocalPageCrumbs provides crumbsSlot) { body() } }
               if (assist != null && chrome.aiPanel && route !is Route.Web) {
                 VerticalDivider(color = shellColors.divider)
                 Column(Modifier.width(380.dp).fillMaxHeight().background(shellColors.sidebar).testTag("ai-panel")) {

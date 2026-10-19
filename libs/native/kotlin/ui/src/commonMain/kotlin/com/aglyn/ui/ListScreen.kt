@@ -56,6 +56,18 @@ class PageStarSlot(val star: @Composable () -> Unit) {
 
 val LocalPageStar = staticCompositionLocalOf<PageStarSlot?> { null }
 
+/**
+ * The breadcrumbs for the place on screen, which the shell binds. A list beside its detail (Figma Orders 13:483 / 13:2167)
+ * draws them atop the detail column and claims them, so the list column starts with its own title row.
+ */
+@Stable
+class PageCrumbsSlot {
+  var crumbs: @Composable () -> Unit by mutableStateOf({})
+  var claimed by mutableStateOf(false)
+}
+
+val LocalPageCrumbs = staticCompositionLocalOf<PageCrumbsSlot?> { null }
+
 /** One filter choice in a list's Filter menu: a group heading's options, one picked per group. */
 data class FilterChoice(val group: String, val key: String, val label: String)
 

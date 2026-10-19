@@ -272,11 +272,20 @@ fun AglynListDetail(
   CompositionLocalProvider(LocalListDetailSelection provides handle) {
     BoxWithConstraints(modifier.fillMaxSize()) {
       if (maxWidth >= TwoPaneMinWidth) {
+        // The shell's breadcrumbs head the detail column, as Figma draws a list beside its detail.
+        val crumbs = LocalPageCrumbs.current
+        if (crumbs != null) {
+          androidx.compose.runtime.DisposableEffect(crumbs) {
+            crumbs.claimed = true
+            onDispose { crumbs.claimed = false }
+          }
+        }
         Row(Modifier.fillMaxSize()) {
           Box(Modifier.weight(0.4f).fillMaxHeight()) { panes.SaveableStateProvider("list") { list(selected) { selected = it } } }
           VerticalDivider()
-          Box(Modifier.weight(0.6f).fillMaxHeight()) {
-            AnimatedContent(selected, transitionSpec = { fadeIn() togetherWith fadeOut() }) { key ->
+          Column(Modifier.weight(0.6f).fillMaxHeight()) {
+            crumbs?.crumbs?.invoke()
+            AnimatedContent(selected, modifier = Modifier.weight(1f).fillMaxWidth(), transitionSpec = { fadeIn() togetherWith fadeOut() }) { key ->
               panes.SaveableStateProvider("detail:$key") { detail(key) }
             }
           }
