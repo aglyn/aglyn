@@ -567,8 +567,9 @@ struct WideShell: View {
           .transition(.move(edge: .leading).combined(with: .opacity))
       }
       if !navigation.sidebarHidden {
+        // The sidebar stays on the theme's own ground: a workspace's color is its rail tile and nothing else (Zach,
+        // 2026-10-19: "this looks green"; AGL-3996).
         ShellSidebar()
-          .background(workspaceTint)
           .frame(width: AglynShellMetrics.sidebarWidth)
           .overlay(alignment: .trailing) { Rectangle().fill(AglynColor.divider).frame(width: 1) }
           .transition(.move(edge: .leading).combined(with: .opacity))
@@ -589,14 +590,6 @@ struct WideShell: View {
     }
   }
 
-  /// The light tint a workspace's color lays over the sidebar while you are in it.
-  @ViewBuilder
-  private var workspaceTint: some View {
-    let color = model.workspaceColor(model.workspace?.org?.id)
-    if color.tintsApp, let tint = Color(aglynHex: color.color) {
-      tint.opacity(0.06)
-    }
-  }
 }
 
 /// The Mac's title bar as Figma draws it: one plain bar in the theme's title-bar color across the window, with a
