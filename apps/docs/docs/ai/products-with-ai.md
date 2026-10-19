@@ -35,7 +35,9 @@ brackets, like **[material]**, and the proposal lists what to fill in before you
 On the products page, **Build your catalog with AI** has **Write copy for products**.
 Pick up to 50 products and press **Write copy**. The picker offers the page of products
 the products table is showing, so filter, search or page that table first to reach
-others. The copy is written one product at a time, and each row appears in the review
+others. With no products listed — a new catalog, or filters that match nothing — the
+button is grayed out and says why: add a product, draft some with **Propose products**,
+or clear the filters. The copy is written one product at a time, and each row appears in the review
 table as it is ready.
 
 - **Apply** saves one product's copy. **Apply to all** saves every row still waiting.

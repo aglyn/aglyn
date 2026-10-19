@@ -35,6 +35,9 @@ export interface PaymentsSettingsCardProps {
   hostId: string
 }
 
+/** The element id the Payments card carries, for a link on the same page that lands on it (AGL-3982). */
+export const PAYMENTS_SETTINGS_ANCHOR = 'store-payments'
+
 /**
  * Merchant payments card (AGL-284): Stripe Connect Express onboarding
  * status for the org owner + the plan's transaction-fee ladder so the
@@ -190,6 +193,7 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
 
   return (
     <CardDisplay
+      id={PAYMENTS_SETTINGS_ANCHOR}
       header={'Payments'}
       help={pluginDocsHelp('commerceEndToEnd', {
         anchor: '#1-connect-payments',

@@ -142,7 +142,8 @@ does not come out is never charged in the first place.
 ## See your credits {#see-your-credits}
 
 - **Billing → Usage → AI credits** shows the credits drawn this month against the
-  included band, and what the add-on adds.
+  included band, and what the add-on adds. A workspace whose plan includes no AI
+  credits sees that said here instead, with **See plans** linking to Billing.
 - **Who is generating what**, on the same page, lists each member's credits by month.
   See [Billing & Plans](../workspace-and-billing/billing-and-plans/overview.md#who-is-generating-what).
 - **The usage line** in the assistant and the AI dialogs shows your own credits, the

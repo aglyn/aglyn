@@ -18,6 +18,7 @@
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -37,6 +38,7 @@ import {
   type StorefrontPaymentMethodSettings,
   type StorefrontPaymentMethodSpec,
 } from '../../model/commerce-payment-methods'
+import { PAYMENTS_SETTINGS_ANCHOR } from './payments-settings-card.component'
 
 export interface PaymentMethodsCardProps {
   hostId: string
@@ -292,6 +294,14 @@ export function PaymentMethodsCard(props: PaymentMethodsCardProps) {
               <Alert severity="info">
                 {'Only a site admin can change which payment methods your store offers.'}
               </Alert>
+            )}
+            {/* What every "Connect Stripe first" chip below waits on, and where
+                it is done: the Payments card above (AGL-3982). */}
+            {view.accountConnected ? null : (
+              <PrerequisiteNotice href={`#${PAYMENTS_SETTINGS_ANCHOR}`} actionLabel="Connect Stripe">
+                {'Connect Stripe in the Payments card above to offer these methods. ' +
+                  'Methods you turn on show at checkout once Stripe is connected and approves them.'}
+              </PrerequisiteNotice>
             )}
             {view.warnings.map((warning) => (
               <Alert key={warning} severity="warning">

@@ -23,6 +23,7 @@ import {
   listPluginDomainEventSubscribers,
   resetPluginDomainEventsForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type { OrderEventOrder } from '@aglyn/plugins-commerce/contracts'
 import { registerAccountingServerDeclarations } from '../declarations.server'
 import { EMPTY_ACCOUNTING_MAPPING } from '../model/accounting.types'
 import { asFirestore, memoryFirestore } from '../testing/memory-firestore'
@@ -39,7 +40,7 @@ import {
 const NOW = Date.UTC(2026, 9, 6, 18)
 
 /** Commerce's public order view, as `order.paid` carries it. */
-const orderView = {
+const orderView: OrderEventOrder = {
   id: 'order-1',
   object: 'order',
   number: 1042,
@@ -51,6 +52,7 @@ const orderView = {
   lineItems: [{ productId: 'p1', name: 'Mug', quantity: 2, unitAmountCents: 1250, sku: 'MUG' }],
   totals: { itemsCents: 2500, shippingCents: 500, taxCents: 240, discountCents: 0, totalCents: 3240, feeCents: 97 },
   refundedCents: 0,
+  taxMode: null,
 }
 
 function setup(connected = true) {
@@ -147,7 +149,7 @@ describe('the event intake', () => {
   it('names a refund with no Stripe id by its envelope, so a redelivery is the same refund', async () => {
     const { deps, item } = setup()
     await onOrderPaid(deps, envelope({ order: orderView }))
-    const refund = { id: null, amountCents: 100 }
+    const refund = { id: null, amountCents: 100, lineItemIds: [], full: false }
     await onOrderRefunded(deps, envelope({ order: orderView, refund }, 'evt-refund-9'))
     expect(await onOrderRefunded(deps, envelope({ order: orderView, refund }, 'evt-refund-9'))).toBe(0)
     expect(item(refundItemId({ order: { hostId: 'host-1', orderId: 'order-1' }, refundId: 'evt-refund-9' } as never))).toBeDefined()

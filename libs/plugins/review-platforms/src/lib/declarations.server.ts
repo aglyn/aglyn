@@ -20,8 +20,8 @@ import {
   type PluginDomainEventEnvelope,
 } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import { registerPluginOrderEmailCopies } from '@aglyn/aglyn/plugin-manager/plugin-order-email-copies'
+import { ORDER_DELIVERED_EVENT, ORDER_FULFILLED_EVENT } from '@aglyn/plugins-commerce/contracts'
 import { REVIEW_PLATFORMS_PLUGIN_ID } from './constants/bundle-common'
-import type { OrderEventPayload, OrderFulfilledPayload } from './server/invitations'
 
 /**
  * Review platforms' SERVER declarations (AGL-3699), loaded by both apps'
@@ -29,9 +29,9 @@ import type { OrderEventPayload, OrderFulfilledPayload } from './server/invitati
  *
  * - the Trustpilot invitation address the seller's buyer emails are copied
  *   to, through core's order-email copies;
- * - the seller's order events, by name — `order.fulfilled` and
- *   `order.delivered` — one subscriber per service, so a service that is
- *   down is retried alone.
+ * - the seller's order events — `order.fulfilled` and `order.delivered`, by
+ *   commerce's contract tokens (AGL-3980) — one subscriber per service, so a
+ *   service that is down is retried alone.
  *
  * Each answers as though absent for a site that connected nothing. Every
  * handler reaches its server module through a dynamic import, so nothing
@@ -49,15 +49,15 @@ export function registerReviewPlatformsServerDeclarations(): void {
     const { trustpilotEmailCopy } = await import('./server/invitations')
     return trustpilotEmailCopy(request)
   }, owner)
-  subscribePluginDomainEvent<OrderEventPayload>('order.fulfilled', invitations((m) => m.inviteThroughTrustpilotApi), {
+  subscribePluginDomainEvent(ORDER_FULFILLED_EVENT, invitations((m) => m.inviteThroughTrustpilotApi), {
     ...owner,
     name: 'trustpilot-fulfilled',
   })
-  subscribePluginDomainEvent<OrderEventPayload>('order.delivered', invitations((m) => m.inviteThroughTrustpilotApi), {
+  subscribePluginDomainEvent(ORDER_DELIVERED_EVENT, invitations((m) => m.inviteThroughTrustpilotApi), {
     ...owner,
     name: 'trustpilot-delivered',
   })
-  subscribePluginDomainEvent<OrderFulfilledPayload>('order.fulfilled', invitations((m) => m.sendOrderToYotpo), {
+  subscribePluginDomainEvent(ORDER_FULFILLED_EVENT, invitations((m) => m.sendOrderToYotpo), {
     ...owner,
     name: 'yotpo-fulfilled',
   })

@@ -133,6 +133,23 @@ describe('the payment methods card (AGL-3629)', () => {
     )
   })
 
+  it('says where Stripe is connected while every method waits on it (AGL-3982)', async () => {
+    fetchMock.mockReturnValueOnce(reply(answer({ accountConnected: false })))
+    render(<PaymentMethodsCard hostId="host-1" />)
+    await screen.findByTestId('payment-method-klarna')
+    expect(screen.getByTestId('payment-method-klarna').textContent).toContain('Connect Stripe first')
+    expect(screen.getByText(/Connect Stripe in the Payments card above to offer these methods\./)).toBeTruthy()
+    // A link to the Payments card on the same page, drawn as a button.
+    expect(screen.getByText('Connect Stripe').closest('a')?.getAttribute('href')).toBe('#store-payments')
+  })
+
+  it('THE CONTROL: a connected account gets no notice', async () => {
+    fetchMock.mockReturnValueOnce(reply(answer()))
+    render(<PaymentMethodsCard hostId="host-1" />)
+    await screen.findByTestId('payment-method-klarna')
+    expect(screen.queryByText(/Connect Stripe in the Payments card above/)).toBeNull()
+  })
+
   it('offers Finish in Stripe on an on method Stripe needs details for, to the owner', async () => {
     fetchMock.mockReturnValueOnce(reply(answer()))
     render(<PaymentMethodsCard hostId="host-1" />)

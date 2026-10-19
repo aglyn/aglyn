@@ -257,7 +257,9 @@ site. They do not count toward the pages you asked for:
 The header links **Account** beside the cart, and the footer links your account and
 policies. When the site is built, **Finish your store** lists what is left: connect
 payments, review your products and prices, set shipping and tax, and fill in your
-policies, each with a button to the page where you do it.
+policies, each with a button to the page where you do it. If your workspace's Stripe
+account already takes payments, the payments step reads **Payments connected** and is
+marked done; if Stripe still needs details, it says what.
 
 ## A blog from the start {#a-blog-from-the-start}
 

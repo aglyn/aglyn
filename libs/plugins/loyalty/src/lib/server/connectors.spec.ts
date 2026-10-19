@@ -214,7 +214,7 @@ function order(overrides: Partial<LoyaltyEventOrder> = {}): LoyaltyEventOrder {
     channel: 'online',
     customerEmail: 'pat@example.com',
     customerName: 'Pat Doe',
-    totals: { itemsCents: 10_000, discountCents: 1_000, totalCents: 9_900 },
+    totals: { itemsCents: 10_000, shippingCents: 0, taxCents: 0, discountCents: 1_000, totalCents: 9_900, feeCents: 0 },
     refundedCents: 0,
     credits: [],
     ...overrides,
@@ -522,8 +522,8 @@ describe('spending a connected balance (AGL-3677)', () => {
       envelope({
         order: order({
           id: 'cs_live_2',
-          totals: { itemsCents: 10_000, discountCents: 600, totalCents: 9_400 },
-          credits: [{ providerId: 'loyalty.rewards', reference, amountCents: 600, appliedAs: 'discount' }],
+          totals: { itemsCents: 10_000, shippingCents: 0, taxCents: 0, discountCents: 600, totalCents: 9_400, feeCents: 0 },
+          credits: [{ providerId: 'loyalty.rewards', pluginId: 'loyalty', label: 'Credit', last4: '0000', reference, amountCents: 600, appliedAs: 'discount' }],
         }),
       }),
     )
@@ -533,7 +533,7 @@ describe('spending a connected balance (AGL-3677)', () => {
 
     // A refund of the whole order gives the spent points back and takes the earned ones.
     calls = []
-    await reverseForOrder(envelope({ order: order({ id: 'cs_live_2', status: 'refunded', refundedCents: 9_400, credits: [{ providerId: 'loyalty.rewards', reference, amountCents: 600, appliedAs: 'discount' }] }) }, 'evt-r'), 'refunded')
+    await reverseForOrder(envelope({ order: order({ id: 'cs_live_2', status: 'refunded', refundedCents: 9_400, credits: [{ providerId: 'loyalty.rewards', pluginId: 'loyalty', label: 'Credit', last4: '0000', reference, amountCents: 600, appliedAs: 'discount' }] }) }, 'evt-r'), 'refunded')
     expect(adjustCalls().map((call) => call.body.points_transaction.points_change).sort((a, b) => a - b)).toEqual([-470, 600])
     expect(members.get('pat@example.com')?.points).toBe(1_000)
   })

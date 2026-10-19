@@ -36,8 +36,14 @@
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
+    "@aglyn/plugins-commerce": "1.0.0-beta.270",
     "@mui/material": "^9.3.1",
     "react": "^19.2.8"
+  },
+  "peerDependenciesMeta": {
+    "@aglyn/plugins-commerce": {
+      "optional": true
+    }
   },
   "sideEffects": false,
   "description": "Zapier for Aglyn sites: the REST hooks Aglyn's Zapier app subscribes to, delivering orders, bookings, contacts and form submissions to a merchant's own Zaps."
