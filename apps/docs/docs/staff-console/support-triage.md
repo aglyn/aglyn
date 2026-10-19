@@ -153,6 +153,70 @@ worse than one that admits the gap:
   report arriving through the support queue may still be the copy someone
   actually sees. Treat §2 as load-bearing.
 
+## 6. Site Care requests {#site-care}
+
+A **Site Care** request is a support ticket from a workspace that has the Site Care
+add-on. It arrives when a member presses **Request a change** on a site's dashboard,
+or by email to the Site Care address (a reply to any Site Care email joins its own
+request). The queue marks it with a **Site Care** chip and a clock: the promise is the
+change **done** within 2 business days, so the clock runs until the request is closed,
+not until the first reply, and a reply on the thread does not stop it.
+
+### Working a request {#site-care-working}
+
+The **Site Care** card in the ticket's thread is where every step is taken. Each step
+writes a dated record that can never be edited, and a staff audit row beside it.
+
+1. **Open it.** The timer starts the first time anyone opens the request, once.
+2. **Make the change** on the site in the Besigner and **Save & publish**. The publish
+   is linked to the request when you close it.
+3. **Close with minutes**: one number. The box is filled from the timer, rounded
+   up to 5 minutes; change it if the timer ran while you waited. Each request counts
+   against the month's included hour in 15-minute blocks, rounded up.
+4. **Past the included hour**, the close is refused until the owner has said yes.
+   **Ask the owner first**: tell them the extra time it needs and wait. When they say
+   yes (at the booth, by phone, by text or by email), choose **Record approval** and
+   enter how and when they said it and the hours. Saving it emails them a
+   confirmation, which is the written record. Or **Absorb it**: close with no charge;
+   the minutes still count.
+5. With an approval on file, the close adds the extra time to the workspace's next
+   subscription invoice: whole hours, rounded up, never fewer than the hours
+   approved. The owner is emailed what changed, the time and the time left.
+
+**Corrections.** Every correction needs a reason, and the owner is emailed the before
+and after.
+
+- **Correct minutes** on a closed request until the invoice carrying it finalizes.
+  The pending charge is changed or removed to match.
+- **Correct approval** records a new version of the owner's yes; the first stays in
+  the history.
+- **Reverse charge** voids, credits or refunds the charge from the request: removed
+  before the invoice finalizes, credited after, refunded once paid, tax included. Never change a Site
+  Care charge in the Stripe dashboard; the request is the only door, and a change
+  made anywhere else is reported by the reconciliation.
+- **Retry charge** appears when Stripe refused or did not answer. It reuses the
+  charge's own key, so it cannot bill twice.
+
+**Bigger than Site Care covers.** When the work adds something new (a page, a form, a
+redesign), use **Send quote** with one flat price and what it covers. The owner
+replies to accept; the invoice is a separate step.
+
+### The month and the statement {#site-care-month}
+
+The **Site Care** card on the staff page for the workspace shows the month: every
+request with its minutes, billing and history, the totals, and the month's own
+records. **Add goodwill minutes** (with a reason) raises that month's included time at
+no charge. **Send statement** emails the owner the month: every request, the minutes,
+the extra time and every correction.
+
+### When the reconciliation alerts {#site-care-reconciliation}
+
+Once a day each closed request's charge is compared with its Stripe invoice item, and
+each month's total with Stripe's, for this month and the last. A difference raises
+**Site Care extra time does not match Stripe** (Should know) for that workspace and month.
+It changes nothing on either side. Open the request it names: retry a charge that is
+stuck or failed, and fix anything edited in Stripe from the request.
+
 ## Related
 
 - [Support queue](support-queue.md) — the page

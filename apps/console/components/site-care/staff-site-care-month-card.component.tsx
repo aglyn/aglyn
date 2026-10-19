@@ -35,6 +35,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useSiteCareCall } from './site-care-api'
 import SiteCareHistoryList, { type SiteCareHistoryEntry } from './site-care-history-list.component'
+import { docsHelp } from '../../constants/docs-links'
 
 interface MonthRequest {
   ticketId: string
@@ -132,6 +133,7 @@ export function StaffSiteCareMonthCard({ orgId, siteCare }: StaffSiteCareMonthCa
     <Box id="site-care">
       <CardDisplay
         header={`Site Care · ${siteCareMonthLabel(month)}`}
+        help={docsHelp('supportTriage', { anchor: '#site-care-month' })}
         subheader={statement ? siteCareMonthSentence(statement) : 'Loading…'}
         HeaderProps={{
           action: (

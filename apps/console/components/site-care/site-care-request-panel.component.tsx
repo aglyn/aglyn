@@ -49,6 +49,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSiteCareCall } from './site-care-api'
 import SiteCareHistoryList, { type SiteCareHistoryEntry } from './site-care-history-list.component'
+import { docsHelp } from '../../constants/docs-links'
 
 interface Panel {
   ticketId: string
@@ -242,6 +243,7 @@ export function SiteCareRequestPanel({ ticketId, onChanged }: SiteCareRequestPan
   return (
     <CardDisplay
       header="Site Care"
+      help={docsHelp('supportTriage', { anchor: '#site-care-working' })}
       subheader={
         closed
           ? `Done ${request.closedAtMs ? formatSiteCareDate(request.closedAtMs) : ''}`

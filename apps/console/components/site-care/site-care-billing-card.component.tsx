@@ -31,6 +31,7 @@ import { Alert, Box, Button, Chip, Collapse, LinearProgress, Stack, Typography }
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSiteCareCall } from './site-care-api'
 import SiteCareHistoryList, { type SiteCareHistoryEntry } from './site-care-history-list.component'
+import { docsHelp } from '../../constants/docs-links'
 
 interface Statement {
   siteCare: boolean
@@ -86,6 +87,7 @@ export function SiteCareBillingCard({ orgId }: SiteCareBillingCardProps) {
     <Box id="site-care">
       <CardDisplay
         header={`Site Care · ${siteCareMonthLabel(month)}`}
+        help={docsHelp('addOns', { anchor: '#site-care-statement' })}
         subheader="Changes our team made to your site this month, and the time they took."
         HeaderProps={{
           action: (
