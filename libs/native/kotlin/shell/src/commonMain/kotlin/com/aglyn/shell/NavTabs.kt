@@ -57,6 +57,8 @@ internal class ShellTab(val id: Int, val navigator: ShellNavigator, orgId: Strin
   var hostId by mutableStateOf(hostId)
   /** What the tab shows, as its title bar says it ("Bakery — Orders"). */
   var title by mutableStateOf("Home")
+  /** The screen's own icon (a Material Symbols name: the bag for Orders), shown on the tab. */
+  var icon by mutableStateOf<String?>(null)
   /** The pinned Home tab: first, never closed. */
   val pinned: Boolean get() = id == 0
 }

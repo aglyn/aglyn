@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.runDesktopComposeUiTest
@@ -314,6 +315,35 @@ class NavShellUiTest {
     onNodeWithTag("picker-org-o1").performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("scope-picker") == 0 }
     waitUntil(timeoutMillis = 3_000) { navigator.top == ShellNavigator.HOME }
+  }
+
+  @Test
+  fun aTabKeepsItsScreenWholeAndWearsItsIcon() = runDesktopComposeUiTest(width = 1280, height = 800) {
+    // Figma Titlebar/Tab 8:111, Apple's rule: the screen's name stays whole; the site before it truncates first.
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-overview") > 0 }
+    runOnIdle { navigator.command = ShellCommand.NEW_TAB }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-1") > 0 }
+    onNodeWithTag("nav-group-website").performClick()
+    onNodeWithTag("nav-site-pages").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodes(androidx.compose.ui.test.hasTestTag("tab-1") and androidx.compose.ui.test.hasText("Pages", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+    onNode(androidx.compose.ui.test.hasText("Pages") and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("tab-title-1")), useUnmergedTree = true).assertIsDisplayed()
+    onNode(androidx.compose.ui.test.hasText("Acme Shop — ") and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("tab-title-1")), useUnmergedTree = true).assertExists()
+  }
+
+  @Test
+  fun aShortWindowStillReachesTheSidebarsLastRow() = runDesktopComposeUiTest(width = 1280, height = 420) {
+    // The rows scroll above the foot (the plan card), so the card never covers Site settings.
+    setContent { AglynShell(testServices(userDoc = emptyMap())) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-siteSettings") > 0 }
+    onNodeWithTag("nav-group-website").performClick()
+    onNodeWithTag("nav-site-siteSettings").performScrollTo().assertIsDisplayed()
+    val row = onNodeWithTag("nav-site-siteSettings").getBoundsInRoot()
+    val sidebar = onNodeWithTag("nav-sidebar").getBoundsInRoot()
+    assertTrue(row.bottom <= sidebar.bottom, "Site settings ends at ${row.bottom}, the sidebar at ${sidebar.bottom}")
   }
 
   @Test

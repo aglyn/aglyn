@@ -73,6 +73,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.aglyn.contracts.NativeNavListId
 import com.aglyn.contracts.toRef
 import com.aglyn.core.AuthState
@@ -371,7 +372,11 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     // As Figma words a tab: "Bakery — Orders" (the scope, then the place); Home is just "Home".
     val atHome = route == null && navigator.top == ShellNavigator.HOME
     val tabTitle = if (atHome) "Home" else listOfNotNull(workspace.site?.name ?: workspace.org?.name, title.takeIf { it.isNotBlank() }).joinToString(" — ")
-    LaunchedEffect(tabTitle, tabs.activeId) { tabs.active.title = tabTitle.ifBlank { "Home" } }
+    val tabIcon = if (atHome) "home" else row?.icon
+    LaunchedEffect(tabTitle, tabIcon, tabs.activeId) {
+      tabs.active.title = tabTitle.ifBlank { "Home" }
+      tabs.active.icon = tabIcon
+    }
     LaunchedEffect(here) {
       val item = here ?: return@LaunchedEffect
       // A screen names itself once its data is in; the visit counts once it has stayed a moment.
@@ -871,7 +876,11 @@ private fun Breadcrumbs(steps: List<Crumb>, star: com.aglyn.ui.PageStarSlot? = n
   }
 }
 
-/** One tab in the title bar: its place's icon and name, and × (the pinned Home tab has none). */
+/**
+ * One tab in the title bar (Figma Titlebar/Tab 8:111): the screen's own icon (14), its title (13, semibold in use) and ×
+ * at rest; the pinned Home tab has none. The title keeps the screen whole ("— Orders") and truncates the workspace or
+ * site before it, up to 260 wide, as Apple's tab does.
+ */
 @Composable
 private fun TitleTab(tab: ShellTab, selected: Boolean, closable: Boolean, onSelect: () -> Unit, onClose: () -> Unit, homeMark: @Composable () -> Unit) {
   val m = com.aglyn.ui.shellMetrics
@@ -880,7 +889,7 @@ private fun TitleTab(tab: ShellTab, selected: Boolean, closable: Boolean, onSele
     shape = RoundedCornerShape(m.controlRadius),
     color = if (selected) MaterialTheme.colorScheme.surfaceContainerLowest else Color.Transparent,
     border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
-    modifier = Modifier.height(if (m.compact) 28.dp else 36.dp).widthIn(max = 220.dp).testTag("tab-${tab.id}")
+    modifier = Modifier.height(if (m.compact) 28.dp else 36.dp).widthIn(max = 260.dp).testTag("tab-${tab.id}")
       .semantics { this.selected = selected; role = Role.Tab },
   ) {
     if (tab.pinned) {
@@ -891,16 +900,17 @@ private fun TitleTab(tab: ShellTab, selected: Boolean, closable: Boolean, onSele
       return@Surface
     }
     Row(Modifier.padding(start = 10.dp, end = if (closable) 2.dp else 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-      Icon(AglynIcons.named("tab"), null, Modifier.size(m.rowIcon - 2.dp), tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-      Text(
-        tab.title,
-        style = MaterialTheme.typography.labelLarge.copy(fontSize = m.rowText),
-        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-        color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.widthIn(max = 170.dp),
-      )
+      Icon(AglynIcons.named(tab.icon ?: "tab"), null, Modifier.size(14.dp), tint = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+      val split = tab.title.lastIndexOf(" — ")
+      val owner = tab.title.takeIf { split > 0 }?.substring(0, split)
+      val place = if (split > 0) tab.title.substring(split + 3) else tab.title
+      val style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp, lineHeight = 18.sp)
+      val weight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+      val ink = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+      Row(Modifier.weight(1f, fill = false).testTag("tab-title-${tab.id}"), verticalAlignment = Alignment.CenterVertically) {
+        owner?.let { Text("$it — ", style = style, fontWeight = weight, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)) }
+        Text(place, style = style, fontWeight = weight, color = ink, maxLines = 1, softWrap = false)
+      }
       if (closable) {
         androidx.compose.material3.IconButton(onClick = onClose, modifier = Modifier.size(20.dp).testTag("tab-close-${tab.id}").semantics { contentDescription = "Close ${tab.title}" }) {
           Icon(AglynIcons.named("close"), null, Modifier.size(12.dp))
