@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.aglyn.contracts.railWorkspaces
 import com.aglyn.core.AccountPreferences
 import com.aglyn.core.AuthUser
@@ -274,13 +275,18 @@ private fun RailTile(
 
 @Composable
 internal fun MenuRow(label: String, icon: String?, trailing: String? = null, enabled: Boolean = true, tag: String? = null, onClick: () -> Unit) {
+  val m = com.aglyn.ui.shellMetrics
+  // Compact (desktop) menus are Figma's Menu/Row (10:96): 30 tall, padding 10, a 16 icon, 13 text, radius 6, inset 6 in
+  // the menu; touch keeps the platform's menu rows.
   DropdownMenuItem(
-    text = { Text(label) },
-    leadingIcon = icon?.let { { Icon(AglynIcons.named(it), null) } },
+    text = { Text(label, fontSize = if (m.compact) 13.sp else androidx.compose.ui.unit.TextUnit.Unspecified) },
+    leadingIcon = icon?.let { { Icon(AglynIcons.named(it), null, if (m.compact) Modifier.size(16.dp) else Modifier) } },
     trailingIcon = trailing?.let { { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
     enabled = enabled,
     onClick = onClick,
-    modifier = Modifier.then(if (tag != null) Modifier.testTag(tag) else Modifier),
+    contentPadding = if (m.compact) androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp) else androidx.compose.material3.MenuDefaults.DropdownMenuItemContentPadding,
+    modifier = (if (m.compact) Modifier.padding(horizontal = 6.dp).height(30.dp).clip(RoundedCornerShape(6.dp)) else Modifier)
+      .then(if (tag != null) Modifier.testTag(tag) else Modifier),
   )
 }
 
