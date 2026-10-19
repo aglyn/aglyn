@@ -21,6 +21,7 @@ import {
   type AppendOnlyHistoryRow,
   type HistoryStripeRef,
 } from '@aglyn/aglyn/app-utils/append-only-history'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import {
   OWNER_APPROVAL_CHANNEL_WORDS,
   readOwnerApprovalInput,
@@ -258,7 +259,13 @@ export async function createSiteCareProject(
   const org = await firestore.collection('orgs').doc(input.orgId).get()
   if (!org.exists) throw new SiteCareError('Unknown workspace', 404)
   const nowMs = nowOf(deps)
-  const ref = firestore.collection('orgs').doc(input.orgId).collection(SITE_CARE_PROJECTS_COLLECTION).doc()
+  // Minted once, before the write: every invoice's Stripe idempotency key is
+  // built from this id, so it is fixed for the life of the project.
+  const ref = firestore
+    .collection('orgs')
+    .doc(input.orgId)
+    .collection(SITE_CARE_PROJECTS_COLLECTION)
+    .doc(createResourceUid())
   const project: SiteCareProject = {
     orgId: input.orgId,
     title,
