@@ -41,7 +41,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import dotenv from 'dotenv'
 
 /**
@@ -152,6 +152,31 @@ export function readEnvFiles(paths) {
   return paths
     .filter((path) => existsSync(path))
     .map((path) => ({ path, parsed: dotenv.parse(readFileSync(path)) }))
+}
+
+/** The main checkout a linked worktree was added from (the parent of git's common dir); null outside git. */
+export function mainCheckoutOf(repoRoot) {
+  try {
+    const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    return common ? dirname(common) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The env files a server for `app` served from `repoRoot` reads: the tree's own, or, in a linked worktree that has none
+ * (env files are git-ignored, so `git worktree add` brings none), the main checkout's. Everything that must agree with
+ * that server reads this same list: the native seed uploads its files to the Storage bucket the console will read.
+ */
+export function consoleEnvFiles(repoRoot, app, configuration = 'development', mainCheckout = mainCheckoutOf(repoRoot)) {
+  const own = readEnvFiles(serveEnvFiles(repoRoot, app, configuration))
+  if (own.length > 0 || !mainCheckout || mainCheckout === repoRoot) return own
+  return readEnvFiles(serveEnvFiles(mainCheckout, app, configuration))
 }
 
 /** Names some env file gives a non-empty value. */

@@ -106,6 +106,23 @@ const SAMPLE_PHOTOS = {
   'seed-media-favicon:mobile-studio-north': 'tools/scripts/seed-native/art/juniper-street-cafe-favicon.png',
 }
 
+/** The demo site's collaborator: on the site's Users roster (account.mjs) and the workspace's, with an account. */
+export const SITE_COLLABORATOR = {
+  uid: 'seed-collab-morgan',
+  email: 'morgan.diaz@example.test',
+  displayName: 'Morgan Diaz',
+  siteRole: 'editor',
+}
+const SITE_COLLABORATOR_MEMBER = (hostId) => ({
+  uid: SITE_COLLABORATOR.uid,
+  role: 'viewer',
+  allHosts: false,
+  hostAccess: { [hostId]: SITE_COLLABORATOR.siteRole },
+  email: SITE_COLLABORATOR.email,
+  displayName: SITE_COLLABORATOR.displayName,
+  joined: 9,
+})
+
 /** A seeded site's favicon as the console stores it: a media reference to the site's own library. */
 export const seededFavicon = (siteId) => `media:${siteId}/seed-media-favicon`
 
@@ -113,7 +130,7 @@ export async function seedWorkspace({ put, uid, orgId, hostId, now, putObject = 
   const day = 24 * 60 * 60 * 1000
   const ago = (days) => new Date(now.getTime() - days * day)
 
-  // --- Team: the owner's own row, three members and a pending invite. ----
+  // --- Team: the owner's own row, three members, the bakery's site collaborator and a pending invite. ----
   const people = [
     { uid, role: 'owner', allHosts: true, hostAccess: {}, email: 'mobile-owner@example.test', displayName: 'Hannah Reyes', joined: 60 },
     { uid: 'seed-admin-priya', role: 'admin', allHosts: true, hostAccess: {}, email: 'priya.shah@example.test', displayName: 'Priya Shah', title: 'Operations lead', joined: 40 },
@@ -136,6 +153,9 @@ export async function seedWorkspace({ put, uid, orgId, hostId, now, putObject = 
       displayName: 'Jordan Lee',
       joined: 7,
     },
+    // The bakery's site collaborator (account.mjs puts them on its Users roster): a viewer on the roster whose reach
+    // is that one site, as the console's grantHostAccess stores a collaborator added by email.
+    SITE_COLLABORATOR_MEMBER(hostId),
   ]
   for (const person of people) {
     const orgWide = person.role === 'owner' || person.role === 'admin' || person.allHosts
