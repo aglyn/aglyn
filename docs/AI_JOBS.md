@@ -1959,8 +1959,29 @@ fields disabled with the reason and an Upgrade link (`BlockedControl` and
   start really builds (`AI_SITE_INSPIRATION_FEATURE_PARTS`): a booking
   section that places the site's form, a Shop page's Product grid, the
   latest posts, an events section, a menu as a ruled list. Every plan rule
-  above it still wins. The kept plan carries the signals as
-  `plan.inspiration`. A reused plan's signals are replaced with this job's.
+  above it still wins. A feature is offered only where this start can build
+  its part (`aiSiteInspirationBuildable`): the Shop page on a store, the
+  newsletter sign-up (the commerce plugin's) on a store that sells, the
+  latest posts on a blog, the events list on an event-led start the events
+  gate admits (AGL-3755), and a testimonials section where the site has
+  customer words. The live eval of 2026-10-19 found the restaurant plan told
+  an events list and a sign-up no restaurant start can place. The order each
+  site's line gives leaves out those kinds too (`aiSiteInspirationOrder`).
+  The home follows the first site's order that has one
+  (`aiSiteInspirationHomeOrder`), and that order takes the place of the
+  seeded home arc (AGL-3899): told both, every plan in the same eval kept the
+  arc, which says "Keep that order", over the block, which yields to every
+  rule above it. A start without sites keeps its arc. The kept plan
+  carries the signals as `plan.inspiration`. A reused plan's signals are
+  replaced with this job's.
+- **The live eval** (`jobs/ai-site-inspiration-live.spec.ts`, skipped unless
+  `AGLYN_LIVE_AI=1`): six guided starts through the real plan step and look,
+  their sites read from the three recordings through the `readPage` seam (no
+  fetch), then a whole build of the paid and the Free restaurant. It holds
+  that no word, picture, name or address of a recording reaches a prompt,
+  plan, look or page, that no testimonials section is planned without
+  customer words, that Free gets no features, and that the look keeps every
+  pinned dimension. `AGLYN_LIVE_AI_CAP_USD` caps the round's spend.
 - **Style is pinned in the look.** The scaffold hands the look unit the
   plan's signals (`inspirationSignals`). `aiSiteInspirationLookPins` maps
   them onto the look's closed sets: what most sites agree on, the first
