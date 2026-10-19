@@ -889,7 +889,7 @@ export interface LegalDocumentManifestEntry {
  *
  * Terms, Privacy, Subprocessors and their `/legal` index cards move "Last
  * updated" to October 19, 2026 (the Terms keep "Effective date: August 5,
- * 2026"), published from the console's Publish now at 08:35 Central that day.
+ * 2026"), published from the console's Publish now at 08:07 Central that day.
  * The wording, and publishing it with re-acceptance, were approved on
  * 2026-10-19; the record is
  * `Platform Docs/Legal/Proposed/2026-10-19-domain-registration/`.
