@@ -19,7 +19,14 @@ import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
 import { validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
 import { aiCompileLayoutPage, type AiLayoutPagePlan } from './ai-layout-compiler'
-import { aiLayoutDesignChoices, aiLayoutGroupVariant, type AiLayoutDesign } from './ai-layout-design'
+import {
+  AI_LAYOUT_HERO_VARIANTS,
+  AI_LAYOUT_KIND_SIGNATURES,
+  aiLayoutDesignChoices,
+  aiLayoutGroupVariant,
+  aiLayoutKindSignature,
+  type AiLayoutDesign,
+} from './ai-layout-design'
 import type { AiLayoutSection } from './ai-layout-language'
 import type { AiLayoutTargets } from './ai-layout-links'
 import { aiLayoutPictureSlots } from './ai-layout-pictures'
@@ -120,18 +127,31 @@ describe('a site design (AGL-3660)', () => {
     const one = aiLayoutDesignChoices({ kind: 'yoga', seed: 42, home: true })
     expect(aiLayoutDesignChoices({ kind: 'yoga', seed: 42, home: false })).toEqual(one)
     const heroes = new Set(Array.from({ length: 40 }, (_, seed) => aiLayoutDesignChoices({ kind: 'yoga', seed, home: true }).hero))
-    expect([...heroes].sort()).toEqual(['cover', 'split'])
+    expect([...heroes].sort()).toEqual(['column', 'split'])
   })
 
-  it('opens every kind with one of the heroes that kind suits', () => {
+  it('opens every kind with both of the heroes its signature names, and no other', () => {
     for (const kind of AI_SITE_KINDS) {
-      for (let seed = 0; seed < 20; seed += 1) {
-        expect(['cover', 'split', 'editorial']).toContain(aiLayoutDesignChoices({ kind: kind.id, seed, home: true }).hero)
-      }
+      const heroes = new Set(Array.from({ length: 40 }, (_, seed) => aiLayoutDesignChoices({ kind: kind.id, seed, home: true }).hero))
+      expect([...heroes].sort()).toEqual([...aiLayoutKindSignature(kind.id).heroes].sort())
     }
     for (let seed = 0; seed < 20; seed += 1) {
-      expect(['cover', 'editorial']).toContain(aiLayoutDesignChoices({ kind: 'photography', seed, home: true }).hero)
+      expect(['editorial', 'poster']).toContain(aiLayoutDesignChoices({ kind: 'photography', seed, home: true }).hero)
     }
+  })
+
+  it('gives every kind a signature of its own (AGL-3985)', () => {
+    // Every kind names its own; none falls back to another's.
+    expect(Object.keys(AI_LAYOUT_KIND_SIGNATURES).sort()).toEqual(AI_SITE_KINDS.map((kind) => kind.id).sort())
+    // No two kinds open with the same two heroes.
+    const pairs = AI_SITE_KINDS.map((kind) => [...aiLayoutKindSignature(kind.id).heroes].sort().join('+'))
+    expect(new Set(pairs).size).toBe(AI_SITE_KINDS.length)
+    // Every arrangement is some kind's, and none leads more than three kinds' style cards.
+    const heroes = AI_SITE_KINDS.flatMap((kind) => aiLayoutKindSignature(kind.id).heroes)
+    expect([...new Set(heroes)].sort()).toEqual([...AI_LAYOUT_HERO_VARIANTS].sort())
+    const leads = new Map<string, number>()
+    for (const kind of AI_SITE_KINDS) leads.set(aiLayoutKindSignature(kind.id).heroes[0], (leads.get(aiLayoutKindSignature(kind.id).heroes[0]) ?? 0) + 1)
+    for (const count of leads.values()) expect(count).toBeLessThanOrEqual(3)
   })
 
   it('draws work as pictures, writing as articles and dishes as a menu, by the kind and the words', () => {
@@ -234,7 +254,8 @@ describe('a site design on a workspace that keeps components (AGL-3660)', () => 
     const { slots, report } = build(sections, plan, { kind: 'portfolio', seed: 3, home: true }, true)
     expect(report.violations).toEqual([])
     expect(slots.filter((slot) => slot.sectionIndex === 1)).toHaveLength(4)
-    const ruled = build(page('Why people come', 3).sections, page('Why people come', 3).plan, { kind: 'yoga', seed: 3, home: true }, true)
+    // A practice's groups are ruled (AGL-3985).
+    const ruled = build(page('Why people come', 3).sections, page('Why people come', 3).plan, { kind: 'professional', seed: 3, home: true }, true)
     expect(ruled.report.violations).toEqual([])
     expect(Object.values(ruled.stored.nodes).filter((node) => (node as { componentId: string }).componentId === 'muiListItemText')).toHaveLength(3)
   })
@@ -254,7 +275,8 @@ describe('a site design on a workspace that keeps components (AGL-3660)', () => 
 
 describe('the header over a photo cover, and a quiet footer under a dark close (AGL-3660)', () => {
   const cover = (): number => {
-    for (let seed = 1; seed < 200; seed += 1) if (aiLayoutDesignChoices({ kind: 'restaurant', seed, home: true }).hero === 'cover') return seed
+    // A restaurant opens on a poster: its words centered over a full-bleed photo (AGL-3985).
+    for (let seed = 1; seed < 200; seed += 1) if (aiLayoutDesignChoices({ kind: 'restaurant', seed, home: true }).hero === 'poster') return seed
     throw new Error('no cover seed')
   }
 
@@ -277,6 +299,86 @@ describe('the header over a photo cover, and a quiet footer under a dark close (
     const footerOf = (nodes: ReturnType<typeof frame>) => Object.values(nodes).find((node) => node.props?.['element'] === 'footer')
     expect(footerOf(frame(false))?.sx).toMatchObject({ bgcolor: 'primary.main' })
     expect(footerOf(frame(true))?.sx).toMatchObject({ bgcolor: 'background.paper' })
+  })
+})
+
+describe('the heroes a kind’s signature opens with (AGL-3985)', () => {
+  type Node = { componentId: string; props?: Record<string, unknown>; sx?: Record<string, unknown>; nodes?: string[] }
+  /** The first seed that opens this kind's home with this hero. */
+  const seedFor = (kind: string, hero: string): number => {
+    for (let seed = 1; seed < 500; seed += 1) if (aiLayoutDesignChoices({ kind, seed, home: true }).hero === hero) return seed
+    throw new Error(`no seed opens ${kind} with ${hero}`)
+  }
+  const draw = (kind: string, hero: string) => {
+    const { sections, plan } = page('Why people come', 3)
+    const built = build(sections, plan, { kind, seed: seedFor(kind, hero), home: true })
+    expect(built.stored.repairs).toEqual([])
+    expect(built.report.violations.map((violation) => `${violation.code}: ${violation.message}`)).toEqual([])
+    const nodes = built.stored.nodes as unknown as Record<string, Node>
+    const inHero = (id: string): Node[] => [nodes[id], ...(nodes[id]?.nodes ?? []).flatMap(inHero)].filter(Boolean)
+    const hero0 = inHero('sec-1')
+    const title = hero0.find((node) => node.componentId === 'muiTypography' && node.props?.['component'] === 'h1')
+    return { ...built, nodes, hero: hero0, title, pictures: built.slots.filter((slot) => slot.sectionIndex === 0) }
+  }
+
+  it('centers a poster’s words over a taller full-bleed photo, under the header', () => {
+    const { nodes, title, pictures } = draw('restaurant', 'poster')
+    expect(nodes['sec-1'].props?.['underHeader']).toBe(true)
+    expect(nodes['sec-1'].props?.['colorScheme']).toBe('dark')
+    expect(nodes['sec-1'].sx?.['minHeight']).toEqual({ xs: '84vh', md: '94vh' })
+    expect(title?.props).toMatchObject({ variant: 'displayXl', align: 'center' })
+    expect(pictures).toHaveLength(1)
+  })
+
+  it('sets a cover’s words at the start, whatever alignment the answer gave', () => {
+    const { title } = draw('trades', 'cover')
+    expect(title?.props?.['align']).toBeUndefined()
+  })
+
+  it('fills half a bleed hero with its photo, edge to edge, the words in the other half', () => {
+    const { hero, title, pictures } = draw('wellness', 'bleed')
+    const row = hero.find((node) => node.componentId === 'muiGrid' && node.props?.['container'])
+    expect(row?.props?.['spacing']).toBe('0')
+    expect(row?.sx).toEqual({ alignItems: 'stretch' })
+    // No Container: the photo meets the page's edge.
+    expect(hero.some((node) => node.componentId === 'muiContainer')).toBe(false)
+    expect(title?.props?.['variant']).toBe('h1')
+    expect(pictures).toHaveLength(1)
+  })
+
+  it('heads a masthead with its words centered in a narrow column, a wide photo under them', () => {
+    const { hero, title, pictures } = draw('blog', 'column')
+    expect(title?.props).toMatchObject({ variant: 'displayXl', align: 'center' })
+    const stack = hero.find((node) => node.componentId === 'muiStack' && node.props?.['spacing'] === '8')
+    expect(stack?.nodes).toHaveLength(2)
+    expect(pictures).toHaveLength(1)
+    expect(pictures[0].aspect).toBeCloseTo(16 / 7)
+  })
+
+  it('lays a collage’s smaller picture over the tall one’s corner, edged in the band', () => {
+    const { hero, pictures } = draw('store', 'collage')
+    expect(pictures).toHaveLength(2)
+    const small = hero.find((node) => node.sx?.['position'] === 'absolute' && node.sx?.['border'] === 6)
+    expect(small?.sx).toMatchObject({ right: 0, bottom: 0, aspectRatio: '1 / 1' })
+    expect(['background.default', 'background.paper', 'primary.main']).toContain(small?.sx?.['borderColor'])
+  })
+
+  it('shows a panel hero’s photo undimmed, the words on a card of the page’s surface, never under the header', () => {
+    const { nodes, hero, pictures } = draw('professional', 'panel')
+    expect(nodes['sec-1'].props?.['underHeader']).toBeUndefined()
+    expect(nodes['sec-1'].props?.['colorScheme']).toBeUndefined()
+    const card = hero.find((node) => node.sx?.['bgcolor'] === 'background.paper')
+    expect(card?.sx).toMatchObject({ color: 'text.primary', boxShadow: 3 })
+    const image = hero.find((node) => node.componentId === 'image')
+    expect(image?.sx?.['opacity']).toBeUndefined()
+    expect(pictures).toHaveLength(1)
+  })
+
+  it('opens a personal page on a round portrait over the centered words', () => {
+    const { hero, title, pictures } = draw('personal', 'portrait')
+    expect(hero.some((node) => node.sx?.['borderRadius'] === '50%' && node.sx?.['aspectRatio'] === '1 / 1')).toBe(true)
+    expect(title?.props?.['align']).toBe('center')
+    expect(pictures).toHaveLength(1)
   })
 })
 
