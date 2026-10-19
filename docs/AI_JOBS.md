@@ -1912,6 +1912,68 @@ the `theme` kind's proposal, and no site plan may propose one.
   every step — the look, the plan, the layout, each page — runs on it, and the
   estimate is priced by the pick's multiplier. A Free start offers none.
 
+### Sites I like (AGL-3975)
+
+Behind `release_ai_site_inspiration`, OFF by default. While it is on for a
+workspace, the guided start's Style step asks for sites the person likes: one
+on Free, three on a paid plan. A Free workspace sees the second and third
+fields disabled with the reason and an Upgrade link (`BlockedControl` and
+`PrerequisiteNotice`), and the review lists the sites by host.
+
+- **The input.** One scalar, `inputs.inspiration`: the https addresses
+  separated by spaces (`model/ai-site-inspiration.ts`). It is sent only when
+  there are sites. `parseAiSiteJobInputs` refuses an address that is not
+  https on the default port, or more than three. The site admission holds a
+  workspace to its plan's limit while the flag is on. The plan step never
+  prints the input.
+- **The read.** The plan step reads each site once, through
+  `readReferencePage` (`fetchPublicText`: https/443, a pinned public IP on
+  every hop, byte caps). It reads the home page and at most two of its
+  stylesheets, never a crawl. All sites share one clock, the theme job's
+  brand budget (8 s). A site start's plan has that room because its outline
+  ceiling sits far under the `job.plan` row (`ai-site-inspiration.spec.ts`
+  holds the sum). With the flag off, nothing is read and the plan is asked
+  exactly what it was before.
+- **Signals only** (`jobs/ai-site-inspiration-signals.ts`). Code reads each
+  page into closed sets, plus hex colors:
+  - the sections in order (hero, about, services, steps, numbers, gallery,
+    menu, products, pricing, testimonials, logos, team, events, posts, FAQ,
+    newsletter, booking, contact, call to action);
+  - the spacing, the header's alignment and what sets it off;
+  - the brand colors (`referencePageColors`, the theme job's ranking);
+  - the page ground and the mood of the headings' type (serif, sans,
+    display);
+  - the buttons' shape and fill, the cards and the corners;
+  - the motion, as AGL-3941's styles: AOS and animate.css names,
+    server-rendered offsets and keyframes;
+  - on a paid plan, the features (booking, store, blog, forms, gallery,
+    events, menu, testimonials, newsletter).
+
+  A page's words are read only to tell one kind of section from another.
+  No sentence, name, picture address or logo is kept, and the stored
+  signals are held to their sets again when they are read back
+  (`aiReadSiteInspiration`).
+- **Structure goes to the plan.** Each site's sections and shape go in one
+  fenced `<inspiration-structure>` block on the plan's turn, labeled as data.
+  On a paid plan the block also maps each feature onto the part of Aglyn a
+  start really builds (`AI_SITE_INSPIRATION_FEATURE_PARTS`): a booking
+  section that places the site's form, a Shop page's Product grid, the
+  latest posts, an events section, a menu as a ruled list. Every plan rule
+  above it still wins. The kept plan carries the signals as
+  `plan.inspiration`. A reused plan's signals are replaced with this job's.
+- **Style is pinned in the look.** The scaffold hands the look unit the
+  plan's signals (`inspirationSignals`). `aiSiteInspirationLookPins` maps
+  them onto the look's closed sets: what most sites agree on, the first
+  site's value where they split. Brand and hue come from the first site's
+  strongest color. The type is pinned to its mood, and the job's seed picks
+  one of Aglyn's own pairings of that mood, the kind's first. The ground,
+  corners, buttons, cards, header, header alignment, density and motion are
+  pinned as read. `aiSiteStyleFor` lays the pins over every draw, so those
+  dimensions are always kept, where an unpinned dimension keeps the model's
+  pick only 30–35% of the time. A brand the person gave still wins. The
+  look's output names what was pinned (`inspired`). A look with no pins is
+  drawn exactly as before.
+
 ### A site start never reuses another site's records (AGL-3912)
 
 Datasets, and their records, belong to the workspace: neither names the site it

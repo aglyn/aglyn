@@ -398,27 +398,54 @@ export async function fetchPublicText(
   return null
 }
 
-/** A linked page's colors, from its markup and its first stylesheets. */
-async function readReferenceColors(url: URL, signal: AbortSignal): Promise<string[] | null> {
+/**
+ * A public page as it was read: its markup and the text of its first
+ * stylesheets ({@link AI_THEME_REFERENCE_STYLESHEETS}), each under its byte
+ * cap. What a theme job takes its colors from and a site start its
+ * inspiration signals (AGL-3975); never a crawl, one page and its sheets.
+ */
+export interface AiReferencePage {
+  /** The address the markup was finally read at, after redirects. */
+  url: string
+  html: string
+  stylesheets: string[]
+}
+
+/** A page and its first stylesheets through {@link fetchPublicText}; `null` when the page cannot be read. */
+export async function readReferencePage(url: URL, signal: AbortSignal): Promise<AiReferencePage | null> {
   const page = await fetchPublicText(url.toString(), {
     maxBytes: AI_THEME_REFERENCE_MAX_BYTES,
     accept: /text\/html|application\/xhtml\+xml/i,
     signal,
   })
   if (!page) return null
-  const weights = colorsFromMarkup(page.text)
+  const stylesheets: string[] = []
   for (const sheet of stylesheetUrlsOf(page.text, page.url)) {
     const css = await fetchPublicText(sheet, {
       maxBytes: AI_THEME_STYLESHEET_MAX_BYTES,
       accept: /text\/css/i,
       signal,
     })
-    if (!css) continue
-    for (const [hex, weight] of colorsFromMarkup(css.text)) {
+    if (css) stylesheets.push(css.text)
+  }
+  return { url: page.url, html: page.text, stylesheets }
+}
+
+/** A read page's brand colors: every color its markup and stylesheets use, ranked. */
+export function referencePageColors(page: Pick<AiReferencePage, 'html' | 'stylesheets'>): string[] {
+  const weights = colorsFromMarkup(page.html)
+  for (const css of page.stylesheets) {
+    for (const [hex, weight] of colorsFromMarkup(css)) {
       weights.set(hex, (weights.get(hex) ?? 0) + weight)
     }
   }
   return rankBrandColors(weights)
+}
+
+/** A linked page's colors, from its markup and its first stylesheets. */
+async function readReferenceColors(url: URL, signal: AbortSignal): Promise<string[] | null> {
+  const page = await readReferencePage(url, signal)
+  return page ? referencePageColors(page) : null
 }
 
 /* ------------------------------------------------------------------------ *

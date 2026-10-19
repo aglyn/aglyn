@@ -21,6 +21,7 @@ import type { AiLoadEstimate } from '../runtime/ai-palette'
 import type { AiBuildPlan } from './ai-build-plan'
 import type { AiFreeCreditsLeft } from './ai-site-job'
 import type { AiJobCreditsConfirmation } from './ai-credit-estimate'
+import type { AiSiteInspiration } from '../jobs/ai-site-inspiration-signals'
 
 /**
  * AI generation jobs (AGL-2904).
@@ -455,6 +456,12 @@ export interface AiJobPlan extends AiBuildPlan {
   key?: string
   /** The job this plan was reused from, when it was not asked for again. */
   reusedFrom?: string
+  /**
+   * What a site start read of the sites the person likes (AGL-3975): signals
+   * only, each from a closed set or a hex color, which the plan was told the
+   * structure of and the look pins the style of. Absent without them.
+   */
+  inspiration?: AiSiteInspiration
 }
 
 /**

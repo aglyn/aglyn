@@ -32,6 +32,8 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
 import { OptionCardGrid } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import {
   Box,
   Divider,
@@ -50,7 +52,13 @@ import {
 import { Fragment, useId, type ReactNode, type Ref } from 'react'
 import { AI_SITE_FREE_PAGES_NOTE, AI_SITE_SUBMISSION_CHOICES, type AiSiteSubmissions } from '../model/ai-site-job'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
-import { AI_SITE_START_TYPES, aiSiteStartKind, type AiSiteStartAnswers } from '../model/ai-site-start'
+import { AI_SITE_START_TYPES, aiSiteStartInspirationTyped, aiSiteStartKind, type AiSiteStartAnswers } from '../model/ai-site-start'
+import {
+  AI_SITE_INSPIRATION_LIMITS,
+  AI_SITE_INSPIRATION_MAX,
+  AI_SITE_INSPIRATION_PAID_NOTE,
+  aiSiteInspirationHost,
+} from '../model/ai-site-inspiration'
 import {
   AI_SITE_START_STEP_LABELS,
   AI_SITE_START_STEPS,
@@ -251,9 +259,16 @@ export function AudienceStep({ answers, answer, tracker, errors, fieldRef }: Ste
  * unset, which is what the single form's unpicked state was: the kind the
  * first answer suggests is the one used, and the card says which.
  */
-export function StyleStep({ answers, answer, tracker }: StepProps) {
+export function StyleStep({
+  answers,
+  answer,
+  tracker,
+  errors,
+  fieldRef,
+  inspiration,
+}: StepProps & { inspiration?: AiSiteStartInspirationOffer | null }) {
   const suggested = aiSiteStartKind({ ...answers, kind: null })
-  return (
+  const cards = (
     <OptionCardGrid
       label="Style of site"
       data-start-area="style-cards"
@@ -276,6 +291,90 @@ export function StyleStep({ answers, answer, tracker }: StepProps) {
         tracker.fieldPicked('kind')
       }}
     />
+  )
+  if (!inspiration) return cards
+  return (
+    <Stack spacing={4}>
+      {cards}
+      <InspirationFields answers={answers} answer={answer} tracker={tracker} errors={errors} fieldRef={fieldRef} offer={inspiration} />
+    </Stack>
+  )
+}
+
+/**
+ * What the guided start offers of Sites I like (AGL-3975), while
+ * `release_ai_site_inspiration` is on: how many sites the workspace may name,
+ * and where it upgrades for more.
+ */
+export interface AiSiteStartInspirationOffer {
+  limit: number
+  upgradeHref: string | null
+}
+
+/** Why a Free workspace's second and third site fields are locked. */
+export const AI_SITE_INSPIRATION_LOCKED_REASON = `A Free workspace names ${AI_SITE_INSPIRATION_LIMITS.free} site you like. Paid plans name up to ${AI_SITE_INSPIRATION_MAX}.`
+
+/**
+ * Sites I like (AGL-3975): up to three addresses under the style cards. A
+ * Free workspace's fields past its one are shown disabled with the reason
+ * and an upgrade link, never hidden, so the person sees what a paid plan adds.
+ */
+function InspirationFields({
+  answers,
+  answer,
+  tracker,
+  errors,
+  fieldRef,
+  offer,
+}: StepProps & { offer: AiSiteStartInspirationOffer }) {
+  const values = answers.inspiration ?? []
+  const change = (index: number, value: string) => {
+    const next = Array.from({ length: offer.limit }, (_, at) => values[at] ?? '')
+    next[index] = value
+    answer({ inspiration: next })
+    tracker.fieldChanged('inspiration')
+  }
+  return (
+    <Stack spacing={1.5} data-start-area="field-inspiration">
+      <Typography variant="overline" color="text.secondary" component="h2">
+        {'Sites you like (optional)'}
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        {
+          'We take only how they are laid out and styled: the order of sections, colors, type, buttons and motion. Never their words, photos or logos, so your site stays your own.'
+        }
+      </Typography>
+      {Array.from({ length: AI_SITE_INSPIRATION_MAX }, (_, index) => {
+        const locked = index >= offer.limit
+        const field = (
+          <TextField
+            fullWidth
+            type="url"
+            inputMode="url"
+            label={`Site ${index + 1}`}
+            placeholder="https://example.com"
+            value={locked ? '' : (values[index] ?? '')}
+            onChange={(event) => change(index, event.target.value)}
+            onBlur={() => tracker.fieldLeft('inspiration')}
+            {...(index === 0 ? { inputRef: fieldRef('inspiration') } : {})}
+            error={index === 0 && Boolean(errors.inspiration)}
+            {...(index === 0 && errors.inspiration ? { helperText: errors.inspiration.message } : {})}
+          />
+        )
+        return locked ? (
+          <BlockedControl key={index} blocked reason={AI_SITE_INSPIRATION_LOCKED_REASON} fullWidth>
+            {field}
+          </BlockedControl>
+        ) : (
+          <Box key={index}>{field}</Box>
+        )
+      })}
+      {offer.limit < AI_SITE_INSPIRATION_MAX && (
+        <PrerequisiteNotice {...(offer.upgradeHref ? { href: offer.upgradeHref } : {})} actionLabel="Upgrade">
+          {AI_SITE_INSPIRATION_PAID_NOTE}
+        </PrerequisiteNotice>
+      )}
+    </Stack>
   )
 }
 
@@ -396,18 +495,25 @@ export function ReviewStep({
   freeTaste,
   onEdit,
   children,
+  inspiration = false,
 }: {
   answers: AiSiteStartAnswers
   freeTaste: boolean
   onEdit: (step: AiSiteStartStep) => void
   children?: ReactNode
+  /** Whether the start asks for the sites the person likes (AGL-3975). */
+  inspiration?: boolean
 }) {
+  const liked = aiSiteStartInspirationTyped(answers)
   const kind = aiSiteStartKind(answers)
   const submissions = AI_SITE_SUBMISSION_CHOICES.find((option) => option.id === answers.submissions)
   const rows: Array<{ label: string; value: ReactNode; step: AiSiteStartStep }> = [
     { label: 'Kind of site', value: answers.siteType.trim(), step: 'kind' },
     { label: 'Who it is for', value: answers.audience.trim() || 'Anyone (not said)', step: 'audience' },
     { label: 'Style', value: answers.kind ? kind.label : `${kind.label}, picked for you`, step: 'style' },
+    ...(inspiration
+      ? [{ label: 'Sites you like', value: liked.length ? liked.map(aiSiteInspirationHost).join(', ') : 'None', step: 'style' as const }]
+      : []),
     { label: 'Form submissions', value: submissions?.label ?? answers.submissions, step: 'details' },
     { label: 'Pages', value: String(answers.pages), step: 'details' },
     ...(freeTaste ? [] : [{ label: 'Welcome email', value: answers.welcomeEmail ? 'Draft one' : 'No', step: 'details' as const }]),

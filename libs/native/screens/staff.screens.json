@@ -22019,6 +22019,28 @@
               "help": "Super staff only. Off by default for everyone: no."
             },
             {
+              "key": "release.release_ai_site_inspiration",
+              "label": "Early access: AI site start: sites you like",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_ai_site_inspiration}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
+            },
+            {
               "key": "release.release_ad_audience_sync",
               "label": "Early access: Account-holder ad audiences",
               "kind": "select",
