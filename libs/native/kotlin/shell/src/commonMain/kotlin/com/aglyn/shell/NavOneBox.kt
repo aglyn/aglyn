@@ -51,7 +51,14 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -107,29 +114,38 @@ internal fun oneBoxIcon(group: String): String = when (group) {
   else -> "search"
 }
 
+/** The line that opens the full results ("See all results for “ro”", Figma 118:15773). */
+internal const val SEE_ALL_GROUP = "seeAll"
+private const val STARRED_GROUP = "starred"
+
+/** What the box shows for a query: its lines (grouped), whether the server is still asked, and its error. */
+@androidx.compose.runtime.Stable
+internal class OneBoxResults(
+  val lines: List<OneBoxLine>,
+  val loading: Boolean,
+  val error: String?,
+  val server: List<OneBoxGroup>,
+  val more: (OneBoxGroup) -> Unit,
+)
+
 /**
- * The one box (Ctrl/⌘K, "Search or jump to"; Zach 2026-10-18): one place that switches workspaces and sites and finds
- * pages, orders, contacts, emails, components, layouts, templates, plugin records and the app's own screens and
- * settings. Before typing it lists the pins, the recent workspaces and what was opened recently; typing asks the server
- * (`/api/search`) and shows the screens-and-settings matches at once. Keyboard first: ↑↓ move, ↵ opens, Esc closes,
- * Ctrl/⌘1–5 jump to the pins.
+ * The one box's answer for [query] (Zach 2026-10-18): before typing, Recent places and Starred (Figma 118:15883); typing
+ * asks the server (`/api/search`) and shows the workspaces the app holds and the screens-and-settings matches at once,
+ * grouped (Workspaces, Sites, Pages, Orders, Contacts, Screens & settings), then "See all results" ([seeAll]).
  */
 @Composable
-internal fun OneBox(
+internal fun rememberOneBoxResults(
   services: ShellServices,
   workspace: WorkspaceState,
   prefs: AccountPreferences,
   enabledPlugins: Collection<String>,
   hostAdmin: Boolean,
-  fullScreen: Boolean,
-  onOpen: (OneBoxLine) -> Unit,
-  onClose: () -> Unit,
-) {
-  var query by remember { mutableStateOf("") }
+  query: String,
+  seeAll: Boolean,
+): OneBoxResults {
   var server by remember { mutableStateOf<List<OneBoxGroup>>(emptyList()) }
   var loading by remember { mutableStateOf(false) }
   var error by remember { mutableStateOf<String?>(null) }
-  var index by remember { mutableIntStateOf(0) }
   val search = remember(services.api) { com.aglyn.core.OneBoxSearch(services.api) }
   val scope = rememberCoroutineScope()
   val orgId = workspace.org?.id
@@ -151,15 +167,13 @@ internal fun OneBox(
   val byOrg = workspace.orgs.associateBy { it.id }
   val lines: List<OneBoxLine> = buildList {
     if (query.isBlank()) {
-      prefs.pinned.mapNotNull { byOrg[it] }.forEach { org ->
-        add(OneBoxLine(PINNED_GROUP, "Pinned ${prefs.pinned.size} of ${Contracts.pinnedOrgsMax}", OneBoxRow(group = Contracts.oneBoxWorkspacesGroup, id = org.id, label = org.name, detail = orgDetail(org, workspace), orgId = org.id)))
+      prefs.recents.take(5).forEach { item ->
+        val where = listOfNotNull(workspace.sites.firstOrNull { it.id == item.hostId }?.name ?: byOrg[item.orgId]?.name).joinToString()
+        add(OneBoxLine(RECENTS_GROUP, "Recent places", OneBoxRow(group = item.kind, id = item.id, label = item.label, detail = where.ifEmpty { null }, orgId = item.orgId, hostId = item.hostId, screen = item.screen, params = item.params)))
       }
-      prefs.recentOrgs.filter { it !in prefs.pinned }.mapNotNull { byOrg[it] }.take(3).forEach { org ->
-        add(OneBoxLine(RECENT_ORGS_GROUP, "Recent workspaces", OneBoxRow(group = Contracts.oneBoxWorkspacesGroup, id = org.id, label = org.name, detail = orgDetail(org, workspace), orgId = org.id)))
-      }
-      prefs.recents.take(8).forEach { item ->
-        val where = listOfNotNull(byOrg[item.orgId]?.name).joinToString()
-        add(OneBoxLine(RECENTS_GROUP, "Opened recently", OneBoxRow(group = item.kind, id = item.id, label = item.label, detail = where.ifEmpty { null }, orgId = item.orgId, hostId = item.hostId, screen = item.screen, params = item.params)))
+      prefs.starred.take(5).forEach { item ->
+        val where = listOfNotNull(workspace.sites.firstOrNull { it.id == item.hostId }?.name ?: byOrg[item.orgId]?.name).joinToString()
+        add(OneBoxLine(STARRED_GROUP, "Starred", OneBoxRow(group = item.kind, id = item.id, label = item.label, detail = where.ifEmpty { null }, orgId = item.orgId, hostId = item.hostId, screen = item.screen, params = item.params)))
       }
     } else {
       // The workspaces the app holds answer at once; the server's list (every membership) replaces them when it lands.
@@ -176,17 +190,135 @@ internal fun OneBox(
         .filter { row -> row.screen?.let { it.startsWith("shell.") || services.registry.screen(it) != null } == true }
         .take(6)
         .forEach { add(OneBoxLine(Contracts.oneBoxScreensGroup, "Screens & settings", it)) }
+      if (seeAll && isSearchableQuery(query)) {
+        add(OneBoxLine(SEE_ALL_GROUP, "", OneBoxRow(group = SEE_ALL_GROUP, id = "see-all", label = "See all results for “${query.trim()}”", detail = "Opens the full results, grouped, with filters")))
+      }
     }
   }
-  LaunchedEffect(lines.size, query) { index = index.coerceIn(0, (lines.size - 1).coerceAtLeast(0)) }
+  return OneBoxResults(lines, loading, error, server) { group ->
+    scope.launch {
+      runCatching { search.more(query, orgId, hostId, group) }.getOrNull()?.let { next ->
+        server = server.map { if (it.group == group.group) it.copy(rows = it.rows + next.rows, nextCursor = next.nextCursor) else it }
+      }
+    }
+  }
+}
+
+/** The box's keys on its field: ↑↓ move, ↵ opens, Esc closes, Ctrl/⌘1–5 jump to the pins. */
+internal fun oneBoxKey(
+  event: androidx.compose.ui.input.key.KeyEvent,
+  lines: List<OneBoxLine>,
+  index: Int,
+  setIndex: (Int) -> Unit,
+  prefs: AccountPreferences,
+  workspace: WorkspaceState,
+  onOpen: (OneBoxLine) -> Unit,
+  onClose: () -> Unit,
+): Boolean {
+  if (event.type != KeyEventType.KeyDown) return false
+  val command = if (isMacPlatform) event.isMetaPressed else event.isCtrlPressed
+  val pin = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five).indexOf(event.key)
+  val byOrg = workspace.orgs.associateBy { it.id }
+  return when {
+    command && pin >= 0 -> prefs.pinned.getOrNull(pin)?.let { id ->
+      byOrg[id]?.let { onOpen(OneBoxLine(PINNED_GROUP, "", OneBoxRow(group = Contracts.oneBoxWorkspacesGroup, id = it.id, label = it.name, orgId = it.id))) }
+      true
+    } ?: false
+    event.key == Key.DirectionDown -> { setIndex((index + 1).coerceAtMost((lines.size - 1).coerceAtLeast(0))); true }
+    event.key == Key.DirectionUp -> { setIndex((index - 1).coerceAtLeast(0)); true }
+    event.key == Key.Enter || event.key == Key.NumPadEnter -> { lines.getOrNull(index)?.let(onOpen); true }
+    event.key == Key.Escape -> { onClose(); true }
+    else -> false
+  }
+}
+
+/** The grouped result lines: a heading per group, the rows, "Show more" where the server has more. */
+@Composable
+internal fun OneBoxList(
+  services: ShellServices,
+  workspace: WorkspaceState,
+  prefs: AccountPreferences,
+  results: OneBoxResults,
+  query: String,
+  index: Int,
+  onOpen: (OneBoxLine) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val lines = results.lines
   val listState = rememberLazyListState()
   LaunchedEffect(index) { if (lines.isNotEmpty()) runCatching { listState.animateScrollToItem(index) } }
+  LazyColumn(modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), state = listState) {
+    var last: String? = null
+    lines.forEachIndexed { i, line ->
+      val heading = line.heading
+      if (line.group == SEE_ALL_GROUP) {
+        item(key = "see-all-divider") { HorizontalDivider(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = shellColors.divider) }
+      } else if (heading != last && heading.isNotEmpty()) {
+        item(key = "h-$i-$heading") {
+          Text(heading, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp).semantics { heading() })
+        }
+      }
+      last = heading
+      item(key = "r-$i-${line.group}-${line.row.id}") { OneBoxResult(services, workspace, prefs, line, i == index) { onOpen(line) } }
+      val group = results.server.firstOrNull { it.group == line.group }
+      if (group?.nextCursor != null && lines.getOrNull(i + 1)?.group != line.group) {
+        item(key = "more-${line.group}") {
+          TextButton(onClick = { results.more(group) }, modifier = Modifier.padding(start = 4.dp).testTag("one-box-more-${line.group}")) { Text("Show more ${group.noun}") }
+        }
+      }
+    }
+    if (lines.isEmpty() && query.isNotBlank() && !results.loading) {
+      item { Text(if (isSearchableQuery(query)) "Nothing matches “$query”." else "Type one more letter to search.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+    if (lines.isEmpty() && query.isBlank()) {
+      item { Text("Places you open and star show up here.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+  }
+}
+
+/** The hint footer (Figma: ↑↓ to move, ↵ to open, esc to close, then what is searched). */
+@Composable
+internal fun OneBoxFooter(workspace: WorkspaceState, typing: Boolean) {
+  HorizontalDivider(color = shellColors.divider)
+  Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    KeyCap("↑↓"); Hint("to move"); Box(Modifier.size(10.dp)); KeyCap("↵"); Hint("to open"); Box(Modifier.size(10.dp)); KeyCap("esc"); Hint("to close")
+    Box(Modifier.weight(1f))
+    Hint(
+      when {
+        !typing -> "Type to search everywhere you work"
+        workspace.site != null -> "Searching ${workspace.site?.name} and everywhere you work"
+        else -> "Searching everywhere you work"
+      },
+    )
+  }
+}
+
+/**
+ * The one box as its own screen: the phone's search (full screen from the top bar), and the fallback where there is no
+ * title bar. Keyboard first, as the inline field is.
+ */
+@Composable
+internal fun OneBox(
+  services: ShellServices,
+  workspace: WorkspaceState,
+  prefs: AccountPreferences,
+  enabledPlugins: Collection<String>,
+  hostAdmin: Boolean,
+  fullScreen: Boolean,
+  onOpen: (OneBoxLine) -> Unit,
+  onClose: () -> Unit,
+) {
+  var query by remember { mutableStateOf("") }
+  var index by remember { mutableIntStateOf(0) }
+  val results = rememberOneBoxResults(services, workspace, prefs, enabledPlugins, hostAdmin, query, seeAll = true)
+  val lines = results.lines
+  LaunchedEffect(lines.size, query) { index = index.coerceIn(0, (lines.size - 1).coerceAtLeast(0)) }
   val focus = remember { FocusRequester() }
   LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 
   Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = !fullScreen)) {
     Surface(
-      shape = if (fullScreen) RoundedCornerShape(0.dp) else RoundedCornerShape(16.dp),
+      shape = if (fullScreen) RoundedCornerShape(0.dp) else RoundedCornerShape(12.dp),
       color = MaterialTheme.colorScheme.surfaceContainerLowest,
       tonalElevation = 6.dp,
       shadowElevation = 12.dp,
@@ -207,71 +339,161 @@ internal fun OneBox(
               cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
               modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("one-box-field")
                 .semantics { contentDescription = "Search or jump to" }
-                .onPreviewKeyEvent { event ->
-                  if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                  val command = if (isMacPlatform) event.isMetaPressed else event.isCtrlPressed
-                  val pin = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five).indexOf(event.key)
-                  when {
-                    command && pin >= 0 -> prefs.pinned.getOrNull(pin)?.let { id ->
-                      byOrg[id]?.let { onOpen(OneBoxLine(PINNED_GROUP, "", OneBoxRow(group = Contracts.oneBoxWorkspacesGroup, id = it.id, label = it.name, orgId = it.id))) }
-                      true
-                    } ?: false
-                    event.key == Key.DirectionDown -> { index = (index + 1).coerceAtMost((lines.size - 1).coerceAtLeast(0)); true }
-                    event.key == Key.DirectionUp -> { index = (index - 1).coerceAtLeast(0); true }
-                    event.key == Key.Enter || event.key == Key.NumPadEnter -> { lines.getOrNull(index)?.let(onOpen); true }
-                    event.key == Key.Escape -> { onClose(); true }
-                    else -> false
-                  }
-                },
+                .onPreviewKeyEvent { event -> oneBoxKey(event, lines, index, { index = it }, prefs, workspace, onOpen, onClose) },
             )
           }
-          if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+          if (results.loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
           if (fullScreen) TextButton(onClick = onClose, modifier = Modifier.testTag("one-box-cancel")) { Text("Cancel") }
           else KeyCap("esc")
         }
         HorizontalDivider(color = shellColors.divider)
-        error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
-        LazyColumn(Modifier.weight(1f, fill = false).fillMaxWidth(), state = listState) {
-          var last: String? = null
-          lines.forEachIndexed { i, line ->
-            val heading = line.heading
-            if (heading != last && heading.isNotEmpty()) {
-              item(key = "h-$i-$heading") {
-                Text(heading, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp).semantics { heading() })
-              }
-            }
-            last = heading
-            item(key = "r-$i-${line.group}-${line.row.id}") { OneBoxResult(services, workspace, prefs, line, i == index) { onOpen(line) } }
-            val group = server.firstOrNull { it.group == line.group }
-            if (group?.nextCursor != null && lines.getOrNull(i + 1)?.group != line.group) {
-              item(key = "more-${line.group}") {
-                TextButton(
-                  onClick = {
-                    scope.launch {
-                      runCatching { search.more(query, orgId, hostId, group) }.getOrNull()?.let { next ->
-                        server = server.map { if (it.group == group.group) it.copy(rows = it.rows + next.rows, nextCursor = next.nextCursor) else it }
-                      }
-                    }
-                  },
-                  modifier = Modifier.padding(start = 8.dp).testTag("one-box-more-${line.group}"),
-                ) { Text("Show more ${group.noun}") }
-              }
-            }
-          }
-          if (lines.isEmpty() && query.isNotBlank() && !loading) {
-            item { Text(if (isSearchableQuery(query)) "Nothing matches “$query”." else "Type one more letter to search.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-          }
-        }
-        if (!fullScreen) {
-          HorizontalDivider(color = shellColors.divider)
-          Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            KeyCap("↑↓"); Hint("to move"); KeyCap("↵"); Hint("to open"); KeyCap(shortcutText("1–5")); Hint("pins")
-            Box(Modifier.weight(1f))
-            Hint(if (hostId != null) "Searching ${workspace.site?.name} and everywhere you work" else "Searching everywhere you work")
+        results.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+        OneBoxList(services, workspace, prefs, results, query, index, onOpen, Modifier.weight(1f, fill = false))
+        if (!fullScreen) OneBoxFooter(workspace, typing = query.isNotBlank())
+      }
+    }
+  }
+}
+
+/**
+ * The title bar's search (Figma 8:90, Mac Focused 67:13286 / Typing 118:18960): a real text field, centered. A click or
+ * Ctrl/⌘K puts the caret in it right there; the dropdown anchored under it (118:16068) lists Recent places and Starred,
+ * then grouped results as you type. Esc, a click outside, or opening a result closes it; "See all results" opens the full
+ * results in this tab.
+ */
+@Composable
+internal fun InlineSearchField(
+  services: ShellServices,
+  workspace: WorkspaceState,
+  chrome: NavChromeState,
+  enabledPlugins: Collection<String>,
+  hostAdmin: Boolean,
+  onOpen: (OneBoxLine) -> Unit,
+  onSeeAll: (String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val m = com.aglyn.ui.shellMetrics
+  val prefs by services.accountPrefs.state.collectAsState()
+  var query by remember { mutableStateOf("") }
+  var index by remember { mutableIntStateOf(0) }
+  val focus = remember { FocusRequester() }
+  val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+  val open = chrome.oneBox
+  val results = rememberOneBoxResults(services, workspace, prefs, enabledPlugins, hostAdmin, if (open) query else "", seeAll = true)
+  val lines = results.lines
+  LaunchedEffect(lines.size, query) { index = index.coerceIn(0, (lines.size - 1).coerceAtLeast(0)) }
+  // Ctrl/⌘K (or Find) opens the box: the caret goes into this field.
+  LaunchedEffect(open) { if (open) runCatching { focus.requestFocus() } }
+  fun close() {
+    chrome.oneBox = false
+    query = ""
+    index = 0
+    focusManager.clearFocus()
+  }
+  val pick: (OneBoxLine) -> Unit = { line ->
+    val typed = query.trim()
+    close()
+    if (line.group == SEE_ALL_GROUP) onSeeAll(typed) else onOpen(line)
+  }
+  Box(modifier) {
+    Row(
+      Modifier.fillMaxWidth().heightIn(min = if (m.compact) 30.dp else 36.dp).clip(RoundedCornerShape(m.controlRadius))
+        .background(if (open) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerHigh)
+        .border(1.dp, if (open) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(m.controlRadius))
+        .padding(horizontal = 10.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      Icon(AglynIcons.named("search"), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+      Box(Modifier.weight(1f)) {
+        if (query.isEmpty()) Text("Search or jump to", fontSize = m.rowText, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        BasicTextField(
+          query,
+          onValueChange = { query = it; index = 0; if (!chrome.oneBox) chrome.oneBox = true },
+          singleLine = true,
+          textStyle = TextStyle.Default.merge(MaterialTheme.typography.bodyMedium).copy(fontSize = m.rowText, color = MaterialTheme.colorScheme.onSurface),
+          cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+          modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("search-or-jump-field")
+            .semantics { contentDescription = "Search or jump to" }
+            .onFocusChanged { if (it.isFocused && !chrome.oneBox) chrome.oneBox = true }
+            .onPreviewKeyEvent { event -> open && oneBoxKey(event, lines, index, { index = it }, prefs, workspace, pick) { close() } },
+        )
+      }
+      if (open && results.loading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+      KeyCap(if (open) "esc" else shortcutText("K"))
+    }
+    if (open) {
+      androidx.compose.ui.window.Popup(
+        popupPositionProvider = remember { CenteredBelow() },
+        onDismissRequest = { close() },
+        properties = androidx.compose.ui.window.PopupProperties(focusable = false, dismissOnClickOutside = true),
+      ) {
+        Surface(
+          shape = RoundedCornerShape(12.dp),
+          color = MaterialTheme.colorScheme.surfaceContainerLowest,
+          shadowElevation = 12.dp,
+          tonalElevation = 4.dp,
+          border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+          modifier = Modifier.width(560.dp).heightIn(max = 540.dp).testTag("one-box"),
+        ) {
+          Column {
+            results.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+            OneBoxList(services, workspace, prefs, results, query, index, pick, Modifier.weight(1f, fill = false))
+            OneBoxFooter(workspace, typing = query.isNotBlank())
           }
         }
       }
     }
+  }
+}
+
+/** Places a popup centered under its anchor, 6 below it, kept inside the window. */
+private class CenteredBelow(private val gap: Int = 6) : androidx.compose.ui.window.PopupPositionProvider {
+  override fun calculatePosition(
+    anchorBounds: androidx.compose.ui.unit.IntRect,
+    windowSize: androidx.compose.ui.unit.IntSize,
+    layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+    popupContentSize: androidx.compose.ui.unit.IntSize,
+  ): androidx.compose.ui.unit.IntOffset {
+    val x = (anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2).coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
+    return androidx.compose.ui.unit.IntOffset(x, anchorBounds.bottom + gap)
+  }
+}
+
+/**
+ * "See all results for “ro”": the full results in the tab, grouped, with a filter per group (chips), and every server
+ * group's "Show more".
+ */
+@Composable
+internal fun SearchResultsScreen(
+  services: ShellServices,
+  workspace: WorkspaceState,
+  enabledPlugins: Collection<String>,
+  hostAdmin: Boolean,
+  initial: String,
+  onOpen: (OneBoxLine) -> Unit,
+) {
+  val prefs by services.accountPrefs.state.collectAsState()
+  var query by remember(initial) { mutableStateOf(initial) }
+  var only by remember(initial) { mutableStateOf<String?>(null) }
+  val results = rememberOneBoxResults(services, workspace, prefs, enabledPlugins, hostAdmin, query, seeAll = false)
+  val groups = results.lines.map { it.group to it.heading }.distinct().filter { it.second.isNotEmpty() }
+  val shown = OneBoxResults(results.lines.filter { only == null || it.group == only }, results.loading, results.error, results.server, results.more)
+  Column(Modifier.fillMaxSize().testTag("search-results")) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+      CompactSearchField(query, "Search everywhere you work", "search-results-field", Modifier.weight(1f)) { query = it; only = null }
+      if (results.loading) CircularProgressIndicator(Modifier.padding(start = 10.dp).size(16.dp), strokeWidth = 2.dp)
+    }
+    if (groups.size > 1) {
+      Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.material3.FilterChip(only == null, onClick = { only = null }, label = { Text("All") }, modifier = Modifier.testTag("search-results-all"))
+        for ((group, heading) in groups) {
+          androidx.compose.material3.FilterChip(only == group, onClick = { only = if (only == group) null else group }, label = { Text(heading) }, modifier = Modifier.testTag("search-results-$group"))
+        }
+      }
+    }
+    results.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+    OneBoxList(services, workspace, prefs, shown, query, -1, onOpen, Modifier.weight(1f).widthIn(max = 760.dp))
   }
 }
 
@@ -293,32 +515,35 @@ private fun Hint(text: String) {
 @Composable
 private fun OneBoxResult(services: ShellServices, workspace: WorkspaceState, prefs: AccountPreferences, line: OneBoxLine, selected: Boolean, onClick: () -> Unit) {
   val row = line.row
+  // Figma 118:16068: 44 tall, a 28 tile (radius 8), 13 semibold title, 12 detail, radius 6, ↵ on the highlighted row.
   Row(
-    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp)
-      .background(if (selected) shellColors.selected else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(10.dp))
+    Modifier.fillMaxWidth().padding(vertical = 0.dp)
+      .background(if (selected) shellColors.selected else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(6.dp))
+      .clip(RoundedCornerShape(6.dp))
       .clickable(onClick = onClick)
-      .padding(horizontal = 10.dp, vertical = 8.dp)
+      .heightIn(min = 44.dp)
+      .padding(horizontal = 10.dp, vertical = 4.dp)
       .testTag("one-box-${line.group}-${row.id}")
       .semantics(mergeDescendants = true) { this.selected = selected },
     verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(12.dp),
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
   ) {
     when (row.group) {
       Contracts.oneBoxWorkspacesGroup -> {
         val (light, dark) = orgLogoUrls(workspace, row.id, services.api.origin)
         val (color) = rememberWorkspaceColor(row.id, workspace, prefs, services.api.origin)
-        WorkspaceTile(row.label, light, dark, color, size = 32.dp)
+        WorkspaceTile(row.label, light, dark, color, size = 28.dp, cornerRadius = 8.dp)
       }
-      "sites" -> BrandPicture(mediaPreviewUrl(workspace.sites.firstOrNull { it.id == row.id }?.favicon, services.api.origin, row.id, 96), null, 32.dp, RoundedCornerShape(8.dp)) {
-        WorkspaceTile(row.label, null, null, null, size = 32.dp)
+      "sites" -> BrandPicture(mediaPreviewUrl(workspace.sites.firstOrNull { it.id == row.id }?.favicon, services.api.origin, row.id, 96), null, 28.dp, RoundedCornerShape(8.dp)) {
+        WorkspaceTile(row.label, null, null, null, size = 28.dp, cornerRadius = 8.dp)
       }
-      else -> Box(Modifier.size(32.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-        Icon(AglynIcons.named(oneBoxIcon(row.group)), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+      else -> Box(Modifier.size(28.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+        Icon(AglynIcons.named(if (row.group == SEE_ALL_GROUP) "search" else oneBoxIcon(row.group)), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
     Column(Modifier.weight(1f)) {
-      Text(row.label, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      row.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+      Text(row.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      row.detail?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
     }
     if (line.group == PINNED_GROUP) {
       val at = prefs.pinned.indexOf(row.id)

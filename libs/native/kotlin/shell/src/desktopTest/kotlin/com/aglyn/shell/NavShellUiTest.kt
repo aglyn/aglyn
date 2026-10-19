@@ -110,6 +110,44 @@ class NavShellUiTest {
   }
 
   @Test
+  fun theTitleBarSearchIsAFieldWithADropdownUnderIt() = runComposeUiTest {
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("search-or-jump-field") > 0 }
+    // A click puts the caret in the field itself; the dropdown hangs under it (no dialog).
+    onNodeWithTag("search-or-jump-field").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("one-box") > 0 }
+    // Typing groups the results; ↵ opens the highlighted one and closes the dropdown.
+    onNodeWithTag("search-or-jump-field").performTextInput("pages")
+    waitUntil(timeoutMillis = 3_000) { onAllNodes(androidx.compose.ui.test.hasText("Screens & settings")).fetchSemanticsNodes().isNotEmpty() }
+    onNode(androidx.compose.ui.test.hasText("See all results", substring = true)).assertExists()
+    onNodeWithTag("search-or-jump-field").performKeyInput { pressKey(androidx.compose.ui.input.key.Key.Enter) }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("one-box") == 0 }
+    waitUntil(timeoutMillis = 3_000) { navigator.top == NavKeys.of("site.pages") }
+    // Esc closes it.
+    onNodeWithTag("search-or-jump-field").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("one-box") > 0 }
+    onNodeWithTag("search-or-jump-field").performKeyInput { pressKey(androidx.compose.ui.input.key.Key.Escape) }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("one-box") == 0 }
+  }
+
+  @Test
+  fun seeAllResultsOpensTheFullResultsInTheTab() = runComposeUiTest {
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("search-or-jump-field") > 0 }
+    onNodeWithTag("search-or-jump-field").performClick()
+    onNodeWithTag("search-or-jump-field").performTextInput("pages")
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("one-box-seeAll-see-all") > 0 }
+    onNodeWithTag("one-box-seeAll-see-all").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("search-results") > 0 }
+    assertEquals(0, onAllNodesWithTagCount("one-box"))
+    onNodeWithTag("search-results-field").assertTextContains("pages")
+  }
+
+  @Test
   fun aSiteIsDrilledIntoWithAWayBackAndASwitcher() = runComposeUiTest {
     setContent { AglynShell(testServices(userDoc = emptyMap())) }
     signIn()

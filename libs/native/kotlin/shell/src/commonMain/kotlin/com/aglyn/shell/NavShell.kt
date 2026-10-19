@@ -384,7 +384,12 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     val body: @Composable () -> Unit = {
       CompositionLocalProvider(com.aglyn.ui.LocalScreenTitle provides screenTitle, com.aglyn.ui.LocalPageStar provides starSlot) {
         entries.SaveableStateProvider(tabKey + navigator.currentKey) {
-          ShellBody(services, context, navigator, workspace, widthClass, uid, route, openInBrowser, banner, screenSession.claims.isStaff) { chrome.colorFor = it }
+          ShellBody(
+            services, context, navigator, workspace, widthClass, uid, route, openInBrowser, banner, screenSession.claims.isStaff,
+            searchResults = { query ->
+              SearchResultsScreen(services, workspace, enabled, hostAdmin, query) { line -> openOneBoxLine(services, navigator, chrome, context, workspace, line, openRef) }
+            },
+          ) { chrome.colorFor = it }
         }
       }
     }
@@ -454,7 +459,17 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       // columns under it. A tablet draws edge to edge: the status bar and the taskbar keep their space.
       Column(Modifier.fillMaxSize().background(shellColors.titleBar).windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing).then(shortcuts)) {
         WindowTabStrip(tabs, onSelectTab = ::selectTab, onCloseTab = { closeTab(it) }, onNewTab = { newTab() }) { HomeTabMark(services, workspace) }
-        WideToolbar(services, navigator, chrome, pushed = route != null, uid = uid) {
+        WideToolbar(
+          services, navigator, chrome, pushed = route != null, uid = uid,
+          search = { modifier ->
+            InlineSearchField(
+              services, workspace, chrome, enabled, hostAdmin,
+              onOpen = { line -> openOneBoxLine(services, navigator, chrome, context, workspace, line, openRef) },
+              onSeeAll = { query -> navigator.push(Route.SearchResults(query)) },
+              modifier = modifier,
+            )
+          },
+        ) {
           HelpButton(help)
           if (assist != null) TitleBarButton(if (chrome.aiPanel) "Close the AI panel" else "AI", "auto_awesome", "ai-panel-toggle") { chrome.toggleAiPanel() }
         }
@@ -532,7 +547,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       )
     }
     if (chrome.shortcuts) KeyboardShortcutsDialog { chrome.shortcuts = false }
-    if (chrome.oneBox) {
+    if (chrome.oneBox && !wide) {
       OneBox(
         services, workspace, prefs, enabled, hostAdmin, fullScreen = !wide,
         onOpen = { line ->
@@ -642,6 +657,7 @@ private fun titleFor(services: ShellServices, navigator: ShellNavigator, route: 
   Route.Switcher -> "Switch workspace or site"
   Route.NotificationSettings -> "Notifications"
   Route.ThemeSettings -> "Theme"
+  is Route.SearchResults -> "Search results"
   is Route.Web -> ""
   null -> when (navigator.top) {
     ShellNavigator.HOME -> "Home"
@@ -667,9 +683,11 @@ private fun ShellBody(
   openInBrowser: (String) -> Unit,
   banner: @Composable () -> Unit,
   staff: Boolean,
+  searchResults: @Composable (String) -> Unit,
   onWorkspaceColor: (String) -> Unit,
 ) {
   when (route) {
+    is Route.SearchResults -> searchResults(route.query)
     is Route.Web -> com.aglyn.webview.WebPageScreen(route.url, onClose = { navigator.back() }, openInBrowser = openInBrowser, header = banner)
     is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null) { navigator.back() }
     is Route.Besigner -> services.besigner(route.path, { navigator.back() }) { link -> navigator.back(); context.openLink(link) }
@@ -759,6 +777,7 @@ private fun WideToolbar(
   chrome: NavChromeState,
   pushed: Boolean,
   uid: String,
+  search: @Composable (Modifier) -> Unit,
   trailing: @Composable () -> Unit = {},
 ) {
   val m = com.aglyn.ui.shellMetrics
@@ -779,25 +798,8 @@ private fun WideToolbar(
       val openRecent = LocalOpenRecent.current
       RecentHistoryButton(services.accountPrefs.state.collectAsState().value) { item -> openRecent?.invoke(item) }
     }
-    Surface(
-      onClick = { chrome.oneBox = true },
-      shape = RoundedCornerShape(m.controlRadius),
-      color = MaterialTheme.colorScheme.surfaceContainerHigh,
-      border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-      modifier = Modifier.align(Alignment.Center).fillMaxWidth(0.42f).widthIn(min = 240.dp, max = 480.dp).height(if (m.compact) 30.dp else 36.dp)
-        .testTag("search-or-jump").semantics { contentDescription = "Search or jump to" },
-    ) {
-      Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(AglynIcons.named("search"), null, Modifier.size(m.rowIcon), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Search or jump to", style = MaterialTheme.typography.bodyMedium.copy(fontSize = m.rowText), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1)
-        Text(
-          shortcutText("K"),
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.clip(RoundedCornerShape(4.dp)).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp),
-        )
-      }
-    }
+    // The global search is a real field, centered on the window (Figma 8:90); its dropdown hangs under it.
+    search(Modifier.align(Alignment.Center).fillMaxWidth(0.42f).widthIn(min = 240.dp, max = 480.dp).testTag("search-or-jump"))
     Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
       BellButton(services, uid) { navigator.select(ShellNavigator.NOTIFICATIONS) }
       trailing()

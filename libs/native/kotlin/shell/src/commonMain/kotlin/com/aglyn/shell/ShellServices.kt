@@ -116,6 +116,8 @@ sealed interface Route {
   data object ThemeSettings : Route
   /** A plain web page (a live site, a preview, a docs or legal page) in the in-app browser screen. */
   data class Web(val url: String) : Route
+  /** The one box's full results for a query ("See all results"), grouped, with filters. */
+  data class SearchResults(val query: String) : Route
 }
 
 /**
