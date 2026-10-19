@@ -157,9 +157,10 @@ describe('site logo card (AGL-1407)', () => {
 describe('favicon card (AGL-1407)', () => {
   it('writes the picked asset through mediaNodeSrc, not media.url', () => {
     expect(faviconCode).toMatch(/mediaNodeSrc\(media\)/)
-    expect(faviconCode).toMatch(/favicon:\s*src/)
+    // Written through the server, which re-fans the site lists (AGL-3972).
+    expect(faviconCode).toMatch(/saveFavicon\(src\)/)
     // The exact regression: `setDoc({ seo: { favicon: media.url } }, …)`.
-    expect(faviconCode).not.toMatch(/favicon:\s*media\.url/)
+    expect(faviconCode).not.toMatch(/(favicon:\s*|saveFavicon\()media\.url/)
   })
 
   it('resolves the stored value before showing it back', () => {
@@ -172,7 +173,14 @@ describe('favicon card (AGL-1407)', () => {
     // The Remove path is deliberately untouched: `host-icon` and this card
     // both test truthiness, and a deleted field would leave the projection
     // row's `favicon` behind (AGL-1071).
-    expect(faviconCode).toMatch(/favicon:\s*''/)
+    expect(faviconCode).toMatch(/saveFavicon\(''\)/)
+  })
+
+  it('writes through the server, never a client write and a ping (AGL-3972)', () => {
+    // A client write then a re-fan ping left every site list on the old icon
+    // whenever the ping never followed the write.
+    expect(faviconCode).toMatch(/saveMirroredHostFields\(hostId/)
+    expect(faviconCode).not.toMatch(/setDoc\(/)
   })
 })
 

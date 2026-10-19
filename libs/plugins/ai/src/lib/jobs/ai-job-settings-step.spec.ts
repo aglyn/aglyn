@@ -345,6 +345,12 @@ describe('the settings step (AGL-3748)', () => {
     expect(lockdownOpen).toHaveBeenCalledWith(expect.objectContaining({ staff: false, uid: 'uid-1', intent: 'write' }))
   })
 
+  it('resyncs members’ site list rows when only the favicon changed (AGL-3972)', async () => {
+    write.mockResolvedValueOnce({ ok: true, done: ['The favicon is now “icon.png”.'], notDone: [], changed: ['seo.favicon'], outboxId: null })
+    await run({ favicon: 'icon.png' })
+    expect(syncMemberships).toHaveBeenCalledWith('org-1', 'host-1')
+  })
+
   it('says a language change does not translate, and fails in words when nothing could be done', async () => {
     write.mockResolvedValueOnce({ ok: true, done: ['The site’s language is now es.'], notDone: [], changed: ['locales', 'defaultLocale'], outboxId: 'o' })
     expect((await run({ language: 'es' })).outputs[0].note).toContain('does not translate them')
