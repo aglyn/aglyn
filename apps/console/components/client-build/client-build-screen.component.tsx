@@ -63,7 +63,7 @@ import useCurrentOrg from '../../hooks/use-current-org'
 import { useHost } from '../../hooks/use-host'
 import { useIsStaff } from '../../hooks/use-is-staff'
 import { useOrgScope } from '../../hooks/use-org-scope'
-import { requestStarterSite } from '../../utils/host-first-run'
+import { requestStarterSiteOutcome } from '../../utils/host-first-run'
 import {
   PhotoLinkCode,
   type PhotoLinkRow,
@@ -522,9 +522,9 @@ function ClientBuildFlow({
                   onStarted={async (jobId) => {
                     await save({ jobId })
                   }}
-                  onStarter={async () => {
-                    await save({ starter: true })
-                  }}
+                  onStarter={async () =>
+                    Boolean(await save({ starter: true }))
+                  }
                   onDone={() => setStep('send')}
                   onBack={() => setStep('photos')}
                 />
@@ -858,8 +858,12 @@ function BuildStep(props: {
   host: string | null
   intake: ClientBuildIntake
   onStarted: (jobId: string) => Promise<void>
-  /** The starter site was given instead: recorded, so a reload resumes at send. */
-  onStarter: () => Promise<void>
+  /**
+   * The starter site exists: records the choice, so a reload resumes at
+   * send. Called only once the starter request succeeded; `false` when the
+   * record could not be saved.
+   */
+  onStarter: () => Promise<boolean>
   onDone: () => void
   onBack: () => void
 }) {
@@ -882,21 +886,30 @@ function BuildStep(props: {
   const [hidden, setHidden] = useState(false)
   const [started, setStarted] = useState(false)
   const [starting, setStarting] = useState(false)
+  const [starterError, setStarterError] = useState<string | null>(null)
   const offered = ready && widgets.length > 0 && !hidden
 
   // The starter instead: the published Home page and layout every other new
   // site is born with, so no site is left empty.
+  // Recorded only once the starter exists (written now, or already there
+  // from an earlier try); a failed request leaves the record as it was and
+  // says so here, with a retry.
   const giveStarter = useCallback(async () => {
     setOpen(false)
     setStarting(true)
-    try {
-      await requestStarterSite(userRef.current, hostId)
-      // Recorded either way: the send step itself waits on a published page.
-      await onStarter()
-    } finally {
-      setStarting(false)
-      onDone()
-    }
+    setStarterError(null)
+    const failure = await (async () => {
+      const outcome = await requestStarterSiteOutcome(userRef.current, hostId)
+      if (outcome === 'failed') {
+        return 'The starter site could not be added. Try again.'
+      }
+      if (!(await onStarter())) {
+        return 'The starter site was added, but the build could not be saved. Try again.'
+      }
+      return null
+    })().finally(() => setStarting(false))
+    if (failure) setStarterError(failure)
+    else onDone()
   }, [hostId, onDone, onStarter])
 
   const clientBuild = useMemo<ConsoleClientBuildStart>(
@@ -934,6 +947,23 @@ function BuildStep(props: {
             'be added to the comp from the staff organization page. Or give the site the starter for now.'}
         </PrerequisiteNotice>
       )}
+      {starterError ? (
+        <Alert
+          severity="warning"
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => void giveStarter()}
+              disabled={starting}
+            >
+              {'Try again'}
+            </Button>
+          }
+        >
+          {starterError}
+        </Alert>
+      ) : null}
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
         spacing={1}

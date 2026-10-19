@@ -33,7 +33,7 @@ let mockCapabilities = { domainSearch: false, text: true, email: true }
 let mockWidgets: Array<{ widgetId: string }> = []
 let mockSite: Record<string, unknown> = { subdomain: 'harbor-plumbing', screens: {} }
 let mockZoneProps: Record<string, unknown> | null = null
-const mockStarter = jest.fn(async () => true)
+const mockStarter = jest.fn(async (): Promise<'provisioned' | 'unchanged' | 'failed'> => 'provisioned')
 
 const reply = (status: number, body: unknown) =>
   ({ ok: status < 400, status, json: async () => body }) as unknown as Response
@@ -60,7 +60,7 @@ jest.mock('../../hooks/use-host', () => ({
 }))
 jest.mock('../../utils/host-first-run', () => ({
   __esModule: true,
-  requestStarterSite: (...args: unknown[]) => mockStarter(...(args as [])),
+  requestStarterSiteOutcome: (...args: unknown[]) => mockStarter(...(args as [])),
 }))
 jest.mock('../org-owner-handoff.component', () => ({
   __esModule: true,
@@ -317,6 +317,45 @@ describe('the client build screen (AGL-3958)', () => {
     render(<ClientBuildScreen />)
     expect(await screen.findByRole('button', { name: /Email the preview/ })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Use the starter site' })).toBeNull()
+  })
+
+  it('saves the starter choice only once the starter exists, and offers a retry when it fails', async () => {
+    mockRecord = {
+      intake: {
+        businessName: 'Harbor Plumbing',
+        whatTheyDo: 'plumbing',
+        towns: '',
+        phone: '',
+        email: 'owner@example.com',
+        hours: '',
+        ownerWords: '',
+      },
+      domain: { choice: 'free' },
+      hostId: 'host-1',
+      host: 'harbor-plumbing',
+      jobId: null,
+      starter: false,
+      previewSentAt: null,
+      intent: { plan: 'starter', addons: ['siteCare'], interval: 'month' },
+    }
+    mockStarter.mockResolvedValueOnce('failed')
+    render(<ClientBuildScreen />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'Use the starter site' }))
+    })
+    // The failure is said, with a retry; nothing is saved and the step stays.
+    expect(await screen.findByText('The starter site could not be added. Try again.')).toBeTruthy()
+    expect(posts('/api/admin/client-build', 'save').filter((post) => 'starter' in post.body)).toHaveLength(0)
+    expect(mockRecord?.['starter']).toBe(false)
+    expect(screen.queryByRole('button', { name: /Email the preview/ })).toBeNull()
+    // The retry succeeds: the choice is saved and the build moves on to send.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    })
+    expect(mockStarter).toHaveBeenCalledTimes(2)
+    expect(posts('/api/admin/client-build', 'save').at(-1)?.body).toMatchObject({ starter: true })
+    expect(await screen.findByRole('button', { name: /Email the preview/ })).toBeTruthy()
   })
 
   it('holds the preview until the site is published, then texts and emails it, beside the hand-off', async () => {

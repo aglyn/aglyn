@@ -91,20 +91,36 @@ export async function requestStarterSite(
   user: Parameters<typeof authorizedFetch>[0],
   hostId: string,
 ): Promise<boolean> {
-  if (!hostId) return false
+  return (await requestStarterSiteOutcome(user, hostId)) === 'provisioned'
+}
+
+/**
+ * What asking for the starter came to: `provisioned` when the route wrote it
+ * now, `unchanged` when it answered but wrote nothing because the site
+ * already has a page or a layout (a second tab, an earlier try), and
+ * `failed` on a refusal or an outage, which leaves the site as it was. The
+ * client build (AGL-3958) records its starter choice only on the first two.
+ */
+export async function requestStarterSiteOutcome(
+  user: Parameters<typeof authorizedFetch>[0],
+  hostId: string,
+): Promise<'provisioned' | 'unchanged' | 'failed'> {
+  if (!hostId) return 'failed'
   try {
     const response = await authorizedFetch(user, '/api/hosts/starter', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hostId }),
     })
-    if (!response.ok) return false
+    if (!response.ok) return 'failed'
     const payload = (await response.json().catch(() => null)) as { provisioned?: boolean } | null
-    if (payload?.provisioned !== true) return false
-    trackEvent('site_published', { first_publish: true })
-    return true
+    if (payload?.provisioned === true) {
+      trackEvent('site_published', { first_publish: true })
+      return 'provisioned'
+    }
+    return payload?.provisioned === false ? 'unchanged' : 'failed'
   } catch {
-    return false
+    return 'failed'
   }
 }
 
