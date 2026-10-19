@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynUI
 import Foundation
 import XCTest
 
@@ -40,6 +41,58 @@ final class CrmTests: XCTestCase {
     for (index, item) in try functionCases("crmReadTokens").enumerated() {
       XCTAssertEqual(crmReadTokens(group(item.args[0])), item.result as? [String], "case \(index)")
     }
+  }
+
+  /// A currency field (AGL-3971) shows and stores its own currency's minor units: USD cents, whole yen, BHD fils. A
+  /// JPY value stored as 1500 reads ¥1,500, never ¥15.
+  func testCurrencyFieldsUseTheirOwnCurrencysMinorUnit() {
+    func field(_ code: String?) -> CrmField {
+      customFieldsOf(.contact, [
+        CustomFieldDefinition(
+          id: "f", key: "budget", label: "Budget", type: "currency", options: [], required: false, order: 0, retired: false,
+          object: "contact", currency: code)
+      ])[0]
+    }
+    let usd = field("usd")
+    let jpy = field("jpy")
+    let bhd = field("bhd")
+    XCTAssertEqual(usd.stored, .minor)
+    XCTAssertEqual(jpy.spec.currency, FieldCurrency(code: "JPY", digits: 0))
+    XCTAssertEqual(bhd.spec.currency, FieldCurrency(code: "BHD", digits: 3))
+    XCTAssertEqual(field(nil).spec.currency?.code, "USD")
+
+    XCTAssertEqual(displayValue(usd, NSNumber(value: 125050)), "1250.50")
+    XCTAssertEqual(displayValue(jpy, NSNumber(value: 1500)), "1500")
+    XCTAssertEqual(displayValue(bhd, NSNumber(value: 1250)), "1.250")
+
+    XCTAssertEqual(AglynCrmPlugin.storedValue(usd, "$1,250.50") as? Int64, 125050)
+    XCTAssertEqual(AglynCrmPlugin.storedValue(jpy, "¥1,500") as? Int64, 1500)
+    XCTAssertEqual(AglynCrmPlugin.storedValue(bhd, "1.25") as? Int64, 1250)
+    XCTAssertNil(AglynCrmPlugin.storedValue(usd, "abc"))
+
+    let us = Locale(identifier: "en_US")
+    XCTAssertEqual(formatCurrencyFieldValue(1500, "jpy", locale: us), "¥1,500")
+    XCTAssertEqual(fieldDisplay(jpy.spec, "1500"), 1500.0.formatted(.currency(code: "JPY").precision(.fractionLength(0))))
+    XCTAssertEqual(fieldDisplay(usd.spec, "1250.50"), 1250.5.formatted(.currency(code: "USD").precision(.fractionLength(2))))
+    XCTAssertTrue(fieldProblems([jpy.spec], [jpy.spec.key: "¥1,500"]).isEmpty)
+    XCTAssertEqual(fieldProblems([jpy.spec], [jpy.spec.key: "lots"])[jpy.spec.key], "Enter an amount")
+
+    // The create sheet sends the value nested under `custom`, in minor units, in the ONE contacts-create call.
+    let created = createdFields([jpy], [jpy.spec.key: "¥1,500"])
+    XCTAssertEqual((created["custom"] as? [String: Any])?["budget"] as? Int64, 1500)
+  }
+
+  /// The field drawer's types and currencies are the console's (`CONTACT_FIELD_TYPES`, the deal currencies).
+  func testTheFieldEditorOffersTheConsolesTypesAndCurrencies() {
+    let values = ContractValues.shared
+    XCTAssertEqual(values.nativeCrmFieldTypes.last, "currency")
+    XCTAssertEqual(values.nativeCrmFieldTypeLabels["currency"], "Currency")
+    XCTAssertTrue(values.nativeCrmFieldCurrencies.contains("jpy"))
+    XCTAssertEqual(values.nativeCrmFieldDefaultCurrency, "usd")
+    let def = CustomFieldDefinition(
+      id: "f", key: "budget", label: "Budget", type: "currency", options: [], required: true, order: 0, retired: false,
+      object: "contact", currency: "jpy")
+    XCTAssertEqual(fieldSubtitle(def), "budget · Currency · JPY · Required")
   }
 
   func testFieldListFieldsAreTheConsoles() throws {

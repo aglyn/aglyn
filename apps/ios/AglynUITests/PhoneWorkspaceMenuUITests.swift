@@ -27,10 +27,14 @@ final class PhoneWorkspaceMenuUITests: XCTestCase {
     XCTAssertTrue(settings.waitForExistence(timeout: 5), "The workspace menu has no Workspace settings")
     settings.tap()
 
-    let members = any["sidebar-members"].firstMatch
-    XCTAssertTrue(members.waitForExistence(timeout: 10), "Workspace settings has no Members row")
-    members.tap()
-    XCTAssertTrue(app.navigationBars["Team"].waitForExistence(timeout: 20), "Members did not open the Team screen")
+    // Workspace settings opens on its first row, Members (the Team screen); its list leads back to the other rows.
+    let team = app.navigationBars["Team"]
+    if !team.waitForExistence(timeout: 10) {
+      let members = any["sidebar-members"].firstMatch
+      XCTAssertTrue(members.waitForExistence(timeout: 10), "Workspace settings has no Members row")
+      members.tap()
+    }
+    XCTAssertTrue(team.waitForExistence(timeout: 20), "Workspace settings did not reach the Team screen")
   }
 }
 #endif

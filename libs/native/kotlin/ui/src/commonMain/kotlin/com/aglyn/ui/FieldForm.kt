@@ -10,10 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.rememberTimePickerState
-import androidx.compose.material3.TimePicker
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -24,7 +22,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +38,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.aglyn.contracts.formatCurrencyFieldValue
+import com.aglyn.contracts.parseCurrencyInput
 
 /*
  * A record's fields as a form, and as read-only rows: one description of a
@@ -63,7 +65,15 @@ data class FieldSpec(
   val help: String? = null,
   /** A select with no pick reads as this ("No owner"); null means it needs one. */
   val emptyLabel: String? = "None",
+  /** A money field's own currency (a CRM currency field, AGL-3971); null reads it as US dollars. */
+  val currency: FieldCurrency? = null,
 )
+
+/** The currency a money field is in, and its minor unit's decimals (2 for USD, 0 for JPY, 3 for BHD). */
+data class FieldCurrency(val code: String, val digits: Int)
+
+/** A typed amount with its symbol, code, spaces and separators dropped ("$1,250.50" → 1250.5), or null. */
+internal fun typedAmount(text: String): Double? = text.filter { it in "0123456789.-" }.takeIf { it.isNotEmpty() }?.toDoubleOrNull()
 
 /** What a filled-in form says is wrong with it, by field key; empty when it can be saved. */
 fun fieldProblems(specs: List<FieldSpec>, values: Map<String, String>): Map<String, String> = buildMap {
@@ -76,7 +86,9 @@ fun fieldProblems(specs: List<FieldSpec>, values: Map<String, String>): Map<Stri
       spec.kind == FieldKind.PHONE && !Regex("""^\+?[\d\s().-]{5,}$""").matches(value) -> put(spec.key, "Enter a phone number")
       spec.kind == FieldKind.URL && !Regex("""^(https?://)?[^\s.]+\.[^\s]+$""").matches(value) -> put(spec.key, "Enter a web address")
       spec.kind == FieldKind.NUMBER && value.toDoubleOrNull() == null -> put(spec.key, "Enter a number")
-      spec.kind == FieldKind.MONEY && value.removePrefix("$").replace(",", "").toDoubleOrNull() == null -> put(spec.key, "Enter an amount")
+      spec.kind == FieldKind.MONEY && spec.currency != null && typedAmount(value) == null -> put(spec.key, "Enter an amount")
+      spec.kind == FieldKind.MONEY && spec.currency == null && value.removePrefix("$").replace(",", "").toDoubleOrNull() == null ->
+        put(spec.key, "Enter an amount")
       spec.kind == FieldKind.DATE && !Regex("""^\d{4}-\d{2}-\d{2}$""").matches(value) -> put(spec.key, "Pick a date")
       spec.kind == FieldKind.TIME && isoTimeMinutes(value) == null -> put(spec.key, "Pick a time")
     }
@@ -92,7 +104,10 @@ fun fieldDisplay(spec: FieldSpec, value: String?): String? {
     FieldKind.MULTI_SELECT -> raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }
       .joinToString(", ") { part -> spec.options.firstOrNull { it.value == part }?.label ?: part }
     FieldKind.TOGGLE -> if (raw == "true") "Yes" else "No"
-    FieldKind.MONEY -> raw.removePrefix("$").toDoubleOrNull()?.let { "$" + formatAmount(it) } ?: raw
+    // A field with its own currency reads at that currency's decimals, in the reader's locale, as the console's Intl.
+    FieldKind.MONEY -> spec.currency?.let { currency ->
+      parseCurrencyInput(raw, currency.code)?.let { formatCurrencyFieldValue(it.toDouble(), currency.code) } ?: raw
+    } ?: raw.removePrefix("$").toDoubleOrNull()?.let { "$" + formatAmount(it) } ?: raw
     else -> raw
   }
 }
@@ -148,7 +163,9 @@ fun FieldEditor(
       singleLine = spec.kind != FieldKind.MULTILINE,
       minLines = if (spec.kind == FieldKind.MULTILINE) 3 else 1,
       isError = error != null,
-      prefix = if (spec.kind == FieldKind.MONEY) ({ Text("$") }) else null,
+      prefix = if (spec.kind == FieldKind.MONEY && spec.currency == null) ({ Text("$") }) else null,
+      // A currency field is typed in major units with its code beside it, as the console's box.
+      suffix = spec.currency?.takeIf { spec.kind == FieldKind.MONEY }?.let { currency -> { Text(currency.code.uppercase()) } },
       supportingText = (error ?: spec.help)?.let { { Text(it) } },
       keyboardOptions = KeyboardOptions(
         keyboardType = when (spec.kind) {

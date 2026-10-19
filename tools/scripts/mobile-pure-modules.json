@@ -58,6 +58,10 @@
       "why": "Reached by crm.ts: the CRM's fixed vocabularies, no imports."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
+      "why": "A CRM custom field's types, labels and the currency field's minor-unit rules (the currency's own decimals, a typed amount's parse), read by the native field editors and replayed by their function cases (AGL-3971); imports only crm and a type."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/crm.ts",
       "why": "The CRM's vocabularies, scope tokens and list fields, read by the native contracts and the CRM's replayed function cases (AGL-3669)."
     },

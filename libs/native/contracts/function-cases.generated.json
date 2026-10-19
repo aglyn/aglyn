@@ -5598,6 +5598,83 @@
         }
       ]
     },
+    "currencyFractionDigits": {
+      "module": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
+      "cases": [
+        {
+          "args": [
+            "usd"
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            "USD"
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            "jpy"
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            "krw"
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            "vnd"
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            "bhd"
+          ],
+          "result": 3
+        },
+        {
+          "args": [
+            "kwd"
+          ],
+          "result": 3
+        },
+        {
+          "args": [
+            "omr"
+          ],
+          "result": 3
+        },
+        {
+          "args": [
+            "eur"
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            "huf"
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            "zzz"
+          ],
+          "result": 2
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": 2
+        }
+      ]
+    },
     "currencyMinorDigits": {
       "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
       "cases": [
@@ -5642,6 +5719,102 @@
             ""
           ],
           "result": 2
+        }
+      ]
+    },
+    "currencyMinorToMajor": {
+      "module": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
+      "cases": [
+        {
+          "args": [
+            125050,
+            "usd"
+          ],
+          "result": 1250.5
+        },
+        {
+          "args": [
+            1500,
+            "jpy"
+          ],
+          "result": 1500
+        },
+        {
+          "args": [
+            1250,
+            "bhd"
+          ],
+          "result": 1.25
+        },
+        {
+          "args": [
+            -4000,
+            "usd"
+          ],
+          "result": -40
+        },
+        {
+          "args": [
+            0,
+            "kwd"
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            7,
+            "eur"
+          ],
+          "result": 0.07
+        }
+      ]
+    },
+    "customFieldCurrency": {
+      "module": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "currency": "JPY"
+            }
+          ],
+          "result": "jpy"
+        },
+        {
+          "args": [
+            {
+              "currency": " bhd "
+            }
+          ],
+          "result": "bhd"
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": "usd"
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": "usd"
+        },
+        {
+          "args": [
+            {
+              "currency": "xx"
+            }
+          ],
+          "result": "usd"
+        },
+        {
+          "args": [
+            {
+              "currency": "euro"
+            }
+          ],
+          "result": "usd"
         }
       ]
     },
@@ -23415,6 +23588,109 @@
               "start": 0
             }
           ]
+        }
+      ]
+    },
+    "parseCurrencyInput": {
+      "module": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
+      "cases": [
+        {
+          "args": [
+            "$1,250.50",
+            "usd"
+          ],
+          "result": 125050
+        },
+        {
+          "args": [
+            "1250.5",
+            "usd"
+          ],
+          "result": 125050
+        },
+        {
+          "args": [
+            "-40",
+            "usd"
+          ],
+          "result": -4000
+        },
+        {
+          "args": [
+            "1500",
+            "jpy"
+          ],
+          "result": 1500
+        },
+        {
+          "args": [
+            "¥1,500",
+            "jpy"
+          ],
+          "result": 1500
+        },
+        {
+          "args": [
+            "1500.6",
+            "jpy"
+          ],
+          "result": 1501
+        },
+        {
+          "args": [
+            "1.25",
+            "bhd"
+          ],
+          "result": 1250
+        },
+        {
+          "args": [
+            "BHD 1.2505",
+            "bhd"
+          ],
+          "result": 1251
+        },
+        {
+          "args": [
+            "abc",
+            "usd"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "",
+            "usd"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "-",
+            "usd"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            ".",
+            "usd"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "1.2.3",
+            "usd"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "12.",
+            "usd"
+          ],
+          "result": 1200
         }
       ]
     },

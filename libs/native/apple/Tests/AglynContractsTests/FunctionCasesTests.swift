@@ -62,9 +62,38 @@ final class FunctionCasesTests: XCTestCase {
       "formatOrderNumber", "formatOrderMoney", "formatReceiptMoney", "formatReceiptTime", "orderChannelLabel",
       "canTransitionOrder", "orderRefundState", "orderRefundSummary", "orderNetCents", "orderPaidCents",
       "apportionCents", "describeRestockCheck", "posPinProblem", "posCashVarianceCents", "expandVariantMatrix", "renameProductOptions",
+      "currencyFractionDigits", "currencyMinorToMajor", "parseCurrencyInput", "customFieldCurrency",
     ] {
       XCTAssertNotNil(functions[name], name)
     }
+  }
+
+  /// A CRM currency field's amounts (AGL-3971): USD's two decimals, JPY's none, BHD's three, as the console's `Intl`.
+  func testCurrencyFieldAmountsUseEachCurrencysOwnDecimals() {
+    for item in cases("currencyFractionDigits") {
+      XCTAssertEqual(currencyFractionDigits(string(item.args[0]) ?? ""), int(item.result), item.label)
+    }
+    for item in cases("currencyMinorToMajor") {
+      let minor = (item.args[0] as? NSNumber)?.doubleValue ?? 0
+      XCTAssertEqual(
+        currencyMinorToMajor(minor, string(item.args[1]) ?? ""), (item.result as? NSNumber)?.doubleValue ?? .nan,
+        item.label)
+    }
+    for item in cases("parseCurrencyInput") {
+      XCTAssertEqual(
+        parseCurrencyInput(string(item.args[0]), string(item.args[1]) ?? ""), (item.result as? NSNumber)?.int64Value,
+        item.label)
+    }
+    for item in cases("customFieldCurrency") {
+      XCTAssertEqual(customFieldCurrency((item.args[0] as? [String: Any])?["currency"] as? String), string(item.result), item.label)
+    }
+    XCTAssertEqual(currencyInputText(125050, "usd"), "1250.50")
+    XCTAssertEqual(currencyInputText(1500, "jpy"), "1500")
+    XCTAssertEqual(currencyInputText(1250, "bhd"), "1.250")
+    let us = Locale(identifier: "en_US")
+    XCTAssertEqual(formatCurrencyFieldValue(125050, "usd", locale: us), "$1,250.50")
+    XCTAssertEqual(formatCurrencyFieldValue(1500, "jpy", locale: us), "¥1,500")
+    XCTAssertTrue(formatCurrencyFieldValue(1250, "bhd", locale: us).hasSuffix("1.250"))
   }
 
   func testTheRestockQuestionIsWordedAsTheConsoleWordsIt() throws {
