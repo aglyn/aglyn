@@ -226,6 +226,17 @@ final class AppModel {
 
   /// The context a plugin's screen or widget is handed in one window.
   func context(for navigation: ShellNavigation) -> NativePluginContext? {
+    // A tab behind another, or one whose workspace and site are still coming back, reads its own (P9).
+    if let frozen = navigation.frozenContext,
+      !navigation.front || workspace?.org?.id != frozen.orgID || scopedSite(navigation)?.id != frozen.hostID
+    {
+      return frozen
+    }
+    return liveContext(for: navigation)
+  }
+
+  /// The context for where the app's workspace store stands now.
+  func liveContext(for navigation: ShellNavigation) -> NativePluginContext? {
     guard let user = auth?.user, let reader, let api else { return nil }
     var context = NativePluginContext(
       uid: user.uid,

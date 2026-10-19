@@ -223,6 +223,15 @@ struct WorkspaceMenuItems: View {
           navigation.colorFor = ColorPickTarget(orgID: org.id, name: org.name)
         }
       }
+      // The console menu's own "Upgrade plan" (Figma 121:18682): Billing, at the plans.
+      if model.offersUpgrade {
+        Section {
+          Button("Upgrade plan", systemImage: "arrow.up.circle") {
+            navigation.enter(.workspaceSettings, first: .plugin("core.billing"))
+          }
+          .accessibilityIdentifier("workspace-menu-upgrade")
+        }
+      }
     }
   }
 }

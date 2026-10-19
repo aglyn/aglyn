@@ -17,6 +17,8 @@ struct ShellSidebar: View {
   @State private var filter = ""
   /// How deep the last scope was, so a drill slides the right way.
   @State private var lastDepth = 0
+  /// The last workspace shown, so another one cross-fades instead of sliding.
+  @State private var lastOrg: String?
 
   /// How deep a scope sits: the workspace, then a site or the workspace's settings, then a site's settings.
   private var depth: Int {
@@ -33,60 +35,60 @@ struct ShellSidebar: View {
   var body: some View {
     let scope = ShellScope(model: model, navigation: navigation)
     let forward = depth >= lastDepth
+    // A drill slides with a fade; another workspace (same depth) cross-fades; Reduce Motion cross-fades only.
+    let slides = !reduceMotion && depth != lastDepth
     ZStack(alignment: .top) {
       VStack(spacing: 0) {
-        ScopeHeader(scope: scope)
-        if navigation.mode == .workspaceSettings || navigation.mode == .siteSettings {
-          SettingsFilterField(text: $filter)
-        }
+        ScopeHeader(scope: scope, filter: $filter)
         SidebarList(scope: scope, filter: filter)
           .safeAreaInset(edge: .bottom, spacing: 0) {
             if navigation.mode == .main { PlanCard() }
           }
       }
       .id(scopeKey)
-      // Drilling in slides the new scope in from the trailing edge with a fade, out from the leading edge; another
-      // workspace cross-fades; Reduce Motion cross-fades only.
       .transition(
-        reduceMotion || depth == lastDepth
-          ? .opacity
-          : .asymmetric(
+        slides
+          ? .asymmetric(
             insertion: .move(edge: forward ? .trailing : .leading).combined(with: .opacity),
-            removal: .move(edge: forward ? .leading : .trailing).combined(with: .opacity)))
+            removal: .move(edge: forward ? .leading : .trailing).combined(with: .opacity))
+          : .opacity)
     }
     .clipped()
-    .animation(reduceMotion || depth == lastDepth ? AglynShellMotion.crossFade : AglynShellMotion.drill, value: scopeKey)
+    .animation(slides ? AglynShellMotion.drill : AglynShellMotion.crossFade, value: scopeKey)
     .background(AglynColor.sidebar)
     .onChange(of: depth) { _, next in lastDepth = next }
     .onChange(of: navigation.mode) { filter = "" }
   }
 }
 
-/// The search field atop a settings mode: settings get their own search (Calm rules).
+/// The search field atop a settings mode (Figma Sidebar, Scope=Settings: "Search settings", 28 points).
 private struct SettingsFilterField: View {
   @Binding var text: String
 
   var body: some View {
     HStack(spacing: 6) {
-      Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
+      Image(systemName: "magnifyingglass").font(.system(size: AglynShellMetrics.rowText - 2))
+        .foregroundStyle(AglynColor.textTertiary).accessibilityHidden(true)
       TextField("Search settings", text: $text)
         .textFieldStyle(.plain)
+        .font(.system(size: AglynShellMetrics.rowText))
         .accessibilityIdentifier("sidebar-settings-search")
     }
-    .font(AglynFont.subheadline)
-    .padding(.horizontal, 10)
-    .padding(.vertical, 6)
-    .background(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).fill(AglynColor.page))
-    .padding(.horizontal, 12)
-    .padding(.bottom, 8)
+    .padding(.horizontal, 8)
+    .frame(height: AglynShellMetrics.rowHeight)
+    .background(RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).fill(AglynColor.sunken))
+    .overlay(
+      RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).strokeBorder(AglynColor.divider))
   }
 }
 
-/// The head of the sidebar under the lockup.
+/// The head of the sidebar (Figma Sidebar/Scope header 98:1023 and 6:112): the workspace with its menu; in a site, the
+/// way back to the workspace and the site's title row; in a settings mode, the way back, its title and its search.
 struct ScopeHeader: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   let scope: ShellScope
+  var filter: Binding<String>? = nil
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -102,87 +104,87 @@ struct ScopeHeader: View {
         }
       case .workspaceSettings, .siteSettings, .admin:
         backButton(
-          navigation.mode == .siteSettings ? (scope.site?.name ?? "Site") : navigation.mode == .admin ? "Back" : (scope.org?.name ?? "Workspace"),
+          navigation.mode == .siteSettings
+            ? (scope.site?.name ?? "Site") : navigation.mode == .admin ? "Back" : (scope.org?.name ?? "Workspace"),
           identifier: "sidebar-back-mode"
         ) { navigation.leaveMode() }
         Text(navigation.mode == .siteSettings ? "Site settings" : navigation.mode == .admin ? "Admin" : "Workspace settings")
-          .font(.system(size: AglynShellMetrics.rowText + 2, weight: .semibold))
+          .font(.system(size: AglynShellMetrics.modeTitle, weight: .semibold))
           .foregroundStyle(AglynColor.textPrimary)
           .accessibilityAddTraits(.isHeader)
           .accessibilityIdentifier("sidebar-mode-title")
+        if let filter, navigation.mode != .admin { SettingsFilterField(text: filter) }
       }
     }
-    .padding(.horizontal, AglynShellMetrics.rowInset + 8)
-    .padding(.top, 14)
-    .padding(.bottom, 10)
+    .padding(AglynShellMetrics.scopeHeadPadding)
+    .padding(AglynShellMetrics.headerPadding)
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   private func backButton(_ title: String, identifier: String, action: @escaping () -> Void) -> some View {
     Button(action: action) {
       HStack(spacing: 4) {
-        Image(systemName: "chevron.left").font(.system(size: AglynShellMetrics.rowText - 3, weight: .semibold))
-        Text(title).font(.system(size: AglynShellMetrics.rowText - 1)).lineLimit(1)
+        Image(systemName: "chevron.left").font(.system(size: AglynShellMetrics.backText - 2, weight: .semibold))
+          .frame(width: 14, height: 14)
+        Text(title).font(.system(size: AglynShellMetrics.backText)).lineLimit(1)
       }
       .foregroundStyle(AglynColor.secondaryText)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .help("Back to \(title)")
+    .accessibilityLabel("Back to \(title)")
     .accessibilityIdentifier(identifier)
   }
 }
 
-/// The workspace's name and plan, opening the workspace menu.
+/// The workspace's header (Figma Sidebar/Scope header, workspace): its logo, its name with ▾, and its plan; the whole
+/// header opens the workspace menu.
 private struct WorkspaceButton: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
+  @State private var hovered = false
 
   var body: some View {
     let org = model.workspace?.org
     let logo = org.flatMap { model.workspace?.orgLogos[$0.id] }
-    // The workspace's logo, name and plan return to the workspace from a site; ▾ opens the workspace menu (Figma Sidebar
-    // 12:703: no separate back line).
-    HStack(alignment: .top, spacing: 8) {
-      Button {
-        navigation.enterWorkspace()
-      } label: {
-        HStack(alignment: .top, spacing: 8) {
+    Menu {
+      WorkspaceMenuItems()
+    } label: {
+      HStack(alignment: .center, spacing: 10) {
+        AglynBrandPicture(
+          model.mediaURL(logo?.light, hostID: nil), darkURL: model.mediaURL(logo?.dark, hostID: nil),
+          size: AglynShellMetrics.workspaceLogo, cornerRadius: AglynShellMetrics.workspaceLogoRadius
+        ) {
           AglynWorkspaceTile(
-            name: org?.name ?? "Workspace", logoURL: model.mediaURL(logo?.light, hostID: nil),
-            darkLogoURL: model.mediaURL(logo?.dark, hostID: nil), colorHex: model.workspaceColor(org?.id).color,
-            selected: false, size: AglynShellMetrics.headerLogo)
-            .padding(-3)
-          VStack(alignment: .leading, spacing: 3) {
-            Text(org?.name ?? (model.workspace?.ready == true ? "No workspace" : "Loading…"))
-              .font(.system(size: AglynShellMetrics.rowText, weight: .semibold)).lineLimit(1)
-              .foregroundStyle(AglynColor.textPrimary)
-            if let plan = logo?.planLabel {
-              Text(plan).font(.system(size: AglynShellMetrics.rowText - 2, weight: .semibold)).foregroundStyle(AglynColor.tint)
-                .padding(.horizontal, 6).padding(.vertical, 1)
-                .background(Capsule().fill(AglynColor.accentSoft))
-            }
-          }
-          Spacer(minLength: 4)
+            name: org?.name ?? "Workspace", logoURL: nil, colorHex: model.workspaceColor(org?.id).color, selected: false,
+            size: AglynShellMetrics.workspaceLogo)
         }
-        .contentShape(Rectangle())
+        VStack(alignment: .leading, spacing: 2) {
+          HStack(spacing: 4) {
+            Text(org?.name ?? (model.workspace?.ready == true ? "No workspace" : "Loading…"))
+              .font(.system(size: AglynShellMetrics.workspaceName, weight: .semibold)).lineLimit(1)
+              .foregroundStyle(AglynColor.textPrimary)
+            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+              .foregroundStyle(AglynColor.secondaryText)
+              .frame(width: 14, height: 14)
+          }
+          if let plan = logo?.planLabel {
+            Text(plan).font(.system(size: 12, weight: .semibold)).foregroundStyle(AglynColor.tint)
+              .padding(.horizontal, 7).padding(.vertical, 1)
+              .background(Capsule().fill(AglynColor.accentSoft))
+          }
+        }
+        Spacer(minLength: 0)
       }
-      .buttonStyle(.plain)
-      .help(navigation.inSite ? "Back to \(org?.name ?? "the workspace")" : (org?.name ?? "Workspace"))
-      .accessibilityIdentifier("sidebar-workspace-home")
-      Menu {
-        WorkspaceMenuItems()
-      } label: {
-        Image(systemName: "chevron.down").font(.system(size: AglynShellMetrics.rowText - 3, weight: .semibold))
-          .foregroundStyle(AglynColor.textTertiary)
-          .frame(width: 20, height: 20)
-          .contentShape(Rectangle())
-      }
-      .menuStyle(.button)
-      .buttonStyle(.plain)
-      .menuIndicator(.hidden)
-      .fixedSize()
-      .accessibilityLabel("\(org?.name ?? "Workspace") menu")
-      .accessibilityIdentifier("sidebar-workspace-menu")
+      .contentShape(Rectangle())
     }
+    .menuStyle(.button)
+    .buttonStyle(.plain)
+    .menuIndicator(.hidden)
+    .help(org?.name ?? "Workspace")
+    .accessibilityLabel("\(org?.name ?? "Workspace") menu")
+    .accessibilityIdentifier("sidebar-workspace-menu")
   }
 }
 
@@ -207,12 +209,14 @@ private struct SiteTitleRow: View {
             name: site.name, logoURL: nil, colorHex: model.workspaceColor(model.workspace?.org?.id).color, selected: false,
             size: AglynShellMetrics.headerLogo
           )
-          .padding(-3)
         }
-        Text(site.name).font(.system(size: AglynShellMetrics.rowText + 2, weight: .semibold)).lineLimit(1)
-          .foregroundStyle(AglynColor.textPrimary)
-        Image(systemName: "chevron.down").font(.system(size: AglynShellMetrics.rowText - 3, weight: .semibold))
-          .foregroundStyle(AglynColor.textTertiary)
+        HStack(spacing: 4) {
+          Text(site.name).font(.system(size: AglynShellMetrics.siteName, weight: .semibold)).lineLimit(1)
+            .foregroundStyle(AglynColor.textPrimary)
+          Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(AglynColor.secondaryText)
+            .frame(width: 14, height: 14)
+        }
         Spacer(minLength: 0)
       }
       .contentShape(Rectangle())
@@ -237,7 +241,8 @@ struct SidebarList: View {
   @Environment(ShellNavigation.self) private var navigation
   let scope: ShellScope
   var filter = ""
-  /// The phone's Menu: rows push onto the stack instead of selecting a sidebar section.
+  /// The phone's Menu: rows push onto the stack instead of selecting a sidebar section, drawn as the phone's list
+  /// (Figma iPhone / Site / Menu 22:176).
   var push = false
   /// The selection pill moves from row to row (Figma Motion).
   @Namespace private var pill
@@ -247,36 +252,37 @@ struct SidebarList: View {
     let holding = ShellScope.group(holding: navigation.section, in: list)
     // Drawn rows, not a sidebar List: the platform's list adds its own insets, selection and type (Figma Sidebar/Row).
     ScrollView(.vertical) {
-      VStack(alignment: .leading, spacing: 2) {
+      VStack(alignment: .leading, spacing: push ? 0 : 2) {
         // The workspace's head has a hairline under it (Figma Sidebar 12:703, workspace scope).
-        if navigation.mode == .main && scope.site == nil && !push { divider }
+        if !push && list.id == .workspace && filter.isEmpty { AglynSidebarDivider() }
         ForEach(Array(list.groups.enumerated()), id: \.element.id) { index, group in
-          if needsDivider(before: group, at: index, in: list) { divider }
+          if !push && needsDivider(before: group, at: index, in: list) { AglynSidebarDivider() }
           groupView(group, open: isOpen(group, holding: holding))
         }
       }
-      .padding(.top, 2)
-      .padding(.bottom, 12)
+      .padding(.top, push ? 0 : 4)
+      .padding(.bottom, push ? 16 : 12)
       .animation(AglynShellMotion.pill, value: navigation.section)
     }
     .scrollIndicators(.never)
     .accessibilityIdentifier("sidebar-list")
   }
 
-  /// A hairline in the border token, inset to the rows (Figma Sidebar/Divider).
-  private var divider: some View {
-    Rectangle().fill(AglynColor.divider).frame(height: 1)
-      .padding(.horizontal, AglynShellMetrics.rowInset + 8).padding(.vertical, 6)
-  }
-
-  /// Where Figma draws a divider: after the top block (Home, Overview, Starred), above More and above the settings row.
+  /// Where Figma draws a divider (P7): in the workspace, after its header and after Home; in a site, after the top block
+  /// (Home, Overview, Starred), between the groups and More, and above Site settings. Settings lists have none.
   private func needsDivider(before group: NativeNavGroup, at index: Int, in list: ResolvedNavList) -> Bool {
     guard index > 0, filter.isEmpty else { return false }
-    if group.id == "more" || group.id == "settings" { return true }
-    let topBlock: Set<String> = ["top", "starred"]
-    guard !topBlock.contains(group.id) else { return false }
-    // The first group after the top block.
-    return list.groups[..<index].allSatisfy { topBlock.contains($0.id) }
+    switch list.id {
+    case .workspace:
+      return index == 1
+    case .site:
+      if group.id == "more" || group.id == "settings" { return true }
+      let topBlock: Set<String> = ["top", "starred"]
+      guard !topBlock.contains(group.id) else { return false }
+      return list.groups[..<index].allSatisfy { topBlock.contains($0.id) }
+    default:
+      return false
+    }
   }
 
   private func isOpen(_ group: NativeNavGroup, holding: String?) -> Bool {
@@ -288,40 +294,56 @@ struct SidebarList: View {
 
   @ViewBuilder
   private func groupView(_ group: NativeNavGroup, open: Bool) -> some View {
-    let rows = filtered(group.rows)
+    // The phone's Home is its own tab, so Menu starts at Overview (Figma 22:176).
+    let rows = filtered(group.rows).filter { !push || $0.screen != NativeNav.home }
     let starred = group.dynamic == "starred" ? starredHere : []
     if group.dynamic == "starred" {
       if !starred.isEmpty && filter.isEmpty {
-        header(group, open: open, hidden: starred.count)
-        if open {
+        if push {
+          PhoneMenuSectionHead(title: group.label ?? "Starred")
+        } else {
+          header(group, open: open, hidden: starred.count)
+        }
+        if open || push {
           ForEach(starred, id: \.key) { starredRow($0) }
             .transition(.opacity.combined(with: .move(edge: .top)))
         }
       }
     } else if !rows.isEmpty {
-      if group.id == "more" && group.foldable && filter.isEmpty {
+      if push {
+        if let label = group.label {
+          PhoneMenuSectionHead(
+            title: label, foldable: group.foldable, open: open, count: rows.count,
+            toggle: group.foldable ? { toggle(group) } : nil
+          )
+          .accessibilityIdentifier("sidebar-group-\(group.id)")
+        }
+      } else if group.id == "more" && group.foldable && filter.isEmpty {
         // More is a row of its own (Figma "··· More"), opening its rows under it.
         AglynSidebarRow("More", selected: false, action: { toggle(group) }) {
           AglynSidebarIcon("ellipsis")
         } trailing: {
-          Image(systemName: "chevron.right").font(.system(size: 8, weight: .bold)).foregroundStyle(AglynColor.textTertiary)
+          Image(systemName: "chevron.right").font(.system(size: AglynShellMetrics.groupChevron * 0.7, weight: .semibold))
+            .foregroundStyle(AglynColor.secondaryText)
             .rotationEffect(.degrees(open ? 90 : 0))
         }
+        .accessibilityValue(open ? "Open" : "Folded")
         .accessibilityIdentifier("sidebar-group-more")
       } else if let label = group.label {
         if group.foldable {
           header(group, open: open, hidden: rows.count)
         } else {
-          Text(label).font(.system(size: 11, weight: .semibold))
+          Text(label).font(.system(size: AglynShellMetrics.groupText, weight: .semibold))
             .foregroundStyle(AglynColor.secondaryText)
-            .padding(.horizontal, AglynShellMetrics.rowInset + 8)
-            .frame(minHeight: AglynShellMetrics.groupHeight)
+            .padding(.horizontal, AglynShellMetrics.rowPadding)
+            .frame(maxWidth: .infinity, minHeight: AglynShellMetrics.groupHeight, alignment: .leading)
+            .padding(.horizontal, AglynShellMetrics.rowInset)
             .accessibilityAddTraits(.isHeader)
         }
       }
       if open {
-        // A group's rows sit one level in (12 points) under its label.
-        ForEach(rows, id: \.id) { rowView($0, indent: group.label != nil && !push ? 1 : 0) }
+        // A group's rows sit one level in (12 points) under its label (Figma: 20 = 8 + 12 on the Mac, 22 on iPad).
+        ForEach(rows, id: \.id) { rowView($0, indent: group.label != nil ? 1 : 0) }
           .transition(.opacity.combined(with: .move(edge: .top)))
       }
     }
@@ -357,7 +379,20 @@ struct SidebarList: View {
     }
   }
 
+  @ViewBuilder
   private func rowView(_ row: NativeNavRow, indent: Int = 0) -> some View {
+    if push {
+      PhoneMenuRow(title: row.label, action: { activate(ShellScope.target(of: row)) }) {
+        Image(systemName: row.appleIcon).font(.system(size: 18)).foregroundStyle(AglynColor.secondaryText)
+      }
+      .contextMenu { starMenu(row) }
+      .accessibilityIdentifier("sidebar-\(row.id)")
+    } else {
+      sidebarRow(row, indent: indent)
+    }
+  }
+
+  private func sidebarRow(_ row: NativeNavRow, indent: Int) -> some View {
     let target = ShellScope.target(of: row)
     let selected = !push && ShellScope.row(row, holds: navigation.section)
     return AglynSidebarRow(row.label, selected: selected, indent: indent, pill: pill, action: { activate(target) }) {
@@ -375,13 +410,18 @@ struct SidebarList: View {
     .accessibilityIdentifier("sidebar-\(row.id)")
   }
 
+  @ViewBuilder
   private func starredRow(_ item: StarredItem) -> some View {
     let section = ShellScope.section(for: item)
-    return AglynSidebarRow(
-      item.label, selected: !push && navigation.section == section, indent: push ? 0 : 1, pill: pill,
-      action: { activate(.section(section)) }
-    ) {
-      Circle().fill(item.color.map(starColor) ?? AglynColor.tint).frame(width: 8, height: 8)
+    let dot = Circle().fill(item.color.map(starColor) ?? AglynColor.tint).frame(width: 8, height: 8)
+    Group {
+      if push {
+        PhoneMenuRow(title: item.label, action: { activate(.section(section)) }) { dot }
+      } else {
+        AglynSidebarRow(
+          item.label, selected: navigation.section == section, indent: 1, pill: pill, action: { activate(.section(section)) }
+        ) { dot }
+      }
     }
     .contextMenu {
       Button("Unstar", systemImage: "star.slash") { model.preferences?.toggleStar(item.ref) }
@@ -394,6 +434,7 @@ struct SidebarList: View {
     }
     .accessibilityIdentifier("sidebar-starred-\(item.id)")
   }
+
 
   @ViewBuilder
   private func starMenu(_ row: NativeNavRow) -> some View {
@@ -457,5 +498,65 @@ struct SidebarBrandHeader: View {
         .accessibilityIdentifier("sidebar-brand")
       Divider()
     }
+  }
+}
+
+/// A row of the phone's Menu (Figma Phone/List row): a 22-point line icon, the label at 17 points and a chevron, 52
+/// points tall across the screen.
+struct PhoneMenuRow<Leading: View>: View {
+  let title: String
+  let action: () -> Void
+  @ViewBuilder let leading: () -> Leading
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 14) {
+        leading().frame(width: 22, height: 22)
+        Text(title).font(.system(size: 17)).foregroundStyle(AglynColor.textPrimary).lineLimit(1)
+        Spacer(minLength: 8)
+        Image(systemName: "chevron.forward").font(.system(size: 13, weight: .semibold))
+          .foregroundStyle(AglynColor.textTertiary)
+          .frame(width: 16, height: 16)
+      }
+      .padding(.horizontal, 16)
+      .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.aglynRow)
+  }
+}
+
+/// A heading in the phone's Menu (Figma Phone/Section head): the label at 13 points in the secondary color, with the
+/// fold chevron before it and the hidden rows' count after it when the group folds.
+struct PhoneMenuSectionHead: View {
+  let title: String
+  var foldable = false
+  var open = true
+  var count = 0
+  var toggle: (() -> Void)? = nil
+
+  var body: some View {
+    Button {
+      toggle?()
+    } label: {
+      HStack(spacing: 6) {
+        if foldable {
+          Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
+            .frame(width: 14, height: 14)
+            .rotationEffect(.degrees(open ? 90 : 0))
+        }
+        Text(title).font(.system(size: 13))
+        Spacer(minLength: 8)
+        if foldable && !open && count > 0 { Text("\(count)").font(.system(size: 13)).monospacedDigit() }
+      }
+      .foregroundStyle(AglynColor.secondaryText)
+      .padding(EdgeInsets(top: 20, leading: 16, bottom: 6, trailing: 16))
+      .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .disabled(toggle == nil)
+    .accessibilityAddTraits(.isHeader)
+    .accessibilityValue(foldable ? (open ? "Open" : "Folded") : "")
   }
 }
