@@ -15,17 +15,15 @@
  * limitations under the License.
  */
 
+import { inboundMailDomain } from '@aglyn/aglyn/app-utils/inbound-mail-domain'
 import {
   emailAddressOf,
   htmlToPlainText,
   stripQuotedHistory,
   threadSubject,
 } from '@aglyn/aglyn/app-utils/email-text'
-import { SITE_CARE_INBOUND_LOCAL_PART } from '@aglyn/aglyn/app-utils/site-care'
-import {
-  SITE_CARE_UNKNOWN_SENDER_EMAIL_KEY,
-  type ReceivedEmail,
-} from '@aglyn/shared-util-email'
+import { SITE_CARE_INBOUND_LOCAL_PART, siteCareSupportAddress } from '@aglyn/aglyn/app-utils/site-care'
+import { getEmailConfig, type ReceivedEmail } from '@aglyn/shared-util-email'
 import {
   appendSiteCareReply,
   openSiteCareRequest,
@@ -34,39 +32,71 @@ import {
   type SiteCareDeps,
 } from './site-care-requests'
 import { findUserByEmailAcrossPools } from './auth-pools'
-import { sendSiteCareEmail } from './site-care-emails'
 
 /**
- * THE SITE CARE ADDRESS (AGL-3959): `care@<inbound mail domain>`.
+ * SITE CARE MAIL ARRIVES AT THE SUPPORT ADDRESS (AGL-3959, AGL-3997).
  *
- * An owner emails or forwards a change to the address and it becomes a Site
- * Care request on their workspace, matched by the sender's address against
- * the members of workspaces that have Site Care. A reply to any Site Care
- * email goes to `care+<requestId>@…` and joins that request's thread, when
- * the sender is a member of its workspace. A sender who matches nobody gets
- * a reply asking them to write from the address on the account; the message
- * itself is not kept.
+ * Site Care has no address of its own. An owner emails the support address
+ * they already know, and the support mailbox delivers a copy of each message
+ * to `support@<inbound mail domain>`, where the mail provider announces it.
+ * A message to either address from a member of a workspace with Site Care
+ * becomes a Site Care request on that workspace, matched by the sender's
+ * address against the members of workspaces that have Site Care. A reply to
+ * any Site Care email goes to `support+<requestId>@…` and joins that
+ * request's thread, when the sender is a member of its workspace.
+ *
+ * Everything else is acknowledged and left alone: nothing is filed and
+ * nothing is sent back, and a message to the support address stays in the
+ * support inbox as ordinary support mail. That includes the platform's own
+ * mail and anything a machine sent: an out-of-office answering a Site Care
+ * email would otherwise join the request, and one answering anything that
+ * replies to support would open one.
  */
 
-/** What a received message was addressed to, of the Site Care address. */
+/** What a received message was addressed to: a new request, or a reply on one. */
 export type SiteCareInboundTarget = { kind: 'new' } | { kind: 'reply'; requestId: string }
+
+/** The addresses the intake reads as the platform's own. */
+export interface SiteCareInboundAddresses {
+  /** The inbound mail domain: `support@` and `support+<requestId>@` it. */
+  domain: string
+  /** The operator's support address, or null when the deployment publishes none. */
+  supportEmail: string | null
+  /** The address the platform sends from, `USAGE_EMAIL_FROM`'s, or null. */
+  platformSender: string | null
+}
+
+/** This deployment's {@link SiteCareInboundAddresses}, read per call. */
+export function siteCareInboundAddresses(): SiteCareInboundAddresses {
+  return {
+    domain: inboundMailDomain(),
+    supportEmail: emailAddressOf(siteCareSupportAddress()),
+    platformSender: emailAddressOf(getEmailConfig().from),
+  }
+}
 
 /** The Site Care target among a message's recipients, or null. */
 export function siteCareInboundTarget(
   recipients: readonly string[],
-  domain: string,
+  addresses: Pick<SiteCareInboundAddresses, 'domain' | 'supportEmail'>,
 ): SiteCareInboundTarget | null {
+  const domain = addresses.domain.toLowerCase()
+  const support = emailAddressOf(addresses.supportEmail)
   let found: SiteCareInboundTarget | null = null
   for (const value of recipients) {
-    // Validated (and lowercased) for the domain, but the local part is read
-    // as written: a request id is a case-sensitive Firestore id, and
-    // lowercasing `care+AbC…` would look up a ticket that does not exist.
+    // Validated (and lowercased) for the comparison, but the local part is
+    // read as written: a request id is a case-sensitive Firestore id, and
+    // lowercasing `support+AbC…` would look up a ticket that does not exist.
     const address = emailAddressOf(value)
     if (!address) continue
+    if (support && address === support) {
+      found = found ?? { kind: 'new' }
+      continue
+    }
     const raw = String(value ?? '').trim()
     const written = (/<([^<>]+)>\s*$/.exec(raw)?.[1] ?? raw).trim()
     const at = written.lastIndexOf('@')
-    if (at <= 0 || address.slice(address.lastIndexOf('@') + 1) !== domain.toLowerCase()) continue
+    if (at <= 0 || address.slice(address.lastIndexOf('@') + 1) !== domain) continue
     const local = written.slice(0, at)
     if (local.toLowerCase() === SITE_CARE_INBOUND_LOCAL_PART) {
       found = found ?? { kind: 'new' }
@@ -83,6 +113,27 @@ export function siteCareInboundTarget(
   return found
 }
 
+/** Why a message is ignored without a lookup: the platform wrote it, or a machine did. */
+export type SiteCareMachineMail = 'ours' | 'automatic'
+
+/**
+ * Whether a message is not a person writing in: from the support address,
+ * the platform's sender or any address on the inbound mail domain, or one
+ * its headers say a machine sent. Null when it may be a person.
+ */
+export function siteCareMachineMail(
+  message: Pick<ReceivedEmail, 'from' | 'autoSubmitted'>,
+  addresses: SiteCareInboundAddresses,
+): SiteCareMachineMail | null {
+  const sender = emailAddressOf(message.from)
+  if (sender) {
+    const own = [addresses.supportEmail, addresses.platformSender].map((value) => emailAddressOf(value))
+    if (own.includes(sender)) return 'ours'
+    if (sender.slice(sender.lastIndexOf('@') + 1) === addresses.domain.toLowerCase()) return 'ours'
+  }
+  return message.autoSubmitted ? 'automatic' : null
+}
+
 export interface SiteCareSenderMatch {
   orgId: string
   org: Record<string, unknown>
@@ -96,7 +147,7 @@ export type SiteCareAccountLookup = (email: string) => Promise<{ uid: string } |
 /**
  * Every pool, not only the project's: an owner who signs in through SSO is a
  * GCIP tenant user the project pool never returns (AGL-1122), and their mail
- * would be answered as a stranger's.
+ * would be read as a stranger's.
  */
 export const findSiteCareAccount: SiteCareAccountLookup = async (email) => {
   const found = await findUserByEmailAcrossPools(email).catch(() => null)
@@ -134,37 +185,56 @@ export function siteCareMessageBody(message: Pick<ReceivedEmail, 'text' | 'html'
   return stripQuotedHistory(plain).trim()
 }
 
+/** Why a message was acknowledged and left alone. */
+export type SiteCareIgnoredReason =
+  /** No workspace with Site Care has the sender as a member: ordinary support mail. */
+  | 'not-a-member'
+  /** The platform's own address wrote it. */
+  | 'ours'
+  /** Its headers say a machine sent it. */
+  | 'automatic'
+  /** A member wrote, but said nothing. */
+  | 'empty'
+
 export type SiteCareInboundOutcome =
   | { outcome: 'opened'; requestId: string }
   | { outcome: 'replied'; requestId: string }
-  | { outcome: 'unknown-sender' }
-  | { outcome: 'empty' }
+  | { outcome: 'ignored'; reason: SiteCareIgnoredReason }
 
-/** Files one received message addressed to the Site Care address. */
+/**
+ * Files one received message addressed to the support address or to a
+ * request's reply address. Nothing is ever sent back to a sender it does
+ * not file for: a message to the support address is still in the support
+ * inbox, answered there like any other.
+ */
 export async function fileSiteCareInboundEmail(
   firestore: FirebaseFirestore.Firestore,
   input: {
     target: SiteCareInboundTarget
     message: ReceivedEmail
+    /** The platform's own addresses; this deployment's by default. */
+    addresses?: SiteCareInboundAddresses
     /** The seam a spec replaces; every auth pool by default. */
     findAccount?: SiteCareAccountLookup
   },
   deps: SiteCareDeps = {},
 ): Promise<SiteCareInboundOutcome> {
   const { message } = input
+  const machine = siteCareMachineMail(message, input.addresses ?? siteCareInboundAddresses())
+  if (machine) return { outcome: 'ignored', reason: machine }
   const body = siteCareMessageBody(message)
   const sender = emailAddressOf(message.from)
-  if (input.target.kind === 'reply') {
+  const findAccount = input.findAccount ?? findSiteCareAccount
+  const match = sender ? await findSiteCareWorkspaceForSender(firestore, findAccount, sender) : null
+  if (input.target.kind === 'reply' && match) {
     const ticket = await firestore.collection('supportTickets').doc(input.target.requestId).get()
     const orgId = String(ticket.get('orgId') ?? '')
-    const match = sender ? await findSiteCareWorkspaceForSender(firestore, input.findAccount ?? findSiteCareAccount, sender) : null
     // Only a member of the request's own workspace may add to it.
-    const member =
-      match && orgId
-        ? (await firestore.collection('orgs').doc(orgId).collection('members').doc(match.uid).get()).exists
-        : false
-    if (ticket.exists && member && match) {
-      if (!body) return { outcome: 'empty' }
+    const member = orgId
+      ? (await firestore.collection('orgs').doc(orgId).collection('members').doc(match.uid).get()).exists
+      : false
+    if (ticket.exists && member) {
+      if (!body) return { outcome: 'ignored', reason: 'empty' }
       await appendSiteCareReply(
         firestore,
         {
@@ -179,26 +249,8 @@ export async function fileSiteCareInboundEmail(
     }
     // A reply that cannot join its request is read as a new one below.
   }
-  const match = sender ? await findSiteCareWorkspaceForSender(firestore, input.findAccount ?? findSiteCareAccount, sender) : null
-  if (!match) {
-    if (sender) {
-      await (deps.email ?? sendSiteCareEmail)({
-        key: SITE_CARE_UNKNOWN_SENDER_EMAIL_KEY,
-        to: sender,
-        org: null,
-        requestId: null,
-        merge: { 'sender.email': sender },
-        fallback: {
-          subject: 'We could not match your email to an account',
-          text:
-            `We got your message from ${sender}, but no workspace with Site Care has that address as a member. ` +
-            'Please send it again from the email address you sign in with.',
-        },
-      })
-    }
-    return { outcome: 'unknown-sender' }
-  }
-  if (!body && !threadSubject(message.subject)) return { outcome: 'empty' }
+  if (!match) return { outcome: 'ignored', reason: 'not-a-member' }
+  if (!body && !threadSubject(message.subject)) return { outcome: 'ignored', reason: 'empty' }
   const opened = await openSiteCareRequest(
     firestore,
     {

@@ -20,6 +20,7 @@ import {
   SITE_CARE_INCLUDED_BLOCK_MINUTES,
   SITE_CARE_INCLUDED_MINUTES,
 } from './plan-entitlements'
+import { operatorIdentity } from './operator-identity'
 import { describeHours, type OwnerApprovalRecord } from './owner-approval-record'
 
 /**
@@ -72,8 +73,42 @@ export const SITE_CARE_MAX_REQUEST_MINUTES = 60 * 40
  */
 export const SITE_CARE_EXTRA_TIME_TAX_CODE = 'txcd_10103001'
 
-/** The local part of the inbound address: `care@<inbound mail domain>`. */
-export const SITE_CARE_INBOUND_LOCAL_PART = 'care'
+/**
+ * WHERE A CHANGE IS EMAILED (AGL-3997): the support address. Site Care has no
+ * address of its own. An owner writes to the support address they already
+ * know, and a message to it from a member of a workspace with Site Care files
+ * itself as a request; every other message is ordinary support mail. The
+ * support mailbox also delivers each message to `support@<inbound mail
+ * domain>`, where the mail provider announces it, and every Site Care email
+ * replies to `support+<requestId>@<inbound mail domain>`, so an answer joins
+ * its own request.
+ */
+export const SITE_CARE_INBOUND_LOCAL_PART = 'support'
+
+/**
+ * The operator's support address, from the operator identity: what an owner
+ * is told to email a change to, and what the intake reads as one. `null` on
+ * a deployment that publishes no support address, where Request a change on
+ * a site's dashboard is the only way in.
+ */
+export function siteCareSupportAddress(): string | null {
+  return operatorIdentity().supportEmail
+}
+
+/**
+ * The Reply-To of a Site Care email: `support+<requestId>@<domain>` for an
+ * email about one request, so the answer joins it; the support address for
+ * one about no single request (a statement, a project), so the answer reaches
+ * the support inbox like any other message to it.
+ */
+export function siteCareReplyAddress(
+  requestId: string | null,
+  domain: string,
+  supportEmail: string | null = siteCareSupportAddress(),
+): string {
+  if (requestId) return `${SITE_CARE_INBOUND_LOCAL_PART}+${requestId}@${domain}`
+  return supportEmail ?? `${SITE_CARE_INBOUND_LOCAL_PART}@${domain}`
+}
 
 /** The longest title and message a request keeps. */
 export const SITE_CARE_SUBJECT_MAX = 150
