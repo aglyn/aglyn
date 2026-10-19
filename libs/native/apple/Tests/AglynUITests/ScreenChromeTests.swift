@@ -51,5 +51,20 @@
       XCTAssertEqual(got.primary?.id, "first")
       XCTAssertEqual(got.entries.map(\.id), ["a", "b"])
     }
+
+    func testEditorActionsPutSaveFirstAndCancelBeside() {
+      let got = chrome(Text("Editor").aglynEditorActions(id: "save", save: "Save", cancel: {}) {}.aglynScreenTitle("Edit"))
+      XCTAssertEqual(got.primary?.id, "save")
+      XCTAssertEqual(got.entries.map(\.id), ["save-cancel"])
+      XCTAssertEqual(got.title, "Edit")
+    }
+
+    func testABesideTheListEditorLeavesThePrimaryToTheList() {
+      let got = chrome(
+        Text("Service").aglynEditorActions(id: "service-save", save: "Save", primary: false) {}
+          .aglynPrimaryAction(id: "add-service", "Add service", systemImage: "plus") {})
+      XCTAssertEqual(got.primary?.id, "add-service")
+      XCTAssertEqual(got.entries.map(\.id), ["service-save"])
+    }
   }
 #endif
