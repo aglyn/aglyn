@@ -20,6 +20,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -90,12 +91,15 @@ fun AglynShell(
     val state = auth
     val authScreen = state is AuthState.SignedOut ||
       (state is AuthState.SignedIn && (services.authFlow.landing || (!state.user.emailVerified && impersonation == null)))
+    // One signed-out screen, moved rather than rebuilt when the account appears mid sign-up: rebuilding it cancelled the
+    // sign-up's own coroutine, so its acceptance, names and held workspace could go unwritten.
+    val signedOutScreen = remember(services, autoSignIn) { movableContentOf { SignedOutScreen(services, autoSignIn) } }
     LaunchHost(services, ready = state !is AuthState.Restoring, backdrop = authScreen, playIntro = playIntro, onRevealed = onIntroRevealed) { reveal ->
       when (state) {
         AuthState.Restoring -> Unit
-        AuthState.SignedOut -> AddAccountFrame(services) { SignedOutScreen(services, autoSignIn) }
+        AuthState.SignedOut -> AddAccountFrame(services) { signedOutScreen() }
         // A sign-up that is still landing keeps its screen up: the account exists, its records are being written.
-        is AuthState.SignedIn if services.authFlow.landing -> SignedOutScreen(services, autoSignIn)
+        is AuthState.SignedIn if services.authFlow.landing -> AddAccountFrame(services) { signedOutScreen() }
         // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
         is AuthState.SignedIn if !state.user.emailVerified && impersonation == null -> VerifyEmailScreen(services, state.user.email)
         // Keyed by the account: switching accounts starts the shell over, so nothing of one account's shows in the other's.
