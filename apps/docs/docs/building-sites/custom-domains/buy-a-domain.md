@@ -2,7 +2,6 @@
 sidebar_position: 1.5
 title: Buy a domain
 description: Search for a domain on your site's Custom Domain page, buy it, and your site goes live at it automatically — no DNS records, renewals handled for you.
-unlisted: true
 ---
 
 # Buy a domain
