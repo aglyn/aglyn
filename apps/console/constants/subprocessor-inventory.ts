@@ -950,6 +950,13 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
     dataReceived:
       'Nothing from us. A staff member who clicks it authenticates to Stripe themselves.',
   },
+  'invoice.stripe.com': {
+    disposition: 'no-request',
+    reason:
+      'The pay link in a Site Care project invoice email (AGL-3970). Its value is the `hosted_invoice_url` Stripe returns for the invoice, and the catalog shows a sample of it. Rendered as a link.',
+    dataReceived:
+      'Nothing from us. The owner who clicks it opens the invoice on Stripe\'s own page.',
+  },
   'linear.app': {
     disposition: 'no-request',
     reason:
