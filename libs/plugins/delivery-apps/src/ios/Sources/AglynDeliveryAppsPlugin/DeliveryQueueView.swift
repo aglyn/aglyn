@@ -17,7 +17,7 @@ struct DeliveryQueueView: View {
   }
 
   var body: some View {
-    Group {
+    VStack(spacing: 0) {
       if let queue = model.queue, queue.connected {
         card(queue)
       }

@@ -70,7 +70,7 @@ struct OutreachGlanceWidget: View {
   @State private var active = LiveQueryList(pageSize: 50, map: sequenceRow)
 
   var body: some View {
-    Group {
+    VStack(spacing: 0) {
       if gate.ready, gate.open(orgID: context.orgID) {
         MetricCard(
           "Sequences", systemImage: "arrow.triangle.branch", tone: .info, value: active.ready ? "\(active.rows.count)\(active.hasMore ? "+" : "")" : nil,
