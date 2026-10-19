@@ -1190,7 +1190,7 @@ class ScreenSpecTest {
     )
     val withAi = """{"org":{"plan":"pro","subscription":{"status":"active"},"seatAddons":{"aiAddon":1}},"billing":{"subscription":{}},"collab":{"sites":[{"hostId":"a"},{"hostId":"b"}]},"seats":{"managerSeats":7},"datasets":{"count":1}}"""
     val text = switchPlan.confirmText(scope("""{"id":"free","label":"Free"}""", """{"downgrade":true,"periodEnd":"2026-11-01T00:00:00Z","droppedAddons":["aiAddon"]}""", withAi))!!
-    assertTrue("Your Aglyn AI add-on is not sold on Free, so it is removed" in text)
+    assertTrue("Your Aglyn AI tier is not sold on Free, so it is removed" in text)
     assertTrue("over the Free plan on: 2 sites (Free includes 1)" in text)
     assertTrue("7 team members (Free includes 1)" in text)
     assertTrue("Nothing is deleted and these keep working" in text)
