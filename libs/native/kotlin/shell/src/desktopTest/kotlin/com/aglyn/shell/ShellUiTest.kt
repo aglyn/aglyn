@@ -186,7 +186,8 @@ class ShellUiTest {
       calls.take(3),
     )
     waitUntil(timeoutMillis = 3_000) { "/api/auth/send-verification" in calls }
-    assertEquals(true, merges.any { it.startsWith("users/u2") && "pendingSignUpWorkspace" in it })
+    // The pending workspace is written beside the verification send, on its own coroutine: wait for it rather than race it.
+    waitUntil(timeoutMillis = 3_000) { merges.any { it.startsWith("users/u2") && "pendingSignUpWorkspace" in it } }
   }
 
   @Test
