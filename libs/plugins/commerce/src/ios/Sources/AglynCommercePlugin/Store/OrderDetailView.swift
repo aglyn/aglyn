@@ -162,6 +162,11 @@ struct OrderDetailView: View {
             }
           }
         }
+        if orderRefundState(order) != .none {
+          // The refund's state in words, as the console says it under the lines (AGL-2454).
+          Text(orderRefundSummary(order)).font(AglynFont.caption).foregroundStyle(AglynColor.error)
+            .accessibilityIdentifier("order-refund-state")
+        }
       } header: {
         if !wide { Text("Items") }
       }
@@ -184,20 +189,23 @@ struct OrderDetailView: View {
         AglynAmountRow("Total", amount: row.total, emphasized: true)
           // Figma 13:483: the total sits under a hairline in the plain column.
           .overlay(alignment: .top) { if wide { AglynHairline() } }
-        if orderRefundState(order) != .none {
-          AglynAmountRow("Refunded", amount: orderRefundSummary(order), tone: .warning)
-        }
-        // A merchant's refund and a lost chargeback are different doors (AGL-1787), said apart.
-        let reversal = splitOrderReversal(order)
-        if reversal.chargedBackCents > 0 {
-          AglynAmountRow("Charged back", amount: formatOrderMoney(reversal.chargedBackCents), tone: .warning)
-        }
       } header: {
         // In the plain column the totals follow the items directly, under the total's hairline (Figma 13:483).
         if !wide { Text("Totals") }
       } footer: {
-        // How the tax on this order was computed (AGL-2451); absent means not recorded, never "no tax".
-        Text(describeOrderTaxMode(order.taxMode?.rawValue))
+        // As the console's order says it: how the tax on this order was computed (AGL-2451; absent means not
+        // recorded, never "no tax"), then what was refunded and what a lost chargeback took, two doors said apart
+        // (AGL-1787), in the error color.
+        let reversal = splitOrderReversal(order)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(describeOrderTaxMode(order.taxMode?.rawValue))
+          if reversal.refundedCents > 0 {
+            Text("Refunded \(formatOrderMoney(reversal.refundedCents))").foregroundStyle(AglynColor.error)
+          }
+          if reversal.chargedBackCents > 0 {
+            Text("Charged back \(formatOrderMoney(reversal.chargedBackCents))").foregroundStyle(AglynColor.error)
+          }
+        }
       }
 
       let shipments = order.fulfillments ?? []
@@ -231,20 +239,8 @@ struct OrderDetailView: View {
         }
       }
 
-      if let payments = order.payments, !payments.isEmpty {
-        AglynFoldedSection("Payment and refunds", count: payments.count, identifier: "order-fold-payment") {
-          ForEach(payments, id: \.id) { payment in
-            AglynRow(
-              paymentLabel(payment), subtitle: payment.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized,
-              systemImage: payment.method == .cash ? "banknote" : "creditcard"
-            ) {
-              Text(formatOrderMoney(Int(payment.amountCents))).monospacedDigit()
-            }
-          }
-        }
-      }
-
-      // Figma 13:483's folded rows: Payment and refunds, Customer details, then Timeline and notes.
+      // Figma 13:483's folded rows: Customer details, then Timeline and notes. The console's order has no payments
+      // section; its refunds are captions under the totals (above).
       AglynFoldedSection("Customer details", identifier: "order-fold-customer") {
         LabeledContent("Name", value: row.customer)
         if let email = order.customerEmail, !email.isEmpty { LabeledContent("Email", value: email) }
@@ -497,12 +493,6 @@ struct OrderDetailView: View {
     case .openInstead: if let url = URL(string: link) { openURL(url) }
     case .failed(let message): problem = message
     }
-  }
-
-  private func paymentLabel(_ payment: OrderPayment) -> String {
-    let method = payment.method.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
-    if let brand = payment.cardBrand, let last4 = payment.last4 { return "\(brand.capitalized) •••• \(last4)" }
-    return method
   }
 
   private func addressText(_ address: OrderAddress) -> String? {

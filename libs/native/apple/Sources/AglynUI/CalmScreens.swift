@@ -212,7 +212,7 @@ public struct AglynRecordMoreMenu: View {
   }
 }
 
-/// A section that stays folded until opened (Payment and refunds, Customer details, Timeline and notes): its heading,
+/// A section that stays folded until opened (Customer details, Shipments, Timeline and notes): its heading,
 /// with a count when there is one, as a row that opens it.
 public struct AglynFoldedSection<Content: View>: View {
   @Environment(\.aglynPlainRecord) private var plain
