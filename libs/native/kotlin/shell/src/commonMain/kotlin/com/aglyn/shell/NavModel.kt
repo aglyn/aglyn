@@ -154,8 +154,16 @@ fun navGroups(
   }
 }
 
-/** The row that holds [key] (its own key or one of its sections'), if any. */
-fun List<NavGroupItem>.rowFor(key: String): NavItem? = asSequence().flatMap { it.rows }.firstOrNull { key in it.keys }
+/**
+ * The row that holds [key] (its own key or one of its sections'), if any. A place opened with params of its own (an order
+ * picked from Recents or a link, `screen:commerce.orders?order=o-1042`) still sits under the row that opens its screen.
+ */
+fun List<NavGroupItem>.rowFor(key: String): NavItem? {
+  val rows = asSequence().flatMap { it.rows }
+  rows.firstOrNull { key in it.keys }?.let { return it }
+  val screen = NavKeys.parse(key)?.first ?: return null
+  return rows.firstOrNull { it.screen == screen } ?: rows.firstOrNull { row -> row.sections.any { it.screen == screen } }
+}
 
 /** The group holding [key]. */
 fun List<NavGroupItem>.groupFor(key: String): NavGroupItem? = firstOrNull { group -> group.rows.any { key in it.keys } }

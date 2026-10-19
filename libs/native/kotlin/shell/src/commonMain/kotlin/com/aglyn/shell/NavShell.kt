@@ -518,10 +518,10 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
             val crumbsSlot = remember { com.aglyn.ui.PageCrumbsSlot() }
             if (route !is Route.Web) {
               // Where the screen sits, as Figma heads every page: the scope, the group, the destination, then a pushed screen.
-              if (row != null || route != null) {
-                val group = allGroups.firstOrNull { g -> g.rows.any { navigator.top in it.keys } }?.label
+              val steps = if (row == null && route == null) null else {
+                val group = allGroups.firstOrNull { g -> row != null && row in g.rows }?.label
                 val place = row?.label
-                val steps = buildList {
+                buildList {
                   add(Crumb(workspace.site?.name ?: workspace.org?.name ?: "") { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) })
                   group?.let { add(Crumb(it, null)) }
                   place?.let { add(Crumb(it) { navigator.select(row?.key ?: navigator.top) }) }
@@ -529,10 +529,13 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
                   row?.sections?.firstOrNull { it.key == navigator.top && it.key != row.key }?.takeIf { row.rowId in SELF_SECTIONED_ROWS }?.let { add(Crumb(it.label, null)) }
                   if (route != null && title.isNotBlank() && title != place) add(Crumb(title, null))
                 }.filter { it.label.isNotBlank() }
-                // A list beside its detail draws them atop its detail column instead (it claims the slot).
-                androidx.compose.runtime.SideEffect { crumbsSlot.crumbs = { Breadcrumbs(steps, star = starSlot?.takeIf { !it.claimed }) } }
-                if (!crumbsSlot.claimed) Breadcrumbs(steps, star = starSlot?.takeIf { !it.claimed })
               }
+              // A list beside its detail draws them atop its detail column instead (it claims the slot). Every page sets
+              // the slot, so a page with no trail of its own never shows the one before it (or another tab's).
+              androidx.compose.runtime.SideEffect {
+                crumbsSlot.crumbs = if (steps == null) NoCrumbs else ({ Breadcrumbs(steps, star = starSlot?.takeIf { !it.claimed }) })
+              }
+              if (steps != null && !crumbsSlot.claimed) Breadcrumbs(steps, star = starSlot?.takeIf { !it.claimed })
               banner()
               sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
             }
@@ -598,7 +601,7 @@ private fun WorkspaceBrandTheme(services: ShellServices, dark: Boolean, accent: 
 /** Which settings mode a screen belongs to, so opening a setting from search or Recents shows its list. */
 private fun settingsModeFor(screen: String, params: Map<String, String>?, lists: Map<NativeNavListId, List<NavGroupItem>>): NativeNavListId? {
   val key = NavKeys.of(screen, params)
-  return lists.entries.firstOrNull { (_, groups) -> groups.rowFor(key) != null }?.key
+  return lists.entries.firstOrNull { (_, groups) -> groups.any { g -> g.rows.any { key in it.keys } } }?.key
 }
 
 private fun settingsLists(enabled: Collection<String>, orgEnabled: Collection<String>, hostAdmin: Boolean, services: ShellServices) = mapOf(
@@ -623,7 +626,7 @@ private fun placeRef(navigator: ShellNavigator, route: Route?, row: NavItem?, ti
       val (screen, params) = NavKeys.parse(navigator.top) ?: return null
       com.aglyn.contracts.AccountItemRef(
         hostId = hostId.takeIf { row?.listId != NativeNavListId.WORKSPACE && row?.listId != NativeNavListId.WORKSPACE_SETTINGS },
-        id = row?.rowId ?: navigator.top, kind = "screen", label = title, orgId = orgId, params = params.ifEmpty { null }, screen = screen,
+        id = row?.rowId?.takeIf { navigator.top in row.keys } ?: navigator.top, kind = "screen", label = title, orgId = orgId, params = params.ifEmpty { null }, screen = screen,
       )
     }
     else -> null
@@ -915,6 +918,9 @@ internal fun TitleBarButton(label: String, icon: String, tag: String, enabled: B
 }
 
 /** Opens one of the person's recent items: set by the shell, which knows how to reach its workspace and site. */
+/** What a page with no trail of its own puts in the breadcrumbs slot. */
+private val NoCrumbs: @Composable () -> Unit = {}
+
 internal val LocalOpenRecent = androidx.compose.runtime.staticCompositionLocalOf<((com.aglyn.contracts.AccountItemRef) -> Unit)?> { null }
 
 /** ☆ in the title bar: stars the screen or record on screen (synced on the account); filled while it is starred. */
