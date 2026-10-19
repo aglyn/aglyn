@@ -1439,6 +1439,24 @@ describe('a guided site start publishes what it built (AGL-3596)', () => {
     expect(publish).not.toHaveBeenCalled()
   })
 
+  /*
+   * The beta.270 Sugar Hollow start (AGL-3988): its Galleries page failed its
+   * checks, and the pages it published still linked it, to a 404.
+   */
+  it('hands the publish the pages it planned and did not build, and the site’s order (AGL-3988)', async () => {
+    const publish = jest.fn(async () => SITE_PUBLISH)
+    const refused = { reason: 'doctrine' as const, message: 'This could not be built within the building rules.', findings: [] }
+    const step = stepWith(
+      { page: fakeRunner([], () => ({ outputs: [output('screen', 'drftPage03')], review: refused })) },
+      { publish },
+    )
+    await step(context(lastPass({ autoConfirm: true })))
+    expect(publish).toHaveBeenCalledTimes(1)
+    const [, input] = publish.mock.calls[0] as unknown as [unknown, { unbuiltScreenIds: string[]; siteOrder: string[] }]
+    expect(input.unbuiltScreenIds).toEqual(['drftPage03'])
+    expect(input.siteOrder).toEqual(confirmedPlan().screens.map((screen) => screen.id))
+  })
+
   it('hands the publish the language its plan says the brief is in, and none where it says none (AGL-3750)', async () => {
     const publish = jest.fn(async () => SITE_PUBLISH)
     const step = stepWith(

@@ -40,6 +40,7 @@ import {
   aiLayoutWithBlogEntry,
   aiLayoutWithNavigation,
   aiMergeSitePublish,
+  aiPageWithoutLinksTo,
   aiPublishGuidedSite,
   aiRestoreGuidedBlogEntry,
   aiSiteUnwrittenBlogHrefs,
@@ -102,6 +103,12 @@ function collectionRef(path: string): Record<string, unknown> {
 let failCommit = false
 const firestore = {
   collection: (name: string) => collectionRef(name),
+  // A draft's tree changed in place, as `updateAiDraftNodes` asks (AGL-3988).
+  runTransaction: async (run: (tx: unknown) => Promise<unknown>) =>
+    run({
+      get: async (ref: { path: string }) => snapshot(ref.path),
+      update: (ref: { path: string }, data: Record<string, unknown>) => apply(ref.path, data, 'update'),
+    }),
   batch: () => {
     const writes: Array<() => void> = []
     return {
@@ -576,5 +583,101 @@ describe('the site publishes in the language its brief was written in (AGL-3750)
     docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), locales: ['en', 'fr'], defaultLocale: 'en' })
     await publishIn('es')
     expect(docs.get('hosts/host-1')).toMatchObject({ locales: ['en', 'fr'], defaultLocale: 'en' })
+  })
+})
+
+/*
+ * The beta.270 Sugar Hollow Photography start (AGL-3988): its Galleries page
+ * was refused by its checks, and the published home page still linked it
+ * from "See the galleries", from the "View all galleries" button under its
+ * gallery band and from the header, all to a 404; its 404 page listed the
+ * pages alphabetically.
+ */
+describe('a page the start did not build is linked from nowhere (AGL-3988)', () => {
+  const LAYOUT = {
+    root: { $id: 'root', componentId: 'div', nodes: ['h_bar'] },
+    h_bar: { $id: 'h_bar', componentId: 'muiAppBar', parentId: 'root', nodes: ['h_nav'] },
+    h_nav: { $id: 'h_nav', componentId: 'muiStack', parentId: 'h_bar', nodes: ['h_home', 'h_galleries', 'h_book'] },
+    h_home: { $id: 'h_home', componentId: 'muiScreenLink', parentId: 'h_nav', props: { children: 'Home', screenId: 'drft-home' }, nodes: [] },
+    h_galleries: { $id: 'h_galleries', componentId: 'muiScreenLink', parentId: 'h_nav', props: { children: 'Galleries', screenId: 'drft-galleries' }, nodes: [] },
+    h_book: { $id: 'h_book', componentId: 'muiScreenLink', parentId: 'h_nav', props: { children: 'Book Now', screenId: 'drft-book' }, nodes: [] },
+  }
+  const HOME = {
+    root: { $id: 'root', componentId: 'div', nodes: ['sec-0', 'sec-1'] },
+    'sec-0': { $id: 'sec-0', componentId: 'section', parentId: 'root', nodes: ['hero_title', 'hero_buttons'] },
+    hero_title: { $id: 'hero_title', componentId: 'muiTypography', parentId: 'sec-0', props: { children: 'Sugar Hollow Photography' }, nodes: [] },
+    hero_buttons: { $id: 'hero_buttons', componentId: 'muiStack', parentId: 'sec-0', nodes: ['hero_book', 'hero_galleries'] },
+    hero_book: { $id: 'hero_book', componentId: 'muiScreenLink', parentId: 'hero_buttons', props: { children: 'Book a session', screenId: 'drft-book' }, nodes: [] },
+    hero_galleries: { $id: 'hero_galleries', componentId: 'muiScreenLink', parentId: 'hero_buttons', props: { children: 'See the galleries', screenId: 'drft-galleries' }, nodes: [] },
+    'sec-1': { $id: 'sec-1', componentId: 'section', parentId: 'root', nodes: ['band_title', 'band_cover', 'band_more'] },
+    band_title: { $id: 'band_title', componentId: 'muiTypography', parentId: 'sec-1', props: { children: 'Galleries by subject' }, nodes: [] },
+    band_cover: { $id: 'band_cover', componentId: 'image', parentId: 'sec-1', props: { src: 'media:h/1', alt: 'A couple', screenId: 'drft-galleries' }, nodes: [] },
+    band_more: { $id: 'band_more', componentId: 'muiStack', parentId: 'sec-1', nodes: ['band_all'] },
+    band_all: { $id: 'band_all', componentId: 'muiScreenLink', parentId: 'band_more', props: { children: 'View all galleries', screenId: 'drft-galleries' }, nodes: [] },
+  }
+  const stored = (nodes: unknown) => Buffer.from(encodeStoredNodes(nodes as never) as Uint8Array)
+
+  function seedSugarHollow() {
+    seedSite()
+    docs.set('hosts/host-1/layouts/lay-site/versions/v-lay', { layoutId: 'lay-site', nodes: stored(LAYOUT) })
+    docs.set('hosts/host-1/screens/drft-home/versions/v-home', { layoutId: 'lay-site', aiJobId: 'job-1', nodes: stored(HOME) })
+    // The refused page's draft is on the site, never live.
+    docs.set('hosts/host-1/screens/drft-galleries', { displayName: 'Galleries', slug: 'galleries', versionId: 'v-gal' })
+    // The owner already placed Book Now in Pages.
+    docs.set('hosts/host-1/screens/drft-book', { ...docs.get('hosts/host-1/screens/drft-book'), order: 7 })
+  }
+  const publishSugarHollow = () =>
+    aiPublishGuidedSite(
+      firestore,
+      { job: JOB, outputs: OUTPUTS, now: NOW, unbuiltScreenIds: ['drft-galleries'], siteOrder: ['drft-home', 'drft-galleries', 'drft-book'] },
+      { sendSitePublished: sendSitePublished as never, dropCache },
+    )
+  const nodesAt = (path: string) => decodeStoredNodes<Record<string, { componentId?: string; props?: Record<string, unknown>; nodes?: string[] }>>(docs.get(path)?.['nodes'] as never) ?? {}
+
+  it('takes every link to it out of the published pages, and the frames left holding none', async () => {
+    seedSugarHollow()
+    const result = await publishSugarHollow()
+    expect(result.published.map((page) => page.id)).toEqual(['drft-home', 'drft-book'])
+    const home = nodesAt('hosts/host-1/screens/drft-home/versions/v-home')
+    const links = Object.values(home).filter((node) => node.props?.['screenId'] === 'drft-galleries')
+    expect(links).toEqual([])
+    // "See the galleries" goes; "Book a session" beside it stays.
+    expect(home['hero_buttons']?.nodes).toEqual(['hero_book'])
+    // "View all galleries" was all its row held: the row goes with it, never the band.
+    expect(home['band_more']).toBeUndefined()
+    expect(home['sec-1']?.nodes).toEqual(['band_title', 'band_cover'])
+    // The cover keeps its place and its photo, and opens nothing.
+    expect(home['band_cover']?.props).toEqual({ src: 'media:h/1', alt: 'A couple' })
+  })
+
+  it('takes it out of the header every page shares', async () => {
+    seedSugarHollow()
+    await publishSugarHollow()
+    const layout = docs.get('hosts/host-1/layouts/lay-site') as Record<string, unknown>
+    const live = nodesAt(`hosts/host-1/layouts/lay-site/versions/${String(layout['versionId'])}`)
+    const header = live['h_nav']?.nodes ?? []
+    expect(header.map((id) => live[id]?.props?.['children'])).toEqual(['Home', 'Book Now'])
+  })
+
+  it('places each page in Pages in the site’s order, where the owner has not, for the 404 page’s links', async () => {
+    seedSugarHollow()
+    await publishSugarHollow()
+    expect(docs.get('hosts/host-1/screens/drft-home')).toMatchObject({ order: 0 })
+    expect(docs.get('hosts/host-1/screens/drft-book')).toMatchObject({ order: 7 })
+  })
+
+  it('changes nothing on a page that links none', () => {
+    expect(aiPageWithoutLinksTo(HOME as never, ['drft-unknown'])).toBeNull()
+    expect(aiPageWithoutLinksTo(HOME as never, [])).toBeNull()
+  })
+
+  it('takes out a link to a page this publish leaves a draft, too', async () => {
+    seedSugarHollow()
+    // Book Now's address is taken by another live page, so it stays a draft.
+    docs.set('hosts/host-1', { ...docs.get('hosts/host-1'), screens: { 'scr-starter': '/', 'scr-other': 'book-now' } })
+    const result = await publishSugarHollow()
+    expect(result.drafts.map((page) => page.id)).toEqual(['drft-book'])
+    const home = nodesAt('hosts/host-1/screens/drft-home/versions/v-home')
+    expect(Object.values(home).some((node) => node.props?.['screenId'] === 'drft-book')).toBe(false)
   })
 })

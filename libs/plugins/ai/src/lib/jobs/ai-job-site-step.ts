@@ -1280,6 +1280,10 @@ export function createAiJobSiteStep(
         ...(postsRow ? { blogUnwritten: !aiBuildItemDelivered(postsRow) || !postsRow.outputs?.length } : {}),
         // The store's pages the header and footer link and the start did not write (AGL-3676).
         ...(rows.get('store') ? { unwrittenHrefs: unwrittenStoreHrefs(pages) } : {}),
+        // The pages it planned and did not build, which nothing it publishes links (AGL-3988).
+        unbuiltScreenIds: unbuiltPages(),
+        // And the order the site lists its pages in, which Pages and the 404 page follow.
+        siteOrder: plan.screens.flatMap((screen) => (screen.id ? [screen.id] : [])),
         ...(wasLive ? { retry: true } : {}),
         // The site publishes in the language its brief was written in (AGL-3750).
         ...(plan.language ? { language: plan.language } : {}),
@@ -1371,6 +1375,21 @@ export function createAiJobSiteStep(
       )
       return [...(job.outputs ?? []).filter((output) => output.resource === 'screen' && ids.has(output.id)), ...extra]
     }
+    /**
+     * The pages the start planned and has not built (AGL-3988): a page whose
+     * part failed or was refused. The beta.270 Sugar Hollow Galleries page
+     * failed its checks, and its home page, header and footer linked it
+     * anyway, to a 404.
+     */
+    const unbuiltPages = () =>
+      units.flatMap((unit) =>
+        unit.kind === 'page' &&
+        !templates.has(unit.slot) &&
+        unit.screen?.id &&
+        !aiBuildItemDelivered(rows.get(unit.slot) ?? { status: 'pending' })
+          ? [unit.screen.id]
+          : [],
+      )
 
     if (!next) return finish({ ...aiUnspentOutcome(model), ...init }, builtPages())
     const unit = units.find((one) => one.slot === next.slot) as AiSiteUnit
