@@ -77,13 +77,28 @@ internal class ShellTabs(root: ShellNavigator) {
 
   val active: ShellTab get() = tabs.firstOrNull { it.id == activeId } ?: tabs.first()
 
-  /** Leaves the tab on screen where it stands and brings [tab] (and its workspace and site) on screen. */
+  /**
+   * Leaves the tab on screen where it stands and brings [tab] on screen with its own workspace and site (or its whole
+   * workspace): each tab keeps its scope, so navigating in one never moves another.
+   */
   fun activate(tab: ShellTab, store: WorkspaceStore, currentOrg: String?, currentHost: String?) {
     if (tab.id == activeId) return
     active.orgId = currentOrg
     active.hostId = currentHost
     activeId = tab.id
-    tab.orgId?.let { org -> store.select(org, tab.hostId) }
+    tab.orgId?.let { org -> expecting = org to tab.hostId; store.selectScope(org, tab.hostId) }
+  }
+
+  /** The scope a tab switch asked for, until the store has it on screen (so the old scope is never tracked onto it). */
+  private var expecting: Pair<String, String?>? = null
+
+  /** The tab on screen follows its scope as it changes (a workspace or site picked inside it). */
+  fun track(currentOrg: String?, currentHost: String?) {
+    if (currentOrg == null) return
+    // The asked-for workspace on screen ends the wait (its site may have resolved to another, which then counts).
+    expecting?.let { want -> if (want.first == currentOrg) expecting = null else return }
+    active.orgId = currentOrg
+    active.hostId = currentHost
   }
 
   /** A new tab at [key] (Home by default), in the workspace and site on screen. */
@@ -107,7 +122,7 @@ internal class ShellTabs(root: ShellNavigator) {
     if (tab.id == activeId) {
       val next = tabs.getOrNull(index) ?: tabs.getOrNull(index - 1) ?: tabs.first()
       activeId = next.id
-      next.orgId?.let { org -> store.select(org, next.hostId) }
+      next.orgId?.let { org -> expecting = org to next.hostId; store.selectScope(org, next.hostId) }
     }
   }
 

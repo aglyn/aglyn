@@ -219,6 +219,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     )
   }
 
+  // The tab on screen keeps the scope it is in, so switching back to it restores exactly that.
+  LaunchedEffect(workspace.org?.id, workspace.site?.id) { tabs.track(workspace.org?.id, workspace.site?.id) }
   fun newTab(key: String = ShellNavigator.HOME) {
     chrome.closeMenus()
     tabs.open(services.workspace, workspace.org?.id, workspace.site?.id, key)

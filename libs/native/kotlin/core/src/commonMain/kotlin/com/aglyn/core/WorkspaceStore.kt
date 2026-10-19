@@ -256,6 +256,11 @@ class WorkspaceStore(
     picked.value = WorkspacePick(orgId, hostId)
   }
 
+  /** Puts exactly this scope on screen: [hostId]'s site, or the whole workspace when it is null (a window tab's own). */
+  fun selectScope(orgId: String, hostId: String?) {
+    picked.value = WorkspacePick(orgId, hostId, whole = hostId == null)
+  }
+
   private fun restore(uid: String): WorkspacePick =
     prefs.get(storageKey(uid))?.let { runCatching { Json.decodeFromString<WorkspacePick>(it) }.getOrNull() }
       ?: WorkspacePick()

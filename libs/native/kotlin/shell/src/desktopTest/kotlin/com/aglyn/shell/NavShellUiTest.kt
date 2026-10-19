@@ -189,6 +189,24 @@ class NavShellUiTest {
   }
 
   @Test
+  fun aTabKeepsItsOwnScopeWhileAnotherMoves() = runComposeUiTest {
+    val navigator = ShellNavigator()
+    val services = testServices(userDoc = emptyMap())
+    setContent { AglynShell(services, navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { services.workspace.state.value.site?.id == "h1" }
+    runOnIdle { navigator.command = ShellCommand.NEW_TAB }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-1") > 0 }
+    // The new tab goes to the whole workspace; the first tab stays in its site.
+    runOnIdle { services.workspace.selectWholeWorkspace() }
+    waitUntil(timeoutMillis = 3_000) { services.workspace.state.value.site == null }
+    onNodeWithTag("tab-0").performClick()
+    waitUntil(timeoutMillis = 3_000) { services.workspace.state.value.site?.id == "h1" }
+    onNodeWithTag("tab-1").performClick()
+    waitUntil(timeoutMillis = 3_000) { services.workspace.state.value.site == null && services.workspace.state.value.org?.id == "o1" }
+  }
+
+  @Test
   fun theTitleBarHasHelpAndTheShortcutsList() = runComposeUiTest {
     val navigator = ShellNavigator()
     setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
