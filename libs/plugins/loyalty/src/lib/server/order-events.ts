@@ -16,6 +16,7 @@
  */
 
 import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type { OrderEventOrder, OrderEventRefund } from '@aglyn/plugins-commerce/contracts'
 import { LOYALTY_CREDIT_PROVIDER_ID } from '../constants/bundle-common'
 import { cumulativeTarget, earnedPoints, normalizeLoyaltyEmail } from '../model/loyalty-math'
 import type { StoredLoyaltyMember } from '../model/loyalty-member'
@@ -32,9 +33,9 @@ import { resolveLoyaltyOrgId } from './site-context'
 
 /**
  * Points for sales, and points back for refunds (AGL-3640), from the seller's
- * order events by name — `order.paid`, `order.refunded`, `order.cancelled` —
- * which commerce raises for online and register sales alike. Loyalty never
- * imports commerce; it restates the fields of the event's `order` it reads.
+ * order events — `order.paid`, `order.refunded`, `order.cancelled` —
+ * which commerce raises for online and register sales alike. The events'
+ * shapes come from commerce's contracts (AGL-3980).
  *
  * ONCE PER ORDER. An event is delivered at least once. The `earn` row for an
  * order is keyed by the order and read inside the transaction that writes
@@ -54,27 +55,24 @@ import { resolveLoyaltyOrgId } from './site-context'
  * test-mode sale earns nothing at all.
  */
 
-/** The order fields loyalty reads, restated from the seller's event. */
-export interface LoyaltyEventOrder {
-  id: string
-  /** Which Stripe environment the sale was paid in, when the seller recorded it. */
-  livemode?: boolean
-  status: string | null
-  channel: string
-  currency?: string
-  customerEmail: string | null
-  customerName: string | null
-  totals: { itemsCents: number; discountCents: number; totalCents: number | null }
-  refundedCents: number
-  credits?: Array<{ providerId: string; reference: string; amountCents: number; appliedAs: 'discount' | 'tender' }>
-}
+/** The fields of the event's `order` loyalty reads. */
+export type LoyaltyEventOrder = Pick<
+  OrderEventOrder,
+  | 'id'
+  | 'livemode'
+  | 'status'
+  | 'channel'
+  | 'customerEmail'
+  | 'customerName'
+  | 'totals'
+  | 'refundedCents'
+  | 'credits'
+>
 
+/** `order.paid` and `order.cancelled`, and `order.refunded` with its refund. */
 export interface LoyaltyOrderPayload {
   order: LoyaltyEventOrder
-}
-
-export interface LoyaltyRefundPayload extends LoyaltyOrderPayload {
-  refund?: { full?: boolean }
+  refund?: Pick<OrderEventRefund, 'full'>
 }
 
 const cents = (value: unknown) => Math.max(0, Math.trunc(Number(value) || 0))
@@ -229,7 +227,7 @@ export async function earnForOrder(envelope: PluginDomainEventEnvelope<LoyaltyOr
  * by tender, except when the sale is canceled outright.
  */
 export async function reverseForOrder(
-  envelope: PluginDomainEventEnvelope<LoyaltyRefundPayload>,
+  envelope: PluginDomainEventEnvelope<LoyaltyOrderPayload>,
   kind: 'refunded' | 'cancelled',
 ): Promise<void> {
   const order = envelope.payload?.order

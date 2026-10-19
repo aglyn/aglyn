@@ -17,6 +17,14 @@
 
 import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import {
+  ORDER_CANCELLED_EVENT,
+  ORDER_REFUNDED_EVENT,
+  type OrderEventOrder,
+  type OrderEventPayload,
+  type OrderFulfilledEventPayload,
+  type OrderRefundedEventPayload,
+} from '@aglyn/plugins-commerce/contracts'
+import {
   PACKAGE_PROTECTION_KEY,
   POST_PURCHASE_COLLECTIONS,
   POST_PURCHASE_PLUGIN_ID,
@@ -35,8 +43,8 @@ import { resolvePostPurchaseSite } from './site-context'
 /**
  * WHAT EACH SERVICE IS TOLD ABOUT AN ORDER (AGL-3635), from the seller's own
  * order events — `order.paid`, `order.fulfilled`, `order.refunded`,
- * `order.cancelled` — subscribed by name. The seller is never imported and
- * its documents are never read: everything below comes off the event's
+ * `order.cancelled` — whose shape comes from commerce's contracts (AGL-3980).
+ * Its documents are never read: everything below comes off the event's
  * `order`, which is the public API's shape.
  *
  * Delivery is at least once and each subscriber is retried alone, so every
@@ -53,43 +61,6 @@ import { resolvePostPurchaseSite } from './site-context'
  * recorded on the order for the merchant and not retried; anything else
  * throws, and the event bus retries with backoff.
  */
-
-/** The order as the seller's events carry it: only the fields read here. */
-export interface PostPurchaseEventOrder {
-  id: string
-  number: number | null
-  status: string | null
-  currency: string
-  customerEmail: string | null
-  customerName: string | null
-  lineItems?: unknown
-  shippingAddress?: Record<string, unknown> | null
-  fulfillments?: Array<{
-    id: string | null
-    status?: string
-    carrier: string | null
-    trackingNumber: string | null
-    lines?: Array<{ lineItemId: number; quantity: number }>
-    at?: string | null
-  }>
-  extras?: Array<{ id: string; pluginId: string; key: string; label: string; amountCents: number; quoteRef: string | null }>
-  created?: unknown
-}
-
-export interface OrderEventPayload {
-  order: PostPurchaseEventOrder
-}
-export interface OrderFulfilledPayload extends OrderEventPayload {
-  fulfillment: {
-    id: string
-    lines: Array<{ lineItemId: number; quantity: number }>
-    carrier: string | null
-    trackingNumber: string | null
-  }
-}
-export interface OrderRefundedPayload extends OrderEventPayload {
-  refund: { full: boolean }
-}
 
 /** What this plugin keeps about one order. */
 export interface StoredPostPurchaseOrder {
@@ -137,6 +108,7 @@ async function contextFor(hostId: string): Promise<Context | null> {
   return { orgId: site.orgId, hostId, config: configured.config, stored: await readStoredSettings(site.orgId, hostId) }
 }
 
+/** A line as this plugin reads it: commerce's contract leaves `lineItems` untyped. */
 interface Line {
   id: string
   name: string
@@ -146,7 +118,7 @@ interface Line {
   physical: boolean
 }
 
-function linesOf(order: PostPurchaseEventOrder): Line[] {
+function linesOf(order: OrderEventOrder): Line[] {
   const raw = Array.isArray(order.lineItems) ? (order.lineItems as Array<Record<string, unknown>>) : []
   return raw.map((line, index) => ({
     id: String(line?.['productId'] ?? `line-${index}`),
@@ -158,7 +130,7 @@ function linesOf(order: PostPurchaseEventOrder): Line[] {
   }))
 }
 
-function shipToOf(order: PostPurchaseEventOrder): NarvarOrder['shipTo'] {
+function shipToOf(order: OrderEventOrder): NarvarOrder['shipTo'] {
   const address = order.shippingAddress
   if (!address || typeof address !== 'object') return null
   const pick = (key: string) => (typeof address[key] === 'string' ? (address[key] as string) : undefined)
@@ -172,16 +144,16 @@ function shipToOf(order: PostPurchaseEventOrder): NarvarOrder['shipTo'] {
   }
 }
 
-function orderNumberOf(order: PostPurchaseEventOrder): string {
+function orderNumberOf(order: OrderEventOrder): string {
   return order.number ? String(order.number) : order.id
 }
 
-function createdAtOf(order: PostPurchaseEventOrder, fallback: number): number {
+function createdAtOf(order: OrderEventOrder, fallback: number): number {
   return Date.parse(String(order.created ?? '')) || fallback
 }
 
 /** The protection line this plugin offered, when the buyer took it. */
-export function protectionBought(order: PostPurchaseEventOrder) {
+export function protectionBought(order: OrderEventOrder) {
   return (order.extras ?? []).find(
     (extra) => extra?.pluginId === POST_PURCHASE_PLUGIN_ID && extra?.key === PACKAGE_PROTECTION_KEY && extra.amountCents > 0,
   )
@@ -265,7 +237,7 @@ export async function openProtectionPolicy(envelope: PluginDomainEventEnvelope<O
 }
 
 /** `order.fulfilled` → tell Route which parcel the covered goods left in. */
-export async function tellRouteShipment(envelope: PluginDomainEventEnvelope<OrderFulfilledPayload>): Promise<void> {
+export async function tellRouteShipment(envelope: PluginDomainEventEnvelope<OrderFulfilledEventPayload>): Promise<void> {
   const order = envelope.payload?.order
   const fulfillment = envelope.payload?.fulfillment
   if (!order || !fulfillment?.trackingNumber || !protectionBought(order)) return
@@ -302,11 +274,11 @@ export async function tellRouteShipment(envelope: PluginDomainEventEnvelope<Orde
 
 /** `order.refunded` (whole) and `order.cancelled` → end the policy. */
 export async function endProtectionPolicy(
-  envelope: PluginDomainEventEnvelope<OrderEventPayload & Partial<OrderRefundedPayload>>,
+  envelope: PluginDomainEventEnvelope<OrderEventPayload & Partial<OrderRefundedEventPayload>>,
 ): Promise<void> {
   const order = envelope.payload?.order
   if (!order || !protectionBought(order)) return
-  if (envelope.event === 'order.refunded' && envelope.payload?.refund?.full !== true) return
+  if (envelope.event === ORDER_REFUNDED_EVENT.id && envelope.payload?.refund?.full !== true) return
   const context = await contextFor(envelope.hostId)
   if (!context) return
   const ref = orderStateRef(context.orgId, context.hostId, order.id)
@@ -338,7 +310,7 @@ export async function endProtectionPolicy(
 }
 
 /** `order.fulfilled` → AfterShip follows the parcel. */
-export async function followParcel(envelope: PluginDomainEventEnvelope<OrderFulfilledPayload>): Promise<void> {
+export async function followParcel(envelope: PluginDomainEventEnvelope<OrderFulfilledEventPayload>): Promise<void> {
   const order = envelope.payload?.order
   const fulfillment = envelope.payload?.fulfillment
   const trackingNumber = String(fulfillment?.trackingNumber ?? '').replace(/\s+/g, '')
@@ -377,8 +349,8 @@ export async function followParcel(envelope: PluginDomainEventEnvelope<OrderFulf
   )
 }
 
-function narvarStatus(event: string, order: PostPurchaseEventOrder): NarvarOrder['status'] {
-  if (event === 'order.cancelled' || order.status === 'cancelled') return 'CANCELLED'
+function narvarStatus(event: string, order: OrderEventOrder): NarvarOrder['status'] {
+  if (event === ORDER_CANCELLED_EVENT.id || order.status === 'cancelled') return 'CANCELLED'
   if (order.status === 'delivered') return 'DELIVERED'
   if (order.status === 'partially_fulfilled') return 'PARTIAL'
   if (order.status === 'fulfilled') return 'SHIPPED'

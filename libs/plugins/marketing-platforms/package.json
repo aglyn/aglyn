@@ -36,8 +36,14 @@
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
+    "@aglyn/plugins-commerce": "1.0.0-beta.270",
     "@mui/material": "^9.3.1",
     "react": "^19.2.8"
+  },
+  "peerDependenciesMeta": {
+    "@aglyn/plugins-commerce": {
+      "optional": true
+    }
   },
   "sideEffects": false,
   "description": "Marketing platforms for Aglyn sites: two-way contact and consent sync with Mailchimp, Klaviyo and Omnisend, order events for their flows, and Attentive behind a partner key."

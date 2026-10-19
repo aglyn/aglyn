@@ -15,20 +15,35 @@
  * limitations under the License.
  */
 
-import { subscribePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import { type PluginDomainEvent, subscribePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type { OrderEventPayload } from '@aglyn/plugins-commerce/contracts'
+import {
+  ORDER_CANCELLED_EVENT,
+  ORDER_FULFILLED_EVENT,
+  ORDER_PAID_EVENT,
+  ORDER_REFUNDED_EVENT,
+  RETURN_RECEIVED_EVENT,
+} from '@aglyn/plugins-commerce/contracts'
 import { MARKETPLACES_PLUGIN_ID } from './constants'
 
 /**
  * The plugin's SERVER declarations (AGL-3638), loaded by both apps' servers:
- * commerce's order events, by the names commerce raises them under. The
- * outbox drains in the tenant, so the subscribers live here, and they only
- * QUEUE (`server/intake.ts`): no grant, no marketplace call.
+ * commerce's order events, by the tokens in commerce's contracts
+ * (AGL-3980). The outbox drains in the tenant, so the subscribers live here,
+ * and they only QUEUE (`server/intake.ts`): no grant, no marketplace call.
  *
  * Light at boot: every body is imported when it is first called.
  */
 
 /** Events after which the shelf has moved: every marketplace listing of the site is brought in line. */
-export const MARKETPLACES_STOCK_EVENTS = ['order.paid', 'order.cancelled', 'order.refunded', 'return.received'] as const
+const STOCK_EVENTS: ReadonlyArray<PluginDomainEvent<OrderEventPayload>> = [
+  ORDER_PAID_EVENT,
+  ORDER_CANCELLED_EVENT,
+  ORDER_REFUNDED_EVENT,
+  RETURN_RECEIVED_EVENT,
+]
+
+export const MARKETPLACES_STOCK_EVENTS: readonly string[] = STOCK_EVENTS.map((event) => event.id)
 
 async function intake() {
   const [module, { defaultIntakeDeps }] = await Promise.all([import('./server/intake'), import('./server/intake-deps')])
@@ -37,21 +52,21 @@ async function intake() {
 
 export function registerMarketplacesServerDeclarations(): void {
   const owner = { pluginId: MARKETPLACES_PLUGIN_ID }
-  for (const event of MARKETPLACES_STOCK_EVENTS) {
+  for (const event of STOCK_EVENTS) {
     subscribePluginDomainEvent(
       event,
       async (envelope) => {
         const { module, deps } = await intake()
-        await module.onStockMoved(deps, envelope as never)
+        await module.onStockMoved(deps, envelope)
       },
       owner,
     )
   }
   subscribePluginDomainEvent(
-    'order.fulfilled',
+    ORDER_FULFILLED_EVENT,
     async (envelope) => {
       const { module, deps } = await intake()
-      await module.onOrderFulfilled(deps, envelope as never)
+      await module.onOrderFulfilled(deps, envelope)
     },
     owner,
   )

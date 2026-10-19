@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { CommerceOrderEventName } from '@aglyn/plugins-commerce/contracts'
 import type { MarketingProviderId, MarketingProviderList } from '../model/connections'
 import type { ProviderHttp } from './http'
 
@@ -81,13 +82,13 @@ export interface ProviderConsentPage {
   more: boolean
 }
 
-/** A commerce fact, in the words every adapter maps to its own event names. */
+/**
+ * A commerce fact, in the words every adapter maps to its own event names:
+ * commerce's own event names, from its contracts (AGL-3980).
+ */
 export type MarketingEventName =
   | 'checkout.started'
-  | 'order.paid'
-  | 'order.fulfilled'
-  | 'order.refunded'
-  | 'order.cancelled'
+  | Extract<CommerceOrderEventName, 'order.paid' | 'order.fulfilled' | 'order.refunded' | 'order.cancelled'>
 
 export interface MarketingEventItem {
   productId: string | null

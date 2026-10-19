@@ -8756,6 +8756,69 @@
             "description": "Sent once, after an account first publishes pages of its own: what to do next, a custom domain and a contact form.",
             "deliveredBy": "resend",
             "editable": true
+          },
+          {
+            "key": "domain-purchased",
+            "name": "Domain purchased",
+            "description": "Sent to a workspace's owners and admins when a domain bought for one of its sites is registered.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "domain-refunded",
+            "name": "Domain purchase refunded",
+            "description": "Sent when a domain could not be registered after it was paid for, and the charge was refunded.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "domain-verify-registrant",
+            "name": "Confirm the domain’s registrant email",
+            "description": "Reminds a workspace's owners that ICANN's registrant email check for a bought domain is still outstanding.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "domain-renewal-notice",
+            "name": "Domain renewal notice",
+            "description": "Sent about 45 days before a bought domain renews, naming the price and the date it will be charged.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "domain-renewed",
+            "name": "Domain renewed",
+            "description": "Confirms a bought domain renewed for another year.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "domain-renewal-failed",
+            "name": "Domain renewal payment failed",
+            "description": "Sent when the charge for a domain renewal fails, with the next try and the date the domain expires.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "domain-expiring",
+            "name": "Domain expiring",
+            "description": "Sent before a bought domain expires because it will not renew: auto-renew is off, or its renewal could not be charged.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "domain-expired",
+            "name": "Domain expired",
+            "description": "Sent when a bought domain has expired.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "domain-transfer-code",
+            "name": "Domain transfer code requested",
+            "description": "Tells a workspace’s owners that someone asked for the code that moves a bought domain to another registrar.",
+            "deliveredBy": "resend",
+            "editable": true
           }
         ],
         "tokens": {
@@ -13919,6 +13982,444 @@
               "name": "preferencesUrl",
               "description": "The product email switch in account settings",
               "sample": "https://app.aglyn.com/manage/user/emails"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "domain-purchased": [
+            {
+              "name": "domain.name",
+              "description": "The domain name",
+              "sample": "testbakery.com"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the domain belongs to",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "org.name",
+              "description": "The workspace",
+              "sample": "Test Org"
+            },
+            {
+              "name": "domain.firstYear",
+              "description": "What the first year cost",
+              "sample": "$15.99"
+            },
+            {
+              "name": "domain.renewalPrice",
+              "description": "The yearly renewal price",
+              "sample": "$15.99"
+            },
+            {
+              "name": "domain.renewsOn",
+              "description": "The date the domain renews",
+              "sample": "Oct 19, 2027"
+            },
+            {
+              "name": "domain.registrant",
+              "description": "Who the domain is registered to",
+              "sample": "Alex Test"
+            },
+            {
+              "name": "domain.registrantEmail",
+              "description": "The registrant's email, which the registrar verifies",
+              "sample": "alex@testbakery.com"
+            },
+            {
+              "name": "domain.manageUrl",
+              "description": "The site's Custom Domain page",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "domain-refunded": [
+            {
+              "name": "domain.name",
+              "description": "The domain name",
+              "sample": "testbakery.com"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the domain belongs to",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "org.name",
+              "description": "The workspace",
+              "sample": "Test Org"
+            },
+            {
+              "name": "domain.failure",
+              "description": "Why it did not happen, in a sentence",
+              "sample": "Someone else registered it a moment before your order reached the registrar."
+            },
+            {
+              "name": "domain.refund",
+              "description": "What was refunded, or that nothing was charged, in a sentence",
+              "sample": "We refunded $15.99 to the card it was charged to. A refund usually reaches the card within 5 to 10 business days."
+            },
+            {
+              "name": "domain.manageUrl",
+              "description": "The site's Custom Domain page",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "domain-verify-registrant": [
+            {
+              "name": "domain.name",
+              "description": "The domain name",
+              "sample": "testbakery.com"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the domain belongs to",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "org.name",
+              "description": "The workspace",
+              "sample": "Test Org"
+            },
+            {
+              "name": "domain.registrantEmail",
+              "description": "The registrant's email, which the registrar verifies",
+              "sample": "alex@testbakery.com"
+            },
+            {
+              "name": "domain.verifyBy",
+              "description": "The date the registrant email must be confirmed by",
+              "sample": "Nov 2, 2026"
+            },
+            {
+              "name": "domain.manageUrl",
+              "description": "The site's Custom Domain page",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "domain-renewal-notice": [
+            {
+              "name": "domain.name",
+              "description": "The domain name",
+              "sample": "testbakery.com"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the domain belongs to",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "org.name",
+              "description": "The workspace",
+              "sample": "Test Org"
+            },
+            {
+              "name": "domain.renewalPrice",
+              "description": "The yearly renewal price",
+              "sample": "$15.99"
+            },
+            {
+              "name": "domain.renewsOn",
+              "description": "The date the domain renews",
+              "sample": "Oct 19, 2027"
+            },
+            {
+              "name": "domain.chargeOn",
+              "description": "About when the renewal is charged",
+              "sample": "Sep 19, 2027"
+            },
+            {
+              "name": "domain.manageUrl",
+              "description": "The site's Custom Domain page",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "domain-renewed": [
+            {
+              "name": "domain.name",
+              "description": "The domain name",
+              "sample": "testbakery.com"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the domain belongs to",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "org.name",
+              "description": "The workspace",
+              "sample": "Test Org"
+            },
+            {
+              "name": "domain.amount",
+              "description": "An amount charged",
+              "sample": "$15.99"
+            },
+            {
+              "name": "domain.expiresOn",
+              "description": "The date the domain expires",
+              "sample": "Oct 19, 2027"
+            },
+            {
+              "name": "domain.manageUrl",
+              "description": "The site's Custom Domain page",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "domain-renewal-failed": [
+            {
+              "name": "domain.name",
+              "description": "The domain name",
+              "sample": "testbakery.com"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the domain belongs to",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "org.name",
+              "description": "The workspace",
+              "sample": "Test Org"
+            },
+            {
+              "name": "domain.renewalPrice",
+              "description": "The yearly renewal price",
+              "sample": "$15.99"
+            },
+            {
+              "name": "domain.nextAttempt",
+              "description": "When the renewal charge will be tried again",
+              "sample": "Sep 22, 2027"
+            },
+            {
+              "name": "domain.expiresOn",
+              "description": "The date the domain expires",
+              "sample": "Oct 19, 2027"
+            },
+            {
+              "name": "billingUrl",
+              "description": "The workspace's Billing page",
+              "sample": "https://app.aglyn.com/test-org/billing"
+            },
+            {
+              "name": "domain.manageUrl",
+              "description": "The site's Custom Domain page",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "domain-expiring": [
+            {
+              "name": "domain.name",
+              "description": "The domain name",
+              "sample": "testbakery.com"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the domain belongs to",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "org.name",
+              "description": "The workspace",
+              "sample": "Test Org"
+            },
+            {
+              "name": "domain.expiresOn",
+              "description": "The date the domain expires",
+              "sample": "Oct 19, 2027"
+            },
+            {
+              "name": "domain.expiryReason",
+              "description": "Why the domain will not renew, in a sentence",
+              "sample": "Auto-renew is turned off for it."
+            },
+            {
+              "name": "domain.manageUrl",
+              "description": "The site's Custom Domain page",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "domain-expired": [
+            {
+              "name": "domain.name",
+              "description": "The domain name",
+              "sample": "testbakery.com"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the domain belongs to",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "org.name",
+              "description": "The workspace",
+              "sample": "Test Org"
+            },
+            {
+              "name": "domain.manageUrl",
+              "description": "The site's Custom Domain page",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "domain-transfer-code": [
+            {
+              "name": "domain.name",
+              "description": "The domain name",
+              "sample": "testbakery.com"
+            },
+            {
+              "name": "site.name",
+              "description": "The site the domain belongs to",
+              "sample": "Test Bakery"
+            },
+            {
+              "name": "org.name",
+              "description": "The workspace",
+              "sample": "Test Org"
+            },
+            {
+              "name": "domain.requestedBy",
+              "description": "Who asked for the transfer code",
+              "sample": "alex@testbakery.com"
+            },
+            {
+              "name": "domain.manageUrl",
+              "description": "The site's Custom Domain page",
+              "sample": "https://app.aglyn.com/test-org/hosts/test-bakery/admin/domain"
             },
             {
               "name": "brand.productName",

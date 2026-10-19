@@ -1058,4 +1058,23 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
       },
     ],
   },
+  {
+    pluginId: 'domains',
+    subprocessors: [],
+    hosts: [
+      {
+        host: "www.icann.org",
+        disposition: "no-request",
+        reason: "ICANN’s registrant benefits and responsibilities page, linked from the purchase dialog (`ICANN_REGISTRANT_RIGHTS_URL` in `libs/plugins/domains/src/lib/components/purchase-dialog.component.tsx`) because a registrar must point a buyer at it. The buyer’s own browser opens it; no server of ours requests it.",
+        dataReceived: "Nothing from our servers. It is a plain link with no parameters.",
+      },
+    ],
+    uses: [
+      {
+        host: "api.vercel.com",
+        reason: "The domains plugin’s registrar driver (`libs/plugins/domains/src/lib/server/registrar-vercel.ts`): searching names and prices, registering a name a customer buys, renewing it, its auto-renew setting, ICANN’s registrant verification status, and the transfer code a customer asks for. Reached only while `DOMAINS_REGISTRAR` is `vercel`.",
+        dataReceived: "The names a customer searches for; and, for a name they buy, the registrant’s first and last name, email, phone number, postal address and company name, which the registrar holds as the name’s ICANN registrant contact and redacts from public WHOIS. No card or bank details: the customer pays the platform, and the platform pays the registrar.",
+      },
+    ],
+  },
 ]

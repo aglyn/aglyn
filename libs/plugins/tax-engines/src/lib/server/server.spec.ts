@@ -23,6 +23,7 @@ import {
   quotePluginTaxEngine,
 } from '@aglyn/aglyn/plugin-manager/plugin-tax-profile'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import type { OrderEventOrder } from '@aglyn/plugins-commerce/contracts'
 import { randomBytes } from 'node:crypto'
 import { TAX_ENGINES_API_ROUTES } from '../constants/api-routes'
 import { registerTaxEnginesServerDeclarations } from '../declarations.server'
@@ -308,15 +309,29 @@ describe('the quote commerce asks for', () => {
 
 /* ---------------------------------------------------------- order events */
 
-const ORDER = {
+const QUOTED: NonNullable<OrderEventOrder['taxEngine']> = {
+  provider: 'avalara',
+  providerLabel: 'Avalara AvaTax',
+  status: 'quoted',
+  reason: null,
+  sandbox: true,
+}
+
+const ORDER: OrderEventOrder = {
   id: 'order-1',
+  object: 'order',
+  number: 1001,
+  status: 'paid',
   channel: 'online',
   currency: 'usd',
   customerEmail: 'buyer@example.com',
+  customerName: 'Buyer',
   lineItems: [{ productId: 'prod-mug', name: 'Mug', quantity: 2, unitAmountCents: 2_000 }],
-  totals: { itemsCents: 4_000, shippingCents: 500, taxCents: 330, discountCents: 0, totalCents: 4_830 },
+  totals: { itemsCents: 4_000, shippingCents: 500, taxCents: 330, discountCents: 0, totalCents: 4_830, feeCents: 0 },
+  refundedCents: 0,
+  taxMode: 'stripe-automatic',
   shippingAddress: { line1: '9 Elm', city: 'Dallas', state: 'TX', postalCode: '75201', country: 'US' },
-  taxEngine: { provider: 'avalara', status: 'quoted' },
+  taxEngine: QUOTED,
 }
 
 function envelope<P>(payload: P, overrides: Record<string, unknown> = {}) {
@@ -361,7 +376,7 @@ describe('recording a paid order', () => {
 
   it('records a fallback sale too, and says it fell back', async () => {
     connect()
-    await onOrderPaid(envelope({ order: { ...ORDER, taxEngine: { provider: 'avalara', status: 'fallback', reason: 'timeout' } } }))
+    await onOrderPaid(envelope({ order: { ...ORDER, taxEngine: { ...QUOTED, status: 'fallback', reason: 'timeout' } } }))
     expect(record()).toMatchObject({ status: 'committed', fallbackReason: 'timeout' })
   })
 
@@ -412,7 +427,7 @@ describe('reversing a recorded order', () => {
 
   it('reverses a partial refund by its share, once, and a full refund after it by what is left', async () => {
     await onOrderRefunded(
-      envelope({ order: ORDER, refund: { id: 're_1', amountCents: 1_200, full: false } }, { id: 'evt-2', event: 'order.refunded' }),
+      envelope({ order: ORDER, refund: { id: 're_1', amountCents: 1_200, lineItemIds: [], full: false } }, { id: 'evt-2', event: 'order.refunded' }),
     )
     const first = calls.find((call) => call.path.endsWith('/refund'))
     expect(first?.body).toMatchObject({
@@ -422,11 +437,11 @@ describe('reversing a recorded order', () => {
     })
     calls = []
     await onOrderRefunded(
-      envelope({ order: ORDER, refund: { id: 're_1', amountCents: 1_200, full: false } }, { id: 'evt-2', event: 'order.refunded', attempt: 2 }),
+      envelope({ order: ORDER, refund: { id: 're_1', amountCents: 1_200, lineItemIds: [], full: false } }, { id: 'evt-2', event: 'order.refunded', attempt: 2 }),
     )
     expect(calls).toHaveLength(0)
     await onOrderRefunded(
-      envelope({ order: ORDER, refund: { id: 're_2', amountCents: 3_630, full: true } }, { id: 'evt-3', event: 'order.refunded' }),
+      envelope({ order: ORDER, refund: { id: 're_2', amountCents: 3_630, lineItemIds: [], full: true } }, { id: 'evt-3', event: 'order.refunded' }),
     )
     const rest = calls.find((call) => call.path.endsWith('/refund'))
     expect(rest?.body.refundType).toBe('Percentage')
@@ -439,7 +454,7 @@ describe('reversing a recorded order', () => {
 
   it('reverses a register return with no Stripe refund id under the event’s own id', async () => {
     await onOrderRefunded(
-      envelope({ order: ORDER, refund: { id: null, amountCents: 4_830, full: true } }, { id: 'evt-cash', event: 'order.refunded' }),
+      envelope({ order: ORDER, refund: { id: null, amountCents: 4_830, lineItemIds: [], full: true } }, { id: 'evt-cash', event: 'order.refunded' }),
     )
     expect(calls.find((call) => call.path.endsWith('/refund'))?.body.refundType).toBe('Full')
     expect(Object.keys(record()?.refunds ?? {})).toEqual(['evt-cash'])
@@ -448,7 +463,7 @@ describe('reversing a recorded order', () => {
   it('waits for a sale still on its way before reversing it', async () => {
     db.docs.set(`taxEngineTransactions/${transactionId(HOST, 'order-1')}`, { ...record(), status: 'pending' })
     await expect(
-      onOrderRefunded(envelope({ order: ORDER, refund: { id: 're_1', amountCents: 100 } }, { event: 'order.refunded' })),
+      onOrderRefunded(envelope({ order: ORDER, refund: { id: 're_1', amountCents: 100, lineItemIds: [], full: false } }, { event: 'order.refunded' })),
     ).rejects.toThrow('not yet recorded')
   })
 
