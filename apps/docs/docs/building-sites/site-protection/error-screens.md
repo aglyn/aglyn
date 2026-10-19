@@ -43,7 +43,8 @@ footer — so a visitor who lands on a missing address can always get somewhere.
 What it *cannot* do is show the header, navigation and footer **you designed**: those
 live in the page you built them on, and on a 404 that page is precisely the one that
 wasn't found. Its page links come from your published pages, and only the public ones —
-an unlisted, password-protected or members-only page never appears there.
+an unlisted, password-protected or members-only page never appears there. They are listed
+in the order the pages have in **Pages**, then by name.
 
 Assigning a designed page is still the better answer for any site that cares how this
 moment looks. The fallback is the floor beneath it.

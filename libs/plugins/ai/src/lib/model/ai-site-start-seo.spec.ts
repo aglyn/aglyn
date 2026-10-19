@@ -139,6 +139,20 @@ describe('a title is never cut mid-phrase (AGL-3596)', () => {
     ).toBe('Hillside Dog Grooming — Neighborhood dog groomer in Austin')
   })
 
+  it('never cuts a subject at the "and" that joins its parts (AGL-3988)', () => {
+    // The beta.270 Sugar Hollow listing: "Sugar Hollow Photography — Wedding".
+    const proposal = aiSiteSeoProposalForInputs({
+      businessType: 'a wedding and family photographer in the Blue Ridge Mountains who books sessions and elopements',
+      audience: 'couples planning a Blue Ridge wedding or elopement, and families who want relaxed outdoor portraits',
+      businessName: 'Sugar Hollow Photography',
+      city: '',
+    })
+    expect(proposal?.values['seo.title']).toBe('Sugar Hollow Photography — Wedding and family photographer')
+    expect(aiSiteSeoTitle({ name: 'Copper Kettle', subject: 'Bakery and cafe in Hillside that takes orders' })).toBe(
+      'Copper Kettle — Bakery and cafe in Hillside',
+    )
+  })
+
   it('drops the place, then the subject, before it ever cuts', () => {
     expect(aiSiteSeoTitle({ name: 'Hillside Dog Grooming and Spa', subject: 'Neighborhood dog groomer in Austin, Texas' })).toBe(
       'Hillside Dog Grooming and Spa — Neighborhood dog groomer',

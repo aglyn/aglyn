@@ -668,6 +668,41 @@ export function aiLayoutEmptyItemSections(
 }
 
 /**
+ * Rule 1's repeats said as the layout language fixes them (AGL-3988). Its
+ * own words ask for "one reusable component with props", which a page
+ * answer cannot make: the beta.270 Sugar Hollow Galleries page was re-asked
+ * with them and node ids it never wrote, broke the rule the same way, and
+ * was refused. Each repeat now names the sections it sits in and how the
+ * language says like blocks once: one group, an item each.
+ */
+export function aiLayoutRepeatsSaidInTheLanguage(
+  violations: readonly AiDoctrineViolation[],
+  nodes: Readonly<Record<string, { nodes?: string[] }>>,
+  sectionIds: readonly string[],
+  sections: ReadonlyArray<{ name: string }>,
+): AiDoctrineViolation[] {
+  const parentOf = new Map<string, string>()
+  for (const [id, node] of Object.entries(nodes)) for (const child of node?.nodes ?? []) parentOf.set(child, id)
+  const sectionOf = (id: string): number => {
+    for (let at: string | undefined = id; at !== undefined; at = parentOf.get(at)) {
+      const index = sectionIds.indexOf(at)
+      if (index >= 0) return index
+    }
+    return -1
+  }
+  return violations.map((violation) => {
+    if (violation.code !== 'repeated-subtree') return violation
+    const where = [...new Set((violation.nodeIds ?? []).map(sectionOf).filter((index) => index >= 0))]
+      .sort((a, b) => a - b)
+      .map((index) => `section ${index + 1} ("${sections[index]?.name ?? ''}")`)
+    return {
+      ...violation,
+      detail: `${where.length ? `In ${where.join(' and ')}: ` : ''}write like blocks once, as one cards, steps or list block with an item for each (its title, its words and where it goes), never the same blocks repeated in several columns or groups.`,
+    }
+  })
+}
+
+/**
  * The check a language page answer is held to: each planned section read,
  * the page compiled, stored and checked whole. Sections that read are kept
  * across the re-ask, so the second answer is asked only for what was missing,
@@ -828,7 +863,7 @@ export function aiLayoutPageCheck(
     // (rule 14, AGL-3596), the same check a layout is held to; a phone number
     // or an email the compiler already writes as its gap.
     const violations: AiDoctrineViolation[] = [
-      ...report.violations,
+      ...aiLayoutRepeatsSaidInTheLanguage(report.violations, nodes as unknown as Record<string, { nodes?: string[] }>, input.sectionIds, input.screen.sections),
       ...copy.violations,
       ...aiLayoutEmptyItemSections(input.screen, items, compiled.quotesOnly, emptied),
       ...(last ? [] : aiLayoutPromisedCopyViolations(input.screen, promised)),

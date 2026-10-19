@@ -97,13 +97,16 @@ import {
   type AiPageSection,
 } from './ai-job-page-sections'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
-import { aiResolveLayoutPictures } from '../layout-language/ai-layout-pictures'
+import { aiResolveLayoutPictures, type AiLayoutPicturePhoto } from '../layout-language/ai-layout-pictures'
 import { aiLayoutSitePhotoSource } from './ai-layout-owner-photos'
 import {
   AI_STOCK_PHOTO_AVOID_INPUT,
+  AI_STOCK_PHOTO_JOB_PHOTOS_INPUT,
   AI_STOCK_PHOTO_PAGES_INPUT,
   aiLayoutStockPhotoSource,
+  aiStockJobPhotosOf,
   aiStockPhotoWordsOf,
+  aiStockPlacedPhotos,
   aiStockPlacedSrcs,
 } from './ai-layout-stock-photos'
 import { AI_PLAN_ITEMS_MIN, aiPlanCopiedPageViolations } from './ai-job-plan-conformance'
@@ -467,6 +470,22 @@ export async function aiJobPagesPlacedPhotos(
   input: { hostId: string; job: Pick<AiJob, 'inputs'>; draftId: string },
   readNodes: typeof readAiDraftNodes = readAiDraftNodes,
 ): Promise<string[]> {
+  return (await aiJobPlacedPhotos(firestore, input, readNodes)).avoid
+}
+
+/**
+ * What the job already placed on this site (AGL-3660, AGL-3988), read once:
+ * the library photos a page does not place again (`avoid`,
+ * {@link aiJobPagesPlacedPhotos}), and the same photos with their size and
+ * words (`photos`), which a slot the library failed takes before any
+ * starter: the other pages' pictures and the datasets' records' photos the
+ * job names (`AI_STOCK_PHOTO_JOB_PHOTOS_INPUT`). Empty on any failure.
+ */
+export async function aiJobPlacedPhotos(
+  firestore: Parameters<typeof readAiDraftNodes>[0],
+  input: { hostId: string; job: Pick<AiJob, 'inputs'>; draftId: string },
+  readNodes: typeof readAiDraftNodes = readAiDraftNodes,
+): Promise<{ avoid: string[]; photos: AiLayoutPicturePhoto[] }> {
   const listed = input.job.inputs?.[AI_STOCK_PHOTO_PAGES_INPUT]
   const ids = Array.isArray(listed)
     ? [...new Set(listed.filter((id): id is string => typeof id === 'string' && !!id && id !== input.draftId))]
@@ -476,11 +495,18 @@ export async function aiJobPagesPlacedPhotos(
   const shown = Array.isArray(elsewhere)
     ? elsewhere.filter((src): src is string => typeof src === 'string' && src.startsWith('media:'))
     : []
-  if (!ids.length) return [...new Set(shown)]
-  const read = await Promise.all(
-    ids.map((id) => readNodes(firestore, { kind: 'screen', hostId: input.hostId, id }).catch(() => null)),
-  )
-  return [...new Set([...shown, ...read.flatMap((stored) => aiStockPlacedSrcs(stored?.nodes))])]
+  // The same records' photos with their size and words (AGL-3988).
+  const records = aiStockJobPhotosOf(input.job.inputs?.[AI_STOCK_PHOTO_JOB_PHOTOS_INPUT])
+  const read = ids.length
+    ? await Promise.all(ids.map((id) => readNodes(firestore, { kind: 'screen', hostId: input.hostId, id }).catch(() => null)))
+    : []
+  const pages = read.flatMap((stored) => aiStockPlacedPhotos(stored?.nodes))
+  const seen = new Set<string>()
+  const photos = [...records, ...pages].filter((photo) => !seen.has(photo.src) && seen.add(photo.src))
+  return {
+    avoid: [...new Set([...shown, ...read.flatMap((stored) => aiStockPlacedSrcs(stored?.nodes))])],
+    photos,
+  }
 }
 
 export interface AiJobPageStepDeps {
@@ -875,14 +901,16 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
       // library, else a starter photo. No AI credits; never fails the job.
       const sectionNames = screen.sections.map((section) => section.name)
       const seed = `${aiOriginJobId(job)}:${screen.id ?? screen.slug}`
-      // A photo another page of the job already shows is not placed here.
-      const avoid = await aiJobPagesPlacedPhotos(firestore, { hostId, job, draftId })
+      // A photo another page of the job already shows is not placed here, and
+      // is what a picture the library fails takes before any starter (AGL-3988).
+      const { avoid, photos: jobPhotos } = await aiJobPlacedPhotos(firestore, { hostId, job, draftId })
       const photoWords = aiStockPhotoWordsOf(job)
       const pictured = await aiResolveLayoutPictures(result.value.nodes, {
         rootId: CANVAS_ROOT_ELEMENT_ID,
         sectionIds,
         sectionNames,
         seed,
+        ...(jobPhotos.length ? { jobPhotos } : {}),
         ...(photoWords.language ? { language: photoWords.language } : {}),
         // The owner's own photos first (AGL-3957), the stock library for the rest.
         source: (deps.stockPhotos ?? aiLayoutSitePhotoSource)({

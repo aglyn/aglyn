@@ -70,7 +70,7 @@ import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
 import { readAiDraftNodes } from './ai-job-drafts'
-import { AI_STOCK_PHOTO_AVOID_INPUT, AI_STOCK_PHOTO_PAGES_INPUT } from './ai-layout-stock-photos'
+import { AI_STOCK_PHOTO_AVOID_INPUT, AI_STOCK_PHOTO_JOB_PHOTOS_INPUT, AI_STOCK_PHOTO_PAGES_INPUT } from './ai-layout-stock-photos'
 import {
   AI_LAYOUT_SITE_ALIASES_INPUT,
   AI_LAYOUT_SITE_PAGES_INPUT,
@@ -110,6 +110,7 @@ import {
   aiSiteDatasetBriefLines,
   aiSiteDatasetInputOf,
   aiSiteDatasetListings,
+  aiSiteDatasetPlacedPhotoDetails,
   aiSiteDatasetPlacedPhotos,
   aiSiteDatasetRefusal,
   aiSitePlanDatasets,
@@ -587,6 +588,18 @@ export function aiSiteBriefLines(
 }
 
 /**
+ * What a guided start's welcome email is called in Marketing (AGL-3988): the
+ * business's welcome email, else "Welcome email". The beta.270 Sugar Hollow
+ * start's was listed as "New email", the email step's name for one nothing
+ * named.
+ */
+export function aiSiteWelcomeEmailName(inputs: Readonly<Record<string, unknown>> | null | undefined): string {
+  const raw = inputs?.['businessName']
+  const business = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().slice(0, 100) : ''
+  return business ? `${business} welcome email` : 'Welcome email'
+}
+
+/**
  * What the welcome email is told (AGL-2918), beyond that it is a welcome
  * email.
  *
@@ -746,6 +759,8 @@ export function aiSiteUnitJob(
   // The look pins what the sites the person likes say of style (AGL-3975):
   // the signals the plan step read, never the sites themselves.
   if (unit.kind === 'theme' && plan.inspiration) unitInputs[AI_SITE_INSPIRATION_SIGNALS_INPUT] = plan.inspiration
+  // The welcome email is named for the business in Marketing, never "New email" (AGL-3988).
+  if (unit.kind === 'email' && typeof unitInputs['name'] !== 'string') unitInputs['name'] = aiSiteWelcomeEmailName(job.inputs)
   // A page is told the pages built before it, whose photos it does not place
   // again (AGL-3660): the maker's portrait in About is never a vase in Work.
   if (unit.screen) {
@@ -756,6 +771,9 @@ export function aiSiteUnitJob(
     // Nor a photo the site's datasets' records already show (AGL-3616).
     const records = aiSiteDatasetPlacedPhotos(job.outputs ?? [])
     if (records.length) unitInputs[AI_STOCK_PHOTO_AVOID_INPUT] = records
+    // Which a picture the library fails takes before any starter (AGL-3988).
+    const recordPhotos = aiSiteDatasetPlacedPhotoDetails(job.outputs ?? [])
+    if (recordPhotos.length) unitInputs[AI_STOCK_PHOTO_JOB_PHOTOS_INPUT] = recordPhotos
   }
   // The layout is built before the pages, so it is told them (AGL-3596): their
   // ids are minted on the plan, and the platform writes the header's links.
@@ -1302,6 +1320,10 @@ export function createAiJobSiteStep(
         ...(postsRow ? { blogUnwritten: !aiBuildItemDelivered(postsRow) || !postsRow.outputs?.length } : {}),
         // The store's pages the header and footer link and the start did not write (AGL-3676).
         ...(rows.get('store') ? { unwrittenHrefs: unwrittenStoreHrefs(pages) } : {}),
+        // The pages it planned and did not build, which nothing it publishes links (AGL-3988).
+        unbuiltScreenIds: unbuiltPages(),
+        // And the order the site lists its pages in, which Pages and the 404 page follow.
+        siteOrder: plan.screens.flatMap((screen) => (screen.id ? [screen.id] : [])),
         ...(wasLive ? { retry: true } : {}),
         // The site publishes in the language its brief was written in (AGL-3750).
         ...(plan.language ? { language: plan.language } : {}),
@@ -1393,6 +1415,21 @@ export function createAiJobSiteStep(
       )
       return [...(job.outputs ?? []).filter((output) => output.resource === 'screen' && ids.has(output.id)), ...extra]
     }
+    /**
+     * The pages the start planned and has not built (AGL-3988): a page whose
+     * part failed or was refused. The beta.270 Sugar Hollow Galleries page
+     * failed its checks, and its home page, header and footer linked it
+     * anyway, to a 404.
+     */
+    const unbuiltPages = () =>
+      units.flatMap((unit) =>
+        unit.kind === 'page' &&
+        !templates.has(unit.slot) &&
+        unit.screen?.id &&
+        !aiBuildItemDelivered(rows.get(unit.slot) ?? { status: 'pending' })
+          ? [unit.screen.id]
+          : [],
+      )
 
     if (!next) return finish({ ...aiUnspentOutcome(model), ...init }, builtPages())
     const unit = units.find((one) => one.slot === next.slot) as AiSiteUnit
