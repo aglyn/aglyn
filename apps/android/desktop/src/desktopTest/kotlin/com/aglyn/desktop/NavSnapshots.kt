@@ -31,6 +31,9 @@ fun main() = runBlocking {
   aglyn.auth.signInWithEmail(aglyn.debugSignIn!!.first, aglyn.debugSignIn!!.second)
   delay(3000)
   val site = System.getProperty("aglyn.snapshotSite")
+  // A theme state shoots on this device's own copy, so the seeded account's theme is never changed.
+  val original = aglyn.accountPrefs.state.value.theme
+  fun theme(change: (com.aglyn.contracts.AppThemePrefs) -> com.aglyn.contracts.AppThemePrefs) = aglyn.accountPrefs.setTheme(change(original), deviceOnly = true)
   val sizes = mapOf("phone" to (412 to 892), "tablet" to (1024 to 768), "desktop" to (1440 to 900))
     .filterKeys { it in (System.getProperty("aglyn.snapshotSizes") ?: "phone,tablet,desktop").split(',') }
   val states: List<Pair<String, suspend (ShellNavigator) -> Unit>> = listOf(
@@ -44,6 +47,16 @@ fun main() = runBlocking {
     "picker-workspace" to { nav -> site?.let { aglyn.workspace.selectSite(it) }; nav.select(ShellNavigator.HOME); nav.command = ShellCommand.FIND },
     "picker-site" to { nav -> site?.let { aglyn.workspace.selectSite(it) }; nav.select(ShellNavigator.HOME); nav.command = ShellCommand.SWITCH_SITE },
     "phone-menu" to { nav -> site?.let { aglyn.workspace.selectSite(it) }; nav.select(ShellNavigator.MENU) },
+    // Phase 3: a second tab, the AI panel and the shortcuts list.
+    "tabs" to { nav -> site?.let { aglyn.workspace.selectSite(it) }; nav.select(NavKeys.of("commerce.orders")); nav.command = ShellCommand.NEW_TAB },
+    "ai-panel" to { nav -> site?.let { aglyn.workspace.selectSite(it) }; nav.select(ShellNavigator.HOME); nav.command = ShellCommand.AI_PANEL },
+    "shortcuts" to { nav -> site?.let { aglyn.workspace.selectSite(it) }; nav.select(ShellNavigator.HOME); nav.command = ShellCommand.SHORTCUTS },
+    // Phase 4: Theme settings, the marketplace home, and the app in Night, Ocean and Compact.
+    "theme-settings" to { nav -> nav.select(ShellNavigator.SETTINGS); nav.push(com.aglyn.shell.Route.ThemeSettings) },
+    "marketplace" to { nav -> site?.let { aglyn.workspace.selectSite(it) }; nav.select(NavKeys.of("marketplace.browse")) },
+    "theme-night" to { nav -> theme { it.copy(theme = com.aglyn.contracts.AppThemeName.NIGHT) }; site?.let { aglyn.workspace.selectSite(it) }; nav.select(NavKeys.of("commerce.orders")) },
+    "theme-ocean" to { nav -> theme { it.copy(theme = com.aglyn.contracts.AppThemeName.OCEAN) }; site?.let { aglyn.workspace.selectSite(it) }; nav.select(NavKeys.of("commerce.orders")) },
+    "theme-compact" to { nav -> theme { it.copy(density = com.aglyn.contracts.AppDensity.COMPACT, accent = "#7A5CF0") }; site?.let { aglyn.workspace.selectSite(it) }; nav.select(NavKeys.of("commerce.orders")) },
   )
   val only = System.getProperty("aglyn.snapshotOnly")?.split(',')
   for ((name, prepare) in states) {
@@ -52,7 +65,10 @@ fun main() = runBlocking {
       if (name == "phone-menu" && size != "phone") continue
       for (dark in listOf(false, true)) {
         val navigator = ShellNavigator()
-        withContext(Dispatchers.Main) { prepare(navigator) }
+        withContext(Dispatchers.Main) {
+          if (aglyn.accountPrefs.state.value.deviceTheme != null && !name.startsWith("theme-")) aglyn.accountPrefs.setTheme(original, deviceOnly = true)
+          prepare(navigator)
+        }
         delay(1500)
         shootNav(dir, "nav-$name-$size${if (dark) "-dark" else ""}", dims.first, dims.second) {
           CompositionLocalProvider(com.aglyn.shell.LocalTitleBarInset provides androidx.compose.ui.unit.Dp(0f)) {
@@ -62,6 +78,9 @@ fun main() = runBlocking {
       }
     }
   }
+  // Back to the account's own theme on this device.
+  if (aglyn.accountPrefs.state.value.deviceTheme != null) withContext(Dispatchers.Main) { aglyn.accountPrefs.setTheme(original, deviceOnly = false) }
+  delay(1000)
   System.exit(0)
 }
 
