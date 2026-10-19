@@ -39,6 +39,7 @@ import com.aglyn.core.nowMillis
 import com.aglyn.core.planFeatureCarried
 import com.aglyn.core.relativeTime
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.PerSiteSection
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -94,10 +95,7 @@ fun rememberMarketingAccess(context: NativePluginContext): MarketingAccess {
 @Composable
 fun MarketingHubScreen(context: NativePluginContext, initialSection: MarketingSection, initial: String? = null) {
   val orgId = context.orgId ?: return
-  val hostId = context.hostId ?: return
   var section by rememberSaveable { mutableStateOf(initialSection) }
-  val actions = remember(orgId, hostId, context) { MarketingActions(context, orgId, hostId) }
-  val access = rememberMarketingAccess(context)
   Column(Modifier.fillMaxSize()) {
     ChoiceChipRow(
       MarketingSection.entries.map { ChipOption(it.name, it.label, it.icon) },
@@ -105,20 +103,37 @@ fun MarketingHubScreen(context: NativePluginContext, initialSection: MarketingSe
       { section = MarketingSection.valueOf(it) },
       Modifier.padding(horizontal = space(2f), vertical = space(1f)).testTag("marketing-sections"),
     )
-    when (section) {
-      MarketingSection.OVERVIEW -> OverviewSection(context, actions) { section = it }
-      MarketingSection.CAMPAIGNS -> CampaignsSection(context, actions, access, initial)
-      MarketingSection.CONVERSIONS -> ConversionsSection(context, actions, null)
-      MarketingSection.OVERLAYS -> if (access.orgReady && !access.carries("marketingOverlays")) {
-        EmptyState("Overlays come with Starter", body = "Announcement bars and popups are included from the Starter plan. Change the plan under Billing to use them.", icon = AglynIcons.named("web_asset"))
-      } else {
-        OverlaysSection(context, actions, access)
+    if (context.hostId != null) {
+      MarketingSectionBody(context, orgId, section, initial) { section = it }
+    } else {
+      // The workspace's own Marketing page: every section is a site's own (its campaigns, conversions, overlays and
+      // tests), read a site at a time as the console's workspace page reads them.
+      PerSiteSection(context, section.key, "Marketing is run for one site at a time. Pick a site to see its ${section.label.lowercase()}.") { site ->
+        MarketingSectionBody(site, orgId, section, initial) { section = it }
       }
-      MarketingSection.EXPERIMENTS -> if (access.orgReady && !access.carries("abTesting")) {
-        EmptyState("A/B testing comes with Business", body = "Testing two versions of a page or an email is included from the Business plan.", icon = AglynIcons.named("science"))
-      } else {
-        ExperimentsSection(context, actions, access)
-      }
+    }
+  }
+}
+
+/** One section of a site's Marketing. */
+@Composable
+private fun MarketingSectionBody(context: NativePluginContext, orgId: String, section: MarketingSection, initial: String?, open: (MarketingSection) -> Unit) {
+  val hostId = context.hostId ?: return
+  val actions = remember(orgId, hostId, context) { MarketingActions(context, orgId, hostId) }
+  val access = rememberMarketingAccess(context)
+  when (section) {
+    MarketingSection.OVERVIEW -> OverviewSection(context, actions, open)
+    MarketingSection.CAMPAIGNS -> CampaignsSection(context, actions, access, initial)
+    MarketingSection.CONVERSIONS -> ConversionsSection(context, actions, null)
+    MarketingSection.OVERLAYS -> if (access.orgReady && !access.carries("marketingOverlays")) {
+      EmptyState("Overlays come with Starter", body = "Announcement bars and popups are included from the Starter plan. Change the plan under Billing to use them.", icon = AglynIcons.named("web_asset"))
+    } else {
+      OverlaysSection(context, actions, access)
+    }
+    MarketingSection.EXPERIMENTS -> if (access.orgReady && !access.carries("abTesting")) {
+      EmptyState("A/B testing comes with Business", body = "Testing two versions of a page or an email is included from the Business plan.", icon = AglynIcons.named("science"))
+    } else {
+      ExperimentsSection(context, actions, access)
     }
   }
 }

@@ -23,27 +23,24 @@ struct VerifyEmailView: View {
     let email = model.auth?.user?.email
     AuthCard(
       "Verify your email",
-      subtitle: "We sent a verification link to \(email ?? "your email address"). Open it to activate your account — this page updates on its own once you do."
+      subtitle: "We sent a verification link to \(email ?? "your email address"). Open it to activate your account — this page updates on its own once you do.",
+      systemImage: "envelope"
     ) {
-      VStack(spacing: 12) {
-        AuthPrimaryButton(title: "I’ve verified — continue", busy: applying) { Task { await check() } }
-          .accessibilityIdentifier("verify-continue")
-        HStack(spacing: 4) {
-          if sent { Text("Didn’t get it?") }
-          Button("Resend verification email") { Task { await send(automatic: false) } }
-            .buttonStyle(.borderless)
-            .disabled(sending)
-            .accessibilityIdentifier("verify-resend")
-        }
-        .font(AglynFont.subheadline)
-        if let error { AuthMessage(text: error) }
-      }
-    } footer: {
+      AuthPrimaryButton(title: "I’ve verified — continue", busy: applying) { Task { await check() } }
+        .accessibilityIdentifier("verify-continue")
       HStack(spacing: 4) {
-        Text("Wrong account?")
-        Button("Sign out") { Task { await model.signOut() } }.buttonStyle(.borderless)
+        if sent { Text("Didn’t get it?") }
+        AuthLink("Resend verification email", identifier: "verify-resend") { Task { await send(automatic: false) } }
+          .disabled(sending)
       }
-      .font(AglynFont.subheadline)
+      .font(AglynAuthFont.small)
+      .foregroundStyle(AglynAuthTokens.Colors.textSecondary.color)
+      .frame(maxWidth: .infinity)
+      if let error { AuthMessage(text: error) }
+    } footer: {
+      AuthFooterLine(lead: "Wrong account?", link: "Sign out", identifier: "verify-sign-out") {
+        Task { await model.signOut() }
+      }
     }
     .task {
       if let code = model.authFlow.pendingVerificationCode {

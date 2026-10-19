@@ -1285,6 +1285,19 @@ describe('hosts', () => {
         cnameDetachmentPending: false,
       }),
     )
+    // The `www.`/apex twin is a name claimed for the site in the same
+    // transaction as `cname` (AGL-3961); a forged one reserves another
+    // site's address, and clearing its retry flag strands the redirect.
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), {
+        cnameTwin: 'www.someone-elses.example',
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), {
+        cnameTwinPending: false,
+      }),
+    )
     // Theme provenance is written by the install route; a client rewrite
     // makes `isOverrideForCurrentTheme()` lie about which theme an override
     // belongs to. The Enterprise project pointers have no client writer.
@@ -6487,6 +6500,138 @@ describe('the ad audience opt-out is the staff route\'s to write (AGL-3780)', ()
     await mustAllow(
       'the owner editing another field beside it',
       setDoc(doc(authed(OWNER), 'users', OWNER), { firstName: 'Zach' }, { merge: true }),
+    )
+  })
+})
+
+/**
+ * The preferences a person keeps on their account (AGL-3943,
+ * `libs/aglyn/src/lib/app-utils/account-preferences.ts`): pins capped at five
+ * everywhere (Zach, 2026-10-18), and every other list or map the console and
+ * the native apps keep there bounded. A list pinned before the cap may only
+ * shrink, so its owner can still unpin and answer "Keep which 5?". An
+ * ordinary edit beside an over-cap list still lands.
+ */
+describe('account preferences are bounded, pins at five (AGL-3943)', () => {
+  const me = (db = authed(OWNER)) => doc(db, 'users', OWNER)
+  const seed = (data) =>
+    env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', OWNER), data)
+    })
+  const ids = (n) => Array.from({ length: n }, (_, i) => `org-${i + 1}`)
+  const item = (i) => ({
+    kind: 'page',
+    id: `p${i}`,
+    orgId: ORG,
+    hostId: 'h1',
+    label: 'Home',
+    screen: 'site.pages',
+    starredAtMs: 1,
+  })
+
+  it('lets the owner pin up to five and refuses a sixth', async () => {
+    await mustAllow('creating with five pins', setDoc(me(), { pinnedOrgs: ids(5) }))
+    await mustDeny(
+      'a sixth pin by arrayUnion',
+      setDoc(me(), { pinnedOrgs: arrayUnion('org-6') }, { merge: true }),
+    )
+    await mustDeny('a list of six', setDoc(me(), { pinnedOrgs: ids(6) }, { merge: true }))
+    await mustAllow(
+      'replacing one (still five)',
+      setDoc(me(), { pinnedOrgs: ['org-9', ...ids(4)] }, { merge: true }),
+    )
+    await mustDeny('pins that are not a list', setDoc(me(), { pinnedOrgs: 'org-1' }, { merge: true }))
+  })
+
+  it('refuses creating the document with six pins', async () => {
+    await mustDeny('creating with six pins', setDoc(me(), { pinnedOrgs: ids(6) }))
+  })
+
+  it('lets an over-cap list only shrink, and lands edits beside it', async () => {
+    await seed({ pinnedOrgs: ids(7), firstName: 'Z' })
+    await mustAllow(
+      'unpinning one of seven',
+      setDoc(me(), { pinnedOrgs: arrayRemove('org-7') }, { merge: true }),
+    )
+    await mustDeny(
+      'pinning an eighth onto six',
+      setDoc(me(), { pinnedOrgs: arrayUnion('org-8') }, { merge: true }),
+    )
+    await mustAllow('keeping five', setDoc(me(), { pinnedOrgs: ids(5) }, { merge: true }))
+    await seed({ pinnedOrgs: ids(7), firstName: 'Z' })
+    await mustAllow('editing another field beside seven pins', setDoc(me(), { firstName: 'Zach' }, { merge: true }))
+  })
+
+  it('caps recent workspaces, starred items, recent items and workspace colors', async () => {
+    await mustAllow(
+      'eight recent workspaces, fifty stars, thirty recents, one color',
+      setDoc(me(), {
+        recentOrgs: ids(8),
+        starred: Array.from({ length: 50 }, (_, i) => item(i)),
+        recents: Array.from({ length: 30 }, (_, i) => item(i)),
+        workspaceColors: { [ORG]: '#00B0FF' },
+      }),
+    )
+    await mustDeny('nine recent workspaces', setDoc(me(), { recentOrgs: ids(9) }, { merge: true }))
+    await mustDeny(
+      'fifty-one stars',
+      setDoc(me(), { starred: Array.from({ length: 51 }, (_, i) => item(i)) }, { merge: true }),
+    )
+    await mustDeny(
+      'thirty-one recents',
+      setDoc(me(), { recents: Array.from({ length: 31 }, (_, i) => item(i)) }, { merge: true }),
+    )
+    await mustDeny(
+      'a hundred and one workspace colors',
+      setDoc(
+        me(),
+        { workspaceColors: Object.fromEntries(ids(101).map((id) => [id, '#000000'])) },
+        { merge: true },
+      ),
+    )
+    await mustDeny('stars that are not a list', setDoc(me(), { starred: { a: 1 } }, { merge: true }))
+  })
+
+  it('holds the synced theme to its shape', async () => {
+    await mustAllow(
+      'a full theme',
+      setDoc(me(), {
+        appTheme: {
+          appearance: 'dark',
+          theme: 'highContrast',
+          accent: '#7A5CF0',
+          density: 'compact',
+          textSize: 'large',
+          sidebarStyle: 'plain',
+          appIcon: 'aglyn',
+          useWorkspaceBrand: false,
+        },
+      }),
+    )
+    await mustAllow(
+      'one field merged in',
+      setDoc(me(), { appTheme: { appearance: 'light' } }, { merge: true }),
+    )
+    await mustDeny(
+      'an unknown appearance',
+      setDoc(me(), { appTheme: { appearance: 'sepia' } }, { merge: true }),
+    )
+    await mustDeny(
+      'an accent that is not a color',
+      setDoc(me(), { appTheme: { accent: 'purple' } }, { merge: true }),
+    )
+    await mustDeny(
+      'a field the theme does not have',
+      setDoc(me(), { appTheme: { wallpaper: 'x' } }, { merge: true }),
+    )
+    await mustDeny('a theme that is not a map', setDoc(me(), { appTheme: 'dark' }, { merge: true }))
+  })
+
+  it('lets nobody else write them', async () => {
+    await seed({ pinnedOrgs: ids(2) })
+    await mustDeny(
+      'another member pinning for the owner',
+      setDoc(doc(authed(OUTSIDER), 'users', OWNER), { pinnedOrgs: ids(1) }, { merge: true }),
     )
   })
 })
@@ -14372,6 +14517,61 @@ describe('ShipStation credentials are server-only (AGL-3613)', () => {
 })
 
 /**
+ * One-click DNS sessions (AGL-3963).
+ *
+ * A session names the domain a site asked its DNS provider to point here and
+ * the member who asked, and its id is the hash of the state token the
+ * provider echoes back. The domains plugin's routes and its sweep are its only
+ * reader and writer, on the Admin SDK, so no client — the site's own admin and
+ * staff included — reads, lists or writes one.
+ */
+describe('one-click DNS sessions are server-only (AGL-3963)', () => {
+  const SESSION = 'a'.repeat(64)
+  const session = (db) => doc(db, 'domainConnectSessions', SESSION)
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(session(context.firestore()), {
+        orgId: ORG,
+        hostId: HOST,
+        domain: 'example.com',
+        status: 'started',
+        createdBy: OWNER,
+        createdAtMs: 1,
+      })
+    })
+  })
+
+  it('no client reads or lists a session: not the site admin, not staff, not a visitor', async () => {
+    await mustDeny('the site owner reading a session', getDoc(session(authed(OWNER))))
+    await mustDeny('a site editor reading a session', getDoc(session(authed(EDITOR))))
+    await mustDeny('staff reading a session', getDoc(session(authed(STAFF, { staff: true }))))
+    await mustDeny('a visitor reading a session', getDoc(session(anon())))
+    await mustDeny(
+      'the site owner listing their workspace’s sessions',
+      getDocs(query(collection(authed(OWNER), 'domainConnectSessions'), where('orgId', '==', ORG), limit(10))),
+    )
+  })
+
+  it('no client writes one: the routes start, finish and expire them on the Admin SDK', async () => {
+    await mustDeny(
+      'the site owner marking their own session connected',
+      updateDoc(session(authed(OWNER)), { status: 'connected' }),
+    )
+    await mustDeny(
+      'the site owner minting a session',
+      setDoc(doc(authed(OWNER), 'domainConnectSessions', 'b'.repeat(64)), {
+        orgId: ORG,
+        hostId: HOST,
+        domain: 'example.com',
+        status: 'applied',
+      }),
+    )
+    await mustDeny('staff deleting a session', deleteDoc(session(authed(STAFF, { staff: true }))))
+  })
+})
+
+/**
  * A site's shopping-channel state (AGL-3637).
  *
  * A feed document holds the token that is the only lock on the store's
@@ -14750,5 +14950,46 @@ describe("a site's live chat settings are written by their route alone (AGL-3698
       "the owner writing another plugin's site settings",
       setDoc(doc(authed(OWNER), 'hosts', HOST, 'pluginSettings', 'marketing'), { fromName: 'Acme' }),
     )
+  })
+})
+
+describe('bought domains are the server’s alone (AGL-3962)', () => {
+  const registrationDoc = (db) => doc(db, 'domainRegistrations', 'testbakery.com')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(registrationDoc(context.firestore()), {
+        domain: 'testbakery.com',
+        orgId: ORG,
+        hostId: HOST,
+        status: 'active',
+        autoRenew: true,
+        costUsd: 11.25,
+      })
+    })
+  })
+
+  it('no member and no staff reads, lists or writes a registration', async () => {
+    const readers = [
+      ['viewer', authed(VIEWER)],
+      ['editor', authed(EDITOR)],
+      ['admin', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]
+    for (const [role, db] of readers) {
+      await mustDeny(`a ${role} reading a registration`, getDoc(registrationDoc(db)))
+      await mustDeny(
+        `a ${role} listing registrations`,
+        getDocs(query(collection(db, 'domainRegistrations'), limit(10))),
+      )
+      await mustDeny(
+        `a ${role} turning a name's renewals off`,
+        updateDoc(registrationDoc(db), { autoRenew: false }),
+      )
+      await mustDeny(
+        `a ${role} moving a name to another workspace`,
+        setDoc(doc(db, 'domainRegistrations', 'other.com'), { orgId: 'theirs', status: 'active' }),
+      )
+    }
   })
 })

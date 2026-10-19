@@ -21,8 +21,8 @@ fun main(args: Array<String>) {
           Item("Sign out", shortcut = shortcut(Key.Q, shift = true), onClick = signOut)
         }
       },
-    ) {
-      PosShell(services, autoSignIn = autoSignIn)
+    ) { onIntroRevealed ->
+      PosShell(services, autoSignIn = autoSignIn, playIntro = true, onIntroRevealed = onIntroRevealed)
     }
   }
 }

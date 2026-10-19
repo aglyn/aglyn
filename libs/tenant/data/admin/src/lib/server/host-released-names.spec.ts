@@ -32,4 +32,12 @@ describe('releasedHostNames (AGL-3629)', () => {
     expect(releasedHostNames(undefined)).toEqual([])
     expect(releasedHostNames({ cname: 42, subdomain: null })).toEqual([])
   })
+
+  it('names the www twin the site claimed with its domain (AGL-3961)', () => {
+    expect(
+      releasedHostNames({ cname: 'example.com', cnameTwin: 'www.example.com', subdomain: 'shop' }),
+    ).toEqual(['example.com', 'www.example.com', `shop.${TENANT_APEX}`])
+    // A twin left behind with no domain is not a name the site served.
+    expect(releasedHostNames({ cnameTwin: 'www.example.com' })).toEqual([])
+  })
 })

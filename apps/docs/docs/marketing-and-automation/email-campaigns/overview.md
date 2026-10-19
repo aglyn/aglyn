@@ -927,7 +927,8 @@ site, with what each one tests, how many variants it has and its status. **Resul
 a test's figures when you ask for them. A test splits one site's traffic, so it is
 created, started, paused and decided on that site: **New experiment** asks which site, and
 **Open** goes to the site's own A/B testing section. Ten sites show at a time, with up to
-ten tests each; a site with more says so and links to its own list.
+ten tests each; a site with more says so and links to its own list. In an organization
+with no sites yet, **New experiment** is grayed out and says to add a site first.
 
 ## Opens & clicks
 

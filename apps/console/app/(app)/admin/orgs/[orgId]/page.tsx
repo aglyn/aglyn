@@ -20,6 +20,7 @@ import {
   aiAddonName,
   checkDiscountMargin,
   hasAiAddon,
+  hasSiteCare,
   MARGIN_SCOPE_NOTE,
   netMarginRating,
   ORG_BILLING_DOC_ID,
@@ -1130,6 +1131,13 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
    * credit band, and the entitlements table names it beside that key.
    */
   const aiAddon = hasAiAddon(org)
+  /*
+   * Whether the org has Site Care in force (AGL-3954), through the same
+   * dead-subscription rule as the AI add-on. It raises no quota, so it has no
+   * row in the table below; the chip above the table is where staff picking up
+   * a change request see that the workspace is paying for the work.
+   */
+  const siteCare = hasSiteCare(org)
   const formatLimit = (value: number) =>
     value === UNLIMITED ? '∞' : value.toLocaleString()
 
@@ -1573,6 +1581,24 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                       contentGutterX
                       contentGutterY
                     >
+                      {siteCare ? (
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          sx={{ alignItems: 'center', mb: 1.5 }}
+                        >
+                          <Chip
+                            label="Site Care"
+                            size="small"
+                            variant="outlined"
+                            color="primary"
+                          />
+                          <Typography variant="caption" color="text.secondary">
+                            {'Managed-website add-on in force: staff make this ' +
+                              'workspace’s small site changes.'}
+                          </Typography>
+                        </Stack>
+                      ) : null}
                       {resolved ? (
                         <ScrollTable size="small">
                           <StaffTableHead>

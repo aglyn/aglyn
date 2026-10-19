@@ -10,7 +10,34 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — the console says what to set up first (newest)
+## October 2026 — more of the console says what to set up first (newest)
+
+- **[Self-service kiosk](commerce-and-bookings/commerce/pos-and-reservations.md#self-service-kiosk)** —
+  pairing a kiosk now says what it still needs to take payment: Stripe, a card
+  reader on its register, or paying at the counter turned back on, each with a
+  link to where you fix it.
+- **[Payment methods](commerce-and-bookings/commerce/overview.md#payment-methods)** —
+  while Stripe isn't connected, the card says so once, with a link to the
+  **Payments** card above it.
+- **[Finish your store](ai/start-with-ai.md)** — after an AI-built store, the
+  payments step reads whether your Stripe account already takes payments and
+  marks itself done.
+- **[Deal line items](content-and-data/crm/deals.md#line-items)**,
+  **[AI credits](ai/ai-credits.md#see-your-credits)**,
+  **[Write copy for products](ai/products-with-ai.md#write-copy-for-many-products)**
+  and the organization's **New overlay** and **New experiment** buttons now say
+  why they're unavailable — a plan without the store or without AI credits, no
+  products listed, or no sites yet — instead of disappearing or going gray
+  without a word.
+
+## October 2026 — a client's workspace is comped as it is created
+
+- **[Build a site for a client](staff-console/overview.md#build-for-a-client)** —
+  staff creating a workspace for a prospect turn on **Build for a client** in the
+  create dialog, pick the tier and write the note, and the workspace is born
+  already comped and recorded in the Audit Log. One step where there were two.
+
+## October 2026 — the console says what to set up first
 
 - **[Taking payment](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —
   when your store's Stripe account isn't connected yet, the register's card

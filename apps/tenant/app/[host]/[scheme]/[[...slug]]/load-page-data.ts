@@ -356,7 +356,7 @@ const composePageResult = async (
     // covers any path that reaches the loader without the middleware. The
     // org doc is loaded once here and reused by the branding/overlay
     // branches below, as before.
-    const orgRes = await getOrgBilling({ hostId })
+    const orgRes = await getOrgBilling({ hostId, scope: 'render' })
     timer.mark('getOrgBilling')
     facts.org = orgRes.org
     /*
@@ -1691,7 +1691,7 @@ export async function loadNotFoundScreen(
     // Read once and used twice: the lockdown verdict below and the
     // entitlement gates every enricher applies (AGL-2511). `getOrgBilling`
     // is cached per host, so this is one read either way.
-    const orgRes = await getOrgBilling({ hostId })
+    const orgRes = await getOrgBilling({ hostId, scope: 'render' })
     /*
      * The zone this site's dates read in (AGL-3237).
      *

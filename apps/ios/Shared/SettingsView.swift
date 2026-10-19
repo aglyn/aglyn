@@ -6,43 +6,51 @@ import AglynScreens
 import AglynUI
 import SwiftUI
 
-/// The account, the picked workspace, and signing out.
+/// Your account's settings (the account menu's Settings): profile, email addresses, security, notifications and sound,
+/// support, and signing out. Workspace and site settings are their own modes in the sidebar now (One way in), so they
+/// are not repeated here.
 struct SettingsView: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation: ShellNavigation?
   @State private var confirmSignOut = false
 
+  /// The account's own pages (`account.screens.json`), in their order.
+  private var accountScreens: [ScreenSpec] { ScreenCatalog.shared.group("account") }
+
   var body: some View {
     Form {
-      Section("Account") {
-        LabeledContent("Signed in as", value: model.auth?.user?.email ?? "—")
-        if let name = model.auth?.user?.displayName, !name.isEmpty {
-          LabeledContent("Name", value: name)
-        }
-      }
-      if let workspace = model.workspace {
-        Section("Workspace") {
-          LabeledContent("Workspace", value: workspace.org?.name ?? "None")
-          LabeledContent(model.app == .pos ? "Store" : "Site", value: workspace.site?.name ?? "None")
-          LabeledContent("Role", value: workspace.org?.role.capitalized ?? "—")
-        }
-      }
-      if model.app == .aglyn, let navigation {
-        ForEach(CoreGroupList.groups(model), id: \.id) { group in
-          Section(group.heading) {
-            ForEach(group.screens) { screen in
-              Button {
-                navigation.push(.screen(screen.id, [:]))
-              } label: {
-                AglynRow(screen.label, subtitle: screen.subtitle, systemImage: screen.icon) {
-                  Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
-                }
-              }
-              .buttonStyle(.aglynRow)
-              .accessibilityIdentifier("settings-\(screen.id)")
-            }
+      Section {
+        HStack(spacing: 12) {
+          AglynAccountAvatar(initials: AccountIdentity(model: model).initials, size: 44)
+          VStack(alignment: .leading, spacing: 2) {
+            Text(AccountIdentity(model: model).name).font(AglynFont.headline)
+            if let email = model.auth?.user?.email { Text(email).font(AglynFont.subheadline).foregroundStyle(.secondary) }
           }
         }
+        .accessibilityElement(children: .combine)
+      }
+      if let navigation, !accountScreens.isEmpty {
+        Section("Your account") {
+          ForEach(accountScreens) { screen in
+            Button {
+              navigation.push(.screen(screen.id, [:]))
+            } label: {
+              AglynRow(screen.label, subtitle: screen.subtitle, systemImage: screen.icon) {
+                Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+              }
+            }
+            .buttonStyle(.aglynRow)
+            .accessibilityIdentifier("settings-\(screen.id)")
+          }
+        }
+      }
+      Section {
+        NavigationLink {
+          NotificationSettingsView()
+        } label: {
+          AglynRow("Notifications and sound", subtitle: "What reaches you, where, and how it sounds", systemImage: "bell.badge")
+        }
+        .accessibilityIdentifier("settings-notifications")
       }
       // Aglyn POS: the register's own screens (card readers…), once a store is open.
       if model.app == .pos, model.workspace?.site != nil {
@@ -60,14 +68,6 @@ struct SettingsView: View {
             }
           }
         }
-      }
-      Section {
-        NavigationLink {
-          NotificationSettingsView()
-        } label: {
-          Label("Notifications", systemImage: "bell.badge")
-        }
-        .accessibilityIdentifier("settings-notifications")
       }
       #if os(iOS)
         // On the Mac these are the Help menu's, opening in the main window rather than the Settings window.
@@ -87,26 +87,6 @@ struct SettingsView: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle("Settings")
-    .confirmationDialog("Sign out of \(model.appName)?", isPresented: $confirmSignOut) {
-      Button("Sign out", role: .destructive) { Task { await model.signOut() } }
-    }
-  }
-}
-
-/// The core screen groups Settings lists (shared by both app targets).
-enum CoreGroupList {
-  struct Group {
-    let id: String
-    let heading: String
-    let screens: [ScreenSpec]
-  }
-
-  @MainActor
-  static func groups(_ model: AppModel) -> [Group] {
-    var picks: [(String, String)] = [("workspace", model.workspace?.org?.name ?? "Workspace")]
-    if let site = model.workspace?.site { picks.append(("site", "Site · \(site.name)")) }
-    picks.append(("account", "Your account"))
-    if model.claims.isStaff { picks.append(("staff", "Staff")) }
-    return picks.map { Group(id: $0.0, heading: $0.1, screens: ScreenCatalog.shared.group($0.0)) }.filter { !$0.screens.isEmpty }
+    .signOutConfirmation(isPresented: $confirmSignOut)
   }
 }

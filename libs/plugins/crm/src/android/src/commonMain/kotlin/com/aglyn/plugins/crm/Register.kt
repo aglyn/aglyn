@@ -28,12 +28,12 @@ import com.aglyn.ui.MetricCard
  */
 fun registerCrmNative(r: NativePluginRegistrar) {
   for (section in CrmSection.entries) {
-    r.screen(section.screen, title = if (section == CrmSection.CONTACTS) "CRM" else section.label, requiresSite = true, icon = section.icon, layout = ScreenLayout.LIST_DETAIL) { context, params ->
+    r.screen(section.screen, title = if (section == CrmSection.CONTACTS) "CRM" else section.label, requiresSite = false, icon = section.icon, layout = ScreenLayout.LIST_DETAIL) { context, params ->
       CrmHubScreen(context, section, params)
     }
   }
   for (kind in CrmKind.entries) {
-    r.screen(kind.detailScreen, title = kind.singular, requiresSite = true, icon = kind.icon) { context, params ->
+    r.screen(kind.detailScreen, title = kind.singular, requiresSite = false, icon = kind.icon) { context, params ->
       val id = params[kind.param] ?: params["${kind.param}Id"] ?: params["id"]
       if (id == null) {
         CrmHubScreen(context, CrmSection.entries.first { it.screen == kind.listScreen })

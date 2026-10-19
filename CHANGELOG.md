@@ -9,6 +9,106 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.270 — 2026-10-19
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.269...v1.0.0-beta.270)
+
+### Added
+
+- **console:** deal catalog, ai credits, payment methods, products, org sites state needs ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
+- **console:** kiosk pairing and AI finish-store state payment prerequisites ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
+- **legal:** v17, Terms, Privacy and Subprocessors: domain names and Site Care ([AGL-3964](https://linear.app/aglyn/issue/AGL-3964), [AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
+- **commerce:** publish its order events and order history as contracts ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
+- **plugins:** a contracts entry point per plugin, a uses field and the boundary guard ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
+- **marketing:** managed landing page, campaign and per-event utm ([AGL-3960](https://linear.app/aglyn/issue/AGL-3960))
+- **pricing:** site care is live on /pricing with the extra-time rate and project floors ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954), [AGL-3959](https://linear.app/aglyn/issue/AGL-3959), [AGL-3970](https://linear.app/aglyn/issue/AGL-3970))
+- **domains:** one-click DNS through Domain Connect ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963), [AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** the Get a domain card on the Custom Domain page ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** buy, connect and renew a domain unattended ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** the domains plugin, its registrar seam and Vercel's driver ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** connect a domain through one server function, with its www twin ([AGL-3961](https://linear.app/aglyn/issue/AGL-3961), [AGL-1311](https://linear.app/aglyn/issue/AGL-1311))
+- **billing:** site care add-on at a flat $49/mo on every paid plan ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
+- **media:** a site photo link drops phone photos in the library; the AI uses them first ([AGL-3957](https://linear.app/aglyn/issue/AGL-3957))
+- **console:** staff comp a client's workspace as they create it ([AGL-3952](https://linear.app/aglyn/issue/AGL-3952))
+- **native:** export the Figma base palettes the preview derivation starts from ([AGL-3950](https://linear.app/aglyn/issue/AGL-3950))
+- **native:** the Aglyn theme is the console's shipping scheme; tokens, roles, docs ([AGL-3950](https://linear.app/aglyn/issue/AGL-3950))
+- **native:** theme palettes, accent derivation and role grants as contracts ([AGL-3950](https://linear.app/aglyn/issue/AGL-3950))
+- **kotlin:** port resolveCreateList, a push tap opens in its own account ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **native:** create menus and help docs in the nav manifest ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+- **native:** a push names its recipient account, uid in MobilePushData ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+- **kotlin:** home opens the site picker, invitations join from the picker ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **kotlin:** the workspace scope opens crm, inbox, emails and marketing ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **apple:** workspace views for Inbox, Emails, Marketing and CRM ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
+- **apple:** workspace rail, scope sidebar, pickers and Add account ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
+- **kotlin:** nav shell phase 1: rail, scoped sidebar, pickers, menus, add account ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **console:** one-box search route, nav manifest drift spec and nav doc ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943), [AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
+- **kotlin:** port the nav manifest, account preferences and one-box rules ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **native:** nav manifest, account preferences and one-box contracts ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+- **kotlin:** sign-in on the Facets ground, the button system and the splash hand-over ([AGL-3934](https://linear.app/aglyn/issue/AGL-3934))
+- **apple:** sign-in on the Facets ground, the button system and the launch intro ([AGL-3934](https://linear.app/aglyn/issue/AGL-3934))
+- **native:** one sign-in and launch theme for Apple, Kotlin and the launch art ([AGL-3934](https://linear.app/aglyn/issue/AGL-3934))
+
+### Fixed
+
+- **commerce:** kiosk readiness reads pay-at-counter itself, off the eager chunk ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
+- **ai:** credits notice reads the AI features, not a brand literal ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
+- **marketing-platforms:** send no Stripe test-mode order to a merchant's email platform ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
+- **print-on-demand:** take commerce's order shape, and read test mode from livemode ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
+- **domains:** punctuate the registrations export note ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** the export note names no brand ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** self-hosts link their own terms; the export names both collections ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** serve the Domain Connect template logo from the public repo ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
+- **domains:** no free first year; every year is paid at cost + 30% ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** charge and email nothing for a workspace locked for security or abuse ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** boot the domains declarations without the server data layer ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **tools:** grade deployed functions by source stamp, not deploy time ([AGL-3968](https://linear.app/aglyn/issue/AGL-3968))
+- **media:** photo link page is web-only, dialog mounts on open, excerpt check reads code ([AGL-3957](https://linear.app/aglyn/issue/AGL-3957))
+- **data:** datasets empty state names no template syntax
+- **console:** pending invites stop re-reading on every tab flip ([AGL-3953](https://linear.app/aglyn/issue/AGL-3953))
+- **ai:** pages a build adds to a site move in the site's own motion style ([AGL-3949](https://linear.app/aglyn/issue/AGL-3949))
+- **native:** sign-in fixes from the device drive, and a sign-in title override ([AGL-3934](https://linear.app/aglyn/issue/AGL-3934))
+- **plugins:** the one box's search sources live on globalThis ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943), [AGL-3947](https://linear.app/aglyn/issue/AGL-3947))
+- **ai:** a form field's placeholder is never a bracketed marker ([AGL-3942](https://linear.app/aglyn/issue/AGL-3942))
+- **ai:** stock alt texts read plainly; mountain sites skip beaches; show the work ([AGL-3942](https://linear.app/aglyn/issue/AGL-3942))
+
+### Performance
+
+- **tenant:** the render's org read stops holding every page at a 60s ISR window ([AGL-3951](https://linear.app/aglyn/issue/AGL-3951))
+
+### Changed
+
+- **plugins:** fourteen plugins take commerce's shapes from its contracts ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
+- **native:** plugins declare their nav rows, the generator assembles them ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+
+### Documentation
+
+- what the kiosk, payment methods, deals, ai credits and org sites need first ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
+- **legal:** v17 was published at 08:07 Central, not 08:35 ([AGL-3964](https://linear.app/aglyn/issue/AGL-3964))
+- **marketing:** managed campaign routing is on, env 16 recorded ([AGL-3960](https://linear.app/aglyn/issue/AGL-3960))
+- **decision-log:** the owner confirmed every site care figure on 2026-10-19 ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
+- **domains:** connect a domain automatically, unlisted until it is live ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
+- site care add-on decision of 2026-10-18 in the decision log index ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954), [AGL-3960](https://linear.app/aglyn/issue/AGL-3960))
+
+<details>
+<summary>Also in this release: 8 test, 6 chore</summary>
+
+- name the managed landing script as a screen door, and unflake the photo link secret check ([AGL-3960](https://linear.app/aglyn/issue/AGL-3960), [AGL-3957](https://linear.app/aglyn/issue/AGL-3957))
+- **native:** await the held workspace name instead of racing the verification email
+- **domains:** the repo-wide sweeps name the domains plugin ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** the domains package rides the repo version, beta.270 ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **pricing:** the figma pricing frames carry the site care card ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
+- **domains:** gate spec mocks the shared release helper the detach route now calls ([AGL-3961](https://linear.app/aglyn/issue/AGL-3961))
+- **domains:** guards and generated files for the domains plugin ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** the Stripe product and environment for selling domains ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **docs:** regenerate the feature matrix for the site care rows ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
+- **apple:** a workspace without a plan reads as Free in its logo row ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
+- **tools:** the launch logo spec checks the mark PNGs at 1x-3x ([AGL-3934](https://linear.app/aglyn/issue/AGL-3934))
+- **console:** the licenses section spec reads the shared section-id constant ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+- **tools:** the Licenses section id's baseline row moves with it ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
+- **kotlin:** accounts and account preferences keep each account apart ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+
+</details>
+
 ## v1.0.0-beta.269 — 2026-10-18
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.268...v1.0.0-beta.269)

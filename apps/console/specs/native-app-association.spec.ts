@@ -180,6 +180,7 @@ describe('the applinks paths follow the native deep-link grammar', () => {
     '/signout',
     '/edit-access',
     '/kiosk/commerce/display',
+    '/p/AbCdE12345',
     '/api/outreach/l/AbCdE12345',
     '/_missing',
     '/_static/monaco/vs/loader.js',

@@ -114,27 +114,38 @@ fun crmSuiteCarried(org: Map<String, Any?>?): Boolean {
   return (plan in CRM_PLANS && status !in LAPSED) || (comp in CRM_PLANS && (status.isEmpty() || status in LAPSED))
 }
 
-/** The CRM as this member sees it from the picked site. */
+/**
+ * The CRM as this member sees it: from the picked site, or (with no [hostId]) across the whole workspace, as the console's
+ * workspace CRM reads it (`useCrmScope` with no host: no `visibleTo` clause, base fields, a site asked for on create).
+ */
 data class CrmScope(
   val orgId: String,
-  val hostId: String,
+  val hostId: String?,
   /** The holder a contact's own fields are kept under: the site's consent group. */
   val groupId: String,
   val uid: String,
   val role: String?,
   val orgWide: Boolean,
-  /** The `visibleTo array-contains-any` every list asks with. */
-  val readTokens: List<String>,
+  /** The `visibleTo array-contains-any` every list asks with; null across the whole workspace, which lists every record. */
+  val readTokens: List<String>?,
   /** What a created record is stamped with. */
   val createTokens: List<String>,
   val suite: Boolean,
   val org: Map<String, Any?>,
+  /** The member's own row, which a site scope narrows a declared group's reach by. */
+  val member: Map<String, Any?>? = null,
 ) {
+  /** The whole workspace's CRM rather than one site's. */
+  val workspaceWide: Boolean get() = hostId == null
+
+  /** The same member's CRM on one site: what a record is created under, and a record's own site. */
+  fun forSite(siteId: String): CrmScope = crmScopeOf(orgId, siteId, uid, org, member)
+
   /** `canWriteOrgData`: an owner, admin or editor of the workspace. */
   val canWrite: Boolean get() = role in setOf("owner", "admin", "editor")
   val canManage: Boolean get() = role in setOf("owner", "admin")
-  /** The scope the CRM routes take: the site, as the console's site hub sends it. */
-  val routeScope: Map<String, Any?> get() = mapOf("hostId" to hostId, "orgId" to orgId)
+  /** The scope the CRM routes take: the site, as the console's site hub sends it; the workspace alone from its own page. */
+  val routeScope: Map<String, Any?> get() = if (hostId != null) mapOf("hostId" to hostId, "orgId" to orgId) else mapOf("orgId" to orgId)
 }
 
 /** The member's reach on a declared group: the group's tokens they hold, or all of them org-wide. */
@@ -144,17 +155,23 @@ fun narrowToReach(tokens: List<String>, member: Map<String, Any?>?, orgWide: Boo
   return tokens.filter { it == ORG_SCOPE_TOKEN || it in held }
 }
 
-fun crmScopeOf(orgId: String, hostId: String, uid: String, org: FirestoreDoc?, member: FirestoreDoc?): CrmScope {
-  val orgData = org?.data.orEmpty()
-  val role = member?.string("role")
-  val orgWide = role in setOf("owner", "admin") || member?.bool("allHosts") == true
+fun crmScopeOf(orgId: String, hostId: String?, uid: String, org: FirestoreDoc?, member: FirestoreDoc?): CrmScope =
+  crmScopeOf(orgId, hostId, uid, org?.data.orEmpty(), member?.data)
+
+fun crmScopeOf(orgId: String, hostId: String?, uid: String, orgData: Map<String, Any?>, member: Map<String, Any?>?): CrmScope {
+  val role = member?.get("role") as? String
+  val orgWide = role in setOf("owner", "admin") || member?.get("allHosts") == true
+  if (hostId == null) {
+    // The workspace's own CRM: every record, its shared fields, and nothing created until a site is picked.
+    return CrmScope(orgId, null, "", uid, role, orgWide, null, emptyList(), crmSuiteCarried(orgData), orgData, member)
+  }
   val group = consentGroupForHost(orgData, hostId)
-  val read = crmReadTokens(group).let { if (group.declared) narrowToReach(it, member?.data, orgWide) else it }
-  return CrmScope(orgId, hostId, group.groupId, uid, role, orgWide, read, crmScopeTokens(orgData, group), crmSuiteCarried(orgData), orgData)
+  val read = crmReadTokens(group).let { if (group.declared) narrowToReach(it, member, orgWide) else it }
+  return CrmScope(orgId, hostId, group.groupId, uid, role, orgWide, read, crmScopeTokens(orgData, group), crmSuiteCarried(orgData), orgData, member)
 }
 
 /** The scope, live: the org document and the member's own row. */
-fun observeCrmScope(reader: FirestoreReader, orgId: String, hostId: String, uid: String): Flow<Live<CrmScope>> =
+fun observeCrmScope(reader: FirestoreReader, orgId: String, hostId: String?, uid: String): Flow<Live<CrmScope>> =
   combine(reader.observeDoc("orgs/$orgId"), reader.observeDoc("orgs/$orgId/members/$uid")) { org, member ->
     when {
       org is Live.Failed -> org

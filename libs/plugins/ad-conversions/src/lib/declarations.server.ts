@@ -18,6 +18,7 @@
 import { registerPluginAdvertisingConversions } from '@aglyn/aglyn/plugin-manager/plugin-advertising-conversions'
 import { subscribePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
+import { ORDER_PAID_EVENT } from '@aglyn/plugins-commerce/contracts'
 import { AD_CONVERSIONS_PLUGIN_ID } from './constants'
 
 /**
@@ -26,8 +27,9 @@ import { AD_CONVERSIONS_PLUGIN_ID } from './constants'
  *
  * - The doors' consent: commerce's checkout routes and the form route hand a
  *   visitor's advertising consent to core's contract, which reaches this.
- * - `order.paid`, from commerce through the domain-event outbox: the
- *   Purchase, owed only where the checkout's consent granted.
+ * - `order.paid`, from commerce through the domain-event outbox, by its
+ *   contract token (AGL-3980): the Purchase, owed only where the checkout's
+ *   consent granted.
  * - A person's erasure: the events still owed that carry their hashed
  *   address.
  *
@@ -50,7 +52,7 @@ export function registerAdConversionsServerDeclarations(): void {
     { pluginId: AD_CONVERSIONS_PLUGIN_ID },
   )
   subscribePluginDomainEvent(
-    'order.paid',
+    ORDER_PAID_EVENT,
     async (envelope) => {
       const [{ intakeOrderPaid }, { platformIntakeDeps }] = await load()
       await intakeOrderPaid(platformIntakeDeps(), envelope)

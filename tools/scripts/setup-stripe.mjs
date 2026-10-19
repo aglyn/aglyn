@@ -430,7 +430,8 @@ if (webhookUrl) {
 }
 
 // Flat add-ons priced the same on every plan: POS Pro registers
-// (AGL-329) and the org-wide Event Calendar toggle (AGL-145/524).
+// (AGL-329), the org-wide Event Calendar toggle (AGL-145/524) and Site Care
+// (AGL-3954).
 const posAddon = await ensureAddonPair({
   lookupBase: 'aglyn_pos_register_addon',
   productName: 'Aglyn POS Pro register',
@@ -448,6 +449,19 @@ const eventCalendarAddon = await ensureAddonPair({
 })
 env['STRIPE_PRICE_EVENT_CALENDAR'] = eventCalendarAddon.monthly.id
 env['STRIPE_PRICE_EVENT_CALENDAR_YEARLY'] = eventCalendarAddon.yearly.id
+
+// Site Care (AGL-3954): the managed-website add-on, flat on every paid plan
+// and capped at quantity 1 by the console, so the price is the whole add-on.
+// It is staff time on the customer's site, taxed on the same platform code
+// every product carries (`PLATFORM_TAX_CODE`, set in `ensurePrice`).
+const siteCareAddon = await ensureAddonPair({
+  lookupBase: 'aglyn_site_care_addon',
+  productName: 'Aglyn Site Care',
+  usd: 49,
+  planMetadata: 'addon',
+})
+env['STRIPE_PRICE_SITE_CARE'] = siteCareAddon.monthly.id
+env['STRIPE_PRICE_SITE_CARE_YEARLY'] = siteCareAddon.yearly.id
 
 // Usage-based billing meter (AGL-635). The report-usage cron posts
 // `billing/meter_events` (event_name aglyn_metered_usage) carrying the
@@ -590,6 +604,37 @@ async function ensureAiOverageProduct() {
   return product.id
 }
 env['STRIPE_PRODUCT_AI_OVERAGE'] = await ensureAiOverageProduct()
+
+/**
+ * Domain registration and renewal (AGL-3962) are one-off invoices whose line
+ * carries its own amount — the registrar's price at cost + 30% — so, like
+ * the AI overage, there is no Price, only the product that carries the tax
+ * code. Found by metadata, created on a miss.
+ */
+async function ensureDomainRegistrationProduct() {
+  const query = encodeURIComponent(
+    `active:'true' AND metadata['aglynProduct']:'domain_registration'`,
+  )
+  const search = await stripe(`products/search?query=${query}`)
+  const existing = (search?.data ?? [])[0]
+  if (existing?.id) {
+    console.log(`= Domain registration product already exists (${existing.id})`)
+    return existing.id
+  }
+  if (DRY_RUN) {
+    dryRunMissing += 1
+    console.log('! Domain registration product MISSING (would be created)')
+    return '<MISSING:domain_registration_product>'
+  }
+  const product = await stripe('products', {
+    name: 'Domain registration',
+    'metadata[aglynProduct]': 'domain_registration',
+    tax_code: PLATFORM_TAX_CODE,
+  })
+  console.log(`+ created Domain registration product (${product.id})`)
+  return product.id
+}
+env['STRIPE_PRODUCT_DOMAIN_REGISTRATION'] = await ensureDomainRegistrationProduct()
 
 /**
  * THE TAX POSITION, checked on every run (AGL-1877).

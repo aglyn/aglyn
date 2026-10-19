@@ -38,20 +38,54 @@ public struct WorkspaceSite: Equatable, Hashable, Identifiable, Sendable {
   }
 }
 
-/// A workspace's logos as its own document keeps them (`logoUrl`, `logoDarkUrl`): the membership index carries none,
-/// so the console's switcher reads each workspace's document for them, and so does this store.
+/// What a workspace's own document says about how it looks: its logos (`logoUrl`, `logoDarkUrl`), its brand color
+/// (`brandingProfile.primaryColor`, white-label workspaces) and the plan it is on. The membership index carries none of
+/// them, so the console's switcher reads each workspace's document for them, and so does this store.
 public struct WorkspaceOrgLogo: Equatable, Hashable, Sendable {
   public let light: String?
   public let dark: String?
+  /// `#RRGGBB` when the workspace set a brand color.
+  public let brandColor: String?
+  /// The effective plan's id (`free`, `pro`, …), nil while unknown.
+  public let plan: String?
+  /// The plugins the workspace turned on, as stored (`enabledPlugins`); nil when it never chose, which reads as the
+  /// defaults (`resolveEnabledPlugins`).
+  public let enabledPlugins: [String]?
 
-  public init(light: String?, dark: String?) {
+  public init(
+    light: String?, dark: String?, brandColor: String? = nil, plan: String? = nil, enabledPlugins: [String]? = nil
+  ) {
     self.light = light
     self.dark = dark
+    self.brandColor = brandColor
+    self.plan = plan
+    self.enabledPlugins = enabledPlugins
   }
 
   public init(_ doc: FirestoreDocument?) {
     func text(_ key: String) -> String? { doc?.string(key).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } }
-    self.init(light: text("logoUrl"), dark: text("logoDarkUrl"))
+    let branding = doc?.data["brandingProfile"] as? [String: Any]
+    let brand = (branding?["primaryColor"] as? String)?.trimmingCharacters(in: .whitespaces)
+    self.init(
+      light: text("logoUrl"), dark: text("logoDarkUrl"),
+      brandColor: brand.flatMap { $0.range(of: "^#[0-9A-Fa-f]{6}$", options: .regularExpression) != nil ? $0 : nil },
+      plan: doc.map { effectivePlan($0.data) },
+      enabledPlugins: (doc?.data["enabledPlugins"] as? [Any])?.compactMap { $0 as? String })
+  }
+
+  /// The plan as the console names it ("Pro").
+  public var planLabel: String? { plan.map { OnboardingPlanIntent.planLabels[$0] ?? $0.capitalized } }
+}
+
+/// A site's own plugin choices, as its document keeps them: the plugins it turned off, and the default-off ones it
+/// opted into (`resolveHostEnabledPlugins` reads both against the workspace's).
+public struct SitePluginChoices: Equatable, Sendable {
+  public let disabled: [String]?
+  public let enabled: [String]?
+
+  public init(disabled: [String]?, enabled: [String]?) {
+    self.disabled = disabled
+    self.enabled = enabled
   }
 }
 
@@ -81,7 +115,21 @@ public final class WorkspaceStore {
   public static let orgWindow = 50
   public static let siteWindow = 100
 
-  public private(set) var orgs: [WorkspaceOrg] = []
+  /// Every workspace the store knows: the window the switcher pages through, plus the ones read on their own (a pin or
+  /// a recent workspace past the window), A to Z.
+  public var orgs: [WorkspaceOrg] {
+    guard !extraOrgs.isEmpty else { return windowOrgs }
+    let inWindow = Set(windowOrgs.map(\.id))
+    return (windowOrgs + extraOrgs.values.filter { !inWindow.contains($0.id) }).sorted {
+      $0.name.localizedStandardCompare($1.name) == .orderedAscending
+    }
+  }
+  /// The membership window, A to Z.
+  public private(set) var windowOrgs: [WorkspaceOrg] = []
+  /// Workspaces read one by one (`loadOrgs`), by id.
+  public private(set) var extraOrgs: [String: WorkspaceOrg] = [:]
+  /// How many workspaces the person belongs to (the server's count), nil until it has answered.
+  public private(set) var orgCount: Int?
   /// Whether the workspace window is full, so the list is not known to be complete (the console's `hasMoreOrgs`);
   /// `loadMoreOrgs` grows it.
   public private(set) var hasMoreOrgs = false
@@ -92,6 +140,8 @@ public final class WorkspaceStore {
   /// asks for them (`loadLogos`).
   public private(set) var orgLogos: [String: WorkspaceOrgLogo] = [:]
   public private(set) var error: String?
+  /// The shown site's own plugin choices (`disabledPlugins`, `enabledPlugins`), read live; nil until read.
+  public private(set) var sitePlugins: SitePluginChoices?
   /// False until the org list (and, with an org, its sites) has arrived once.
   public var ready: Bool { orgsLoaded && (orgs.isEmpty || sitesLoaded) }
 
@@ -112,6 +162,11 @@ public final class WorkspaceStore {
   @ObservationIgnored private var orgListener: FirestoreListening?
   @ObservationIgnored private var siteListener: FirestoreListening?
   @ObservationIgnored private var logoListeners: [String: FirestoreListening] = [:]
+  @ObservationIgnored private var orgReads: [String: FirestoreListening] = [:]
+  @ObservationIgnored private var siteDocListener: FirestoreListening?
+  @ObservationIgnored private var watchedHostID: String?
+  /// A workspace picked by id before its membership row was read (a search result past the window).
+  @ObservationIgnored private var waitingPick: WorkspacePick?
   @ObservationIgnored private var sitesFor: String?
   /// The site a console link named by its address (`/{orgSlug}/hosts/{hostSlug}/…`) before its workspace's sites arrived.
   @ObservationIgnored private var pendingHostSlug: String?
@@ -136,6 +191,7 @@ public final class WorkspaceStore {
   public func start() {
     guard orgListener == nil else { return }
     let window = orgWindowSize
+    if orgCount == nil { Task { await countOrgs() } }
     orgListener = reader.listen(
       FirestoreQuery(["users", uid, "orgs"], limit: window)
     ) { [weak self] result in
@@ -144,7 +200,7 @@ public final class WorkspaceStore {
       case .success(let docs):
         self.error = nil
         self.hasMoreOrgs = docs.count >= window
-        self.orgs = docs.map { Self.org(from: $0) }.sorted {
+        self.windowOrgs = docs.map { Self.org(from: $0) }.sorted {
           $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
         self.orgsLoaded = true
@@ -179,7 +235,37 @@ public final class WorkspaceStore {
     start()
   }
 
+  /// Asks the server how many workspaces the person belongs to (the rail's "All workspaces (N)").
+  public func countOrgs() async {
+    if let count = try? await reader.count(FirestoreQuery(["users", uid, "orgs"])) { orgCount = count }
+  }
+
+  /// Reads each of these workspaces' membership rows that the window does not hold (a pin or a recent workspace past
+  /// the first page), once, so the rail can show them and the switcher can pick them. A row that is gone stays unread,
+  /// so a workspace the person left never shows.
+  public func loadOrgs(_ orgIDs: [String]) {
+    let inWindow = Set(windowOrgs.map(\.id))
+    for orgID in orgIDs where !orgID.isEmpty && !inWindow.contains(orgID) && extraOrgs[orgID] == nil && orgReads[orgID] == nil {
+      let listener = reader.listenDocument(["users", uid, "orgs", orgID]) { [weak self] result in
+        guard let self else { return }
+        if case .success(let doc?) = result { self.extraOrgs[orgID] = Self.org(from: doc) }
+        self.orgReads[orgID]?.remove()
+        self.orgReads[orgID] = nil
+        if let waiting = self.waitingPick, waiting.orgID == orgID {
+          self.waitingPick = nil
+          if self.extraOrgs[orgID] != nil { self.select(orgID: orgID, hostID: waiting.hostID) }
+        }
+      }
+      if extraOrgs[orgID] != nil { listener.remove() } else { orgReads[orgID] = listener }
+    }
+  }
+
   public func stop() {
+    siteDocListener?.remove()
+    siteDocListener = nil
+    watchedHostID = nil
+    orgReads.values.forEach { $0.remove() }
+    orgReads = [:]
     orgListener?.remove()
     siteListener?.remove()
     orgListener = nil
@@ -206,6 +292,16 @@ public final class WorkspaceStore {
       }
       // An answer from the cache can land before the listener is kept; a one-time read then ends at once.
       if !live && orgLogos[orgID] != nil { listener.remove() } else { logoListeners[orgID] = listener }
+    }
+  }
+
+  /// Picks a workspace by id whether or not the window holds it: one past the window is read first, then picked.
+  public func open(orgID: String, hostID: String? = nil) {
+    if orgs.contains(where: { $0.id == orgID }) {
+      select(orgID: orgID, hostID: hostID)
+    } else {
+      waitingPick = WorkspacePick(orgID: orgID, hostID: hostID)
+      loadOrgs([orgID])
     }
   }
 
@@ -296,8 +392,25 @@ public final class WorkspaceStore {
     persist()
   }
 
+  /// Keeps a live read of the shown site's document for its plugin choices.
+  private func watchSite() {
+    let hostID = effective.hostID
+    guard hostID != watchedHostID else { return }
+    watchedHostID = hostID
+    siteDocListener?.remove()
+    siteDocListener = nil
+    sitePlugins = nil
+    guard let hostID else { return }
+    siteDocListener = reader.listenDocument(["hosts", hostID]) { [weak self] result in
+      guard let self, self.watchedHostID == hostID, case .success(let doc) = result else { return }
+      func ids(_ key: String) -> [String]? { (doc?.data[key] as? [Any])?.compactMap { $0 as? String } }
+      self.sitePlugins = SitePluginChoices(disabled: ids("disabledPlugins"), enabled: ids("enabledPlugins"))
+    }
+  }
+
   /// Remembers what is actually shown, so a stale pick heals on disk too.
   private func persist() {
+    watchSite()
     guard orgsLoaded, let data = try? JSONEncoder().encode(effective) else { return }
     defaults.set(data, forKey: Self.storageKey(uid))
   }

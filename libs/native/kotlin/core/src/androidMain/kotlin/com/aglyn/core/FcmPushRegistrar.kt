@@ -20,6 +20,10 @@ class FcmPushRegistrar(
   private val prefs: KeyValueStore,
   private val app: AglynAppId,
   private val appVersion: String?,
+  /** The Firestore that writes as [uid]: each signed-in account's own (Add account), so its device row is its own. */
+  private val firestoreFor: (uid: String) -> com.google.firebase.firestore.FirebaseFirestore = { firebase.firestore },
+  /** Every account signed in on this device, whose rows follow a rotated token. */
+  private val signedIn: () -> List<String> = { emptyList() },
 ) : PushRegistrar {
   private val messaging: FirebaseMessaging? =
     runCatching { firebase.app.get(FirebaseMessaging::class.java) }.getOrNull()
@@ -40,6 +44,11 @@ class FcmPushRegistrar(
     return write(uid, token)
   }
 
+  /** A rotated token: every account signed in here gets it in its own row, not only the one on screen. */
+  suspend fun rotated(token: String) {
+    for (uid in signedIn().ifEmpty { return }) write(uid, token)
+  }
+
   /** Writes the row for [token]; also called when FCM rotates the token. */
   suspend fun write(uid: String, token: String): Boolean {
     val firstKey = "$REGISTERED_KEY.$uid"
@@ -47,7 +56,7 @@ class FcmPushRegistrar(
     val row = fcmDeviceRow(token, app, appVersion, first) ?: return false
     val fields = row.mapValues { (_, value) -> if (value === ServerTimestamp) FieldValue.serverTimestamp() else value }
     return try {
-      firebase.firestore.document(deviceRowPath(uid, installId())).set(fields, SetOptions.merge()).await()
+      firestoreFor(uid).document(deviceRowPath(uid, installId())).set(fields, SetOptions.merge()).await()
       prefs.set(firstKey, "1")
       true
     } catch (error: Exception) {
@@ -57,7 +66,7 @@ class FcmPushRegistrar(
   }
 
   override suspend fun unregister(uid: String) {
-    runCatching { firebase.firestore.document(deviceRowPath(uid, installId())).delete().await() }
+    runCatching { firestoreFor(uid).document(deviceRowPath(uid, installId())).delete().await() }
     prefs.set("$REGISTERED_KEY.$uid", null)
   }
 

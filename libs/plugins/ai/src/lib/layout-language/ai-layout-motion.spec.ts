@@ -29,7 +29,7 @@ import {
   nodePropsAnimate,
 } from '@aglyn/aglyn/app-utils/element-animation'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { aiLayoutMotionSiteOf, aiLayoutPageCheck } from '../jobs/ai-job-page-language'
+import { AI_LAYOUT_SITE_MOTION_INPUT, aiLayoutMotionSiteOf, aiLayoutPageCheck, aiLayoutSiteMotionOf } from '../jobs/ai-job-page-language'
 import { AI_JUNIPER_PORTFOLIO_PAGE_ANSWER } from '../jobs/fixtures/ai-juniper-portfolio-page-recording'
 import { AI_SITE_KINDS } from '../model/ai-site-kinds'
 import {
@@ -439,5 +439,48 @@ describe('a site’s motion style, chosen with its look (AGL-3941)', () => {
     expect(aiLayoutMotionSiteOf(job({ seed: 42, motion: 'bounce' }), '/')).toEqual({ kind: 'portfolio', seed: 42 })
     // A job that names no kind of site still carries the style its look chose.
     expect(aiLayoutMotionSiteOf({ $id: 'job-2', inputs: { siteStyle: { motion: 'still' } } } as never, '/')).toMatchObject({ motion: 'still' })
+  })
+})
+
+describe('what a later build adds to a site moves the way the site does (AGL-3949)', () => {
+  // The look a guided start stored on its site, as `hosts/{id}.siteStyle` keeps it.
+  const stored = { v: 1, kind: 'photography', base: 'starter', seed: 4242, hue: 20, accent: 200, headerAlign: 'start', rhythm: 'calm', motion: 'sides' }
+  // A page of that site's own start, handed the look by the site step.
+  const ownPage = { $id: 'start-1-p1', inputs: { siteKind: 'photography', originJobId: 'start-1', siteStyle: { headerAlign: 'start', rhythm: 'calm', seed: 4242, motion: 'sides' } } }
+  // A page a later build adds: a job of its own, its seed its own, the site's motion handed on.
+  const addedPage = (siteMotion: unknown) => ({ $id: 'build-9-p0', inputs: { originJobId: 'build-9', ...(siteMotion === undefined ? {} : { [AI_LAYOUT_SITE_MOTION_INPUT]: siteMotion }) } })
+
+  it('reads the stored look’s kind, seed and motion style, defensively', () => {
+    expect(aiLayoutSiteMotionOf(stored)).toEqual({ kind: 'photography', seed: 4242, motion: 'sides' })
+    // A look stored before AGL-3941 chose no style: the site's kind and seed, its mood.
+    expect(aiLayoutSiteMotionOf({ ...stored, motion: undefined })).toEqual({ kind: 'photography', seed: 4242 })
+    expect(aiLayoutSiteMotionOf({ ...stored, motion: 'bounce' })).toEqual({ kind: 'photography', seed: 4242 })
+    for (const nothing of [null, undefined, 'sides', {}, { ...stored, seed: 'x' }, { ...stored, seed: Number.NaN }]) {
+      expect(aiLayoutSiteMotionOf(nothing)).toBeNull()
+    }
+  })
+
+  it('moves an added page exactly as the site’s own pages move', () => {
+    const own = aiLayoutMotionSiteOf(ownPage as never, '/about')
+    const added = aiLayoutMotionSiteOf(addedPage(aiLayoutSiteMotionOf(stored)) as never, '/book')
+    expect(added).toEqual(own)
+    // A page's motion is its site's character written on its nodes, so one character is one way of moving.
+    expect(aiSiteMotion(added)).toEqual(aiSiteMotion(own))
+    // Under `sides`: a split's picture from its own side, its words from the other.
+    expect(aiSiteMotion(added).sides).toBe(true)
+    // Not the motion its own job's seed would draw.
+    expect(aiSiteMotion(added)).not.toEqual(aiSiteMotion(aiLayoutMotionSiteOf(addedPage(undefined) as never, '/book')))
+  })
+
+  it('draws an added page on a site with no stored look from its own job, as before', () => {
+    const before = aiLayoutMotionSiteOf(addedPage(undefined) as never, '/book')
+    expect(before).toEqual({ seed: aiLayoutMotionSiteOf({ $id: 'x', inputs: { originJobId: 'build-9' } } as never, '/book').seed })
+    expect(aiLayoutMotionSiteOf(addedPage(null) as never, '/book')).toEqual(before)
+    expect(aiLayoutMotionSiteOf(addedPage({ kind: 'photography' }) as never, '/book')).toEqual(before)
+  })
+
+  it('keeps a site job’s own look first: a unit handed the look never reads a stored motion', () => {
+    const both = { ...ownPage, inputs: { ...ownPage.inputs, [AI_LAYOUT_SITE_MOTION_INPUT]: { kind: 'fitness', seed: 1, motion: 'still' } } }
+    expect(aiLayoutMotionSiteOf(both as never, '/about')).toEqual(aiLayoutMotionSiteOf(ownPage as never, '/about'))
   })
 })

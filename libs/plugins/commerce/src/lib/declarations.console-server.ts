@@ -20,6 +20,8 @@
 import { registerApiV1SiteResource } from '@aglyn/tenant-data-admin/server/api-v1-resources'
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import { registerPluginService } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { registerPluginSearchSources } from '@aglyn/aglyn/plugin-manager/plugin-search-sources'
+import { COMMERCE_SERVER_SEARCH_SOURCES } from './model/commerce-server-search-sources'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { ORDER_HISTORY_CONTRACT } from './model/order-history'
 import { registerCommerceTransferResources } from './transfer/register-transfer-resources'
@@ -84,4 +86,8 @@ export function registerCommerceConsoleServerDeclarations(): void {
   // import wizard and the export dialog (AGL-3531): the transfer routes are
   // the console's alone, so they register here.
   registerCommerceTransferResources()
+  // What the native apps' one box finds in a store (AGL-3943): products and
+  // orders, each under its own plan flag and, for orders, the site role that
+  // reads them.
+  registerPluginSearchSources(COMMERCE_SERVER_SEARCH_SOURCES, { pluginId: BUNDLE_ID })
 }

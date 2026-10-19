@@ -47,6 +47,7 @@ import {
   AI_ADDON_CREDITS_PER_MONTH,
   aiAddonName,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
+  SITE_CARE_ADDON_MONTHLY_USD,
   POS_REGISTER_ADDON_MONTHLY_USD,
   POS_REGISTERS_ADDON_MAX,
   ORG_COGS_UNIT_RATES_USD,
@@ -1051,6 +1052,15 @@ const addons = {
           (p) => `${num(AI_ADDON_CREDITS_PER_MONTH[p])} on ${PLAN_LABELS[p]}`,
         ).join(', ') +
         '. Enterprise by agreement.',
+    },
+    {
+      // The managed-website add-on (AGL-3954): staff time on the customer's
+      // site, flat on every paid plan and never on Free, so one headline
+      // price like the Event Calendar's. Org-wide, bought once.
+      label: 'Site Care',
+      priceUsd: SITE_CARE_ADDON_MONTHLY_USD,
+      scope: 'organization',
+      maxQuantity: 1,
     },
   ],
 }
@@ -2067,10 +2077,10 @@ feeLadder.finish()
 const ADDONS_STALE: Record<string, Divergence> = {}
 
 /**
- * Cards we publish that the page carries nowhere. Empty since AGL-2900 put
- * the AI card on every breakpoint; the AI card was declared here from the
- * day AGL-2896 priced it until then, which is the shape a new card takes
- * between the code selling it and the page stating it.
+ * Cards we publish that the page carries nowhere. Empty since AGL-3954 put
+ * the Site Care card on every breakpoint. A new card is declared here between
+ * the code selling it and the page stating it: the AI card from AGL-2896 to
+ * AGL-2900, Site Care from its pricing until the breakpoints carried it.
  */
 const ADDONS_EXPECTED_ABSENT: Record<string, string> = {}
 
@@ -2083,6 +2093,7 @@ const ADDON_FRAME_LABELS: Record<string, string[]> = {
   'Event Calendar': ['Event Calendar'],
   'Extra POS register': ['Extra POS register'],
   [AI_ADDON]: [AI_ADDON],
+  'Site Care': ['Site Care'],
 }
 
 /** A per-plan token read out of the AI card's sentence, or what is missing. */

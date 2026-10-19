@@ -29,19 +29,41 @@
  * production was already judging never fired, `/api/health/crons` returned
  * `job-never-reported`, and the Scheduled jobs monitor went red.
  *
- * WHY A TIMESTAMP AND NOT A CONTENT HASH. The rules checker byte-compares the
- * live ruleset against the file, because the control plane hands the source
- * back. Cloud Functions does not: what is deployed is a build artifact of a
- * whole npm package, and the API reports `updateTime`, a build id and a source
- * bucket URL, never the TypeScript that went in. The comparable question is
- * therefore ordering — is the newest promoted commit touching the package
- * older than the deploy that is running? — and it answers the failure that
- * actually happens, which is a deploy step nobody ran.
+ * WHY A SOURCE STAMP AND NOT A TIMESTAMP (AGL-3968). The rules checker
+ * byte-compares the live ruleset against the file, because the control plane
+ * hands the source back. Cloud Functions does not: what is deployed is a build
+ * artifact of a whole npm package, and the API reports `updateTime`, a build id
+ * and a source bucket URL, never the TypeScript that went in. Ordering (is the
+ * deploy newer than the last commit touching the package?) cannot stand in for
+ * content: on 2026-10-17 a functions commit landed at 01:19Z, a deploy of the
+ * PREVIOUS promotion's source ran at 02:54Z, and an ordering check would call
+ * the next promotion matched while production ran the older code.
  *
- * The four verdicts, and why each is separate:
+ * So the deploy writes down what it shipped. The functions predeploy hook
+ * (`cloud/functions/scripts/stamp-source.mjs`) puts the checkout's HEAD sha in
+ * the package dotenv as `AGLYN_SOURCE_SHA`; firebase-functions copies every
+ * dotenv variable onto every function it deploys, and the list API returns it
+ * under `serviceConfig.environmentVariables`. The check then asks git whether
+ * the stamped commit's package tree equals the baseline's
+ * (`git diff --quiet <stamp> <baseline> -- <pathspecs>`). Tree equality, not
+ * ancestry, so a squashed promotion with the same tree reads as the same
+ * source.
  *
- *  - STALE — a promoted commit touches the package and is NEWER than the
- *    deploy. The deploy is owed. This is the AGL-2575 incident.
+ * The verdicts, and why each is separate:
+ *
+ *  - STALE — the stamped source differs from the baseline, and the baseline
+ *    carries package commits the stamp does not. The deploy is owed. This is
+ *    the AGL-2575 incident, and the 2026-10-17 one.
+ *  - AHEAD — the stamped source differs and only the stamp carries the
+ *    commits: a deploy from a checkout past the promoted sha, so production
+ *    runs code that has not been promoted.
+ *  - UNSTAMPED — no `AGLYN_SOURCE_SHA`: deployed before the stamp existed, or
+ *    by a path that skipped the predeploy hook. Unknown is never a match;
+ *    redeploy to stamp.
+ *  - DIRTY — the stamp says the deploy packed uncommitted changes, so no
+ *    commit describes what is running.
+ *  - UNKNOWN SOURCE — the stamped sha is not in this clone (an unpushed
+ *    commit, or a shallow fetch), so its tree cannot be compared.
  *  - NEVER DEPLOYED — the promoted source exports a function that does not
  *    exist in the project at all. Worse than stale and reported apart from it,
  *    because a new scheduled export also creates a Cloud Scheduler job, and
@@ -52,23 +74,46 @@
  *    a deploy that has not run; until it does, a schedule keeps firing at code
  *    that review has already deleted.
  *  - NOT ACTIVE — deployed, but in a state other than ACTIVE. A FAILED or
- *    half-finished deployment reads as "recently updated" on `updateTime`
- *    alone, so the timestamp comparison would call it clean.
- *
- * CLOCK SKEW is real but not load-bearing here. Both timestamps come from
- * elsewhere — git's committer date and Google's deploy time — and the gap the
- * check exists to catch is measured in hours or days, not seconds. A deploy
- * made from an OLDER checkout than the promoted sha is the one case a
- * timestamp cannot see; nothing short of hashing the built artifact can, and
- * that failure has never happened here while the missed-deploy one has.
+ *    half-finished deployment can carry the new stamp on a revision that is
+ *    not serving.
  */
 
 /** Everything `firebase deploy --only functions` packs and ships. */
 export const FUNCTIONS_SOURCE_PATH = 'cloud/functions'
 
 /**
- * The pathspecs that decide WHICH commit the deployed functions are judged
- * against: everything under the package EXCEPT what cannot change what runs.
+ * The dotenv variable the predeploy hook writes and this check reads. Not a
+ * reserved prefix: firebase-tools refuses `FIREBASE_`, `X_GOOGLE_`, `EXT_`.
+ */
+export const SOURCE_STAMP_ENV = 'AGLYN_SOURCE_SHA'
+
+/** Suffix the stamp carries when the deploy packed uncommitted changes. */
+export const DIRTY_STAMP_SUFFIX = '-dirty'
+
+/** The deployed function's source stamp, or null when it carries none. */
+export function readSourceStamp(fn) {
+  const value = fn?.serviceConfig?.environmentVariables?.[SOURCE_STAMP_ENV]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+/**
+ * `dotenv` with exactly one `AGLYN_SOURCE_SHA=<stamp>` line, every other line
+ * kept as written. A null stamp removes the line, so a deploy that cannot read
+ * git ships UNSTAMPED rather than carrying an earlier deploy's sha forward.
+ */
+export function withSourceStamp(dotenv, stamp) {
+  const kept = String(dotenv ?? '')
+    .split('\n')
+    .filter((line) => !new RegExp(`^\\s*${SOURCE_STAMP_ENV}\\s*=`).test(line))
+  while (kept.length > 0 && kept[kept.length - 1] === '') kept.pop()
+  if (stamp) kept.push(`${SOURCE_STAMP_ENV}=${stamp}`)
+  return kept.length > 0 ? `${kept.join('\n')}\n` : ''
+}
+
+/**
+ * The pathspecs whose tree must match between the stamped commit and the
+ * baseline: everything under the package EXCEPT what cannot change what runs.
+ * The predeploy hook's dirty check reads the same list.
  *
  * The exclusions are deliberately few, and the list only ever grows by
  * argument, because it is the direction that fails UNSAFELY — a path wrongly
@@ -83,9 +128,9 @@ export const FUNCTIONS_SOURCE_PATH = 'cloud/functions'
  * declares no `ignore` for this package, so packing follows firebase-tools'
  * own defaults; this file is carried along and never consulted.
  *
- * Each was a real red with nothing to deploy behind it: Firebase skips an
- * unchanged function, correctly, so the timestamp the check waits for never
- * arrives and the workflow stays red for good.
+ * Each was a real red with nothing to deploy behind it: a difference there
+ * changes nothing that runs, so a check that counted it would owe a deploy
+ * that ships nothing new.
  */
 export const FUNCTIONS_SOURCE_PATHSPECS = Object.freeze([
   FUNCTIONS_SOURCE_PATH,
@@ -135,52 +180,71 @@ export function parseTimestamp(value) {
   return Number.isNaN(ms) ? null : ms
 }
 
-function formatAge(fromMs, toMs) {
-  const hours = Math.round(((toMs - fromMs) / 3_600_000) * 10) / 10
-  if (Math.abs(hours) < 48) return `${hours}h`
-  return `${Math.round((hours / 24) * 10) / 10}d`
+const short = (sha) => String(sha ?? '').slice(0, 9)
+
+function listCommits(lines, limit = 5) {
+  const shown = lines.slice(0, limit).join('; ')
+  return lines.length > limit ? `${shown}; and ${lines.length - limit} more` : shown
 }
 
 /**
  * Compare the deployed functions against the promoted source.
  *
  * @param deployed  the API's `functions` array (resource `name`, `updateTime`,
- *                  `state`).
+ *                  `state`, `serviceConfig.environmentVariables`).
  * @param declared  function ids the promoted entry file exports.
- * @param commit    `{ sha, timestampMs, subject }` for the newest promoted
- *                  commit touching the package, or null when the history
- *                  carries none.
+ * @param baselineSha  the commit whose package SHOULD be live, for messages.
+ * @param compareSource  `(stampSha) => ({ known, same, missing, extra })`:
+ *                  `known` is false when the sha is not in this clone; `same`
+ *                  is tree equality of the package at the stamp and at the
+ *                  baseline; `missing` lists the baseline's package commits
+ *                  the stamp lacks and `extra` the reverse, one oneline each.
+ *                  Called once per distinct stamp.
  * @param unreachable  regions the API could not answer for. LOAD-BEARING: an
  *                  export missing from a listing that skipped a region is
  *                  UNVERIFIABLE, not absent, and accusing it of never having
  *                  been deployed would be the check crying wolf about the one
  *                  case it genuinely cannot see.
- * @returns `{ findings, current, stale, neverDeployed, orphaned, notActive,
- *            unverifiable, oldestDeployMs, drifted }`
+ * @returns `{ findings, current, stale, ahead, unstamped, dirty,
+ *            unknownSource, neverDeployed, orphaned, notActive, unverifiable,
+ *            drifted }`
  */
-export function classifyFunctionsDrift({ deployed, declared, commit, unreachable }) {
+export function classifyFunctionsDrift({
+  deployed,
+  declared,
+  baselineSha,
+  compareSource,
+  unreachable,
+}) {
   const blindRegions = (unreachable ?? []).length > 0
   const declaredIds = new Set(declared ?? [])
   const seen = new Set()
   const findings = []
   const current = []
-  let oldestDeployMs = null
+  const comparisons = new Map()
+  const compare = (sha) => {
+    if (!comparisons.has(sha)) {
+      comparisons.set(
+        sha,
+        compareSource ? compareSource(sha) : { known: false, same: false, missing: [], extra: [] },
+      )
+    }
+    return comparisons.get(sha)
+  }
+  const baseline = baselineSha ? short(baselineSha) : 'the baseline'
 
   for (const fn of deployed ?? []) {
     const id = functionId(fn.name)
     const region = functionRegion(fn.name)
-    const updatedAtMs = parseTimestamp(fn.updateTime)
+    const stamp = readSourceStamp(fn)
     seen.add(id)
-    if (updatedAtMs !== null) {
-      oldestDeployMs =
-        oldestDeployMs === null ? updatedAtMs : Math.min(oldestDeployMs, updatedAtMs)
-    }
     const entry = {
       id,
       region,
       updateTime: fn.updateTime ?? null,
-      updatedAtMs,
+      updatedAtMs: parseTimestamp(fn.updateTime),
       state: fn.state ?? 'UNKNOWN',
+      stamp,
     }
     if (!declaredIds.has(id) && declaredIds.size > 0) {
       findings.push({
@@ -200,40 +264,72 @@ export function classifyFunctionsDrift({ deployed, declared, commit, unreachable
       })
       continue
     }
-    if (commit && updatedAtMs !== null && commit.timestampMs > updatedAtMs) {
+    if (!stamp) {
       findings.push({
         ...entry,
-        verdict: 'stale',
+        verdict: 'unstamped',
         detail:
-          `deployed ${formatAge(updatedAtMs, commit.timestampMs)} BEFORE ` +
-          `${commit.sha.slice(0, 9)}, which changed ${FUNCTIONS_SOURCE_PATH}.`,
+          `unknown — no source stamp (${SOURCE_STAMP_ENV}), so nothing says which code it ` +
+          'runs. Redeploy to stamp; a deploy time is not evidence of content.',
       })
       continue
     }
-    if (updatedAtMs === null) {
+    if (stamp.endsWith(DIRTY_STAMP_SUFFIX)) {
       findings.push({
         ...entry,
-        verdict: 'not-active',
-        detail: 'the API reported no parsable updateTime, so its age is unknown.',
+        verdict: 'dirty',
+        detail:
+          `deployed from ${short(stamp)} WITH uncommitted ${FUNCTIONS_SOURCE_PATH} changes, ` +
+          'so no commit describes what runs. Redeploy from a clean checkout.',
       })
       continue
     }
-    current.push(entry)
+    const result = compare(stamp)
+    if (!result.known) {
+      findings.push({
+        ...entry,
+        verdict: 'unknown-source',
+        detail:
+          `stamped ${short(stamp)}, which this clone does not have — an unpushed commit, ` +
+          'or a shallow fetch. Fetch it, or redeploy from a pushed checkout at the baseline.',
+      })
+      continue
+    }
+    if (result.same) {
+      current.push(entry)
+      continue
+    }
+    const missing = result.missing ?? []
+    const extra = result.extra ?? []
+    const verdict = missing.length === 0 && extra.length > 0 ? 'ahead' : 'stale'
+    findings.push({
+      ...entry,
+      verdict,
+      detail:
+        verdict === 'ahead'
+          ? `runs ${short(stamp)}, which carries ${extra.length} ${FUNCTIONS_SOURCE_PATH} ` +
+            `commit(s) ${baseline} does not: ${listCommits(extra)}.`
+          : `runs ${short(stamp)}, whose ${FUNCTIONS_SOURCE_PATH} differs from ${baseline}` +
+            (missing.length > 0
+              ? ` — missing ${missing.length} commit(s): ${listCommits(missing)}.`
+              : '.'),
+    })
   }
 
   const unverifiable = []
   for (const id of [...declaredIds].sort()) {
     if (seen.has(id)) continue
-    const missing = {
+    const absent = {
       id,
       region: '(none)',
       updateTime: null,
       updatedAtMs: null,
       state: 'ABSENT',
+      stamp: null,
     }
     if (blindRegions) {
       unverifiable.push({
-        ...missing,
+        ...absent,
         verdict: 'unverifiable',
         detail:
           `absent from a listing that could not answer for ${(unreachable ?? []).join(', ')} — ` +
@@ -242,7 +338,7 @@ export function classifyFunctionsDrift({ deployed, declared, commit, unreachable
       continue
     }
     findings.push({
-      ...missing,
+      ...absent,
       verdict: 'never-deployed',
       detail:
         'the promoted entry file exports it and the project has no such function — ' +
@@ -255,11 +351,14 @@ export function classifyFunctionsDrift({ deployed, declared, commit, unreachable
     findings,
     current,
     stale: byVerdict('stale'),
+    ahead: byVerdict('ahead'),
+    unstamped: byVerdict('unstamped'),
+    dirty: byVerdict('dirty'),
+    unknownSource: byVerdict('unknown-source'),
     neverDeployed: byVerdict('never-deployed'),
     orphaned: byVerdict('orphaned'),
     notActive: byVerdict('not-active'),
     unverifiable,
-    oldestDeployMs,
     drifted: findings.length > 0,
   }
 }
@@ -272,6 +371,7 @@ export function renderFunctionLines(entries) {
   const width = sorted.reduce((n, e) => Math.max(n, e.id.length), 0)
   return sorted.map(
     (e) =>
-      `  ${e.id.padEnd(width)}  ${e.region.padEnd(12)}  ${e.updateTime ?? '(never deployed)'}`,
+      `  ${e.id.padEnd(width)}  ${e.region.padEnd(12)}  ${e.updateTime ?? '(never deployed)'}` +
+      (e.stamp ? `  source ${short(e.stamp)}` : ''),
   )
 }

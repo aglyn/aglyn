@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-post-purchase",
-  "version": "1.0.0-beta.269",
+  "version": "1.0.0-beta.270",
   "private": true,
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
@@ -26,19 +26,25 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.269",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.269",
-    "@aglyn/shared-ui-snackstack": "1.0.0-beta.269",
-    "@aglyn/shared-util-http": "1.0.0-beta.269",
-    "@aglyn/shared-util-tools": "1.0.0-beta.269",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.269",
-    "@aglyn/tenant-feature-instance": "1.0.0-beta.269",
+    "@aglyn/aglyn": "1.0.0-beta.270",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.270",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.270",
+    "@aglyn/shared-util-http": "1.0.0-beta.270",
+    "@aglyn/shared-util-tools": "1.0.0-beta.270",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.270",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.270",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
+    "@aglyn/plugins-commerce": "1.0.0-beta.270",
     "@mui/material": "^9.3.1",
     "firebase-admin": "^14.3.0",
     "react": "^19.2.8"
+  },
+  "peerDependenciesMeta": {
+    "@aglyn/plugins-commerce": {
+      "optional": true
+    }
   },
   "sideEffects": false
 }

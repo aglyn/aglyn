@@ -70,6 +70,15 @@ function orders(context: PluginRecordRouteContext, key?: string, value?: string)
 }
 
 /**
+ * One order's address: the Orders list, opening that order's dialog. The
+ * same answer the `order` record route gives, for a caller that holds the
+ * id but not the registry (the one-box search, AGL-3943).
+ */
+export function orderRecordHref(context: PluginRecordRouteContext, id: string): string | null {
+  return id ? orders(context, ORDERS_ORDER_PARAM, id) : null
+}
+
+/**
  * The store's settings — payments (Stripe), shipping, tax and returns — under
  * `store-settings` (AGL-3676): where an AI-built store's "Finish your store"
  * list sends its owner, without spelling this plugin's console path.

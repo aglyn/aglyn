@@ -375,6 +375,16 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "keeps": "The connections are kept, and the site’s browser tags on the Tracking tab are not affected."
     }
   },
+  {
+    "id": "domains",
+    "label": "Domains",
+    "alwaysOnForWorkspace": true,
+    "description": "Buy a domain for a site and have it set up automatically, or point a domain you already own here in one click.",
+    "siteOff": {
+      "stops": "Switching Domains off for this site removes buying a domain and one-click DNS from its Custom Domain page. A domain you already connected keeps serving.",
+      "keeps": "Domains bought for this site stay registered to you and keep renewing until you turn auto-renew off or transfer them out, and Domains keeps working on the workspace’s other sites."
+    }
+  },
 ]
 
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
@@ -418,6 +428,7 @@ export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>
   "music": "elements",
   "help-desks": "console-only",
   "ad-conversions": "console-only",
+  "domains": "console-only",
 }
 
 /**
@@ -2512,6 +2523,16 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "delivery-apps",
     "name": "deliveryAppOrders",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "domains",
+    "name": "domainRegistrations",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "domains",
+    "name": "domainConnectSessions",
     "orgField": "orgId"
   },
 ]

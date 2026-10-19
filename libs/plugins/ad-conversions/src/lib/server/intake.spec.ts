@@ -18,6 +18,8 @@
  * limitations under the License.
  */
 
+import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import { ORDER_PAID_EVENT, type OrderEventPayload } from '@aglyn/plugins-commerce/contracts'
 import { intakeOrderPaid, recordOrderConsent, reportLead, type IntakeDeps } from './intake'
 import { emptyConnection } from './store'
 import { createMemoryAdConversionStore } from '../testing/memory-store'
@@ -67,9 +69,9 @@ function setup(options: { host?: Record<string, unknown> | null; enabled?: boole
   return { memory, deps }
 }
 
-const paid = (orderId: string, attempt = 1) => ({
+const paid = (orderId: string, attempt = 1): PluginDomainEventEnvelope<OrderEventPayload> => ({
   id: `env-${orderId}-${attempt}`,
-  event: 'order.paid',
+  event: ORDER_PAID_EVENT.id,
   hostId: HOST_ID,
   orgId: 'org-1',
   occurredAtMs: NOW,
@@ -77,11 +79,17 @@ const paid = (orderId: string, attempt = 1) => ({
   payload: {
     order: {
       id: orderId,
+      object: 'order',
+      number: 1001,
+      status: 'paid',
+      channel: 'online',
       currency: 'usd',
       customerEmail: 'Shopper@Example.com',
       customerName: 'Sam Shopper',
       lineItems: [{ productId: 'prod-1', name: 'Mug', quantity: 2, unitAmountCents: 1000 }],
-      totals: { itemsCents: 2000, taxCents: 165, totalCents: 2665 },
+      totals: { itemsCents: 2000, shippingCents: 500, taxCents: 165, discountCents: 0, totalCents: 2665, feeCents: 0 },
+      refundedCents: 0,
+      taxMode: 'manual',
       shippingAddress: { city: 'San Francisco', state: 'CA', postalCode: '94107', country: 'US' },
     },
   },

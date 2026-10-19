@@ -91,6 +91,34 @@ export const AI_LAYOUT_LANGUAGE_INPUT = 'layoutLanguage'
 /** The unit input naming the page of the site that places its form, where it is another page. */
 export const AI_LAYOUT_FORM_PAGE_INPUT = 'layoutFormPage'
 
+/**
+ * The unit input carrying the motion of the site a build adds to (AGL-3949):
+ * its stored look's kind, seed and motion style (`aiLayoutSiteMotionOf`).
+ */
+export const AI_LAYOUT_SITE_MOTION_INPUT = 'siteMotion'
+
+/** The site a page's entrance motion is drawn for: its kind, seed and, where its look chose one, motion style. */
+export interface AiLayoutSiteMotion {
+  kind?: string
+  seed: number
+  motion?: AiSiteMotionStyle
+}
+
+/**
+ * The motion a site's stored look names (`hosts/{id}.siteStyle`, or the
+ * `AI_LAYOUT_SITE_MOTION_INPUT` read from it), read defensively: `null` for a
+ * site whose look stored no seed, which a build then draws from its own job.
+ */
+export function aiLayoutSiteMotionOf(value: unknown): AiLayoutSiteMotion | null {
+  if (!value || typeof value !== 'object') return null
+  const style = value as Record<string, unknown>
+  const seed = style['seed']
+  if (typeof seed !== 'number' || !Number.isFinite(seed)) return null
+  const kind = typeof style['kind'] === 'string' && style['kind'] ? style['kind'] : null
+  const motion = aiSiteMotionStyle(style['motion'])
+  return { ...(kind ? { kind } : {}), seed: seed >>> 0, ...(motion ? { motion } : {}) }
+}
+
 /** Whether this job builds its page or its layout in the layout language. */
 export function aiJobUsesLayoutLanguage(job: Pick<AiJob, 'inputs'>): boolean {
   return job.inputs?.[AI_LAYOUT_LANGUAGE_INPUT] === true
@@ -477,13 +505,19 @@ export function aiLayoutDesignOf(job: Pick<AiJob, '$id' | 'inputs'>, slug: strin
  * standard mood — so every page of one site moves alike. The motion style its
  * look chose rides along (AGL-3941); a job whose look chose none — one from
  * before the look did, a replay of one, a job with no look — moves in its
- * kind's mood.
+ * kind's mood. A unit a build makes on an existing site carries the site's
+ * stored motion instead (`AI_LAYOUT_SITE_MOTION_INPUT`, AGL-3949), so a page
+ * added later moves the way the site's own pages do.
  */
 export function aiLayoutMotionSiteOf(
   job: Pick<AiJob, '$id' | 'inputs'>,
   slug: string,
-): { kind?: string; seed: number; motion?: AiSiteMotionStyle } {
+): AiLayoutSiteMotion {
   const style = job.inputs?.['siteStyle'] as Record<string, unknown> | undefined
+  if (!style) {
+    const stored = aiLayoutSiteMotionOf(job.inputs?.[AI_LAYOUT_SITE_MOTION_INPUT])
+    if (stored) return stored
+  }
   const motion = aiSiteMotionStyle(style?.['motion'])
   const { kind, seed } = aiLayoutDesignOf(job, slug) ?? { seed: aiSiteSeed(aiOriginJobId(job)) }
   return { ...(kind ? { kind } : {}), seed, ...(motion ? { motion } : {}) }
@@ -518,7 +552,7 @@ export interface AiLayoutPageCheckInput {
   /** The site's language, which the compiler's own words are written in (AGL-3760); absent, English. */
   language?: string
   /** The site the page's entrance motion is drawn for (`aiLayoutMotionSiteOf`); absent, its design. */
-  motion?: { kind?: string; seed: number; motion?: AiSiteMotionStyle }
+  motion?: AiLayoutSiteMotion
   /** Whether copy may promise what is coming (a coming-soon site, AGL-3887); absent, it may not. */
   promisesAllowed?: boolean
 }
