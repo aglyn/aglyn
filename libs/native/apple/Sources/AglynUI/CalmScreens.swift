@@ -66,30 +66,17 @@ public struct AglynRecordHeader: View {
   /// leads only when the record has one; a symbol tile adds nothing a detail column needs.
   private var column: some View {
     VStack(alignment: .leading, spacing: 20) {
-      HStack(alignment: .center, spacing: 10) {
-        if let imageURL { AglynDetailTile(imageURL: imageURL, systemImage: systemImage, size: 54) }
-        VStack(alignment: .leading, spacing: 6) {
-          Text(title).font(.system(size: 22, weight: .bold)).foregroundStyle(AglynColor.textPrimary).lineLimit(2)
-            .accessibilityAddTraits(.isHeader)
-            .textSelection(.enabled)
-          if let status { StatusChip(status.text, tone: status.tone) }
+      // Title and actions on one line where they fit; a narrow column (iPad in portrait) puts the actions under the
+      // title rather than cutting the primary's label short.
+      ViewThatFits(in: .horizontal) {
+        HStack(alignment: .center, spacing: 10) {
+          titleBlock
+          Spacer(minLength: 8)
+          columnActions
         }
-        Spacer(minLength: 8)
-        if !more.isEmpty { AglynRecordMoreMenu(more, square: true) }
-        if let primary {
-          Button(role: primary.destructive ? .destructive : nil) {
-            primary.run()
-          } label: {
-            if primary.busy {
-              ProgressView().controlSize(.small).frame(minWidth: 36, minHeight: 36)
-            } else {
-              AglynPrimaryHeaderButton.face(primary.label, systemImage: primary.systemImage)
-            }
-          }
-          .buttonStyle(.plain)
-          .opacity(primary.enabled ? 1 : 0.5)
-          .disabled(!primary.enabled || primary.busy)
-          .accessibilityIdentifier(primary.id)
+        VStack(alignment: .leading, spacing: 12) {
+          titleBlock
+          HStack(spacing: 10) { columnActions }
         }
       }
       if let subtitle, !subtitle.isEmpty {
@@ -101,6 +88,38 @@ public struct AglynRecordHeader: View {
     .padding(.top, 20)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("record-header")
+  }
+
+  private var titleBlock: some View {
+    HStack(alignment: .center, spacing: 10) {
+      if let imageURL { AglynDetailTile(imageURL: imageURL, systemImage: systemImage, size: 54) }
+      VStack(alignment: .leading, spacing: 6) {
+        Text(title).font(.system(size: 22, weight: .bold)).foregroundStyle(AglynColor.textPrimary).lineLimit(2)
+          .accessibilityAddTraits(.isHeader)
+          .textSelection(.enabled)
+        if let status { StatusChip(status.text, tone: status.tone) }
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var columnActions: some View {
+    if !more.isEmpty { AglynRecordMoreMenu(more, square: true) }
+    if let primary {
+      Button(role: primary.destructive ? .destructive : nil) {
+        primary.run()
+      } label: {
+        if primary.busy {
+          ProgressView().controlSize(.small).frame(minWidth: 36, minHeight: 36)
+        } else {
+          AglynPrimaryHeaderButton.face(primary.label, systemImage: primary.systemImage).fixedSize()
+        }
+      }
+      .buttonStyle(.plain)
+      .opacity(primary.enabled ? 1 : 0.5)
+      .disabled(!primary.enabled || primary.busy)
+      .accessibilityIdentifier(primary.id)
+    }
   }
 
   private var touch: some View {
@@ -220,7 +239,7 @@ public struct AglynFoldedSection<Content: View>: View {
         content
       } label: {
         HStack {
-          Text(title).font(AglynFont.strongSubheadline)
+          Text(title).font(plain ? .system(size: 14, weight: .semibold) : AglynFont.strongSubheadline)
           Spacer(minLength: AglynSpace.one)
           if let count, count > 0 {
             Text("\(count)").font(AglynFont.caption).foregroundStyle(.secondary).monospacedDigit()
@@ -231,10 +250,9 @@ public struct AglynFoldedSection<Content: View>: View {
         .accessibilityValue(open ? "Open" : "Folded")
         .accessibilityIdentifier(identifier ?? "fold-\(title)")
         // In the Mac and iPad detail column a folded section is a 49-point row under a hairline (Figma Section/Folded).
-        .frame(minHeight: plain ? 41 : nil)
+        .frame(minHeight: plain ? 49 : nil)
       }
-      .listRowSeparator(plain ? .visible : .automatic, edges: .top)
-      .listRowSeparatorTint(plain ? AglynColor.divider : nil)
+      .overlay(alignment: .top) { if plain { AglynHairline() } }
     }
   }
 }
@@ -261,7 +279,8 @@ public struct AglynRecordForm<Content: View>: View {
       List {
         content
           .listRowSeparator(.hidden)
-          .listRowInsets(EdgeInsets(top: 0, leading: 40, bottom: 0, trailing: 40))
+          // A list row adds 4 of its own, so the content lands 40 from the column's edges (Figma 13:483).
+          .listRowInsets(EdgeInsets(top: 0, leading: 36, bottom: 0, trailing: 36))
           .listRowBackground(Color.clear)
       }
       .listStyle(.plain)
@@ -274,6 +293,34 @@ public struct AglynRecordForm<Content: View>: View {
       Form { content }
         .formStyle(.grouped)
         .aglynListBackground()
+    }
+  }
+}
+
+/// The detail column's hairline (Figma border/subtle, 1 point), drawn by the row that owns it.
+public struct AglynHairline: View {
+  public init() {}
+
+  public var body: some View {
+    Rectangle().fill(AglynColor.divider).frame(height: 1).accessibilityHidden(true)
+  }
+}
+
+/// A plain detail column's section title (Figma 13:483: 17 semibold in the primary text color).
+public struct AglynRecordSectionTitle: View {
+  @Environment(\.aglynPlainRecord) private var plain
+  let title: String
+
+  public init(_ title: String) { self.title = title }
+
+  public var body: some View {
+    if plain {
+      // A row, not the section's header, so it lines up with the rows under it.
+      Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(AglynColor.textPrimary).textCase(nil)
+        .padding(.top, 20)
+        .accessibilityAddTraits(.isHeader)
+    } else {
+      Text(title)
     }
   }
 }

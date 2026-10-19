@@ -94,10 +94,11 @@ struct OrderDetailView: View {
         if let done { AglynNotice(done, tone: .success) { self.done = nil } }
       }
 
-      Section("Items") {
+      Section {
         let lines = order.lineItems ?? []
         let states = orderLineFulfillmentStates(order)
         let canRefundLines = canTransitionOrder(from: row.status, to: .refunded) && !orderDisputeBlocksRefund(order)
+        if wide { AglynRecordSectionTitle("Items") }
         if lines.isEmpty {
           Text("No items").foregroundStyle(.secondary)
         }
@@ -161,6 +162,8 @@ struct OrderDetailView: View {
             }
           }
         }
+      } header: {
+        if !wide { Text("Items") }
       }
 
       Section {
@@ -179,7 +182,8 @@ struct OrderDetailView: View {
         }
         if let tip = totals?.tipCents, tip != 0 { AglynAmountRow("Tip", amount: formatOrderMoney(Int(tip))) }
         AglynAmountRow("Total", amount: row.total, emphasized: true)
-          .listRowSeparator(.visible, edges: .top)
+          // Figma 13:483: the total sits under a hairline in the plain column.
+          .overlay(alignment: .top) { if wide { AglynHairline() } }
         if orderRefundState(order) != .none {
           AglynAmountRow("Refunded", amount: orderRefundSummary(order), tone: .warning)
         }
