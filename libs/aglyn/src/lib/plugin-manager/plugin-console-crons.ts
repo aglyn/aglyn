@@ -116,7 +116,19 @@ interface Registration extends PluginConsoleCronDeclaration {
   run: PluginConsoleCronJob['run']
 }
 
-const registrations: Registration[] = []
+/**
+ * On `globalThis` under `Symbol.for`, never at module scope (AGL-3947).
+ * The jobs are registered at boot, from `instrumentation.ts`, and Next
+ * compiles that file apart from the routes, so the boot and a route each hold
+ * their own copy of this module. At module scope, the boot filled its copy and
+ * every route read an empty one (AGL-3412, AGL-3868).
+ */
+const REGISTRY_KEY = Symbol.for('@aglyn/aglyn:plugin-console-crons')
+const globalScope = globalThis as typeof globalThis & {
+  [REGISTRY_KEY]?: Registration[]
+}
+const registrations: Registration[] =
+  globalScope[REGISTRY_KEY] ?? (globalScope[REGISTRY_KEY] = [])
 
 /** A job id as a beat document and a health row can carry it. */
 const JOB_ID = /^[a-z][a-z0-9-]*$/

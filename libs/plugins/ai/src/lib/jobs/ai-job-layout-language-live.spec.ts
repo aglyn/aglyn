@@ -352,7 +352,8 @@ function job(brief: Brief, kind: 'page' | 'layout', id: string, screen: AiBuildP
       businessName: brief.name,
       businessType: brief.businessType,
       siteKind: kindOf(brief),
-      ...(look ? { siteStyle: { headerAlign: look.headerAlign, rhythm: look.rhythm } } : {}),
+      // As the site step hands a unit its look; the motion style moves the compiled page (AGL-3941).
+      ...(look ? { siteStyle: { headerAlign: look.headerAlign, rhythm: look.rhythm, ...(look.motion ? { motion: look.motion } : {}) } } : {}),
       audience: brief.audience,
       city: brief.city,
       sitePages: planned(brief),
@@ -658,6 +659,7 @@ describeLive('six guided starts designed by the real model in the layout languag
           headerAlign: style?.headerAlign,
           rhythm: style?.rhythm,
           ground: style?.ground,
+          motion: style?.motion,
         }
       }),
       outputTokensPerPage: pages.map((result) => result.outputTokens),
