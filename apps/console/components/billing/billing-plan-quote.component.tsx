@@ -226,8 +226,16 @@ export default function BillingPlanQuoteComponent({
         const locked = parseLockdownRefusal(response.status, payload)
         if (locked) return void setLockdown(locked)
         // The link's code did not resolve: say so in one line and quote
-        // without it, rather than greeting the owner with an error.
-        if (!response.ok && response.status === 400 && fromLink && promotionCode) {
+        // without it, rather than greeting the owner with an error. Only the
+        // code's own refusal, which carries no `code`: an add-on refusal
+        // (`unknown_addon`, `addon_over_max`…) is not the coupon's fault.
+        if (
+          !response.ok &&
+          response.status === 400 &&
+          fromLink &&
+          promotionCode &&
+          !payload?.code
+        ) {
           setCouponNotice(
             `The code ${promotionCode} from your link is not valid or has ` +
               'expired, so it was left off.',
