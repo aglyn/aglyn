@@ -22,7 +22,13 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { nameSearchToken } from '@aglyn/aglyn/app-utils/name-search'
-import { hostMembershipSearchTokens, hostSearchFields, membershipRow } from './host-memberships'
+import {
+  changesProjectedHostFields,
+  hostMembershipSearchTokens,
+  hostSearchFields,
+  membershipRow,
+  projectedHostFieldsUpdate,
+} from './host-memberships'
 
 /**
  * AGL-1071. The site switcher renders from this projection, so the favicon
@@ -167,5 +173,59 @@ describe('hostSearchFields stamps the staff Sites list keys on the site (AGL-337
 
   it('says false for a site with no domain, rather than leaving the key out', () => {
     expect(hostSearchFields({ displayName: 'A' }).hasCustomDomain).toBe(false)
+  })
+})
+
+/**
+ * AGL-3972. The site lists read these rows, so a list showed a site's old name
+ * and its platform address while the site itself said otherwise.
+ */
+describe('the row carries the address the site answers on (AGL-3972)', () => {
+  it('carries the custom domain when the site has one', () => {
+    const row = membershipRow('org1', { displayName: 'Aglyn', subdomain: 'mkt', cname: ' example.com ' }, 'admin')
+    expect(row.cname).toBe('example.com')
+  })
+
+  it('deletes the domain, never omits it, once the site has none', () => {
+    // Merge writes: an absent key would keep a released domain on the row.
+    const row = membershipRow('org1', { displayName: 'Aglyn', subdomain: 'mkt', cname: '' }, 'admin')
+    expect('cname' in row).toBe(true)
+    expect(typeof row.cname).not.toBe('string')
+  })
+})
+
+describe('a mirrored field is written by the server that re-fans it (AGL-3972)', () => {
+  it('reads a new name, trimmed, as the host update', () => {
+    expect(projectedHostFieldsUpdate({ hostId: 'h', displayName: '  Aglyn  ' })).toEqual({
+      update: { displayName: 'Aglyn' },
+    })
+  })
+
+  it('reads a favicon, and the empty clear, onto seo.favicon', () => {
+    expect(projectedHostFieldsUpdate({ hostId: 'h', favicon: 'media:org:x' })).toEqual({
+      update: { 'seo.favicon': 'media:org:x' },
+    })
+    expect(projectedHostFieldsUpdate({ hostId: 'h', favicon: '' })).toEqual({
+      update: { 'seo.favicon': '' },
+    })
+  })
+
+  it('writes nothing for a body naming neither, so a plain re-fan stays one', () => {
+    expect(projectedHostFieldsUpdate({ hostId: 'h' })).toEqual({ update: null })
+    expect(projectedHostFieldsUpdate(null)).toEqual({ update: null })
+  })
+
+  it('refuses a blank or overlong name and a favicon that is not text', () => {
+    expect(projectedHostFieldsUpdate({ displayName: '   ' })).toHaveProperty('error')
+    expect(projectedHostFieldsUpdate({ displayName: 'x'.repeat(201) })).toHaveProperty('error')
+    expect(projectedHostFieldsUpdate({ displayName: 42 })).toHaveProperty('error')
+    expect(projectedHostFieldsUpdate({ favicon: null })).toHaveProperty('error')
+  })
+
+  it('names every host path a row is derived from as owing the re-fan', () => {
+    for (const path of ['displayName', 'subdomain', 'cname', 'seo.favicon']) {
+      expect(changesProjectedHostFields([path])).toBe(true)
+    }
+    expect(changesProjectedHostFields(['locales', 'defaultLocale', 'logoUrl'])).toBe(false)
   })
 })
