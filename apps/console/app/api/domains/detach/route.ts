@@ -15,19 +15,15 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb, runPluginEventHandlers, TENANT_APEX } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { revalidateHostAliases } from '../../../../utils/server/tenant-revalidate'
 import {
-  attachProjectDomain,
-  detachProjectDomain,
+  disconnectHostCustomDomain,
   emailUnverifiedResponse,
   firebaseAdmin,
   getOrgForHost,
   isImpersonationSession,
   lockdownRefusal,
-  logHostActivity,
-  releaseCustomDomainTwin,
-  syncHostProjectionForMembers,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -100,147 +96,33 @@ async function handler(request: Request): Promise<Response> {
 
     // Only this host's own domain may be released — never a domain read off
     // the request body, which would let an admin detach someone else's.
-    const domain = String(hostSnapshot.get('cname') ?? '')
-      .trim()
-      .toLowerCase()
-    if (!domain) {
+    // The release — provider detach, the subdomain serving again, the twin,
+    // the cleared claim, the activity entry and the plugin event — lives in
+    // `disconnectHostCustomDomain` (AGL-3961), so a plugin releasing a name it
+    // bought takes exactly this path. Authorization stays here.
+    const released = await disconnectHostCustomDomain({
+      hostId,
+      actor: {
+        uid: decoded.uid,
+        email: decoded.email ? String(decoded.email) : null,
+      },
+    })
+    if (released.ok === 'already-clear') {
       return Response.json({ detached: true, alreadyClear: true }, { status: 200 })
     }
-
-    // `not-found` is success (the name is already gone) and `skipped` is a
-    // deployment that does not register names at all — neither is a failure to
-    // report, and neither leaves an orphan behind.
-    const released = await detachProjectDomain(domain, 'tenant')
-    if (released.outcome === 'failed') {
-      // Record that the platform still holds it, so the orphan is visible
-      // rather than silent, and keep `cname` so a retry has something to act
-      // on. Same honesty as attach's `cnameAttachmentPending`.
-      await hostSnapshot.ref
-        .set({ cnameDetachmentPending: true }, { merge: true })
-        .catch(() => undefined)
-      return Response.json(
-        { error: released.detail ?? 'Detach failed at the platform' },
-        { status: 502 },
-      )
+    if (released.ok === 'refused') {
+      return Response.json({ error: released.error }, { status: released.status })
     }
-
-    // Undo the platform-subdomain edge redirect (AGL-1273): once no custom
-    // domain is connected, `{subdomain}.aglyn.app` must SERVE again rather
-    // than redirect to a domain the customer just released.
-    //
-    // Two calls because a redirect is a property of the registration, so the
-    // way to drop it is to drop the entry and put a plain one back. Only when
-    // there WAS an entry: `not-found` means the name is served by a wildcard
-    // and never had a redirect of its own, and registering one there would
-    // invent an entry this route never removed.
-    //
-    // Best-effort, in the order that fails safe. If the re-register loses, the
-    // name is left unregistered rather than redirecting to a domain that is
-    // gone — a wildcard still serves it, and the site keeps an address either
-    // way; a stale redirect would leave it with none.
-    //
-    // ⛔ Do NOT collapse these back into one call. This was a single
-    // `PATCH {redirect: null}` against the hosting vendor's API, and that is
-    // precisely what the provider seam exists to not have. The contract in
-    // `domain-provider.ts` is three operations — attach, detach, status — and
-    // an in-place mutate is a fourth that every driver would owe: the wildcard
-    // driver registers nothing and has no entry to patch, and the webhook
-    // driver would need a new verb in an operator's already-deployed endpoint.
-    // A fourth operation across three drivers is a real cost, and it is not
-    // worth what it buys here.
-    //
-    // What it would buy is closing a window whose worst case is already
-    // covered. The entry being dropped exists ONLY because a custom domain was
-    // connected — `upsertSubdomainRedirect` is what created it — so the state
-    // this restores is the one every site without a custom domain is already
-    // in: unregistered, and served by the wildcard on the tenant apex. The
-    // re-register is belt-and-braces for a name that resolves without it. A
-    // lost one costs nothing a visitor can see, which is why this may stay two
-    // calls and stay best-effort.
-    const subdomain = String(hostSnapshot.get('subdomain') ?? '')
-      .trim()
-      .toLowerCase()
-    if (subdomain) {
-      const platformName = `${subdomain}.${TENANT_APEX}`
-      const removed = await detachProjectDomain(platformName, 'tenant')
-      if (removed.outcome === 'detached') {
-        await attachProjectDomain(platformName, {}, 'tenant')
-      }
-    }
-
-    // The `www.`/apex twin (AGL-3961) forwards to the name just released, so
-    // it goes with it. Best-effort: a twin left on the deployment redirects
-    // to a name that no longer serves, which is a dead end but not another
-    // site — and the claim below is cleared either way, so no site can be
-    // shown the name as its own.
-    await releaseCustomDomainTwin(hostSnapshot.get('cnameTwin')).catch(
-      () => false,
-    )
-    await hostSnapshot.ref.set(
-      {
-        cname: firebaseAdmin.firestore.FieldValue.delete(),
-        cnameTwin: firebaseAdmin.firestore.FieldValue.delete(),
-        cnameTwinPending: firebaseAdmin.firestore.FieldValue.delete(),
-        cnameAttachmentPending: firebaseAdmin.firestore.FieldValue.delete(),
-        cnameDetachmentPending: firebaseAdmin.firestore.FieldValue.delete(),
-        subdomainRedirectPending: firebaseAdmin.firestore.FieldValue.delete(),
-      },
-      { merge: true },
-    )
-    // The Sites list's rows of this site drop the domain from their search
-    // and read "no custom domain" again (AGL-3321, `membershipRow`).
-    // Best-effort, as the rename's re-sync is.
-    {
-      const orgId = String(hostSnapshot.get('orgId') ?? '')
-      if (orgId) await syncHostProjectionForMembers(orgId, hostId).catch(() => undefined)
-    }
-
-    /*==========================================
-     * THE EVENT IS `cname` LEAVING THE DOCUMENT (AGL-118), which is the
-     * write directly above — the mirror image of where attach logs, and
-     * chosen the same way.
-     *
-     * Two of this route's exits answer 200 and neither is this event:
-     *
-     *  - `alreadyClear`, on a site with no domain to release. It is a 200
-     *    because the caller's desired end state already holds, not because
-     *    anything moved — and an entry there would put "released
-     *    example.com" in the feed of a site that has never had a domain,
-     *    with no domain name to even put in it.
-     *  - `outcome === 'failed'` is a 502, but it is the branch most likely
-     *    to attract a log line, because it is where the platform is
-     *    genuinely doing something. It stamps `cnameDetachmentPending` and
-     *    KEEPS `cname`: the domain is still attached, still certifying,
-     *    still counting against the deployment. A row there would say the
-     *    customer released a domain we are in fact still holding — the exact
-     *    orphan this route exists to make visible, made invisible again by
-     *    the audit trail agreeing with the mistake.
-     *
-     * Everything after this write is best-effort cache work that cannot
-     * re-attach the domain, so the state the entry describes is settled.
-     *=========================================*/
-    await logHostActivity(
-      hostId,
-      { uid: decoded.uid, email: decoded.email ? String(decoded.email) : null },
-      'Released the custom domain',
-      { type: 'host', id: hostId, name: domain },
-    )
 
     // AFTER the write, never before: the tenant re-reads on the next request,
     // so busting first would race the delete and re-warm the entry we are
     // trying to drop. The domain no longer resolves to this host, and the
     // `cname--` alias entry is the only thing that still says it does.
-    await revalidateHostAliases({ subdomain, hostId, cname: domain })
-
-    // The name no longer serves this site: plugins undo what they registered
-    // for it (AGL-3629), each checking no other site still serves it.
-    await runPluginEventHandlers('host.domain.released', {
-      orgId: String(hostSnapshot.get('orgId') ?? '') || null,
+    await revalidateHostAliases({
+      subdomain: released.subdomain,
       hostId,
-      domain,
-      reason: 'detached',
+      cname: released.domain,
     })
-
     return Response.json({ detached: true }, { status: 200 })
   } catch (error) {
     // A refused credential is a 401, not a fault of ours (AGL-1993). Null

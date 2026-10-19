@@ -15,12 +15,54 @@
  * limitations under the License.
  */
 
+import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
+import { registerPluginConsoleCron } from '@aglyn/aglyn/plugin-manager/plugin-console-crons'
+import { registerPluginEventHandler } from '@aglyn/aglyn/plugin-manager/plugin-events'
+import { BUNDLE_ID } from './constants/bundle-common'
+import { DOMAINS_OPERATOR_ALERTS } from './server/alerts'
 import { registerDomainConnectDeclarations } from './server/domain-connect/declarations'
+
+/** The lifecycle sweep's job id: its beat document and its health row. */
+export const DOMAINS_LIFECYCLE_JOB_ID = 'domains-lifecycle'
 
 /**
  * Domains' console-server registrations (AGL-3962, AGL-3963): the lifecycle
- * sweep, its alerts and activity actions, and the platform events it hears.
+ * sweep, its operator alerts, and the platform events it hears. On the
+ * console's server only — the billing webhook and the domain routes that
+ * raise these events run there, and the sweep charges cards.
  */
 export function registerDomainsConsoleServerDeclarations(): void {
+  registerOperatorAlerts(DOMAINS_OPERATOR_ALERTS, { pluginId: BUNDLE_ID })
+  registerPluginConsoleCron(
+    {
+      id: DOMAINS_LIFECYCLE_JOB_ID,
+      label: 'Domains',
+      drives:
+        'Finishes domain orders and connects them to their sites, refunds a purchase the registrar could not complete, reminds owners to confirm their registrant email, sends renewal notices, charges and renews domains before they expire, and lets a site fall back to its free address when its domain expires. If it stops, bought domains are left half-finished and renewals stop — the registrar’s own auto-renew keeps the names alive, unpaid.',
+      run: async (context) => {
+        const [{ runDomainsSweep }, { platformEffects }] = await Promise.all([
+          import('./server/lifecycle'),
+          import('./server/platform-effects'),
+        ])
+        return runDomainsSweep(platformEffects(), context)
+      },
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginEventHandler(
+    'billing.dispute.opened',
+    async (payload) => (await import('./server/events')).onDisputeOpened(payload),
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginEventHandler(
+    'billing.paymentMethod.changed',
+    async (payload) => (await import('./server/events')).onPaymentMethodChanged(payload),
+    { pluginId: BUNDLE_ID },
+  )
+  registerPluginEventHandler(
+    'host.domain.released',
+    async (payload) => (await import('./server/events')).onHostDomainReleased(payload),
+    { pluginId: BUNDLE_ID },
+  )
   registerDomainConnectDeclarations()
 }

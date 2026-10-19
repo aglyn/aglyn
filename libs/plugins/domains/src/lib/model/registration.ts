@@ -98,6 +98,11 @@ export interface DomainRegistrationDoc {
   costUsd: number
   renewalCostUsd: number
   purchaseInvoiceId?: string | null
+  /**
+   * Every invoice ever charged for the name — the purchase and each renewal —
+   * so a dispute on any of them finds the registration by `array-contains`.
+   */
+  invoiceIds?: string[]
   /** The registrar's order for the first year. */
   orderId?: string | null
   registeredAtMs?: number | null

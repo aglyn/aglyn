@@ -52,28 +52,31 @@ const mockLogHostActivity = jest.fn(async (..._args: unknown[]) => undefined)
 const mockHostData = jest.fn()
 const mockSyncHostProjection = jest.fn(async (..._args: unknown[]) => undefined)
 
-jest.mock('@aglyn/tenant-data-admin', () => ({
-  __esModule: true,
-  firebaseAdmin: {
-    app: () => ({
-      auth: () => ({
-        verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
-      }),
-      firestore: () => ({
-        collection: () => ({
-          doc: () => ({
-            get: async () => ({
-              exists: true,
-              get: (field: string) => mockHostData()[field],
-              data: () => mockHostData(),
-              ref: { set: mockHostSet },
-            }),
+const mockFirebaseAdmin = {
+  app: () => ({
+    auth: () => ({
+      verifyIdToken: (...args: unknown[]) => mockVerifyIdToken(...args),
+    }),
+    firestore: () => ({
+      collection: () => ({
+        doc: () => ({
+          set: (...args: unknown[]) => mockHostSet(...args),
+          get: async () => ({
+            exists: true,
+            get: (field: string) => mockHostData()[field],
+            data: () => mockHostData(),
+            ref: { set: mockHostSet },
           }),
         }),
       }),
     }),
-    firestore: { FieldValue: { delete: () => 'FIELD_DELETE' } },
-  },
+  }),
+  firestore: { FieldValue: { delete: () => 'FIELD_DELETE' } },
+}
+
+jest.mock('@aglyn/tenant-data-admin', () => ({
+  __esModule: true,
+  firebaseAdmin: mockFirebaseAdmin,
   getOrgForHost: async () => ({ orgId: 'org-1', org: {} }),
   lockdownRefusal: async () => null,
   isImpersonationSession: () => false,
@@ -81,14 +84,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     Response.json({ error: 'Verify your email' }, { status: 403 }),
   attachProjectDomain: (...args: unknown[]) => mockAttachProjectDomain(...args),
   detachProjectDomain: (...args: unknown[]) => mockDetachProjectDomain(...args),
-  // The twin's release (AGL-3961), modelled on the real one: no twin, no
-  // call; otherwise the same provider detach the primary goes through.
-  releaseCustomDomainTwin: async (twin: unknown) => {
-    const name = String(twin ?? '').trim().toLowerCase()
-    if (!name) return true
-    const released = await mockDetachProjectDomain(name, 'tenant')
-    return released?.outcome !== 'failed'
-  },
   // CAPTURED, not stubbed away (AGL-118): which branch writes the entry is
   // half of what this file now pins. Named explicitly because this factory is
   // a closed world — an absent export is `undefined`, the route throws past
@@ -97,6 +92,37 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   logHostActivity: (...args: unknown[]) => mockLogHostActivity(...args),
   // CAPTURED (AGL-3321): the members' site rows drop the released domain.
   syncHostProjectionForMembers: (...args: unknown[]) => mockSyncHostProjection(...args),
+  // The REAL release sequence (AGL-3961), which moved out of the route into
+  // the library. Its own imports are pointed at the same doubles below.
+  ...jest.requireActual('../../../../../../libs/tenant/data/admin/src/lib/server/host-custom-domain'),
+}))
+
+jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/firebase-admin', () => ({
+  __esModule: true,
+  default: mockFirebaseAdmin,
+  firebaseAdmin: mockFirebaseAdmin,
+}))
+jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/workspace-domains', () => ({
+  __esModule: true,
+  attachProjectDomain: (...args: unknown[]) => mockAttachProjectDomain(...args),
+  detachProjectDomain: (...args: unknown[]) => mockDetachProjectDomain(...args),
+  projectDomainStatus: async () => ({ state: 'unknown', verification: [], conflicts: [] }),
+}))
+jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/organizations', () => ({
+  __esModule: true,
+  logHostActivity: (...args: unknown[]) => mockLogHostActivity(...args),
+}))
+jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/host-memberships', () => ({
+  __esModule: true,
+  syncHostProjectionForMembers: (...args: unknown[]) => mockSyncHostProjection(...args),
+}))
+jest.mock('../../../../../../libs/tenant/data/admin/src/lib/server/hosted-page-review', () => ({
+  __esModule: true,
+  flagLookalikeCustomDomain: async () => 'clean',
+}))
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-events', () => ({
+  __esModule: true,
+  runPluginEventHandlers: (...args: unknown[]) => mockRunPluginEventHandlers(...args),
 }))
 
 const mockRunPluginEventHandlers = jest.fn(async (..._args: unknown[]) => ({

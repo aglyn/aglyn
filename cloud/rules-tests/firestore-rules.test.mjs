@@ -14897,3 +14897,44 @@ describe("a site's live chat settings are written by their route alone (AGL-3698
     )
   })
 })
+
+describe('bought domains are the server’s alone (AGL-3962)', () => {
+  const registrationDoc = (db) => doc(db, 'domainRegistrations', 'testbakery.com')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(registrationDoc(context.firestore()), {
+        domain: 'testbakery.com',
+        orgId: ORG,
+        hostId: HOST,
+        status: 'active',
+        autoRenew: true,
+        costUsd: 11.25,
+      })
+    })
+  })
+
+  it('no member and no staff reads, lists or writes a registration', async () => {
+    const readers = [
+      ['viewer', authed(VIEWER)],
+      ['editor', authed(EDITOR)],
+      ['admin', authed(OWNER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]
+    for (const [role, db] of readers) {
+      await mustDeny(`a ${role} reading a registration`, getDoc(registrationDoc(db)))
+      await mustDeny(
+        `a ${role} listing registrations`,
+        getDocs(query(collection(db, 'domainRegistrations'), limit(10))),
+      )
+      await mustDeny(
+        `a ${role} turning a name's renewals off`,
+        updateDoc(registrationDoc(db), { autoRenew: false }),
+      )
+      await mustDeny(
+        `a ${role} moving a name to another workspace`,
+        setDoc(doc(db, 'domainRegistrations', 'other.com'), { orgId: 'theirs', status: 'active' }),
+      )
+    }
+  })
+})

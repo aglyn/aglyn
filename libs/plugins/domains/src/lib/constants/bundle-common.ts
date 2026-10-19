@@ -37,6 +37,7 @@ export const DOMAINS_API_ROUTES = {
   purchase: 'registrar/purchase',
   registrations: 'registrar/registrations',
   autoRenew: 'registrar/auto-renew',
+  renewNow: 'registrar/renew-now',
   transferOut: 'registrar/transfer-out',
   reconnect: 'registrar/reconnect',
   connectDiscover: 'domain-connect/discover',

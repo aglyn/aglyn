@@ -15,7 +15,29 @@
  * limitations under the License.
  */
 
-/** Buying and managing a domain (AGL-3962). */
+import { registerPluginApiRoute } from '@aglyn/aglyn/server'
+import { DOMAINS_API_ROUTES } from '../constants/bundle-common'
+
+type Routes = typeof import('./routes')
+
+const lazy =
+  (pick: (routes: Routes) => (request: Request) => Promise<Response>) =>
+  async (request: Request) =>
+    pick(await import('./routes'))(request)
+
+/** Buying and managing a domain (AGL-3962), each handler loaded on first use. */
 export function registerRegistrarRoutes(): void {
-  // Routes land with the purchase lifecycle.
+  const routes: Array<[string, Parameters<typeof lazy>[0]]> = [
+    [DOMAINS_API_ROUTES.search, (routes) => routes.searchRoute],
+    [DOMAINS_API_ROUTES.registrations, (routes) => routes.registrationsRoute],
+    [DOMAINS_API_ROUTES.purchase, (routes) => routes.purchaseRoute],
+    [DOMAINS_API_ROUTES.autoRenew, (routes) => routes.autoRenewRoute],
+    [DOMAINS_API_ROUTES.renewNow, (routes) => routes.renewNowRoute],
+    [DOMAINS_API_ROUTES.transferOut, (routes) => routes.transferOutRoute],
+    [DOMAINS_API_ROUTES.reconnect, (routes) => routes.reconnectRoute],
+  ]
+  for (const [path, pick] of routes) {
+    const handler = lazy(pick)
+    registerPluginApiRoute(path, { web: (request) => handler(request) })
+  }
 }

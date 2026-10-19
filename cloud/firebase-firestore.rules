@@ -2816,6 +2816,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // A domain bought through the domains plugin (AGL-3962), keyed by the
+    // name. Written only by the plugin's console routes and its lifecycle
+    // sweep through the Admin SDK, and read the same way: what a client may
+    // see of one — never its registrar cost, never its invoice ids — is the
+    // view `/api/registrar/registrations` returns. A client write here could
+    // move a paid name to another workspace or switch its renewals off.
+    match /domainRegistrations/{domain} {
+      allow read, write: if false;
+    }
+
     // Storefront commerce tax records (AGL-1904), written by the commerce
     // webhook and read only by the same staff tax-return route. Deny ALL
     // client access: a row carries a shopper's address beside the amounts,

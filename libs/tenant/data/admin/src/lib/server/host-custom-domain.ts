@@ -16,6 +16,7 @@
  */
 
 import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/tenant-apex'
 import { runPluginEventHandlers } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import {
   domainProvider,
@@ -358,4 +359,130 @@ export async function releaseCustomDomainTwin(
   if (!name) return true
   const released = await detachProjectDomain(name, 'tenant')
   return released.outcome !== 'failed'
+}
+
+export type DisconnectHostDomainResult =
+  | {
+      ok: 'released'
+      /** The name released, for the caller's cache work. */
+      domain: string
+      /** The site's platform subdomain, which serves again. */
+      subdomain: string
+    }
+  /** Nothing to release: the caller's desired end state already holds. */
+  | { ok: 'already-clear' }
+  | {
+      ok: 'refused'
+      status: 404 | 502
+      code: 'unknown-site' | 'detach-failed'
+      error: string
+    }
+
+/**
+ * Releases a site's custom domain (AGL-742): removes it from the tenant
+ * deployment, puts the platform subdomain back to serving, releases the twin,
+ * clears the claim, logs it and tells plugins — the sequence
+ * `/api/domains/detach` ran inline, here so a plugin can release a name it
+ * bought once that name stops being the site's (it expired, or moved away).
+ *
+ * Deliberately does NOT touch DNS: a connected domain's records live in the
+ * customer's own zone.
+ *
+ * Cache work is the caller's, after this returns: the console's
+ * `revalidateHostAliases` drops the tenant's `cname--` alias entry, and a
+ * caller without it degrades to the cache's TTL.
+ */
+export async function disconnectHostCustomDomain(input: {
+  hostId: string
+  actor: HostActivityActor
+  reason?: 'detached' | 'site-deleted'
+}): Promise<DisconnectHostDomainResult> {
+  const { hostId, actor } = input
+  const firestore = firebaseAdmin.app().firestore()
+  const hostRef = firestore.collection('hosts').doc(hostId)
+  const hostSnapshot = await hostRef.get()
+  if (!hostSnapshot.exists) {
+    return { ok: 'refused', status: 404, code: 'unknown-site', error: 'Unknown site' }
+  }
+  const domain = String(hostSnapshot.get('cname') ?? '')
+    .trim()
+    .toLowerCase()
+  if (!domain) return { ok: 'already-clear' }
+
+  // `not-found` is success — the desired end state already holds — mirroring
+  // how attach tolerates a name already registered.
+  const released = await detachProjectDomain(domain, 'tenant')
+  if (released.outcome === 'failed') {
+    // Recorded so a retry (and a staff view) can see a release that never
+    // landed; `cname` is KEPT, because the name is still attached.
+    await hostRef
+      .set({ cnameDetachmentPending: true }, { merge: true })
+      .catch(() => undefined)
+    return {
+      ok: 'refused',
+      status: 502,
+      code: 'detach-failed',
+      error: released.detail ?? 'Detach failed at the platform',
+    }
+  }
+
+  // The platform subdomain was registered as a REDIRECT to the domain
+  // (AGL-1273), and the redirect is a property of its registration, so it is
+  // dropped with the registration and put back plain — which is what makes
+  // it serve again. A `not-found` means a wildcard serves it and it carried
+  // no redirect of its own; registering one there would create an entry
+  // this never removed.
+  const subdomain = String(hostSnapshot.get('subdomain') ?? '')
+    .trim()
+    .toLowerCase()
+  if (subdomain) {
+    const platformName = `${subdomain}.${TENANT_APEX}`
+    const removed = await detachProjectDomain(platformName, 'tenant')
+    if (removed.outcome === 'detached') {
+      await attachProjectDomain(platformName, {}, 'tenant')
+    }
+  }
+
+  // The twin forwards to the name just released, so it goes with it.
+  // Best-effort: a twin left on the deployment redirects to a name that no
+  // longer serves, which is a dead end but not another site — and the claim
+  // below is cleared either way, so no site can be shown the name as its own.
+  await releaseCustomDomainTwin(hostSnapshot.get(HOST_CNAME_TWIN_FIELD)).catch(
+    () => false,
+  )
+  await hostRef.set(
+    {
+      cname: firebaseAdmin.firestore.FieldValue.delete(),
+      [HOST_CNAME_TWIN_FIELD]: firebaseAdmin.firestore.FieldValue.delete(),
+      cnameTwinPending: firebaseAdmin.firestore.FieldValue.delete(),
+      cnameAttachmentPending: firebaseAdmin.firestore.FieldValue.delete(),
+      cnameDetachmentPending: firebaseAdmin.firestore.FieldValue.delete(),
+      subdomainRedirectPending: firebaseAdmin.firestore.FieldValue.delete(),
+    },
+    { merge: true },
+  )
+  // The Sites list's rows of this site drop the domain from their search and
+  // read "no custom domain" again (AGL-3321). Best-effort.
+  const orgId = String(hostSnapshot.get('orgId') ?? '')
+  if (orgId) {
+    await syncHostProjectionForMembers(orgId, hostId).catch(() => undefined)
+  }
+  // THE EVENT IS `cname` LEAVING THE DOCUMENT (AGL-118), which is the write
+  // directly above — the mirror image of where connect logs. The refusals
+  // above write no entry: a failed release still holds the name, and a row
+  // there would say the customer released a domain we are still holding.
+  await logHostActivity(hostId, actor, 'Released the custom domain', {
+    type: 'host',
+    id: hostId,
+    name: domain,
+  })
+  // The name no longer serves this site: plugins undo what they registered
+  // for it (AGL-3629), each checking no other site still serves it.
+  await runPluginEventHandlers('host.domain.released', {
+    orgId: orgId || null,
+    hostId,
+    domain,
+    reason: input.reason ?? 'detached',
+  })
+  return { ok: 'released', domain, subdomain }
 }
