@@ -40,6 +40,7 @@ import {
   blockedExtensionNotice,
   composeExtensionEntitlements,
   entitlementPurchasable,
+  lockedPreviewPlanLabel,
   resolveExtensionEntitlement,
 } from './extension-entitlement'
 
@@ -162,5 +163,30 @@ describe('entitlementPurchasable (AGL-3601)', () => {
         live('pro', { entitlements: { features: { demoUpsell: true } } }),
       ),
     ).toBe(false)
+  })
+})
+
+describe('lockedPreviewPlanLabel (AGL-3977)', () => {
+  it('names the plan that includes what a Free workspace lacks', () => {
+    expect(lockedPreviewPlanLabel(['crm'], { plan: 'free' })).toBe(
+      planLabelGrantingFeature('crm'),
+    )
+  })
+
+  it('names the HIGHEST plan when two flags are missing', () => {
+    // `crm` starts lower than `scheduledPublishing`; only the higher plan has both.
+    expect(lockedPreviewPlanLabel(['crm', 'scheduledPublishing'], { plan: 'free' })).toBe(
+      planLabelGrantingFeature('scheduledPublishing'),
+    )
+  })
+
+  it('answers nothing when nothing is missing', () => {
+    expect(
+      lockedPreviewPlanLabel(['crm', undefined], { plan: 'business', billingStatus: 'active' }),
+    ).toBeUndefined()
+  })
+
+  it('answers nothing when a missing flag is on no plan, so the card stays absent', () => {
+    expect(lockedPreviewPlanLabel(['crm', 'outreach'], { plan: 'free' })).toBeUndefined()
   })
 })

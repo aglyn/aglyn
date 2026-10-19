@@ -877,7 +877,12 @@ export function OrgMembersCard() {
                 } (metered per site)`
               : ''}
             {seatQuota.upgradeRequired ? (
-              ' — upgrade for more'
+              <>
+                {' — '}
+                <AppLink href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#plans`}>
+                  {'upgrade for more'}
+                </AppLink>
+              </>
             ) : seatQuota.addonPriceUsd != null ? (
               <>
                 {` — extra seats $${seatQuota.addonPriceUsd}/mo in `}
