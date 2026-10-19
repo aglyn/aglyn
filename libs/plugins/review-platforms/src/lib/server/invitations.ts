@@ -16,6 +16,12 @@
  */
 
 import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import {
+  ORDER_DELIVERED_EVENT,
+  ORDER_FULFILLED_EVENT,
+  type OrderEventPayload,
+  type OrderFulfilledEventPayload,
+} from '@aglyn/plugins-commerce/contracts'
 import type {
   PluginOrderEmailCopy,
   PluginOrderEmailCopyRequest,
@@ -86,13 +92,6 @@ export interface StoredInvitations {
   recordId: string
   trustpilot?: StoredInvitationEntry
   yotpo?: StoredInvitationEntry
-}
-
-export interface OrderEventPayload {
-  order: InvitationOrder
-}
-export interface OrderFulfilledPayload extends OrderEventPayload {
-  fulfillment?: { id?: string | null; at?: string | null }
 }
 
 /** How long a claim blocks a second delivery before a Yotpo claim is retaken. */
@@ -264,7 +263,7 @@ export async function inviteThroughTrustpilotApi(envelope: PluginDomainEventEnve
   if (!context) return
   const api = openTrustpilotApi(context.stored, context.config)
   if (!api) return
-  const wanted = api.sendOn === 'delivered' ? 'order.delivered' : 'order.fulfilled'
+  const wanted = api.sendOn === 'delivered' ? ORDER_DELIVERED_EVENT.id : ORDER_FULFILLED_EVENT.id
   if (envelope.event !== wanted) return
   const email = String(order.customerEmail ?? '').trim()
   const reason = await refusal(context, order, email)
@@ -321,7 +320,7 @@ function isoOf(value: unknown, fallbackMs: number): string {
 }
 
 /** `order.fulfilled` → Yotpo has the order, fulfilled, and asks its buyer for a review. */
-export async function sendOrderToYotpo(envelope: PluginDomainEventEnvelope<OrderFulfilledPayload>): Promise<void> {
+export async function sendOrderToYotpo(envelope: PluginDomainEventEnvelope<OrderFulfilledEventPayload>): Promise<void> {
   const order = envelope.payload?.order
   if (!order?.id) return
   const context = await contextFor(envelope.hostId)

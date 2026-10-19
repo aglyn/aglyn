@@ -21,10 +21,8 @@ import { PLATFORM_BRAND_NAME, platformConsoleOrigin } from '@aglyn/aglyn/app-uti
 import { resolveHostEnabledPlugins } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { pluginPeopleChangedSince } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import { pluginRecordPageLink } from '@aglyn/aglyn/plugin-manager/plugin-record-pages'
-import {
-  definePluginServiceContract,
-  resolvePluginService,
-} from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { resolvePluginService } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { ORDER_HISTORY_CONTRACT } from '@aglyn/plugins-commerce/contracts'
 import { getHostDocAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import {
   firebaseAdmin,
@@ -43,12 +41,12 @@ import { createCredentialOpener } from './credentials'
 import type { IntakeDeps } from './intake'
 import { fail, type HelpDeskGateResult, type HelpDeskRole, type HelpDeskRouteDeps } from './routes'
 import { createFirestoreConnectionStore, type ConnectionStore } from './store'
-import { runConnectionSync, type OrderHistoryEntry, type SyncRunDeps } from './sync-engine'
+import { runConnectionSync, type SyncRunDeps } from './sync-engine'
 
 /**
  * The production wiring (AGL-3824): the Admin SDK's Firestore, the person
  * records seam the CRM registers, commerce's order history service by its
- * contract id, and `fetch`. Every module above takes these as arguments, so
+ * contract, and `fetch`. Every module above takes these as arguments, so
  * a spec drives them with fakes and this file is the only one that reaches
  * the real services.
  */
@@ -66,19 +64,6 @@ const http = (): ProviderHttp => httpOverride ?? defaultProviderHttp()
 
 let store: ConnectionStore | null = null
 export const platformConnectionStore = (): ConnectionStore => (store ??= createFirestoreConnectionStore(firestore))
-
-/**
- * Commerce's order history reader, restated by its contract id: this plugin
- * never imports commerce, and a process where commerce registered no reader
- * answers `null`, which the backfill takes as nothing to copy.
- */
-interface CommerceOrderHistoryReader {
-  listOrders(request: { hostId: string; fromMs: number; untilMs: number; limit: number }): Promise<OrderHistoryEntry[]>
-}
-
-const COMMERCE_ORDER_HISTORY = definePluginServiceContract<CommerceOrderHistoryReader>('commerce.orderHistory', {
-  multiple: false,
-})
 
 const ROLE_RANK: Record<string, number> = { viewer: 1, author: 1, editor: 2, admin: 3 }
 
@@ -206,8 +191,10 @@ export function platformSyncDeps(): SyncRunDeps {
       }
     },
     peopleChangedSince: (request) => pluginPeopleChangedSince(request),
+    // Commerce's order history, by its contract (AGL-3980). A process where
+    // commerce registered no reader answers `null`: nothing to copy.
     orderHistory: async (request) => {
-      const reader = resolvePluginService(COMMERCE_ORDER_HISTORY)
+      const reader = resolvePluginService(ORDER_HISTORY_CONTRACT)
       return reader ? reader.listOrders(request) : null
     },
     source: PLATFORM_BRAND_NAME,

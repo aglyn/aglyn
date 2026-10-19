@@ -26,6 +26,12 @@ import {
   type PluginTrackingUpdate,
 } from '@aglyn/aglyn/plugin-manager/plugin-shipment-records'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import type { PluginDomainEventEnvelope } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import type {
+  OrderEventOrder,
+  OrderEventPayload,
+  OrderRefundedEventPayload,
+} from '@aglyn/plugins-commerce/contracts'
 import {
   listPluginFulfillmentProviders,
   pluginFulfillmentHolds,
@@ -403,7 +409,7 @@ async function importTee() {
   return answer.body.results[0]
 }
 
-function paidEnvelope(overrides: Record<string, unknown> = {}) {
+function paidEnvelope(overrides: Partial<OrderEventOrder> = {}): PluginDomainEventEnvelope<OrderEventPayload> {
   return {
     id: 'evt-1',
     event: 'order.paid',
@@ -414,17 +420,34 @@ function paidEnvelope(overrides: Record<string, unknown> = {}) {
     payload: {
       order: {
         id: ORDER_ID,
+        object: 'order',
         number: 1042,
+        status: 'paid',
+        channel: 'online',
         currency: 'usd',
-        testMode: false,
+        customerEmail: 'bea@example.com',
+        customerName: 'Bea Buyer',
+        livemode: true,
         lineItems: [
           { productId: 'prod-1', variantId: 'prod-1-v0', name: 'Ocean Tee', variantLabel: 'Black / S', quantity: 2, unitAmountCents: 2499 },
           { productId: 'own-product', variantId: 'v', name: 'Sticker', quantity: 1, unitAmountCents: 300 },
           { productId: 'prod-1', variantId: 'prod-1-v1', name: 'Ocean Tee', variantLabel: 'Black / M', quantity: 1, unitAmountCents: 2599 },
         ],
+        totals: { itemsCents: 7897, shippingCents: 0, taxCents: 0, discountCents: 0, totalCents: 7897, feeCents: 0 },
+        refundedCents: 0,
+        taxMode: 'none',
         ...overrides,
       },
     },
+  }
+}
+
+function refundedEnvelope(full: boolean): PluginDomainEventEnvelope<OrderRefundedEventPayload> {
+  const paid = paidEnvelope()
+  return {
+    ...paid,
+    event: 'order.refunded',
+    payload: { ...paid.payload, refund: { id: 're_1', amountCents: full ? 7897 : 300, lineItemIds: [], full } },
   }
 }
 
@@ -714,7 +737,7 @@ describe('orders', () => {
   })
 
   it('sends a paid order’s imported lines once, confirmed, with the address read from the order', async () => {
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     const stored = part()
     expect(stored).toMatchObject({
       orgId: ORG,
@@ -753,7 +776,7 @@ describe('orders', () => {
 
     // A redelivered event, and a member's send, find it sent.
     calls = []
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     expect(await sendPodOrder(PART(), { force: true })).toBe('skipped')
     expect(serviceCalls().filter((call) => call.method === 'POST')).toHaveLength(0)
     expect(printfulOrders.size).toBe(1)
@@ -769,15 +792,17 @@ describe('orders', () => {
       }
       return null
     }
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     expect(part()).toMatchObject({ status: 'queued', work: 'submit', attempts: 1, lastError: 'Printful: Bad gateway' })
     expect(await sendPodOrder(PART(), { now: Date.now() + 120_000 })).toBe('found')
     expect(part()).toMatchObject({ status: 'submitted', sourceOrderId: '701', attempts: 2 })
     expect(printfulOrders.size).toBe(1)
   })
 
-  it('leaves a test order a draft, never confirmed', async () => {
-    await onOrderPaid(paidEnvelope({ testMode: true }) as never)
+  it('leaves a test order a draft, never confirmed, by the event’s `livemode: false` alone (AGL-3980)', async () => {
+    // Commerce says test mode as `livemode: false`; the store's own record
+    // stays silent here, so only the event's word can make it a draft.
+    await onOrderPaid(paidEnvelope({ livemode: false }))
     expect(part()).toMatchObject({ status: 'draft', testMode: true })
     expect(serviceCalls().find((call) => call.path === '/orders')?.search).toBe('?confirm=false')
     const confirm = await json(await orderActionRoute(request(POD_API_ROUTES.orderAction, 'tok-editor', { body: { orderId: ORDER_ID, provider: 'printful', action: 'confirm' } })))
@@ -788,7 +813,7 @@ describe('orders', () => {
 
   it('leaves a live order a draft in review mode, for a member to confirm', async () => {
     await settingsRoute(request(POD_API_ROUTES.settings, 'tok-admin', { body: { provider: 'printful', submitMode: 'review' } }))
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     expect(part()?.status).toBe('draft')
     const view = await json(await orderRoute(request(POD_API_ROUTES.order, 'tok-viewer', { query: { orderId: ORDER_ID } })))
     expect(view.body.parts[0].actions).toEqual(['confirm', 'refresh', 'cancel'])
@@ -798,16 +823,16 @@ describe('orders', () => {
   })
 
   it('routes nothing for an order with no imported products, and nothing without a connection', async () => {
-    await onOrderPaid(paidEnvelope({ lineItems: [{ productId: 'own-product', quantity: 1, unitAmountCents: 100 }] }) as never)
+    await onOrderPaid(paidEnvelope({ lineItems: [{ productId: 'own-product', quantity: 1, unitAmountCents: 100 }] }))
     expect(part()).toBeNull()
     await disconnectRoute(request(POD_API_ROUTES.disconnect, 'tok-admin', { body: { provider: 'printful' } }))
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     expect(part()).toBeNull()
   })
 
   it('retries a failure that may pass with backoff, and gives up on one that will not, telling the managers', async () => {
     override = (call) => (call.method === 'POST' && call.path === '/orders' ? { status: 503 } : null)
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     const queued = part()
     expect(queued).toMatchObject({ status: 'queued', work: 'submit', attempts: 1 })
     expect((queued?.dueAtMs ?? 0) - Date.now()).toBeGreaterThan(50_000)
@@ -832,14 +857,14 @@ describe('orders', () => {
 
   it('fails at once an order with no address to ship to', async () => {
     orderRecord = { shipTo: { name: 'X', country: 'US' } }
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     expect(part()).toMatchObject({ status: 'failed', lastError: 'The order has no complete shipping address, so it cannot be sent to be made.' })
     expect(serviceCalls().some((call) => call.path === '/orders')).toBe(false)
   })
 
   it('holds a locked workspace’s order, untouched, until the lock lifts', async () => {
     lockdown = { scope: 'all' }
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     expect(part()).toMatchObject({ status: 'queued', work: 'submit', attempts: 0 })
     expect(serviceCalls().some((call) => call.path === '/orders')).toBe(false)
     lockdown = null
@@ -848,7 +873,7 @@ describe('orders', () => {
   })
 
   it('writes each parcel onto the order once, with the lines it carried', async () => {
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     const order = printfulOrders.get('701') as FakeOrder
     order.status = 'partial'
     order.shipments = [{ id: 555, carrier: 'USPS', tracking_number: '9400111', tracking_url: 'https://tools.usps.com/9400111', items: [{ item_id: 1000, quantity: 2 }] }]
@@ -876,7 +901,7 @@ describe('orders', () => {
   })
 
   it('keeps a parcel the order refused, with the reason, and tries again later', async () => {
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     const order = printfulOrders.get('701') as FakeOrder
     order.status = 'fulfilled'
     order.shipments = [{ id: 555, carrier: 'USPS', tracking_number: '1', items: [] }]
@@ -890,29 +915,29 @@ describe('orders', () => {
   })
 
   it('cancels at the service when the store cancels or fully refunds, and not for a part refund', async () => {
-    await onOrderPaid(paidEnvelope() as never)
-    await onOrderRefunded({ ...paidEnvelope(), event: 'order.refunded', payload: { ...paidEnvelope().payload, refund: { full: false } } } as never)
+    await onOrderPaid(paidEnvelope())
+    await onOrderRefunded(refundedEnvelope(false))
     expect(part()?.status).toBe('submitted')
-    await onOrderRefunded({ ...paidEnvelope(), event: 'order.refunded', payload: { ...paidEnvelope().payload, refund: { full: true } } } as never)
+    await onOrderRefunded(refundedEnvelope(true))
     expect(part()).toMatchObject({ status: 'canceled', work: null })
     expect(printfulOrders.get('701')?.status).toBe('canceled')
-    await onOrderCancelled({ ...paidEnvelope(), event: 'order.cancelled' } as never)
+    await onOrderCancelled({ ...paidEnvelope(), event: 'order.cancelled' })
     expect(serviceCalls().filter((call) => call.method === 'DELETE')).toHaveLength(1)
   })
 
   it('tells the managers when the service has already started making a canceled order', async () => {
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     const order = printfulOrders.get('701') as FakeOrder
     order.status = 'inprocess'
     await refreshPodOrder(PART())
-    await onOrderCancelled({ ...paidEnvelope(), event: 'order.cancelled' } as never)
+    await onOrderCancelled({ ...paidEnvelope(), event: 'order.cancelled' })
     expect(part()?.status).toBe('in_production')
     expect(notices[0].title).toBe('Order #1042 is already in production at Printful')
   })
 
   it('cancels an order never sent here, and one canceled mid-send once the send settles', async () => {
     lockdown = { scope: 'all' }
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     const outcome = await cancelPodOrder(PART(), parseSecretBoxKeyring(TOKEN_KEY), 'Canceled.')
     expect(outcome.ok).toBe(true)
     expect(part()).toMatchObject({ status: 'canceled', work: null })
@@ -928,9 +953,9 @@ describe('orders', () => {
       return service(url, init)
     }
     setPodFetchForTests(slowService)
-    const paid = onOrderPaid(paidEnvelope() as never)
+    const paid = onOrderPaid(paidEnvelope())
     while (!part() || part()?.leaseUntilMs === 0) await new Promise((resolve) => setTimeout(resolve, 0))
-    await onOrderCancelled({ ...paidEnvelope(), event: 'order.cancelled' } as never)
+    await onOrderCancelled({ ...paidEnvelope(), event: 'order.cancelled' })
     expect(part()?.work).toBe('cancel')
     release()
     await paid
@@ -941,7 +966,7 @@ describe('orders', () => {
 
   it('leaves a draft for an order the store’s own record says was paid in test mode', async () => {
     orderRecord = { ...orderRecord, testMode: true }
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     expect(part()).toMatchObject({ status: 'draft', testMode: true })
     expect(serviceCalls().find((call) => call.path === '/orders')?.search).toBe('?confirm=false')
   })
@@ -949,7 +974,7 @@ describe('orders', () => {
   it('holds the units it has not shipped, for a label bought for the rest of the order', async () => {
     registerPrintOnDemandServerDeclarations()
     expect(listPluginFulfillmentProviders().map((entry) => entry.id).sort()).toEqual(['printful', 'printify'])
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     expect(await podFulfillmentHolds(HOST, ORDER_ID, 'printful')).toEqual([
       { providerId: 'printful', providerLabel: 'Printful', lineIndex: 0, quantity: 2, state: 'accepted', reference: '701' },
       { providerId: 'printful', providerLabel: 'Printful', lineIndex: 2, quantity: 1, state: 'accepted', reference: '701' },
@@ -962,7 +987,7 @@ describe('orders', () => {
     expect(seen.unanswered).toEqual([])
     expect(seen.holds.map((hold) => [hold.providerId, hold.lineIndex, hold.quantity])).toEqual([['printful', 2, 1]])
     // Too far along to cancel, so the service still holds what it is making.
-    await onOrderCancelled({ ...paidEnvelope(), event: 'order.cancelled' } as never)
+    await onOrderCancelled({ ...paidEnvelope(), event: 'order.cancelled' })
     expect((await podFulfillmentHolds(HOST, ORDER_ID, 'printful')).map((hold) => hold.lineIndex)).toEqual([2])
     // A canceled part holds nothing.
     db.docs.set(`podOrders/${PART()}`, { ...(db.docs.get(`podOrders/${PART()}`) as object), status: 'canceled' })
@@ -978,12 +1003,12 @@ describe('orders', () => {
       },
       { pluginId: 'fulfillment-network' },
     )
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     expect(part()?.lines.map((line) => [line.lineIndex, line.quantity])).toEqual([[2, 1]])
   })
 
   it('lists the site’s sent orders newest first', async () => {
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     const list = await json(await ordersRoute(request(POD_API_ROUTES.orders, 'tok-editor')))
     expect(list.body.parts).toHaveLength(1)
     expect(list.body.parts[0]).toMatchObject({ orderRef: '#1042', providerLabel: 'Printful', status: 'submitted', retailMinor: 2 * 2499 + 2599 })
@@ -996,7 +1021,7 @@ describe('webhook doors', () => {
   beforeEach(async () => {
     await connectPrintful()
     await importTee()
-    await onOrderPaid(paidEnvelope() as never)
+    await onOrderPaid(paidEnvelope())
     calls = []
   })
 

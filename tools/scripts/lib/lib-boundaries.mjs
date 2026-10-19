@@ -530,8 +530,9 @@ export const OVERRIDES_CALL = 'boundaryOverridesFor(import.meta.url)'
  * @param {string} args.projectRoot repo-relative root of the project asking
  * @param {string} args.ruleName
  * @param {Record<string, unknown>} args.baseOptions the rule's options as configured
+ * @param {(alias: string) => string[]} [args.contractAliasesOf] the npm names of the plugins whose contracts the asking plugin declares (AGL-3980)
  */
-export function lintOverridesFor({ allowlist, packageMap, projectRoot, ruleName, baseOptions }) {
+export function lintOverridesFor({ allowlist, packageMap, projectRoot, ruleName, baseOptions, contractAliasesOf = () => [] }) {
   const byName = new Map(packageMap.map((project) => [project.name, project]))
   const source = packageMap.find((project) => project.root === projectRoot)
   if (!source) return []
@@ -541,8 +542,15 @@ export function lintOverridesFor({ allowlist, packageMap, projectRoot, ruleName,
     const target = byName.get(entry.to)
     if (target?.alias) aliases.add(target.alias)
   }
-  if (!aliases.size) return []
-  const allow = [...aliases].sort().map((alias) => `^${alias.replace(/[/@.-]/g, '\\$&')}(/|$)`)
+  const escape = (alias) => alias.replace(/[/@.-]/g, '\\$&')
+  // A plugin's declared providers, by their contracts subpath ONLY (AGL-3980):
+  // their entry and every other module stay refused.
+  const contracts = [...new Set(source.alias ? contractAliasesOf(source.alias) : [])].sort()
+  if (!aliases.size && !contracts.length) return []
+  const allow = [
+    ...[...aliases].sort().map((alias) => `^${escape(alias)}(/|$)`),
+    ...contracts.map((alias) => `^${escape(alias)}/${CONTRACTS_SUBPATH}$`),
+  ]
   return [
     {
       // Exactly the extensions the root config runs the rule on. Naming
@@ -850,4 +858,211 @@ export function versionedLibPackages(repoRoot) {
     .filter((project) => project.projectType === 'library' && !INDEPENDENTLY_VERSIONED.has(project.name))
     .map((project) => ({ name: project.name, path: join(project.root, 'package.json') }))
     .filter((entry) => statSync(join(repoRoot, entry.path), { throwIfNoEntry: false })?.isFile())
+}
+
+// ── Plugin contracts (AGL-3980) ──────────────────────────────────────────────
+//
+// A plugin never imports another plugin, with ONE exception: the other
+// plugin's contracts module, `libs/plugins/<id>/src/lib/contracts.ts`,
+// imported as `@aglyn/plugins-<id>/contracts`. It carries what a consumer
+// would otherwise restate by hand — a service contract's id and interface, an
+// event's name and payload — and nothing that runs the plugin, so importing it
+// never loads the plugin, and the consumer stays runnable with the provider
+// absent. The consumer says so in `plugins.config.json`: the provider is in its
+// `uses` (an optional code dependency) or its `catalog.requires` (it cannot be
+// switched on without it), and its package.json carries the provider as an
+// OPTIONAL peer.
+
+/** The subpath every plugin publishes its contracts at. */
+export const CONTRACTS_SUBPATH = 'contracts'
+
+/** Where a plugin's contracts module lives, relative to the plugin's root. */
+export const CONTRACTS_MODULE = 'src/lib/contracts.ts'
+
+/**
+ * Each plugin's declared code dependencies, read from `plugins.config.json`:
+ * `uses` and `catalog.requires` (a capability's `requires` names a switchboard
+ * id, which resolves to the plugin that serves it). What is malformed comes
+ * back as sentences, for the generator to throw and the guard to print.
+ *
+ * @param {{plugins: Array<Record<string, any>>}} config
+ * @returns {{plugins: Map<string, {id: string, alias: string, may: Set<string>}>, findings: string[]}}
+ */
+export function pluginCodeDependencies(config) {
+  const findings = []
+  const owner = new Map()
+  for (const plugin of config.plugins ?? []) {
+    owner.set(plugin.id, plugin.id)
+    for (const capability of plugin.capabilities ?? []) owner.set(capability.id, plugin.id)
+  }
+  const plugins = new Map()
+  for (const plugin of config.plugins ?? []) {
+    const where = `plugins.config.json: "${plugin.id}"`
+    const may = new Set()
+    if (plugin.uses !== undefined) {
+      if (!Array.isArray(plugin.uses) || plugin.uses.some((id) => typeof id !== 'string' || !id)) {
+        findings.push(`${where} "uses" must be a list of plugin ids`)
+      } else {
+        if (new Set(plugin.uses).size !== plugin.uses.length) findings.push(`${where} "uses" names a plugin twice`)
+        for (const id of plugin.uses) {
+          if (id === plugin.id) findings.push(`${where} "uses" names the plugin itself`)
+          else if (!owner.has(id)) findings.push(`${where} uses "${id}", which is no plugin in plugins.config.json`)
+          else if (owner.get(id) !== id) findings.push(`${where} uses "${id}", a capability of "${owner.get(id)}": name the plugin`)
+          else may.add(id)
+        }
+      }
+    }
+    for (const source of [plugin, ...(plugin.capabilities ?? [])]) {
+      for (const required of source.catalog?.requires ?? []) {
+        const id = owner.get(required)
+        if (id && id !== plugin.id) may.add(id)
+      }
+    }
+    plugins.set(plugin.id, { id: plugin.id, alias: plugin.package, may })
+  }
+  return { plugins, findings }
+}
+
+const STATEMENT = /(?:^|[;\n])\s*(import|export)\s+(type\s+)?([^'";]*?)\s*from\s*['"]([^'"]+)['"]|(?:^|[;\n])\s*import\s*['"]([^'"]+)['"]|\b(?:import|require)\s*\(\s*['"]([^'"]+)['"]\s*\)/g
+
+/** The text with every comment removed, so a quoted word in prose is never read as an import. */
+function withoutComments(text) {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1')
+}
+
+/**
+ * Every module specifier one source file imports or re-exports, with whether
+ * the statement is erased at compile time: `import type`, `export type`, or a
+ * braced list whose every name says `type`.
+ *
+ * @param {string} text
+ * @returns {Array<{specifier: string, typeOnly: boolean}>}
+ */
+export function importStatements(text) {
+  const out = []
+  for (const match of withoutComments(text).matchAll(STATEMENT)) {
+    if (match[4]) {
+      const clause = match[3].trim()
+      const braced = /^\{([\s\S]*)\}$/.exec(clause)
+      const names = braced ? braced[1].split(',').map((name) => name.trim()).filter(Boolean) : []
+      const typeOnly = Boolean(match[2]) || (names.length > 0 && names.every((name) => name.startsWith('type ')))
+      out.push({ specifier: match[4], typeOnly })
+    } else {
+      out.push({ specifier: match[5] ?? match[6], typeOnly: false })
+    }
+  }
+  return out
+}
+
+/**
+ * What one plugin's source — specs included, because the graph edge is drawn
+ * from any file — imports from other plugins: `[{ file, specifier, to,
+ * contract }]`, `to` the providing plugin's id and `contract` true for exactly
+ * `<alias>/contracts`.
+ *
+ * @param {string} pluginRoot absolute path of the importing plugin
+ * @param {string} ownId
+ * @param {ReadonlyMap<string, string>} idByAlias every plugin's npm name → id
+ */
+export function crossPluginImports(pluginRoot, ownId, idByAlias) {
+  const found = []
+  for (const file of walk(join(pluginRoot, 'src'), (name) => SOURCE_FILE.test(name))) {
+    for (const { specifier } of importStatements(readFileSync(file, 'utf8'))) {
+      const alias = packageOfSpecifier(specifier)
+      const to = alias ? idByAlias.get(alias) : undefined
+      if (!to || to === ownId) continue
+      found.push({ file, specifier, to, contract: specifier === `${alias}/${CONTRACTS_SUBPATH}` })
+    }
+  }
+  return found
+}
+
+/**
+ * The plugin → plugin edges that are contracts and nothing else, which the
+ * map allows, and what is wrong with the rest of the contract imports.
+ *
+ * An edge is a contract edge when EVERY import across it is the provider's
+ * `/contracts`, the provider has a contracts module, and the consumer names
+ * the provider in `uses` or `requires`. One other import across the same edge
+ * — the entry, a model file, a component — and the edge is an ordinary
+ * plugin → plugin edge, which `evaluateEdges` refuses as before.
+ *
+ * @param {object} args
+ * @param {Map<string, {id: string, alias: string, may: Set<string>}>} args.plugins from {@link pluginCodeDependencies}
+ * @param {Map<string, ReturnType<typeof crossPluginImports>>} args.imports by importing plugin id
+ * @param {(id: string) => boolean} args.hasContracts whether a plugin has its contracts module
+ * @returns {{allowed: Array<{from: string, to: string}>, findings: string[]}} edges by plugin id
+ */
+export function contractEdges({ plugins, imports, hasContracts }) {
+  const allowed = []
+  const findings = []
+  for (const [from, list] of imports) {
+    const byTarget = new Map()
+    for (const entry of list) byTarget.set(entry.to, [...(byTarget.get(entry.to) ?? []), entry])
+    for (const [to, entries] of byTarget) {
+      if (!entries.every((entry) => entry.contract)) continue
+      const alias = plugins.get(to)?.alias ?? to
+      if (!hasContracts(to)) {
+        findings.push(`${from} imports ${alias}/${CONTRACTS_SUBPATH}, but ${to} has no ${CONTRACTS_MODULE}`)
+        continue
+      }
+      if (!plugins.get(from)?.may.has(to)) {
+        findings.push(
+          `${from} imports ${alias}/${CONTRACTS_SUBPATH} without declaring it: add "${to}" to "uses" on "${from}" in plugins.config.json ` +
+            `(or to its catalog "requires", when ${from} cannot be switched on without ${to})`,
+        )
+        continue
+      }
+      allowed.push({ from, to })
+    }
+  }
+  return { allowed, findings }
+}
+
+/**
+ * What a contracts module may not do, as sentences. It is the one module of a
+ * plugin another plugin loads, so it must load nothing of the plugin: a
+ * runtime import is `@aglyn/aglyn` or one of its subpaths (the contract
+ * helpers), and anything else it names — its own model files included — is
+ * `import type`, which the compiler erases.
+ *
+ * @param {string} text the module's source
+ * @param {string} file for the message
+ */
+export function contractsModuleFindings(text, file) {
+  const findings = []
+  for (const { specifier, typeOnly } of importStatements(text)) {
+    if (typeOnly && (specifier.startsWith('.') || specifier.startsWith('@aglyn/aglyn'))) continue
+    if (!typeOnly && (specifier === '@aglyn/aglyn' || specifier.startsWith('@aglyn/aglyn/'))) continue
+    findings.push(
+      typeOnly
+        ? `${file} imports types from "${specifier}": a contract names its own model files or @aglyn/aglyn, nothing another package would have to install`
+        : `${file} loads "${specifier}" at runtime: a contracts module imports only @aglyn/aglyn at runtime, and everything else as \`import type\`, so loading it never loads the plugin`,
+    )
+  }
+  return findings
+}
+
+/**
+ * What a consumer's package.json owes for the contracts it imports from
+ * shipped source: the provider as a peer at the repo version, marked
+ * optional, and NOT as a dependency — installing the consumer must never
+ * install the provider.
+ *
+ * @param {Record<string, any>} pkg
+ * @param {string[]} providers npm names of the plugins whose contracts the shipped source imports
+ * @param {string} rootVersion
+ */
+export function contractPeerFindings(pkg, providers, rootVersion) {
+  const findings = []
+  for (const name of providers) {
+    if (pkg.dependencies?.[name]) findings.push(`dependencies carries ${name}; a plugin whose contracts it imports is an optional peer, never a dependency`)
+    if (pkg.peerDependencies?.[name] !== rootVersion) {
+      findings.push(`peerDependencies["${name}"] must be "${rootVersion}", the repo version (sync:lib-dependencies writes it)`)
+    }
+    if (pkg.peerDependenciesMeta?.[name]?.optional !== true) {
+      findings.push(`peerDependenciesMeta["${name}"] must say { "optional": true }: the plugin runs with ${name} absent (sync:lib-dependencies writes it)`)
+    }
+  }
+  return findings
 }

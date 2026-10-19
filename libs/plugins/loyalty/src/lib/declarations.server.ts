@@ -16,14 +16,11 @@
  */
 
 import { registerPluginCheckoutCredit } from '@aglyn/aglyn/plugin-manager/plugin-checkout-credits'
-import {
-  subscribePluginDomainEvent,
-  type PluginDomainEventEnvelope,
-} from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
+import { subscribePluginDomainEvent } from '@aglyn/aglyn/plugin-manager/plugin-domain-events'
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
+import { ORDER_CANCELLED_EVENT, ORDER_PAID_EVENT, ORDER_REFUNDED_EVENT } from '@aglyn/plugins-commerce/contracts'
 import { LOYALTY_CREDIT_KEY, LOYALTY_PLUGIN_ID } from './constants/bundle-common'
 import { canonicalLoyaltyCode } from './model/loyalty-math'
-import type { LoyaltyOrderPayload, LoyaltyRefundPayload } from './server/order-events'
 
 /**
  * Loyalty's SERVER declarations (AGL-3640), loaded by both apps' servers
@@ -32,9 +29,9 @@ import type { LoyaltyOrderPayload, LoyaltyRefundPayload } from './server/order-e
  * - the rewards credit commerce's cart and register ask through core's
  *   `core.checkout-credits` — rewards codes, referral codes, and staff
  *   lookup at the register;
- * - the seller's order events by name: `order.paid` earns, and
- *   `order.refunded` / `order.cancelled` take earned points back and give
- *   spent rewards back;
+ * - commerce's order events, by its contract tokens (AGL-3980): `order.paid`
+ *   earns, and `order.refunded` / `order.cancelled` take earned points back
+ *   and give spent rewards back;
  * - the person eraser, so erasing a customer erases their membership.
  *
  * Every body reaches its server module through a dynamic import, so nothing
@@ -64,18 +61,18 @@ export function registerLoyaltyServerDeclarations(): void {
     },
     owner,
   )
-  subscribePluginDomainEvent<LoyaltyOrderPayload>(
-    'order.paid',
+  subscribePluginDomainEvent(
+    ORDER_PAID_EVENT,
     async (envelope) => (await events()).earnForOrder(envelope),
     { ...owner, name: 'earn' },
   )
-  subscribePluginDomainEvent<LoyaltyRefundPayload>(
-    'order.refunded',
-    async (envelope: PluginDomainEventEnvelope<LoyaltyRefundPayload>) => (await events()).reverseForOrder(envelope, 'refunded'),
+  subscribePluginDomainEvent(
+    ORDER_REFUNDED_EVENT,
+    async (envelope) => (await events()).reverseForOrder(envelope, 'refunded'),
     { ...owner, name: 'refund' },
   )
-  subscribePluginDomainEvent<LoyaltyOrderPayload>(
-    'order.cancelled',
+  subscribePluginDomainEvent(
+    ORDER_CANCELLED_EVENT,
     async (envelope) => (await events()).reverseForOrder(envelope, 'cancelled'),
     { ...owner, name: 'cancel' },
   )
