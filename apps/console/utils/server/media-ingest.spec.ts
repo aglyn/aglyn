@@ -48,11 +48,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         collection: () => ({
           doc: () => ({
             collection: () => ({
-              where: (field: string, _op: string, value: string) => ({
+              where: (field: string, _op: string, value: unknown) => ({
                 limit: () => ({
                   get: async () => ({
                     docs: mockStored
-                      .filter((entry) => (entry.data['stockPhoto'] as { key?: string })?.key === value && field === 'stockPhoto.key')
+                      .filter((entry) =>
+                        field === 'stockPhoto.key'
+                          ? (entry.data['stockPhoto'] as { key?: string })?.key === value
+                          : field === 'ownerPhoto' && entry.data['ownerPhoto'] === value,
+                      )
                       .map((entry) => ({ id: entry.id, data: () => entry.data })),
                   }),
                 }),
@@ -101,6 +105,8 @@ jest.mock('./media-scope', () => ({
   },
   mediaCdnPathUpdate: ({ cdnScope, mediaId }: { cdnScope: string; mediaId: string }) =>
     `/api/media/cdn/${cdnScope}/${mediaId}`,
+  // The library holds one folder, `owner`, named "From the owner"; any other id is stale.
+  folderStoragePath: async (_scopeRef: unknown, folderId: string | null) => (folderId === 'owner' ? 'From the owner' : ''),
 }))
 
 jest.mock('./media-storage-band', () => ({
@@ -235,5 +241,59 @@ describe('the console media ingest (AGL-3660)', () => {
       height: 853,
     })
     expect(await consoleMediaIngest.findStockPhoto({ hostId: 'host-1', sourceKey: 'pixabay:9' })).toBeNull()
+  })
+
+  it("files a photo link's photo in its folder, marked as the owner's (AGL-3957)", async () => {
+    const result = await consoleMediaIngest.ingest({
+      hostId: 'host-1',
+      uid: 'member-1',
+      fileName: 'IMG_0412.jpg',
+      contentType: 'image/jpeg',
+      bytes: JPEG,
+      folderId: 'owner',
+      ownerPhotoLinkId: 'link-1',
+    })
+    expect(result).toMatchObject({ ok: true })
+    const { mediaId } = result as { mediaId: string }
+    expect(mockSaved[0]).toEqual({ path: `hosts/host-1/media/From the owner/${mediaId}`, bytes: JPEG.length })
+    expect(mockCreated[0].data).toMatchObject({
+      folderId: 'owner',
+      storagePath: `hosts/host-1/media/From the owner/${mediaId}`,
+      ownerPhoto: true,
+      photoLinkId: 'link-1',
+    })
+    // A stale folder files at the root, and a stock photo is nobody's own.
+    const stale = await consoleMediaIngest.ingest({
+      hostId: 'host-1',
+      uid: 'member-1',
+      fileName: 'a.jpg',
+      contentType: 'image/jpeg',
+      bytes: JPEG,
+      folderId: 'gone',
+    })
+    const staleId = (stale as { mediaId: string }).mediaId
+    expect(mockSaved[1]).toEqual({ path: `hosts/host-1/media/${staleId}`, bytes: JPEG.length })
+    expect(mockCreated[1].data).toMatchObject({ folderId: 'gone' })
+    expect(mockCreated[1].data).not.toHaveProperty('ownerPhoto')
+  })
+
+  it("lists the site's own photos newest first, live and public only, with their alt text (AGL-3957)", async () => {
+    const at = (ms: number) => ({ toMillis: () => ms })
+    mockStored = [
+      { id: 'stock', data: { stockPhoto: STOCK, contentType: 'image/jpeg', cdnPath: '/api/media/cdn/host-1/stock' } },
+      { id: 'old', data: { ownerPhoto: true, contentType: 'image/jpeg', cdnPath: '/api/media/cdn/host-1/old', width: 800, height: 600, createdAt: at(1) } },
+      { id: 'gone', data: { ownerPhoto: true, contentType: 'image/jpeg', cdnPath: '/api/media/cdn/host-1/gone', deletedAt: 1 } },
+      { id: 'secret', data: { ownerPhoto: true, contentType: 'image/jpeg', private: true } },
+      {
+        id: 'new',
+        data: { ownerPhoto: true, contentType: 'image/png', cdnPath: '/api/media/cdn/host-1/new', width: 1200, height: 1600, alt: 'The van', createdAt: at(2) },
+      },
+    ]
+    expect(await consoleMediaIngest.listOwnerPhotos({ hostId: 'host-1' })).toEqual([
+      { mediaId: 'new', src: 'media:host-1/new', width: 1200, height: 1600, alt: 'The van' },
+      { mediaId: 'old', src: 'media:host-1/old', width: 800, height: 600 },
+    ])
+    expect(await consoleMediaIngest.listOwnerPhotos({ hostId: 'host-1', limit: 1 })).toHaveLength(1)
+    expect(await consoleMediaIngest.listOwnerPhotos({ hostId: '' })).toEqual([])
   })
 })

@@ -11,7 +11,7 @@ import com.aglyn.pluginhost.NativePluginRegistrar
  */
 fun registerMarketingNative(r: NativePluginRegistrar) {
   for (section in MarketingSection.entries) {
-    r.screen(section.screen, title = if (section == MarketingSection.OVERVIEW) "Marketing" else section.label, requiresSite = true, icon = section.icon) { context, params ->
+    r.screen(section.screen, title = if (section == MarketingSection.OVERVIEW) "Marketing" else section.label, requiresSite = false, icon = section.icon) { context, params ->
       val campaign = params["campaign"]
       val orgId = context.orgId
       val hostId = context.hostId

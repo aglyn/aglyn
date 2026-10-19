@@ -615,9 +615,17 @@ npm run check:functions-drift -- --baseline=origin/production
 npm --prefix cloud/functions run deploy   # firebase deploy --only functions
 ```
 
-The check is the functions counterpart of `check:rules-drift`: it reads each
-deployed function's `updateTime` and goes red when the promoted commit that
-changed `cloud/functions` is newer. It needs **ADC**, not the Firebase service
+The check is the functions counterpart of `check:rules-drift`, and it compares
+content, not time. Every deploy stamps each function with the sha of the
+checkout it ran from: the `stamp-source` predeploy hook writes
+`AGLYN_SOURCE_SHA` into `cloud/functions/.env`, and firebase-functions copies it
+onto every function. The check reads that stamp back and goes red unless the
+stamped commit's `cloud/functions` tree equals the baseline's. A function with
+no stamp reads `UNSTAMPED` (unknown, never a match), and a deploy from a
+checkout with uncommitted package changes reads `DIRTY`. So deploy from a clean
+checkout pinned to the promoted sha, and deploy every function: a deploy
+time later than the last commit is not evidence that the deploy carried it
+(AGL-3968). It needs **ADC**, not the Firebase service
 account — that principal has no `cloudfunctions.functions.list` and gets a 403.
 A live `gcloud auth login` session is picked up on its own; otherwise pass
 `FUNCTIONS_CHECK_ACCESS_TOKEN=$(gcloud auth print-access-token)`. It also runs

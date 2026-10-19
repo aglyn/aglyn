@@ -298,6 +298,12 @@ export const FEATURE_ROW_EXCLUSIONS: Partial<Record<FeatureKey, string>> = {
   // sold on its own line.
   eventCalendar:
     'Sold as a paid add-on, not carried by any tier — priced separately.',
+  // False on all eight tiers for the same reason (AGL-3954): staff time on
+  // the customer's site, bought on its own line on any paid plan. A row would
+  // read "no plan includes this" on every card.
+  siteCare:
+    'Sold as a paid add-on on every paid plan, not carried by any tier — ' +
+    'priced separately.',
   // True from Pro up, so a row would tick — and would promise something the
   // platform cannot guarantee. A dedicated subdomain is capacity-managed:
   // claimed only when a merchant asks, bounded by the provider's account-wide

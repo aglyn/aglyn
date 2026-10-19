@@ -55,6 +55,7 @@ import PluginWidgetSlot, {
 } from '../../../../../components/plugin-widget-slot.component'
 import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
 import StaffMediaLibraryCard from '../../../../../components/staff-media-library-card.component'
+import { PhotoLinkDialogOnOpen } from '../../../../../components/media/photo-link-dialog.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
 import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
@@ -177,6 +178,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
 
   const [subdomain, setSubdomain] = useState('')
   const [busy, setBusy] = useState(false)
+  const [photoLinkOpen, setPhotoLinkOpen] = useState(false)
   useEffect(() => setSubdomain(String(host?.subdomain ?? '')), [host?.subdomain])
   const handleSubdomainSave = async () => {
     const next = subdomain.trim().toLowerCase()
@@ -234,6 +236,14 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
             disabled={!liveUrl}
           >
             {'Visit live site'}
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={!hostId}
+            onClick={() => setPhotoLinkOpen(true)}
+          >
+            {'Get a photo link'}
           </Button>
           <Button
             size="small"
@@ -609,6 +619,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
           />
         </StaffOnly>
       </Container>
+      <PhotoLinkDialogOnOpen hostId={hostId} open={photoLinkOpen} onClose={() => setPhotoLinkOpen(false)} />
     </DashboardLayout>
   )
 }

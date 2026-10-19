@@ -10,6 +10,12 @@ import androidx.compose.material.icons.automirrored.outlined.Notes
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.UnfoldMore
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Contrast
+import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AdminPanelSettings
@@ -229,6 +235,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 object AglynIcons {
   private val byName: Map<String, ImageVector> = mapOf(
     "alt_route" to Icons.Outlined.AltRoute,
+    "arrow_downward" to Icons.Outlined.ArrowDownward,
+    "arrow_upward" to Icons.Outlined.ArrowUpward,
+    "contrast" to Icons.Outlined.Contrast,
+    "grid_view" to Icons.Outlined.GridView,
+    "keep" to Icons.Outlined.PushPin,
+    "keep_off" to Icons.Outlined.PushPin,
+    "unfold_more" to Icons.Outlined.UnfoldMore,
     "apps" to Icons.Outlined.Apps,
     "arrow_back" to Icons.AutoMirrored.Outlined.ArrowBack,
     "bolt" to Icons.Outlined.Bolt,

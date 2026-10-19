@@ -14,7 +14,7 @@ import com.aglyn.screens.SpecScreens
  */
 fun registerEmailNative(r: NativePluginRegistrar) {
   for (section in EmailSection.entries) {
-    r.screen(section.screen, title = if (section == EmailSection.MESSAGES) "Emails" else section.label, requiresSite = true, icon = section.icon) { context, params ->
+    r.screen(section.screen, title = if (section == EmailSection.MESSAGES) "Emails" else section.label, requiresSite = false, icon = section.icon) { context, params ->
       EmailHubScreen(context, section, params["message"] ?: params["list"] ?: params["id"], params["campaign"])
     }
   }

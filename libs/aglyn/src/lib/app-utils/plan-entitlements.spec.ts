@@ -74,6 +74,10 @@ import {
   AI_ADDON_CREDITS_PER_MONTH,
   aiAddonUnits,
   hasAiAddon,
+  hasSiteCare,
+  planSellsSiteCare,
+  siteCareUnits,
+  SITE_CARE_ADDON_MONTHLY_USD,
 } from './plan-entitlements'
 import { pluginUsageBands } from '../plugin-manager/plugin-usage-axes'
 import { registerPluginEntitlements } from '../plugin-manager/plugin-entitlements'
@@ -3113,5 +3117,78 @@ describe('the Aglyn AI add-on (AGL-2896)', () => {
     expect(PLAN_PRICING.starter.extraAssistCreditsUsdPer1k).toBe(
       PLAN_PRICING.pro.extraAssistCreditsUsdPer1k,
     )
+  })
+})
+
+describe('Site Care add-on (AGL-3954)', () => {
+  it('is granted by no tier: false on every plan row', () => {
+    for (const plan of Object.keys(PLAN_ENTITLEMENTS)) {
+      expect(`${plan}: ${PLAN_ENTITLEMENTS[plan as keyof typeof PLAN_ENTITLEMENTS].features.siteCare}`).toBe(
+        `${plan}: false`,
+      )
+    }
+  })
+
+  it('switches the org-wide feature on from a live purchase, like the Event Calendar', () => {
+    const bought = {
+      plan: 'starter',
+      subscription: { status: 'active' },
+      seatAddons: { siteCare: 1 },
+    } as any
+    expect(checkEntitlement(bought, 'siteCare')).toBe(true)
+    expect(hasSiteCare(bought)).toBe(true)
+    expect(checkEntitlement({ plan: 'starter' } as any, 'siteCare')).toBe(false)
+    expect(hasSiteCare({ plan: 'starter' } as any)).toBe(false)
+    // It raises no quota: the plan's limits are what they were.
+    expect(resolveOrgEntitlements(bought).hostLimit).toBe(
+      PLAN_ENTITLEMENTS.starter.hostLimit,
+    )
+  })
+
+  it('turns off when the subscription dies, and keeps dunning grace', () => {
+    const dead = {
+      plan: 'pro',
+      subscription: { status: 'canceled' },
+      seatAddons: { siteCare: 1 },
+    } as any
+    expect(checkEntitlement(dead, 'siteCare')).toBe(false)
+    expect(hasSiteCare(dead)).toBe(false)
+    const pastDue = { ...dead, subscription: { status: 'past_due' } }
+    expect(checkEntitlement(pastDue, 'siteCare')).toBe(true)
+  })
+
+  it('counts a quantity above one as one purchase, and junk as none', () => {
+    expect(siteCareUnits({ siteCare: 3 })).toBe(1)
+    expect(siteCareUnits({ siteCare: 0 })).toBe(0)
+    expect(siteCareUnits({ siteCare: Number.NaN })).toBe(0)
+    expect(siteCareUnits({ siteCare: -1 })).toBe(0)
+    expect(siteCareUnits(undefined)).toBe(0)
+  })
+
+  it('adds its flat price to the list price once, on either interval', () => {
+    expect(SITE_CARE_ADDON_MONTHLY_USD).toBe(49)
+    expect(
+      orgListPriceMonthlyUsd({
+        plan: 'starter',
+        subscription: { status: 'active', interval: 'month' },
+        seatAddons: { siteCare: 2 },
+      } as any),
+    ).toBe(PLAN_PRICING.starter.basePriceMonthlyUsd + 49)
+    expect(
+      orgListPriceMonthlyUsd({
+        plan: 'starter',
+        subscription: { status: 'active', interval: 'year' },
+        seatAddons: { siteCare: 1 },
+      } as any),
+    ).toBe(PLAN_PRICING.starter.basePriceAnnualMonthlyUsd + 49)
+  })
+
+  it('is sold on every paid self-serve plan and never on Free or Enterprise', () => {
+    for (const plan of SELF_SERVE_PLANS) {
+      expect(`${plan}: ${planSellsSiteCare(plan)}`).toBe(`${plan}: ${plan !== 'free'}`)
+    }
+    expect(planSellsSiteCare('enterprise')).toBe(false)
+    expect(planSellsSiteCare('nonsense')).toBe(false)
+    expect(planSellsSiteCare(undefined)).toBe(false)
   })
 })
