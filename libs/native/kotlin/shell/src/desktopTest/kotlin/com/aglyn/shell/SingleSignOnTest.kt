@@ -1,6 +1,7 @@
 package com.aglyn.shell
 
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -76,47 +77,59 @@ private class TenantFirestore : FirestoreReader {
 
 @OptIn(ExperimentalTestApi::class)
 class SingleSignOnTest {
+  /** The console, Firebase and the console's sign-in page, played by the test. */
+  private class Rig {
+    val calls = mutableListOf<String>()
+    val auth = TenantAuth()
+    var opened: Map<String, String> = emptyMap()
+    val services: ShellServices
+
+    init {
+      val calls = calls
+      val auth = auth
+      val firestore = TenantFirestore()
+      val json = headersOf(HttpHeaders.ContentType, "application/json")
+      val http = HttpClient(MockEngine { request ->
+        calls += request.url.encodedPath
+        when (request.url.encodedPath) {
+          "/api/auth/sso-lookup" -> respond("""{"ssoEnabled":true,"tenantId":"$TENANT","providerId":"saml.aglyn"}""", HttpStatusCode.OK, json)
+          "/api/auth/native-handoff/redeem" -> respond("""{"ok":true,"token":"custom-for-sso-member","tenantId":"$TENANT"}""", HttpStatusCode.OK, json)
+          else -> respond("{}", HttpStatusCode.OK, json)
+        }
+      })
+      // The console page, played by the test: it reads what the app sent and goes back to the app's return address.
+      val transport = ConsoleHandoffTransport { page ->
+        val url = page("http://127.0.0.1:5000/handoff")
+        opened = queryParams(url.substringAfter('?'))
+        "http://127.0.0.1:5000/handoff?code=${"k".repeat(43)}&state=${opened["state"]}"
+      }
+      val prefs = InMemoryKeyValueStore()
+      val config = AglynConfig.read(AglynEnv(consoleUrl = "https://app.example.com", firebaseProjectId = "demo-test"), AglynAppId.AGLYN)
+      services = ShellServices(
+        app = NativeApp.AGLYN, config = config, auth = auth, firestore = firestore,
+        api = ConsoleApiClient(config.consoleOrigin, http, auth::idToken),
+        workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
+        prefs = prefs, registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES) },
+        besigner = { _, _, _ -> }, consoleHandoff = transport,
+      )
+    }
+  }
+
   /**
    * The acceptance case (AGL-3816): an address on a workspace's SSO domain signs in through the console's `/sso`, the hand-off
    * signs the app in as the TENANT account, and its switcher holds every workspace that account belongs to.
    */
   @Test
   fun anSsoAddressSignsInThroughItsWorkspaceAndSeesEveryWorkspace() = runComposeUiTest {
-    val calls = mutableListOf<String>()
-    val auth = TenantAuth()
-    val firestore = TenantFirestore()
-    val json = headersOf(HttpHeaders.ContentType, "application/json")
-    val http = HttpClient(MockEngine { request ->
-      calls += request.url.encodedPath
-      when (request.url.encodedPath) {
-        "/api/auth/sso-lookup" -> respond("""{"ssoEnabled":true,"tenantId":"$TENANT","providerId":"saml.aglyn"}""", HttpStatusCode.OK, json)
-        "/api/auth/native-handoff/redeem" -> respond("""{"ok":true,"token":"custom-for-sso-member","tenantId":"$TENANT"}""", HttpStatusCode.OK, json)
-        else -> respond("{}", HttpStatusCode.OK, json)
-      }
-    })
-    var opened: Map<String, String> = emptyMap()
-    // The console page, played by the test: it reads what the app sent and goes back to the app's return address.
-    val transport = ConsoleHandoffTransport { page ->
-      val url = page("http://127.0.0.1:5000/handoff")
-      opened = queryParams(url.substringAfter('?'))
-      "http://127.0.0.1:5000/handoff?code=${"k".repeat(43)}&state=${opened["state"]}"
-    }
-    val prefs = InMemoryKeyValueStore()
-    val config = AglynConfig.read(AglynEnv(consoleUrl = "https://app.example.com", firebaseProjectId = "demo-test"), AglynAppId.AGLYN)
-    val services = ShellServices(
-      app = NativeApp.AGLYN, config = config, auth = auth, firestore = firestore,
-      api = ConsoleApiClient(config.consoleOrigin, http, auth::idToken),
-      workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
-      prefs = prefs, registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES) },
-      besigner = { _, _, _ -> }, consoleHandoff = transport,
-    )
+    val rig = Rig()
+    val (calls, auth, services) = Triple(rig.calls, rig.auth, rig.services)
     setContent { AglynShell(services) }
     onNodeWithTag("sign-in-email").performTextInput("sso-member@aglyn.com")
     onNodeWithTag("sign-in-submit").performClick()
     waitUntil(timeoutMillis = 3_000) { auth.state.value is AuthState.SignedIn }
     assertEquals(emptyList(), auth.passwordSignIns)
-    assertEquals("sso", opened["start"])
-    assertEquals("sso-member@aglyn.com", opened["login_hint"])
+    assertEquals("sso", rig.opened["start"])
+    assertEquals("sso-member@aglyn.com", rig.opened["login_hint"])
     assertEquals(TENANT, auth.pool)
     assertEquals(listOf("/api/auth/sso-lookup", "/api/auth/native-handoff/redeem"), calls.take(2))
     waitUntil(timeoutMillis = 3_000) { services.workspace.state.value.orgs.size == 6 }
@@ -125,5 +138,20 @@ class SingleSignOnTest {
       services.workspace.state.value.orgs.map { it.name }.toSet(),
     )
     assertEquals(false, services.workspace.state.value.hasMoreOrgs)
+  }
+
+  /** "Continue with SSO" opens the work-email step, which names the domain the console knows and goes on to its sign-in. */
+  @Test
+  fun theSsoButtonAsksForTheWorkEmailAndContinues() = runComposeUiTest {
+    val rig = Rig()
+    setContent { AglynShell(rig.services) }
+    onNodeWithTag("sign-in-sso").performClick()
+    onNodeWithTag("sso-email").performTextInput("sso-member@aglyn.com")
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTag("sso-routing").fetchSemanticsNodes().isNotEmpty() }
+    onNodeWithTag("sso-submit").performClick()
+    waitUntil(timeoutMillis = 3_000) { rig.auth.state.value is AuthState.SignedIn }
+    assertEquals("sso", rig.opened["start"])
+    assertEquals("sso-member@aglyn.com", rig.opened["login_hint"])
+    assertEquals(emptyList(), rig.auth.passwordSignIns)
   }
 }

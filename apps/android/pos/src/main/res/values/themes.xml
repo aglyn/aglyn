@@ -2,10 +2,12 @@
 <resources>
   <style name="Theme.AglynPos" parent="android:Theme.Material.Light.NoActionBar" />
 
-  <!-- The launch screen: the Aglyn mark (the brand kit has no POS mark) on the icon's own background. -->
+  <!-- The launch screen (AGL-3934): the sign-in ground (bg/canvas, dark in values-night) and the mark drawing in on Android
+       12+ (drawable-v31/splash_icon), the still mark before it. MainActivity keeps it up until the auth state is known. -->
   <style name="Theme.AglynPos.Starting" parent="Theme.SplashScreen">
-    <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
-    <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+    <item name="windowSplashScreenBackground">@color/aglyn_splash_ground</item>
+    <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+    <item name="windowSplashScreenAnimationDuration">@integer/aglyn_splash_duration</item>
     <item name="postSplashScreenTheme">@style/Theme.AglynPos</item>
   </style>
 </resources>
