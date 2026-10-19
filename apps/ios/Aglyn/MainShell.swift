@@ -125,7 +125,6 @@ struct ShellFrame<Content: View>: View {
         navigation.paths = [:]
         navigation.mode = .main
         navigation.section = .home
-        navigation.assist.clear()
       }
   }
 
@@ -184,7 +183,7 @@ struct WideShell: View {
         .id(navigation.section)
         .toolbar { TitleBarItems(unread: unreadFeed.rows?.filter { !$0.read }.count ?? 0) }
         .inspector(isPresented: $navigation.showAssist) {
-          AssistPanel()
+          AssistSlot()
             .inspectorColumnWidth(min: 300, ideal: 360, max: 480)
         }
     }
@@ -205,6 +204,46 @@ struct WideShell: View {
   }
 }
 
+/// The AI panel: the widgets a plugin puts in the `assistPanel` slot (the AI plugin's Assist), handed the console path
+/// of the screen in use and its title, so the shell never names AI.
+struct AssistSlot: View {
+  @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
+
+  static let slot = "assistPanel"
+
+  static func available(_ model: AppModel) -> Bool { !model.registry.widgets(for: model.app, slot: slot).isEmpty }
+
+  var body: some View {
+    let scope = ShellScope(model: model, navigation: navigation)
+    let row = scope.row(for: navigation.section)
+    let title = [navigation.section == .home ? "Home" : row?.label, scope.site?.name ?? scope.org?.name]
+      .compactMap { $0 }.joined(separator: " · ")
+    let orgSlug = model.workspace?.org?.slug ?? ""
+    let site = scope.site
+    let route =
+      "/\(orgSlug)" + (site.map { "/hosts/\($0.subdomain.isEmpty ? $0.id : $0.subdomain)" } ?? "")
+      + (row.map(Self.consolePath) ?? "")
+    VStack(spacing: 0) {
+      if let context = model.context(for: navigation) {
+        ForEach(model.registry.widgets(for: model.app, slot: Self.slot)) { widget in
+          widget.make(context).id("\(widget.id):\(context.orgID ?? ""):\(context.hostID ?? "")")
+        }
+      }
+    }
+    .environment(\.aglynSlotParams, ["route": route, "title": title])
+  }
+
+  /// A row's console path within its scope, from the manifest's console reference.
+  static func consolePath(_ row: NativeNavRow) -> String {
+    switch row.console.surface {
+    case .hostPluginTab, .orgPluginTab, .hostPluginSection, .orgPluginSection: row.console.id
+    case .setupSection: "/setup/\(row.console.id)"
+    default: ""
+    }
+  }
+}
+
 /// One section's navigation stack.
 struct ShellStack: View {
   @Environment(AppModel.self) private var model
@@ -217,6 +256,8 @@ struct ShellStack: View {
         .phoneTopBar()
         .navigationDestination(for: Route.self) { RouteView(route: $0) }
     }
+    // A detail a screen opens goes on this stack's path, so a later push (a page in the browser) never drops it.
+    .environment(\.aglynPush, AglynPushAction { [weak navigation] view in navigation?.push(.view(view)) })
   }
 }
 
@@ -395,6 +436,7 @@ struct TitleBarItems: ToolbarContent {
     }
     ToolbarItem(placement: .primaryAction) { HelpMenuButton() }
     ToolbarItem(placement: .primaryAction) {
+      if AssistSlot.available(model) {
       Button {
         navigation.showAssist.toggle()
       } label: {
@@ -403,6 +445,7 @@ struct TitleBarItems: ToolbarContent {
       .keyboardShortcut("i", modifiers: [.command, .option])
       .help("\(model.brandName) AI")
       .accessibilityIdentifier("titlebar-ai")
+      }
     }
     ToolbarItem(placement: .primaryAction) {
       Button {
@@ -501,7 +544,16 @@ struct PhoneShell: View {
     }
     .sheet(isPresented: $navigation.showCreate) { CreateNewSheet().environment(model).environment(navigation) }
     .sheet(isPresented: $navigation.showAssist) {
-      AssistPanel(docked: false).environment(model).environment(navigation).presentationDetents([.large])
+      NavigationStack {
+        AssistSlot()
+          .navigationTitle("\(model.brandName) AI")
+          #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+          #endif
+          .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { navigation.showAssist = false } } }
+      }
+      .environment(model).environment(navigation)
+      .presentationDetents([.large])
     }
     .onChange(of: navigation.section, initial: true) { previous, section in
       // The centre tab is Create new: it opens the sheet and stays on the tab you were on.
@@ -616,12 +668,14 @@ struct MenuScreen: View {
       if navigation.mode == .main {
         // Your AI and help sit in Menu on a phone, never floating over content.
         HStack(spacing: AglynSpace.one) {
-          Button {
-            navigation.showAssist = true
-          } label: {
-            Label("\(model.brandName) AI", systemImage: "sparkles").frame(maxWidth: .infinity)
+          if AssistSlot.available(model) {
+            Button {
+              navigation.showAssist = true
+            } label: {
+              Label("\(model.brandName) AI", systemImage: "sparkles").frame(maxWidth: .infinity)
+            }
+            .accessibilityIdentifier("menu-ai")
           }
-          .accessibilityIdentifier("menu-ai")
           Menu {
             HelpMenuItems()
           } label: {

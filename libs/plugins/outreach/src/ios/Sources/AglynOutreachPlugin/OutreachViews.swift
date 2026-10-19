@@ -170,7 +170,7 @@ struct SequencesSection: View {
           emptyTitle: "No sequences yet", emptyMessage: "A sequence sends a few one-to-one emails and tasks, spaced out, until someone replies.",
           systemImage: "arrow.triangle.branch", onMore: { list.loadMore() }, onRetry: { list.retry() }
         ) { row in
-          NavigationLink {
+          AglynPushLink {
             SequenceDetail(context: context, api: api, orgID: orgID, sequenceID: row.id, mailboxes: mailboxes.rows)
           } label: {
             SequenceRowView(row: row, mailboxes: mailboxes.rows)

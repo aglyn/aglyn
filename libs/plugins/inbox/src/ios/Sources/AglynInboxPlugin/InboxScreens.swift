@@ -271,3 +271,31 @@ struct InboxGlanceWidget: View {
     .onDisappear { list.stop() }
   }
 }
+
+/// Home's "Needs you" line for the Inbox (`inbox.needs-you`): messages nobody has read, opening the Inbox on Unread.
+struct InboxNeedsYouWidget: View {
+  let context: NativePluginContext
+  @State private var list = LiveQueryList(pageSize: submissionsPageSize, map: Submission.init)
+
+  var body: some View {
+    Group {
+      if list.ready && list.failure == nil && !list.rows.isEmpty {
+        let count = list.rows.count
+        AglynNeedsYouLine(
+          id: "inbox-unread", systemImage: "tray",
+          text: "\(list.hasMore ? "\(count)+" : "\(count)") \(count == 1 ? "message waiting" : "messages waiting") for a reply",
+          place: "Inbox"
+        ) {
+          context.navigate(inboxSubmissionsScreen, ["read": "false"])
+        }
+      }
+    }
+    .task(id: context.hostID) {
+      guard let hostID = context.hostID else { return }
+      list.show(context.firestore) {
+        submissionsPlan(formID: nil, read: "false", search: "").firestoreQuery(submissionsPath(hostID), limit: $0)
+      }
+    }
+    .onDisappear { list.stop() }
+  }
+}

@@ -81,7 +81,7 @@ struct ArtifactsScreen: View {
             }
           } else {
             list(selectable: false, hostID: hostID)
-              .navigationDestination(item: $selection) { id in
+              .aglynPushDestination(item: $selection) { id in
                 ArtifactDetail(context: context, hostID: hostID, kind: kind, id: id, api: api, runner: runner, canEdit: canEdit) {
                   dialog = $0
                 }

@@ -15,8 +15,8 @@ struct HomeView: View {
   @Environment(ShellNavigation.self) private var navigation
   @State private var site = SiteStatus()
   @State private var prompt = ""
-  /// How tall each Needs-you line drew: a line with nothing waiting draws nothing.
-  @State private var lineHeights: [String: CGFloat] = [:]
+  /// The Needs-you lines on screen: a line with nothing waiting draws nothing.
+  @State private var lines = AglynNeedsYouLines()
 
   /// The plugins' "Needs you" lines (the `homeNeedsYou` slot): each draws one line, or nothing when nothing waits.
   static let needsYouSlot = "homeNeedsYou"
@@ -82,24 +82,31 @@ struct HomeView: View {
   // MARK: Needs you
 
   private var needsYou: some View {
-    let lines = model.registry.widgets(for: .aglyn, slot: Self.needsYouSlot).filter { picked != nil || !$0.requiresSite }
+    let widgets = model.registry.widgets(for: .aglyn, slot: Self.needsYouSlot).filter { picked != nil || !$0.requiresSite }
+    let paymentDue = model.workspace?.orgLogo?.paymentDue == true
     return VStack(alignment: .leading, spacing: AglynSpace.one) {
       AglynSectionHeader("Needs you")
-      if let context = model.context(for: navigation), !lines.isEmpty {
-        let drawn = lines.contains { (lineHeights[$0.id] ?? 0) > 1 }
-        VStack(spacing: 0) {
-          ForEach(lines) { line in
-            line.make(context).id("\(line.id):\(context.hostID ?? ""):\(model.refreshToken)")
-              .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { lineHeights[line.id] = $0 }
+      VStack(spacing: 0) {
+        // The workspace's own plan payment, the shell's line (read from the workspace's document).
+        if paymentDue {
+          AglynNeedsYouLine(
+            id: "plan-payment", systemImage: "creditcard", text: "Your plan's payment did not go through", place: "Billing",
+            tone: .error
+          ) {
+            navigation.mode = .workspaceSettings
+            navigation.select(.plugin("core.billing"))
           }
         }
-        .aglynCardSurface()
-        .opacity(drawn ? 1 : 0)
-        if !drawn {
-          Text("Nothing needs you right now.").foregroundStyle(.secondary)
-            .accessibilityIdentifier("home-nothing-waiting")
+        if let context = model.context(for: navigation) {
+          ForEach(widgets) { line in
+            line.make(context).id("\(line.id):\(context.hostID ?? ""):\(model.refreshToken)")
+          }
         }
-      } else {
+      }
+      .environment(\.aglynNeedsYou, lines)
+      .aglynCardSurface()
+      .opacity(lines.any ? 1 : 0)
+      if !lines.any {
         Text("Nothing needs you right now.").foregroundStyle(.secondary)
           .accessibilityIdentifier("home-nothing-waiting")
       }

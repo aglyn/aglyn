@@ -269,7 +269,7 @@ struct PagesScreen: View {
         } else {
           List {
             ForEach(rows) { row in
-              NavigationLink {
+              AglynPushLink {
                 PageDetail(
                   context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner,
                   canEdit: canEdit, canPublish: canPublish, pushed: true
@@ -286,7 +286,7 @@ struct PagesScreen: View {
             moreRow
           }
           // A link to one page (a notification, a job's draft) opens it, as the wide layout selects it.
-          .navigationDestination(item: $linkedPage) { id in
+          .aglynPushDestination(item: $linkedPage) { id in
             if let row = rows.first(where: { $0.id == id }) {
               PageDetail(
                 context: context, hostID: hostID, pageID: id, model: model, api: api, runner: runner,

@@ -1,8 +1,10 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynContracts
 import AglynPluginHost
 import AglynPluginManifest
+import AglynScreens
 import XCTest
 
 @testable import Aglyn
@@ -56,5 +58,35 @@ final class ShellTests: XCTestCase {
       let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
       XCTAssertEqual(plist["FirebaseAppDelegateProxyEnabled"] as? Bool, false, name)
     }
+  }
+
+  /// Every row the nav manifest lists opens a screen this app has (AGL-3945): a row with none would be a dead end.
+  func testEveryManifestRowOpensAScreenTheAppHas() {
+    let registry = NativePluginRegistry()
+    let result = NativePluginLoader.load(
+      [CoreScreens.manifestEntry] + AppModel.platformEntries + NativePluginManifest.entries, into: registry)
+    XCTAssertEqual(result.failed, [])
+    for list in NativeNav.manifest.lists {
+      for row in list.groups.flatMap(\.rows) where !row.screen.hasPrefix("shell.") {
+        XCTAssertNotNil(registry.screen(row.screen), "\(list.id.rawValue).\(row.id) opens \(row.screen), which is not registered")
+        for section in row.sections ?? [] {
+          XCTAssertNotNil(registry.screen(section.screen), "\(row.id) section \(section.id) opens \(section.screen)")
+        }
+      }
+    }
+  }
+
+  /// Back and Forward walk the sections opened, and a new place drops what was ahead.
+  func testHistoryGoesBackAndForward() {
+    let navigation = ShellNavigation()
+    navigation.select(.plugin("commerce.orders"))
+    navigation.select(.plugin("site.pages"))
+    navigation.goBack()
+    XCTAssertEqual(navigation.section, .plugin("commerce.orders"))
+    navigation.goForward()
+    XCTAssertEqual(navigation.section, .plugin("site.pages"))
+    navigation.goBack()
+    navigation.select(.analytics)
+    XCTAssertFalse(navigation.canGoForward)
   }
 }

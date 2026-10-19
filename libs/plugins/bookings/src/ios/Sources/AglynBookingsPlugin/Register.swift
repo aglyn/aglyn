@@ -33,6 +33,9 @@ public func registerBookingsNative(_ r: NativePluginRegistrar) {
   r.widget("bookings.today", title: "Today's bookings", icon: "calendar", order: 300, size: .half, requiresSite: true) {
     BookingsTodayWidget(context: $0)
   }
+  r.widget("bookings.needs-you", title: "Needs you", order: 30, requiresSite: true, slot: "homeNeedsYou") {
+    BookingsNeedsYouWidget(context: $0)
+  }
   r.quickAction("bookings.open", title: "Bookings", icon: "calendar", order: 300, screen: bookingsCalendarScreen, requiresSite: true)
   r.deepLink("bookings.page", path: "/bookings", screen: bookingsCalendarScreen)
 }

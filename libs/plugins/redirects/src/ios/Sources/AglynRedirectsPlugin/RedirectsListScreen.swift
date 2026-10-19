@@ -99,7 +99,7 @@ struct RedirectsListScreen: View {
       .accessibilityIdentifier("redirects-list")
     } else {
       List(model.rows) { row in
-        NavigationLink {
+        AglynPushLink {
           RedirectDetail(row: row, editor: editor)
         } label: {
           RedirectListRow(row: row)

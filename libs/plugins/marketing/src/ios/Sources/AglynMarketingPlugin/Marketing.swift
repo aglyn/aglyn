@@ -47,12 +47,15 @@ func campaignSearchFields(_ name: String) -> [String: Any] {
   ["name": name, "nameLower": nameSearchKey(name), "nameTokens": nameSearchTokens(name)]
 }
 
-func campaignsQuery(orgID: String, hostID: String, search: String, limit: Int) -> FirestoreQuery {
+/// `orgLevel`: the workspace's campaigns, every site's (the console's org Marketing page reads one org collection).
+func campaignsQuery(orgID: String, hostID: String, search: String, limit: Int, orgLevel: Bool = false) -> FirestoreQuery {
   let typed = search.trimmingCharacters(in: .whitespacesAndNewlines)
   return planListQuery(
     ContractValues.shared.nativeSiteCampaignsQuery,
     ListQueryRequest(
-      base: [ListQueryFilter(op: .arrayContainsAny, path: "visibleTo", value: .array(siteScopeTokens(hostID).map { .string($0) }))],
+      base: orgLevel
+        ? nil
+        : [ListQueryFilter(op: .arrayContainsAny, path: "visibleTo", value: .array(siteScopeTokens(hostID).map { .string($0) }))],
       clauses: typed.isEmpty ? [] : [ListFilterRequest(field: "name", op: "startsWith", value: typed)])
   ).firestoreQuery(["orgs", orgID, "emailCampaigns"], limit: limit)
 }
@@ -331,7 +334,10 @@ func jsFixed0(_ value: Double) -> String {
 struct MarketingActions {
   let context: NativePluginContext
   let orgID: String
+  /// The site read and written; at the workspace's level the site new campaigns go to.
   let hostID: String
+  /// The workspace's Marketing: campaigns and sends of every site.
+  var orgLevel = false
 
   private func siteWide() async {
     await publishSiteWideChange(api: context.api, reader: context.firestore, hostID: hostID)

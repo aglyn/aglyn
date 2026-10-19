@@ -22,6 +22,7 @@ struct POSShell: View {
         }
       }
       .navigationDestination(for: Route.self) { RouteView(route: $0) }
+      .environment(\.aglynPush, AglynPushAction { [weak navigation] view in navigation?.push(.view(view)) })
       .toolbar {
         ToolbarItem(placement: .primaryAction) {
           Menu {

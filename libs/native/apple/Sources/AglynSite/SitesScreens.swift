@@ -132,7 +132,7 @@ struct SitesScreen: View {
       } else {
         List {
           ForEach(rows) { row in
-            NavigationLink {
+            AglynPushLink {
               SiteOverview(context: context, hostID: row.id).navigationTitle(row.name)
             } label: {
               SiteListRow(context: context, row: row)

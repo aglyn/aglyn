@@ -96,7 +96,7 @@ struct FormsScreen: View {
         SlotWidgets(context: context, slot: ListCreateZone.forms, placement: .header)
       }
     }
-    .navigationDestination(item: $pushed) { id in detail(id, titled: true) }
+    .aglynPushDestination(item: $pushed) { id in detail(id, titled: true) }
     .safeAreaInset(edge: .bottom) {
       if sheet == nil && exporting == nil, let notice = runner.notice {
         AglynNotice(notice, tone: .success) { runner.clear() }

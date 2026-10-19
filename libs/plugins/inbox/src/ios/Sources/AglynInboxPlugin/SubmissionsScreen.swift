@@ -31,12 +31,15 @@ struct SubmissionsScreen: View {
   @State private var site = ObservedDocument()
   @State private var forms = LiveQueryList(pageSize: 50) { (id: $0.id, name: inboxFormName($0)) }
 
-  init(context: NativePluginContext, formID: String?, formName: String?, initialSubmissionID: String?) {
+  /// `initialRead`: the Read filter it opens on (`read=false` from Home's line: Unread).
+  init(context: NativePluginContext, formID: String?, formName: String?, initialSubmissionID: String?, initialRead: String? = nil) {
     self.context = context
     self.formID = formID
     self.formName = formName
     self.initialSubmissionID = initialSubmissionID
-    _model = State(initialValue: SubmissionsModel(formID: formID))
+    let model = SubmissionsModel(formID: formID)
+    model.read = initialRead == "false" || initialRead == "true" ? initialRead : nil
+    _model = State(initialValue: model)
   }
 
   private var isWide: Bool {
@@ -110,7 +113,7 @@ struct SubmissionsScreen: View {
       }
       }
     }
-    .navigationDestination(item: $pushed) { id in detail(id, titled: true) }
+    .aglynPushDestination(item: $pushed) { id in detail(id, titled: true) }
     .safeAreaInset(edge: .bottom) {
       if exporting == nil, replying == nil, let notice = runner.notice {
         AglynNotice(notice, tone: .success) { runner.clear() }

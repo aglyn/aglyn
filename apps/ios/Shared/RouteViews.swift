@@ -21,6 +21,7 @@ struct RouteView: View {
     case .analytics: AnalyticsView()
     case .notifications: NotificationsView()
     case .themeSettings: ThemeSettingsView()
+    case .view(let pushed): pushed.view
     case .web(let page): AglynBrowserScreen(page)
     }
   }

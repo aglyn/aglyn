@@ -486,7 +486,7 @@ struct AudiencesSection: View {
           emptyTitle: "No lists yet", emptyMessage: "A list is who an email goes to: people you add, or everyone a rule matches.",
           systemImage: "person.3", onMore: { list.loadMore() }, onRetry: { list.retry() }
         ) { row in
-          NavigationLink { ListDetail(context: context, actions: actions, listID: row.id) } label: { ListRowView(row: row) }
+          AglynPushLink { ListDetail(context: context, actions: actions, listID: row.id) } label: { ListRowView(row: row) }
         }
       }
     }

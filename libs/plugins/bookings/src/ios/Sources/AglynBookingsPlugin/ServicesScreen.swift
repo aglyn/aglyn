@@ -102,7 +102,7 @@ struct BookingServicesScreen: View {
           .accessibilityIdentifier("services-list")
         } else {
           List(rows) { service in
-            NavigationLink {
+            AglynPushLink {
               editor(for: service)
             } label: {
               ServiceListRow(service: service)

@@ -448,7 +448,7 @@ struct MediaLibrary: View {
           label
         }
       } else {
-        NavigationLink {
+        AglynPushLink {
           MediaDetail(
             context: context, scope: scope, mediaID: item.id, api: api, runner: runner, folders: folderList,
             canEdit: canEdit, onDeleted: deleted

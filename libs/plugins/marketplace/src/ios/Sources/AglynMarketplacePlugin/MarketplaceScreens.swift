@@ -40,6 +40,9 @@ struct BrowseScreen: View {
   var initialListingID: String?
 
   @State private var list = LiveQueryList(pageSize: browsePageSize) { ListingRow($0) }
+  /// The marketplace home's two shelves (AGL-3945): the newest and the most installed.
+  @State private var newest = LiveQueryList(pageSize: 8) { ListingRow($0) }
+  @State private var popular = LiveQueryList(pageSize: 8) { ListingRow($0) }
   @State private var search = ""
   @State private var category: String?
   @State private var sort = BrowseSort.newest
@@ -83,7 +86,7 @@ struct BrowseScreen: View {
       }
     }
     .navigationTitle("Marketplace")
-    .navigationDestination(item: $pushed) { id in ListingDetail(context: context, listingID: id).navigationTitle("Listing") }
+    .aglynPushDestination(item: $pushed) { id in ListingDetail(context: context, listingID: id).navigationTitle("Listing") }
     .searchable(text: $search, prompt: "Search the marketplace")
     .task(id: "\(search)|\(category ?? "")|\(sort.rawValue)|\(context.orgID ?? "")") {
       // The search waits for a pause in the typing, as the console's does.
@@ -99,7 +102,16 @@ struct BrowseScreen: View {
         if !isWide { pushed = initialListingID }
       }
     }
-    .onDisappear { list.stop() }
+    .task(id: context.orgID) {
+      let orgID = context.orgID
+      newest.show(context.firestore) { browseQuery(viewerOrgID: orgID, category: nil, search: "", sort: .newest, limit: $0) }
+      popular.show(context.firestore) { browseQuery(viewerOrgID: orgID, category: nil, search: "", sort: .installed, limit: $0) }
+    }
+    .onDisappear {
+      list.stop()
+      newest.stop()
+      popular.stop()
+    }
   }
 
   @ViewBuilder
@@ -129,10 +141,38 @@ struct BrowseScreen: View {
         .padding(.horizontal, AglynSpace.two)
         .padding(.vertical, AglynSpace.one)
       }
+      // The home: New and Popular as preview cards, while nothing is searched or picked.
+      if search.isEmpty && category == nil && (!newest.rows.isEmpty || !popular.rows.isEmpty) {
+        VStack(alignment: .leading, spacing: AglynSpace.one) {
+          shelfRow("New", newest.rows)
+          shelfRow("Popular", popular.rows)
+          Text("All listings").font(AglynFont.headline).padding(.horizontal, AglynSpace.two).padding(.top, AglynSpace.one)
+        }
+        .accessibilityIdentifier("marketplace-home")
+      }
       content(selectable: selectable)
     }
     .aglynListColumn()
     .background(AglynColor.page)
+  }
+
+  @ViewBuilder
+  private func shelfRow(_ title: String, _ rows: [ListingRow]) -> some View {
+    if !rows.isEmpty {
+      VStack(alignment: .leading, spacing: 6) {
+        Text(title).font(AglynFont.headline).padding(.horizontal, AglynSpace.two)
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: AglynSpace.oneAndHalf) {
+            ForEach(rows) { row in
+              ListingCard(row: row) {
+                if isWide { selection = row.id } else { pushed = row.id }
+              }
+            }
+          }
+          .padding(.horizontal, AglynSpace.two)
+        }
+      }
+    }
   }
 
   @ViewBuilder
@@ -175,6 +215,36 @@ struct BrowseScreen: View {
       .accessibilityIdentifier("listing-\(row.id)")
     }
     if list.hasMore { AglynLoadMoreRow("Show more listings") { list.loadMore() } }
+  }
+}
+
+/// A listing as a preview card on the marketplace home: its picture, name, type, rating and price, and Get or Buy,
+/// which opens the listing where it installs.
+private struct ListingCard: View {
+  let row: ListingRow
+  let open: () -> Void
+
+  var body: some View {
+    Button(action: open) {
+      VStack(alignment: .leading, spacing: 6) {
+        AglynRemoteImage(row.imageURL.flatMap(URL.init(string:)), systemImage: row.artifactType == "plugin" ? "puzzlepiece.extension" : "square.grid.2x2")
+          .frame(width: 180, height: 104)
+          .clipShape(RoundedRectangle(cornerRadius: AglynRadius.card, style: .continuous))
+        Text(row.name).font(AglynFont.strongSubheadline).lineLimit(1)
+        Text([artifactLabel(row.artifactType), ratingLabel(row)].joined(separator: " · ")).font(AglynFont.caption)
+          .foregroundStyle(.secondary).lineLimit(1)
+        HStack {
+          StatusChip(priceLabel(row.priceUSD), tone: row.paid ? .info : .success)
+          Spacer()
+          Text(row.paid ? "Buy" : "Get").font(AglynFont.button).foregroundStyle(AglynColor.tint)
+        }
+      }
+      .frame(width: 180, alignment: .leading)
+      .padding(10)
+      .aglynCardSurface()
+    }
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("listing-card-\(row.id)")
   }
 }
 

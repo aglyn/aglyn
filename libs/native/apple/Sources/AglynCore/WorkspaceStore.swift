@@ -51,10 +51,14 @@ public struct WorkspaceOrgLogo: Equatable, Hashable, Sendable {
   /// The plugins the workspace turned on, as stored (`enabledPlugins`); nil when it never chose, which reads as the
   /// defaults (`resolveEnabledPlugins`).
   public let enabledPlugins: [String]?
+  /// The plan's payment failed and is owed (`past_due` or `unpaid`): Home says so and opens Billing.
+  public let paymentDue: Bool
 
   public init(
-    light: String?, dark: String?, brandColor: String? = nil, plan: String? = nil, enabledPlugins: [String]? = nil
+    light: String?, dark: String?, brandColor: String? = nil, plan: String? = nil, enabledPlugins: [String]? = nil,
+    paymentDue: Bool = false
   ) {
+    self.paymentDue = paymentDue
     self.light = light
     self.dark = dark
     self.brandColor = brandColor
@@ -70,7 +74,13 @@ public struct WorkspaceOrgLogo: Equatable, Hashable, Sendable {
       light: text("logoUrl"), dark: text("logoDarkUrl"),
       brandColor: brand.flatMap { $0.range(of: "^#[0-9A-Fa-f]{6}$", options: .regularExpression) != nil ? $0 : nil },
       plan: doc.map { effectivePlan($0.data) },
-      enabledPlugins: (doc?.data["enabledPlugins"] as? [Any])?.compactMap { $0 as? String })
+      enabledPlugins: (doc?.data["enabledPlugins"] as? [Any])?.compactMap { $0 as? String },
+      paymentDue: {
+        let mirrored = doc?.string("billingStatus")
+        let status = (mirrored?.isEmpty == false ? mirrored : nil)
+          ?? ((doc?.data["subscription"] as? [String: Any])?["status"] as? String)
+        return status == "past_due" || status == "unpaid"
+      }())
   }
 
   /// The plan as the console names it ("Pro").

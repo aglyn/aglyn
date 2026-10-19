@@ -179,7 +179,7 @@ struct ProductsScreen: View {
         if selectable {
           ProductListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
         } else {
-          NavigationLink {
+          AglynPushLink {
             ProductDetailView(context: context, productID: row.id, titled: true)
           } label: {
             ProductListRow(row: row)

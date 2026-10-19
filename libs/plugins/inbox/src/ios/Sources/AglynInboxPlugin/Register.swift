@@ -21,7 +21,7 @@ public func registerInboxNative(_ r: NativePluginRegistrar) {
     context, params in
     SubmissionsScreen(
       context: context, formID: params["formId"] ?? params["form"], formName: params["formName"],
-      initialSubmissionID: params["submission"] ?? params["submissionId"])
+      initialSubmissionID: params["submission"] ?? params["submissionId"], initialRead: params["read"])
   }
   r.screen(inboxSubmissionScreen, title: "Submission", requiresSite: true, icon: InboxSymbols.inbox) {
     context, params in
@@ -34,6 +34,9 @@ public func registerInboxNative(_ r: NativePluginRegistrar) {
   }
   r.widget("inbox.glance", title: "Inbox", icon: "tray", order: 60, size: .half, requiresSite: true) {
     InboxGlanceWidget(context: $0)
+  }
+  r.widget("inbox.needs-you", title: "Needs you", order: 20, requiresSite: true, slot: "homeNeedsYou") {
+    InboxNeedsYouWidget(context: $0)
   }
   r.quickAction("inbox.open", title: "Inbox", icon: "tray", order: 60, screen: inboxSubmissionsScreen, requiresSite: true)
   r.quickAction("inbox.people", title: "Members & leads", icon: "person.2", order: 62, screen: inboxPeopleScreen, requiresSite: true)

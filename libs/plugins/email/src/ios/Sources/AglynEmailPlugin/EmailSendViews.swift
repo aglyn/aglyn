@@ -142,7 +142,7 @@ struct EmailsScreen: View {
         if selectable {
           EmailRow(send: send).aglynSelectableRow(send.id, selection: $selection)
         } else if let orgID = context.orgID, let hostID = context.hostID {
-          NavigationLink {
+          AglynPushLink {
             EmailDetail(context: context, orgID: orgID, hostID: hostID, sendID: send.id, canSend: role.canSend)
           } label: {
             EmailRow(send: send)

@@ -132,6 +132,11 @@ struct BookingsCalendarScreen: View {
       started = true
       serviceFilter = params["service"]
       booker = params["email"].flatMap { $0.isEmpty ? nil : $0 }
+      // Opened from Home's line (`day=today`): today's day view.
+      if params["day"] == "today" {
+        mode = .day
+        anchor = Date()
+      }
       selection = params["booking"]
     }
     .task(id: queryKey) {
@@ -343,6 +348,37 @@ struct BookingsTodayWidget: View {
       context.navigate(bookingsCalendarScreen)
     }
     .accessibilityIdentifier("bookings-today")
+    .task(id: context.hostID) {
+      guard let hostID = context.hostID else { return }
+      let start = AglynCalendarMath.startOfDay(Date())
+      bookings.start(
+        context.firestore, BookingQueries.range(hostID, from: ms(start), to: ms(AglynCalendarMath.addDays(start, 1)))
+      ) { $0.map(BookingRow.init) }
+    }
+    .onDisappear { bookings.stop() }
+  }
+}
+
+/// Home's "Needs you" line for bookings (`bookings.needs-you`): what is still to come today, with the next one's time,
+/// opening Bookings on today's day view. Nothing is drawn for nothing.
+struct BookingsNeedsYouWidget: View {
+  let context: NativePluginContext
+  @State private var bookings = LiveList<BookingRow>()
+
+  var body: some View {
+    let now = nowMs()
+    let rows = (bookings.rows ?? []).filter { $0.state(now) != .canceled && $0.state(now) != .expired && $0.endsAtMs > now }
+    Group {
+      if let next = rows.min(by: { $0.startsAtMs < $1.startsAtMs }) {
+        let time = next.start.formatted(date: .omitted, time: .shortened)
+        AglynNeedsYouLine(
+          id: "bookings-today", systemImage: "calendar.badge.clock",
+          text: rows.count == 1 ? "\(next.name) at \(time)" : "\(rows.count) bookings today, next at \(time)", place: "Bookings"
+        ) {
+          context.navigate(bookingsCalendarScreen, ["day": "today"])
+        }
+      }
+    }
     .task(id: context.hostID) {
       guard let hostID = context.hostID else { return }
       let start = AglynCalendarMath.startOfDay(Date())

@@ -149,7 +149,7 @@ struct FunnelsScreen: View {
       .accessibilityIdentifier("funnels-list")
     } else {
       List(model.rows) { row in
-        NavigationLink {
+        AglynPushLink {
           if let editor { FunnelDetail(row: row, editor: editor, canManage: access.state.canManage) }
         } label: {
           FunnelListRow(row: row)

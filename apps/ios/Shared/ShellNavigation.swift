@@ -24,6 +24,8 @@ enum Route: Hashable {
   case notifications
   /// Theme settings.
   case themeSettings
+  /// A detail screen a screen pushed (`AglynPushLink`), on the path so the next push never drops it.
+  case view(AglynPushedView)
   /// A plain web page (a live site, a preview, a docs or legal page) in the in-app browser screen.
   case web(AglynWebPage)
 }
@@ -113,8 +115,6 @@ final class ShellNavigation {
   var showShortcuts = false
   /// Bumped when this device's own theme changes (it is not on the account, so nothing else would redraw it).
   var themeNonce = 0
-  /// This window's conversation with the AI panel.
-  @ObservationIgnored let assist = AssistConversation()
   /// The workspace and site this tab stands in, so it comes back to them in front (a tab of its own on the Mac and iPad).
   var pickedOrgID: String?
   var pickedHostID: String?

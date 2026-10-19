@@ -114,6 +114,14 @@ struct CrmGate<Content: View>: View {
   @ViewBuilder let content: (CrmScope, CrmAPI, CrmReference) -> Content
   @State private var scopeModel = CrmScopeModel()
   @State private var reference = CrmReference()
+  /// At the workspace's level: the site new records are filed under (the console's `createHostId`).
+  @AppStorage("aglyn.crm.createSite") private var storedCreateHost = ""
+
+  private var createHost: String? {
+    guard context.hostID == nil else { return nil }
+    if context.sites.contains(where: { $0.id == storedCreateHost }) { return storedCreateHost }
+    return context.sites.first?.id
+  }
 
   var body: some View {
     Group {
@@ -135,9 +143,14 @@ struct CrmGate<Content: View>: View {
         List { SkeletonRows(count: 6) }.aglynListBackground()
       }
     }
-    .task(id: "\(context.orgID ?? "")|\(context.hostID ?? "")") {
-      guard let orgID = context.orgID, let hostID = context.hostID else { return }
-      scopeModel.start(context.firestore, orgID: orgID, hostID: hostID, uid: context.uid)
+    .task(id: "\(context.orgID ?? "")|\(context.hostID ?? "")|\(createHost ?? "")") {
+      guard let orgID = context.orgID else { return }
+      if let hostID = context.hostID {
+        scopeModel.start(context.firestore, orgID: orgID, hostID: hostID, uid: context.uid)
+      } else {
+        // The workspace's CRM: every site's records, new ones filed under the site picked for them.
+        scopeModel.start(context.firestore, orgID: orgID, hostID: createHost ?? "", uid: context.uid, orgLevel: true)
+      }
     }
     .onDisappear {
       scopeModel.stop()
@@ -154,15 +167,7 @@ struct CrmHubScreen: View {
   /// The Contacts list asked to open the one person with this address (`?email=`, `contactByEmail`).
   var openEmail: String?
 
-  var body: some View {
-    if context.hostID == nil {
-      // The workspace's CRM: read through one of its sites at a time, the site picked here.
-      WorkspaceSitePick(context: context, key: "crm", prompt: "CRM of") { site in hub(site) }
-        .navigationTitle(section == .contacts ? "CRM" : section.label)
-    } else {
-      hub(context)
-    }
-  }
+  var body: some View { hub(context) }
 
   private func hub(_ context: NativePluginContext) -> some View {
     CrmGate(context: context) { scope, api, reference in
@@ -177,6 +182,7 @@ struct CrmHubScreen: View {
           .padding(.vertical, AglynSpace.one)
         }
         .accessibilityIdentifier("crm-sections")
+        if scope.orgLevel { CrmCreateSitePick(context: context, scope: scope) }
         sectionView(context, scope, api, reference).frame(maxWidth: .infinity, maxHeight: .infinity)
       }
       .background(AglynColor.page)
@@ -199,6 +205,32 @@ struct CrmHubScreen: View {
     case .reports: ReportsSection(context: context, scope: scope, reference: reference)
     case .fields: FieldsSection(context: context, scope: scope, reference: reference)
     case .settings: SettingsSection(context: context, scope: scope, reference: reference)
+    }
+  }
+}
+
+/// The workspace's CRM: every site's records; a new record is filed under the site picked here (the console's org
+/// page asks the same).
+struct CrmCreateSitePick: View {
+  let context: NativePluginContext
+  let scope: CrmScope
+  @AppStorage("aglyn.crm.createSite") private var storedCreateHost = ""
+
+  var body: some View {
+    if context.sites.count > 1 {
+      HStack(spacing: AglynSpace.one) {
+        Text("Every site's records. New ones go to").font(AglynFont.subheadline).foregroundStyle(.secondary)
+        Menu {
+          ForEach(context.sites) { site in Button(site.name) { storedCreateHost = site.id } }
+        } label: {
+          Label(context.siteName(scope.hostID), systemImage: "globe").font(AglynFont.strongSubheadline)
+        }
+        .fixedSize()
+        .accessibilityIdentifier("crm-create-site")
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, AglynSpace.two)
+      .padding(.bottom, AglynSpace.one)
     }
   }
 }

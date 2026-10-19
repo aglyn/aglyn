@@ -145,7 +145,7 @@ struct RecordsSection: View {
         if selectable {
           CrmRowView(row: row, reference: reference).aglynSelectableRow(row.id, selection: $selection)
         } else {
-          NavigationLink {
+          AglynPushLink {
             RecordDetail(context: context, kind: kind, id: row.id, scope: scope, api: api, reference: reference)
           } label: {
             CrmRowView(row: row, reference: reference)

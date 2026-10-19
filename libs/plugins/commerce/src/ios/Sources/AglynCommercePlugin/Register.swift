@@ -95,6 +95,9 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
 
   r.tab("commerce.orders-tab", title: "Orders", icon: "bag", screen: commerceOrdersScreen, order: 100)
   r.tab("commerce.products-tab", title: "Products", icon: "shippingbox", screen: commerceProductsScreen, order: 110)
+  r.widget("commerce.needs-you", title: "Needs you", order: 10, requiresSite: true, slot: "homeNeedsYou") { context in
+    OrdersNeedsYouWidget(context: context)
+  }
   r.widget("commerce.to-ship", title: "To ship", order: 90, size: .half, requiresSite: true) { context in
     OrdersToShipWidget(context: context)
   }

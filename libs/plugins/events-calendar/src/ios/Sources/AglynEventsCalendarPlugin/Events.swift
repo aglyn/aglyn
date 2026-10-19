@@ -238,7 +238,7 @@ struct EventsScreen: View {
             .accessibilityIdentifier("events-list")
         } else {
           List(rows) { row in
-            NavigationLink {
+            AglynPushLink {
               editor(for: row)
             } label: {
               EventListRow(row: row)

@@ -288,7 +288,7 @@ struct OrdersScreen: View {
         if selectable {
           OrderListRow(row: row).aglynSelectableRow(row.id, selection: $selection)
         } else {
-          NavigationLink {
+          AglynPushLink {
             OrderDetailView(context: context, orderID: row.id, titled: true)
           } label: {
             OrderListRow(row: row)
@@ -357,5 +357,46 @@ struct OrdersToShipWidget: View {
       model.start(context.firestore, hostID: context.hostID)
     }
     .onDisappear { model.stop() }
+  }
+}
+
+/// Home's "Needs you" lines for a store (`commerce.needs-you`): paid orders still to get ready, and disputes waiting on
+/// an answer, each opening Orders on its chip. Nothing is drawn for nothing.
+struct OrdersNeedsYouWidget: View {
+  let context: NativePluginContext
+  @State private var toFulfill = OrdersModel()
+  @State private var disputes = OrdersModel()
+
+  var body: some View {
+    VStack(spacing: 0) {
+      if toFulfill.ready && !toFulfill.rows.isEmpty {
+        let count = toFulfill.rows.count
+        AglynNeedsYouLine(
+          id: "orders-to-fulfill", systemImage: "bag",
+          text: "\(toFulfill.hasMore ? "\(count)+" : "\(count)") \(count == 1 ? "order" : "orders") to get ready", place: "Orders"
+        ) {
+          context.navigate(commerceOrdersScreen, ["filter": OrderFilter.unfulfilled.rawValue])
+        }
+      }
+      if disputes.ready && !disputes.rows.isEmpty {
+        let count = disputes.rows.count
+        AglynNeedsYouLine(
+          id: "orders-disputed", systemImage: "exclamationmark.bubble",
+          text: "\(count) \(count == 1 ? "dispute needs" : "disputes need") an answer", place: "Orders", tone: .error
+        ) {
+          context.navigate(commerceOrdersScreen, ["filter": OrderFilter.disputes.rawValue])
+        }
+      }
+    }
+    .task(id: context.hostID) {
+      toFulfill.filter = .unfulfilled
+      toFulfill.start(context.firestore, hostID: context.hostID)
+      disputes.filter = .disputes
+      disputes.start(context.firestore, hostID: context.hostID)
+    }
+    .onDisappear {
+      toFulfill.stop()
+      disputes.stop()
+    }
   }
 }

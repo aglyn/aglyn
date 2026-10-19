@@ -71,3 +71,16 @@ public struct WorkspaceSitePick<Content: View>: View {
     UserDefaults.standard.set(hostID, forKey: storageKey)
   }
 }
+
+private struct SlotParamsKey: EnvironmentKey {
+  static let defaultValue: [String: String] = [:]
+}
+
+extension EnvironmentValues {
+  /// What the shell hands a slot's widgets beside the context (the Kotlin kit's `LocalSlotParams`): the AI panel reads
+  /// `route` (the console path of the screen in use) and `title` (that screen's name).
+  public var aglynSlotParams: [String: String] {
+    get { self[SlotParamsKey.self] }
+    set { self[SlotParamsKey.self] = newValue }
+  }
+}

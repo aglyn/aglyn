@@ -171,7 +171,7 @@ private struct CollectionEntries: View {
         }
       } else {
         list(selectable: false)
-          .navigationDestination(item: $selection) { id in
+          .aglynPushDestination(item: $selection) { id in
             EntryEditor(env: env, collection: collection, entryID: id, model: model).id(id)
           }
       }

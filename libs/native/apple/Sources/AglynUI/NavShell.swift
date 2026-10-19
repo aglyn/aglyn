@@ -283,3 +283,69 @@ public struct AglynColorSwatch: View {
     .overlay(Circle().strokeBorder(selected ? AglynColor.tint : .clear, lineWidth: 2))
   }
 }
+
+/// The lines on screen in Home's "Needs you", by id: a line is there only while something waits, so Home says "Nothing
+/// needs you right now" when none is (the Kotlin kit's `NeedsYouLines`).
+@MainActor
+@Observable
+public final class AglynNeedsYouLines {
+  public private(set) var shown: Set<String> = []
+  public init() {}
+  public var any: Bool { !shown.isEmpty }
+  func appear(_ id: String) { shown.insert(id) }
+  func disappear(_ id: String) { shown.remove(id) }
+}
+
+private struct NeedsYouLinesKey: EnvironmentKey {
+  static let defaultValue: AglynNeedsYouLines? = nil
+}
+
+extension EnvironmentValues {
+  /// Home's "Needs you" lines, for the lines to report themselves to.
+  public var aglynNeedsYou: AglynNeedsYouLines? {
+    get { self[NeedsYouLinesKey.self] }
+    set { self[NeedsYouLinesKey.self] = newValue }
+  }
+}
+
+/// One thing waiting on the person (Home's "Needs you"): what it is ("3 orders to get ready"), the list it opens,
+/// already filtered. A plugin draws one only while something waits; nothing is drawn for nothing.
+public struct AglynNeedsYouLine: View {
+  @Environment(\.aglynNeedsYou) private var lines
+  let id: String
+  let systemImage: String
+  let text: String
+  let place: String
+  let tone: AglynTone
+  let action: () -> Void
+
+  public init(
+    id: String, systemImage: String, text: String, place: String, tone: AglynTone = .neutral, action: @escaping () -> Void
+  ) {
+    self.id = id
+    self.systemImage = systemImage
+    self.text = text
+    self.place = place
+    self.tone = tone
+    self.action = action
+  }
+
+  public var body: some View {
+    Button(action: action) {
+      HStack(spacing: 12) {
+        IconBadge(systemImage, tone: tone == .neutral ? .info : tone, size: 28)
+        Text(text).font(AglynFont.body).foregroundStyle(.primary).multilineTextAlignment(.leading)
+        Spacer(minLength: 8)
+        Text(place).font(AglynFont.caption).foregroundStyle(.secondary)
+        Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 10)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.aglynRow)
+    .onAppear { lines?.appear(id) }
+    .onDisappear { lines?.disappear(id) }
+    .accessibilityIdentifier("needs-you-\(id)")
+  }
+}
