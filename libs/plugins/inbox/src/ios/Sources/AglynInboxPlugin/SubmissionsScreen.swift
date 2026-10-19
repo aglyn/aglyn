@@ -53,6 +53,22 @@ struct SubmissionsScreen: View {
     }
   }
 
+  /// The workspace's Inbox (no site picked): every site's submissions, the console's organization Inbox.
+  private var wholeWorkspace: Bool { context.hostID == nil }
+
+  /// The API for one submission: the site's, or on the workspace's Inbox the site it came in on.
+  private func api(for submission: Submission) -> SubmissionsAPI? {
+    guard let hostID = context.hostID ?? submission.hostID else { return nil }
+    return SubmissionsAPI(api: context.api, writer: context.writer, firestore: context.firestore, hostID: hostID)
+  }
+
+  /// Whether the person may change a submission: on its own site, by their role there.
+  private func canEdit(_ submission: Submission) -> Bool {
+    if !wholeWorkspace { return role.canEditContent }
+    let siteRole = submission.hostID.flatMap { id in context.sites.first { $0.id == id }?.role }
+    return ["admin", "editor", "author"].contains(siteRole ?? "") || ["owner", "admin", "editor"].contains(context.orgRole ?? "")
+  }
+
   private var siteName: String? { site.document?.string("displayName") ?? site.document?.string("name") }
 
   private var title: String { formName.map { "Submissions · \($0)" } ?? "Submissions" }
@@ -77,6 +93,7 @@ struct SubmissionsScreen: View {
     .searchable(text: $searchText, prompt: "Search submissions")
     .onChange(of: searchText) { _, text in model.type(text) }
     .toolbar {
+      if !wholeWorkspace {
       ToolbarItem(placement: .primaryAction) {
         Button {
           runner.clear()
@@ -90,6 +107,7 @@ struct SubmissionsScreen: View {
         }
         .keyboardShortcut("e", modifiers: [.command, .shift])
         .accessibilityIdentifier("submissions-export")
+      }
       }
     }
     .navigationDestination(item: $pushed) { id in detail(id, titled: true) }
@@ -109,7 +127,11 @@ struct SubmissionsScreen: View {
       }
     }
     .sheet(item: $replying) { submission in
-      if let api { ReplySheet(submission: submission, siteName: siteName, api: api, runner: runner) { replying = nil } }
+      if let api = api(for: submission) {
+        ReplySheet(
+          submission: submission, siteName: siteName ?? context.siteName(submission.hostID), api: api, runner: runner
+        ) { replying = nil }
+      }
     }
     .confirmationDialog(
       "Delete this submission?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
@@ -119,9 +141,9 @@ struct SubmissionsScreen: View {
     } message: { _ in
       Text("It is removed for everyone. The form's counts are refreshed.")
     }
-    .task(id: context.hostID) {
+    .task(id: context.hostID ?? context.orgID) {
       role.start(context)
-      model.start(context.firestore, hostID: context.hostID)
+      model.start(context.firestore, hostID: context.hostID, orgID: context.orgID)
       if let hostID = context.hostID {
         site.start(context.firestore, ["hosts", hostID])
         if formID == nil { forms.show(context.firestore) { _ in formsQuery(hostID) } }
@@ -147,6 +169,16 @@ struct SubmissionsScreen: View {
         ForEach(readChoices(), id: \.label) { choice in
           AglynChoiceChip(choice.label, selected: model.read == choice.value) { model.read = choice.value }
             .accessibilityIdentifier("submissions-read-\(choice.value ?? "all")")
+        }
+        if wholeWorkspace && context.sites.count > 1 {
+          Divider().frame(height: 24)
+          Menu {
+            Button("Every site") { model.pickedSite = nil }
+            ForEach(context.sites) { site in Button(site.name) { model.pickedSite = site.id } }
+          } label: {
+            Label(context.sites.first { $0.id == model.pickedSite }?.name ?? "Every site", systemImage: "globe")
+          }
+          .accessibilityIdentifier("inbox-site-pick")
         }
         if formID == nil && forms.rows.count > 1 {
           Divider().frame(height: 24)
@@ -181,7 +213,9 @@ struct SubmissionsScreen: View {
     .background(AglynColor.page)
   }
 
-  private var filtered: Bool { !model.search.isEmpty || model.read != nil || model.pickedForm != nil }
+  private var filtered: Bool {
+    !model.search.isEmpty || model.read != nil || model.pickedForm != nil || model.pickedSite != nil
+  }
 
   @ViewBuilder
   private func content(selectable: Bool) -> some View {
@@ -197,7 +231,11 @@ struct SubmissionsScreen: View {
     } else if model.rows.isEmpty {
       AglynEmptyState(
         filtered ? "No submissions match" : "No submissions yet", systemImage: InboxSymbols.inbox,
-        message: filtered ? "Try another filter or search." : "What visitors send through your forms shows up here.")
+        message: filtered
+          ? "Try another filter or search."
+          : wholeWorkspace
+            ? "What visitors send through any site's forms shows up here."
+            : "What visitors send through your forms shows up here.")
     } else if selectable {
       List { rows(selectable: true) }
         .onChange(of: model.rows, initial: true) { _, rows in
@@ -219,38 +257,39 @@ struct SubmissionsScreen: View {
     ForEach(model.rows) { row in
       Group {
         if selectable {
-          SubmissionListRow(row: row, showForm: formID == nil, now: now).aglynSelectableRow(row.id, selection: $selection)
+          SubmissionListRow(row: row, showForm: formID == nil, site: siteLabel(row), now: now)
+            .aglynSelectableRow(row.id, selection: $selection)
         } else {
           Button {
             pushed = row.id
           } label: {
-            SubmissionListRow(row: row, showForm: formID == nil, now: now)
+            SubmissionListRow(row: row, showForm: formID == nil, site: siteLabel(row), now: now)
           }
           .buttonStyle(.aglynRow)
         }
       }
       .swipeActions(edge: .trailing) {
         Button(role: .destructive) { ask(delete: row) } label: { Label("Delete", systemImage: "trash") }
-          .disabled(!role.canEditContent)
+          .disabled(!canEdit(row))
       }
       .swipeActions(edge: .leading) {
         Button { toggleRead(row) } label: {
           Label(row.read ? "Unread" : "Read", systemImage: row.read ? InboxSymbols.unread : InboxSymbols.read)
         }
         .tint(AglynColor.primary)
-        .disabled(!role.canEditContent)
+        .disabled(!canEdit(row))
       }
       .contextMenu {
         Button { toggleRead(row) } label: {
           Label(row.read ? "Mark as unread" : "Mark as read", systemImage: row.read ? InboxSymbols.unread : InboxSymbols.read)
         }
-        .disabled(!role.canEditContent)
+        .disabled(!canEdit(row))
         if row.sender.email != nil {
           Button { replying = row } label: { Label("Reply", systemImage: InboxSymbols.reply) }
-            .disabled(!role.canEditContent)
+            .disabled(!canEdit(row))
         }
         Button(role: .destructive) { ask(delete: row) } label: { Label("Delete", systemImage: "trash") }
-          .disabled(!role.canEditContent)
+          .disabled(!canEdit(row))
       }
       .aglynListRow()
       .accessibilityIdentifier("submission-\(row.id)")
@@ -266,10 +305,37 @@ struct SubmissionsScreen: View {
 
   // MARK: Actions
 
+  /// The site a row came in on, named on the workspace's Inbox.
+  private func siteLabel(_ row: Submission) -> String? {
+    wholeWorkspace ? row.hostID.map(context.siteName) : nil
+  }
+
+  /// One submission's detail, on its own site.
+  @ViewBuilder
   private func detail(_ id: String, titled: Bool) -> some View {
-    SubmissionDetailView(
-      context: context, submissionID: id, runner: runner, role: role, siteName: siteName, titled: titled,
-      onRead: { model.patch($0, read: $1) }, toggleRead: toggleRead, reply: { replying = $0 }, delete: ask(delete:))
+    let host = context.hostID ?? model.rows.first { $0.id == id }?.hostID
+    if let host {
+      siteDetail(id, titled: titled, context: context.hostID == nil ? context.onSite(host) : context)
+    } else {
+      AglynSelectionPlaceholder("No submission selected", systemImage: InboxSymbols.inbox)
+    }
+  }
+
+  @ViewBuilder
+  private func siteDetail(_ id: String, titled: Bool, context: NativePluginContext) -> some View {
+    if wholeWorkspace {
+      // On the workspace's Inbox each submission is read under the person's role on its own site.
+      SiteRoleScope(context: context) { siteRole in
+        SubmissionDetailView(
+          context: context, submissionID: id, runner: runner, role: siteRole,
+          siteName: context.siteName(context.hostID), titled: titled,
+          onRead: { model.patch($0, read: $1) }, toggleRead: toggleRead, reply: { replying = $0 }, delete: ask(delete:))
+      }
+    } else {
+      SubmissionDetailView(
+        context: context, submissionID: id, runner: runner, role: role, siteName: siteName, titled: titled,
+        onRead: { model.patch($0, read: $1) }, toggleRead: toggleRead, reply: { replying = $0 }, delete: ask(delete:))
+    }
   }
 
   private func ask(delete submission: Submission) {
@@ -278,7 +344,7 @@ struct SubmissionsScreen: View {
   }
 
   private func toggleRead(_ submission: Submission) {
-    guard let api else { return }
+    guard let api = api(for: submission) else { return }
     let next = !submission.read
     runner.run {
       try await api.setRead(submission.id, read: next)
@@ -287,7 +353,7 @@ struct SubmissionsScreen: View {
   }
 
   private func delete(_ submission: Submission) {
-    guard let api else { return }
+    guard let api = api(for: submission) else { return }
     runner.run(success: "Submission deleted.") {
       try await api.delete(submission)
       model.patch(submission.id, removed: true)
@@ -300,6 +366,8 @@ struct SubmissionsScreen: View {
 struct SubmissionListRow: View {
   let row: Submission
   var showForm = true
+  /// The site it came in on, on the workspace's Inbox.
+  var site: String? = nil
   var now = Date()
 
   var body: some View {
@@ -317,7 +385,7 @@ struct SubmissionListRow: View {
             Text(relativeTime(createdAt, now: now)).font(AglynFont.caption).foregroundStyle(.secondary)
           }
         }
-        let subtitle = [showForm ? row.formName : nil, row.preview.isEmpty ? nil : row.preview]
+        let subtitle = [site, showForm ? row.formName : nil, row.preview.isEmpty ? nil : row.preview]
           .compactMap { $0 }.joined(separator: " — ")
         if !subtitle.isEmpty {
           Text(subtitle).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(2)
@@ -327,5 +395,18 @@ struct SubmissionListRow: View {
     .contentShape(Rectangle())
     .accessibilityElement(children: .combine)
     .accessibilityValue(row.read ? "Read" : "Unread")
+  }
+}
+
+/// The person's role on one site, live, for a view on a workspace-wide list that acts on that site.
+struct SiteRoleScope<Content: View>: View {
+  let context: NativePluginContext
+  @ViewBuilder let content: (SiteRoleModel) -> Content
+  @State private var role = SiteRoleModel()
+
+  var body: some View {
+    content(role)
+      .task(id: context.hostID) { role.start(context) }
+      .onDisappear { role.stop() }
   }
 }

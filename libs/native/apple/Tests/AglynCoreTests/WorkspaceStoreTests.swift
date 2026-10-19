@@ -94,7 +94,8 @@ final class WorkspaceStoreTests: XCTestCase {
     // The shown workspace's document is read live: the membership index carries no logo.
     let shown = try! XCTUnwrap(reader.documents.first { $0.0 == "orgs/a" })
     shown.1(.success(.init(id: "a", data: ["logoUrl": "/api/media/cdn/org:a/logo", "logoDarkUrl": ""])))
-    XCTAssertEqual(store.orgLogo, WorkspaceOrgLogo(light: "/api/media/cdn/org:a/logo", dark: nil))
+    // A document without a plan is on Free (`effectivePlan`), which the switcher names under each workspace.
+    XCTAssertEqual(store.orgLogo, WorkspaceOrgLogo(light: "/api/media/cdn/org:a/logo", dark: nil, plan: "free"))
     XCTAssertFalse(shown.2.removed)
 
     // The switcher asks for every row's: each other workspace's document is read once.

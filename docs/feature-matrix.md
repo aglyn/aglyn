@@ -51,6 +51,7 @@ this file is the last step, not the decision.
 | `reusableComponents` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `scheduledPublishing` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `screenAnalytics` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `siteCare` | — | — | — | — | — | — | — | — |
 | `siteExport` | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `ssoEnabled` | — | — | — | — | — | — | — | ✓ |
 | `storefrontSubscriptions` | — | — | — | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -60,4 +61,4 @@ this file is the last step, not the decision.
 | `whiteLabel` | — | — | — | — | — | — | ✓ | ✓ |
 | `workflows` | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-_39 features across 8 plans._
+_40 features across 8 plans._

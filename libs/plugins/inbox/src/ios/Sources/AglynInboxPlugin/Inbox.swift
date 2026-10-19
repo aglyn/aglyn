@@ -44,6 +44,13 @@ func siteLeadsQuery(orgID: String, hostID: String, search: String, limit: Int) -
     .firestoreQuery(["orgs", orgID, "leads"], limit: limit)
 }
 
+/// Every site's leads on the workspace's Inbox: LEAD_LIST_QUERY with no scope clause, which the org-wide read admits.
+func orgLeadsQuery(orgID: String, search: String, limit: Int) -> FirestoreQuery {
+  let words = search.trimmingCharacters(in: .whitespacesAndNewlines)
+  return planListQuery(ContractValues.shared.leadListQuery, ListQueryRequest(clauses: [], search: words.isEmpty ? nil : [words]))
+    .firestoreQuery(["orgs", orgID, "leads"], limit: limit)
+}
+
 // MARK: Who wrote in: `submissionSender`, replayed from the console's cases
 
 struct SubmissionSender: Equatable {

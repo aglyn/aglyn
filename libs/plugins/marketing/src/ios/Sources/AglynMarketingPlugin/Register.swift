@@ -11,7 +11,7 @@ import AglynPluginHost
 @MainActor
 public func registerMarketingNative(_ r: NativePluginRegistrar) {
   for section in MarketingSection.allCases {
-    r.screen(section.screen, title: section == .overview ? "Marketing" : section.label, requiresSite: true, icon: section.symbol) { ctx, params in
+    r.screen(section.screen, title: section == .overview ? "Marketing" : section.label, requiresSite: true, workspaceView: true, icon: section.symbol) { ctx, params in
       if section == .conversions, let campaign = params["campaign"], let orgID = ctx.orgID, let hostID = ctx.hostID {
         ConversionsSection(context: ctx, actions: MarketingActions(context: ctx, orgID: orgID, hostID: hostID), campaignID: campaign)
           .navigationTitle("Conversions")

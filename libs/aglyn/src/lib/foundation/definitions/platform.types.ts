@@ -988,6 +988,15 @@ export interface AglynHostMedia {
    * photo is stored once per site.
    */
   stockPhoto?: AglynHostMediaStockSource
+  /**
+   * The business's own photo, sent from a phone through a site photo link
+   * (AGL-3957), as opposed to a stock photo or a starter. `true` is the one
+   * value written, so the field is queried by equality; absent otherwise.
+   * The AI places these before it searches a stock library.
+   */
+  ownerPhoto?: true
+  /** The photo link the asset came through (AGL-3957), with `ownerPhoto`. */
+  photoLinkId?: string
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
   deletedAt?: ITimestamp

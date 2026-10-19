@@ -2037,6 +2037,13 @@
             "description": "Generate pages, components, emails, campaigns, products and more, then edit anything. Adds {const.aiCredits[@data.addons.plan]:number} AI credits a month to your workspace's pool.",
             "toggle": true,
             "icon": "sparkles|auto_awesome"
+          },
+          {
+            "kind": "siteCare",
+            "label": "Site Care",
+            "description": "We make your site changes for you: hours, prices, photos, a staff member, a seasonal banner, a section on an existing page, up to about an hour of work a month, done within 2 business days. Bigger jobs are quoted first. What it does not cover: plan limits, new pages or forms, redesigns, brand work, photography, ads.",
+            "toggle": true,
+            "icon": "hammer|construction"
           }
         ],
         "aiCredits": {

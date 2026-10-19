@@ -76,6 +76,8 @@ struct Submission: Identifiable, Hashable {
   let id: String
   let formID: String?
   let formName: String
+  /// The site it came in on: the workspace's Inbox lists every site's.
+  let hostID: String?
   let path: String?
   /// What the visitor sent, by field name (in key order; the detail orders them by the form's questions).
   let fields: [SubmissionField]
@@ -94,6 +96,7 @@ struct Submission: Identifiable, Hashable {
     id = doc.id
     formID = doc.string("formId").flatMap { $0.isEmpty ? nil : $0 }
     formName = doc.string("formName").flatMap { $0.isEmpty ? nil : $0 } ?? "Form"
+    hostID = doc.string("hostId").flatMap { $0.isEmpty ? nil : $0 }
     path = doc.string("path").flatMap { $0.isEmpty ? nil : $0 }
     fields = raw.map { SubmissionField(key: $0.key, text: submissionText($0.value)) }
     read = doc.bool("read") == true
@@ -151,6 +154,22 @@ func submissionsPlan(formID: String?, read: String?, search: String, pickedForm:
     submissionsRequest(formID: formID, read: read, search: search, pickedForm: pickedForm))
 }
 
+/// The workspace's Inbox (ORG_SUBMISSION_LIST_QUERY): every site's submissions, under the `orgId` clause the rules
+/// require of the group read (`orgSubmissionBase`), with the Site pick as a clause.
+func orgSubmissionsPlan(orgID: String, read: String?, search: String, pickedSite: String? = nil) -> ListQueryPlan {
+  let words = search.trimmingCharacters(in: .whitespacesAndNewlines)
+  var clauses = read.map { [ListFilterRequest(field: "read", op: "equals", value: $0)] } ?? []
+  if let pickedSite, !pickedSite.isEmpty { clauses.append(ListFilterRequest(field: "hostId", op: "equals", value: pickedSite)) }
+  return planListQuery(
+    ContractValues.shared.orgSubmissionListQuery,
+    ListQueryRequest(
+      base: [ListQueryFilter(op: .equal, path: "orgId", value: .string(orgID))], clauses: clauses,
+      search: words.isEmpty ? nil : [words]))
+}
+
+/// The workspace's Inbox reads every site's `formSubmissions` as one collection group.
+let orgSubmissionsGroup = ["formSubmissions"]
+
 /// What an export of the list covers: one form's, the read filter's, or every submission.
 func submissionsExportScope(formID: String?, read: String?) -> JSONValue {
   var filter: [String: JSONValue] = [:]
@@ -177,6 +196,9 @@ final class SubmissionsModel {
 
   @ObservationIgnored private var reader: FirestoreReader?
   @ObservationIgnored private var hostID: String?
+  @ObservationIgnored private var orgID: String?
+  /// The Site pick on the workspace's Inbox.
+  var pickedSite: String? { didSet { if oldValue != pickedSite { restart() } } }
   @ObservationIgnored private var listener: FirestoreListening?
   @ObservationIgnored private var limit = submissionsPageSize
   @ObservationIgnored private var debounce: Task<Void, Never>?
@@ -185,9 +207,11 @@ final class SubmissionsModel {
     self.formID = formID
   }
 
-  func start(_ reader: FirestoreReader, hostID: String?) {
+  /// One site's list, or with no site the workspace's (`orgID`).
+  func start(_ reader: FirestoreReader, hostID: String?, orgID: String? = nil) {
     self.reader = reader
     self.hostID = hostID
+    self.orgID = orgID
     restart()
   }
 
@@ -235,11 +259,23 @@ final class SubmissionsModel {
   private func listen() {
     listener?.remove()
     failed = false
-    guard let reader, let hostID else { return }
-    let plan = submissionsPlan(formID: formID, read: read, search: search, pickedForm: pickedForm)
+    guard let reader else { return }
+    let query: FirestoreQuery
+    let plan: ListQueryPlan
+    if let hostID {
+      plan = submissionsPlan(formID: formID, read: read, search: search, pickedForm: pickedForm)
+      query = plan.firestoreQuery(submissionsPath(hostID), limit: limit + 1)
+    } else if let orgID {
+      plan = orgSubmissionsPlan(orgID: orgID, read: read, search: search, pickedSite: pickedSite)
+      var group = plan.firestoreQuery(orgSubmissionsGroup, limit: limit + 1)
+      group.collectionGroup = true
+      query = group
+    } else {
+      return
+    }
     notice = plan.refused.isEmpty ? plan.notices.first : "This search cannot run with that filter. Clear one of them."
     let window = limit
-    listener = reader.listen(plan.firestoreQuery(submissionsPath(hostID), limit: window + 1)) { [weak self] result in
+    listener = reader.listen(query) { [weak self] result in
       guard let self else { return }
       switch result {
       case .success(let docs):

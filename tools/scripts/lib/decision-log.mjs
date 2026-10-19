@@ -77,7 +77,13 @@ export const WATCHED = Object.freeze([
       'EVENT_CALENDAR_ADDON_MONTHLY_USD',
       'POS_REGISTER_ADDON_MONTHLY_USD',
     ]),
-    optionalScalars: Object.freeze(['PAGE_VIEW_CDN_REQUEST_COST_USD']),
+    // `SITE_CARE_ADDON_MONTHLY_USD` (AGL-3954) is optional only until the
+    // base ref carries it: a production that predates the add-on reads it as
+    // absent, so its arrival is a recorded move rather than an unreadable.
+    optionalScalars: Object.freeze([
+      'PAGE_VIEW_CDN_REQUEST_COST_USD',
+      'SITE_CARE_ADDON_MONTHLY_USD',
+    ]),
   }),
   Object.freeze({
     path: 'apps/console/utils/usage-metering.ts',

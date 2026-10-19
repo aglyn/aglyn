@@ -159,6 +159,12 @@ public func passwordChangeMessage(_ error: Error) -> String {
 /// user is kept in the Keychain by Firebase; with REST the refresh token is
 /// kept by `KeychainCredentialStore`. Either way a relaunch restores them
 /// without a prompt.
+///
+/// More than one account can be signed in at once (Add account, Zach 2026-10-18). The app's own sign-in is the base
+/// slot; each account added beside it signs in over REST with its refresh token in a Keychain slot of its own, and while
+/// one of them is in use every token and every read is that account's, exactly as in a support session. Switching
+/// changes `user`, which the app follows with a fresh workspace store, so nothing of one account reaches another's
+/// screens; signing out ends the account in use and keeps the others.
 @MainActor
 @Observable
 public final class AuthSession {
@@ -173,8 +179,20 @@ public final class AuthSession {
   /// The support session a staff member is in as a customer, nil for an ordinary session. While it is on, `user` is the
   /// customer and every token is theirs; the staff member's own session is set aside untouched.
   public private(set) var impersonation: Impersonation?
-  /// Whether a support session is on, for readers that are not on the main actor.
+  /// Whether reads go over REST with this session's token rather than the SDK's own sign-in: in a support session, and
+  /// while an added account is in use. Readable by readers that are not on the main actor.
   public let impersonationFlag = ImpersonationFlag()
+
+  /// Every account signed in on this device, the app's own (base) first.
+  public private(set) var accounts: [SignedInAccount] = []
+  /// The slot of the account in use (`SignedInAccount.baseSlot` for the app's own sign-in).
+  public private(set) var activeSlot = SignedInAccount.baseSlot
+  /// While true, a sign-in adds an account beside the ones signed in (and switches to it) instead of replacing the
+  /// app's own: the Add account screen sets it around the shared sign-in screens.
+  public var addingAccount = false
+
+  /// Whether more than one account can be signed in on this build.
+  public var canAddAccounts: Bool { makeAccountAuth != nil }
 
   @ObservationIgnored private let rest: IdentityToolkitAuth?
   @ObservationIgnored private var handle: AuthStateDidChangeListenerHandle?
@@ -188,22 +206,41 @@ public final class AuthSession {
   /// does not land over it.
   @ObservationIgnored private var signedInOrOutSinceLaunch = false
 
-  /// `rest` is the REST client to sign in with; nil signs in with the Firebase SDK.
-  public init(rest: IdentityToolkitAuth? = nil, impersonationAuth: (@Sendable () -> IdentityToolkitAuth)? = nil) {
+  /// The app's own sign-in, whichever account is in use.
+  @ObservationIgnored private var baseUser: AglynUser?
+  /// The added accounts' REST clients and people, by slot, once restored or signed in this launch.
+  @ObservationIgnored private var addedClients: [String: IdentityToolkitAuth] = [:]
+  @ObservationIgnored private var addedUsers: [String: AglynUser] = [:]
+  /// A client for an added account's slot, its refresh token kept in the Keychain under that slot.
+  @ObservationIgnored private let makeAccountAuth: (@Sendable (String) -> IdentityToolkitAuth)?
+  @ObservationIgnored private let roster: AccountRosterStorage?
+  @ObservationIgnored private var baseAnswered = false
+  @ObservationIgnored private var addedRestored = false
+
+  /// `rest` is the REST client to sign in with; nil signs in with the Firebase SDK. `accountAuth` makes the client of an
+  /// added account's slot, and `roster` keeps who is signed in where; without them only one account signs in.
+  public init(
+    rest: IdentityToolkitAuth? = nil, impersonationAuth: (@Sendable () -> IdentityToolkitAuth)? = nil,
+    accountAuth: (@Sendable (String) -> IdentityToolkitAuth)? = nil, roster: AccountRosterStorage? = nil
+  ) {
     self.rest = rest
     makeImpersonationAuth = impersonationAuth
+    makeAccountAuth = accountAuth
+    self.roster = roster
     transport = rest == nil ? .sdk : .rest
+    accounts = roster?.load() ?? []
+    Task { @MainActor in await self.restoreAddedAccount() }
     if let rest {
       Task { @MainActor in
         // A sign-in that began before this task ran owns the stored session: restoring it now would refresh the fresh
         // tokens a second time, and a refused refresh would clear them.
         guard !self.signedInOrOutSinceLaunch else {
-          self.ready = true
+          self.baseDidAnswer()
           return
         }
         let restored = await rest.restore()
-        if !self.signedInOrOutSinceLaunch { self.user = restored }
-        self.ready = true
+        if !self.signedInOrOutSinceLaunch { self.setBase(restored) }
+        self.baseDidAnswer()
         await self.refreshStanding()
       }
       return
@@ -211,20 +248,17 @@ public final class AuthSession {
     handle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
       MainActor.assumeIsolated {
         let signedIn = user.map { AglynUser(sdk: $0) }
-        self?.ready = true
         // While a support session is on, the SDK's user is the staff member's, set aside.
-        if self?.impersonation != nil {
-          self?.staffAside = signedIn
-          return
-        }
-        self?.user = signedIn
+        if self?.impersonation != nil { self?.staffAside = signedIn }
+        self?.setBase(signedIn)
+        self?.baseDidAnswer()
         Task { await self?.refreshStanding() }
       }
     }
   }
 
   /// The session for a config: REST when `transport` says so, else the SDK. Every REST call carries
-  /// `appCheck`'s token (the SDK takes its own from Firebase App Check).
+  /// `appCheck`'s token (the SDK takes its own from Firebase App Check). Added accounts always sign in over REST.
   public static func make(
     _ config: AglynConfig, transport: AuthTransport = .resolve(), appCheck: AppCheckTokenProvider = NoAppCheck()
   ) -> AuthSession {
@@ -234,24 +268,175 @@ public final class AuthSession {
       IdentityToolkitAuth(
         apiKey: config.firebase.apiKey, emulatorHost: config.authEmulatorHost, transport: http, store: MemoryCredentialStore())
     }
-    guard transport == .rest else { return AuthSession(impersonationAuth: impersonationAuth) }
+    let service = restAuthKeychainService(
+      bundleID: Bundle.main.bundleIdentifier ?? "com.aglyn.app", buildHash: restBuildHash())
+    let accountAuth: @Sendable (String) -> IdentityToolkitAuth = { slot in
+      IdentityToolkitAuth(
+        apiKey: config.firebase.apiKey, emulatorHost: config.authEmulatorHost, transport: http,
+        store: KeychainCredentialStore(service: "\(service).accounts", account: "\(config.firebase.projectID).\(slot)"))
+    }
+    let roster = AccountRosterStorage(projectID: config.firebase.projectID)
+    guard transport == .rest else {
+      return AuthSession(impersonationAuth: impersonationAuth, accountAuth: accountAuth, roster: roster)
+    }
     return AuthSession(
       rest: IdentityToolkitAuth(
         apiKey: config.firebase.apiKey,
         emulatorHost: config.authEmulatorHost,
         transport: http,
-        store: KeychainCredentialStore(
-          service: restAuthKeychainService(
-            bundleID: Bundle.main.bundleIdentifier ?? "com.aglyn.app", buildHash: restBuildHash()),
-          account: config.firebase.projectID)),
-      impersonationAuth: impersonationAuth)
+        store: KeychainCredentialStore(service: service, account: config.firebase.projectID)),
+      impersonationAuth: impersonationAuth, accountAuth: accountAuth, roster: roster)
   }
+
+  // MARK: Which account is in use
+
+  /// The added account in use, nil while the app's own is.
+  private var activeAdded: IdentityToolkitAuth? {
+    activeSlot == SignedInAccount.baseSlot ? nil : addedClients[activeSlot]
+  }
+
+  /// The REST client the person in use is signed in with: an added account's, else the app's own REST session (nil on
+  /// the SDK).
+  private var currentRest: IdentityToolkitAuth? { activeAdded ?? rest }
+
+  /// The app's own sign-in changed (signed in, out, refreshed).
+  private func setBase(_ next: AglynUser?) {
+    baseUser = next
+    if let next {
+      updateRoster(SignedInAccount(slot: SignedInAccount.baseSlot, uid: next.uid, email: next.email, displayName: next.displayName))
+    } else {
+      removeFromRoster(SignedInAccount.baseSlot)
+    }
+    applyActive()
+  }
+
+  /// The person in use changed: `user` follows the active slot, and reads follow its token.
+  private func setCurrent(_ next: AglynUser?) {
+    guard activeSlot != SignedInAccount.baseSlot else { return setBase(next) }
+    guard let next else { return }
+    addedUsers[activeSlot] = next
+    updateRoster(SignedInAccount(slot: activeSlot, uid: next.uid, email: next.email, displayName: next.displayName))
+    applyActive()
+  }
+
+  private func applyActive() {
+    guard impersonation == nil else { return }
+    let added = activeSlot != SignedInAccount.baseSlot
+    impersonationFlag.set(added)
+    user = added ? addedUsers[activeSlot] : baseUser
+  }
+
+  private func baseDidAnswer() {
+    baseAnswered = true
+    ready = baseAnswered && addedRestored
+  }
+
+  /// At launch: the added account that was in use, restored from its Keychain slot; one whose session the server no
+  /// longer accepts is dropped and the app's own comes back.
+  private func restoreAddedAccount() async {
+    defer {
+      addedRestored = true
+      ready = baseAnswered && addedRestored
+    }
+    guard let roster, let makeAccountAuth else { return }
+    let slot = roster.activeSlot
+    guard slot != SignedInAccount.baseSlot else { return }
+    guard accounts.contains(where: { $0.slot == slot }) else {
+      roster.activeSlot = SignedInAccount.baseSlot
+      return
+    }
+    let client = makeAccountAuth(slot)
+    guard let restored = await client.restore() else {
+      removeFromRoster(slot)
+      roster.activeSlot = SignedInAccount.baseSlot
+      return
+    }
+    addedClients[slot] = client
+    addedUsers[slot] = restored
+    activeSlot = slot
+    applyActive()
+    await refreshStanding()
+  }
+
+  private func updateRoster(_ account: SignedInAccount) {
+    let next = AccountRosterRules.upsert(account, into: accounts)
+    guard next != accounts else { return }
+    accounts = next
+    roster?.save(next)
+  }
+
+  private func removeFromRoster(_ slot: String) {
+    let next = AccountRosterRules.remove(slot: slot, from: accounts)
+    guard next != accounts else { return }
+    accounts = next
+    roster?.save(next)
+  }
+
+  /// Remembers which workspaces the account in use belongs to, so a tapped push about one finds its account.
+  public func recordWorkspaces(_ orgIDs: [String]) {
+    guard impersonation == nil, var account = accounts.first(where: { $0.slot == activeSlot }), account.orgIDs != orgIDs
+    else { return }
+    account.orgIDs = orgIDs
+    let next = accounts.map { $0.slot == account.slot ? account : $0 }
+    accounts = next
+    roster?.save(next)
+  }
+
+  /// Uses another signed-in account. Its session is read back from its Keychain slot when it was not used this launch;
+  /// one the server no longer accepts is dropped. A support session is ended first.
+  public func switchAccount(to slot: String) async {
+    guard slot != activeSlot || impersonation != nil else { return }
+    await endImpersonation()
+    if slot == SignedInAccount.baseSlot {
+      guard baseUser != nil else { return }
+    } else if addedClients[slot] == nil {
+      guard let makeAccountAuth, accounts.contains(where: { $0.slot == slot }) else { return }
+      let client = makeAccountAuth(slot)
+      guard let restored = await client.restore() else {
+        removeFromRoster(slot)
+        return
+      }
+      addedClients[slot] = client
+      addedUsers[slot] = restored
+    }
+    activeSlot = slot
+    roster?.activeSlot = slot
+    signedInOrOutSinceLaunch = true
+    applyActive()
+    await refreshStanding()
+  }
+
+  /// Signs in an account beside the ones signed in, in a Keychain slot of its own, and switches to it. The same person
+  /// signing in again is switched to, not added twice.
+  private func add(_ signIn: (IdentityToolkitAuth) async throws -> AglynUser) async throws -> AglynUser {
+    guard let makeAccountAuth else { throw IdentityToolkitError(code: nil, status: 0) }
+    let slot = UUID().uuidString
+    let client = makeAccountAuth(slot)
+    let signed = try await signIn(client)
+    addingAccount = false
+    if let existing = accounts.first(where: { $0.uid == signed.uid }) {
+      await client.signOut()
+      await switchAccount(to: existing.slot)
+      return signed
+    }
+    addedClients[slot] = client
+    addedUsers[slot] = signed
+    updateRoster(SignedInAccount(slot: slot, uid: signed.uid, email: signed.email, displayName: signed.displayName))
+    await switchAccount(to: slot)
+    return signed
+  }
+
+  // MARK: Signing in
 
   public func signIn(email: String, password: String) async throws {
     let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+    if addingAccount {
+      _ = try await add { try await $0.signIn(email: trimmed, password: password) }
+      return
+    }
     if let rest {
       signedInOrOutSinceLaunch = true
-      user = try await rest.signIn(email: trimmed, password: password)
+      setBase(try await rest.signIn(email: trimmed, password: password))
       await refreshStanding()
       return
     }
@@ -265,9 +450,13 @@ public final class AuthSession {
   /// `tenantId` is the identity pool the token was minted in (an SSO account lives in its workspace's tenant).
   public func signIn(customToken: String, tenantId: String? = nil) async throws {
     let pool = tenantId.flatMap { $0.isEmpty ? nil : $0 }
+    if addingAccount {
+      _ = try await add { try await $0.signIn(customToken: customToken, tenantId: pool) }
+      return
+    }
     if let rest {
       signedInOrOutSinceLaunch = true
-      user = try await rest.signIn(customToken: customToken, tenantId: pool)
+      setBase(try await rest.signIn(customToken: customToken, tenantId: pool))
       await refreshStanding()
       return
     }
@@ -279,35 +468,45 @@ public final class AuthSession {
   /// (`createUserWithEmailAndPassword`). Throws with the Firebase code for `signUpErrorMessage`.
   public func signUp(email: String, password: String) async throws -> AglynUser {
     let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+    if addingAccount { return try await add { try await $0.signUp(email: trimmed, password: password) } }
     if let rest {
       signedInOrOutSinceLaunch = true
       let created = try await rest.signUp(email: trimmed, password: password)
-      user = created
+      setBase(created)
       await refreshStanding()
       return created
     }
     Auth.auth().tenantID = nil
     let result = try await Auth.auth().createUser(withEmail: trimmed, password: password)
     let created = AglynUser(sdk: result.user)
-    user = created
+    setBase(created)
     return created
   }
 
   /// Signs in with a Google ID token (the platform sheet's), which signs up a person Firebase has not seen.
   /// Returns whether it did, the console's `isNewAccount(credential)`.
   public func signIn(googleIDToken: String, accessToken: String? = nil) async throws -> Bool {
+    let body = "id_token=\(ConsoleAPIClient.encodeComponent(googleIDToken))&providerId=google.com"
+    if addingAccount {
+      var isNew = false
+      _ = try await add { client in
+        let (signedIn, created) = try await client.signIn(idpPostBody: body)
+        isNew = created
+        return signedIn
+      }
+      return isNew
+    }
     if let rest {
       signedInOrOutSinceLaunch = true
-      let (signedIn, isNew) = try await rest.signIn(
-        idpPostBody: "id_token=\(ConsoleAPIClient.encodeComponent(googleIDToken))&providerId=google.com")
-      user = signedIn
+      let (signedIn, isNew) = try await rest.signIn(idpPostBody: body)
+      setBase(signedIn)
       await refreshStanding()
       return isNew
     }
     Auth.auth().tenantID = nil
     let credential = GoogleAuthProvider.credential(withIDToken: googleIDToken, accessToken: accessToken ?? "")
     let result = try await Auth.auth().signIn(with: credential)
-    user = AglynUser(sdk: result.user)
+    setBase(AglynUser(sdk: result.user))
     return result.additionalUserInfo?.isNewUser == true
   }
 
@@ -316,19 +515,28 @@ public final class AuthSession {
   public func signIn(appleIDToken: String, rawNonce: String, fullName: PersonNameComponents?) async throws -> Bool {
     let name = fullName.map { PersonNameComponentsFormatter().string(from: $0) }?
       .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let body =
+      "id_token=\(ConsoleAPIClient.encodeComponent(appleIDToken))&providerId=apple.com"
+      + "&nonce=\(ConsoleAPIClient.encodeComponent(rawNonce))"
     let isNew: Bool
-    if let rest {
+    if addingAccount {
+      var created = false
+      _ = try await add { client in
+        let (signedIn, isNew) = try await client.signIn(idpPostBody: body)
+        created = isNew
+        return signedIn
+      }
+      isNew = created
+    } else if let rest {
       signedInOrOutSinceLaunch = true
-      let (signedIn, created) = try await rest.signIn(
-        idpPostBody: "id_token=\(ConsoleAPIClient.encodeComponent(appleIDToken))&providerId=apple.com"
-          + "&nonce=\(ConsoleAPIClient.encodeComponent(rawNonce))")
-      user = signedIn
+      let (signedIn, created) = try await rest.signIn(idpPostBody: body)
+      setBase(signedIn)
       isNew = created
     } else {
       Auth.auth().tenantID = nil
       let credential = OAuthProvider.appleCredential(withIDToken: appleIDToken, rawNonce: rawNonce, fullName: fullName)
       let result = try await Auth.auth().signIn(with: credential)
-      user = AglynUser(sdk: result.user)
+      setBase(AglynUser(sdk: result.user))
       isNew = result.additionalUserInfo?.isNewUser == true
     }
     if isNew, !name.isEmpty, (user?.displayName ?? "").isEmpty { try? await updateDisplayName(name) }
@@ -336,29 +544,31 @@ public final class AuthSession {
     return isNew
   }
 
+  // MARK: The account in use
+
   /// Re-reads the account (the console's `user.reload()`), so a confirmed address shows as confirmed; the fresh
   /// token then carries `email_verified`, which the routes read.
   public func reload() async {
-    if let rest {
-      if let fresh = try? await rest.reload() { user = fresh }
+    if let rest = currentRest {
+      if let fresh = try? await rest.reload() { setCurrent(fresh) }
       return
     }
     guard let signedIn = Auth.auth().currentUser else { return }
     try? await signedIn.reload()
     guard let current = Auth.auth().currentUser else { return }
     if current.isEmailVerified { _ = try? await current.getIDTokenResult(forcingRefresh: true) }
-    if impersonation == nil { user = AglynUser(sdk: current) }
+    if impersonation == nil { setBase(AglynUser(sdk: current)) }
   }
 
   /// The sign-in providers the account holds (`password`, `google.com`, …), as the console reads `user.providerData`.
   public func providerIDs() async -> [String] {
-    if let rest { return (try? await rest.providerIDs()) ?? [] }
+    if let rest = currentRest { return (try? await rest.providerIDs()) ?? [] }
     return Auth.auth().currentUser?.providerData.map(\.providerID) ?? []
   }
 
   /// Confirms an address with an emailed verification link's code; no one need be signed in.
   public func applyEmailVerification(code: String) async throws {
-    if let rest {
+    if let rest = currentRest {
       try await rest.applyActionCode(code)
     } else {
       try await Auth.auth().applyActionCode(code)
@@ -381,8 +591,8 @@ public final class AuthSession {
   /// Changes the password, after proving the current one.
   public func changePassword(current: String, new: String) async throws {
     guard let email = user?.email else { throw IdentityToolkitError(code: "INVALID_LOGIN_CREDENTIALS", status: 401) }
-    if let rest {
-      user = try await rest.changePassword(email: email, current: current, new: new)
+    if let rest = currentRest {
+      setCurrent(try await rest.changePassword(email: email, current: current, new: new))
       return
     }
     guard let signedIn = Auth.auth().currentUser else { throw IdentityToolkitError(code: nil, status: 401) }
@@ -393,20 +603,23 @@ public final class AuthSession {
   /// Keeps the account's display name in step with the profile (rosters and comments read it).
   public func updateDisplayName(_ name: String) async throws {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    if let rest {
-      user = try await rest.updateDisplayName(trimmed)
+    if let rest = currentRest {
+      setCurrent(try await rest.updateDisplayName(trimmed))
       return
     }
     guard let signedIn = Auth.auth().currentUser else { return }
     let change = signedIn.createProfileChangeRequest()
     change.displayName = trimmed
     try await change.commitChanges()
-    user = AglynUser(uid: signedIn.uid, email: signedIn.email, displayName: trimmed.isEmpty ? nil : trimmed, emailVerified: signedIn.isEmailVerified)
+    setBase(
+      AglynUser(
+        uid: signedIn.uid, email: signedIn.email, displayName: trimmed.isEmpty ? nil : trimmed,
+        emailVerified: signedIn.isEmailVerified))
   }
 
   /// Disconnects a sign-in provider (`google.com`), as the console's Account section does with `unlink`.
   public func unlinkProvider(_ providerID: String) async throws {
-    if let rest {
+    if let rest = currentRest {
       try await rest.deleteProvider(providerID)
       await refreshStanding()
       return
@@ -423,6 +636,8 @@ public final class AuthSession {
   public func onBeforeSignOut(_ task: @escaping @MainActor () async -> Void) {
     beforeSignOut.append(task)
   }
+
+  // MARK: Support sessions
 
   /// Signs in as a customer with the custom token `/api/admin/impersonate` minted, in the pool it was minted in. The staff
   /// member's own session is set aside untouched; the customer's lives in memory only. Throws when the token is refused.
@@ -446,28 +661,68 @@ public final class AuthSession {
     guard let session = impersonated else { return }
     await session.signOut()
     impersonated = nil
-    impersonationFlag.set(false)
     impersonation = nil
-    user = staffAside
     staffAside = nil
+    applyActive()
     await refreshStanding()
   }
 
+  // MARK: Signing out
+
+  /// Signs the account in use out, and keeps every other one signed in: the next one (the app's own first) takes over,
+  /// and with none left the sign-in shows.
   public func signOut() async {
     // Leaving the app from a support session ends it, and then signs the staff member out as well.
     await endImpersonation()
     for task in beforeSignOut { await task() }
     staff = nil
     signedInOrOutSinceLaunch = true
+    if activeSlot != SignedInAccount.baseSlot {
+      let slot = activeSlot
+      await addedClients[slot]?.signOut()
+      addedClients[slot] = nil
+      addedUsers[slot] = nil
+      removeFromRoster(slot)
+      let next = baseUser != nil ? SignedInAccount.baseSlot : accounts.first(where: { !$0.isBase })?.slot
+      activeSlot = SignedInAccount.baseSlot
+      roster?.activeSlot = SignedInAccount.baseSlot
+      if let next, next != SignedInAccount.baseSlot {
+        await switchAccount(to: next)
+      } else {
+        applyActive()
+        await refreshStanding()
+      }
+      return
+    }
+    // The next account takes over before the app's own signs out, so the shell never passes through signed out.
+    if let next = accounts.first(where: { !$0.isBase }) { await switchAccount(to: next.slot) }
     if let rest {
       await rest.signOut()
-      user = nil
+      setBase(nil)
       return
     }
     try? Auth.auth().signOut()
+    setBase(nil)
     // An SSO account's pool outlives `signOut`. Every sign-in door sets its own, but the emailed-code steps (verify an address,
     // reset a password) use whatever is left, so signed out means the project pool (AGL-3844).
     Auth.auth().tenantID = nil
+  }
+
+  /// Drops the added account in use whose session the server refused, and returns to the next account.
+  private func dropActiveAddedAccount() async {
+    guard activeSlot != SignedInAccount.baseSlot else { return }
+    let slot = activeSlot
+    await addedClients[slot]?.signOut()
+    addedClients[slot] = nil
+    addedUsers[slot] = nil
+    removeFromRoster(slot)
+    activeSlot = SignedInAccount.baseSlot
+    roster?.activeSlot = SignedInAccount.baseSlot
+    if baseUser == nil, let next = accounts.first(where: { !$0.isBase }) {
+      await switchAccount(to: next.slot)
+    } else {
+      applyActive()
+    }
   }
 
   /// Reads the staff standing from the current ID token's claims.
@@ -487,9 +742,16 @@ public final class AuthSession {
       if token == nil { await endImpersonation() }
       return token
     }
+    if let added = await MainActor.run(body: { self.activeAdded }) {
+      let token = try await added.idToken(forceRefresh: forceRefresh)
+      // A refresh the server refuses (the account was signed out elsewhere) drops that account here, without the
+      // sign-out work that would need its token.
+      if token == nil { await dropActiveAddedAccount() }
+      return token
+    }
     if let rest {
       let token = try await rest.idToken(forceRefresh: forceRefresh)
-      if token == nil { await MainActor.run { self.user = nil } }
+      if token == nil { await MainActor.run { self.setBase(nil) } }
       return token
     }
     guard let current = Auth.auth().currentUser else { return nil }
