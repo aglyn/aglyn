@@ -20,6 +20,7 @@ import {
   isCustomPricedPlan,
   isOrgSubscriptionLive,
   PLATFORM_BRAND_NAME,
+  planSellsSiteCare,
   pluginRequestFromWeb,
   type AttemptClaim,
   type OrgPlan,
@@ -256,16 +257,20 @@ export async function resolvePromotionCode(
 function promotionCodeFullUseMetadata(
   plan: OrgPlan,
   interval: 'month' | 'year',
-  aiAddon: boolean,
+  addons: { aiAddon: boolean; siteCare: boolean },
   promo: Awaited<ReturnType<typeof resolvePromotionCode>>,
 ): Record<string, string> {
   if (!promo.id) return {}
+  const { aiAddon, siteCare } = addons
   try {
     const assessed = orgDiscountFullUse(
       {
         plan,
         subscription: { status: 'active', interval },
-        seatAddons: aiAddon ? { aiAddon: 1 } : {},
+        seatAddons: {
+          ...(aiAddon ? { aiAddon: 1 } : {}),
+          ...(siteCare ? { siteCare: 1 } : {}),
+        },
       } as never,
       {
         percentOff: promo.percentOff ?? undefined,
@@ -279,6 +284,7 @@ function promotionCodeFullUseMetadata(
         plan,
         interval,
         aiAddon,
+        siteCare,
         verdict: describeDiscountFullUse(assessed),
       })
     }
@@ -319,6 +325,22 @@ async function handler(request: Request): Promise<Response> {
       { status: 400 },
     )
   }
+  // Site Care (AGL-3954) is sold on every paid self-serve plan and on
+  // nothing else. Refused here, ahead of the price lookup, so a Free request
+  // reads as what it is rather than as the "billing is not configured" 501
+  // that a plan with no price would otherwise answer.
+  const siteCareWanted = body?.siteCare === true
+  if (siteCareWanted && !planSellsSiteCare(plan)) {
+    return Response.json(
+      {
+        error:
+          'Site Care is added to a paid plan. Choose a paid plan to add it — ' +
+          'Free has no subscription to carry it.',
+        code: 'site_care_needs_paid_plan',
+      },
+      { status: 400 },
+    )
+  }
   // Billing interval (AGL-269): 'year' maps to the *_YEARLY price ids.
   const interval = body?.interval === 'year' ? 'year' : 'month'
   const priceId =
@@ -352,6 +374,20 @@ async function handler(request: Request): Promise<Response> {
         'Billing is not configured: STRIPE_PRICE_' +
         `${plan.toUpperCase()}_AI_ADDON${interval === 'year' ? '_YEARLY' : ''} ` +
         `is unset, so the ${PLATFORM_BRAND_NAME} AI add-on cannot be sold on this plan yet.`,
+    }, { status: 501 })
+  }
+  // Site Care bought WITH the plan (AGL-3954), the way the AI add-on is: one
+  // more recurring item on the same subscription, mirrored onto
+  // `seatAddons.siteCare` by the webhook. Flat, so one env per interval.
+  const siteCarePriceId = siteCareWanted
+    ? addonPriceId('siteCare', plan as OrgPlan, interval)
+    : null
+  if (siteCareWanted && !siteCarePriceId) {
+    return Response.json({
+      error:
+        'Billing is not configured: STRIPE_PRICE_SITE_CARE' +
+        `${interval === 'year' ? '_YEARLY' : ''} is unset, so Site Care ` +
+        'cannot be sold yet.',
     }, { status: 501 })
   }
 
@@ -520,11 +556,14 @@ async function handler(request: Request): Promise<Response> {
       if (meteredPreview) {
         preview.set('subscription_details[items][1][price]', meteredPreview)
       }
-      if (aiAddonPriceId) {
-        // Quoted on the same invoice as the plan, so the total on the card
-        // is the total the card is charged. Quantity 1 is the whole add-on.
-        const at = meteredPreview ? 2 : 1
-        preview.set(`subscription_details[items][${at}][price]`, aiAddonPriceId)
+      // Add-ons are quoted on the same invoice as the plan, so the total on
+      // the card is the total the card is charged. Quantity 1 is the whole
+      // add-on, and each takes the next slot after the metered item.
+      let nextPreviewItem = meteredPreview ? 2 : 1
+      for (const addonPrice of [aiAddonPriceId, siteCarePriceId]) {
+        if (!addonPrice) continue
+        const at = nextPreviewItem++
+        preview.set(`subscription_details[items][${at}][price]`, addonPrice)
         preview.set(`subscription_details[items][${at}][quantity]`, '1')
       }
       const promo = await resolvePromotionCode(
@@ -726,11 +765,20 @@ async function handler(request: Request): Promise<Response> {
     // and metered positions the price-fault reader names stay where they are.
     // Interval-matched through `addonPriceId`, for the reason the metered
     // item is: one `recurring.interval` per subscription.
+    let nextItem = meteredNative ? 2 : 1
     let aiAddonItemIndex: number | null = null
     if (aiAddonPriceId) {
-      aiAddonItemIndex = meteredNative ? 2 : 1
+      aiAddonItemIndex = nextItem++
       subParams.set(`items[${aiAddonItemIndex}][price]`, aiAddonPriceId)
       subParams.set(`items[${aiAddonItemIndex}][quantity]`, '1')
+    }
+    // Site Care (AGL-3954) takes the slot after it, for the same reason: the
+    // positions the price-fault reader names are the positions used here.
+    let siteCareItemIndex: number | null = null
+    if (siteCarePriceId) {
+      siteCareItemIndex = nextItem++
+      subParams.set(`items[${siteCareItemIndex}][price]`, siteCarePriceId)
+      subParams.set(`items[${siteCareItemIndex}][quantity]`, '1')
     }
     // The attribution metadata the session put on `subscription_data`, now set
     // directly on the subscription — same destination, one hop fewer. Both are
@@ -743,7 +791,12 @@ async function handler(request: Request): Promise<Response> {
     }
     if (promo.id) subParams.set('discounts[0][promotion_code]', promo.id)
     for (const [key, value] of Object.entries(
-      promotionCodeFullUseMetadata(plan as OrgPlan, interval, aiAddonWanted, promo),
+      promotionCodeFullUseMetadata(
+        plan as OrgPlan,
+        interval,
+        { aiAddon: aiAddonWanted, siteCare: siteCareWanted },
+        promo,
+      ),
     )) {
       subParams.set(key, value)
     }
@@ -772,6 +825,7 @@ async function handler(request: Request): Promise<Response> {
         plan,
         interval,
         aiAddonItemIndex,
+        siteCareItemIndex,
       )
       if (missing) return Response.json({ error: missing }, { status: 501 })
       return Response.json(

@@ -10,7 +10,14 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — the console says what to set up first (newest)
+## October 2026 — a client's workspace is comped as it is created (newest)
+
+- **[Build a site for a client](staff-console/overview.md#build-for-a-client)** —
+  staff creating a workspace for a prospect turn on **Build for a client** in the
+  create dialog, pick the tier and write the note, and the workspace is born
+  already comped and recorded in the Audit Log. One step where there were two.
+
+## October 2026 — the console says what to set up first
 
 - **[Taking payment](commerce-and-bookings/commerce/pos-and-reservations.md#taking-payment)** —
   when your store's Stripe account isn't connected yet, the register's card

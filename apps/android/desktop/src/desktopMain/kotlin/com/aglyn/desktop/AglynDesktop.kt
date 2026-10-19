@@ -3,11 +3,12 @@ package com.aglyn.desktop
 import androidx.compose.runtime.remember
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.window.application
+import androidx.compose.ui.unit.dp
 import com.aglyn.pluginhost.NativeApp
 import com.aglyn.plugins.manifest.NativePluginManifest
 import com.aglyn.shell.AglynShell
 import com.aglyn.shell.DesktopShell
-import com.aglyn.shell.Route
+import com.aglyn.shell.ShellCommand
 import com.aglyn.shell.ShellNavigator
 
 /** "Aglyn" on the desktop. */
@@ -23,22 +24,27 @@ fun main(args: Array<String>) {
       title = services.config.brandName,
       services = services,
       menus = { signOut ->
+        // Ctrl/⌘1–5 belong to the pinned workspaces (Zach, 2026-10-18), so Go has no number shortcuts.
         Menu("Go", mnemonic = 'G') {
-          Item("Home", shortcut = shortcut(Key.One), onClick = { navigator.select(ShellNavigator.HOME) })
-          Item("Notifications", shortcut = shortcut(Key.Two), onClick = { navigator.select(ShellNavigator.NOTIFICATIONS) })
-          Item("Pages", shortcut = shortcut(Key.Three), onClick = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Screen(com.aglyn.shell.SITE_PAGES_SCREEN_ID)) })
-          Item("Orders", shortcut = shortcut(Key.Four), onClick = { navigator.select(ShellNavigator.screenKey("commerce.orders")) })
-          Item("Bookings", shortcut = shortcut(Key.Five), onClick = { navigator.select(ShellNavigator.screenKey("bookings.calendar")) })
-          Item("Analytics", shortcut = shortcut(Key.Six), onClick = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Analytics) })
-          Item("Automation", shortcut = shortcut(Key.Seven), onClick = { navigator.select(ShellNavigator.screenKey("workflows.automation")) })
-          Item("Settings", shortcut = shortcut(Key.Comma), onClick = { navigator.select(ShellNavigator.SETTINGS) })
+          Item("Home", onClick = { navigator.select(ShellNavigator.HOME) })
+          Item("Notifications", onClick = { navigator.select(ShellNavigator.NOTIFICATIONS) })
+          Item("Search or jump to…", shortcut = shortcut(Key.K), onClick = { navigator.command = ShellCommand.FIND })
           Separator()
           Item("Back", shortcut = shortcut(Key.LeftBracket), onClick = { navigator.back() })
         }
         Menu("Workspace", mnemonic = 'W') {
-          Item("Switch site…", shortcut = shortcut(Key.K), onClick = { navigator.push(Route.Switcher) })
+          val pins = listOf(ShellCommand.PIN_1, ShellCommand.PIN_2, ShellCommand.PIN_3, ShellCommand.PIN_4, ShellCommand.PIN_5)
+          val keys = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five)
+          pins.forEachIndexed { i, pin -> Item("Pinned workspace ${i + 1}", shortcut = shortcut(keys[i]), onClick = { navigator.command = pin }) }
+          Separator()
+          Item("Settings", shortcut = shortcut(Key.Comma), onClick = { navigator.command = ShellCommand.SETTINGS })
+        }
+        Menu("View", mnemonic = 'V') {
+          Item("Show or hide the sidebar", shortcut = shortcut(Key.S, shift = true), onClick = { navigator.command = ShellCommand.TOGGLE_SIDEBAR })
+          Item("Show or hide the workspace rail", shortcut = shortcut(Key.R, shift = true), onClick = { navigator.command = ShellCommand.TOGGLE_RAIL })
         }
         Menu("Account", mnemonic = 'A') {
+          Item("Add account…", onClick = { navigator.command = ShellCommand.ADD_ACCOUNT })
           Item("Sign out", shortcut = shortcut(Key.Q, shift = true), onClick = signOut)
         }
       },
@@ -46,8 +52,13 @@ fun main(args: Array<String>) {
       androidx.compose.runtime.CompositionLocalProvider(
         com.aglyn.screens.LocalGoogleCredentialSource provides google,
       ) {
-        AglynShell(services, navigator, autoSignIn = autoSignIn, playIntro = true, onIntroRevealed = onIntroRevealed)
+        // The Mac's traffic lights sit over the transparent title bar: the rail and the title bar start below them.
+        androidx.compose.runtime.CompositionLocalProvider(com.aglyn.shell.LocalTitleBarInset provides if (isMacOs) 28.dp else 0.dp) {
+          AglynShell(services, navigator, autoSignIn = autoSignIn, playIntro = true, onIntroRevealed = onIntroRevealed)
+        }
       }
     }
   }
 }
+
+private val isMacOs = System.getProperty("os.name").orEmpty().startsWith("Mac")

@@ -1,0 +1,135 @@
+package com.aglyn.shell
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import com.aglyn.contracts.NativeNavListId
+import com.aglyn.contracts.resolveWorkspaceColor
+import com.aglyn.core.AccountPreferences
+import com.aglyn.core.FirestoreDoc
+import com.aglyn.core.KeyValueStore
+import com.aglyn.core.Live
+import com.aglyn.core.WorkspaceOrg
+import com.aglyn.core.WorkspaceState
+import com.aglyn.core.mediaPreviewUrl
+import com.aglyn.ui.colorOfHex
+import com.aglyn.ui.rememberLogoColor
+import com.aglyn.ui.toHex
+
+/** The settings-mode value that stands for the staff list (the rail's Admin button), which the manifest does not hold. */
+internal val STAFF_MODE = NativeNavListId.UNKNOWN
+
+/** The two steps of the scope picker: a workspace, then one of its sites (or the whole workspace). */
+enum class PickerStep { WORKSPACE, SITE }
+
+/**
+ * What the shell's chrome has open: the settings mode, the picker, a menu or dialog, and the folded groups and hidden
+ * panes it remembers on this device.
+ */
+@Stable
+internal class NavChromeState(private val device: KeyValueStore) {
+  /** The settings list swapped in for the sidebar ("‹ Juniper Street Co. settings"), null for the everyday list. */
+  var settingsMode by mutableStateOf<NativeNavListId?>(null)
+  var picker by mutableStateOf<PickerStep?>(null)
+  var accountMenu by mutableStateOf(false)
+  var workspaceMenu by mutableStateOf(false)
+  var createMenu by mutableStateOf(false)
+  /** The workspace waiting on "Pinned is full. Replace one?". */
+  var pinFullFor by mutableStateOf<String?>(null)
+  /** The workspace whose color picker is open. */
+  var colorFor by mutableStateOf<String?>(null)
+  /** Whether "Keep which 5 pins?" was dismissed this session (it comes back next launch until answered). */
+  var keepPinsLater by mutableStateOf(false)
+
+  var sidebarHidden by mutableStateOf(device.get(SIDEBAR_HIDDEN) == "1")
+    private set
+  var railHidden by mutableStateOf(device.get(RAIL_HIDDEN) == "1")
+    private set
+
+  fun toggleSidebar() {
+    sidebarHidden = !sidebarHidden
+    device.set(SIDEBAR_HIDDEN, if (sidebarHidden) "1" else null)
+  }
+
+  fun toggleRail() {
+    railHidden = !railHidden
+    device.set(RAIL_HIDDEN, if (railHidden) "1" else null)
+  }
+
+  private val openGroups = mutableStateOf(device.get(OPEN_GROUPS)?.split(',')?.filter { it.isNotEmpty() }?.toSet().orEmpty())
+
+  /**
+   * A foldable group is open when the person opened it, or when it holds the screen in use; only one group per list stays
+   * open, remembered on this device.
+   */
+  fun isOpen(listId: NativeNavListId, groupId: String, holdsCurrent: Boolean): Boolean =
+    holdsCurrent || "${listId.raw}.$groupId" in openGroups.value
+
+  fun toggle(listId: NativeNavListId, groupId: String, open: Boolean) {
+    val key = "${listId.raw}.$groupId"
+    val others = openGroups.value.filterNot { it.startsWith("${listId.raw}.") && it != "${listId.raw}.starred" }
+    val next = if (open) (if (groupId == "starred") openGroups.value + key else others + key) else openGroups.value - key
+    openGroups.value = next.toSet()
+    device.set(OPEN_GROUPS, next.joinToString(","))
+  }
+
+  fun closeMenus() {
+    accountMenu = false
+    workspaceMenu = false
+    createMenu = false
+  }
+
+  companion object {
+    private const val SIDEBAR_HIDDEN = "aglyn.nav.sidebarHidden"
+    private const val RAIL_HIDDEN = "aglyn.nav.railHidden"
+    private const val OPEN_GROUPS = "aglyn.nav.openGroups"
+  }
+}
+
+/** A workspace's logo as a URL the image loader reads, light and dark. */
+internal fun orgLogoUrls(workspace: WorkspaceState, orgId: String, origin: String): Pair<String?, String?> {
+  val logo = workspace.orgLogos[orgId]
+  return mediaPreviewUrl(logo?.light, origin, null, 160) to mediaPreviewUrl(logo?.dark, origin, null, 160)
+}
+
+/**
+ * A workspace's color as the rail draws it and the app is tinted with: the person's pick, else its brand color, else a
+ * color taken from its logo (Zach, 2026-10-18), and whether it tints the app.
+ */
+@Composable
+internal fun rememberWorkspaceColor(
+  orgId: String,
+  workspace: WorkspaceState,
+  prefs: AccountPreferences,
+  origin: String,
+): Pair<Color?, Boolean> {
+  val logo = rememberLogoColor(orgLogoUrls(workspace, orgId, origin).first)
+  val resolved = resolveWorkspaceColor(
+    prefs.workspaceColors[orgId],
+    workspace.orgLogos[orgId]?.brandColor,
+    logo?.toHex(),
+    prefs.theme.useWorkspaceBrand,
+  )
+  return colorOfHex(resolved.color) to resolved.tintsApp
+}
+
+/** The site's own document, live, for the plugins it runs. */
+@Composable
+internal fun liveHostDoc(services: ShellServices, hostId: String?): FirestoreDoc? {
+  if (hostId == null) return null
+  val flow = remember(hostId) { services.firestore.observeDoc("hosts/$hostId") }
+  val live by flow.collectAsState(Live.Loading)
+  return (live as? Live.Ready)?.value
+}
+
+/** The workspace's role in words ("Owner"). */
+internal fun roleLabel(role: String): String = role.replaceFirstChar { it.uppercase() }
+
+/** The detail line under a workspace in a picker: its role and plan. */
+internal fun orgDetail(org: WorkspaceOrg, workspace: WorkspaceState): String =
+  listOfNotNull(roleLabel(org.role).ifEmpty { null }, workspace.orgLogos[org.id]?.plan?.replaceFirstChar { it.uppercase() }).joinToString(" · ")

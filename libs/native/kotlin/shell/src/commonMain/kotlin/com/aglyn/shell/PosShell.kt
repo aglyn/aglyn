@@ -79,7 +79,7 @@ fun PosShell(
   playIntro: Boolean = false,
   onIntroRevealed: () -> Unit = {},
 ) {
-  AglynTheme(dark = dark ?: androidx.compose.foundation.isSystemInDarkTheme()) {
+  AglynTheme(dark = dark ?: appearanceDark(services)) {
     com.aglyn.webview.ProvideInAppBrowser(secureTab = services.openHostedPage) {
     // Remote pictures (product photos on the register and the kiosk) load through the app's image loader, as in the Aglyn app.
     androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalImageLoader provides services.imageLoader) {
