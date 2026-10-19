@@ -146,8 +146,12 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
         ListHeader("Pages") {
-          OverflowMenu(listOf(MenuAction("new-group", "New group", "folder", enabled = canEdit) { dialog = PageDialog.NewGroup }))
-          OutlinedButton(onClick = { dialog = PageDialog.Gallery }, enabled = canEdit, modifier = Modifier.testTag("page-from-template")) { Text("From a template") }
+          OverflowMenu(
+            listOf(
+              MenuAction("new-group", "New group", "folder", enabled = canEdit) { dialog = PageDialog.NewGroup },
+              MenuAction("page-from-template", "From a template", "widgets", enabled = canEdit) { dialog = PageDialog.Gallery },
+            ),
+          )
           Button(onClick = { dialog = PageDialog.NewPage }, enabled = canEdit, modifier = Modifier.testTag("add-page")) {
             Icon(AglynIcons.named("add"), contentDescription = null)
             Text("New page", Modifier.padding(start = space(1f)))
@@ -157,6 +161,18 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
         }
         if (dialog == null) {
           Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) { RunnerBanners(runner) }
+        }
+        // "Start from a template", until it is dismissed on this device; the ⋯ menu keeps the way in.
+        val stripKey = "aglyn.pages.templateStrip.dismissed.$hostId"
+        var stripShown by remember(hostId) { mutableStateOf(context.deviceStore.get(stripKey) == null) }
+        if (stripShown && canEdit) {
+          com.aglyn.ui.TemplateStrip(
+            "Start a page from one of this site's templates.",
+            "Browse templates",
+            onOpen = { dialog = PageDialog.Gallery },
+            onDismiss = { context.deviceStore.set(stripKey, "1"); stripShown = false },
+            modifier = Modifier.padding(horizontal = space(2f), vertical = space(0.5f)),
+          )
         }
         // Collapsed like the console's hub; what is open is kept per site for as long as the app runs.
         var expanded by remember(hostId) { mutableStateOf(PagesTreeMemory.expanded(hostId)) }

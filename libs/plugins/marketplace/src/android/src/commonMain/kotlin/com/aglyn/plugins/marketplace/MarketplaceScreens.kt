@@ -62,7 +62,6 @@ import com.aglyn.ui.MenuAction
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OverflowMenu
 import com.aglyn.ui.RefreshableBox
-import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectOption
 import com.aglyn.ui.SelectField
@@ -128,6 +127,7 @@ fun BrowseScreen(context: NativePluginContext, initialListingId: String? = null)
   LaunchedEffect(model) { model.reload() }
   // A card's Install opens its listing with the listing's own Install asked straight away.
   var installFor by remember { mutableStateOf<String?>(null) }
+  var view by remember { mutableStateOf(com.aglyn.ui.ListView.LIST) }
   AglynListDetail(
     initialSelected = initialListingId,
     list = { selected, onSelect ->
@@ -137,13 +137,19 @@ fun BrowseScreen(context: NativePluginContext, initialListingId: String? = null)
         ListHeader("Marketplace")
         Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
           SectionTabs(context, MARKETPLACE_BROWSE_SCREEN)
-          SearchField(model.search, model::type, placeholder = "Search the marketplace")
+          com.aglyn.ui.ListToolbar(
+            model.search, model::type, placeholder = "Search the marketplace", tag = "marketplace",
+            sorts = BrowseSort.entries.map { com.aglyn.ui.SortOption(it.name, it.label) },
+            sort = model.sort.name,
+            onSort = { model.order(BrowseSort.valueOf(it)) },
+            view = view,
+            onView = { view = it },
+          )
           ChoiceChipRow(
             listOf(ChipOption("", "All")) + Contracts.listingCategories.map { ChipOption(it, listingCategoryLabel(it)) },
             model.category ?: "",
             { model.pick(it.ifEmpty { null }) },
           )
-          ChoiceChipRow(BrowseSort.entries.map { ChipOption(it.name, it.label) }, model.sort.name, { model.order(BrowseSort.valueOf(it)) })
         }
         RefreshableBox(model.refreshing, model::refresh) {
           LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load the marketplace") { rows ->
@@ -156,7 +162,14 @@ fun BrowseScreen(context: NativePluginContext, initialListingId: String? = null)
                     MarketplaceHome(context.firestore, context.orgId, context.api.origin, onOpen = onSelect, onInstall = { id -> installFor = id; onSelect(id) })
                   }
                 }
-                items(rows, key = { it.id }) { row ->
+                if (view == com.aglyn.ui.ListView.GRID) {
+                  items(rows.chunked(2), key = { chunk -> chunk.first().id }) { chunk ->
+                    Row(Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(0.75f)), horizontalArrangement = Arrangement.spacedBy(space(1.5f))) {
+                      for (row in chunk) ListingCard(row, context.api.origin, { onSelect(row.id) }, { installFor = row.id; onSelect(row.id) }, Modifier.weight(1f))
+                      if (chunk.size == 1) androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                    }
+                  }
+                } else items(rows, key = { it.id }) { row ->
                   AglynListItem(
                     title = row.name,
                     supporting = listOfNotNull(artifactLabel(row.artifactType), row.category, ratingLabel(row), "${row.installCount} installs").joinToString(" · "),

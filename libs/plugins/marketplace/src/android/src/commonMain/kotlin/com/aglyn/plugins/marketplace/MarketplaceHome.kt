@@ -89,13 +89,13 @@ private fun HomeRow(title: String, tag: String, listings: List<ListingRow>, orig
 
 /** A listing's preview: its picture, its name and kind, its price, and Install or Use. */
 @Composable
-private fun ListingCard(listing: ListingRow, origin: String, onOpen: () -> Unit, onInstall: () -> Unit) {
+internal fun ListingCard(listing: ListingRow, origin: String, onOpen: () -> Unit, onInstall: () -> Unit, modifier: Modifier = Modifier.width(220.dp)) {
   Surface(
     shape = MaterialTheme.shapes.medium,
     color = MaterialTheme.colorScheme.surfaceContainerLowest,
     tonalElevation = 0.dp,
     shadowElevation = 1.dp,
-    modifier = Modifier.width(220.dp).clip(MaterialTheme.shapes.medium).clickable(onClick = onOpen).testTag("card-${listing.id}"),
+    modifier = modifier.clip(MaterialTheme.shapes.medium).clickable(onClick = onOpen).testTag("card-${listing.id}"),
   ) {
     Column {
       RemoteImage(

@@ -142,3 +142,26 @@ fun PlainSection(title: String?, modifier: Modifier = Modifier, content: @Compos
     content()
   }
 }
+
+/**
+ * The dismissible "Start from a template" strip over a list (the redesign's screen patterns): one line saying what the
+ * templates are for, a button that opens them, and a close. Its owner keeps the item in a menu too, so dismissing it
+ * never hides the way in.
+ */
+@Composable
+fun TemplateStrip(text: String, action: String, onOpen: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+  androidx.compose.material3.Surface(
+    shape = MaterialTheme.shapes.medium,
+    color = MaterialTheme.colorScheme.primaryContainer,
+    modifier = modifier.fillMaxWidth().testTag("template-strip"),
+  ) {
+    Row(Modifier.padding(start = space(2f), end = space(0.5f), top = space(1f), bottom = space(1f)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+      Icon(AglynIcons.named("widgets"), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+      Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.weight(1f))
+      androidx.compose.material3.TextButton(onClick = onOpen, enabled = enabled, modifier = Modifier.testTag("template-strip-open")) { Text(action) }
+      androidx.compose.material3.IconButton(onClick = onDismiss, modifier = Modifier.testTag("template-strip-dismiss")) {
+        Icon(AglynIcons.named("close"), contentDescription = "Dismiss", Modifier.size(18.dp))
+      }
+    }
+  }
+}
