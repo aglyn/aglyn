@@ -186,7 +186,8 @@ your header or footer has no list of links to add to, the layout is left as it i
 
 This needs a plan that includes a store, with **Commerce** on for the site, and the editor
 role. When the build is done, the card shows **Finish your store**: connect payments, review
-your products, set shipping and tax, and fill in your policies.
+your products, set shipping and tax, and fill in your policies. The payments step is marked
+done when your workspace's Stripe account already takes payments.
 
 ## What it costs {#what-it-costs}
 

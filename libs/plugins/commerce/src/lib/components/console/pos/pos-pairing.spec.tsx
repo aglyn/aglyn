@@ -171,7 +171,7 @@ describe('kiosk payment prerequisites (AGL-3982)', () => {
     mockConfig = { posKioskPayAtCounter: false }
     await openKiosk()
     expect(await screen.findByText(/This kiosk can’t take payment yet/)).toBeTruthy()
-    expect(screen.getByText('Open store settings').closest('a')?.getAttribute('href')).toBe(
+    expect(screen.getByText('Open Commerce settings').closest('a')?.getAttribute('href')).toBe(
       '/acme/hosts/shop/admin/plugins/commerce',
     )
   })

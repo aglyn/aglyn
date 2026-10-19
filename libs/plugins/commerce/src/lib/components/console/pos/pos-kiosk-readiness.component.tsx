@@ -93,7 +93,7 @@ export interface PosKioskReadinessProps {
  * (AGL-3982). The shopper at a kiosk with no way to pay reads "Payment is not
  * set up on this kiosk yet"; this is where the merchant learns why, with a
  * link to each fix: Stripe on the Payments page, a reader on the POS devices
- * card, and pay at the counter in the store's Point of Sale settings.
+ * card, and pay at the counter under Admin → Plugins → Commerce.
  *
  * Nothing is said until every answer is in: a notice that flashes while the
  * readers or the settings load would tell a ready store to set up.
@@ -156,9 +156,9 @@ export function PosKioskReadiness({ user, hostId, registerId, registerName }: Po
         switch (gap) {
           case 'no-payment':
             return (
-              <PrerequisiteNotice key={gap} severity="warning" href={kioskSettingsHref} actionLabel="Open store settings">
+              <PrerequisiteNotice key={gap} severity="warning" href={kioskSettingsHref} actionLabel="Open Commerce settings">
                 {'This kiosk can’t take payment yet: customers will see “Payment is not set up on this kiosk yet.” ' +
-                  'Turn on “Kiosk: let customers pay at the counter” in the store’s settings' +
+                  'Turn on “Kiosk: let customers pay at the counter” under Admin → Plugins → Commerce' +
                   (readers.available ? ', or finish card payments below.' : '.')}
               </PrerequisiteNotice>
             )
