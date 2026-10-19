@@ -178,7 +178,7 @@ private struct CollectionEntries: View {
     }
     .task(id: collection.id) { model.start(env.context.firestore, hostID: env.hostID, collectionID: collection.id) }
     .onDisappear { model.stop() }
-    .searchable(text: $searchText, prompt: "Search titles")
+    .aglynSearchable(text: $searchText, prompt: "Search titles")
     .task(id: searchText) {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }

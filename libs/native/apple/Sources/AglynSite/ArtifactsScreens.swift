@@ -104,7 +104,7 @@ struct ArtifactsScreen: View {
       }
     }
     .navigationTitle(kind.title)
-    .searchable(text: $searchText, prompt: "Search \(kind.title.lowercased())")
+    .aglynSearchable(text: $searchText, prompt: "Search \(kind.title.lowercased())")
     .task(id: searchText) {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }

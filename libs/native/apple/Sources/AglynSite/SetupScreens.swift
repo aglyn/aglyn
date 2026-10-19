@@ -1115,7 +1115,7 @@ private struct FontBrowserSheet: View {
         ) { category = $0 }
         .background(.bar)
       }
-      .searchable(text: $search, prompt: "Search fonts")
+      .aglynSearchable(text: $search, prompt: "Search fonts")
       .navigationTitle("Font family")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

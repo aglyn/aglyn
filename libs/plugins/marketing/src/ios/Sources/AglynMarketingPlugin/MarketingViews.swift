@@ -245,8 +245,7 @@ struct CampaignsSection: View {
         pane(rollups, selectable: false)
       }
     }
-    .searchable(text: $searchText, prompt: "Search campaigns")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search campaigns", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .toolbar {
       if access.canEdit {
@@ -822,8 +821,7 @@ struct ExperimentsSection: View {
       }
       .accessibilityIdentifier("experiment-\(row.id)")
     }
-    .searchable(text: $searchText, prompt: "Search experiments")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search experiments", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .toolbar {
       if access.canEdit {

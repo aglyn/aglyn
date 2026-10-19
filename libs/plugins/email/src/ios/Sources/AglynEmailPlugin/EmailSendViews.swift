@@ -78,8 +78,7 @@ struct EmailsScreen: View {
       }
     }
     .navigationTitle("Emails")
-    .searchable(text: $searchText, prompt: "Search subjects")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search subjects", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .toolbar {
       if role.canSend {

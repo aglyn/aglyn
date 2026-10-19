@@ -11,6 +11,7 @@ import SwiftUI
 /// line, then only what is waiting on the person (each line opens its list, already filtered), then where they left off,
 /// then the one-line AI prompt that starts Create with AI. No charts here: those are Overview's.
 struct HomeView: View {
+  @Environment(\.aglynWideChrome) private var wide
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   @State private var site = SiteStatus()
@@ -35,11 +36,13 @@ struct HomeView: View {
           if picked != nil, model.registry.screen("ai.create") != nil { aiPrompt }
         }
       }
-      .padding(AglynSpace.two)
+      .padding(.horizontal, wide ? AglynContentInsets.horizontal : AglynSpace.two)
+      .padding(.vertical, wide ? 24 : AglynSpace.two)
       .frame(maxWidth: 880, alignment: .leading)
-      .frame(maxWidth: .infinity)
+      .frame(maxWidth: .infinity, alignment: wide ? .leading : .center)
     }
-    .background(AglynColor.page)
+    // The content's ground is the surface on the Mac and iPad (Figma Home 2:6), the canvas on a phone.
+    .background(wide ? AglynColor.paper : AglynColor.page)
     .navigationTitle("Home")
     .refreshable { model.refresh() }
     .task(id: "\(picked?.id ?? ""):\(model.refreshToken)") {

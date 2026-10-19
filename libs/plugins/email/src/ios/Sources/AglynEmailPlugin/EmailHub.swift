@@ -338,8 +338,7 @@ struct TemplatesSection: View {
         }
       }
     }
-    .searchable(text: $searchText, prompt: "Search templates")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search templates", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .toolbar {
       if role.canEdit {
@@ -450,8 +449,7 @@ struct AudiencesSection: View {
         pane(selectable: false)
       }
     }
-    .searchable(text: $searchText, prompt: "Search lists")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search lists", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
@@ -816,8 +814,7 @@ struct SuppressionsSection: View {
           .contextMenu { Button("Put back on your list", systemImage: "arrow.uturn.backward") { removing = row } }
       }
     }
-    .searchable(text: $searchText, prompt: "Search addresses")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search addresses", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .toolbar {
       ToolbarItem(placement: .primaryAction) { Button("Suppress", systemImage: "plus") { adding = true }.accessibilityIdentifier("suppression-add") }

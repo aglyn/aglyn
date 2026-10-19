@@ -26,6 +26,8 @@ public enum AglynShellMetrics {
     public static let railCaption: CGFloat = 9
     /// The space between rail tiles.
     public static let railGap: CGFloat = 8
+    /// The brand mark atop the rail.
+    public static let railMark: CGFloat = 20
     /// Create new and the account photo at the rail's foot.
     public static let utility: CGFloat = 28
     /// A sidebar row: height, text, icon, the selected pill's radius and its inset from the column's edges.
@@ -61,6 +63,8 @@ public enum AglynShellMetrics {
     public static let avatar: CGFloat = 32
     public static let railCaption: CGFloat = 10
     public static let railGap: CGFloat = 8
+    /// The brand mark atop the rail.
+    public static let railMark: CGFloat = 24
     public static let utility: CGFloat = 36
     public static let rowHeight: CGFloat = 36
     public static let rowText: CGFloat = 15

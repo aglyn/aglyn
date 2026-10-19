@@ -124,8 +124,7 @@ struct SequencesSection: View {
         pane(selectable: false)
       }
     }
-    .searchable(text: $searchText, prompt: "Search sequences")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search sequences", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .toolbar {
       ToolbarItem(placement: .primaryAction) { Button("New sequence", systemImage: "plus") { creating = true }.accessibilityIdentifier("sequence-new") }

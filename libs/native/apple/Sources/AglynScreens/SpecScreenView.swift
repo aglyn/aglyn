@@ -679,7 +679,7 @@ struct SearchModifier: ViewModifier {
   func body(content: Content) -> some View {
     if enabled {
       content
-        .searchable(text: $text)
+        .aglynSearchable(text: $text, prompt: "Search")
         .onSubmit(of: .search, submit)
         .onChange(of: text) { _, now in if now.isEmpty { submit() } }
     } else {

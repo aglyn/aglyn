@@ -23,6 +23,11 @@ struct WorkspaceRail: View {
     VStack(spacing: 0) {
       ScrollView(.vertical, showsIndicators: false) {
         VStack(spacing: AglynShellMetrics.railGap) {
+          // The brand mark, small and whole, above the workspaces (the logo kit's multi-color mark).
+          AglynArtwork.mark.resizable().scaledToFit().frame(width: AglynShellMetrics.railMark, height: AglynShellMetrics.railMark)
+            .padding(.bottom, 4)
+            .accessibilityLabel(model.brandName)
+            .accessibilityIdentifier("rail-brand")
           if !rail.pinned.isEmpty {
             caption("Pinned")
             ForEach(rail.pinned, id: \.self) { tile($0, pinned: true) }

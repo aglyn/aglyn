@@ -37,8 +37,7 @@ struct ProductsScreen: View {
       }
     }
     .navigationTitle("Products")
-    .searchable(text: $searchText, prompt: "Product name")
-    .onSubmit(of: .search) { model.search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Product name", onSubmit: { model.search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { model.search = "" } }
     .toolbar {
       ToolbarItem(placement: .primaryAction) {

@@ -819,7 +819,7 @@ struct LookupSheet: View {
           Section { AglynNotice("Could not search \(failed.joined(separator: ", ")). Try again.", tone: .warning) }
         }
       }
-      .searchable(text: $words, prompt: "Search by name or email")
+      .aglynSearchable(text: $words, prompt: "Search by name or email")
       .navigationTitle(ScreenValues.render(field.label, in: context))
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

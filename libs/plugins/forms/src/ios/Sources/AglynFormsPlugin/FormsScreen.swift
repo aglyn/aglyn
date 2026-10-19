@@ -80,7 +80,7 @@ struct FormsScreen: View {
       }
     }
     .navigationTitle("Forms")
-    .searchable(text: $searchText, prompt: "Search forms")
+    .aglynSearchable(text: $searchText, prompt: "Search forms")
     .onChange(of: searchText) { _, text in model.type(text) }
     .toolbar {
       ToolbarItem(placement: .primaryAction) {

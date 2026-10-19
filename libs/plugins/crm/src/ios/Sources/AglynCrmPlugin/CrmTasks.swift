@@ -241,8 +241,7 @@ struct TasksSection: View {
         .aglynListBackground()
       }
     }
-    .searchable(text: $searchText, prompt: "Search tasks")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search tasks", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .toolbar {
       if scope.canWrite {

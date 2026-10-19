@@ -18,7 +18,7 @@ struct ShellSidebar: View {
   var body: some View {
     let scope = ShellScope(model: model, navigation: navigation)
     VStack(spacing: 0) {
-      SidebarBrandHeader(name: model.brandName)
+      // The workspace is the sidebar's head (the brand mark sits small atop the rail).
       ScopeHeader(scope: scope)
       if navigation.mode == .workspaceSettings || navigation.mode == .siteSettings {
         SettingsFilterField(text: $filter)
@@ -63,12 +63,8 @@ struct ScopeHeader: View {
     VStack(alignment: .leading, spacing: 8) {
       switch navigation.mode {
       case .main:
-        if let site = scope.site {
-          backButton(scope.org?.name ?? "Workspace", identifier: "sidebar-back-workspace") { navigation.enterWorkspace() }
-          SiteButton(site: site)
-        } else {
-          WorkspaceButton()
-        }
+        WorkspaceButton()
+        if let site = scope.site { SiteButton(site: site) }
       case .workspaceSettings, .siteSettings, .admin:
         backButton(
           navigation.mode == .siteSettings ? (scope.site?.name ?? "Site") : navigation.mode == .admin ? "Back" : (scope.org?.name ?? "Workspace"),
@@ -82,8 +78,8 @@ struct ScopeHeader: View {
       }
     }
     .padding(.horizontal, AglynShellMetrics.rowInset + 8)
-    .padding(.top, 10)
-    .padding(.bottom, 8)
+    .padding(.top, 14)
+    .padding(.bottom, 10)
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
@@ -103,41 +99,55 @@ struct ScopeHeader: View {
 /// The workspace's name and plan, opening the workspace menu.
 private struct WorkspaceButton: View {
   @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
 
   var body: some View {
     let org = model.workspace?.org
     let logo = org.flatMap { model.workspace?.orgLogos[$0.id] }
-    Menu {
-      WorkspaceMenuItems()
-    } label: {
-      HStack(alignment: .top, spacing: 8) {
-        AglynWorkspaceTile(
-          name: org?.name ?? "Workspace", logoURL: model.mediaURL(logo?.light, hostID: nil),
-          darkLogoURL: model.mediaURL(logo?.dark, hostID: nil), colorHex: model.workspaceColor(org?.id).color,
-          selected: false, size: AglynShellMetrics.headerLogo)
-          .padding(-3)
-        VStack(alignment: .leading, spacing: 3) {
-          Text(org?.name ?? (model.workspace?.ready == true ? "No workspace" : "Loading…"))
-            .font(.system(size: AglynShellMetrics.rowText, weight: .semibold)).lineLimit(1)
-            .foregroundStyle(AglynColor.textPrimary)
-          if let plan = logo?.planLabel {
-            Text(plan).font(.system(size: AglynShellMetrics.rowText - 2, weight: .semibold)).foregroundStyle(AglynColor.tint)
-              .padding(.horizontal, 6).padding(.vertical, 1)
-              .background(Capsule().fill(AglynColor.accentSoft))
+    // The workspace's logo, name and plan return to the workspace from a site; ▾ opens the workspace menu (Figma Sidebar
+    // 12:703: no separate back line).
+    HStack(alignment: .top, spacing: 8) {
+      Button {
+        navigation.enterWorkspace()
+      } label: {
+        HStack(alignment: .top, spacing: 8) {
+          AglynWorkspaceTile(
+            name: org?.name ?? "Workspace", logoURL: model.mediaURL(logo?.light, hostID: nil),
+            darkLogoURL: model.mediaURL(logo?.dark, hostID: nil), colorHex: model.workspaceColor(org?.id).color,
+            selected: false, size: AglynShellMetrics.headerLogo)
+            .padding(-3)
+          VStack(alignment: .leading, spacing: 3) {
+            Text(org?.name ?? (model.workspace?.ready == true ? "No workspace" : "Loading…"))
+              .font(.system(size: AglynShellMetrics.rowText, weight: .semibold)).lineLimit(1)
+              .foregroundStyle(AglynColor.textPrimary)
+            if let plan = logo?.planLabel {
+              Text(plan).font(.system(size: AglynShellMetrics.rowText - 2, weight: .semibold)).foregroundStyle(AglynColor.tint)
+                .padding(.horizontal, 6).padding(.vertical, 1)
+                .background(Capsule().fill(AglynColor.accentSoft))
+            }
           }
+          Spacer(minLength: 4)
         }
-        Spacer(minLength: 4)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .help(navigation.inSite ? "Back to \(org?.name ?? "the workspace")" : (org?.name ?? "Workspace"))
+      .accessibilityIdentifier("sidebar-workspace-home")
+      Menu {
+        WorkspaceMenuItems()
+      } label: {
         Image(systemName: "chevron.down").font(.system(size: AglynShellMetrics.rowText - 3, weight: .semibold))
           .foregroundStyle(AglynColor.textTertiary)
-          .padding(.top, 3)
+          .frame(width: 20, height: 20)
+          .contentShape(Rectangle())
       }
-      .contentShape(Rectangle())
+      .menuStyle(.button)
+      .buttonStyle(.plain)
+      .menuIndicator(.hidden)
+      .fixedSize()
+      .accessibilityLabel("\(org?.name ?? "Workspace") menu")
+      .accessibilityIdentifier("sidebar-workspace-menu")
     }
-    .menuStyle(.button)
-    .buttonStyle(.plain)
-    .menuIndicator(.hidden)
-    .accessibilityLabel("\(org?.name ?? "Workspace") menu")
-    .accessibilityIdentifier("sidebar-workspace-menu")
   }
 }
 

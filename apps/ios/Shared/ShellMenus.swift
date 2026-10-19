@@ -198,6 +198,12 @@ struct WorkspaceMenuItems: View {
         }
       }
       Section {
+        if navigation.inSite {
+          Button("Workspace home", systemImage: "house") { navigation.enterWorkspace() }
+        }
+        Button("Switch workspace…", systemImage: "arrow.left.arrow.right") { navigation.showOneBox = true }
+      }
+      Section {
         if model.registry.screen("core.team") != nil {
           Button("Invite people", systemImage: "person.badge.plus") {
             navigation.mode = .workspaceSettings

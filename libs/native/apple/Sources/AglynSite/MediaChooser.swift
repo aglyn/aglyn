@@ -243,7 +243,7 @@ private struct MediaChooserGrid: View {
       self.uploaded = nil
       choose(item)
     }
-    .searchable(text: $searchText, prompt: "Search files")
+    .aglynSearchable(text: $searchText, prompt: "Search files")
     .task(id: searchText) {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }

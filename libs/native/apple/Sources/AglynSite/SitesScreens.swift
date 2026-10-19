@@ -30,27 +30,15 @@ struct SitesScreen: View {
   @State private var selection: String?
   @State private var searchText = ""
   @State private var creating = false
+  @Environment(\.aglynWideChrome) private var wide
 
   private var canCreate: Bool { siteCreatorRoles.contains(context.orgRole ?? "") }
 
   var body: some View {
     Group {
       if let orgID = context.orgID {
-        WideLayoutReader { wide in
-          if wide {
-            AglynListDetailColumns {
-              list(selectable: true)
-            } detail: {
-              if let selection {
-                SiteOverview(context: context, hostID: selection).id(selection)
-              } else {
-                AglynSelectionPlaceholder("No site selected", systemImage: SiteSymbols.site)
-              }
-            }
-          } else {
-            list(selectable: false)
-          }
-        }
+        // One list on every device (Figma Mac Sites 13:3): a site opens on its own page.
+        list(selectable: false)
         .sheet(isPresented: $creating) { CreateSiteSheet(context: context, orgID: orgID) }
         .task(id: orgID) {
           if startNew && canCreate { creating = true }
@@ -61,32 +49,32 @@ struct SitesScreen: View {
       }
     }
     .navigationTitle("Sites")
-    .searchable(text: $searchText, prompt: "Search sites")
+    .aglynSearchable(text: $searchText, prompt: "Search sites") {
+      AglynFilterMenu(active: model.domain == .all ? nil : model.domain.label) {
+        Picker("Sites", selection: Binding(get: { model.domain }, set: { model.domain = $0 })) {
+          ForEach(SiteDomainFilter.allCases, id: \.self) { Text($0.label).tag($0) }
+        }
+        .pickerStyle(.inline)
+      }
+    }
     .task(id: searchText) {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }
     }
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          creating = true
-        } label: {
-          Label("Create site", systemImage: "plus")
-        }
-        .disabled(!canCreate || context.orgID == nil)
-        .keyboardShortcut("n", modifiers: .command)
-        .help(canCreate ? "Create a site" : "Only a workspace owner or admin creates sites")
-        .accessibilityIdentifier("add-site")
-      }
+    .aglynPrimaryAction(id: "add-site", "New site", systemImage: "plus", enabled: canCreate && context.orgID != nil) {
+      creating = true
     }
     .onDisappear { model.stop() }
   }
 
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
-      AglynChipRow(
-        SiteDomainFilter.allCases.map { AglynChipOption($0.rawValue, $0.label) }, selected: model.domain.rawValue
-      ) { model.domain = SiteDomainFilter(rawValue: $0) ?? .all }
+      // On a phone the filter chips sit over the list; the Mac and iPad keep them in the list toolbar's Filter.
+      if !wide {
+        AglynChipRow(
+          SiteDomainFilter.allCases.map { AglynChipOption($0.rawValue, $0.label) }, selected: model.domain.rawValue
+        ) { model.domain = SiteDomainFilter(rawValue: $0) ?? .all }
+      }
       content(selectable: selectable)
     }
     .background(AglynColor.page)
@@ -143,14 +131,15 @@ struct SitesScreen: View {
           if model.hasMore { AglynLoadMoreRow("Show more sites") { model.loadMore() } }
         }
         .refreshable { model.refresh() }
-        .aglynListBackground()
+        .aglynContentList()
         .accessibilityIdentifier("sites-list")
       }
     }
   }
 }
 
-/// One row of the sites list, with its site's live status.
+/// One row of the sites list (Figma Mac Sites 13:3): the site's favicon, else its initial on its brand color; its name
+/// and address; its status; when it was last edited; a chevron. The role is the site page's, not the row's.
 struct SiteListRow: View {
   let context: NativePluginContext
   let row: SiteRow
@@ -160,22 +149,40 @@ struct SiteListRow: View {
     let doc = host.state.value ?? nil
     let status = doc.map { HostStatus.describe($0.data) }
     // The site's favicon, as the console's Sites list shows it (`HostIcon`): the host's own `seo.favicon`, else the
-    // membership row's copy of it; the globe while there is none.
+    // membership row's copy of it.
     let favicon = siteFavicon(doc) ?? row.favicon
-    AglynRow(
-      row.name,
-      subtitle: [HostStatus.siteAddress(row.subdomain), row.role.map(\.capitalized)].compactMap { $0 }
-        .joined(separator: " · "),
-      systemImage: SiteSymbols.site,
-      imageURL: mediaPreviewURL(favicon, origin: context.api.origin, hostID: row.id, width: 96)
-    ) {
-      HStack(spacing: AglynSpace.half) {
-        if row.id == context.hostID { StatusChip("Current", tone: .info) }
-        if let status { StatusChip(status.label, tone: hostStatusTone(status.kind)) }
+    HStack(spacing: 12) {
+      AglynBrandPicture(
+        mediaPreviewURL(favicon, origin: context.api.origin, hostID: row.id, width: 96), size: 32,
+        cornerRadius: AglynShellMetrics.controlRadius
+      ) {
+        AglynWorkspaceTile(name: row.name, logoURL: nil, colorHex: siteBrandColor(doc), selected: false, size: 32)
+          .padding(-3)
+      }
+      VStack(alignment: .leading, spacing: 2) {
+        Text(row.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)
+          .lineLimit(1).truncationMode(.tail)
+        Text(HostStatus.siteAddress(row.subdomain) ?? "").font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText)
+          .lineLimit(1).truncationMode(.middle)
+      }
+      Spacer(minLength: 8)
+      if row.id == context.hostID { StatusChip("Current", tone: .info) }
+      if let status { StatusChip(status.label, tone: hostStatusTone(status.kind)) }
+      if let edited = (doc?.data["updatedAt"] as? Date) ?? (doc?.data["createdAt"] as? Date) {
+        Text("Edited \(edited.formatted(.relative(presentation: .named)))")
+          .font(.system(size: 12)).foregroundStyle(AglynColor.textTertiary).lineLimit(1)
       }
     }
+    .frame(minHeight: 48)
     .task(id: row.id) { await host.bind(context.firestore, ["hosts", row.id]) }
   }
+}
+
+/// A site's brand color, as its theme holds it (`theme.colorSchemes.light.primary.main`).
+func siteBrandColor(_ doc: FirestoreDocument?) -> String? {
+  let theme = doc?.data["theme"] as? [String: Any]
+  let light = (theme?["colorSchemes"] as? [String: Any])?["light"] as? [String: Any]
+  return (light?["primary"] as? [String: Any])?["main"] as? String
 }
 
 /// A host document's favicon (`seo.favicon`), as the console stores it: a reference, a CDN path or an address.

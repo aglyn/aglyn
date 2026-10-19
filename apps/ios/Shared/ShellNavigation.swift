@@ -111,8 +111,12 @@ final class ShellNavigation {
   var showCreate = false
   /// The AI panel, docked on the right (a sheet on a phone).
   var showAssist = false
-  /// The sidebar folded away (the title bar's sidebar button), so the place in use takes the width.
+  /// The sidebar folded away (View ▸ Hide Sidebar, ⌥⌘S), so the place in use takes the width.
   var sidebarHidden = false
+  /// The workspace rail hidden (the title bar's toggle, ⌃⌘S): remembered on this device.
+  var railHidden = UserDefaults.standard.bool(forKey: "aglyn.shell.railHidden") {
+    didSet { UserDefaults.standard.set(railHidden, forKey: "aglyn.shell.railHidden") }
+  }
   /// The keyboard shortcuts sheet.
   var showShortcuts = false
   /// Bumped when this device's own theme changes (it is not on the account, so nothing else would redraw it).
@@ -245,9 +249,19 @@ struct ShellNavigationKey: FocusedValueKey {
   typealias Value = ShellNavigation
 }
 
+struct ShellTabsKey: FocusedValueKey {
+  typealias Value = TabStrip
+}
+
 extension FocusedValues {
   var shellNavigation: ShellNavigation? {
     get { self[ShellNavigationKey.self] }
     set { self[ShellNavigationKey.self] = newValue }
+  }
+
+  /// The window's tabs (the tab strip on the Mac and iPad), for ⌘T, ⌘W and ⌘⇧T.
+  var shellTabs: TabStrip? {
+    get { self[ShellTabsKey.self] }
+    set { self[ShellTabsKey.self] = newValue }
   }
 }

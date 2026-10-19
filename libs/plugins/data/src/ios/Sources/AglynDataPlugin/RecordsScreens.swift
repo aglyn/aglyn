@@ -192,7 +192,7 @@ private struct RecordsBody: View {
       }
     }
     .navigationTitle(dataset.plural.trimmingCharacters(in: .whitespaces).isEmpty ? dataset.name : dataset.plural)
-    .searchable(text: $searchText, prompt: "Search \(dataset.name)")
+    .aglynSearchable(text: $searchText, prompt: "Search \(dataset.name)")
     .onChange(of: searchText) { _, text in model.type(text) }
     .toolbar {
       ToolbarItemGroup(placement: .primaryAction) {

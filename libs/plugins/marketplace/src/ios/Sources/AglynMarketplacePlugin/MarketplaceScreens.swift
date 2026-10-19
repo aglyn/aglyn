@@ -87,7 +87,7 @@ struct BrowseScreen: View {
     }
     .navigationTitle("Marketplace")
     .aglynPushDestination(item: $pushed) { id in ListingDetail(context: context, listingID: id).navigationTitle("Listing") }
-    .searchable(text: $search, prompt: "Search the marketplace")
+    .aglynSearchable(text: $search, prompt: "Search the marketplace")
     .task(id: "\(search)|\(category ?? "")|\(sort.rawValue)|\(context.orgID ?? "")") {
       // The search waits for a pause in the typing, as the console's does.
       if !search.isEmpty { try? await Task.sleep(nanoseconds: 300_000_000) }

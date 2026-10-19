@@ -93,7 +93,7 @@ struct SubmissionsScreen: View {
       }
     }
     .navigationTitle(title)
-    .searchable(text: $searchText, prompt: "Search submissions")
+    .aglynSearchable(text: $searchText, prompt: "Search submissions")
     .onChange(of: searchText) { _, text in model.type(text) }
     .toolbar {
       if !wholeWorkspace {

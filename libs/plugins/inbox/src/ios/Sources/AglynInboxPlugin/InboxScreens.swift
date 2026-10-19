@@ -139,8 +139,7 @@ struct PeopleScreen: View {
       leads.stop()
       site.stop()
     }
-    .searchable(text: $searchText, prompt: tab == "members" ? "Search members" : "Search leads")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: tab == "members" ? "Search members" : "Search leads", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .task(id: "\(tab)|\(search)|\(context.hostID ?? "")") {
       site.start(context)

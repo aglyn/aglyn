@@ -167,7 +167,7 @@ struct PagesScreen: View {
           await model.bind(context.firestore, hostID: hostID)
           if let initialPageID { await model.reveal(initialPageID) }
         }
-        .searchable(text: $model.search, prompt: "Search pages")
+        .aglynSearchable(text: $model.search, prompt: "Search pages")
         .task(id: model.search) {
           // A search finds any page: the windows still unread are read, only while searching.
           guard !model.search.trimmingCharacters(in: .whitespaces).isEmpty else { return }

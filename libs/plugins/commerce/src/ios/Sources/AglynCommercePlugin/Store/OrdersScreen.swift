@@ -59,25 +59,17 @@ struct OrdersScreen: View {
       }
     }
     .navigationTitle("Orders")
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button(selecting ? "Done" : "Select") {
-          selecting.toggle()
-          picked = []
-        }
-        .accessibilityIdentifier("orders-select")
+    // Draft order is the list's primary action; Select and the shipping tools sit beside it (in the head on the Mac
+    // and iPad, the navigation bar on a phone).
+    .aglynPrimaryAction(id: "orders-draft", "Draft order", systemImage: "link.badge.plus") { drafting = true }
+    .aglynScreenToolbar(id: "orders") {
+      Button(selecting ? "Done" : "Select") {
+        selecting.toggle()
+        picked = []
       }
-      ToolbarItem(placement: .primaryAction) {
-        // Selling to someone directly: their order as a payment link (the console's Draft order).
-        Button {
-          drafting = true
-        } label: {
-          Label("Draft order", systemImage: "link.badge.plus")
-        }
-        .accessibilityIdentifier("orders-draft")
-      }
-      ToolbarItem(placement: .secondaryAction) {
-        Menu {
+      .accessibilityIdentifier("orders-select")
+      Menu {
+        Section("Export for shipping") {
           ForEach(ContractValues.shared.orderShippingPresetChoices, id: \.id) { preset in
             Button {
               Task { await exportForShipping(preset.id) }
@@ -86,13 +78,8 @@ struct OrdersScreen: View {
               if let description = preset.description { Text(description) }
             }
           }
-        } label: {
-          Label("Export for shipping", systemImage: "shippingbox.and.arrow.backward")
         }
-        .accessibilityIdentifier("orders-export-shipping")
-      }
-      if canImportProducts(context) {
-        ToolbarItem(placement: .secondaryAction) {
+        if canImportProducts(context) {
           Button {
             context.navigate(coreDataImportScreen, trackingImportParams(hostID: context.hostID))
           } label: {
@@ -100,7 +87,11 @@ struct OrdersScreen: View {
           }
           .accessibilityIdentifier("orders-import-tracking")
         }
+      } label: {
+        Label("More", systemImage: "ellipsis")
       }
+      .menuIndicator(.hidden)
+      .accessibilityIdentifier("orders-export-shipping")
     }
     .onAppear {
       guard startNew, !startedNew else { return }
@@ -148,8 +139,7 @@ struct OrdersScreen: View {
     } message: {
       Text("Each order is checked on its own: one that cannot be fulfilled is skipped and the rest go ahead. Customers are emailed as they are for a single order.")
     }
-    .searchable(text: $searchText, prompt: "Order, customer or email")
-    .onSubmit(of: .search) { model.search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Order, customer or email", onSubmit: { model.search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { model.search = "" } }
     .task(id: context.hostID) {
       if model.filter == .all { model.filter = initialFilter }

@@ -163,7 +163,7 @@ struct WorkspacePickerList: View {
         ProgressView()
       }
     }
-    .searchable(text: $query, prompt: "Find a workspace")
+    .aglynSearchable(text: $query, prompt: "Find a workspace")
     .sheet(isPresented: $adding) { AddWorkspaceSheet { adding = false } }
   }
 
@@ -249,7 +249,7 @@ struct SitePickerList: View {
     Group {
       if let workspace = model.workspace { content(workspace) } else { ProgressView() }
     }
-    .searchable(text: $query, prompt: "Find a \(siteNoun.lowercased())")
+    .aglynSearchable(text: $query, prompt: "Find a \(siteNoun.lowercased())")
   }
 
   private func content(_ workspace: WorkspaceStore) -> some View {

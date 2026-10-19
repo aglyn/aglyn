@@ -66,8 +66,7 @@ struct RecordsSection: View {
         if wide { selection = id } else { context.navigate(kind.detailScreen, [kind.param: id]) }
       }
     }
-    .searchable(text: $searchText, prompt: "Search \(kind.plural.lowercased())")
-    .onSubmit(of: .search) { search = searchText }
+    .aglynSearchable(text: $searchText, prompt: "Search \(kind.plural.lowercased())", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .toolbar {
       if scope.canWrite {

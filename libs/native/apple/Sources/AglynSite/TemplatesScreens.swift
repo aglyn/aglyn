@@ -76,7 +76,7 @@ struct TemplateGallerySheet: View {
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
-      .searchable(text: $searchText, prompt: "Search templates")
+      .aglynSearchable(text: $searchText, prompt: "Search templates")
       .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: close) } }
     }
     .aglynSheetMinimumSize(width: 420, height: 480)

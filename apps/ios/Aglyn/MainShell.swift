@@ -27,11 +27,10 @@ struct MainShell: View {
         if sizeClass == .compact {
           ShellFrame(navigation: navigation, compact: true) { PhoneShell(navigation: navigation) }
         } else {
-          IPadTabs(first: navigation)
+          ShellTabs(first: navigation)
         }
       #else
-        ShellFrame(navigation: navigation, compact: false) { WideShell(navigation: navigation) }
-          .modifier(MacWindowTab(navigation: navigation, closedTabs: model.closedTabs))
+        ShellTabs(first: navigation)
       #endif
     }
     .task(id: "\(model.workspace?.org?.id ?? ""):\(model.auth?.user?.uid ?? ""):\(model.orgAccess.memberRoleID ?? "")") {
@@ -46,8 +45,10 @@ struct MainShell: View {
   }
 }
 
-/// iPad's tabs: the strip across the top, and the shell of the tab in front.
-struct IPadTabs: View {
+/// The Mac's and iPad's window (Figma Mac/Titlebar 12:910): two rows of chrome drawn here, not by the system: the tab
+/// strip (the window's buttons, the tabs, "+") and the toolbar (the rail toggle, history, the search centered on the
+/// window, the bell, Help and AI); then the shell of the tab in front.
+struct ShellTabs: View {
   @Environment(AppModel.self) private var model
   @State private var strip: TabStrip
 
@@ -58,12 +59,19 @@ struct IPadTabs: View {
   var body: some View {
     let current = strip.current
     VStack(spacing: 0) {
-      TabStripBar(strip: strip, closedTabs: model.closedTabs)
+      ShellChrome(strip: strip).environment(current)
       ShellFrame(navigation: current, compact: false) { WideShell(navigation: current) }
         .id(ObjectIdentifier(current))
         .environment(current)
         .focusedSceneValue(\.shellNavigation, current)
     }
+    .focusedSceneValue(\.shellTabs, strip)
+    #if os(macOS)
+      // The chrome reaches the window's top edge; the window's own buttons sit in the tab strip. The window has no
+      // system toolbar: a screen's actions are in its head, so nothing draws over the chrome.
+      .ignoresSafeArea(.container, edges: .top)
+      .toolbar(.hidden, for: .windowToolbar)
+    #endif
     .onAppear {
       for tab in strip.tabs { tab.openTab = { [weak strip, model] seed in strip?.open(seed, model: model) } }
     }
@@ -72,6 +80,158 @@ struct IPadTabs: View {
         tab.openTab = { [weak strip, model] seed in strip?.open(seed, model: model) }
       }
     }
+  }
+}
+
+/// The two rows of window chrome.
+struct ShellChrome: View {
+  @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
+  @Bindable var strip: TabStrip
+  @State private var unreadFeed = NotificationFeed()
+
+  #if os(macOS)
+    static let tabRow: CGFloat = 34
+    static let toolRow: CGFloat = 44
+  #else
+    static let tabRow: CGFloat = 40
+    static let toolRow: CGFloat = 48
+  #endif
+
+  var body: some View {
+    @Bindable var navigation = navigation
+    let unread = unreadFeed.rows?.filter { !$0.read }.count ?? 0
+    VStack(spacing: 0) {
+      // The tab strip: the window's buttons, the tabs (each as wide as its title, to a cap), "+".
+      HStack(spacing: 4) {
+        Color.clear.frame(width: AglynShellMetrics.trafficLights, height: 1)
+        ForEach(Array(strip.tabs.enumerated()), id: \.offset) { index, tab in
+          ChromeTab(
+            title: index == 0 ? "Home" : tabTitle(tab, model: model), systemImage: index == 0 ? "house" : "square.on.square",
+            selected: index == strip.selected, closable: index > 0
+          ) {
+            strip.select(index, model: model)
+          } close: {
+            strip.close(index, model: model, closedTabs: model.closedTabs)
+          }
+          .accessibilityIdentifier("tab-\(index)")
+        }
+        Button {
+          strip.open(strip.current.seed(model: model), model: model)
+        } label: {
+          AglynBarSymbol(systemImage: "plus")
+        }
+        .buttonStyle(.plain)
+        .help("New tab (⌘T)")
+        .accessibilityLabel("New tab")
+        .accessibilityIdentifier("tab-new")
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, 8)
+      .frame(height: Self.tabRow)
+      .overlay(alignment: .bottom) { Rectangle().fill(AglynColor.divider).frame(height: 1) }
+      // The toolbar: the rail toggle and history on the left, the bell, Help and AI on the right, and the one search
+      // centered on the window.
+      ZStack {
+        HStack(spacing: 2) {
+          TitleBarButton(
+            navigation.railHidden ? "Show workspace switcher" : "Hide workspace switcher", systemImage: "sidebar.left",
+            identifier: "titlebar-rail"
+          ) {
+            withAnimation(.easeOut(duration: 0.2)) { navigation.railHidden.toggle() }
+          }
+          TitleBarButton("Back", systemImage: "chevron.left", identifier: "titlebar-back") { navigation.goBack() }
+            .disabled(!navigation.canGoBack)
+          TitleBarButton("Forward", systemImage: "chevron.right", identifier: "titlebar-forward") { navigation.goForward() }
+            .disabled(!navigation.canGoForward)
+          RecentPlacesMenu()
+          Spacer(minLength: 0)
+          TitleBarButton(
+            unread > 0 ? "Notifications, \(unread) unread" : "Notifications", systemImage: unread > 0 ? "bell.badge" : "bell",
+            identifier: "titlebar-bell"
+          ) { navigation.showNotifications.toggle() }
+          .popover(isPresented: $navigation.showNotifications, arrowEdge: .bottom) {
+            NotificationsPopover().environment(model).environment(navigation)
+          }
+          HelpMenuButton()
+          if AssistSlot.available(model) {
+            TitleBarButton("\(model.brandName) AI", systemImage: "sparkles", identifier: "titlebar-ai") {
+              navigation.showAssist.toggle()
+            }
+            .keyboardShortcut("i", modifiers: [.command, .option])
+          }
+        }
+        TitleBarSearchField { navigation.showOneBox = true }
+      }
+      .padding(.horizontal, 12)
+      .frame(height: Self.toolRow)
+      .overlay(alignment: .bottom) { Rectangle().fill(AglynColor.divider).frame(height: 1) }
+    }
+    .background(AglynColor.titlebar)
+    .modifier(WindowDragArea())
+    .task(id: "\(model.auth?.user?.uid ?? ""):\(model.refreshToken)") {
+      unreadFeed.start(
+        reader: model.reader, uid: model.auth?.user?.uid, count: 100, filter: NotificationFilter(status: .new))
+    }
+  }
+}
+
+/// One tab in the strip: as wide as its title up to a cap, the title cut with an ellipsis past it.
+struct ChromeTab: View {
+  let title: String
+  let systemImage: String
+  let selected: Bool
+  let closable: Bool
+  let select: () -> Void
+  let close: () -> Void
+  @State private var hovered = false
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Image(systemName: systemImage).font(.system(size: AglynShellMetrics.rowText - 2))
+        .foregroundStyle(selected ? AglynColor.accentIcon : AglynColor.secondaryText)
+      Text(title).font(.system(size: AglynShellMetrics.rowText - 1, weight: selected ? .semibold : .regular))
+        .foregroundStyle(selected ? AglynColor.textPrimary : AglynColor.secondaryText)
+        .lineLimit(1).truncationMode(.tail)
+      if closable {
+        Button(action: close) {
+          Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)).foregroundStyle(AglynColor.textTertiary)
+        }
+        .buttonStyle(.plain)
+        .opacity(selected || hovered ? 1 : 0)
+        .accessibilityLabel("Close tab")
+      }
+    }
+    .padding(.horizontal, 10)
+    .frame(height: AglynShellMetrics.barButton)
+    .frame(maxWidth: 200, alignment: .leading)
+    .fixedSize(horizontal: true, vertical: false)
+    .background(
+      RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
+        .fill(selected ? AglynColor.paper : hovered ? AglynColor.hover : .clear))
+    .overlay(
+      RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
+        .strokeBorder(selected ? AglynColor.divider : .clear))
+    .contentShape(Rectangle())
+    .onTapGesture(perform: select)
+    .onHover { hovered = $0 }
+    .accessibilityElement(children: .combine)
+    .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+  }
+}
+
+/// Dragging the chrome's empty space moves the window, as a title bar does.
+struct WindowDragArea: ViewModifier {
+  func body(content: Content) -> some View {
+    #if os(macOS)
+      if #available(macOS 15.0, *) {
+        content.gesture(WindowDragGesture())
+      } else {
+        content
+      }
+    #else
+      content
+    #endif
   }
 }
 
@@ -169,7 +329,10 @@ struct WideShell: View {
     // One flush row of columns under the title bar (Figma Mac 13:483): the rail, the sidebar with a hairline after it,
     // and the place in use. Not a split view: its sidebar floats as an inset card the design does not have.
     HStack(spacing: 0) {
-      WorkspaceRail(unread: unreadByOrg)
+      if !navigation.railHidden {
+        WorkspaceRail(unread: unreadByOrg)
+          .transition(.move(edge: .leading).combined(with: .opacity))
+      }
       if !navigation.sidebarHidden {
         ShellSidebar()
           .background(workspaceTint)
@@ -179,14 +342,14 @@ struct WideShell: View {
       }
       ShellStack(navigation: navigation, section: navigation.section)
         .id(navigation.section)
-        .toolbar { TitleBarItems(unread: unreadFeed.rows?.filter { !$0.read }.count ?? 0) }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AglynColor.paper)
         .inspector(isPresented: $navigation.showAssist) {
           AssistSlot()
             .inspectorColumnWidth(min: 300, ideal: 360, max: 480)
         }
     }
-    .modifier(MacTitleBar())
+    .environment(\.aglynWideChrome, true)
     .task(id: "\(model.auth?.user?.uid ?? ""):\(model.refreshToken)") {
       unreadFeed.start(
         reader: model.reader, uid: model.auth?.user?.uid, count: 100, filter: NotificationFilter(status: .new))
@@ -302,6 +465,7 @@ struct ShellRoot: View {
 struct AreaView: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
+  @Environment(\.aglynWideChrome) private var wide
   let screen: String
   let params: NativeParams
 
@@ -311,31 +475,54 @@ struct AreaView: View {
   var body: some View {
     let row = ShellScope(model: model, navigation: navigation).row(for: ShellSection.opening(screen, params))
     let sections = (row?.sections ?? []).filter { model.registry.screen($0.screen) != nil }
+    let actions = (row?.actions ?? []).filter { model.registry.screen($0.screen) != nil }
     PluginScreenView(screenID: screen, params: params)
       .safeAreaInset(edge: .top, spacing: 0) {
         VStack(alignment: .leading, spacing: 0) {
-          Breadcrumbs(row: row)
-        if let row, sections.count > 1, !Self.selfSectioned.contains(row.id) {
-          ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AglynSpace.one) {
-              ForEach(sections, id: \.id) { section in
-                let target = ShellSection.opening(section.screen, section.params)
-                AglynChoiceChip(section.label, selected: target == ShellSection.opening(screen, params)) {
-                  navigation.select(target)
-                }
-                .accessibilityIdentifier("area-section-\(section.id)")
-              }
+          if wide, let row {
+            // The area's head in its content (Figma Mac Sites 13:3): breadcrumbs, the title with its star, and the one
+            // filled primary button.
+            AglynContentHeader(row.label) {
+              Breadcrumbs(row: row)
+            } accessory: {
+              starButton(row)
+              Spacer(minLength: 8)
+              // The screen's own actions and primary button are drawn over this row from its preferences (below).
             }
-            .padding(.horizontal, AglynSpace.two)
-            .padding(.vertical, AglynSpace.one)
           }
-          .background(.bar)
-          .accessibilityIdentifier("area-sections-\(row.id)")
+          if let row, sections.count > 1, !Self.selfSectioned.contains(row.id) {
+            ScrollView(.horizontal, showsIndicators: false) {
+              HStack(spacing: AglynSpace.one) {
+                ForEach(sections, id: \.id) { section in
+                  let target = ShellSection.opening(section.screen, section.params)
+                  AglynChoiceChip(section.label, selected: target == ShellSection.opening(screen, params)) {
+                    navigation.select(target)
+                  }
+                  .accessibilityIdentifier("area-section-\(section.id)")
+                }
+              }
+              .padding(.horizontal, wide ? AglynContentInsets.horizontal : AglynSpace.two)
+              .padding(.vertical, AglynSpace.one)
+            }
+            .background(wide ? AnyShapeStyle(AglynColor.paper) : AnyShapeStyle(.bar))
+            .accessibilityIdentifier("area-sections-\(row.id)")
+          }
         }
+      }
+      .overlayPreferenceValue(AglynScreenChromeKey.self, alignment: .top) { chrome in
+        if wide, let row {
+          // The area's own create action stands in when the screen names no primary action of its own.
+          let fallback = (actions.first(where: { $0.params?["new"] == "1" }) ?? actions.first).map { first in
+            AglynPrimaryAction(id: "area-action-\(first.id)", title: first.label, systemImage: first.icon.apple, enabled: true) {
+              navigation.push(.screen(first.screen, first.params ?? [:]))
+            }
+          }
+          AreaHeaderActions(row: row, primary: chrome.primary ?? fallback, entries: chrome.entries)
         }
       }
       .toolbar {
-        if let row, let item = model.itemRef(for: row, navigation: navigation) {
+        // On a phone the star and the area's actions stay in the navigation bar.
+        if !wide, let row, let item = model.itemRef(for: row, navigation: navigation) {
           ToolbarItem(placement: .primaryAction) {
             let starred = model.preferences?.isStarred(item) == true
             Button {
@@ -347,9 +534,9 @@ struct AreaView: View {
             .accessibilityIdentifier("titlebar-star")
           }
         }
-        if let actions = row?.actions, !actions.isEmpty {
+        if !wide, !actions.isEmpty {
           ToolbarItemGroup(placement: .primaryAction) {
-            ForEach(actions.filter { model.registry.screen($0.screen) != nil }, id: \.id) { action in
+            ForEach(actions, id: \.id) { action in
               Button(action.label, systemImage: action.icon.apple) {
                 navigation.push(.screen(action.screen, action.params ?? [:]))
               }
@@ -358,6 +545,58 @@ struct AreaView: View {
           }
         }
       }
+  }
+
+  /// The star beside the area's title: the place on the person's Starred list.
+  @ViewBuilder
+  private func starButton(_ row: NativeNavRow) -> some View {
+    if let item = model.itemRef(for: row, navigation: navigation) {
+      let starred = model.preferences?.isStarred(item) == true
+      Button {
+        model.preferences?.toggleStar(item)
+      } label: {
+        Image(systemName: starred ? "star.fill" : "star")
+          .font(.system(size: AglynShellMetrics.rowIcon - 1))
+          .foregroundStyle(starred ? AnyShapeStyle(AglynColor.warning) : AnyShapeStyle(AglynColor.textTertiary))
+      }
+      .buttonStyle(.plain)
+      .help(starred ? "Unstar" : "Star")
+      .accessibilityLabel(starred ? "Unstar \(row.label)" : "Star \(row.label)")
+      .accessibilityIdentifier("titlebar-star")
+    }
+  }
+}
+
+/// The screen's own actions over its head's title row on the Mac and iPad: laid out like the head (an invisible copy of
+/// its breadcrumbs keeps the row's height) so they sit exactly on the title row's trailing edge.
+struct AreaHeaderActions: View {
+  let row: NativeNavRow
+  let primary: AglynPrimaryAction?
+  let entries: [AglynScreenToolbarEntry]
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Breadcrumbs(row: row).hidden()
+      HStack(spacing: 8) {
+        Spacer(minLength: 0)
+        HStack(spacing: 8) {
+          ForEach(entries) { $0.content }
+        }
+        .buttonStyle(AglynHeaderButtonStyle())
+        .menuStyle(.button)
+        .fixedSize()
+        .frame(height: 36)
+        if let primary {
+          AglynPrimaryHeaderButton(primary.title, systemImage: primary.systemImage) { primary.run() }
+            .disabled(!primary.enabled)
+            .opacity(primary.enabled ? 1 : 0.5)
+            .accessibilityIdentifier(primary.id)
+        }
+      }
+    }
+    .padding(.horizontal, AglynContentInsets.horizontal)
+    .padding(.top, 20)
+    .frame(maxWidth: .infinity, alignment: .topLeading)
   }
 }
 
@@ -388,13 +627,14 @@ struct Breadcrumbs: View {
       let parts = [owner, group, row.label].compactMap { $0 }
       HStack(spacing: 6) {
         ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
-          if index > 0 { Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary) }
-          Text(part).font(AglynFont.caption).foregroundStyle(index == parts.count - 1 ? .primary : .secondary)
+          if index > 0 {
+            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(AglynColor.textTertiary)
+          }
+          Text(part).font(.system(size: AglynShellMetrics.rowText - 1, weight: index == parts.count - 1 ? .medium : .regular))
+            .foregroundStyle(index == parts.count - 1 ? AglynColor.textPrimary : AglynColor.secondaryText)
             .lineLimit(1)
         }
       }
-      .padding(.horizontal, AglynSpace.two)
-      .padding(.top, AglynSpace.one)
       .accessibilityElement(children: .combine)
       .accessibilityIdentifier("breadcrumbs")
     }
@@ -412,9 +652,14 @@ struct TitleBarItems: ToolbarContent {
   var body: some ToolbarContent {
     @Bindable var navigation = navigation
     ToolbarItemGroup(placement: .navigation) {
-      TitleBarButton("Show or hide the sidebar", systemImage: "sidebar.left", identifier: "titlebar-sidebar") {
-        withAnimation(.easeOut(duration: 0.2)) { navigation.sidebarHidden.toggle() }
+      // Shows or hides the workspace rail (the sidebar's own hide is in the View menu, ⌥⌘S).
+      TitleBarButton(
+        navigation.railHidden ? "Show workspace switcher" : "Hide workspace switcher", systemImage: "sidebar.left",
+        identifier: "titlebar-rail"
+      ) {
+        withAnimation(.easeOut(duration: 0.2)) { navigation.railHidden.toggle() }
       }
+      .keyboardShortcut("s", modifiers: [.control, .command])
       TitleBarButton("Back", systemImage: "chevron.left", identifier: "titlebar-back") { navigation.goBack() }
         .disabled(!navigation.canGoBack)
       TitleBarButton("Forward", systemImage: "chevron.right", identifier: "titlebar-forward") { navigation.goForward() }
@@ -422,11 +667,12 @@ struct TitleBarItems: ToolbarContent {
       RecentPlacesMenu()
     }
     .aglynPlainToolbarBackground()
-    ToolbarItem(placement: .primaryAction) {
+    // The one search, centered in the title bar.
+    ToolbarItem(placement: .principal) {
       TitleBarSearchField { navigation.showOneBox = true }
     }
     .aglynPlainToolbarBackground()
-    // Figma Mac/Titlebar's actions, in its order: the bell, Help, the AI panel.
+    // The right side, in Figma's order: the bell, Help, the AI panel.
     ToolbarItemGroup(placement: .primaryAction) {
       TitleBarButton(
         unread > 0 ? "Notifications, \(unread) unread" : "Notifications", systemImage: unread > 0 ? "bell.badge" : "bell",
@@ -489,7 +735,9 @@ struct TitleBarSearchField: View {
         .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(AglynColor.divider))
     }
     .padding(.horizontal, 10)
-    .frame(width: Self.width, height: AglynShellMetrics.barButton)
+    // Centered on the window, 240 to 480 points wide (Figma Mac/Titlebar 12:910).
+    .frame(minWidth: 240, maxWidth: 480)
+    .frame(height: AglynShellMetrics.barButton)
     .background(RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).fill(AglynColor.sunken))
     .overlay(
       RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).strokeBorder(AglynColor.divider))
@@ -503,13 +751,6 @@ struct TitleBarSearchField: View {
     .accessibilityIdentifier("titlebar-search")
   }
 
-  static var width: CGFloat {
-    #if os(macOS)
-      300
-    #else
-      240
-    #endif
-  }
 }
 
 
