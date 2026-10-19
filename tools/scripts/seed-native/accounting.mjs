@@ -9,6 +9,9 @@
  * shows a connection, its mapping and a sync log rather than only the
  * connect buttons:
  *
+ * - The workspace has Accounting released to it, as staff release it to one workspace: the per-org override
+ *   `releaseFlags.release_accounting` (off by default until a deployment has ledger credentials; while it is off the
+ *   console hides Accounting and its routes answer 404).
  * - `orgs/{orgId}/accountingConnections/quickbooks`: an
  *   `AccountingConnectionRecord` (connection-store.ts) bound to a sandbox
  *   company. It holds NO tokens: the sealed fields are empty, so anything
@@ -36,6 +39,7 @@ function hostCode(id) {
 export async function seedAccounting({ put, uid, orgId, hostId, now: date }) {
   const now = date.getTime()
   const provider = 'quickbooks'
+  await put(`orgs/${orgId}`, { releaseFlags: { release_accounting: true } }, { merge: true, fields: ['releaseFlags.release_accounting'] })
   await put(`orgs/${orgId}/accountingConnections/${provider}`, {
     orgId,
     provider,

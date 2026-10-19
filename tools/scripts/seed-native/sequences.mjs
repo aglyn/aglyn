@@ -33,7 +33,7 @@ export async function seedSequences({ put, uid, orgId, hostId, now: date, nameSe
   await put(
     `orgs/${orgId}`,
     { releaseFlags: { release_outreach: true }, entitlements: { features: { outreach: true } } },
-    { merge: true },
+    { merge: true, fields: ['releaseFlags.release_outreach', 'entitlements.features.outreach'] },
   )
   await put(`orgs/${orgId}/outreachSettings/compliance`, {
     legalName: 'Juniper Street Co. LLC',
