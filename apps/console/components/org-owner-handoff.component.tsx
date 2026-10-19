@@ -16,26 +16,45 @@
  */
 'use client'
 
-import type { OwnerHandoffPreviousOwner } from '@aglyn/aglyn'
+import type { AglynOrgBilling, OwnerHandoffPreviousOwner } from '@aglyn/aglyn'
+import { describeBundle } from '@aglyn/aglyn/app-utils/bundle-intent'
+import { isLiveSubscriptionStatus } from '@aglyn/aglyn/app-utils/org-billing-doc'
 import {
   OWNER_HANDOFF_PREVIOUS_OWNER,
   OWNER_HANDOFF_PREVIOUS_OWNER_LABELS,
 } from '@aglyn/aglyn/app-utils/organizations'
+import { UPGRADE_PROPOSAL_NOTE_MAX } from '@aglyn/aglyn/app-utils/upgrade-proposal'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
+  Alert,
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
+  Divider,
   MenuItem,
   Stack,
   TextField,
 } from '@mui/material'
 import { useState } from 'react'
+import {
+  bundleDraftBody,
+  DEFAULT_BUNDLE_DRAFT,
+  StaffBundleFields,
+  type BundleDraft,
+} from './staff-bundle-fields.component'
+import {
+  EMPTY_BUNDLE_DOMAIN,
+  StaffBundleDomainFields,
+  StaffBundleLinkActions,
+  useDomainsAvailable,
+  type BundleDomainDraft,
+  type BundleSiteOption,
+} from './staff-bundle-link.component'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -82,7 +101,17 @@ export function OwnerHandoffPreviousOwnerField(props: {
  */
 export async function sendOwnerHandoff(
   user: Parameters<typeof authorizedFetch>[0],
-  options: { orgId: string; email: string; previousOwner: OwnerHandoffPreviousOwner },
+  options: {
+    orgId: string
+    email: string
+    previousOwner: OwnerHandoffPreviousOwner
+    /**
+     * The plan proposed in the same act (AGL-3956), staff only: the
+     * invitation and the proposal commit together, and the invitation email
+     * carries the bundle checkout link.
+     */
+    proposal?: ReturnType<typeof bundleDraftBody> & { note?: string }
+  },
 ): Promise<{ ok: boolean; emailed?: boolean; error?: string }> {
   const response = await authorizedFetch(user, '/api/orgs/invites', {
     method: 'POST',
@@ -93,6 +122,7 @@ export async function sendOwnerHandoff(
       email: options.email.trim().toLowerCase(),
       role: 'owner',
       handoff: { previousOwner: options.previousOwner },
+      ...(options.proposal ? { proposal: options.proposal } : {}),
     }),
   })
   const payload = await response.json().catch(() => ({}))
@@ -105,47 +135,77 @@ export interface StaffOrgOwnerHandoffProps {
   orgId: string
   /** The organization's name, for the dialog. */
   orgName?: string | null
+  /**
+   * The org document as the staff page read it. A workspace with a live
+   * subscription has nothing to propose, so its handoff goes without one.
+   */
+  org?: Partial<AglynOrgBilling> | null
+  /** The workspace's sites, for a bundle link that carries a domain. */
+  sites?: readonly BundleSiteOption[]
   /** Called once the invitation is sent. */
   onSent?: () => void
 }
 
 /**
- * Hand a workspace to a client from the staff pages (AGL-3466): the staff
- * organization page and the staff site page, beside the ownership transfer.
+ * Hand a workspace to a client from the staff pages (AGL-3466, AGL-3956):
+ * the staff organization page and the staff site page.
  *
  * A transfer moves the workspace to somebody already on its roster. A
  * handoff invites an address — the client the site was built for usually
  * has no account yet — and moves the workspace when they accept. Staff take
  * no seat, so a Free workspace staff built needs no override for it.
+ *
+ * For a site built for a client the handoff and the plan are always asked
+ * together, so this is ONE act (AGL-3956): the plan, its add-ons (Site Care
+ * on by default), the cadence and a coupon ride the same request, the
+ * invitation and the proposal commit together, and the email carries the
+ * bundle checkout link. The dialog header copies that link or shows its QR
+ * for an owner standing in front of you (AGL-3955). "Ask to upgrade" stays
+ * for an owner who already exists.
  */
 export function StaffOrgOwnerHandoff(props: StaffOrgOwnerHandoffProps) {
-  const { orgId, orgName, onSent } = props
+  const { orgId, orgName, org, sites = [], onSent } = props
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [open, setOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [previousOwner, setPreviousOwner] =
     useState<OwnerHandoffPreviousOwner>('stay')
+  const [draft, setDraft] = useState<BundleDraft>(DEFAULT_BUNDLE_DRAFT)
+  const [domain, setDomain] = useState<BundleDomainDraft>(EMPTY_BUNDLE_DOMAIN)
+  const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const emailValid = EMAIL_PATTERN.test(email.trim())
+  // A paying workspace has nothing to propose: the handoff goes alone.
+  const subscriptionLive = isLiveSubscriptionStatus(org?.billingStatus)
+  const domainsAvailable = useDomainsAvailable()
 
   const send = async () => {
     if (!emailValid || busy) return
     setBusy(true)
     try {
-      const result = await sendOwnerHandoff(user, { orgId, email, previousOwner })
+      const result = await sendOwnerHandoff(user, {
+        orgId,
+        email,
+        previousOwner,
+        ...(subscriptionLive
+          ? {}
+          : { proposal: { ...bundleDraftBody(draft), ...(note.trim() ? { note: note.trim() } : {}) } }),
+      })
       if (!result.ok) {
         enqueueSnackbar(result.error, { variant: 'warning', persist: false })
         return
       }
+      const what = subscriptionLive ? 'Handoff' : `Handoff with ${describeBundle(bundleDraftBody(draft))}`
       enqueueSnackbar(
         result.emailed
-          ? `Handoff sent to ${email.trim()} — email sent`
-          : `Handoff sent to ${email.trim()} — they'll see it when they sign in`,
+          ? `${what} sent to ${email.trim()} — email sent`
+          : `${what} sent to ${email.trim()} — they'll see it when they sign in`,
         { variant: 'success' },
       )
       setOpen(false)
       setEmail('')
+      setNote('')
       onSent?.()
     } finally {
       setBusy(false)
@@ -160,15 +220,28 @@ export function StaffOrgOwnerHandoff(props: StaffOrgOwnerHandoffProps) {
         onClick={() => setOpen(true)}
         sx={{ alignSelf: 'flex-start' }}
       >
-        {'Hand off to a new owner'}
+        {'Hand off'}
       </Button>
       <Dialog
         open={open}
         onClose={() => (busy ? undefined : setOpen(false))}
-        maxWidth="xs"
+        maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>{`Hand off ${orgName ?? 'this workspace'}`}</DialogTitle>
+        <DialogTitle
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
+            flexWrap: 'wrap',
+          }}
+        >
+          {`Hand off ${orgName ?? 'this workspace'}`}
+          {subscriptionLive ? null : (
+            <StaffBundleLinkActions orgId={orgId} draft={draft} domain={domain} />
+          )}
+        </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <DialogContentText>{OWNER_HANDOFF_HINT}</DialogContentText>
@@ -191,6 +264,39 @@ export function StaffOrgOwnerHandoff(props: StaffOrgOwnerHandoffProps) {
               onChange={setPreviousOwner}
               disabled={busy}
             />
+            <Divider />
+            {subscriptionLive ? (
+              <Alert severity="info">
+                {'This workspace already pays for a plan, so the handoff goes ' +
+                  'without a proposal.'}
+              </Alert>
+            ) : (
+              <>
+                <DialogContentText>
+                  {'The plan is proposed with the handoff: the email carries a link ' +
+                    'to Billing with all of it chosen, and accepting opens it.'}
+                </DialogContentText>
+                <StaffBundleFields value={draft} onChange={setDraft} disabled={busy} />
+                <TextField
+                  size="small"
+                  label="Note to the owner (optional)"
+                  value={note}
+                  onChange={(event) =>
+                    setNote(event.target.value.slice(0, UPGRADE_PROPOSAL_NOTE_MAX))
+                  }
+                  multiline
+                  minRows={2}
+                  disabled={busy}
+                />
+                <StaffBundleDomainFields
+                  value={domain}
+                  onChange={setDomain}
+                  sites={sites}
+                  available={domainsAvailable}
+                  disabled={busy}
+                />
+              </>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -202,7 +308,7 @@ export function StaffOrgOwnerHandoff(props: StaffOrgOwnerHandoffProps) {
             disabled={busy || !emailValid}
             onClick={() => void send()}
           >
-            {busy ? 'Sending…' : 'Send handoff'}
+            {busy ? 'Sending…' : subscriptionLive ? 'Send handoff' : 'Hand off and propose'}
           </Button>
         </DialogActions>
       </Dialog>

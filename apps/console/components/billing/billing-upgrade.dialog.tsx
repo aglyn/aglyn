@@ -31,6 +31,8 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import BillingAddressCardComponent from './billing-address-card.component'
 import BillingPaymentMethodsCardComponent from './billing-payment-methods-card.component'
+import type { BundleAddons } from '@aglyn/aglyn/app-utils/bundle-intent'
+import type { AiTierId } from '@aglyn/aglyn'
 import BillingPlanQuoteComponent from './billing-plan-quote.component'
 import BillingTaxIdCardComponent from './billing-tax-id-card.component'
 import type { BillingProfile } from './use-billing-profile'
@@ -52,6 +54,13 @@ export interface BillingUpgradeDialogProps {
    */
   appliedCode: string
   onAppliedCodeChange: (code: string) => void
+  /**
+   * The add-ons the page will buy with the plan (AGL-3955), quoted here on
+   * the same invoice so the total in this dialog is the total charged.
+   */
+  addons?: BundleAddons
+  /** The Aglyn AI tier those add-ons carry (AGL-3965), quoted as that tier. */
+  aiTier?: AiTierId | null
   onClose: () => void
   /**
    * Subscribe. The SAME call the plan grid makes when nothing was missing —
@@ -114,6 +123,8 @@ export default function BillingUpgradeDialogComponent({
   canManage,
   appliedCode,
   onAppliedCodeChange,
+  addons,
+  aiTier,
   onClose,
   onConfirm,
 }: BillingUpgradeDialogProps) {
@@ -272,6 +283,8 @@ export default function BillingUpgradeDialogComponent({
               canManage={canManage}
               appliedCode={appliedCode}
               onAppliedCodeChange={onAppliedCodeChange}
+              addons={addons}
+              aiTier={aiTier}
             />
           ) : (
             <Alert severity="info">

@@ -153,6 +153,9 @@ jest.mock('../hooks/use-branding', () => ({
 // hands it straight to `parseOnboardingPlanIntent`, and this file's whole
 // second half is about what that parser makes of it.
 jest.mock('next/navigation', () => ({
+  // The Billing page sends the owner on to the bundle's domain after paying
+  // (AGL-3955), so it reads the router too.
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), prefetch: jest.fn(), back: jest.fn(), refresh: jest.fn() }),
   useSearchParams: () => new URLSearchParams(mockSearch),
 }))
 

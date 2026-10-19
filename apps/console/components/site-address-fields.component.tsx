@@ -69,8 +69,18 @@ export interface SiteAddress {
  * The check is advisory: an outage says nothing, and the create re-checks
  * everything in its own transaction.
  */
-export function useSiteAddress(options: { autoFocus?: boolean } = {}): SiteAddress {
-  const { autoFocus = false } = options
+export function useSiteAddress(
+  options: {
+    autoFocus?: boolean
+    /**
+     * A name already known (AGL-3958: the business name a client build was
+     * given), filled in once with the address that follows it, for the person
+     * to keep or change.
+     */
+    initialName?: string
+  } = {},
+): SiteAddress {
+  const { autoFocus = false, initialName } = options
   const { data: user } = useUser()
   // Held in a ref so a request reads who is signed in, never the identity of
   // the object that says so.
@@ -85,6 +95,15 @@ export function useSiteAddress(options: { autoFocus?: boolean } = {}): SiteAddre
   const [showErrors, setShowErrors] = useState(false)
   const validShape = SUBDOMAIN_PATTERN.test(subdomain)
   const trimmed = name.trim()
+
+  // Seeded once, never over what has been typed.
+  const seeded = useRef(false)
+  useEffect(() => {
+    if (seeded.current || !initialName?.trim()) return
+    seeded.current = true
+    setName((current) => current || initialName)
+    setSubdomain((current) => current || generateSubdomain(initialName))
+  }, [initialName])
 
   useEffect(() => {
     if (!validShape) return void setAvailability({ status: 'idle' })

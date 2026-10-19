@@ -164,6 +164,33 @@ describe('configuredPriceFault (AGL-1137)', () => {
     ).toContain('STRIPE_PRICE_SITE_CARE')
   })
 
+  it('names a bundle add-on by the env its caller priced it from (AGL-3955)', () => {
+    // A bundle: metered [1], two extra sites [2], event calendar [3], AI [4],
+    // Site Care [5]. Only the caller knows where each landed and which env
+    // var it read, so the message is exactly what it was handed.
+    const addonItems = [
+      { index: 2, envVar: 'STRIPE_PRICE_PRO_EXTRA_HOST_YEARLY' },
+      { index: 3, envVar: 'STRIPE_PRICE_EVENT_CALENDAR_YEARLY' },
+    ]
+    const at = (index: number) =>
+      configuredPriceFault(
+        { ...REAL_DEAD_PRICE_ERROR, param: `items[${index}][price]` },
+        'pro',
+        'year',
+        4,
+        5,
+        'plus',
+        addonItems,
+      )
+    expect(at(2)).toContain('STRIPE_PRICE_PRO_EXTRA_HOST_YEARLY')
+    expect(at(3)).toContain('STRIPE_PRICE_EVENT_CALENDAR_YEARLY')
+    expect(at(3)).not.toContain('EXTRA_HOST')
+    // The AI and Site Care items keep their own names behind them.
+    // The AI item names the tier the checkout sold (AGL-3965), not the plan's.
+    expect(at(4)).toContain('STRIPE_PRICE_AI_PLUS_YEARLY')
+    expect(at(5)).toContain('STRIPE_PRICE_SITE_CARE_YEARLY')
+  })
+
   it('stays out of the way of every other Stripe failure', () => {
     // The control that keeps this honest: if it matched broadly, a genuine
     // outage would be relabelled as a config fault and nobody would look at

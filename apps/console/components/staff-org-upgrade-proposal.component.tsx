@@ -16,12 +16,12 @@
  */
 'use client'
 
-import type { AglynOrgBilling, OrgPlan } from '@aglyn/aglyn'
-import { PLAN_LABELS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import type { AglynOrgBilling } from '@aglyn/aglyn'
+import { describeBundle } from '@aglyn/aglyn/app-utils/bundle-intent'
 import {
   readUpgradeProposal,
   UPGRADE_PROPOSAL_NOTE_MAX,
-  UPGRADE_PROPOSAL_PLANS,
+  upgradeProposalSummary,
 } from '@aglyn/aglyn/app-utils/upgrade-proposal'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -33,12 +33,17 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  MenuItem,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
 import { useState } from 'react'
+import {
+  bundleDraftBody,
+  DEFAULT_BUNDLE_DRAFT,
+  StaffBundleFields,
+  type BundleDraft,
+} from './staff-bundle-fields.component'
 
 export interface StaffOrgUpgradeProposalProps {
   orgId: string
@@ -66,7 +71,7 @@ export function StaffOrgUpgradeProposal(props: StaffOrgUpgradeProposalProps) {
   const { enqueueSnackbar } = useSnackbar()
   const standing = readUpgradeProposal(org)
   const [open, setOpen] = useState(false)
-  const [plan, setPlan] = useState<OrgPlan>('starter')
+  const [draft, setDraft] = useState<BundleDraft>(DEFAULT_BUNDLE_DRAFT)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -93,12 +98,14 @@ export function StaffOrgUpgradeProposal(props: StaffOrgUpgradeProposalProps) {
   }
 
   const propose = async () => {
-    const payload = await call({ action: 'propose', plan, note })
+    const bundle = bundleDraftBody(draft)
+    const payload = await call({ action: 'propose', ...bundle, note })
     if (!payload) return
+    const what = describeBundle(bundle)
     enqueueSnackbar(
       payload['emailed']
-        ? `Proposed ${PLAN_LABELS[plan]} — the owner was emailed`
-        : `Proposed ${PLAN_LABELS[plan]} — no email went out; they will see it in the console`,
+        ? `Proposed ${what} — the owner was emailed`
+        : `Proposed ${what} — no email went out; they will see it in the console`,
       { variant: 'success' },
     )
     setOpen(false)
@@ -117,7 +124,7 @@ export function StaffOrgUpgradeProposal(props: StaffOrgUpgradeProposalProps) {
       {standing ? (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Typography variant="body2" sx={{ flexGrow: 1 }}>
-            {`Proposed: ${PLAN_LABELS[standing.plan]}` +
+            {`Proposed: ${upgradeProposalSummary(standing)}` +
               (standing.proposedAt
                 ? ` (${new Date(standing.proposedAt).toLocaleDateString()})`
                 : '')}
@@ -139,7 +146,7 @@ export function StaffOrgUpgradeProposal(props: StaffOrgUpgradeProposalProps) {
       <Dialog
         open={open}
         onClose={() => (busy ? undefined : setOpen(false))}
-        maxWidth="xs"
+        maxWidth="sm"
         fullWidth
       >
         <DialogTitle>{'Ask to upgrade'}</DialogTitle>
@@ -147,23 +154,11 @@ export function StaffOrgUpgradeProposal(props: StaffOrgUpgradeProposalProps) {
           <Stack spacing={2} sx={{ pt: 1 }}>
             <DialogContentText>
               {"The owner is emailed, and the workspace's billing managers see " +
-                'the plan on the org home and on Billing, preselected, until ' +
-                'a subscription is live. A sales-trial comp clears itself when ' +
-                'they subscribe.'}
+                'the plan, with its add-ons, cadence and coupon, on the org ' +
+                'home and on Billing, preselected, until a subscription is ' +
+                'live. A sales-trial comp clears itself when they subscribe.'}
             </DialogContentText>
-            <TextField
-              select
-              size="small"
-              label="Plan"
-              value={plan}
-              onChange={(event) => setPlan(event.target.value as OrgPlan)}
-            >
-              {UPGRADE_PROPOSAL_PLANS.map((option) => (
-                <MenuItem key={option} value={option}>
-                  {PLAN_LABELS[option]}
-                </MenuItem>
-              ))}
-            </TextField>
+            <StaffBundleFields value={draft} onChange={setDraft} disabled={busy} />
             <TextField
               size="small"
               label="Note to the owner (optional)"
