@@ -70,16 +70,13 @@ internal fun rememberCreateGates(services: ShellServices, workspace: WorkspaceSt
 }
 
 /**
- * What the "+" lists here, from the manifest (`resolveCreateList`): the site's items inside a site, the workspace's
- * otherwise; a plugin that is off hides its item, a missing permission, role or plan shows it with why. An item whose
- * screen this build does not carry is left out.
+ * What the "+" lists for one scope, from the manifest (`resolveCreateList`): a plugin that is off hides its item, a
+ * missing permission, role or plan shows it with why. An item whose screen this build does not carry is left out.
  */
-internal fun createEntries(services: ShellServices, workspace: WorkspaceState, enabled: Collection<String>, gates: CreateGates): List<ResolvedCreateItem> {
-  val scope = if (workspace.site != null) NativeNavCreateScope.SITE else NativeNavCreateScope.WORKSPACE
-  return resolveCreateList(scope, enabled, gates.permissions, gates.features, gates.hostRole)
+internal fun createEntries(services: ShellServices, scope: NativeNavCreateScope, enabled: Collection<String>, gates: CreateGates): List<ResolvedCreateItem> =
+  resolveCreateList(scope, enabled, gates.permissions, gates.features, gates.hostRole)
     .filter { services.registry.screen(it.screen) != null }
     .sortedBy { it.order ?: Double.MAX_VALUE }
-}
 
 /** The Create menu from the rail's "+": the create actions for the scope on screen, the blocked ones disabled with why. */
 @Composable
@@ -92,28 +89,34 @@ internal fun CreateMenu(services: ShellServices, workspace: WorkspaceState, chro
   }
 }
 
+/**
+ * The "+" menu's items, as the design lays them out: inside a site, the site's items under its name, then the
+ * workspace's under the workspace's name; in the whole workspace, the workspace's alone.
+ */
 @Composable
 internal fun CreateMenuItems(services: ShellServices, workspace: WorkspaceState, enabled: Collection<String>, uid: String, onPick: (ResolvedCreateItem) -> Unit) {
   val gates = rememberCreateGates(services, workspace, uid)
-  val entries = createEntries(services, workspace, enabled, gates)
-  val scopeName = workspace.site?.name ?: workspace.org?.name ?: "this workspace"
-  Text("In $scopeName", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-  for (item in entries) {
-    DropdownMenuItem(
-      text = {
-        Column {
-          Text(item.label)
-          item.reason?.takeIf { item.blocked }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-      },
-      leadingIcon = { Icon(AglynIcons.named(item.icon.android), null) },
-      enabled = !item.blocked,
-      onClick = { onPick(item) },
-      modifier = Modifier.testTag("create-${item.id}"),
-    )
+  val orgEnabled = enabledPluginsFor(workspace.orgLogo?.enabledPlugins, null, false)
+  val sections = buildList {
+    workspace.site?.let { add(it.name to createEntries(services, NativeNavCreateScope.SITE, enabled, gates)) }
+    add((workspace.org?.name ?: "this workspace") to createEntries(services, NativeNavCreateScope.WORKSPACE, if (workspace.site != null) orgEnabled else enabled, gates))
   }
-  if (entries.isEmpty()) {
-    HorizontalDivider()
-    Text("Pick a site to create pages, products and more.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp))
+  sections.forEachIndexed { index, (scopeName, entries) ->
+    if (index > 0) HorizontalDivider()
+    Text("In $scopeName", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+    for (item in entries) {
+      DropdownMenuItem(
+        text = {
+          Column {
+            Text(item.label)
+            item.reason?.takeIf { item.blocked }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+          }
+        },
+        leadingIcon = { Icon(AglynIcons.named(item.icon.android), null) },
+        enabled = !item.blocked,
+        onClick = { onPick(item) },
+        modifier = Modifier.testTag(if (index == 0 && workspace.site != null) "create-${item.id}" else "create-workspace-${item.id}"),
+      )
+    }
   }
 }
