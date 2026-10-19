@@ -1037,6 +1037,8 @@ struct RecentPlacesMenu: View {
 struct PhoneShell: View {
   @Environment(AppModel.self) private var model
   @Bindable var navigation: ShellNavigation
+  /// A tab's count from its row's count view (Inbox's unread), worn as the tab's badge (Figma Phone/Tab bar 22:499).
+  @State private var counts: [String: Int] = [:]
 
   /// The tabs for where the person stands: the busiest area is Orders for a store, Pages for a site without one, and
   /// Sites for the whole workspace.
@@ -1056,6 +1058,33 @@ struct PhoneShell: View {
 
   /// The centre tab's tag: never a section of its own.
   static let createTab = ShellSection.plugin("shell.create")
+
+  /// The manifest row a tab opens ("inbox"), for its count; empty for Home, Create and Menu.
+  private func tabRowID(_ section: ShellSection) -> String {
+    let scope = ShellScope(model: model, navigation: navigation)
+    return scope.mainList.groups.flatMap(\.rows).first { ShellSection.opening($0.screen, $0.params) == section }?.id ?? ""
+  }
+
+  #if os(iOS)
+    /// Figma Phone/Tab item: a grey line icon and secondary label at rest; the accent icon and primary label when in use;
+    /// a count on the accent.
+    static func styleTabBar() {
+      let item = UITabBarItemAppearance()
+      item.normal.iconColor = UIColor(AglynColor.textTertiary)
+      item.normal.titleTextAttributes = [.foregroundColor: UIColor(AglynColor.secondaryText)]
+      item.selected.iconColor = UIColor(AglynColor.primary)
+      item.selected.titleTextAttributes = [.foregroundColor: UIColor(AglynColor.textPrimary)]
+      item.normal.badgeBackgroundColor = UIColor(AglynColor.primary)
+      item.normal.badgeTextAttributes = [.foregroundColor: UIColor(AglynColor.primaryContrast)]
+      let appearance = UITabBarAppearance()
+      appearance.configureWithDefaultBackground()
+      appearance.stackedLayoutAppearance = item
+      appearance.inlineLayoutAppearance = item
+      appearance.compactInlineLayoutAppearance = item
+      UITabBar.appearance().standardAppearance = appearance
+      UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
+  #endif
 
   #if os(iOS)
   /// Create new's tile in the tab bar: a white "+" on the accent, 48 by 36 points with a 12-point radius.
@@ -1082,15 +1111,35 @@ struct PhoneShell: View {
                 // The centre tab is the filled accent "+" tile (Figma Phone/Tab bar, Create), drawn as it is.
                 Image(uiImage: tile.withRenderingMode(.alwaysOriginal)).renderingMode(.original).accessibilityLabel("Create")
               } else {
-                Label(tab.title, systemImage: tab.icon)
+                // Line icons, as Figma's tab bar (a tab bar fills its symbols unless told not to).
+                Label(tab.title, systemImage: tab.icon).environment(\.symbolVariants, .none)
               }
             #else
               Label(tab.title, systemImage: tab.icon)
             #endif
           }
+          .badge(counts[tabRowID(tab.section)] ?? 0)
           .tag(tab.section)
       }
     }
+    // The tabs' rows' count views, unseen, so each tab can wear its count.
+    .background {
+      if let context = model.context(for: navigation) {
+        ForEach(tabs.map { tabRowID($0.section) }.filter { !$0.isEmpty }, id: \.self) { rowID in
+          ForEach(model.registry.widgets(for: model.app, slot: "sidebarCount.\(rowID)")) { widget in
+            widget.make(context).id("\(widget.id):\(context.orgID ?? ""):\(context.hostID ?? "")")
+              .onPreferenceChange(AglynCountKey.self) { count in
+                MainActor.assumeIsolated { counts[rowID] = count ?? 0 }
+              }
+          }
+        }
+        .hidden()
+        .accessibilityHidden(true)
+      }
+    }
+    #if os(iOS)
+      .onAppear { PhoneShell.styleTabBar() }
+    #endif
     .sheet(isPresented: $navigation.showNotifications) {
       NotificationsPopover().environment(model).environment(navigation)
     }
@@ -1148,12 +1197,15 @@ struct PhoneTopBar: ViewModifier {
           } label: {
             Label("Search or jump to", systemImage: "magnifyingglass")
           }
+          // Grey, as Figma's top bar (22:499); the accent is for the action in use.
+          .tint(AglynColor.secondaryText)
           .accessibilityIdentifier("topbar-search")
           Button {
             navigation.showNotifications = true
           } label: {
             Label("Notifications", systemImage: "bell")
           }
+          .tint(AglynColor.secondaryText)
           .accessibilityIdentifier("topbar-bell")
           Button {
             navigation.showAccount = true
@@ -1198,10 +1250,11 @@ struct ScopeChip: View {
         Text(name).font(AglynFont.strongSubheadline).lineLimit(1)
         Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
       }
-      .padding(.horizontal, 8)
+      // Figma Phone/Scope chip 11:313: a filled sunken capsule, no border, 6 points before the picture and 12 after.
+      .padding(.leading, 6)
+      .padding(.trailing, 12)
       .padding(.vertical, 4)
-      .background(Capsule().fill(AglynColor.paper))
-      .overlay(Capsule().strokeBorder(AglynColor.divider))
+      .background(Capsule().fill(AglynColor.sunken))
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Switch, \(name)")
