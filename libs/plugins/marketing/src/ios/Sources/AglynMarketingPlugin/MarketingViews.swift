@@ -163,6 +163,7 @@ struct OverviewSection: View {
     let more = sends.hasMore ? "+" : ""
     ScrollView {
       AglynCardGrid {
+        if !actions.orgLevel {
         MetricCard("Live overlays", systemImage: "rectangle.on.rectangle", tone: .info, value: overlays.ready ? "\(live.count)\(overlays.hasMore ? "+" : "")" : nil,
           caption: "\(grouped(overlays.rows.reduce(0) { $0 + $1.impressions })) views · \(grouped(overlays.rows.reduce(0) { $0 + $1.clicks })) clicks",
           actionLabel: "Open overlays") { open(.overlays) }

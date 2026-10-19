@@ -92,10 +92,22 @@ struct RootView<Shell: View>: View {
   /// A tapped push's link, opened once someone is signed in.
   private func openPendingPush() {
     guard let link = model.push.pendingLink, model.auth?.user != nil else { return }
-    let (orgID, hostID) = (model.push.pendingOrgID, model.push.pendingHostID)
+    let (orgID, hostID, uid) = (model.push.pendingOrgID, model.push.pendingHostID, model.push.pendingUID)
     model.push.pendingLink = nil
     model.push.pendingOrgID = nil
     model.push.pendingHostID = nil
+    model.push.pendingUID = nil
+    // A push sent to another account signed in here opens in that account (Add account).
+    if let auth = model.auth, auth.impersonation == nil,
+      let owner = auth.accounts.first(where: { $0.uid == uid && $0.slot != auth.activeSlot })
+        ?? (uid == nil ? AccountRosterRules.owner(ofOrg: orgID, in: auth.accounts, activeSlot: auth.activeSlot) : nil)
+    {
+      Task {
+        await auth.switchAccount(to: owner.slot)
+        model.follow(link, orgID: orgID, hostID: hostID, in: navigation)
+      }
+      return
+    }
     model.follow(link, orgID: orgID, hostID: hostID, in: navigation)
   }
 }

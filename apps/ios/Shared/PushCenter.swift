@@ -27,6 +27,8 @@ final class PushCenter: NSObject {
   var pendingLink: String?
   /// The workspace and site the tapped push is about, followed before its link (AGL-3911).
   var pendingOrgID: String?
+  /// The account the tapped push was sent to: another one signed in on this device is switched to first.
+  var pendingUID: String?
   var pendingHostID: String?
   /// What the person answered when asked; nil until known.
   private(set) var authorization: UNAuthorizationStatus?
@@ -110,6 +112,7 @@ extension PushCenter: UNUserNotificationCenterDelegate {
     await MainActor.run {
       guard let data, let link = data.link else { return }
       self.pendingOrgID = data.orgID
+      self.pendingUID = data.uid
       self.pendingHostID = data.hostID
       self.pendingLink = link
     }
