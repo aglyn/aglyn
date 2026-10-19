@@ -372,9 +372,10 @@ public struct AglynCardGrid: Layout {
     self.spacing = spacing
   }
 
-  /// How many columns fit in `width`.
+  /// How many columns fit in `width`. An unbounded width (a scroll view sizing its content on the Mac) fits them all.
   public func columns(for width: CGFloat) -> Int {
-    min(maxColumns, max(1, Int((width + spacing) / (minimum + spacing))))
+    guard width.isFinite else { return maxColumns }
+    return min(maxColumns, max(1, Int((max(0, width) + spacing) / (minimum + spacing))))
   }
 
   /// The subview indices of each row.
@@ -403,7 +404,9 @@ public struct AglynCardGrid: Layout {
 
   public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
     guard !subviews.isEmpty else { return .zero }
-    let width = proposal.width ?? (minimum * CGFloat(min(maxColumns, subviews.count)))
+    // No width, or an unbounded one, asks for the grid's ideal: every column it can hold at its minimum.
+    let ideal = minimum * CGFloat(min(maxColumns, subviews.count))
+    let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? ideal
     let rows = measure(width, subviews)
     let height = rows.reduce(0) { $0 + $1.height } + spacing * CGFloat(max(0, rows.count - 1))
     return CGSize(width: width, height: height)
