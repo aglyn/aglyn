@@ -8212,6 +8212,13 @@
             "editable": true
           },
           {
+            "key": "client-build-preview",
+            "name": "Client build preview",
+            "description": "Sent to a business owner when the platform team has built their website with them, at an event or on their doorstep, with the link to look at it and the address it will live at.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
             "key": "usage-summary",
             "name": "Monthly usage summary",
             "description": "Monthly per-organization usage and metered-cost summary, sent by the scheduled job.",
@@ -8906,6 +8913,38 @@
               "name": "billingUrl",
               "description": "Billing page with the proposed plan preselected",
               "sample": "https://app.aglyn.com/test-org/billing?plan=starter"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "client-build-preview": [
+            {
+              "name": "business.name",
+              "description": "Name of the business the website was built for",
+              "sample": "Harbor Plumbing"
+            },
+            {
+              "name": "preview.url",
+              "description": "Where the website can be seen now",
+              "sample": "https://harbor-plumbing.example.com"
+            },
+            {
+              "name": "site.address",
+              "description": "The address the website will live at: the domain the owner chose, or its free address",
+              "sample": "www.example.com"
             },
             {
               "name": "brand.productName",
