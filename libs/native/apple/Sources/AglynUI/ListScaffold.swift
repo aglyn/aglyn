@@ -707,10 +707,10 @@ public struct AglynDetailCrumbs: View {
   public init(_ head: AglynAreaHead) { self.head = head }
 
   public var body: some View {
+    // Figma 13:483: the crumbs 24 from the column's top and 40 from its edge, where the record's head lines up.
     head.crumbs
-      .padding(.horizontal, AglynContentInsets.horizontal)
-      .padding(.top, 20)
-      .padding(.bottom, 4)
+      .padding(.horizontal, 40)
+      .padding(.top, 24)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(AglynColor.paper)
   }

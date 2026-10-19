@@ -37,6 +37,7 @@ struct OrderDetailView: View {
   @State private var working = false
   @State private var noting = false
   @Environment(\.openURL) private var openURL
+  @Environment(\.aglynWideChrome) private var wide
 
   var body: some View {
     Group {
@@ -64,14 +65,19 @@ struct OrderDetailView: View {
 
   private func form(_ row: OrderRow) -> some View {
     let order = row.order
-    return Form {
+    // The Mac and iPad detail column is Figma's plain one (Orders 13:483); a phone keeps its grouped form.
+    return AglynRecordForm {
       Section {
         // The record's head (the calmer screens): the next step for its state as the one filled button, every other
         // act in the ⋯ menu.
+        // Beside the list the head's line names the customer first, as Figma's customer line does.
         AglynRecordHeader(
           row.number,
-          subtitle: [orderChannelLabel(order.channel?.rawValue), row.createdAt.map { $0.formatted(date: .abbreviated, time: .shortened) }]
-            .compactMap { $0 }.joined(separator: " · "),
+          subtitle: [
+            wide ? row.customer : nil, orderChannelLabel(order.channel?.rawValue),
+            row.createdAt.map { $0.formatted(date: .abbreviated, time: .shortened) },
+          ]
+          .compactMap { $0 }.joined(separator: " · "),
           systemImage: "bag", status: (row.statusLabel, orderStatusTone(row.status).tone),
           primary: primaryAction(row), more: moreActions(row))
         if let dispute = describeOrderDispute(order) {
@@ -100,25 +106,57 @@ struct OrderDetailView: View {
           // What this line is still entitled to (AGL-2454): a line refunded by itself is struck through.
           let withdrawn = orderLineRefunded(order, index)
           let fulfilled = states.indices.contains(index) ? states[index].fulfilledQuantity : 0
-          VStack(alignment: .leading, spacing: AglynSpace.one) {
-            AglynRow(
-              line.name, subtitle: [line.variantLabel, quantity == 1 ? nil : "\(quantity) × \(formatOrderMoney(Int(line.unitAmountCents)))"]
-                .compactMap { $0 }.joined(separator: " · "),
-              systemImage: "shippingbox"
-            ) {
-              Text(formatOrderMoney(Int(line.unitAmountCents) * quantity)).monospacedDigit()
-                .strikethrough(withdrawn)
-                .foregroundStyle(withdrawn ? .secondary : .primary)
+          if wide {
+            // Figma 13:483's plain line: what was bought and how many, then its amount; the line's own refund is in
+            // its context menu, the order's in the head's ⋯.
+            VStack(alignment: .leading, spacing: 4) {
+              HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(
+                  [line.name, line.variantLabel].compactMap { $0 }.joined(separator: ", ")
+                    + (quantity == 1 ? "" : " × \(quantity)")
+                )
+                .font(.system(size: 14)).foregroundStyle(AglynColor.textPrimary)
+                Spacer(minLength: 12)
+                Text(formatOrderMoney(Int(line.unitAmountCents) * quantity)).font(.system(size: 14)).monospacedDigit()
+                  .strikethrough(withdrawn)
+                  .foregroundStyle(withdrawn ? AglynColor.secondaryText : AglynColor.textPrimary)
+              }
+              if fulfilled > 0 || withdrawn {
+                HStack {
+                  if fulfilled > 0 { StatusChip("\(fulfilled) of \(quantity) fulfilled") }
+                  if withdrawn { StatusChip("Refunded", tone: .warning) }
+                }
+              }
             }
-            HStack {
-              if fulfilled > 0 { StatusChip("\(fulfilled) of \(quantity) fulfilled") }
-              if withdrawn {
-                StatusChip("Refunded", tone: .warning)
-              } else if canRefundLines {
+            .padding(.vertical, 10)
+            .contextMenu {
+              if !withdrawn && canRefundLines {
                 Button("Refund line", role: .destructive) { refundingLine = index }
-                  .buttonStyle(.borderless)
                   .disabled(busy != nil || working)
-                  .accessibilityIdentifier("order-refund-line-\(index)")
+              }
+            }
+            .accessibilityIdentifier("order-line-\(index)")
+          } else {
+            VStack(alignment: .leading, spacing: AglynSpace.one) {
+              AglynRow(
+                line.name, subtitle: [line.variantLabel, quantity == 1 ? nil : "\(quantity) × \(formatOrderMoney(Int(line.unitAmountCents)))"]
+                  .compactMap { $0 }.joined(separator: " · "),
+                systemImage: "shippingbox"
+              ) {
+                Text(formatOrderMoney(Int(line.unitAmountCents) * quantity)).monospacedDigit()
+                  .strikethrough(withdrawn)
+                  .foregroundStyle(withdrawn ? .secondary : .primary)
+              }
+              HStack {
+                if fulfilled > 0 { StatusChip("\(fulfilled) of \(quantity) fulfilled") }
+                if withdrawn {
+                  StatusChip("Refunded", tone: .warning)
+                } else if canRefundLines {
+                  Button("Refund line", role: .destructive) { refundingLine = index }
+                    .buttonStyle(.borderless)
+                    .disabled(busy != nil || working)
+                    .accessibilityIdentifier("order-refund-line-\(index)")
+                }
               }
             }
           }
@@ -141,6 +179,7 @@ struct OrderDetailView: View {
         }
         if let tip = totals?.tipCents, tip != 0 { AglynAmountRow("Tip", amount: formatOrderMoney(Int(tip))) }
         AglynAmountRow("Total", amount: row.total, emphasized: true)
+          .listRowSeparator(.visible, edges: .top)
         if orderRefundState(order) != .none {
           AglynAmountRow("Refunded", amount: orderRefundSummary(order), tone: .warning)
         }
@@ -150,20 +189,11 @@ struct OrderDetailView: View {
           AglynAmountRow("Charged back", amount: formatOrderMoney(reversal.chargedBackCents), tone: .warning)
         }
       } header: {
-        Text("Totals")
+        // In the plain column the totals follow the items directly, under the total's hairline (Figma 13:483).
+        if !wide { Text("Totals") }
       } footer: {
         // How the tax on this order was computed (AGL-2451); absent means not recorded, never "no tax".
         Text(describeOrderTaxMode(order.taxMode?.rawValue))
-      }
-
-      AglynFoldedSection("Customer details", identifier: "order-fold-customer") {
-        LabeledContent("Name", value: row.customer)
-        if let email = order.customerEmail, !email.isEmpty { LabeledContent("Email", value: email) }
-        if let phone = order.customerPhone, !phone.isEmpty { LabeledContent("Phone", value: phone) }
-        if let address = order.shippingAddress, let text = addressText(address) {
-          LabeledContent("Ships to") { Text(text).multilineTextAlignment(.trailing) }
-        }
-        if let note = order.note, !note.isEmpty { LabeledContent("Note", value: note) }
       }
 
       let shipments = order.fulfillments ?? []
@@ -210,10 +240,19 @@ struct OrderDetailView: View {
         }
       }
 
+      // Figma 13:483's folded rows: Payment and refunds, Customer details, then Timeline and notes.
+      AglynFoldedSection("Customer details", identifier: "order-fold-customer") {
+        LabeledContent("Name", value: row.customer)
+        if let email = order.customerEmail, !email.isEmpty { LabeledContent("Email", value: email) }
+        if let phone = order.customerPhone, !phone.isEmpty { LabeledContent("Phone", value: phone) }
+        if let address = order.shippingAddress, let text = addressText(address) {
+          LabeledContent("Ships to") { Text(text).multilineTextAlignment(.trailing) }
+        }
+        if let note = order.note, !note.isEmpty { LabeledContent("Note", value: note) }
+      }
+
       OrderAnnotationSections(context: context, orderID: orderID, order: order, noting: $noting)
     }
-    .formStyle(.grouped)
-    .aglynListBackground()
     .confirmationDialog(
       "Cancel this order?", isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
       titleVisibility: .visible

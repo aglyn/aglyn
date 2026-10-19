@@ -59,16 +59,16 @@ public struct SpecScreenView: View {
           WideLayoutReader { wide in
             if wide {
               ListDetailLayout(listWidth: 380, showsDetail: splitListHasRows(model)) {
-                SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: true)
+                SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: true, embedded: embedded)
               } detail: {
                 detail
               }
             } else {
-              SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: false)
+              SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: false, embedded: embedded)
             }
           }
         } else {
-          SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: false)
+          SpecScreenBody(model: model, plugin: plugin, selection: $selection, splitting: false, embedded: embedded)
         }
       } else {
         Form { SkeletonRows(count: 6) }.formStyle(.grouped)
@@ -159,6 +159,9 @@ struct SpecScreenBody: View {
   let plugin: NativePluginContext
   @Binding var selection: ListSelection?
   let splitting: Bool
+  /// Shown in another screen's detail column (or a sheet): its actions sit at the top of its own column, never in the
+  /// head, which already holds the list's (one More per head).
+  var embedded = false
 
   @Environment(\.aglynScreenSession) private var session
   @Environment(\.webAuthenticationSession) private var webAuthentication
@@ -200,8 +203,9 @@ struct SpecScreenBody: View {
       // On the Mac and iPad the screen's first action is its head's one primary button and the rest are in More; a
       // phone keeps them in its navigation bar.
       .toolbar { if !wide { toolbar } }
-      .aglynPrimaryAction(wide ? headPrimary : nil)
-      .aglynScreenToolbar(id: "spec-\(model.spec.id)") { if wide { headMore } }
+      .aglynPrimaryAction(wide && !embedded ? headPrimary : nil)
+      .aglynScreenToolbar(id: "spec-\(model.spec.id)") { if wide && !embedded { headMore } }
+      .safeAreaInset(edge: .top, spacing: 0) { if wide && embedded { embeddedHead } }
       // A screen that names a `start` action runs it once, as soon as its data is in: the action's own `when` decides
       // whether there is anything to do (a link's `?notice=` that names a notice that cannot be reviewed does nothing).
       .task(id: isReady) {
@@ -336,6 +340,23 @@ struct SpecScreenBody: View {
     return AglynPrimaryAction(
       id: "spec-action-\(first.id)", title: first.label, systemImage: first.icon ?? "plus", enabled: running == nil
     ) { trigger(first, scope: scope) }
+  }
+
+  /// A detail column's own actions on the Mac and iPad, at its top right as Figma draws a detail's (Orders 13:483):
+  /// its first action as the filled button, the rest and Refresh in its More.
+  @ViewBuilder
+  private var embeddedHead: some View {
+    HStack(spacing: 8) {
+      Spacer(minLength: 0)
+      headMore
+        .buttonStyle(AglynHeaderButtonStyle())
+        .menuStyle(.button)
+        .fixedSize()
+      if let primary = headPrimary { AglynPrimaryHeaderButton.blockable(primary) }
+    }
+    .padding(.horizontal, AglynContentInsets.horizontal)
+    .padding(.top, 16)
+    .padding(.bottom, 4)
   }
 
   /// The head's More menu: the other actions, and Refresh on the Mac.

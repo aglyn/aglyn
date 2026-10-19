@@ -35,6 +35,7 @@ public struct AglynRecordAction: Identifiable {
 /// A record's head: its picture, title and status line, then the ⋯ menu with every other act and the one filled
 /// button. Nothing else sits in the head. Beside the title where both fit, else on their own line beneath it.
 public struct AglynRecordHeader: View {
+  @Environment(\.aglynWideChrome) private var wide
   let title: String
   let subtitle: String?
   let imageURL: URL?
@@ -57,6 +58,52 @@ public struct AglynRecordHeader: View {
   }
 
   public var body: some View {
+    if wide { column } else { touch }
+  }
+
+  /// The Mac and iPad detail column's head (Figma Orders 13:483): the title at 22 bold with its status pill under it,
+  /// the ⋯ and the one filled button at the right, then the subtitle as the record's line under the head. A picture
+  /// leads only when the record has one; a symbol tile adds nothing a detail column needs.
+  private var column: some View {
+    VStack(alignment: .leading, spacing: 20) {
+      HStack(alignment: .center, spacing: 10) {
+        if let imageURL { AglynDetailTile(imageURL: imageURL, systemImage: systemImage, size: 54) }
+        VStack(alignment: .leading, spacing: 6) {
+          Text(title).font(.system(size: 22, weight: .bold)).foregroundStyle(AglynColor.textPrimary).lineLimit(2)
+            .accessibilityAddTraits(.isHeader)
+            .textSelection(.enabled)
+          if let status { StatusChip(status.text, tone: status.tone) }
+        }
+        Spacer(minLength: 8)
+        if !more.isEmpty { AglynRecordMoreMenu(more, square: true) }
+        if let primary {
+          Button(role: primary.destructive ? .destructive : nil) {
+            primary.run()
+          } label: {
+            if primary.busy {
+              ProgressView().controlSize(.small).frame(minWidth: 36, minHeight: 36)
+            } else {
+              AglynPrimaryHeaderButton.face(primary.label, systemImage: primary.systemImage)
+            }
+          }
+          .buttonStyle(.plain)
+          .opacity(primary.enabled ? 1 : 0.5)
+          .disabled(!primary.enabled || primary.busy)
+          .accessibilityIdentifier(primary.id)
+        }
+      }
+      if let subtitle, !subtitle.isEmpty {
+        Text(subtitle).font(.system(size: 14)).foregroundStyle(AglynColor.secondaryText).lineLimit(2)
+          .textSelection(.enabled)
+      }
+    }
+    // 20 under the crumbs (Figma 13:483: crumbs at 24, the head at 60).
+    .padding(.top, 20)
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("record-header")
+  }
+
+  private var touch: some View {
     VStack(alignment: .leading, spacing: AglynSpace.one) {
       AglynDetailHeader(title, subtitle: subtitle, imageURL: imageURL, systemImage: systemImage, status: status)
       if primary != nil || !more.isEmpty {
@@ -94,8 +141,13 @@ public struct AglynRecordHeader: View {
 /// The ⋯ menu: every act but the filled one, the destructive ones last, below a divider.
 public struct AglynRecordMoreMenu: View {
   let actions: [AglynRecordAction]
+  /// The detail column's 36-point square ⋯ (Figma 13:483) rather than the system's bordered button.
+  let square: Bool
 
-  public init(_ actions: [AglynRecordAction]) { self.actions = actions }
+  public init(_ actions: [AglynRecordAction], square: Bool = false) {
+    self.actions = actions
+    self.square = square
+  }
 
   public var body: some View {
     let plain = actions.filter { !$0.destructive }
@@ -105,12 +157,27 @@ public struct AglynRecordMoreMenu: View {
       if !plain.isEmpty && !destructive.isEmpty { Divider() }
       ForEach(destructive) { item(for: $0) }
     } label: {
-      Label("More actions", systemImage: "ellipsis")
-        .labelStyle(.iconOnly)
-        .frame(minWidth: 28, minHeight: 24)
+      if square {
+        Label("More actions", systemImage: "ellipsis")
+          .labelStyle(.iconOnly)
+          .font(.system(size: 15, weight: .semibold))
+          .foregroundStyle(AglynColor.textPrimary)
+          .frame(width: 36, height: 36)
+          .background(
+            RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).fill(AglynColor.paper))
+          .overlay(
+            RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
+              .strokeBorder(AglynColor.divider))
+          .contentShape(Rectangle())
+      } else {
+        Label("More actions", systemImage: "ellipsis")
+          .labelStyle(.iconOnly)
+          .frame(minWidth: 28, minHeight: 24)
+      }
     }
     .menuStyle(.button)
-    .buttonStyle(.bordered)
+    .modifier(RecordMoreButtonStyle(square: square))
+    .menuIndicator(.hidden)
     .fixedSize()
     .accessibilityIdentifier("record-more")
   }
@@ -129,6 +196,7 @@ public struct AglynRecordMoreMenu: View {
 /// A section that stays folded until opened (Payment and refunds, Customer details, Timeline and notes): its heading,
 /// with a count when there is one, as a row that opens it.
 public struct AglynFoldedSection<Content: View>: View {
+  @Environment(\.aglynPlainRecord) private var plain
   let title: String
   let count: Int?
   let identifier: String?
@@ -162,7 +230,55 @@ public struct AglynFoldedSection<Content: View>: View {
         .accessibilityElement(children: .combine)
         .accessibilityValue(open ? "Open" : "Folded")
         .accessibilityIdentifier(identifier ?? "fold-\(title)")
+        // In the Mac and iPad detail column a folded section is a 49-point row under a hairline (Figma Section/Folded).
+        .frame(minHeight: plain ? 41 : nil)
       }
+      .listRowSeparator(plain ? .visible : .automatic, edges: .top)
+      .listRowSeparatorTint(plain ? AglynColor.divider : nil)
     }
   }
+}
+
+private struct RecordMoreButtonStyle: ViewModifier {
+  let square: Bool
+
+  func body(content: Content) -> some View {
+    if square { content.buttonStyle(.plain) } else { content.buttonStyle(.bordered) }
+  }
+}
+
+/// A record's sections. On a phone a grouped Form; on the Mac and iPad Figma's plain detail column (Orders 13:483):
+/// the sections on the surface, 40 points from the column's edges, no boxes, prominent section titles, and hairlines
+/// only where a row draws one (a total, a folded section).
+public struct AglynRecordForm<Content: View>: View {
+  @Environment(\.aglynWideChrome) private var wide
+  let content: Content
+
+  public init(@ViewBuilder content: () -> Content) { self.content = content() }
+
+  public var body: some View {
+    if wide {
+      List {
+        content
+          .listRowSeparator(.hidden)
+          .listRowInsets(EdgeInsets(top: 0, leading: 40, bottom: 0, trailing: 40))
+          .listRowBackground(Color.clear)
+      }
+      .listStyle(.plain)
+      .headerProminence(.increased)
+      .scrollContentBackground(.hidden)
+      .background(AglynColor.paper)
+      .environment(\.defaultMinListRowHeight, 40)
+      .environment(\.aglynPlainRecord, true)
+    } else {
+      Form { content }
+        .formStyle(.grouped)
+        .aglynListBackground()
+    }
+  }
+}
+
+extension EnvironmentValues {
+  /// Inside an `AglynRecordForm`'s plain detail column (Mac and iPad).
+  @Entry public var aglynPlainRecord: Bool = false
 }
