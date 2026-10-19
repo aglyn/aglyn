@@ -221,7 +221,10 @@ export function facetsLayout(width, height, { dark = false, settle = 1 } = {}) {
       points: [
         [f.bandLeftX * width, bandTopLeft],
         [f.bandRightX * width, bandTopLeft - bandRise],
-        [f.bandRightX * width, bandTopLeft - bandRise + f.bandThickness * height],
+        [
+          f.bandRightX * width,
+          bandTopLeft - bandRise + f.bandThickness * height,
+        ],
         [f.bandLeftX * width, bandTopLeft + f.bandThickness * height],
       ],
     },

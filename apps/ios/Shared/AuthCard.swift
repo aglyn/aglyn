@@ -48,6 +48,8 @@ struct AuthCard<Content: View, Footer: View, Accessory: View>: View {
             .frame(height: M.lockupHeight)
             .fixedSize()
             .accessibilityLabel(model.appName)
+            // Hidden under the launch intro's own lockup until the destination is revealed, then in its place.
+            .opacity(reveal.opacity)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, AglynAuthLayout.lockupLeading(compact: compact))
             .padding(.top, AglynAuthLayout.lockupTop(compact: compact))
@@ -73,6 +75,8 @@ struct AuthCard<Content: View, Footer: View, Accessory: View>: View {
       }
       .scrollBounceBehavior(.basedOnSize)
       .scrollDismissesKeyboard(.interactively)
+      // The card scrolls away under the status bar's edge rather than behind the clock.
+      .clipped()
     }
   }
 

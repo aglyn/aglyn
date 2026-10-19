@@ -67,29 +67,76 @@ struct ProviderSignInButtons: View {
     }
   }
 
-  /// Apple's own button (HIG): black on a light ground, white on a dark one, with Apple's approved title.
+  /// Apple's own button (HIG): black on a light ground, white on a dark one, with Apple's approved title. On the Mac the
+  /// system button keeps its own short height, so the Mac draws the HIG's custom button (the Apple logo and the system
+  /// font, Apple's colors) at the provider height and asks for the credential itself.
+  @ViewBuilder
   private var apple: some View {
-    SignInWithAppleButton(mode == .signUp ? .signUp : .signIn) { request in
-      let nonce = AppleSignInNonce.make()
-      appleNonce = nonce.raw
-      request.requestedScopes = [.fullName, .email]
-      request.nonce = nonce.hashed
-    } onCompletion: { result in
-      apple(result)
-    }
-    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-    .frame(height: AglynAuthTokens.Metrics.buttonHeight)
-    .clipShape(RoundedRectangle(cornerRadius: AglynAuthTokens.Metrics.buttonRadius, style: .continuous))
-    .disabled(busy || !enabled)
-    .opacity(busy || !enabled ? AglynAuthTokens.Metrics.disabledOpacity : 1)
-    // The agreement is checked before Apple's sheet opens: without it, a tap shows the reminder instead.
-    .overlay {
-      if mode == .signUp && !consented {
-        Color.clear.contentShape(Rectangle()).onTapGesture { _ = gate() }
+    #if os(macOS)
+      Button(action: appleOnMac) {
+        HStack(spacing: 6) {
+          Image(systemName: "applelogo").font(.system(size: 17, weight: .semibold))
+          Text(mode == .signUp ? "Sign up with Apple" : "Sign in with Apple").font(.system(size: 17, weight: .semibold))
+        }
+        .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
+        .frame(maxWidth: .infinity, minHeight: AglynAuthTokens.Metrics.buttonHeight)
+        .background(
+          colorScheme == .dark ? Color.white : Color.black,
+          in: RoundedRectangle(cornerRadius: AglynAuthTokens.Metrics.buttonRadius, style: .continuous)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: AglynAuthTokens.Metrics.buttonRadius, style: .continuous))
+      }
+      .buttonStyle(.plain)
+      .disabled(busy || !enabled)
+      .opacity(busy || !enabled ? AglynAuthTokens.Metrics.disabledOpacity : 1)
+      .accessibilityIdentifier("sign-in-apple")
+    #else
+      SignInWithAppleButton(mode == .signUp ? .signUp : .signIn) { request in
+        prepare(request)
+      } onCompletion: { result in
+        apple(result)
+      }
+      .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+      .frame(height: AglynAuthTokens.Metrics.buttonHeight)
+      .clipShape(RoundedRectangle(cornerRadius: AglynAuthTokens.Metrics.buttonRadius, style: .continuous))
+      .disabled(busy || !enabled)
+      .opacity(busy || !enabled ? AglynAuthTokens.Metrics.disabledOpacity : 1)
+      // The agreement is checked before Apple's sheet opens: without it, a tap shows the reminder instead.
+      .overlay {
+        if mode == .signUp && !consented {
+          Color.clear.contentShape(Rectangle()).onTapGesture { _ = gate() }
+        }
+      }
+      .accessibilityIdentifier("sign-in-apple")
+    #endif
+  }
+
+  private func prepare(_ request: ASAuthorizationAppleIDRequest) {
+    let nonce = AppleSignInNonce.make()
+    appleNonce = nonce.raw
+    request.requestedScopes = [.fullName, .email]
+    request.nonce = nonce.hashed
+  }
+
+  #if os(macOS)
+    private func appleOnMac() {
+      guard mode == .signIn || gate() else { return }
+      let request = ASAuthorizationAppleIDProvider().createRequest()
+      prepare(request)
+      Task {
+        do {
+          let result = try await authorizationController.performRequest(request)
+          guard case .appleID(let credential) = result else {
+            error = "Sign in with Apple did not finish. Try again."
+            return
+          }
+          finishApple(credential)
+        } catch {
+          if !isCanceledSignIn(error) { self.error = "Sign in with Apple did not finish. Try again." }
+        }
       }
     }
-    .accessibilityIdentifier("sign-in-apple")
-  }
+  #endif
 
   private func google() {
     guard mode == .signIn || gate() else { return }
@@ -112,25 +159,31 @@ struct ProviderSignInButtons: View {
     case .failure(let failure):
       if !isCanceledSignIn(failure) { error = "Sign in with Apple did not finish. Try again." }
     case .success(let authorization):
-      guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
-        let data = credential.identityToken, let token = String(data: data, encoding: .utf8), !appleNonce.isEmpty
-      else {
+      guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
         error = "Sign in with Apple did not finish. Try again."
         return
       }
-      busy = true
-      error = nil
-      let nonce = appleNonce
-      Task {
-        do {
-          try await model.continueWithApple(
-            identityToken: token, rawNonce: nonce, fullName: credential.fullName, signingUp: mode == .signUp,
-            marketing: marketing)
-        } catch {
-          self.error = providerErrorMessage(error)
-        }
-        busy = false
+      finishApple(credential)
+    }
+  }
+
+  private func finishApple(_ credential: ASAuthorizationAppleIDCredential) {
+    guard let data = credential.identityToken, let token = String(data: data, encoding: .utf8), !appleNonce.isEmpty else {
+      error = "Sign in with Apple did not finish. Try again."
+      return
+    }
+    busy = true
+    error = nil
+    let nonce = appleNonce
+    Task {
+      do {
+        try await model.continueWithApple(
+          identityToken: token, rawNonce: nonce, fullName: credential.fullName, signingUp: mode == .signUp,
+          marketing: marketing)
+      } catch {
+        self.error = providerErrorMessage(error)
       }
+      busy = false
     }
   }
 

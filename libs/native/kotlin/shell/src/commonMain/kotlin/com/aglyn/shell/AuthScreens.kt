@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+
 package com.aglyn.shell
 
 import androidx.compose.foundation.background
@@ -88,9 +90,14 @@ fun SignedOutScreen(
   autoSignIn: Boolean = false,
   deviceModes: List<com.aglyn.pluginhost.NativeScreen> = emptyList(),
   onDeviceMode: (com.aglyn.pluginhost.NativeScreen) -> Unit = {},
+  /** The sign-in screen's heading and line in place of the defaults ("Add an account" in the add-account flow). */
+  signInTitle: String? = null,
+  signInSubtitle: String? = null,
 ) {
+  // System back from any other auth screen returns to sign-in instead of leaving the app.
+  androidx.compose.ui.backhandler.BackHandler(enabled = services.authFlow.screen != AuthScreen.SignIn) { services.authFlow.reset() }
   when (val screen = services.authFlow.screen) {
-    AuthScreen.SignIn -> SignInScreen(services, autoSignIn, deviceModes, onDeviceMode)
+    AuthScreen.SignIn -> SignInScreen(services, autoSignIn, deviceModes, onDeviceMode, signInTitle, signInSubtitle)
     AuthScreen.SignUp -> SignUpScreen(services)
     AuthScreen.AccountRecovery -> AccountRecoveryScreen(services)
     AuthScreen.SingleSignOn -> SingleSignOnScreen(services)
@@ -135,7 +142,11 @@ internal fun AuthCard(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
       Box(Modifier.fillMaxWidth().heightIn(min = height)) {
         // The logo-kit lockup (white wordmark on the dark ground), its clear space around it.
-        AglynLogo(Modifier.padding(start = leading.dp, top = top.dp).height(M.LOCKUP_HEIGHT.dp), contentDescription = appName)
+        // Hidden under the launch intro's own lockup until the destination is revealed, then in its place.
+        AglynLogo(
+          Modifier.padding(start = leading.dp, top = top.dp).height(M.LOCKUP_HEIGHT.dp).graphicsLayer { alpha = reveal.alpha },
+          contentDescription = appName,
+        )
         Column(
           Modifier
             .align(if (compact) Alignment.TopCenter else Alignment.Center)

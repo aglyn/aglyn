@@ -9,11 +9,14 @@ import SwiftUI
 /// The signed-out app: whichever of the console's `(auth)` screens the flow is on.
 struct SignedOutView: View {
   @Environment(AppModel.self) private var model
+  /// The sign-in screen's heading and line in place of the defaults ("Add an account" in the add-account flow).
+  var signInTitle: String?
+  var signInSubtitle: String?
 
   var body: some View {
     Group {
       switch model.authFlow.screen {
-      case .signIn: SignInView()
+      case .signIn: SignInView(title: signInTitle, subtitle: signInSubtitle)
       case .signUp: SignUpView()
       case .accountRecovery: AccountRecoveryView()
       case .singleSignOn: SingleSignOnView()
@@ -29,6 +32,10 @@ struct SignedOutView: View {
 struct SignInView: View {
   @Environment(AppModel.self) private var model
   @Environment(\.webAuthenticationSession) private var webAuthentication
+  /// The heading in place of "Sign in" (or the POS app's), e.g. "Add an account"; nil keeps the default.
+  var title: String?
+  /// The line under the heading in place of the default; nil keeps it.
+  var subtitle: String?
   @State private var password = ""
   @State private var busy = false
   /// The password door is working (the provider doors share `busy`, which disables every button).
@@ -41,8 +48,9 @@ struct SignInView: View {
   var body: some View {
     @Bindable var flow = model.authFlow
     AuthCard(
-      model.app == .pos ? "Sign in to \(model.appName)" : "Sign in",
-      subtitle: model.app == .pos ? "Sign in to take payments at your store." : "Use your \(model.brandName) account",
+      title ?? (model.app == .pos ? "Sign in to \(model.appName)" : "Sign in"),
+      subtitle: subtitle
+        ?? (model.app == .pos ? "Sign in to take payments at your store." : "Use your \(model.brandName) account"),
       accessory: {
         AuthLink("Create account", identifier: "sign-in-create-account") { flow.screen = .signUp }
       }

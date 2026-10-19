@@ -41,6 +41,10 @@ fun SignInScreen(
   /** The whole-screen modes a plugin offers this tablet instead of a register (the POS app only). */
   deviceModes: List<com.aglyn.pluginhost.NativeScreen> = emptyList(),
   onDeviceMode: (com.aglyn.pluginhost.NativeScreen) -> Unit = {},
+  /** The heading in place of "Sign in" (or the POS app's), e.g. "Add an account"; null keeps the default. */
+  title: String? = null,
+  /** The line under the heading in place of the default; null keeps it. */
+  subtitle: String? = null,
 ) {
   val flow = services.authFlow
   LaunchedEffect(Unit) { services.debugSignIn?.first?.let { if (flow.email.isEmpty()) flow.email = it } }
@@ -111,8 +115,8 @@ fun SignInScreen(
   }
   AuthCard(
     services,
-    if (pos) "Sign in to $brand POS" else "Sign in",
-    if (pos) "Sign in to take payments at your store." else "Use your $brand account",
+    title ?: if (pos) "Sign in to $brand POS" else "Sign in",
+    subtitle ?: if (pos) "Sign in to take payments at your store." else "Use your $brand account",
     accessory = { AuthTextLink("Create account", { flow.screen = AuthScreen.SignUp }, Modifier.testTag("sign-in-create-account")) },
     footer = {
       AuthLinkRow("Having trouble logging in?", "Account recovery", "sign-in-account-recovery") { flow.screen = AuthScreen.AccountRecovery }

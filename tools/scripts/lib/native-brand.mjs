@@ -110,14 +110,15 @@ export const iconSources = () =>
  * The launch screen's mark (LaunchScreen.storyboard), in each app's own asset
  * catalog: the logo kit's multi-color mark alone, centered over the Facets
  * launch art at 96 pt (iPhone) / 120 pt (iPad), as the intro's first frame
- * draws it (AGL-3934). The storyboard sizes it; the SVG stays a vector.
+ * draws it (AGL-3934). PNGs at 1x-3x of 120 pt: the system's launch-screen
+ * snapshot does not draw an SVG image set.
  */
 export const LAUNCH_LOGO = {
   apple: 'LaunchLogo',
   light: 'aglyn-logo-mark-multi.svg',
   dark: 'aglyn-logo-mark-multi.svg',
-  width: 96,
-  height: 96,
+  width: 120,
+  height: 120,
 }
 
 export const appleLaunchSet = (app) =>
@@ -215,8 +216,9 @@ export function iconContainers() {
 /** Files an earlier icon layout wrote: removed by a write, refused by `--check`. */
 export const RETIRED_OUTPUTS = APP_ICONS.flatMap((icon) => [
   `${appleIconSet(icon.apple)}/AppIcon-512.png`,
-  // The launch screen showed the full logo, light and dark, until AGL-3934; the mark has one ink.
+  // The launch screen showed the full logo as SVGs, light and dark, until AGL-3934; it is the mark as PNGs now.
   `apps/ios/${icon.apple}/Assets.xcassets/LaunchLogo.imageset/LaunchLogo-dark.svg`,
+  `apps/ios/${icon.apple}/Assets.xcassets/LaunchLogo.imageset/LaunchLogo.svg`,
 ])
 
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`
@@ -670,27 +672,10 @@ export function brandTextOutputs(read) {
       file: `${appleIconSet(icon.apple)}/Contents.json`,
       content: appIconContents(),
     })
-    const launch = appleLaunchSet(icon.apple)
     outputs.push({
-      file: `${launch}/Contents.json`,
-      content: imageSetContents(LAUNCH_LOGO),
+      file: `${appleLaunchSet(icon.apple)}/Contents.json`,
+      content: launchLogoContents(),
     })
-    for (const [suffix, source] of [
-      ['', LAUNCH_LOGO.light],
-      ...(LAUNCH_LOGO.dark === LAUNCH_LOGO.light
-        ? []
-        : [['-dark', LAUNCH_LOGO.dark]]),
-    ]) {
-      outputs.push({
-        file: `${launch}/${LAUNCH_LOGO.apple}${suffix}.svg`,
-        content: sizedSvg(
-          read(source),
-          LAUNCH_LOGO.width,
-          LAUNCH_LOGO.height,
-          source,
-        ),
-      })
-    }
     const res = androidRes(icon.android)
     outputs.push({
       file: `${res}/mipmap-anydpi-v26/ic_launcher.xml`,
@@ -878,7 +863,10 @@ export function authOutputs(read) {
     outputs.push(
       { file: `${res}/values/splash.xml`, content: splashColors(false) },
       { file: `${res}/values-night/splash.xml`, content: splashColors(true) },
-      { file: `${res}/drawable/splash_icon.xml`, content: splashIconStatic(read) },
+      {
+        file: `${res}/drawable/splash_icon.xml`,
+        content: splashIconStatic(read),
+      },
       {
         file: `${res}/drawable-v31/splash_icon.xml`,
         content: splashIconAnimated(read),
@@ -886,4 +874,37 @@ export function authOutputs(read) {
     )
   }
   return outputs
+}
+
+const LAUNCH_LOGO_SCALES = [1, 2, 3]
+
+/** The launch mark's image set: one PNG per scale. */
+export function launchLogoContents() {
+  return json({
+    images: LAUNCH_LOGO_SCALES.map((scale) => ({
+      filename: `${LAUNCH_LOGO.apple}@${scale}x.png`,
+      idiom: 'universal',
+      scale: `${scale}x`,
+    })),
+    info: XCODE_INFO,
+  })
+}
+
+/** The launch mark's PNGs, per app and scale, drawn from the mark SVG at its point size. */
+export function launchLogoRasters(read) {
+  const svg = sizedSvg(
+    read(LAUNCH_LOGO.light),
+    LAUNCH_LOGO.width,
+    LAUNCH_LOGO.height,
+    LAUNCH_LOGO.light,
+  ).toString()
+  return APP_ICONS.flatMap((icon) =>
+    LAUNCH_LOGO_SCALES.map((scale) => ({
+      file: `${appleLaunchSet(icon.apple)}/${LAUNCH_LOGO.apple}@${scale}x.png`,
+      width: LAUNCH_LOGO.width * scale,
+      height: LAUNCH_LOGO.height * scale,
+      scale,
+      svg,
+    })),
+  )
 }

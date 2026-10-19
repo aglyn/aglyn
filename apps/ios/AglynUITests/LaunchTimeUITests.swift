@@ -7,18 +7,24 @@ import XCTest
 /// is drawn and it answers input), and the wall-clock time until the sign-in form takes a tap, which is what a person
 /// waits for. Each is printed as `AGLYN-LAUNCH <name> <ms>` for the comparison in AGL-3934.
 final class LaunchTimeUITests: XCTestCase {
+  /// The app under test: the scheme's target, or another install named by `AGLYN_LAUNCH_BUNDLE` (a build to compare).
+  private func application() -> XCUIApplication {
+    let bundle = ProcessInfo.processInfo.environment["AGLYN_LAUNCH_BUNDLE"] ?? ""
+    return bundle.isEmpty ? XCUIApplication() : XCUIApplication(bundleIdentifier: bundle)
+  }
+
   func testLaunchUntilResponsive() {
     let options = XCTMeasureOptions()
     options.iterationCount = 5
     measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true)], options: options) {
-      XCUIApplication().launch()
+      application().launch()
     }
   }
 
   func testLaunchUntilSignInTakesATap() {
     var samples: [Double] = []
     for _ in 0..<5 {
-      let app = XCUIApplication()
+      let app = application()
       app.terminate()
       let start = Date()
       app.launch()
