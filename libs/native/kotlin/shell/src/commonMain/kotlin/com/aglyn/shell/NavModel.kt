@@ -88,6 +88,22 @@ object NavKeys {
 fun isHostAdmin(siteRole: String?, orgRole: String?): Boolean =
   siteRole in setOf("owner", "admin") || orgRole in setOf("owner", "admin")
 
+/**
+ * The plugins the platform has released to the workspace: a plugin whose catalog entry names a release flag stays only
+ * while that flag is on for it (`isReleaseFlagOnForOrg`: its override, the plan targeting, the published value, the
+ * rollout). The console's shell hides such a plugin's tab and its routes answer 404 (Accounting until a deployment has
+ * its ledger credentials), so a row for it would only open "This did not load". Staff see every plugin, as the console's
+ * staff session does.
+ */
+fun releasedPlugins(ids: List<String>, orgId: String?, logo: com.aglyn.core.WorkspaceOrgLogo?, staff: Boolean): List<String> {
+  if (staff) return ids
+  return ids.filter { id ->
+    val flag = com.aglyn.contracts.Contracts.firstPartyPlugins.firstOrNull { it.id == id }?.releaseFlag ?: return@filter true
+    val value = com.aglyn.core.ReleaseFlagDefaults.byKey[flag] ?: com.aglyn.core.ReleaseFlagValue(false, 0, emptyList())
+    com.aglyn.core.isReleaseFlagOn(flag, value, orgId, logo?.plan, logo?.releaseFlags)
+  }
+}
+
 /** The plugins on for the scope: the site's effective set inside a site, the workspace's otherwise. */
 fun enabledPluginsFor(orgEnabled: List<String>?, host: Map<String, Any?>?, inSite: Boolean): List<String> {
   if (!inSite) return resolveEnabledPlugins(orgEnabled)

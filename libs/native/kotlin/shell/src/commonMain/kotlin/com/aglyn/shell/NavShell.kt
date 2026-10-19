@@ -186,8 +186,9 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   // The scope's lists, from the manifest.
   val inSite = workspace.site != null
   val host = liveHostDoc(services, workspace.site?.id)
-  val enabled = enabledPluginsFor(workspace.orgLogo?.enabledPlugins, host?.data, inSite)
-  val orgEnabled = enabledPluginsFor(workspace.orgLogo?.enabledPlugins, null, false)
+  // Less any plugin the platform has not released to this workspace (its routes would answer 404).
+  val enabled = releasedPlugins(enabledPluginsFor(workspace.orgLogo?.enabledPlugins, host?.data, inSite), workspace.org?.id, workspace.orgLogo, claims.isStaff)
+  val orgEnabled = releasedPlugins(enabledPluginsFor(workspace.orgLogo?.enabledPlugins, null, false), workspace.org?.id, workspace.orgLogo, claims.isStaff)
   val hostAdmin = isHostAdmin(workspace.site?.role, workspace.org?.role)
   val scopeList = if (inSite) NativeNavListId.SITE else NativeNavListId.WORKSPACE
   val scopeGroups = remember(version, enabled, hostAdmin, inSite) { navGroups(scopeList, enabled, hostAdmin, services.registry, inSite) }

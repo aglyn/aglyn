@@ -53,6 +53,8 @@ data class WorkspaceOrgLogo(
   val brandMarkDark: String? = null,
   /** Custom-priced or flagged Enterprise, as the console's `isEnterpriseOrg` reads it: nothing to upgrade to. */
   val enterprise: Boolean = false,
+  /** The workspace's own release-flag overrides (`releaseFlags`), which win over the published values. */
+  val releaseFlags: Map<String, Any?>? = null,
 ) {
   companion object {
     fun from(data: Map<String, Any?>?): WorkspaceOrgLogo = WorkspaceOrgLogo(
@@ -63,6 +65,7 @@ data class WorkspaceOrgLogo(
       plan = data?.let { effectivePlan(it) },
       brandMark = ((data?.get("brandingProfile") as? Map<*, *>)?.get("faviconUrl") as? String)?.trim()?.ifEmpty { null },
       brandMarkDark = ((data?.get("brandingProfile") as? Map<*, *>)?.get("faviconDarkUrl") as? String)?.trim()?.ifEmpty { null },
+      releaseFlags = (data?.get("releaseFlags") as? Map<*, *>)?.entries?.associate { it.key.toString() to it.value },
       enterprise = data?.get("enterprise") == true || data?.get("plan") == "enterprise" ||
         (((data?.get("subscription") as? Map<*, *>)?.get("customMonthlyUsd") as? Number)?.toDouble() ?: 0.0) > 0,
     )
