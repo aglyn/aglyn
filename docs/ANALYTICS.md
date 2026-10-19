@@ -2462,6 +2462,13 @@ Counted into `orgs/{orgId}/campaignVisitReports/{campaignId}` (Admin SDK only),
 so the rollup is bounded by the campaigns that exist. A visitor without the
 analytics grant is in the views and never in the first visits.
 
+**A label has to be declared to survive a filed page.** On the visit that
+converts, a page filed under a campaign beats a label no campaign declares, and
+the record keeps the page's campaign but none of the three labels. So a
+per-placement label (one event, one town) is added to the campaign's
+`utmCampaigns` before the link goes out; Aglyn's own QR codes work this way,
+see `docs/MANAGED_CAMPAIGN_UTM.md` (AGL-3960).
+
 ### 13. Why a server event can still report nothing with the credentials in place (AGL-2327)
 
 Three distinct causes have been mistaken for each other, twice. Check them in

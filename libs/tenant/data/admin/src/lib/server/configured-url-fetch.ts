@@ -124,3 +124,59 @@ export async function fetchConfiguredPublicUrl(
     await dispatcher.close().catch(() => undefined)
   }
 }
+
+export type ConfiguredUrlReadResult =
+  /**
+   * Called: the status, and the body as text. `body` is null when the reply
+   * ran past `maxBytes`, which a caller reads as no answer.
+   */
+  | { ok: true; status: number; body: string | null }
+  | { ok: false; refusal: ConfiguredUrlRefusal; host: string }
+
+/**
+ * {@link fetchConfiguredPublicUrl} for a caller that reads the answer: the
+ * same refusals, the same pinned address, no redirect followed, and the body
+ * read up to `maxBytes`. A server reading a document at an address it
+ * discovered in somebody's DNS (AGL-3963) holds the reply to a size it chose,
+ * so a host that streams forever costs one bounded read. Throws only what
+ * `fetch` throws.
+ */
+export async function readConfiguredPublicUrl(
+  url: string,
+  init: Omit<RequestInit, 'redirect'>,
+  options: { maxBytes: number; resolve?: typeof resolvePublicIp },
+): Promise<ConfiguredUrlReadResult> {
+  const refusal = configuredUrlRefusal(url)
+  let host: string
+  try {
+    host = new URL(url).hostname
+  } catch {
+    host = ''
+  }
+  if (refusal) return { ok: false, refusal, host }
+  const pinned = await (options.resolve ?? resolvePublicIp)(host)
+  if (!pinned) return { ok: false, refusal: 'private-address', host }
+  const dispatcher = createPinnedDispatcher(pinned)
+  try {
+    const pinnedInit = { ...init, redirect: 'manual' as const, dispatcher }
+    const response = await fetch(url, pinnedInit as RequestInit)
+    const status = Number(response.status ?? 0)
+    const reader = response.body?.getReader()
+    if (!reader) return { ok: true, status, body: '' }
+    const chunks: Uint8Array[] = []
+    let size = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      if (size > options.maxBytes) {
+        await reader.cancel().catch(() => undefined)
+        return { ok: true, status, body: null }
+      }
+      chunks.push(value)
+    }
+    return { ok: true, status, body: Buffer.concat(chunks).toString('utf8') }
+  } finally {
+    await dispatcher.close().catch(() => undefined)
+  }
+}

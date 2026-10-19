@@ -2441,6 +2441,16 @@
         "keeps": "The connections are kept, and the site’s browser tags on the Tracking tab are not affected.",
         "stops": "Switching Ad conversions off for this site stops its purchases and leads being sent to the Meta, TikTok and Pinterest accounts it connected."
       }
+    },
+    {
+      "alwaysOnForWorkspace": true,
+      "description": "Buy a domain for a site and have it set up automatically, or point a domain you already own here in one click.",
+      "id": "domains",
+      "label": "Domains",
+      "siteOff": {
+        "keeps": "Domains bought for this site stay registered to you and keep renewing until you turn auto-renew off or transfer them out, and Domains keeps working on the workspace’s other sites.",
+        "stops": "Switching Domains off for this site removes buying a domain and one-click DNS from its Custom Domain page. A domain you already connected keeps serving."
+      }
     }
   ],
   "FORM_IN_USE": {

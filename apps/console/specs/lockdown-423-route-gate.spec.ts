@@ -40,6 +40,9 @@ const mockVerifyIdToken = jest.fn()
 const mockLockdownRefusal = jest.fn()
 const mockGetOrgForHost = jest.fn()
 const mockHostSet = jest.fn(async () => undefined)
+// The release itself (AGL-3961): the route hands every write to
+// `disconnectHostCustomDomain`, so THIS call is the mutation the gate guards.
+const mockDisconnect = jest.fn()
 // Lazy so the hoisted mock factory never touches a const in its TDZ.
 const mockHostSnapshot = jest.fn()
 
@@ -75,9 +78,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   lockdownRefusal: (...args: unknown[]) => mockLockdownRefusal(...args),
   // A deployment with no domain provider, which is what this file models: the
   // registration calls report `skipped`, neither a success nor a failure, and
-  // the Firestore write stays the one observable mutation the gate protects.
+  // the release call stays the one observable mutation the gate protects.
   attachProjectDomain: async (domain: string) => ({ outcome: 'skipped', domain }),
   detachProjectDomain: async (domain: string) => ({ outcome: 'skipped', domain }),
+  disconnectHostCustomDomain: (...args: unknown[]) => mockDisconnect(...args),
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
@@ -121,7 +125,7 @@ const post = () =>
 beforeEach(() => {
   jest.clearAllMocks()
   // No Vercel env in tests: the route's platform-API calls are skipped and
-  // the Firestore write is the observable mutation.
+  // the release call is the observable mutation.
   delete process.env.VERCEL_TOKEN
   delete process.env.VERCEL_TENANT_PROJECT_ID
   mockVerifyIdToken.mockResolvedValue({
@@ -130,6 +134,11 @@ beforeEach(() => {
     staff: false,
   })
   mockGetOrgForHost.mockResolvedValue({ orgId: 'org-1', org: ORG_DOC })
+  mockDisconnect.mockResolvedValue({
+    ok: 'released',
+    domain: HOST_DATA.cname,
+    subdomain: HOST_DATA.subdomain,
+  })
   mockHostSnapshot.mockReturnValue({
     exists: true,
     get: (field: string) => (HOST_DATA as Record<string, unknown>)[field],
@@ -148,7 +157,8 @@ describe('AGL-1506 · the 423 idiom gates a wired route (domains/detach)', () =>
       scope: 'org',
       reason: 'billing',
     })
-    // The gate, not just the status: the host doc was never written.
+    // The gate, not just the status: nothing was released or written.
+    expect(mockDisconnect).not.toHaveBeenCalled()
     expect(mockHostSet).not.toHaveBeenCalled()
   })
 
@@ -183,6 +193,10 @@ describe('AGL-1506 · the 423 idiom gates a wired route (domains/detach)', () =>
     const response = await post()
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({ detached: true })
-    expect(mockHostSet).toHaveBeenCalledTimes(1)
+    expect(mockDisconnect).toHaveBeenCalledTimes(1)
+    expect(mockDisconnect).toHaveBeenCalledWith({
+      hostId: 'host-1',
+      actor: { uid: 'u-member', email: null },
+    })
   })
 })

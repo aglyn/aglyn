@@ -84,6 +84,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/domain-provider',
   ),
+  // The REAL redirect registrations (AGL-3961), which moved from the console
+  // into the library with the connect sequence. Their own imports are the
+  // provider seam above, so the fake `fetch` still sees every call.
+  ...jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/custom-domain-redirects',
+  ),
   firebaseAdmin: {
     firestore: { FieldValue: { delete: () => '__delete__' } },
     app: () => ({
