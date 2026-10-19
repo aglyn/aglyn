@@ -14,6 +14,8 @@ struct RouteView: View {
   var body: some View {
     switch route {
     case .screen(let id, let params): PluginScreenView(screenID: id, params: params)
+    // The app's shell draws a pushed area with its section chips (ShellStack); an app without areas shows its screen.
+    case .area(let id, let params): PluginScreenView(screenID: id, params: params)
     case .besigner(let path): BesignerScreen(path: path)
     case .unavailable(let path): NotInAppView(path: path)
     case .settings: SettingsView()
