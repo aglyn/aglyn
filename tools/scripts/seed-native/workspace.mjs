@@ -100,7 +100,7 @@ const SAMPLE_PHOTOS = {
   'seed-media-croissants': 'gallery-craft.jpg',
 }
 
-export async function seedWorkspace({ put, uid, orgId, hostId, now, putObject = null, root = null }) {
+export async function seedWorkspace({ put, uid, orgId, hostId, now, putObject = null, root = null, auth = null, project = null }) {
   const day = 24 * 60 * 60 * 1000
   const ago = (days) => new Date(now.getTime() - days * day)
 
@@ -141,6 +141,20 @@ export async function seedWorkspace({ put, uid, orgId, hostId, now, putObject = 
       ...(person.uid === uid ? {} : { invitedBy: uid }),
       joinedAt: ago(person.joined),
     })
+  }
+  // Each teammate is a real (emulator) account, verified, under the member row's uid: the console's role change and
+  // removal read the person's Auth record and answer 404 for a uid it does not know. No password: nobody signs in as
+  // them. An existing account is left as it is (the batch reports it and goes on).
+  if (auth && project) {
+    const users = people
+      .filter((person) => person.uid !== uid)
+      .map((person) => ({ localId: person.uid, email: person.email, emailVerified: true, displayName: person.displayName }))
+    const response = await fetch(`http://${auth}/identitytoolkit.googleapis.com/v1/projects/${project}/accounts:batchCreate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer owner' },
+      body: JSON.stringify({ users }),
+    })
+    if (!response.ok) throw new Error(`team accounts: ${response.status} ${await response.text()}`)
   }
   await put(`orgs/${orgId}/invites/seed-invite-sam`, {
     email: 'sam.ortiz@example.test',
