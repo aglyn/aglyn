@@ -18,7 +18,7 @@
 
 /**
  * Publishes the Aglyn AI tiers to the `/pricing` page (AGL-3965), and the
- * "Learn more" link from the Site Care card to `/managed`.
+ * "Learn more →" link from the Site Care card to `/managed`.
  *
  *   node tools/scripts/publish-pricing-ai-tiers.mjs [--dry-run]
  *       dry run, the default: prints every changed node before and after
@@ -30,7 +30,7 @@
  * and `apps/console/.env.production.local`.
  *
  * The page is Besigner content on the marketing host, so the changes are
- * made to the screen's stored node map. Exactly four, and nothing else:
+ * made to the screen's stored node map. Exactly six, and nothing else:
  *
  *  1. the compare row "AI credits / mo" is relabeled "AI credits included /
  *     mo", on the desktop table and in each of the eight per-plan panels:
@@ -43,18 +43,29 @@
  *     own ticks carry;
  *  3. the Aglyn AI card's sentence names the six tiers once, in place of a
  *     price per plan;
- *  4. the Site Care card gets a "Learn more" text link to `/managed`, after
+ *  4. the Site Care card gets a "Learn more →" text link to `/managed`, after
  *     its last sentence. It is a Page Link (`muiScreenLink`) that targets the
  *     `/managed` screen by id, shown as a text link, opening in the same tab,
- *     in the style of the card links on the home page ("See agencies →":
- *     `body2`, `semiBold`, `primary.dark`). `inline-block` lets its top
- *     margin space it like the sentences above it.
+ *     worded and styled like the card links on the home page ("See agencies
+ *     →": `body2`, `semiBold`, `primary.dark`). `inline-block` lets its top
+ *     margin space it like the sentences above it;
+ *  5. the FAQ answer to "What does Aglyn AI cost?" says what the tiers cost
+ *     and that every paid plan's own credits pay for all AI, in place of a
+ *     price per plan. Its last three sentences (the overage rate, the stop
+ *     switch and ceiling, Free's 300 credits) are unchanged;
+ *  6. the four ticks that were styled unlike the rest (Free's "CDN &
+ *     responsive images" and Starter's "AI assist", on the desktop table and
+ *     in those plans' panels) take the same two style fields every other
+ *     tick carries. The run refuses if the stray ticks are not exactly those
+ *     four.
  *
  * The new text for 1–3 comes from `tools/marketing/pricing-copy/tables.json`,
- * which `build-pricing-tables.mts` generates from `plan-entitlements.ts`.
- * Each cell is checked against its current value before it is changed. A
- * cell that already reads the new value is left alone, so a re-run is a
- * no-op.
+ * which `build-pricing-tables.mts` generates from `plan-entitlements.ts`. The
+ * FAQ answer in 5 is built from the same tiers and must equal the answer the
+ * Figma frames carry (`pricing-copy/copy-desktop.json`), so the page and the
+ * design cannot drift apart. Each cell is checked against its current value
+ * before it is changed. A cell that already reads the new value is left
+ * alone, so a re-run is a no-op.
  *
  * None of the nodes this touches sits in a reusable component, and the
  * script refuses if one does, so the screen's version is the whole of it. A
@@ -95,8 +106,8 @@ const MANAGED_SCREEN = 'qnuMY13VsS' // /managed
 const MANAGED_SLUG = 'managed'
 
 const VERSION_NAME =
-  'Aglyn AI tiers: credits included, generation on every paid plan, the tier card, ' +
-  'Site Care links to /managed (AGL-3965)'
+  'Aglyn AI tiers: credits included, generation on every paid plan, the tier card and FAQ, ' +
+  'tick styles, Site Care links to /managed (AGL-3965)'
 
 // ---- what the page says now ------------------------------------------------
 const CREDITS_LABEL_FROM = 'AI credits / mo'
@@ -107,6 +118,23 @@ const AI_SENTENCE_FROM =
   'Pro, 19,000 on Business, 34,000 on Scale, 49,000 on Advanced, 149,000 on Agency. ' +
   'Enterprise by agreement.'
 const SITE_CARE_LAST_SENTENCE = 'Any paid plan.'
+const FAQ_QUESTION = 'What does Aglyn AI cost?'
+/** The answer's last two sentences, which stay as they are. */
+const FAQ_KEPT_TAIL =
+  'If you’d rather it stopped, turn on Stop AI assist at the included band in Billing, or set ' +
+  'a monthly dollar ceiling on overage. Free includes 300 credits a month and stops there — ' +
+  'nothing is billed.'
+const FAQ_FROM =
+  'Aglyn AI is a per-workspace add-on on any paid plan — $9 a month on Starter, $19 on Pro, ' +
+  '$39 on Business, $69 on Scale, $99 on Advanced, $299 on Agency; Enterprise by agreement. ' +
+  'It adds AI credits to your plan’s included band every month, from 4,000 on Starter to ' +
+  '149,000 on Agency, and credits past the band are billed per 1,000 at the rate in the usage ' +
+  `table. ${FAQ_KEPT_TAIL}`
+/** Ticks styled unlike the rest, as `[row label, plan]`: the only ones there are. */
+const STRAY_TICKS = [
+  ['CDN & responsive images', 'free'],
+  ['AI assist', 'starter'],
+]
 
 // ---- what it will say, from the generated tables ---------------------------
 const TABLES = JSON.parse(
@@ -128,10 +156,35 @@ if (!creditsRow || !generationRow || !aiCard?.blurb || !siteCareCard?.priceUsd) 
 const AI_SENTENCE_TO = aiCard.blurb
 const SITE_CARE_PRICE = `$${siteCareCard.priceUsd} / mo`
 
+/** The FAQ answer, from the same tiers the card states. */
+const tierPrices = aiCard.tiers.map((tier) => `${tier.label} $${tier.priceUsd}`)
+const tierCredits = aiCard.tiers.map((tier) => tier.credits)
+const FAQ_TO =
+  'Every paid plan includes a monthly band of AI credits, and every Aglyn AI action draws on ' +
+  'it, generation included. For more, add an Aglyn AI tier to any paid plan, per workspace: ' +
+  `${tierPrices.slice(0, -1).join(', ')} or ${tierPrices.at(-1)} a month, adding ` +
+  `${Math.min(...tierCredits).toLocaleString('en-US')} to ` +
+  `${Math.max(...tierCredits).toLocaleString('en-US')} credits a month on top of the plan’s ` +
+  'own; Enterprise by agreement. Credits past the band are billed per 1,000 at the rate in the ' +
+  `usage table. ${FAQ_KEPT_TAIL}`
+{
+  // The design carries the same answer, or the page and the frames would drift.
+  const desktopFrame = JSON.parse(
+    readFileSync(join(ROOT, 'tools', 'marketing', 'pricing-copy', 'copy-desktop.json'), 'utf8'),
+  )
+  const framed = desktopFrame.sections
+    .flatMap((section) => section.groups.flatMap((group) => group.records))
+    .find((record) => record.cells[0] === FAQ_QUESTION)?.cells[1]
+  if (framed !== FAQ_TO) {
+    console.error(`The Figma frames answer "${FAQ_QUESTION}" with:\n  ${framed}\nthis script with:\n  ${FAQ_TO}`)
+    process.exit(1)
+  }
+}
+
 /** A tick, as the other ticks on the page are styled. */
 const TICK_SX = { fontWeight: 'semiBold', color: 'primary.dark' }
 
-const LINK_TEXT = 'Learn more'
+const LINK_TEXT = 'Learn more →'
 const LINK_PROPS = {
   children: LINK_TEXT,
   renderAs: 'link',
@@ -454,6 +507,68 @@ if (existingLink) {
   }
 }
 
+// ---- (5) the FAQ answer to "What does Aglyn AI cost?" -----------------------------------------
+const faqAnswers = withText(FAQ_FROM, FAQ_TO)
+if (faqAnswers.length !== 1) {
+  problems.push(`expected one answer to "${FAQ_QUESTION}", found ${faqAnswers.length}`)
+  refuse()
+}
+{
+  const [answer] = faqAnswers
+  const [questionId, answerId] = childIds(nodes[answer.parentId])
+  if (textOf(nodes[questionId]) !== FAQ_QUESTION || answerId !== answer.$id) {
+    problems.push(`answer ${answer.$id} does not sit under the question "${FAQ_QUESTION}"`)
+  }
+  setText(answer, FAQ_FROM, FAQ_TO, `FAQ answer to "${FAQ_QUESTION}"`)
+}
+
+// ---- (6) the ticks styled unlike the rest ------------------------------------------------------
+{
+  const compareTabs = nodes[nodes[nodes[creditsPanels[0].parentId].parentId].parentId]
+  const scopes = [
+    { scope: 'desktop', where: () => 'desktop compare table', rows: childIds(desktopTable), plans: () => COLUMNS.map((c) => c.plan) },
+    ...childIds(compareTabs).map((panelId) => ({
+      scope: 'panel',
+      where: () => `${nodes[panelId].props.label} panel`,
+      rows: childIds(nodes[panelId]),
+      plans: () => [planOfPanel(nodes[panelId])],
+    })),
+  ]
+  const stripBackground = ({ bgcolor: _bg, '@scheme dark': _dark, ...rest }) => rest
+  const tickStyles = { desktop: new Map(), panel: new Map() }
+  const stray = []
+  for (const { scope, where, rows, plans } of scopes) {
+    for (const rowId of rows) {
+      const [labelId, ...cellIds] = childIds(nodes[rowId])
+      cellIds.forEach((id, i) => {
+        const cell = nodes[id]
+        if (textOf(cell) !== '✓') return
+        const key = JSON.stringify(stripBackground(cell.sx ?? {}))
+        tickStyles[scope].set(key, (tickStyles[scope].get(key) ?? 0) + 1)
+        const restyled = { ...cell.sx, ...TICK_SX }
+        if (JSON.stringify(restyled) === JSON.stringify(cell.sx)) return
+        stray.push({ cell, restyled, scope, where: where(), label: textOf(nodes[labelId]), plan: plans()[i] })
+      })
+    }
+  }
+  const usual = (scope) => [...tickStyles[scope]].sort((a, b) => b[1] - a[1])[0]?.[0]
+  const expected = new Set(STRAY_TICKS.map(([label, plan]) => `${label}|${plan}`))
+  for (const { cell, restyled, scope, where, label, plan } of stray) {
+    if (!expected.has(`${label}|${plan}`)) {
+      problems.push(`${where}: the "${label}" tick ${cell.$id} (${plan}) is styled unlike the rest, and is not one of the four`)
+      continue
+    }
+    if (JSON.stringify(stripBackground(restyled)) !== usual(scope)) {
+      problems.push(`${where}: the "${label}" tick ${cell.$id} would be ${JSON.stringify(restyled)}, the other ticks are ${usual(scope)}`)
+      continue
+    }
+    const sxBefore = JSON.stringify(cell.sx)
+    cell.sx = restyled
+    intended.add(cell.$id)
+    changes.push({ id: cell.$id, where: `${where}, "${label}" tick (${plan})`, field: 'sx', from: sxBefore, to: JSON.stringify(restyled) })
+  }
+}
+
 // ---- nothing inside a reusable component ---------------------------------------------------
 for (const id of [...intended, ...(linkId ? [linkId] : [])]) {
   const inside = ancestorsOf(nodes[id]).find((node) => node.props?.refId || node.componentId === 'reusableInstance')
@@ -477,7 +592,7 @@ const unexpected = [
   ...removed.map((id) => `removed ${id}`),
 ]
 if (unexpected.length) {
-  problems.push(`the new version differs from live beyond the four changes: ${unexpected.join(', ')}`)
+  problems.push(`the new version differs from live beyond the six changes: ${unexpected.join(', ')}`)
   refuse()
 }
 
@@ -494,7 +609,7 @@ for (const change of changes) {
 if (already.length) console.log(`\n  already done:\n${already.map((line) => `    = ${line}`).join('\n')}`)
 
 if (!differ.length && !added.length) {
-  console.log(`\nNothing to do: ${ROUTE} already carries all four changes.`)
+  console.log(`\nNothing to do: ${ROUTE} already carries all six changes.`)
   process.exit(0)
 }
 if (!WRITE) {

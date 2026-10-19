@@ -5,7 +5,7 @@
   "frameName": "Pricing — Mobile",
   "frameSize": {
     "width": 375,
-    "height": 11900
+    "height": 11924
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -1188,7 +1188,7 @@
               "figmaNodeId": "2548:3008",
               "name": null,
               "cells": [
-                "Learn more"
+                "Learn more →"
               ]
             }
           ]
@@ -1202,7 +1202,7 @@
       "name": "FAQ",
       "order": 4,
       "widthPx": 375,
-      "heightPx": 2642,
+      "heightPx": 2666,
       "groups": [
         {
           "figmaNodeId": "247:4567",
@@ -1244,7 +1244,7 @@
               "name": "qa",
               "cells": [
                 "What does Aglyn AI cost?",
-                "Aglyn AI is a per-workspace add-on on any paid plan — $9 a month on Starter, $19 on Pro, $39 on Business, $69 on Scale, $99 on Advanced, $299 on Agency; Enterprise by agreement. It adds AI credits to your plan’s included band every month, from 4,000 on Starter to 149,000 on Agency, and credits past the band are billed per 1,000 at the rate in the usage table. If you’d rather it stopped, turn on Stop AI assist at the included band in Billing, or set a monthly dollar ceiling on overage. Free includes 300 credits a month and stops there — nothing is billed."
+                "Every paid plan includes a monthly band of AI credits, and every Aglyn AI action draws on it, generation included. For more, add an Aglyn AI tier to any paid plan, per workspace: Spark $9, Boost $19, Plus $39, Max $69, Ultra $99 or Studio $299 a month, adding 4,000 to 149,000 credits a month on top of the plan’s own; Enterprise by agreement. Credits past the band are billed per 1,000 at the rate in the usage table. If you’d rather it stopped, turn on Stop AI assist at the included band in Billing, or set a monthly dollar ceiling on overage. Free includes 300 credits a month and stops there — nothing is billed."
               ]
             },
             {

@@ -44,7 +44,10 @@
  * `-jejSg7GLa`), and every allowance and metered rate AGL-3469 and AGL-3476
  * moved from the second republish that day (version `qE5PwfZM-K`), and the
  * Site Care card and the Managed sentence from the AGL-3954 republish of
- * **2026-10-19** (version `4OlwBbptBB`) — and their whole job is to be a fixed point that does NOT move when the constants do.
+ * **2026-10-19** (version `4OlwBbptBB`), and the Aglyn AI tiers — the
+ * generative door ticking on every paid plan, the "AI credits included / mo"
+ * row and the tier card — from the AGL-3965 republish later that day
+ * (version `U6Vbrc6Jr5`, 14:39Z) — and their whole job is to be a fixed point that does NOT move when the constants do.
  * Deriving them from `PLAN_ENTITLEMENTS` would make the file assert `x === x`
  * and prove nothing at all.
  *
@@ -822,8 +825,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * every paid plan's included credits pay for generation, so the cell is a
      * tick on every paid plan and on Enterprise, and "300 credits" on Free —
      * whose band is the taste. The page printed "add-on" on the paid plans
-     * until the AGL-3965 republish (the go-live runbook publishes the page
-     * before this merges, page first); this pins the cells that page states.
+     * until the AGL-3965 republish of **2026-10-19** (version `U6Vbrc6Jr5`),
+     * published page first, before this merged; this pins the cells that
+     * page states.
      */
     describe('Aglyn AI: generate pages, emails, campaigns, products and more', () => {
       it('300 credits · ✓ ×6 · ✓ — Free generates against its taste, every paid plan against its own credits', () => {
@@ -1105,8 +1109,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * and the six TIERS once in the card's sentence — Spark, Boost, Plus,
      * Max, Ultra, Studio — each with the credits it adds on top of the
      * plan's included credits, on any paid plan. Free sells none; Enterprise
-     * by agreement. (Until the AGL-3965 republish the page printed a price
-     * per plan; the go-live runbook publishes this card before the merge.)
+     * by agreement. Transcribed from the AGL-3965 republish of
+     * **2026-10-19** (version `U6Vbrc6Jr5`); until then the page printed a
+     * price per plan.
      */
     describe('Aglyn AI card', () => {
       it('From $9 / mo — Spark $9 · Boost $19 · Plus $39 · Max $69 · Ultra $99 · Studio $299 a month, per workspace', () => {
