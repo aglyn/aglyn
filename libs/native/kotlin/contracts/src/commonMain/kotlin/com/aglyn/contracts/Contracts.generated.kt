@@ -3401,6 +3401,15 @@ internal data class ContractValuesPart5(
     @SerialName("PAYMENT_ACCEPTED_MAX_LENGTH") val paymentAcceptedMaxLength: Long,
     @SerialName("PINNED_ORGS_FIELD") val pinnedOrgsField: String,
     @SerialName("PINNED_ORGS_MAX") val pinnedOrgsMax: Long,
+    @SerialName("PLAN_CARD_ADVANCE_MS") val planCardAdvanceMs: Long,
+    @SerialName("PLAN_CARD_CONTEXT_METERS") val planCardContextMeters: Map<String, List<String>>,
+    @SerialName("PLAN_CARD_CONTEXTS") val planCardContexts: List<String>,
+    @SerialName("PLAN_CARD_HOME_SCREEN") val planCardHomeScreen: String,
+    @SerialName("PLAN_CARD_METER_LABELS") val planCardMeterLabels: Map<String, String>,
+    @SerialName("PLAN_CARD_METER_UNITS") val planCardMeterUnits: Map<String, String>,
+    @SerialName("PLAN_CARD_METERS") val planCardMeters: List<String>,
+    @SerialName("PLAN_CARD_SCREEN_CONTEXTS") val planCardScreenContexts: Map<String, String>,
+    @SerialName("PLAN_CARD_WARNING_SHARE") val planCardWarningShare: Double,
     @SerialName("POS_CASH_EVENT_LABELS") val posCashEventLabels: Map<String, String>,
     @SerialName("POS_DISPLAY_MAX_LINES") val posDisplayMaxLines: Long,
     @SerialName("POS_DISPLAY_PAIRING_TTL_MS") val posDisplayPairingTtlMs: Double,
@@ -3425,6 +3434,10 @@ internal data class ContractValuesPart5(
     @SerialName("POS_OFFLINE_SYNC_BATCH_MAX") val posOfflineSyncBatchMax: Long,
     @SerialName("POS_OFFLINE_SYNC_ROUTE") val posOfflineSyncRoute: String,
     @SerialName("POS_TENDER_LABELS") val posTenderLabels: Map<String, String>,
+)
+
+@Serializable
+internal data class ContractValuesPart6(
     @SerialName("PRICE_RANGE_MAX_LENGTH") val priceRangeMaxLength: Long,
     @SerialName("PRINTER_BRAND_LABELS") val printerBrandLabels: Map<String, String>,
     @SerialName("PRINTER_BRANDS") val printerBrands: List<PrinterBrand>,
@@ -3434,10 +3447,6 @@ internal data class ContractValuesPart5(
     @SerialName("PRODUCT_LIST_BASE") val productListBase: List<ListQueryFilter>,
     @SerialName("PRODUCT_LIST_HEADERS") val productListHeaders: Map<String, String>,
     @SerialName("PRODUCT_LIST_OPTIONS") val productListOptions: Map<String, List<ListFilterOption>>,
-)
-
-@Serializable
-internal data class ContractValuesPart6(
     @SerialName("PRODUCT_LIST_QUERY") val productListQuery: ListQueryDeclaration,
     @SerialName("PRODUCT_LIST_SELECT_FIELDS") val productListSelectFields: List<String>,
     @SerialName("RAIL_ALL_WORKSPACES_AT_MOST") val railAllWorkspacesAtMost: Long,
@@ -3477,6 +3486,10 @@ internal data class ContractValuesPart6(
     @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
     @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
     @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
+)
+
+@Serializable
+internal data class ContractValuesPart7(
     @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
     @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
@@ -3486,10 +3499,6 @@ internal data class ContractValuesPart6(
     @SerialName("THEME_ACCENTS") val themeAccents: List<ThemeNamedAccent>,
     @SerialName("THEME_CONSOLE_FIELDS") val themeConsoleFields: List<String>,
     @SerialName("THEME_DARK_RAIL_SEEDS") val themeDarkRailSeeds: Map<String, String>,
-)
-
-@Serializable
-internal data class ContractValuesPart7(
     @SerialName("THEME_DENSITIES") val themeDensities: List<ThemeDensity>,
     @SerialName("THEME_FIGMA_BASE") val themeFigmaBase: ThemeColorsPair,
     @SerialName("THEME_NON_TEXT_CONTRAST") val themeNonTextContrast: Long,
@@ -3724,6 +3733,15 @@ class ContractValues internal constructor(
     val paymentAcceptedMaxLength: Long get() = part5.paymentAcceptedMaxLength
     val pinnedOrgsField: String get() = part5.pinnedOrgsField
     val pinnedOrgsMax: Long get() = part5.pinnedOrgsMax
+    val planCardAdvanceMs: Long get() = part5.planCardAdvanceMs
+    val planCardContextMeters: Map<String, List<String>> get() = part5.planCardContextMeters
+    val planCardContexts: List<String> get() = part5.planCardContexts
+    val planCardHomeScreen: String get() = part5.planCardHomeScreen
+    val planCardMeterLabels: Map<String, String> get() = part5.planCardMeterLabels
+    val planCardMeterUnits: Map<String, String> get() = part5.planCardMeterUnits
+    val planCardMeters: List<String> get() = part5.planCardMeters
+    val planCardScreenContexts: Map<String, String> get() = part5.planCardScreenContexts
+    val planCardWarningShare: Double get() = part5.planCardWarningShare
     val posCashEventLabels: Map<String, String> get() = part5.posCashEventLabels
     val posDisplayMaxLines: Long get() = part5.posDisplayMaxLines
     val posDisplayPairingTtlMs: Double get() = part5.posDisplayPairingTtlMs
@@ -3748,15 +3766,15 @@ class ContractValues internal constructor(
     val posOfflineSyncBatchMax: Long get() = part5.posOfflineSyncBatchMax
     val posOfflineSyncRoute: String get() = part5.posOfflineSyncRoute
     val posTenderLabels: Map<String, String> get() = part5.posTenderLabels
-    val priceRangeMaxLength: Long get() = part5.priceRangeMaxLength
-    val printerBrandLabels: Map<String, String> get() = part5.printerBrandLabels
-    val printerBrands: List<PrinterBrand> get() = part5.printerBrands
-    val printerModelSuggestions: Map<String, List<String>> get() = part5.printerModelSuggestions
-    val printerOfflineAfterMs: Double get() = part5.printerOfflineAfterMs
-    val printerStateLabels: Map<String, String> get() = part5.printerStateLabels
-    val productListBase: List<ListQueryFilter> get() = part5.productListBase
-    val productListHeaders: Map<String, String> get() = part5.productListHeaders
-    val productListOptions: Map<String, List<ListFilterOption>> get() = part5.productListOptions
+    val priceRangeMaxLength: Long get() = part6.priceRangeMaxLength
+    val printerBrandLabels: Map<String, String> get() = part6.printerBrandLabels
+    val printerBrands: List<PrinterBrand> get() = part6.printerBrands
+    val printerModelSuggestions: Map<String, List<String>> get() = part6.printerModelSuggestions
+    val printerOfflineAfterMs: Double get() = part6.printerOfflineAfterMs
+    val printerStateLabels: Map<String, String> get() = part6.printerStateLabels
+    val productListBase: List<ListQueryFilter> get() = part6.productListBase
+    val productListHeaders: Map<String, String> get() = part6.productListHeaders
+    val productListOptions: Map<String, List<ListFilterOption>> get() = part6.productListOptions
     val productListQuery: ListQueryDeclaration get() = part6.productListQuery
     val productListSelectFields: List<String> get() = part6.productListSelectFields
     val railAllWorkspacesAtMost: Long get() = part6.railAllWorkspacesAtMost
@@ -3796,15 +3814,15 @@ class ContractValues internal constructor(
     val submissionReadOptions: List<ListFilterOption> get() = part6.submissionReadOptions
     val suppressionListQuery: ListQueryDeclaration get() = part6.suppressionListQuery
     val taskListDeclaration: ListQueryDeclaration get() = part6.taskListDeclaration
-    val templateKindOptions: List<ListFilterOption> get() = part6.templateKindOptions
-    val templateListBase: List<ListQueryFilter> get() = part6.templateListBase
-    val templateListQuery: ListQueryDeclaration get() = part6.templateListQuery
-    val tenantEmailCollection: String get() = part6.tenantEmailCollection
-    val tenantEmails: List<TenantEmailEntry> get() = part6.tenantEmails
-    val themeAccentSwatches: List<ThemeAccentSwatch> get() = part6.themeAccentSwatches
-    val themeAccents: List<ThemeNamedAccent> get() = part6.themeAccents
-    val themeConsoleFields: List<String> get() = part6.themeConsoleFields
-    val themeDarkRailSeeds: Map<String, String> get() = part6.themeDarkRailSeeds
+    val templateKindOptions: List<ListFilterOption> get() = part7.templateKindOptions
+    val templateListBase: List<ListQueryFilter> get() = part7.templateListBase
+    val templateListQuery: ListQueryDeclaration get() = part7.templateListQuery
+    val tenantEmailCollection: String get() = part7.tenantEmailCollection
+    val tenantEmails: List<TenantEmailEntry> get() = part7.tenantEmails
+    val themeAccentSwatches: List<ThemeAccentSwatch> get() = part7.themeAccentSwatches
+    val themeAccents: List<ThemeNamedAccent> get() = part7.themeAccents
+    val themeConsoleFields: List<String> get() = part7.themeConsoleFields
+    val themeDarkRailSeeds: Map<String, String> get() = part7.themeDarkRailSeeds
     val themeDensities: List<ThemeDensity> get() = part7.themeDensities
     val themeFigmaBase: ThemeColorsPair get() = part7.themeFigmaBase
     val themeNonTextContrast: Long get() = part7.themeNonTextContrast

@@ -25979,6 +25979,543 @@
         }
       ]
     },
+    "planCardContext": {
+      "module": "libs/aglyn/src/lib/app-utils/plan-card-meters.ts",
+      "cases": [
+        {
+          "args": [
+            "shell.home",
+            true
+          ],
+          "result": "website"
+        },
+        {
+          "args": [
+            "shell.home",
+            false
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "site.media",
+            false
+          ],
+          "result": "media"
+        },
+        {
+          "args": [
+            "site.pages",
+            true
+          ],
+          "result": "website"
+        },
+        {
+          "args": [
+            "core.team",
+            false
+          ],
+          "result": "team"
+        },
+        {
+          "args": [
+            "core.site.users",
+            true
+          ],
+          "result": "team"
+        },
+        {
+          "args": [
+            "site.sites",
+            false
+          ],
+          "result": "sites"
+        },
+        {
+          "args": [
+            "commerce.orders",
+            true
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            true
+          ],
+          "result": null
+        }
+      ]
+    },
+    "planCardMeterOrder": {
+      "module": "libs/aglyn/src/lib/app-utils/plan-card-meters.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            "media"
+          ],
+          "result": [
+            "storage",
+            "bandwidth",
+            "emailSends",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            "email"
+          ],
+          "result": [
+            "emailSends",
+            "bandwidth",
+            "storage",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            null
+          ],
+          "result": [
+            "bandwidth",
+            "storage",
+            "emailSends",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            "sites"
+          ],
+          "result": [
+            "sites",
+            "bandwidth",
+            "storage",
+            "emailSends"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            "ai"
+          ],
+          "result": [
+            "bandwidth",
+            "storage",
+            "emailSends",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            "website"
+          ],
+          "result": [
+            "bandwidth",
+            "storage",
+            "emailSends",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 3,
+                "limit": 3
+              },
+              {
+                "meter": "storage",
+                "used": 400,
+                "limit": 1000
+              },
+              {
+                "meter": "bandwidth",
+                "used": 9,
+                "limit": 10
+              },
+              {
+                "meter": "emailSends",
+                "used": 100,
+                "limit": 1000
+              },
+              {
+                "meter": "aiCredits",
+                "used": null,
+                "limit": 500
+              },
+              {
+                "meter": "dataStorage",
+                "used": 5,
+                "limit": null
+              }
+            ],
+            "unknown"
+          ],
+          "result": [
+            "bandwidth",
+            "storage",
+            "emailSends",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "pages",
+                "used": 2,
+                "limit": 0
+              },
+              {
+                "meter": "forms",
+                "used": 1,
+                "limit": 2
+              }
+            ],
+            null
+          ],
+          "result": [
+            "forms"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "forms",
+                "used": 1,
+                "limit": 2
+              },
+              {
+                "meter": "storage",
+                "used": 5,
+                "limit": 10
+              },
+              {
+                "meter": "storage",
+                "used": 9,
+                "limit": 10
+              }
+            ],
+            "team"
+          ],
+          "result": [
+            "storage",
+            "forms"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "seats",
+                "used": 2,
+                "limit": 3
+              },
+              {
+                "meter": "pages",
+                "used": 8,
+                "limit": 10
+              },
+              {
+                "meter": "aiCredits",
+                "used": 450,
+                "limit": 500
+              },
+              {
+                "meter": "sites",
+                "used": 1,
+                "limit": 1
+              }
+            ],
+            "team"
+          ],
+          "result": [
+            "seats",
+            "aiCredits",
+            "pages",
+            "sites"
+          ]
+        },
+        {
+          "args": [
+            [],
+            "media"
+          ],
+          "result": []
+        }
+      ]
+    },
+    "planCardShows": {
+      "module": "libs/aglyn/src/lib/app-utils/plan-card-meters.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "meter": "storage",
+                "used": 1,
+                "limit": 100
+              }
+            ],
+            true
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "storage",
+                "used": 1,
+                "limit": 100
+              }
+            ],
+            false
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "storage",
+                "used": 80,
+                "limit": 100
+              }
+            ],
+            false
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "storage",
+                "used": null,
+                "limit": 100
+              }
+            ],
+            true
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            [
+              {
+                "meter": "sites",
+                "used": 1,
+                "limit": null
+              }
+            ],
+            true
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            [],
+            true
+          ],
+          "result": false
+        }
+      ]
+    },
     "planDatasetRecordQuery": {
       "module": "libs/plugins/data/src/lib/components/dataset-record-filter.ts",
       "cases": [
