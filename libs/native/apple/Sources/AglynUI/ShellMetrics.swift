@@ -20,6 +20,8 @@ public enum AglynShellMetrics {
     public static let railBar = CGSize(width: 3, height: 18)
     /// The initials on a tile without a logo.
     public static let tileInitials: CGFloat = 13
+    /// A logo's box on its tile's paper plate (Figma Rail/Workspace tile, Type=Logo, Compact 97:899: 22 on 32).
+    public static let tileLogo: CGFloat = 22
     /// The account photo at the rail's foot.
     public static let avatar: CGFloat = 24
     /// The rail's section labels ("PINNED").
@@ -81,6 +83,8 @@ public enum AglynShellMetrics {
     public static let ringBox: CGFloat = 48
     public static let railBar = CGSize(width: 3, height: 22)
     public static let tileInitials: CGFloat = 15
+    /// A logo's box on its tile's paper plate (Figma Rail/Workspace tile, Type=Logo, Touch 5:47: 28 on 40).
+    public static let tileLogo: CGFloat = 28
     public static let avatar: CGFloat = 32
     public static let railCaption: CGFloat = 10
     public static let railGap: CGFloat = 8
