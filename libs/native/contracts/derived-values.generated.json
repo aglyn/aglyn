@@ -22,7 +22,11 @@
       "abandonedCart": false,
       "productReviews": false,
       "dropshipRouting": false,
-      "contentGating": false
+      "contentGating": false,
+      "crm": false,
+      "commerce": false,
+      "bookings": false,
+      "eventCalendar": false
     },
     "starter": {
       "marketingOverlays": true,
@@ -35,7 +39,11 @@
       "abandonedCart": false,
       "productReviews": false,
       "dropshipRouting": false,
-      "contentGating": false
+      "contentGating": false,
+      "crm": true,
+      "commerce": true,
+      "bookings": true,
+      "eventCalendar": false
     },
     "pro": {
       "marketingOverlays": true,
@@ -48,7 +56,11 @@
       "abandonedCart": true,
       "productReviews": true,
       "dropshipRouting": true,
-      "contentGating": false
+      "contentGating": false,
+      "crm": true,
+      "commerce": true,
+      "bookings": true,
+      "eventCalendar": false
     },
     "business": {
       "marketingOverlays": true,
@@ -61,7 +73,11 @@
       "abandonedCart": true,
       "productReviews": true,
       "dropshipRouting": true,
-      "contentGating": true
+      "contentGating": true,
+      "crm": true,
+      "commerce": true,
+      "bookings": true,
+      "eventCalendar": false
     },
     "scale": {
       "marketingOverlays": true,
@@ -74,7 +90,11 @@
       "abandonedCart": true,
       "productReviews": true,
       "dropshipRouting": true,
-      "contentGating": true
+      "contentGating": true,
+      "crm": true,
+      "commerce": true,
+      "bookings": true,
+      "eventCalendar": false
     },
     "advanced": {
       "marketingOverlays": true,
@@ -87,7 +107,11 @@
       "abandonedCart": true,
       "productReviews": true,
       "dropshipRouting": true,
-      "contentGating": true
+      "contentGating": true,
+      "crm": true,
+      "commerce": true,
+      "bookings": true,
+      "eventCalendar": false
     },
     "agency": {
       "marketingOverlays": true,
@@ -100,7 +124,11 @@
       "abandonedCart": true,
       "productReviews": true,
       "dropshipRouting": true,
-      "contentGating": true
+      "contentGating": true,
+      "crm": true,
+      "commerce": true,
+      "bookings": true,
+      "eventCalendar": false
     },
     "enterprise": {
       "marketingOverlays": true,
@@ -113,7 +141,11 @@
       "abandonedCart": true,
       "productReviews": true,
       "dropshipRouting": true,
-      "contentGating": true
+      "contentGating": true,
+      "crm": true,
+      "commerce": true,
+      "bookings": true,
+      "eventCalendar": false
     }
   },
   "grantedFrom": {
@@ -126,7 +158,10 @@
     "abandonedCart": "Pro",
     "productReviews": "Pro",
     "dropshipRouting": "Pro",
-    "contentGating": "Business"
+    "contentGating": "Business",
+    "crm": "Starter",
+    "commerce": "Starter",
+    "bookings": "Starter"
   },
   "cases": [
     {
@@ -208,6 +243,34 @@
     },
     {
       "org": {
+        "plan": "free"
+      },
+      "feature": "crm",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free"
+      },
+      "feature": "commerce",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free"
+      },
+      "feature": "bookings",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free"
+      },
+      "feature": "eventCalendar",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "starter"
       },
       "feature": "marketingOverlays",
@@ -285,6 +348,34 @@
     },
     {
       "org": {
+        "plan": "starter"
+      },
+      "feature": "crm",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter"
+      },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter"
+      },
+      "feature": "bookings",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter"
+      },
+      "feature": "eventCalendar",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "pro"
       },
       "feature": "marketingOverlays",
@@ -362,6 +453,34 @@
     },
     {
       "org": {
+        "plan": "pro"
+      },
+      "feature": "crm",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "pro"
+      },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "pro"
+      },
+      "feature": "bookings",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "pro"
+      },
+      "feature": "eventCalendar",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "business"
       },
       "feature": "marketingOverlays",
@@ -439,6 +558,34 @@
     },
     {
       "org": {
+        "plan": "business"
+      },
+      "feature": "crm",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business"
+      },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business"
+      },
+      "feature": "bookings",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business"
+      },
+      "feature": "eventCalendar",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "enterprise"
       },
       "feature": "marketingOverlays",
@@ -516,6 +663,34 @@
     },
     {
       "org": {
+        "plan": "enterprise"
+      },
+      "feature": "crm",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise"
+      },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise"
+      },
+      "feature": "bookings",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise"
+      },
+      "feature": "eventCalendar",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "nonsense"
       },
       "feature": "marketingOverlays",
@@ -593,6 +768,34 @@
     },
     {
       "org": {
+        "plan": "nonsense"
+      },
+      "feature": "crm",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "nonsense"
+      },
+      "feature": "commerce",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "nonsense"
+      },
+      "feature": "bookings",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "nonsense"
+      },
+      "feature": "eventCalendar",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "business",
         "billingStatus": "canceled"
       },
@@ -682,6 +885,38 @@
     {
       "org": {
         "plan": "business",
+        "billingStatus": "canceled"
+      },
+      "feature": "crm",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "canceled"
+      },
+      "feature": "commerce",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "canceled"
+      },
+      "feature": "bookings",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "canceled"
+      },
+      "feature": "eventCalendar",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "business",
         "billingStatus": "past_due"
       },
       "feature": "marketingOverlays",
@@ -769,6 +1004,38 @@
     },
     {
       "org": {
+        "plan": "business",
+        "billingStatus": "past_due"
+      },
+      "feature": "crm",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "past_due"
+      },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "past_due"
+      },
+      "feature": "bookings",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "past_due"
+      },
+      "feature": "eventCalendar",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "pro",
         "subscription": {
           "status": "unpaid"
@@ -879,6 +1146,46 @@
     },
     {
       "org": {
+        "plan": "pro",
+        "subscription": {
+          "status": "unpaid"
+        }
+      },
+      "feature": "crm",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "pro",
+        "subscription": {
+          "status": "unpaid"
+        }
+      },
+      "feature": "commerce",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "pro",
+        "subscription": {
+          "status": "unpaid"
+        }
+      },
+      "feature": "bookings",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "pro",
+        "subscription": {
+          "status": "unpaid"
+        }
+      },
+      "feature": "eventCalendar",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "free",
         "entitlements": {
           "planComp": {
@@ -1008,6 +1315,54 @@
       },
       "feature": "contentGating",
       "result": true
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "crm",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "bookings",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "eventCalendar",
+      "result": false
     },
     {
       "org": {
@@ -1155,6 +1510,58 @@
     {
       "org": {
         "plan": "starter",
+        "billingStatus": "active",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "crm",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "active",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "active",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "bookings",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "active",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "eventCalendar",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "starter",
         "billingStatus": "canceled",
         "entitlements": {
           "planComp": {
@@ -1297,6 +1704,58 @@
     },
     {
       "org": {
+        "plan": "starter",
+        "billingStatus": "canceled",
+        "entitlements": {
+          "planComp": {
+            "plan": "pro"
+          }
+        }
+      },
+      "feature": "crm",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "canceled",
+        "entitlements": {
+          "planComp": {
+            "plan": "pro"
+          }
+        }
+      },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "canceled",
+        "entitlements": {
+          "planComp": {
+            "plan": "pro"
+          }
+        }
+      },
+      "feature": "bookings",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "canceled",
+        "entitlements": {
+          "planComp": {
+            "plan": "pro"
+          }
+        }
+      },
+      "feature": "eventCalendar",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "free",
         "entitlements": {
           "features": {
@@ -1440,6 +1899,58 @@
     },
     {
       "org": {
+        "plan": "free",
+        "entitlements": {
+          "features": {
+            "abTesting": true,
+            "outreach": true
+          }
+        }
+      },
+      "feature": "crm",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "features": {
+            "abTesting": true,
+            "outreach": true
+          }
+        }
+      },
+      "feature": "commerce",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "features": {
+            "abTesting": true,
+            "outreach": true
+          }
+        }
+      },
+      "feature": "bookings",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "features": {
+            "abTesting": true,
+            "outreach": true
+          }
+        }
+      },
+      "feature": "eventCalendar",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "enterprise",
         "entitlements": {
           "features": {
@@ -1569,6 +2080,54 @@
       },
       "feature": "contentGating",
       "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise",
+        "entitlements": {
+          "features": {
+            "marketingOverlays": false
+          }
+        }
+      },
+      "feature": "crm",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise",
+        "entitlements": {
+          "features": {
+            "marketingOverlays": false
+          }
+        }
+      },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise",
+        "entitlements": {
+          "features": {
+            "marketingOverlays": false
+          }
+        }
+      },
+      "feature": "bookings",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise",
+        "entitlements": {
+          "features": {
+            "marketingOverlays": false
+          }
+        }
+      },
+      "feature": "eventCalendar",
+      "result": false
     }
   ],
   "goalEvents": [
