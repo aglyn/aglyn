@@ -119,6 +119,7 @@ describe('the routes are WIRED to it', () => {
     'admin/finish-domain-attachments',
     'admin/consent-group-changes',
     'admin/operator-alerts/tick',
+    'admin/site-care/reconcile',
   ]
 
   it.each(guarded)('%s calls the shared helper', (route) => {

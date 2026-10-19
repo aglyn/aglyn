@@ -222,6 +222,11 @@ export * from './health-report'
 // `health-report`, whose billing verdict consumes the counts this produces.
 export * from './webhook-delivery'
 export * from './support-tiers'
+// Site Care requests (AGL-3959): the arithmetic, and the two modules any
+// staff-recorded, approval-gated charge reuses (AGL-3970).
+export * from './site-care'
+export * from './owner-approval-record'
+export * from './append-only-history'
 export * from './release-flags'
 // Who runs THIS deployment, and where its notices go (AGL-2016). Ordered
 // before the four surfaces that print it, all of which used to declare their

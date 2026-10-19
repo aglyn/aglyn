@@ -127,8 +127,9 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
       // summary's workspace and site emails in AGL-3867 — the five
       // getting-started emails (AGL-3692), and one per risk notice kind plus the risk
       // digest and review acknowledgment (AGL-3368, pinned in
-      // `risk-notice-catalog.spec.ts`).
-      expect(editable.length).toBe(31 + 5 + RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length)
+      // `risk-notice-catalog.spec.ts`), and the eight Site Care emails
+      // (AGL-3959).
+      expect(editable.length).toBe(31 + 5 + 8 + RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length)
       for (const entry of SYSTEM_EMAIL_TEMPLATES) {
         if (isSystemEmailEditable(entry)) {
           expect(entry.footerReason?.startsWith('You’re receiving this')).toBe(true)

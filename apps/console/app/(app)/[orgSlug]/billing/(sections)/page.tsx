@@ -133,6 +133,8 @@ import { useOrgSlug } from '../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import useCurrentOrg from '../../../../../hooks/use-current-org'
+import SiteCareBillingCard from '../../../../../components/site-care/site-care-billing-card.component'
+import { hasSiteCare } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import useConfirmedDoc from '../../../../../hooks/use-confirmed-doc'
 import useOrgPermissions from '../../../../../hooks/use-org-permissions'
 
@@ -163,6 +165,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     () => mergeOrgBillingOverOrg(orgDoc as Record<string, unknown>, orgBilling),
     [orgDoc, orgBilling],
   )
+  // Whether Site Care is in force (AGL-3959), for its card below the add-ons.
+  const siteCareOn = hasSiteCare(org as never)
   const {
     permissions,
     can,
@@ -1758,6 +1762,16 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                             </Box>
                     ),
                   },
+                  // Site Care's month (AGL-3959): requests, minutes of the
+                  // included hour, extra time billed, and what was recorded.
+                  ...(orgId && siteCareOn && can('billing.view')
+                    ? [
+                        {
+                          size: { xs: 12 },
+                          children: <SiteCareBillingCard orgId={orgId} />,
+                        },
+                      ]
+                    : []),
                   {
                     size: { xs: 12 },
                     children: (

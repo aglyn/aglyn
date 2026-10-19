@@ -78,6 +78,7 @@ import { BRAND } from '@aglyn/shared-data-enums/aglyn'
 import { EMAIL_NODE_ROOT_ID } from './email-render'
 import { RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES } from './risk-notice-emails'
 import { retentionSystemEmailTemplates } from './retention-emails'
+import { SITE_CARE_SYSTEM_EMAIL_TEMPLATES } from './site-care-emails'
 import { welcomeEmailMergeValues } from './welcome-email'
 
 /** The welcome email's next steps, as a new workspace's owner gets them. */
@@ -1705,6 +1706,8 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
     ...BASE_SYSTEM_EMAIL_TEMPLATES,
     ...RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES,
     ...retentionSystemEmailTemplates(SAMPLE_CONSOLE_ORIGIN, SAMPLE_DOCS_ORIGIN),
+    // Site Care requests (AGL-3959), beside their own sender's notes.
+    ...SITE_CARE_SYSTEM_EMAIL_TEMPLATES,
   ].map((entry) => ({
     ...entry,
     mergeTokens: [...entry.mergeTokens, ...BRAND_MERGE_TOKENS],

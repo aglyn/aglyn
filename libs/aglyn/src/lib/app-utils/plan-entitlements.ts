@@ -1154,6 +1154,26 @@ export const EVENT_CALENDAR_ADDON_MONTHLY_USD = 9
 export const SITE_CARE_ADDON_MONTHLY_USD = 49
 
 /**
+ * Site Care's included time (AGL-3959): about an hour of staff work a month,
+ * no rollover. `SITE_CARE_INCLUDED_BLOCK_MINUTES` is the step each request is
+ * counted against it in, always rounded up — a 10-minute change uses one
+ * 15-minute block. The timer's actual minutes are still logged beside it.
+ */
+export const SITE_CARE_INCLUDED_MINUTES = 60
+
+/** The block a request counts against the included hour in (AGL-3959). */
+export const SITE_CARE_INCLUDED_BLOCK_MINUTES = 15
+
+/**
+ * Site Care extra time (AGL-3959): $79 per STARTED hour past the included
+ * hour in a month. Billed in whole hours, rounded up — any part of an hour is
+ * the full rate — and never less than the hours the owner approved. Only with
+ * the owner's recorded yes, as an invoice item on the next subscription
+ * invoice; never recurring. `site-care.ts` holds the arithmetic.
+ */
+export const SITE_CARE_EXTRA_HOUR_USD = 79
+
+/**
  * POS Pro register add-on (AGL-329): $89/mo per extra register/location
  * (Shopify POS Pro parity). Purchased add-ons land as a per-org
  * `posRegisters` entitlement override, which
