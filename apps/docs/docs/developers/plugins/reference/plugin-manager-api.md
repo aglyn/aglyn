@@ -1959,6 +1959,45 @@ A video is served from the provider only when the `release_video_delivery` flag,
 off by default, is on for its org and a copy of its current bytes exists;
 everything else serves from the platform exactly as before.
 
+## Domain search — `plugin-domain-search` (`/server`)
+
+A slot one plugin holds (`core.domain-search`, built on the service contracts
+above): searching for a domain name to register. Its one caller is the staff
+console's client build, whose Domain step shows the names found with the
+first-year and renewal price side by side and records the pick for the owner
+to buy after they subscribe. Core asks through the slot and never imports the
+plugin that talks to a registrar. Register it from a `consoleServerDeclarations`
+entry. Search only: nothing here buys, holds or reserves a name.
+
+```ts
+registerPluginDomainSearch({
+  async search(query) {
+    if (!registrarConfigured()) return null      // nothing to search with here
+    return (await registrar.check(query)).map((hit) => ({
+      name: hit.domain,                          // lower-cased by core
+      available: hit.available,
+      firstYearUsd: hit.firstYear,               // what the owner will be charged
+      renewalUsd: hit.renewal,
+      premium: hit.premium,
+    }))
+  },
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginDomainSearch(impl, { pluginId? })` | Fills the slot. A single-implementation contract: a second plugin's implementation throws naming both. |
+| `domainSearchRegistered()` | Whether a plugin offers search in this process. The Domain step shows **Find a domain to buy** only when it does; otherwise it offers the free address and a domain the owner already has. |
+| `searchDomains(query)` | `{ status: 'ok', results }`, `{ status: 'unavailable' }` (no plugin, or `search` answered `null`) or `{ status: 'failed' }` (`search` threw), never thrown. Results missing a name, an availability or a finite, non-negative price are dropped. |
+
+`impl.search(query)` returns the exact name when the query is one plus close
+alternatives, each `{ name, available, firstYearUsd, renewalUsd, premium? }`
+in US dollars, or `null` when no registrar is configured in this deployment.
+It may throw; the caller reports a failed search, never a partial one. The
+query is a business name said aloud at a booth, so core never logs it, and the
+staff route that calls the slot allows each staff account a limited number of
+searches a minute.
+
 ## Site analytics tags — `analytics-provider`
 
 A site can send its visitors' measurement to an analytics vendor it chose, by

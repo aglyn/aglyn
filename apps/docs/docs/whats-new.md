@@ -10,7 +10,17 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## October 2026 — a client's workspace is comped as it is created (newest)
+## October 2026 — build a client's site on one phone screen (newest)
+
+- **[The client build screen](staff-console/overview.md#client-build-screen)** —
+  staff building a site for a prospect, at a booth or on a doorstep, do it all on
+  one screen from their phone: the business details, a domain (the free address,
+  one they already have, or one to buy later, with its first-year and renewal
+  price), the owner's photos by QR code, the site built by Aglyn AI's guided start
+  (or the starter site), and the preview sent to the owner by text and email once
+  the site is published. It picks up where it left off after a reload.
+
+## October 2026 — a client's workspace is comped as it is created
 
 - **[Build a site for a client](staff-console/overview.md#build-for-a-client)** —
   staff creating a workspace for a prospect turn on **Build for a client** in the
