@@ -106,7 +106,7 @@ struct AiAssistPanel: View {
           .lineLimit(1...4)
           .onSubmit { ask(question) }
           .padding(10)
-          .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(AglynColor.page))
+          .background(RoundedRectangle(cornerRadius: AglynRadius.card, style: .continuous).fill(AglynColor.page))
           .accessibilityIdentifier("assist-field")
         Button {
           ask(question)
@@ -175,7 +175,7 @@ struct AiAssistPanel: View {
     }
     .padding(10)
     .background(
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
+      RoundedRectangle(cornerRadius: AglynRadius.card, style: .continuous)
         .fill(mine ? AglynColor.primary.opacity(0.14) : AglynColor.page))
     .frame(maxWidth: 520, alignment: .leading)
     .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)

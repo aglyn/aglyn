@@ -25,8 +25,19 @@ public struct AglynSurfaces: Sendable {
   public let border: Color
   public let textPrimary: Color
   public let textSecondary: Color
+  /// The window's title bar (Figma Mac/Titlebar).
+  public let titlebar: Color
+  /// A recessed field's ground (the title bar's search, the site picker).
+  public let sunken: Color
+  /// A row under the pointer.
+  public let hover: Color
+  /// Captions and placeholders.
+  public let textTertiary: Color
 
-  public init(canvas: Color, surface: Color, rail: Color, railText: Color, border: Color, textPrimary: Color, textSecondary: Color) {
+  public init(
+    canvas: Color, surface: Color, rail: Color, railText: Color, border: Color, textPrimary: Color, textSecondary: Color,
+    titlebar: Color? = nil, sunken: Color? = nil, hover: Color? = nil, textTertiary: Color? = nil
+  ) {
     self.canvas = canvas
     self.surface = surface
     self.rail = rail
@@ -34,6 +45,22 @@ public struct AglynSurfaces: Sendable {
     self.border = border
     self.textPrimary = textPrimary
     self.textSecondary = textSecondary
+    self.titlebar = titlebar ?? surface
+    self.sunken = sunken ?? canvas
+    self.hover = hover ?? canvas
+    self.textTertiary = textTertiary ?? textSecondary
+  }
+}
+
+/// The accent's two shades the intents do not carry (`ThemeAccent.soft` and `.icon`): a selected row's fill, and an
+/// icon on it.
+public struct AglynAccentShades: Sendable {
+  public let soft: Color
+  public let icon: Color
+
+  public init(soft: Color, icon: Color) {
+    self.soft = soft
+    self.icon = icon
   }
 }
 
@@ -79,6 +106,7 @@ public final class AglynThemeRuntime: @unchecked Sendable {
   private var spec = AglynThemeSpec.console
   /// The accent's derived shades, light and dark; nil keeps the console's own primary.
   private var accent: (light: AglynIntent, dark: AglynIntent)?
+  private var shades: (light: AglynAccentShades, dark: AglynAccentShades)?
   private var compact = false
   private var tintedSidebar = true
   private var scale: CGFloat = 1
@@ -88,12 +116,14 @@ public final class AglynThemeRuntime: @unchecked Sendable {
   /// Applies a choice: the theme's surfaces and its accent's shades for each appearance (both from the theme contract,
   /// `THEME_PALETTES` and `deriveAccent`).
   public func apply(
-    theme: AglynThemeSpec, accent: (light: AglynIntent, dark: AglynIntent)?, compact: Bool, tintedSidebar: Bool,
+    theme: AglynThemeSpec, accent: (light: AglynIntent, dark: AglynIntent)?,
+    shades: (light: AglynAccentShades, dark: AglynAccentShades)? = nil, compact: Bool, tintedSidebar: Bool,
     textScale: CGFloat
   ) {
     lock.withLock {
       spec = theme
       self.accent = accent
+      self.shades = shades
       self.compact = compact
       self.tintedSidebar = tintedSidebar
       scale = textScale
@@ -112,6 +142,11 @@ public final class AglynThemeRuntime: @unchecked Sendable {
   /// The accent's intent for an appearance, or nil for the console's own primary.
   func accentIntent(dark: Bool) -> AglynIntent? {
     lock.withLock { accent.map { dark || spec.alwaysDark ? $0.dark : $0.light } }
+  }
+
+  /// The accent's soft fill and icon shade for an appearance, or nil before a theme is applied.
+  func accentShades(dark: Bool) -> AglynAccentShades? {
+    lock.withLock { shades.map { dark || spec.alwaysDark ? $0.dark : $0.light } }
   }
 
   /// Whether the theme is dark in both appearances.

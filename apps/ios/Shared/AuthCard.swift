@@ -81,7 +81,7 @@ struct AuthCard<Content: View, Footer: View, Accessory: View>: View {
   }
 
   private func card(compact: Bool) -> some View {
-    let shape = RoundedRectangle(cornerRadius: M.cardRadius, style: .continuous)
+    let shape = RoundedRectangle(cornerRadius: AglynAuthDensity.cardRadius, style: .continuous)
     return VStack(alignment: .leading, spacing: compact ? M.cardSpacingCompact : M.cardSpacingRegular) {
       if let systemImage {
         Image(systemName: systemImage)

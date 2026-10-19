@@ -153,7 +153,6 @@ struct ShellFrame<Content: View>: View {
 struct WideShell: View {
   @Environment(AppModel.self) private var model
   @Bindable var navigation: ShellNavigation
-  @State private var columns: NavigationSplitViewVisibility = .all
   @State private var unreadFeed = NotificationFeed()
 
   /// Unread notifications, by workspace: the rail's badges.
@@ -167,31 +166,27 @@ struct WideShell: View {
   }
 
   var body: some View {
-    NavigationSplitView(columnVisibility: $columns) {
-      HStack(spacing: 0) {
-        WorkspaceRail(unread: unreadByOrg)
-        Divider()
+    // One flush row of columns under the title bar (Figma Mac 13:483): the rail, the sidebar with a hairline after it,
+    // and the place in use. Not a split view: its sidebar floats as an inset card the design does not have.
+    HStack(spacing: 0) {
+      WorkspaceRail(unread: unreadByOrg)
+      if !navigation.sidebarHidden {
         ShellSidebar()
           .background(workspaceTint)
+          .frame(width: AglynShellMetrics.sidebarWidth)
+          .overlay(alignment: .trailing) { Rectangle().fill(AglynColor.divider).frame(width: 1) }
+          .transition(.move(edge: .leading).combined(with: .opacity))
       }
-      #if os(iOS)
-        .toolbar(.hidden, for: .navigationBar)
-      #endif
-      #if os(macOS)
-        .navigationSplitViewColumnWidth(min: 300, ideal: WorkspaceRail.width + 252, max: 380)
-      #else
-        .navigationSplitViewColumnWidth(WorkspaceRail.width + 260)
-      #endif
-    } detail: {
       ShellStack(navigation: navigation, section: navigation.section)
         .id(navigation.section)
         .toolbar { TitleBarItems(unread: unreadFeed.rows?.filter { !$0.read }.count ?? 0) }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .inspector(isPresented: $navigation.showAssist) {
           AssistSlot()
             .inspectorColumnWidth(min: 300, ideal: 360, max: 480)
         }
     }
-    .navigationSplitViewStyle(.balanced)
+    .modifier(MacTitleBar())
     .task(id: "\(model.auth?.user?.uid ?? ""):\(model.refreshToken)") {
       unreadFeed.start(
         reader: model.reader, uid: model.auth?.user?.uid, count: 100, filter: NotificationFilter(status: .new))
@@ -205,6 +200,25 @@ struct WideShell: View {
     if color.tintsApp, let tint = Color(aglynHex: color.color) {
       tint.opacity(0.06)
     }
+  }
+}
+
+/// The Mac's title bar as Figma draws it: one plain bar in the theme's title-bar color across the window, with a
+/// hairline under it and no window title (the tabs and the place say where you are).
+struct MacTitleBar: ViewModifier {
+  func body(content: Content) -> some View {
+    #if os(macOS)
+      if #available(macOS 15.0, *) {
+        content
+          .toolbar(removing: .title)
+          .toolbarBackground(AglynColor.titlebar, for: .windowToolbar)
+          .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+      } else {
+        content.toolbarBackground(AglynColor.titlebar, for: .windowToolbar)
+      }
+    #else
+      content
+    #endif
   }
 }
 
@@ -398,88 +412,106 @@ struct TitleBarItems: ToolbarContent {
   var body: some ToolbarContent {
     @Bindable var navigation = navigation
     ToolbarItemGroup(placement: .navigation) {
-      Button {
-        navigation.goBack()
-      } label: {
-        Label("Back", systemImage: "chevron.left")
+      TitleBarButton("Show or hide the sidebar", systemImage: "sidebar.left", identifier: "titlebar-sidebar") {
+        withAnimation(.easeOut(duration: 0.2)) { navigation.sidebarHidden.toggle() }
       }
-      .disabled(!navigation.canGoBack)
-      .help("Back")
-      .accessibilityIdentifier("titlebar-back")
-      Button {
-        navigation.goForward()
-      } label: {
-        Label("Forward", systemImage: "chevron.right")
-      }
-      .disabled(!navigation.canGoForward)
-      .help("Forward")
-      .accessibilityIdentifier("titlebar-forward")
+      TitleBarButton("Back", systemImage: "chevron.left", identifier: "titlebar-back") { navigation.goBack() }
+        .disabled(!navigation.canGoBack)
+      TitleBarButton("Forward", systemImage: "chevron.right", identifier: "titlebar-forward") { navigation.goForward() }
+        .disabled(!navigation.canGoForward)
       RecentPlacesMenu()
     }
-    #if os(macOS)
-      // The Mac's toolbar draws its own control around an item and leaves out a custom-drawn field: a plain labeled
-      // button reads as the search field there.
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          navigation.showOneBox = true
-        } label: {
-          Label("Search or jump to  ⌘K", systemImage: "magnifyingglass").labelStyle(.titleAndIcon)
-        }
-        .help("Search or jump to (⌘K)")
-        .accessibilityLabel("Search or jump to")
-        .accessibilityIdentifier("titlebar-search")
-      }
-    #else
+    .aglynPlainToolbarBackground()
     ToolbarItem(placement: .primaryAction) {
-      Button {
-        navigation.showOneBox = true
-      } label: {
-        HStack(spacing: 8) {
-          Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-          Text("Search or jump to").foregroundStyle(.secondary)
-          Spacer(minLength: 24)
-          Text("⌘K").font(AglynFont.caption).foregroundStyle(.secondary)
-        }
-        .font(AglynFont.subheadline)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .frame(width: 240)
-        .background(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).fill(AglynColor.page))
-        .overlay(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).strokeBorder(AglynColor.divider))
-      }
-      .buttonStyle(.plain)
-      .help("Search or jump to (⌘K)")
-      .accessibilityLabel("Search or jump to")
-      .accessibilityIdentifier("titlebar-search")
+      TitleBarSearchField { navigation.showOneBox = true }
     }
-    #endif
-    ToolbarItem(placement: .primaryAction) { HelpMenuButton() }
-    ToolbarItem(placement: .primaryAction) {
-      if AssistSlot.available(model) {
-      Button {
-        navigation.showAssist.toggle()
-      } label: {
-        Label("\(model.brandName) AI", systemImage: "sparkles")
-      }
-      .keyboardShortcut("i", modifiers: [.command, .option])
-      .help("\(model.brandName) AI")
-      .accessibilityIdentifier("titlebar-ai")
-      }
-    }
-    ToolbarItem(placement: .primaryAction) {
-      Button {
-        navigation.showNotifications.toggle()
-      } label: {
-        Label(unread > 0 ? "Notifications, \(unread) unread" : "Notifications", systemImage: unread > 0 ? "bell.badge" : "bell")
-      }
-      .help("Notifications")
-      .accessibilityIdentifier("titlebar-bell")
+    .aglynPlainToolbarBackground()
+    // Figma Mac/Titlebar's actions, in its order: the bell, Help, the AI panel.
+    ToolbarItemGroup(placement: .primaryAction) {
+      TitleBarButton(
+        unread > 0 ? "Notifications, \(unread) unread" : "Notifications", systemImage: unread > 0 ? "bell.badge" : "bell",
+        identifier: "titlebar-bell"
+      ) { navigation.showNotifications.toggle() }
       .popover(isPresented: $navigation.showNotifications, arrowEdge: .bottom) {
         NotificationsPopover().environment(model).environment(navigation)
       }
+      HelpMenuButton()
+      if AssistSlot.available(model) {
+        TitleBarButton("\(model.brandName) AI", systemImage: "sparkles", identifier: "titlebar-ai") {
+          navigation.showAssist.toggle()
+        }
+        .keyboardShortcut("i", modifiers: [.command, .option])
+      }
     }
+    .aglynPlainToolbarBackground()
   }
 }
+
+/// A title-bar button (Figma Titlebar/Icon button): a line symbol in the secondary text color on a square that fills
+/// faintly under the pointer, with no glass of its own.
+struct TitleBarButton: View {
+  let title: String
+  let systemImage: String
+  let identifier: String
+  let action: () -> Void
+
+  init(_ title: String, systemImage: String, identifier: String, action: @escaping () -> Void) {
+    self.title = title
+    self.systemImage = systemImage
+    self.identifier = identifier
+    self.action = action
+  }
+
+  var body: some View {
+    Button(action: action) {
+      AglynBarSymbol(systemImage: systemImage)
+    }
+    .buttonStyle(.plain)
+    .help(title)
+    .accessibilityLabel(title)
+    .accessibilityIdentifier(identifier)
+  }
+}
+
+/// "Search or jump to ⌘K" in the title bar (Figma Titlebar/Search field): a recessed field that opens the one box.
+struct TitleBarSearchField: View {
+  let action: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Image(systemName: "magnifyingglass").font(.system(size: AglynShellMetrics.rowText - 1))
+        .foregroundStyle(AglynColor.textTertiary)
+      Text("Search or jump to").font(.system(size: AglynShellMetrics.rowText)).foregroundStyle(AglynColor.textTertiary)
+      Spacer(minLength: 8)
+      Text("⌘K").font(.system(size: AglynShellMetrics.rowText - 2, weight: .medium)).foregroundStyle(AglynColor.secondaryText)
+        .padding(.horizontal, 5).padding(.vertical, 1)
+        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(AglynColor.paper))
+        .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(AglynColor.divider))
+    }
+    .padding(.horizontal, 10)
+    .frame(width: Self.width, height: AglynShellMetrics.barButton)
+    .background(RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).fill(AglynColor.sunken))
+    .overlay(
+      RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).strokeBorder(AglynColor.divider))
+    .contentShape(Rectangle())
+    .onTapGesture(perform: action)
+    .help("Search or jump to (⌘K)")
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Search or jump to")
+    .accessibilityAddTraits(.isButton)
+    .accessibilityAction { action() }
+    .accessibilityIdentifier("titlebar-search")
+  }
+
+  static var width: CGFloat {
+    #if os(macOS)
+      300
+    #else
+      240
+    #endif
+  }
+}
+
 
 /// The recent places beside Back and Forward: what the person opened lately, from the account's recents.
 struct RecentPlacesMenu: View {
@@ -494,9 +526,13 @@ struct RecentPlacesMenu: View {
         Button(recentTitle(item)) { open(item) }
       }
     } label: {
-      Label("Recent", systemImage: "clock")
+      AglynBarSymbol(systemImage: "clock")
     }
+    .menuStyle(.button)
+    .buttonStyle(.plain)
     .menuIndicator(.hidden)
+    .fixedSize()
+    .accessibilityLabel("Recent")
     .help("Recent")
     .accessibilityIdentifier("titlebar-recent")
   }

@@ -40,10 +40,19 @@ enum ContractThemes {
     func color(_ hex: String) -> Color { Color(aglynCSS: hex) }
     return AglynSurfaces(
       canvas: color(colors.canvas), surface: color(colors.surface), rail: color(colors.rail), railText: color(railText),
-      border: color(colors.borderSubtle), textPrimary: color(colors.textPrimary), textSecondary: color(colors.textSecondary))
+      border: color(colors.borderSubtle), textPrimary: color(colors.textPrimary), textSecondary: color(colors.textSecondary),
+      titlebar: color(colors.titlebar), sunken: color(colors.sunken), hover: color(colors.hover),
+      textTertiary: color(colors.textTertiary))
   }
 
   /// An accent's shades for both appearances, or nil for a value that is not a color.
+  /// An accent's soft fill and icon shade, for both appearances.
+  static func shades(_ hex: String) -> (light: AglynAccentShades, dark: AglynAccentShades)? {
+    guard let accent = deriveAccent(hex) else { return nil }
+    let shades = AglynAccentShades(soft: Color(aglynCSS: accent.soft), icon: Color(aglynCSS: accent.icon))
+    return (shades, shades)
+  }
+
   static func accent(_ hex: String) -> (light: AglynIntent, dark: AglynIntent)? {
     guard let accent = deriveAccent(hex) else { return nil }
     func color(_ hex: String) -> Color { Color(aglynCSS: hex) }
@@ -99,7 +108,8 @@ enum ThemeApplier {
       }
     let spec = ContractThemes.spec(prefs.theme == .unknown ? "aglyn" : prefs.theme.rawValue)
     AglynThemeRuntime.shared.apply(
-      theme: spec, accent: ContractThemes.accent(accent ?? spec.accent), compact: prefs.density == .compact,
+      theme: spec, accent: ContractThemes.accent(accent ?? spec.accent),
+      shades: ContractThemes.shades(accent ?? spec.accent), compact: prefs.density == .compact,
       tintedSidebar: prefs.sidebarStyle != .plain, textScale: scale)
     return [prefs.theme.rawValue, accent ?? "theme", prefs.density.rawValue, prefs.sidebarStyle.rawValue, prefs.textSize.rawValue]
       .joined(separator: "|")

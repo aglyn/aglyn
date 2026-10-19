@@ -100,4 +100,23 @@ extension AglynColor {
   /// Text on a primary fill (a prominent button), the console's `primary.contrastText`.
   public static let primaryContrast = accent(\.contrastText)
   public static let divider = themed { AglynThemeRuntime.shared.surfaces(dark: $0).border }
+  /// The window's title bar.
+  public static let titlebar = themed { AglynThemeRuntime.shared.surfaces(dark: $0).titlebar }
+  /// A recessed field's ground.
+  public static let sunken = themed { AglynThemeRuntime.shared.surfaces(dark: $0).sunken }
+  /// A row under the pointer, from the theme.
+  public static let hover = themed { AglynThemeRuntime.shared.surfaces(dark: $0).hover }
+  /// Primary text, from the theme.
+  public static let textPrimary = themed { AglynThemeRuntime.shared.surfaces(dark: $0).textPrimary }
+  /// Captions and placeholders, from the theme.
+  public static let textTertiary = themed { AglynThemeRuntime.shared.surfaces(dark: $0).textTertiary }
+  /// A selected row's fill: the accent at 16%.
+  public static let accentSoft = themed { dark in
+    AglynThemeRuntime.shared.accentShades(dark: dark)?.soft
+      ?? (dark ? AglynTokens.dark.primary.main : AglynTokens.light.primary.main).opacity(0.16)
+  }
+  /// An icon on a selected row: the accent, readable at 3:1.
+  public static let accentIcon = themed { dark in
+    AglynThemeRuntime.shared.accentShades(dark: dark)?.icon ?? (dark ? AglynTokens.dark.primary.main : AglynTokens.light.primary.main)
+  }
 }

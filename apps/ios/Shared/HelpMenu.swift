@@ -73,9 +73,13 @@ struct HelpMenuButton: View {
     Menu {
       HelpMenuItems()
     } label: {
-      Label("Help", systemImage: "questionmark.circle")
+      AglynBarSymbol(systemImage: "questionmark.circle")
     }
+    .menuStyle(.button)
+    .buttonStyle(.plain)
     .menuIndicator(.hidden)
+    .fixedSize()
+    .accessibilityLabel("Help")
     .help("Help")
     .accessibilityIdentifier("titlebar-help")
   }

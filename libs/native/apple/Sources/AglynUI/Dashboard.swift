@@ -22,8 +22,22 @@ public enum AglynSpace {
 
 /// Corner radii: the console's radius for small controls, and the card radius built on it.
 public enum AglynRadius {
-  public static let control = AglynTokens.radius * 2
-  public static let card = AglynTokens.radius * 3
+  /// A control's rounding: 6 on the Mac (Figma's Compact density), 8 on touch screens.
+  public static var control: CGFloat {
+    #if os(macOS)
+      6
+    #else
+      AglynTokens.radius * 2
+    #endif
+  }
+  /// A card's rounding: 10 on the Mac, 12 on touch screens.
+  public static var card: CGFloat {
+    #if os(macOS)
+      10
+    #else
+      AglynTokens.radius * 3
+    #endif
+  }
 }
 
 extension View {

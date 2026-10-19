@@ -73,11 +73,11 @@ public struct AglynCountBadge: View {
   public var body: some View {
     if count > 0 {
       Text(count > 99 ? "99+" : "\(count)")
-        .font(.system(size: 10, weight: .bold, design: .rounded))
+        .font(.system(size: AglynShellMetrics.badge * 0.6, weight: .bold, design: .rounded))
         .monospacedDigit()
         .foregroundStyle(AglynColor.badgeText)
-        .padding(.horizontal, count > 9 ? 4 : 0)
-        .frame(minWidth: 17, minHeight: 17)
+        .padding(.horizontal, count > 9 ? 3 : 0)
+        .frame(minWidth: AglynShellMetrics.badge, minHeight: AglynShellMetrics.badge)
         .background(Capsule().fill(AglynColor.badge))
         .overlay(Capsule().strokeBorder(AglynColor.paper, lineWidth: 1.5))
         .accessibilityLabel("\(count) waiting")
@@ -98,7 +98,7 @@ public struct AglynWorkspaceTile: View {
 
   public init(
     name: String, logoURL: URL?, darkLogoURL: URL? = nil, colorHex: String?, selected: Bool, unread: Int = 0,
-    size: CGFloat = 40
+    size: CGFloat = AglynShellMetrics.tile
   ) {
     self.name = name
     self.logoURL = logoURL
@@ -109,7 +109,15 @@ public struct AglynWorkspaceTile: View {
     self.size = size
   }
 
-  private var radius: CGFloat { size * 0.25 }
+  /// The gap between a tile and its selection ring: half the ring box's extra width.
+  private var ringPadding: CGFloat {
+    size == AglynShellMetrics.tile ? (AglynShellMetrics.ringBox - AglynShellMetrics.tile) / 2 : 3
+  }
+
+  /// The rail's tile takes the shell's radius; any other size keeps the same proportion.
+  private var radius: CGFloat {
+    size == AglynShellMetrics.tile ? AglynShellMetrics.tileRadius : size * AglynShellMetrics.tileRadius / AglynShellMetrics.tile
+  }
 
   public var body: some View {
     ZStack(alignment: .topTrailing) {
@@ -121,11 +129,12 @@ public struct AglynWorkspaceTile: View {
         .overlay(
           RoundedRectangle(cornerRadius: radius, style: .continuous)
             .strokeBorder(AglynColor.divider, lineWidth: logoURL == nil ? 0 : 1))
-        .padding(3)
+        .padding(ringPadding)
+        // Selected: a 2-point ring in the accent on the ring box (the rail draws the 3-point bar at its edge).
         .overlay(
-          RoundedRectangle(cornerRadius: radius + 3, style: .continuous)
-            .strokeBorder(selected ? (Color(aglynHex: colorHex) ?? AglynColor.primary) : .clear, lineWidth: 2))
-      AglynCountBadge(unread).offset(x: 4, y: -4)
+          RoundedRectangle(cornerRadius: radius + ringPadding, style: .continuous)
+            .strokeBorder(selected ? AglynColor.accentIcon : .clear, lineWidth: 2))
+      AglynCountBadge(unread).offset(x: 3, y: -3)
     }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(name)
@@ -136,7 +145,11 @@ public struct AglynWorkspaceTile: View {
   private var initials: some View {
     let fill = Color(aglynHex: colorHex) ?? AglynColor.neutralTile
     return Text(aglynInitials(name))
-      .font(.system(size: size * (aglynInitials(name).count > 1 ? 0.36 : 0.44), weight: .semibold, design: .rounded))
+      .font(
+        .system(
+          size: size == AglynShellMetrics.tile
+            ? AglynShellMetrics.tileInitials : size * (aglynInitials(name).count > 1 ? 0.36 : 0.44),
+          weight: .semibold))
       .foregroundStyle(colorHex == nil || Color.aglynPrefersLightText(colorHex) ? AglynTokens.light.primary.contrastText : AglynTokens.light.text.primary)
       .frame(width: size, height: size)
       .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(fill))
@@ -150,7 +163,7 @@ public struct AglynRailButton: View {
   let filled: Bool
   let size: CGFloat
 
-  public init(systemImage: String, caption: String? = nil, filled: Bool = false, size: CGFloat = 40) {
+  public init(systemImage: String, caption: String? = nil, filled: Bool = false, size: CGFloat = AglynShellMetrics.tile) {
     self.systemImage = systemImage
     self.caption = caption
     self.filled = filled
@@ -160,14 +173,17 @@ public struct AglynRailButton: View {
   public var body: some View {
     VStack(spacing: 3) {
       Image(systemName: systemImage)
-        .font(.system(size: size * 0.42, weight: .semibold))
+        .font(.system(size: size == AglynShellMetrics.utility ? AglynShellMetrics.rowIcon - 2 : size * 0.42, weight: .semibold))
         .foregroundStyle(filled ? AglynColor.primaryContrast : AglynColor.railText)
         .frame(width: size, height: size)
         .background(
-          RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
-            .fill(filled ? AglynColor.tint : AglynColor.paper.opacity(0.7)))
+          RoundedRectangle(
+            cornerRadius: size == AglynShellMetrics.utility
+              ? AglynShellMetrics.controlRadius : size * AglynShellMetrics.tileRadius / AglynShellMetrics.tile,
+            style: .continuous)
+            .fill(filled ? AglynColor.primary : AglynColor.paper.opacity(0.7)))
       if let caption {
-        Text(caption).font(.system(size: 11, weight: .medium)).monospacedDigit()
+        Text(caption).font(.system(size: AglynShellMetrics.railCaption + 1, weight: .medium)).monospacedDigit()
           .foregroundStyle(AglynColor.railText).lineLimit(1)
       }
     }
@@ -217,21 +233,27 @@ public struct AglynSidebarGroupHeader: View {
       HStack(spacing: 6) {
         if foldable {
           Image(systemName: "chevron.right")
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: AglynShellMetrics.groupText - 2, weight: .semibold))
+            .foregroundStyle(AglynColor.textTertiary)
             .rotationEffect(.degrees(open ? 90 : 0))
-            .frame(width: 12)
+            .frame(width: AglynShellMetrics.groupText + 3)
         }
-        Text(title).font(AglynFont.strongSubheadline)
+        Text(title)
+          .font(.system(size: AglynShellMetrics.groupText + 1, weight: .semibold))
+          .foregroundStyle(AglynColor.secondaryText)
         Spacer(minLength: 4)
         if foldable && !open && hiddenCount > 0 {
-          Text("\(hiddenCount)").font(AglynFont.caption).monospacedDigit()
+          Text("\(hiddenCount)").font(.system(size: AglynShellMetrics.groupText + 1)).monospacedDigit()
+            .foregroundStyle(AglynColor.textTertiary)
         }
       }
-      .foregroundStyle(AglynColor.secondaryText)
+      .padding(.horizontal, 8)
+      .frame(maxWidth: .infinity, minHeight: AglynShellMetrics.groupHeight, alignment: .leading)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .disabled(!foldable)
+    .padding(.horizontal, AglynShellMetrics.rowInset)
     .accessibilityLabel(title)
     .accessibilityValue(foldable ? (open ? "Open" : "Folded") : "")
     .accessibilityHint(foldable ? (open ? "Folds the group" : "Opens the group") : "")

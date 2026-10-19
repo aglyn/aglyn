@@ -111,6 +111,8 @@ final class ShellNavigation {
   var showCreate = false
   /// The AI panel, docked on the right (a sheet on a phone).
   var showAssist = false
+  /// The sidebar folded away (the title bar's sidebar button), so the place in use takes the width.
+  var sidebarHidden = false
   /// The keyboard shortcuts sheet.
   var showShortcuts = false
   /// Bumped when this device's own theme changes (it is not on the account, so nothing else would redraw it).
