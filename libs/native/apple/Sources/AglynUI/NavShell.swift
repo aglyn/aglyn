@@ -191,10 +191,11 @@ public struct AglynRailButton: View {
 
   public var body: some View {
     if utility {
+      // Create new is filled; Admin is the bare outline (Figma Rail/Utility button, Kind=Admin 97:946 / 5:98).
       symbol
         .background(
-          RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .fill(filled ? AglynColor.primary : AglynColor.paper.opacity(0.7)))
+          RoundedRectangle(cornerRadius: radius, style: .continuous).fill(filled ? AglynColor.primary : Color.clear))
+        .contentShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
     } else {
       VStack(spacing: AglynShellMetrics.allTileGap) {
         symbol
@@ -214,8 +215,8 @@ public struct AglynRailButton: View {
 
   private var symbol: some View {
     Image(systemName: systemImage)
-      .font(.system(size: AglynShellMetrics.rowIcon - (utility ? 2 : 0), weight: utility ? .semibold : .regular))
-      .foregroundStyle(filled ? AglynColor.primaryContrast : utility ? AglynColor.railText : AglynColor.secondaryText)
+      .font(.system(size: AglynShellMetrics.rowIcon - (utility ? 2 : 0), weight: filled ? .semibold : .regular))
+      .foregroundStyle(filled ? AglynColor.primaryContrast : AglynColor.secondaryText)
       .frame(width: size, height: size)
   }
 }

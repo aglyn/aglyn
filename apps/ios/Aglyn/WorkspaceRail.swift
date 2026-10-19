@@ -56,7 +56,7 @@ struct WorkspaceRail: View {
           Button {
             navigation.enter(.admin, first: ShellScope(model: model, navigation: navigation).firstSection(of: .admin))
           } label: {
-            AglynRailButton(systemImage: "shield.lefthalf.filled", size: AglynShellMetrics.utility)
+            AglynRailButton(systemImage: "shield", size: AglynShellMetrics.utility)
           }
           .buttonStyle(.plain)
           .help("Admin")
