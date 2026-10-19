@@ -16,6 +16,10 @@
  */
 
 import {
+  isSecurityClassLockdownReason,
+  normalizeOrgLockdown,
+} from '@aglyn/aglyn/app-utils/lockdown'
+import {
   connectHostCustomDomain,
   disconnectHostCustomDomain,
   readOrgBilling,
@@ -51,6 +55,14 @@ export function platformEffects(): LifecycleEffects {
     driver: deploymentRegistrar(),
     now: () => Date.now(),
     async charge(request) {
+      // A workspace locked for security or abuse is charged nothing: its card
+      // may be the stolen one the lock is about. The renewal then runs out
+      // of tries as a decline would, and auto-renew is turned off.
+      const org = await db().collection('orgs').doc(request.orgId).get().catch(() => null)
+      const lock = normalizeOrgLockdown(org?.data() as never)
+      if (lock && isSecurityClassLockdownReason(lock.reason)) {
+        return { ok: false, invoiceId: null, paidCents: 0, code: 'workspace-locked' }
+      }
       const billing = await readOrgBilling(request.orgId).catch(() => ({}))
       const stripeCustomerId = String(
         (billing as { stripeCustomerId?: unknown }).stripeCustomerId ?? '',

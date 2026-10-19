@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import {
+  isAccountBanLockdownReason,
+  normalizeOrgLockdown,
+} from '@aglyn/aglyn/app-utils/lockdown'
 import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { NotificationLevel } from '@aglyn/aglyn/app-utils/notifications'
 import { DOMAIN_EMAIL_KEYS, sendEmail } from '@aglyn/shared-util-email'
@@ -143,6 +147,11 @@ export async function sendDomainEmail(
   merge: Record<string, string>,
 ): Promise<void> {
   try {
+    // A ban is a ban (AGL-3420): after its notice the account is sent
+    // nothing, by any sender — a renewal reminder included.
+    const org = await db().collection('orgs').doc(registration.orgId).get().catch(() => null)
+    const lock = normalizeOrgLockdown(org?.data() as never)
+    if (lock && isAccountBanLockdownReason(lock.reason)) return
     const wording = WORDING[kind]
     const paths = await domainPagePath(registration.orgId, registration.hostId)
     const origin = platformConsoleOrigin()
