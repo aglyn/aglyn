@@ -3091,6 +3091,7 @@ data class ThemeNamedAccent(
 data class ThemePalette(
     val accent: String,
     val alwaysDark: Boolean? = null,
+    val brandLabel: Boolean? = null,
     val dark: ThemeColors,
     val id: ThemePaletteId,
     val label: String,
@@ -3124,6 +3125,7 @@ data class ThemePreview(
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = ThemeSourceSerializer::class)
 enum class ThemeSource(val raw: String) {
+    CONSOLE("console"),
     DERIVED("derived"),
     FIGMA("figma"),
     UNKNOWN(""),
@@ -3471,17 +3473,18 @@ internal data class ContractValuesPart6(
     @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
     @SerialName("THEME_ACCENT_SWATCHES") val themeAccentSwatches: List<ThemeAccentSwatch>,
     @SerialName("THEME_ACCENTS") val themeAccents: List<ThemeNamedAccent>,
+    @SerialName("THEME_CONSOLE_FIELDS") val themeConsoleFields: List<String>,
     @SerialName("THEME_DARK_RAIL_SEEDS") val themeDarkRailSeeds: Map<String, String>,
     @SerialName("THEME_DENSITIES") val themeDensities: List<ThemeDensity>,
     @SerialName("THEME_NON_TEXT_CONTRAST") val themeNonTextContrast: Long,
     @SerialName("THEME_PALETTES") val themePalettes: List<ThemePalette>,
     @SerialName("THEME_PREVIEWS") val themePreviews: Map<String, ThemePreview>,
     @SerialName("THEME_TEXT_CONTRAST") val themeTextContrast: Double,
-    @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
+    @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
     @SerialName("TIME_ZONE_DEFAULT_LABEL") val timeZoneDefaultLabel: String,
     @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
     @SerialName("WORKSPACE_COLORS_FIELD") val workspaceColorsField: String,
@@ -3783,13 +3786,14 @@ class ContractValues internal constructor(
     val tenantEmails: List<TenantEmailEntry> get() = part6.tenantEmails
     val themeAccentSwatches: List<ThemeAccentSwatch> get() = part6.themeAccentSwatches
     val themeAccents: List<ThemeNamedAccent> get() = part6.themeAccents
+    val themeConsoleFields: List<String> get() = part6.themeConsoleFields
     val themeDarkRailSeeds: Map<String, String> get() = part6.themeDarkRailSeeds
     val themeDensities: List<ThemeDensity> get() = part6.themeDensities
     val themeNonTextContrast: Long get() = part6.themeNonTextContrast
     val themePalettes: List<ThemePalette> get() = part6.themePalettes
     val themePreviews: Map<String, ThemePreview> get() = part6.themePreviews
     val themeTextContrast: Double get() = part6.themeTextContrast
-    val timeZoneChoices: List<String> get() = part6.timeZoneChoices
+    val timeZoneChoices: List<String> get() = part7.timeZoneChoices
     val timeZoneDefaultLabel: String get() = part7.timeZoneDefaultLabel
     val workflowMaxSteps: Long get() = part7.workflowMaxSteps
     val workspaceColorsField: String get() = part7.workspaceColorsField

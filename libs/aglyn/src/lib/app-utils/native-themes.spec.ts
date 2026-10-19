@@ -94,7 +94,7 @@ describe('the accents', () => {
 
   it('offers Figma’s six swatches', () => {
     expect(THEME_ACCENT_SWATCHES.map((swatch) => [swatch.label, swatch.color])).toEqual([
-      ['Aglyn blue', '#0073ae'],
+      ['Brand blue', '#0073ae'],
       ['Sky', '#00b0ff'],
       ['Violet', '#7a5cf0'],
       ['Pink', '#e040fb'],
@@ -111,9 +111,9 @@ describe('the themes', () => {
         themeContrast(colors.textPrimary, ground) >= 4.5 && themeContrast(colors.textSecondary, ground) >= 4.5,
     )
 
-  it('lists the six themes, four from Figma and two derived from its previews', () => {
+  it('lists the six themes: the console’s look, three from Figma, two derived from Figma’s previews', () => {
     expect(THEME_PALETTES.map((theme) => [theme.id, theme.source])).toEqual([
-      ['aglyn', 'figma'],
+      ['aglyn', 'console'],
       ['quiet', 'figma'],
       ['night', 'figma'],
       ['ocean', 'derived'],
@@ -154,6 +154,11 @@ describe('the themes', () => {
       expect([theme.id, 'dark', readable(theme.dark)]).toEqual([theme.id, 'dark', true])
     }
   })
+})
+
+it('names the shipping theme after the configured brand, never a literal', () => {
+  const aglyn = THEME_PALETTES.find((theme) => theme.id === 'aglyn')
+  expect(aglyn).toMatchObject({ label: '', brandLabel: true })
 })
 
 describe('the densities', () => {

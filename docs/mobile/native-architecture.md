@@ -732,17 +732,33 @@ defines a value.
   - five status bg/fg pairs;
   - the scrim and the danger fill.
 
-  Aglyn, Quiet, Night (always dark) and High contrast are Figma's values
-  exactly.
+  Quiet, Night (always dark) and High contrast are Figma's values exactly.
+- **Aglyn** is the look that ships (`source: 'console'`): the console's
+  resolved MUI scheme, the same scheme the shared tokens (§7) are generated
+  from. Its dark surface is the console's paper, #2A3440.
+  - Text, divider and hover are composited onto the paper.
+  - The status colors are the console's MUI Alert, standard variant.
+  - Figma supplies what the console has no color for: sunken, rail,
+    titlebar, the strong border, "new", the scrim, and the danger fill. The
+    console's `error.main` carries white text at only 4.36:1.
+  - `THEME_CONSOLE_FIELDS` lists the console-sourced fields, and
+    `apps/console/specs/native-theme-aglyn.spec.ts` holds them to the scheme.
+  - Figma's Aglyn mode (Themes 2:8) now holds these same values.
+  - The theme is labeled with the build's configured brand name
+    (`brandLabel`), never a literal.
+- **The original Figma Aglyn values** stay in code as `FIGMA_AGLYN_*`. They
+  are the base for Quiet's status colors and for the Ocean and Warm
+  derivations, which are unchanged.
 - **Ocean and Warm** exist in Figma only as four-color previews.
   `deriveThemeFromPreview` builds their full palettes by one rule for both:
   - *Light:* the previewed canvas, surface and rail; raised = surface;
     sunken = canvas 25% toward the rail; hover = surface 10% toward the rail;
-    titlebar = surface 35% toward the canvas; borders = Aglyn's, 18% and 22%
-    toward the rail.
-  - *Dark:* Aglyn's dark appearance tinted toward the dark rail seed (Ocean
-    #0B3954, Warm #7A5634): canvas 22%, surface and raised 18%, rail 45%.
-  - Text, status and the scrim are Aglyn's.
+    titlebar = surface 35% toward the canvas; borders = the original Figma
+    Aglyn borders, 18% and 22% toward the rail.
+  - *Dark:* the original Figma Aglyn dark appearance tinted toward the dark
+    rail seed (Ocean #0B3954, Warm #7A5634): canvas 22%, surface and raised
+    18%, rail 45%.
+  - Text, status and the scrim are the original Figma Aglyn values.
 
   Figma board 87:4930 on the Themes page shows the derived values.
 - **Accents.** `THEME_ACCENTS` holds Figma's four Accent modes exactly (Blue,
