@@ -1113,6 +1113,69 @@ describe('after "Plan my site": where the next step is (AGL-3594)', () => {
 })
 
 /**
+ * A site staff are building for a client (AGL-3958): the one-screen build has
+ * asked the business details already, created the site and gathered the
+ * owner's photos. The start opens on its review with those answers, passes
+ * the rest of the intake to the job, and stays on the build's screen.
+ */
+describe('a site staff are building for a client (AGL-3958)', () => {
+  const intake = {
+    businessName: 'Harbor Plumbing',
+    whatTheyDo: 'a family plumbing business',
+    towns: 'Austin and Round Rock',
+    phone: '(512) 555-0123',
+    email: 'owner@example.com',
+    hours: 'Mon–Fri 8–5',
+    ownerWords: 'Three generations fixing pipes the right way.',
+  }
+  beforeEach(() => mockPush.mockReset())
+
+  it('opens on the review with the intake, starts the job with all of it, and stays on the screen', async () => {
+    const onStarted = jest.fn()
+    const ready = jest.fn()
+    const leave = jest.fn()
+    const Widget = widget()
+    mockFetch.mockResolvedValueOnce(json({ jobs: [] }))
+    render(<Widget {...zoneProps({ leave, clientBuild: { intake, onStarted, ready } })} />)
+    await onStep('review')
+    expect(ready).toHaveBeenCalledWith(true)
+    expect(screen.getByText(/^Also from the client’s details: Harbor Plumbing, serving Austin and Round Rock/)).toBeTruthy()
+    // The follow that replaces the review reads the job from the same route.
+    mockFetch.mockResolvedValue(json({ job: siteJob() }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))
+    await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ id: 'job-1' }))
+    const body = JSON.parse(postCall()[1].body)
+    expect(body.brief).toContain('a family plumbing business')
+    expect(body.brief).toContain('The business is called Harbor Plumbing.')
+    expect(body.brief).toContain('call (512) 555-0123 or email owner@example.com')
+    expect(body.brief).toContain('Its hours are Mon–Fri 8–5.')
+    expect(body.brief).toContain(`In the owner's own words: "${intake.ownerWords}"`)
+    expect(body.inputs).toEqual(
+      expect.objectContaining({
+        businessType: 'a family plumbing business',
+        businessName: 'Harbor Plumbing',
+        city: 'Austin and Round Rock',
+        autoConfirm: true,
+      }),
+    )
+    // It follows the job here instead of opening the site's build page.
+    expect(await screen.findByText(/Your site is being planned/)).toBeTruthy()
+    expect(mockPush).not.toHaveBeenCalled()
+    expect(leave).not.toHaveBeenCalled()
+    expect(mockStartBlank).not.toHaveBeenCalled()
+  })
+
+  it('tells the build when it will not draw', async () => {
+    const ready = jest.fn()
+    const Widget = widget()
+    mockFetch.mockResolvedValueOnce(json({ error: 'Not found' }, 404))
+    const { container } = render(<Widget {...zoneProps({ clientBuild: { intake, ready } })} />)
+    await waitFor(() => expect(ready).toHaveBeenCalledWith(false))
+    expectNothingDrawn(container)
+  })
+})
+
+/**
  * The takeover's surface (AGL-3596). A full-screen Dialog's paper is an
  * elevated paper, and in dark mode MUI lightens one with a white overlay — a
  * `background-image` over the paper color — which turned the guided start a

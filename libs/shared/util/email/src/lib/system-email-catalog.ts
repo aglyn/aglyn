@@ -375,6 +375,46 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       source: 'apps/console/app/api/admin/org-upgrade-proposal/route.ts',
     },
     {
+      key: 'client-build-preview',
+      name: 'Client build preview',
+      description:
+        'Sent to a business owner when the platform team has built their ' +
+        'website with them, at an event or on their doorstep, with the link ' +
+        'to look at it and the address it will live at.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Your new website for {{business.name}} is ready to look at',
+      mergeTokens: [
+        {
+          name: 'business.name',
+          description: 'Name of the business the website was built for',
+          sample: 'Harbor Plumbing',
+        },
+        {
+          name: 'preview.url',
+          description: 'Where the website can be seen now',
+          sample: 'https://harbor-plumbing.example.com',
+        },
+        {
+          name: 'site.address',
+          description: 'The address the website will live at: the domain the owner chose, or its free address',
+          sample: 'www.example.com',
+        },
+      ],
+      // Mirrors the fallback text in libs/tenant/data/admin/src/lib/server/client-build.ts.
+      defaultBody: [
+        { block: 'text', text: '{{business.name}}', variant: 'eyebrow' },
+        { block: 'text', text: 'Your new website is ready to look at', variant: 'heading' },
+        { block: 'text', text: 'We built the website for {{business.name}} with you today. Open it on your phone and look around: every page, picture and word can still be changed.', variant: 'body' },
+        { block: 'text', text: 'Website: {{preview.url}}\nAddress: {{site.address}}', variant: 'details' },
+        { block: 'button', label: 'See your website', href: '{{preview.url}}' },
+        { block: 'text', text: 'Nothing is charged until you choose a plan.', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because the {{brand.productName}} team built a ' +
+        'website for {{business.name}} with you and you gave us this address.',
+      source: 'apps/console/app/api/admin/client-build/route.ts',
+    },
+    {
       key: 'usage-summary',
       name: 'Monthly usage summary',
       description:

@@ -153,6 +153,8 @@ export * from './lib/server/media-tombstone'
 export * from './lib/server/media-delivery-regeneration'
 export * from './lib/server/media-variants'
 export * from './lib/server/media-photo-links'
+// The one-screen build for a client (AGL-3958): staff hold its record.
+export * from './lib/server/client-build'
 export * from './lib/server/serve-media-cdn'
 export * from './lib/server/serve-plugin-fetch'
 export * from './lib/server/configured-url-fetch'
