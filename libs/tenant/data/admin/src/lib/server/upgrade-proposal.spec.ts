@@ -203,6 +203,32 @@ describe('proposing an upgrade (AGL-3466)', () => {
     )
   })
 
+  it('records the bundle proposed with the plan and sends Billing with all of it chosen (AGL-3956)', async () => {
+    seedTrial()
+    const result = await proposeOrgUpgrade({
+      orgId: ORG,
+      plan: 'starter',
+      addons: 'siteCare,ai,jetpack',
+      interval: 'year',
+      coupon: 'BOOTH25',
+      actor: { uid: 'staff', email: 'zed@aglyn.test' },
+      origin: 'https://app.aglyn.test',
+    })
+    expect(result.proposal).toMatchObject({
+      plan: 'starter',
+      addons: { siteCare: 1, aiAddon: 1 },
+      interval: 'year',
+      coupon: 'BOOTH25',
+    })
+    expect(org()['upgradeProposal']).toMatchObject({ addons: { siteCare: 1, aiAddon: 1 } })
+    expect(String(mockSent[0]['text'])).toContain(
+      'https://app.aglyn.test/acme/billing?plan=starter&interval=year&addons=ai,siteCare&coupon=BOOTH25',
+    )
+    expect(mockActivity.map((row) => row.action)).toEqual([
+      'Proposed the Starter plan (Starter with Aglyn AI and Site Care, billed yearly, code BOOTH25)',
+    ])
+  })
+
   it('refuses a plan the workspace cannot buy itself, writing nothing', async () => {
     seedTrial()
     for (const plan of ['free', 'enterprise', 'platinum']) {

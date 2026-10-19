@@ -72,6 +72,11 @@ async function handler(request: Request): Promise<Response> {
         orgId,
         plan: body?.plan,
         note: body?.note,
+        // The bundle proposed with the plan (AGL-3956): add-ons, cadence and
+        // a coupon, fitted to the plan by the shared parser.
+        addons: body?.addons,
+        interval: body?.interval,
+        coupon: body?.coupon,
         actor,
         origin,
       })

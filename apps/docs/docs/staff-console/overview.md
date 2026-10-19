@@ -157,10 +157,12 @@ below the cards, **Emails sent** across its sites, then the
 [Email campaigns](#staff-org-email) and [Organization
 automations](#staff-automations) cards when those plugins are installed.
 **Transfer organization ownership** is under **Edit organization**, and asks
-for a confirmation before it hands the organization over. Beside it, **Hand off
-to a new owner** invites an address to take the organization over, and **Ask to
-upgrade** proposes a plan to its owner; see
-[Build a site for a client](#build-for-a-client). The **Members** card marks a
+for a confirmation before it hands the organization over. Beside it, **Hand off**
+invites an address to take the organization over and proposes its plan in the same
+step, and **Ask to upgrade** proposes a plan to an owner who already has the
+workspace; see [Build a site for a client](#build-for-a-client). The **Bundle checkout
+link** card makes a link or QR code that opens the owner's Billing page with the
+bundle chosen; see [Bundle checkout link](#bundle-link). The **Members** card marks a
 staff member's row **staff · no seat**, and the seat usage in **Effective
 entitlements** counts managers the way the seat gates do, never staff and never
 site collaborators.
@@ -354,19 +356,29 @@ at any step: staff take none of a workspace's seats.
    **Build for a client**, a single screen made for a phone held at a booth or on a
    doorstep. Its steps run top to bottom, and each finished step shows its answer
    under its name. See [The client build screen](#client-build-screen) below.
-3. **Hand it over.** On the organization's page (or the site's **Ownership** card),
-   choose **Hand off to a new owner**, enter the client's email, and choose whether
-   you **Stay on as an admin after the handoff** or **Leave after the handoff**. The
-   client is emailed. The invitation reserves no seat, and when the client accepts
-   they own the workspace and land on its home. Nothing asks them to upgrade.
-4. **The client evaluates** with the full tier the comp gives them.
-5. **Ask to upgrade.** When the evaluation is done, choose **Ask to upgrade**, pick
-   the plan, and add a note if you like. The owner gets an email, and the
-   workspace's billing managers see a card on the workspace's home and on Billing
-   with the plan preselected. **Withdraw proposal** takes it back.
-6. **The owner subscribes from Billing.** The comped tier's card offers **Start your
-   *plan* subscription** even though it shows as their current plan, and it runs the
-   ordinary checkout.
+3. **Hand it over and propose the plan, in one step.** On the client build screen's
+   last step, the organization's page or the site's **Ownership** card, choose
+   **Hand off**. Enter the client's email,
+   choose whether you **Stay on as an admin after the handoff** or **Leave after the
+   handoff**, and pick the bundle: the plan, its add-ons (Site Care is on to start;
+   every add-on the plan sells is offered, such as Aglyn AI, the Event Calendar and
+   extra sites), **Yearly** or **Monthly**, and an optional coupon code and note.
+   **Hand off and propose** sends one invitation and records the proposal together,
+   so a refused invitation leaves no proposal behind. The client's email carries a
+   link to Billing with the bundle chosen; when they accept, they land on Billing,
+   one tap from paid. The invitation reserves no seat. A workspace that already pays
+   for a plan is handed off without a proposal.
+4. **Standing in front of the owner?** The **Hand off** dialog's header has **Copy
+   bundle link** and **QR**: show the QR on your screen and the owner scans it with
+   their phone. See [Bundle checkout link](#bundle-link).
+5. **Ask to upgrade** is for an owner who already has the workspace: pick the same
+   bundle and add a note if you like. The owner gets an email, and the workspace's
+   billing managers see a card on the workspace's home and on Billing with the
+   bundle preselected. **Withdraw proposal** takes it back.
+6. **The owner subscribes from Billing.** The **What you will pay** card comes first,
+   with the bundle and its total; its **Pay** button pays with the card on file and
+   asks for a card and billing address first if there are none. The comped tier's
+   card in the plan grid still offers **Start your *plan* subscription**.
 7. **It cleans up after itself.** When the subscription goes live, the proposal and
    the sales-trial comp are removed, each with an audit row. A comp granted for any
    other reason stays dormant until you remove it.
@@ -407,7 +419,7 @@ yet finished. Only staff can open it.
    live at. Where texting is not set up, it goes by email only, and the result says
    what each channel came to. The step also shows what the hand-off will propose:
    the comped plan with Site Care, billed monthly, and the domain picked in step 2
-   with its price. **Hand off to a new owner** is on the same step.
+   with its price. **Hand off** is on the same step.
 
 Sending the preview writes a row to the [Audit Log](#audit-log) naming the
 workspace and the site, without the owner's phone or email. To keep a lost phone
@@ -420,6 +432,32 @@ handoff is refused when it is sent and points them to **Leave after the handoff*
 because staying would add a second manager the plan does not include. Revoking
 someone's staff role takes the **no seat** mark off their rows and pending invites,
 so they take a seat like anyone else from then on.
+
+#### Bundle checkout link {#bundle-link}
+
+The **Bundle checkout link** card on an organization's page, and the header of the
+**Hand off** dialog, make a link to the owner's Billing page with the plan, add-ons,
+billing interval and coupon already chosen. **Copy bundle link** copies it; **QR**
+shows it as a QR code for the owner to scan with their phone. Each press makes a new
+link for that one workspace, which works for 24 hours and is recorded in the
+[Audit Log](#audit-log) as a bundle checkout link made by you.
+
+- **Coupons are applied, never created here.** Make the code on the staff Coupons page
+  first, then type it in. An expired or unknown code is left off on the owner's page
+  with a note.
+- **A domain (optional).** Search the name with the owner on the site's **Custom
+  Domain** page, then enter it, its first-year and renewal prices, and the site it is
+  for. The owner's Billing page shows it as its own line, and after paying they buy it
+  on the Custom Domain page themselves, with their own contact details and their own
+  acceptance of the registration terms. The price is checked again at purchase. Where
+  buying domains is not available yet, the domain fields are disabled with the reason.
+- **One purchase without the waiting period.** Buying a domain normally waits for a
+  paid invoice at least 72 hours old. A link you make stands in for that wait for one
+  domain purchase in that workspace within its 24 hours, because you met the owner and
+  your name is on the audit row. The brand-lookalike check and the per-workspace limits
+  still apply.
+- A workspace that already has a live subscription gets no link: it changes plans
+  from Billing.
 
 ### Site management {#sites-admin}
 
@@ -492,8 +530,8 @@ billing and every site of the organization, and the previous owner stays on as
 an admin. A transfer that would lock the organization out of its own single
 sign-on is refused, with the reason shown.
 
-The same card carries **Hand off to a new owner** and **Ask to upgrade**, the
-two steps of [Build a site for a client](#build-for-a-client).
+The same card carries **Hand off** and **Ask to upgrade**, the steps of
+[Build a site for a client](#build-for-a-client).
 
 #### Move a site to another organization {#site-transfer}
 

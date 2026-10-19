@@ -39,9 +39,21 @@ import {
   usesCustomerSeat,
 } from '@aglyn/aglyn/app-utils/organizations'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import {
+  standingUpgradeProposal,
+  upgradeProposalDestination,
+  upgradeProposalSummary,
+} from '@aglyn/aglyn/app-utils/upgrade-proposal'
+import type { OrgUpgradeProposal } from '@aglyn/aglyn/server'
+import { PLAN_LABELS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
   acceptOwnerHandoff,
+  buildUpgradeProposal,
+  readUpgradeProposalTarget,
+  recordUpgradeProposalActivity,
+  stageUpgradeProposal,
+  UpgradeProposalError,
   collaboratorSeatRefusal,
   collaboratorSeatRefusalResponse,
   isStaffAddress,
@@ -450,6 +462,7 @@ async function handler(request: Request): Promise<Response> {
       email: string,
       role: string,
       handoff?: { previousOwner: 'stay' | 'leave' } | null,
+      proposal?: OrgUpgradeProposal | null,
     ): Promise<boolean> => {
       if (!isEmailConfigured()) {
         console.warn(
@@ -474,7 +487,28 @@ async function handler(request: Request): Promise<Response> {
           ? 'The current owner stays on as an admin.'
           : 'The current owner leaves the workspace once you accept.'
         : ''
-      const fallbackText = handoff
+      // A hand-off that proposes its plan in the same act (AGL-3956) carries
+      // the bundle checkout link: signing in shows the invitation, and
+      // accepting it opens Billing with the plan, add-ons, cadence and
+      // coupon already chosen (AGL-3955).
+      const orgSlug = String(orgSnapshot.get('slug') ?? '')
+      const billingUrl =
+        handoff && proposal && orgSlug
+          ? `${origin}${upgradeProposalDestination(orgSlug, proposal)}`
+          : ''
+      const proposalSummary = billingUrl && proposal
+        ? upgradeProposalSummary(proposal, { brand: branding.productName })
+        : ''
+      const planLabel = proposal ? (PLAN_LABELS[proposal.plan] ?? proposal.plan) : ''
+      const fallbackText = billingUrl
+        ? `You've been invited to take over ${orgName} as its owner. ` +
+          `${previousOwnerLine}\n\n` +
+          `Your plan: ${proposalSummary}.` +
+          (proposal?.note ? `\n\n${proposal.note}` : '') +
+          '\n\nSign in with this email address, accept the invitation, and ' +
+          `Billing opens with everything already chosen:\n\n${billingUrl}\n\n` +
+          'Nothing is charged until you confirm.'
+        : handoff
         ? `You've been invited to take over ${orgName} as its owner. ` +
           `${previousOwnerLine}\n\n` +
           `Sign in at ${origin} with this email address and accept ` +
@@ -486,7 +520,7 @@ async function handler(request: Request): Promise<Response> {
       // built-in copy, in this org's header and footer (AGL-3322). The copy
       // here is the last resort behind both.
       const designed = await renderSystemEmail(
-        handoff ? 'org-owner-handoff' : 'org-invite',
+        billingUrl ? 'org-owner-handoff-proposal' : handoff ? 'org-owner-handoff' : 'org-invite',
         {
           // AGL-2139: the brand as merge tokens, so a staff-designed template
           // renders THIS org's brand rather than a hard-coded "Aglyn". The
@@ -497,6 +531,14 @@ async function handler(request: Request): Promise<Response> {
           'invite.role': role.charAt(0).toUpperCase() + role.slice(1),
           'handoff.previousOwner': previousOwnerLine,
           signInUrl: origin,
+          ...(billingUrl
+            ? {
+                'plan.name': planLabel,
+                'proposal.summary': proposalSummary,
+                'proposal.note': proposal?.note ?? '',
+                billingUrl,
+              }
+            : {}),
         },
         {
               brandLogoUrl: branding.emailLogoUrl,
@@ -508,7 +550,9 @@ async function handler(request: Request): Promise<Response> {
         to: email,
         subject:
           designed?.subject ??
-          (handoff
+          (billingUrl
+            ? `${orgName} is ready for you on ${branding.productName}`
+            : handoff
             ? `${orgName} is being handed to you on ${branding.productName}`
             : `You've been invited to ${orgName} on ${branding.productName}`),
         text: designed?.text || fallbackText,
@@ -586,6 +630,52 @@ async function handler(request: Request): Promise<Response> {
         ).toLowerCase()
         if (ownerEmail && ownerEmail === email) {
           return Response.json({ error: 'That address already owns this workspace' }, { status: 400 })
+        }
+      }
+      /*
+       * HAND OFF AND PROPOSE, ONE ACT (AGL-3956). For a site the platform
+       * team built for a client, the hand-off and the plan are always asked
+       * together, so staff send both in this one request: the invitation and
+       * the proposal (plan, add-ons, cadence, coupon) commit in one
+       * transaction below, so a refused invitation never leaves a proposal
+       * standing. Staff only — an owner handing their own workspace on does
+       * not propose a plan to the next one.
+       */
+      const proposalInput =
+        handoff && body?.proposal && typeof body.proposal === 'object'
+          ? (body.proposal as Record<string, unknown>)
+          : null
+      if (proposalInput && !isStaff) {
+        return Response.json({
+          error: 'Only the platform team proposes a plan with a handoff',
+        }, { status: 403 })
+      }
+      let proposal: OrgUpgradeProposal | null = null
+      // A workspace that already pays has nothing to propose: the hand-off
+      // goes alone, and the answer says so.
+      let proposalSkipped = false
+      if (proposalInput) {
+        try {
+          proposal = buildUpgradeProposal({
+            plan: proposalInput['plan'],
+            note: proposalInput['note'],
+            addons: proposalInput['addons'],
+            interval: proposalInput['interval'],
+            coupon: proposalInput['coupon'],
+            actor: { uid: decoded.uid, email: decoded.email ?? null },
+          })
+          // Checked before anything is written, and again in the transaction.
+          const orgRef = firestore.collection('orgs').doc(orgId)
+          await firestore.runTransaction((tx) => readUpgradeProposalTarget(tx, orgRef))
+        } catch (error) {
+          if (error instanceof UpgradeProposalError && error.status === 409) {
+            proposal = null
+            proposalSkipped = true
+          } else if (error instanceof UpgradeProposalError) {
+            return Response.json({ error: error.message }, { status: error.status })
+          } else {
+            throw error
+          }
         }
       }
       // Sending gate (AGL-1907) — after the role check and the body
@@ -711,8 +801,7 @@ async function handler(request: Request): Promise<Response> {
           { type: 'invite', id: replaced.id, name: String(replaced.get('email') ?? '') },
         )
       }
-      await invitesRef.doc(inviteId).set(
-        {
+      const inviteData = {
           email,
           role,
           // A handoff makes its accepter the owner, which reaches every site.
@@ -733,9 +822,42 @@ async function handler(request: Request): Promise<Response> {
           invitedBy: decoded.uid,
           createdAt: FieldValue.serverTimestamp(),
           acceptedAt: null,
-        },
-        { merge: true },
-      )
+        }
+      if (proposal) {
+        const stagedProposal = proposal
+        const orgRef = firestore.collection('orgs').doc(orgId)
+        try {
+          await firestore.runTransaction(async (tx) => {
+            const before = await readUpgradeProposalTarget(tx, orgRef)
+            tx.set(invitesRef.doc(inviteId), inviteData, { merge: true })
+            stageUpgradeProposal(tx, firestore, {
+              orgId,
+              proposal: stagedProposal,
+              before,
+              actorUid: decoded.uid,
+            })
+          })
+          await recordUpgradeProposalActivity(
+            orgId,
+            { uid: decoded.uid, email: decoded.email ?? null },
+            stagedProposal,
+          )
+        } catch (error) {
+          // A subscription that went live since the check above: the hand-off
+          // still goes, alone, exactly as if it had been live then.
+          if (!(error instanceof UpgradeProposalError && error.status === 409)) {
+            if (error instanceof UpgradeProposalError) {
+              return Response.json({ error: error.message }, { status: error.status })
+            }
+            throw error
+          }
+          proposal = null
+          proposalSkipped = true
+          await invitesRef.doc(inviteId).set(inviteData, { merge: true })
+        }
+      } else {
+        await invitesRef.doc(inviteId).set(inviteData, { merge: true })
+      }
       void logOrgActivity(
         orgId,
         { uid: decoded.uid, email: decoded.email },
@@ -748,7 +870,7 @@ async function handler(request: Request): Promise<Response> {
       )
       // Best-effort delivery via Resend (AGL-708): the invite works without
       // it — the console banner surfaces it after sign-in either way.
-      const emailed = await sendInviteEmail(email, role, handoff)
+      const emailed = await sendInviteEmail(email, role, handoff, proposal)
       // Tell the org's admins (AGL-1116). Until now a pending invite left no
       // trace outside the activity log, which nobody watches: the `team.invite`
       // notification type has existed since AGL-259 with no emitter at all.
@@ -779,7 +901,14 @@ async function handler(request: Request): Promise<Response> {
       // otherwise has no in-app trace of the invitation.
       await notifyInvitee(email, asWhat, inviteId)
       return Response.json(
-        { ok: true, inviteId, emailed, updated: reusing },
+        {
+          ok: true,
+          inviteId,
+          emailed,
+          updated: reusing,
+          ...(proposal ? { proposal } : {}),
+          ...(proposalSkipped ? { proposalSkipped: true } : {}),
+        },
         { status: 200 },
       )
     }
@@ -905,8 +1034,21 @@ async function handler(request: Request): Promise<Response> {
         })
         await markInviteNotificationsRead(decoded.uid, inviteId)
         // The org home, as for any other join: a client handed a workspace
-        // looks around first, and is asked to upgrade as a separate step.
-        return Response.json({ ok: true, owner: true }, { status: 200 })
+        // looks around first, and is asked to upgrade as a separate step —
+        // unless the hand-off proposed its plan in the same act (AGL-3956).
+        // Then the new owner lands on Billing with the bundle preselected,
+        // one tap from paid, which is what the invitation email promised.
+        const standing = standingUpgradeProposal(
+          ((await getOrgDoc(orgId)) ?? {}) as Partial<AglynOrgBilling>,
+        )
+        const billingDestination =
+          standing && handoffOrg.slug
+            ? upgradeProposalDestination(handoffOrg.slug, standing)
+            : null
+        return Response.json(
+          { ok: true, owner: true, ...(billingDestination ? { billingDestination } : {}) },
+          { status: 200 },
+        )
       }
       // The manager seat is charged INSIDE `upsertOrgMember`'s transaction
       // (AGL-2068 on the manager key). The gate that stood here read the

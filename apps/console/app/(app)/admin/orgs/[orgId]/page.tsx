@@ -100,6 +100,8 @@ import StaffOrgActions from '../../../../../components/staff-org-actions.compone
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
 import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
+import StaffBundleLinkCard from '../../../../../components/staff-bundle-link.component'
+import { isLiveSubscriptionStatus } from '@aglyn/aglyn/app-utils/org-billing-doc'
 import { countManagerSeats, isStaffSeat } from '@aglyn/aglyn/app-utils/organizations'
 import { StaffSiteRowActions } from '../../../../../components/staff-site-row-actions.component'
 import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
@@ -319,6 +321,15 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
       active = false
     }
   }, [isStaff, orgId, user])
+  // The sites a bundle link's domain can be for (AGL-3955).
+  const bundleSites = useMemo(
+    () =>
+      (hostDocs ?? []).map((host: any) => ({
+        hostId: String(host.$id),
+        name: String(host.displayName ?? host.subdomain ?? host.$id),
+      })),
+    [hostDocs],
+  )
   // Site names by id, for the tables that name the site a row came from.
   const siteNames = useMemo(
     () =>
@@ -1253,6 +1264,19 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: <StaffAcquisitionCard orgId={orgId} />,
                 },
                 {
+                  // The bundle checkout link and its QR, for an owner in
+                  // front of you (AGL-3955).
+                  children: (
+                    <StaffBundleLinkCard
+                      orgId={orgId}
+                      sites={bundleSites}
+                      subscriptionLive={isLiveSubscriptionStatus(
+                        (org as { billingStatus?: unknown } | null | undefined)?.billingStatus,
+                      )}
+                    />
+                  ),
+                },
+                {
                   children: (
                     // Direct editing (AGL-358).
                     <CardDisplay
@@ -1379,6 +1403,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                         <StaffOrgOwnerHandoff
                           orgId={orgId}
                           orgName={org?.name}
+                          org={org as never}
+                          sites={bundleSites}
                           onSent={() => setOrgNonce((nonce) => nonce + 1)}
                         />
                         {/* The separate step after the evaluation: ask the
