@@ -31,7 +31,9 @@
 //   - a package that ships only types by its `@types/` name.
 //
 // The framework families (react, next, firebase, @mui/*) stay peers; that half
-// is `check:lib-boundaries`' and is not written here. Nothing is ever REMOVED:
+// is `check:lib-boundaries`' and is not written here. A plugin a plugin
+// imports — only ever its `/contracts` (AGL-3980) — IS written here, as an
+// optional peer at the repo version. Nothing is ever REMOVED:
 // `@swc/helpers` is imported by the build's output rather than by the source,
 // and a declaration this script cannot see a reason for is not evidence that
 // there is none. `check:lib-boundaries` is what refuses a missing one.
@@ -58,6 +60,7 @@ const rootRanges = { ...(rootPkg.devDependencies ?? {}), ...(rootPkg.dependencie
 const packageMap = readPackageMap(ROOT)
 const workspace = new Set(packageMap.map((project) => project.alias).filter(Boolean))
 const versioned = new Set(versionedLibPackages(ROOT).map((entry) => entry.name))
+const pluginAliases = new Set(packageMap.filter((project) => project.tags.includes('scope:plugin')).map((project) => project.alias).filter(Boolean))
 
 const drifted = []
 const unknown = []
@@ -74,8 +77,19 @@ for (const project of packageMap) {
   const owed = declarationsOwed(packagesImported(join(ROOT, project.root), project.alias)).dependencies
   const peers = pkg.peerDependencies ?? {}
   const next = { ...(pkg.dependencies ?? {}) }
+  // A plugin's providers (AGL-3980): another plugin it imports — which the
+  // guard allows only through `/contracts` — is an OPTIONAL peer at the repo
+  // version, never a dependency, so installing it never installs them.
+  const providers = project.tags.includes('scope:plugin') ? owed.filter((name) => pluginAliases.has(name)) : []
+  const nextPeers = { ...peers }
+  const nextMeta = { ...(pkg.peerDependenciesMeta ?? {}) }
+  for (const name of providers) {
+    delete next[name]
+    nextPeers[name] = rootPkg.version
+    nextMeta[name] = { ...(nextMeta[name] ?? {}), optional: true }
+  }
   for (const name of owed) {
-    if (name in peers) continue
+    if (name in peers || providers.includes(name)) continue
     if (workspace.has(name)) {
       next[name] = rootPkg.version
     } else if (name in rootRanges) {
@@ -99,9 +113,14 @@ for (const project of packageMap) {
     }
   }
   const sorted = Object.fromEntries(Object.entries(next).sort(([a], [b]) => a.localeCompare(b)))
-  if (JSON.stringify(sorted) === JSON.stringify(pkg.dependencies ?? {})) continue
+  const peersChanged = providers.length > 0 && JSON.stringify({ nextPeers, nextMeta }) !== JSON.stringify({ nextPeers: peers, nextMeta: pkg.peerDependenciesMeta ?? {} })
+  if (JSON.stringify(sorted) === JSON.stringify(pkg.dependencies ?? {}) && !peersChanged) continue
   drifted.push(project.root)
   if (check) continue
+  if (peersChanged) {
+    pkg.peerDependencies = Object.fromEntries(Object.entries(nextPeers).sort(([a], [b]) => a.localeCompare(b)))
+    pkg.peerDependenciesMeta = Object.fromEntries(Object.entries(nextMeta).sort(([a], [b]) => a.localeCompare(b)))
+  }
   // `dependencies` sits where it already is, or directly before the peers.
   const out = {}
   let placed = false
@@ -114,10 +133,14 @@ for (const project of packageMap) {
         out.dependencies = sorted
         placed = true
       }
+      if (key === 'peerDependenciesMeta') continue
       out[key] = value
+      // `peerDependenciesMeta` directly after the peers it qualifies.
+      if (key === 'peerDependencies' && pkg.peerDependenciesMeta) out.peerDependenciesMeta = pkg.peerDependenciesMeta
     }
   }
   if (!placed) out.dependencies = sorted
+  if (pkg.peerDependenciesMeta && !out.peerDependenciesMeta) out.peerDependenciesMeta = pkg.peerDependenciesMeta
   writeFileSync(path, `${JSON.stringify(out, null, 2)}\n`)
 }
 

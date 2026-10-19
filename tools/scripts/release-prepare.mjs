@@ -406,6 +406,11 @@ function main() {
     for (const name of Object.keys(libPkg.dependencies ?? {})) {
       if (libNames.has(name)) libPkg.dependencies[name] = version
     }
+    // A plugin's optional peers on the plugins whose contracts it imports
+    // (AGL-3980) ride the same number, for the same reason.
+    for (const name of Object.keys(libPkg.peerDependencies ?? {})) {
+      if (libNames.has(name)) libPkg.peerDependencies[name] = version
+    }
     write(libPath, `${JSON.stringify(libPkg, null, 2)}\n`)
   }
 

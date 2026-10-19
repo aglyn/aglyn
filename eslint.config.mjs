@@ -21,7 +21,7 @@ import noRawMuiTable from './tools/lint-rules/no-raw-mui-table.mjs'
 import noRemoteImageService from './tools/lint-rules/no-remote-image-service.mjs'
 import noSxAfterSpread from './tools/lint-rules/no-sx-after-spread.mjs'
 import noUnguardedLoadingHook from './tools/lint-rules/no-unguarded-loading-hook.mjs'
-import { DEP_CONSTRAINTS, lintOverridesFor, readPackageMap } from './tools/scripts/lib/lib-boundaries.mjs'
+import { DEP_CONSTRAINTS, lintOverridesFor, pluginCodeDependencies, readPackageMap } from './tools/scripts/lib/lib-boundaries.mjs'
 
 /**
  * The React version, stated rather than detected (AGL-2479).
@@ -125,6 +125,15 @@ const boundaryAllowlist = JSON.parse(
   readFileSync(join(repoRoot, 'tools/scripts/lib-boundaries-allowlist.json'), 'utf8'),
 ).edges
 const packageMap = readPackageMap(repoRoot)
+// Each plugin's declared providers (AGL-3980), whose `/contracts` its lint
+// allows; `check:lib-boundaries` holds the rest of the contract.
+const pluginCode = pluginCodeDependencies(
+  JSON.parse(readFileSync(join(repoRoot, 'plugins.config.json'), 'utf8')),
+).plugins
+const contractAliasesOf = (alias) => {
+  const plugin = [...pluginCode.values()].find((entry) => entry.alias === alias)
+  return plugin ? [...plugin.may].map((id) => pluginCode.get(id)?.alias).filter(Boolean) : []
+}
 
 /**
  * The allowlist's lint-side half, for the project whose `eslint.config.mjs`
@@ -143,6 +152,7 @@ export function boundaryOverridesFor(configUrl) {
     projectRoot: relative(repoRoot, dirname(fileURLToPath(configUrl))).split(sep).join('/'),
     ruleName: '@nx/enforce-module-boundaries',
     baseOptions: moduleBoundaryOptions,
+    contractAliasesOf,
   })
 }
 

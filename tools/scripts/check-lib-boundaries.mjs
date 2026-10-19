@@ -38,6 +38,11 @@
 //     lazy `import()` edges, beyond `LAZY_AND_STATIC_ALLOWED` (AGL-3557).
 //     The lint rule reds every such static import, in the lazy importer and
 //     in each app that loads it lazily, but only the full lint in CI runs it.
+//  6. Plugin contracts (AGL-3980): a plugin → plugin edge is allowed when
+//     every import across it is the provider's `/contracts` and the consumer
+//     names the provider in `uses` or `requires`; the contracts module loads
+//     nothing but `@aglyn/aglyn` at runtime; and the consumer's package.json
+//     carries the provider as an optional peer.
 //
 // The lint rule sees the same map at every file; this sees it at the project
 // level, so an edge that reached `main` through a disabled line is still
@@ -52,10 +57,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  CONTRACTS_MODULE,
   DEP_CONSTRAINTS,
   LAZY_AND_STATIC_ALLOWED,
   OVERRIDES_CALL,
   compareToAllowlist,
+  contractEdges,
+  contractPeerFindings,
+  contractsModuleFindings,
+  crossPluginImports,
   declarationsOwed,
   evaluateEdges,
   isNpmLibrary,
@@ -67,6 +77,7 @@ import {
   workspaceSubpathsImported,
   packagesImported,
   peerFamiliesImported,
+  pluginCodeDependencies,
   readPackageMap,
 } from './lib/lib-boundaries.mjs'
 
@@ -110,13 +121,39 @@ if (!existsSync(DOC_PATH)) {
 }
 
 const problems = []
+const packageMap = readPackageMap(REPO_ROOT)
 
-// 1. The edges.
-const verdict = compareToAllowlist(evaluateEdges(document, DEP_CONSTRAINTS), allowlist)
+// 6, read first because it decides which plugin → plugin edges are contracts.
+const pluginsConfig = JSON.parse(readFileSync(join(REPO_ROOT, 'plugins.config.json'), 'utf8'))
+const codeDependencies = pluginCodeDependencies(pluginsConfig)
+problems.push(...codeDependencies.findings)
+const projectByAlias = new Map(packageMap.filter((project) => project.alias).map((project) => [project.alias, project]))
+const pluginProject = (id) => projectByAlias.get(codeDependencies.plugins.get(id)?.alias)
+const idByAlias = new Map([...codeDependencies.plugins.values()].map((plugin) => [plugin.alias, plugin.id]))
+const pluginImports = new Map()
+for (const plugin of codeDependencies.plugins.values()) {
+  const project = pluginProject(plugin.id)
+  if (project) pluginImports.set(plugin.id, crossPluginImports(join(REPO_ROOT, project.root), plugin.id, idByAlias))
+}
+const hasContracts = (id) => {
+  const project = pluginProject(id)
+  return Boolean(project && existsSync(join(REPO_ROOT, project.root, CONTRACTS_MODULE)))
+}
+const contracts = contractEdges({ plugins: codeDependencies.plugins, imports: pluginImports, hasContracts })
+problems.push(...contracts.findings)
+const contractEdgeKeys = new Set(
+  contracts.allowed.map((edge) => `${pluginProject(edge.from)?.name} -> ${pluginProject(edge.to)?.name}`),
+)
+
+// 1. The edges, less the contract edges, which the map allows (6).
+const edgeViolations = evaluateEdges(document, DEP_CONSTRAINTS).filter(
+  (edge) => !contractEdgeKeys.has(`${edge.from} -> ${edge.to}`),
+)
+const verdict = compareToAllowlist(edgeViolations, allowlist)
 for (const edge of verdict.regressions) {
   problems.push(
     `${edge.from} -> ${edge.to} breaks the map: ${edge.rule}.\n` +
-      `    Put what is shared behind a core seam (docs/PACKAGES.md, "Rules"). Down a layer only if it ` +
+      `    Put what is shared behind a core seam (docs/PACKAGES.md, "Rules"), or, plugin to plugin, import only the provider's /contracts and name it in "uses" ("Plugin contracts"). Down a layer only if it ` +
       `carries no plugin's domain: libs/shared is generic, types included, so it is not a home for a model two plugins agree on. ` +
       `A new row in tools/scripts/lib-boundaries-allowlist.json is not the fix: the list only shrinks.`,
   )
@@ -135,7 +172,6 @@ for (const name of missingMapRows(readFileSync(DOC_PATH, 'utf8'), projectNames))
 }
 
 // 3. The lint-side wiring.
-const packageMap = readPackageMap(REPO_ROOT)
 for (const source of overrideWiring(allowlist, packageMap, (path) => (existsSync(join(REPO_ROOT, path)) ? readFileSync(join(REPO_ROOT, path), 'utf8') : null))) {
   if (source.wired) continue
   problems.push(
@@ -190,6 +226,37 @@ for (const project of packageMap) {
   }
 }
 
+// 6, the rest: each contracts module loads nothing of its plugin, each
+// consumer's lint config takes the override that allows the import, and each
+// consumer's package.json carries its providers as optional peers.
+for (const plugin of codeDependencies.plugins.values()) {
+  const project = pluginProject(plugin.id)
+  if (!project) continue
+  const modulePath = join(REPO_ROOT, project.root, CONTRACTS_MODULE)
+  if (existsSync(modulePath)) {
+    problems.push(...contractsModuleFindings(readFileSync(modulePath, 'utf8'), `${project.root}/${CONTRACTS_MODULE}`))
+  }
+}
+const consumers = [...new Set(contracts.allowed.map((edge) => edge.from))].sort()
+for (const id of consumers) {
+  const project = pluginProject(id)
+  const config = `${project.root}/eslint.config.mjs`
+  const text = existsSync(join(REPO_ROOT, config)) ? readFileSync(join(REPO_ROOT, config), 'utf8') : ''
+  if (!text.includes(OVERRIDES_CALL)) {
+    problems.push(
+      `${config} does not spread the boundary overrides, so ${project.name} lints red on the contracts it imports.\n` +
+        `    Import { ${OVERRIDES_CALL.split('(')[0]} } beside baseConfig and spread \`...${OVERRIDES_CALL},\` after \`...baseConfig,\`.`,
+    )
+  }
+  const shipped = (pluginImports.get(id) ?? []).filter((entry) => entry.contract && !/\.(?:spec|test|stories)\.[cm]?[jt]sx?$/.test(entry.file))
+  const providers = [...new Set(shipped.map((entry) => codeDependencies.plugins.get(entry.to).alias))].sort()
+  const packagePath = join(REPO_ROOT, project.root, 'package.json')
+  if (!providers.length || !existsSync(packagePath)) continue
+  for (const finding of contractPeerFindings(JSON.parse(readFileSync(packagePath, 'utf8')), providers, rootVersion)) {
+    problems.push(`${project.root}/package.json: ${finding}`)
+  }
+}
+
 // 5. The lazy loads.
 const lazy = compareToAllowlist(lazyAndStaticPairs(document), LAZY_AND_STATIC_ALLOWED)
 for (const pair of lazy.regressions) {
@@ -216,6 +283,6 @@ if (problems.length) {
 }
 console.log(
   `check:lib-boundaries: ${projectNames.length} projects, ${edgeCount} static edges, ` +
-    `${allowlist.length} allowlisted (all still real), ${LAZY_AND_STATIC_ALLOWED.length} lazy-and-static pairs (all allowed), every project in docs/PACKAGES.md, ` +
+    `${allowlist.length} allowlisted (all still real), ${contracts.allowed.length} plugin contract edges (all declared), ${LAZY_AND_STATIC_ALLOWED.length} lazy-and-static pairs (all allowed), every project in docs/PACKAGES.md, ` +
     `${packageMap.filter((project) => project.projectType === 'library').length} lib package.json files in shape`,
 )
