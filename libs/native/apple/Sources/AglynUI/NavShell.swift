@@ -230,20 +230,20 @@ public struct AglynSidebarGroupHeader: View {
 
   public var body: some View {
     Button(action: action) {
-      HStack(spacing: 6) {
+      // A small label with its chevron after it (Figma Sidebar/Group header 6:84), its count on the right while folded.
+      HStack(spacing: 4) {
+        Text(title)
+          .font(.system(size: 11, weight: .semibold))
+          .foregroundStyle(AglynColor.secondaryText)
         if foldable {
           Image(systemName: "chevron.right")
-            .font(.system(size: AglynShellMetrics.groupText - 2, weight: .semibold))
+            .font(.system(size: 8, weight: .bold))
             .foregroundStyle(AglynColor.textTertiary)
             .rotationEffect(.degrees(open ? 90 : 0))
-            .frame(width: AglynShellMetrics.groupText + 3)
         }
-        Text(title)
-          .font(.system(size: AglynShellMetrics.groupText + 1, weight: .semibold))
-          .foregroundStyle(AglynColor.secondaryText)
         Spacer(minLength: 4)
         if foldable && !open && hiddenCount > 0 {
-          Text("\(hiddenCount)").font(.system(size: AglynShellMetrics.groupText + 1)).monospacedDigit()
+          Text("\(hiddenCount)").font(.system(size: 11)).monospacedDigit()
             .foregroundStyle(AglynColor.textTertiary)
         }
       }
@@ -257,7 +257,6 @@ public struct AglynSidebarGroupHeader: View {
     .accessibilityLabel(title)
     .accessibilityValue(foldable ? (open ? "Open" : "Folded") : "")
     .accessibilityHint(foldable ? (open ? "Folds the group" : "Opens the group") : "")
-    .animation(.easeOut(duration: 0.15), value: open)
   }
 }
 
