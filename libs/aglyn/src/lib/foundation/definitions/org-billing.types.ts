@@ -259,6 +259,13 @@ export interface CoreOrgFeatureFlags {
   multilingual?: boolean
   /** Event Calendar add-on (AGL-145); paid, not part of any base tier. */
   eventCalendar?: boolean
+  /**
+   * Site Care add-on (AGL-3954): staff make the owner's small site changes,
+   * about an hour of work a month. Paid, never part of any base tier — true
+   * only while `OrgSeatAddons.siteCare` is bought on a live subscription, or
+   * by a staff override.
+   */
+  siteCare?: boolean
   /** URL redirects manager (AGL-154). */
   redirects?: boolean
   /** Per-screen traffic analytics (AGL-150). */
@@ -752,6 +759,13 @@ export interface OrgSeatAddons {
   posRegisters?: number
   /** Event Calendar org-wide toggle, 0/1 (AGL-145/524). */
   eventCalendar?: number
+  /**
+   * Site Care org-wide toggle, 0/1 (AGL-3954): the managed-website add-on,
+   * flat at `SITE_CARE_ADDON_MONTHLY_USD` on every paid self-serve plan.
+   * `resolveOrgEntitlements` reads any quantity >= 1 as one and switches
+   * `features.siteCare` on; it raises no quota.
+   */
+  siteCare?: number
   /**
    * Aglyn AI org-wide toggle, 0/1 (AGL-2896). One purchase covers every
    * host in the org, the way Event Calendar does: `resolveOrgEntitlements`

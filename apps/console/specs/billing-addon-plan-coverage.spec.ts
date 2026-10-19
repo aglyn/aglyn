@@ -74,6 +74,8 @@ PRICE_ENV['STRIPE_PRICE_POS_REGISTER'] = 'price_pos_register'
 PRICE_ENV['STRIPE_PRICE_POS_REGISTER_YEARLY'] = 'price_pos_register_yearly'
 PRICE_ENV['STRIPE_PRICE_EVENT_CALENDAR'] = 'price_event_calendar'
 PRICE_ENV['STRIPE_PRICE_EVENT_CALENDAR_YEARLY'] = 'price_event_calendar_yearly'
+PRICE_ENV['STRIPE_PRICE_SITE_CARE'] = 'price_site_care'
+PRICE_ENV['STRIPE_PRICE_SITE_CARE_YEARLY'] = 'price_site_care_yearly'
 PRICE_ENV['STRIPE_PRICE_METERED'] = 'price_metered_usage'
 PRICE_ENV['STRIPE_PRICE_METERED_YEARLY'] = 'price_metered_usage_yearly'
 
@@ -125,6 +127,7 @@ describe('PAID_PLANS covers every plan that is actually sold (AGL-1340)', () => 
         item('price_pos_register', 5),
         item('price_event_calendar', 1),
         item(`${prefix}_ai_addon`, 1),
+        item('price_site_care', 1),
       ]
       // The bug, precisely: every one of these was 0 before the fix, and the
       // webhook merged that onto the org doc as the truth.
@@ -136,6 +139,7 @@ describe('PAID_PLANS covers every plan that is actually sold (AGL-1340)', () => 
         posRegisters: 5,
         eventCalendar: 1,
         aiAddon: 1,
+        siteCare: 1,
       })
     },
   )
@@ -202,6 +206,7 @@ describe('the base plan item is identified explicitly (AGL-1340)', () => {
       posRegisters: 0,
       eventCalendar: 0,
       aiAddon: 0,
+      siteCare: 0,
     })
   })
 
@@ -304,5 +309,38 @@ describe('the Aglyn AI add-on is a per-plan, 0/1 kind (AGL-2896)', () => {
     // (null) is what refuses the sale there, exactly as it does for a
     // register on a plan without POS.
     expect(addonMaxForPlan('eventCalendar', 'pro')).toBe(1)
+  })
+})
+
+describe('Site Care is sold on every paid plan and never on Free (AGL-3954)', () => {
+  it('is a flat price, one env per interval, and round-trips it', () => {
+    expect(addonPriceId('siteCare', 'starter', 'month')).toBe('price_site_care')
+    expect(addonPriceId('siteCare', 'agency', 'year')).toBe('price_site_care_yearly')
+    for (const interval of ['month', 'year'] as const) {
+      expect(addonKindFromPriceId(addonPriceId('siteCare', 'pro', interval))).toBe('siteCare')
+    }
+    expect(
+      addonQuantitiesFromItems([item('price_business'), item('price_site_care', 1)]),
+    ).toMatchObject({ siteCare: 1, aiAddon: 0 })
+  })
+
+  it('costs the same on every paid plan', () => {
+    for (const plan of PAID_PLANS) {
+      expect(`${plan}: ${addonUnitUsd('siteCare', plan)}`).toBe(`${plan}: 49`)
+    }
+  })
+
+  it('caps at one on every paid plan and at zero on Free and Enterprise', () => {
+    // The price is flat, so unlike Aglyn AI no null in the price map refuses
+    // the sale: this ceiling is the one rule that keeps Free from buying it.
+    for (const plan of PAID_PLANS) {
+      expect(`${plan}: ${addonMaxForPlan('siteCare', plan)}`).toBe(`${plan}: 1`)
+    }
+    expect(addonMaxForPlan('siteCare', 'free')).toBe(0)
+    expect(addonMaxForPlan('siteCare', 'enterprise')).toBe(0)
+  })
+
+  it('is the last kind, so every list that mirrors ADDON_KINDS appends it', () => {
+    expect(ADDON_KINDS[ADDON_KINDS.length - 1]).toBe('siteCare')
   })
 })

@@ -21652,6 +21652,26 @@
               ]
             },
             {
+              "key": "feature.siteCare",
+              "label": "Feature: Site care",
+              "kind": "select",
+              "initial": "{item.entitlements.features.siteCare}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ]
+            },
+            {
               "key": "feature.redirects",
               "label": "Feature: Redirects",
               "kind": "select",

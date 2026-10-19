@@ -41,7 +41,7 @@ export const DOCS_HELP_EXCERPTS = {
   actionsBuilder: 'Map a single event to a single action without building a full workflow.',
   activities: 'Log calls, emails, meetings and notes against a contact, a company, a deal or a lead, email one person from their record, and read it all in one timeline beside everything captured and every campaign sent.',
   addALocale: 'Create a language variant of your site and translate its pages.',
-  addOns: 'Buy extra seats, sites, datasets, POS registers, the Event Calendar, and Aglyn AI from the Billing page — prorated, self-serve, no support ticket.',
+  addOns: 'Buy extra seats, sites, datasets, POS registers, the Event Calendar, Aglyn AI and Site Care from the Billing page — prorated, self-serve, no support ticket.',
   addSearch: 'Drop the Search Box element onto a page and publish — the built-in search page does the rest.',
   adTracking: 'Run your own Meta, TikTok, Pinterest, Google Ads and LinkedIn tags on your site — only for visitors who allow advertising.',
   agencySites: 'Run one brief across many client sites: each is its own build job with its own plan and drafts, per-site allotments keep spend separate, and nothing reaches a client\'s live site until your team publishes it.',
