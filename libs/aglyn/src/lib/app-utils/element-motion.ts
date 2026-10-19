@@ -62,10 +62,12 @@ import {
  *    sides when the character says {@link ElementMotionCharacter.sides}:
  *    the left column from the left, the right from the right, the second a
  *    stagger step after the first. A picture whose preset zooms keeps its
- *    zoom.
+ *    zoom. Without sides its columns still arrive one after the other, the
+ *    picture's in the media preset and the words' in the section's.
  *  - A group of like items — a grid of cards, a list, the questions of an
  *    FAQ, a dataset repeated over one card — STAGGERS its items, one after
- *    another, rather than arriving as one block.
+ *    another, rather than arriving as one block, in the character's {@link
+ *    ElementMotionCharacter.groupPreset} where it names one.
  *  - A picture, and a group whose items each lead with one, takes the
  *    character's media preset.
  *  - Never touched: forms and their fields, navigation and the site's frame,
@@ -75,6 +77,10 @@ import {
  *    `none` included, is never overwritten. A block that HOLDS one of those
  *    is not animated as a whole either; its other children are animated one
  *    by one instead, so a form never slides in with its section.
+ *  - Except a picture's FRAME: a box in the flow whose picture is laid over
+ *    it (`position: absolute`), as the AI's layout compiler draws every
+ *    picture slot. The frame is the picture, so it moves as one, picture and
+ *    all, and counts as a picture for the media preset and for a split.
  *  - Never nested: once a block animates, nothing inside it does. Two
  *    entrances on the same pixels multiply their fades and add their
  *    offsets, which reads as a stutter, not as motion.
@@ -106,6 +112,12 @@ export interface ElementMotionCharacter {
   sectionPresets?: readonly AnimationPreset[]
   /** Whether a split's two columns come in from their own sides. */
   sides?: boolean
+  /**
+   * What a group of like items — a grid of cards, a list, an FAQ — arrives
+   * with, whatever its section's turn; the section's own preset when absent.
+   * A group whose every item leads with a picture still takes {@link mediaPreset}.
+   */
+  groupPreset?: AnimationPreset
 }
 
 /** The motion a page gets when nothing says otherwise: a soft rise, as the attributes panel defaults to. */
@@ -243,14 +255,33 @@ export function applyElementMotion<T extends Record<string, any>>(nodes: T, opti
 
   /** The first section's Largest Contentful Paint candidates, painted where they stand. */
   const still = new Set<string>()
-  /** Left alone, and so is everything inside it. */
-  const closed = (id: string): boolean => {
+  /** Left alone for what it is, wherever it stands. */
+  const refused = (id: string): boolean => {
     const at = node(id)
     if (!at) return true
     if (at.hidden || still.has(id)) return true
     if (ELEMENT_MOTION_NEVER.has(String(at.componentId ?? ''))) return true
-    if (at.props && NODE_ANIMATION_PROPS.some((prop) => at.props?.[prop] !== undefined)) return true
-    return pins(at.sx?.['position'])
+    return !!at.props && NODE_ANIMATION_PROPS.some((prop) => at.props?.[prop] !== undefined)
+  }
+  /** Left alone, and so is everything inside it. */
+  const closed = (id: string): boolean => refused(id) || pins(node(id)?.sx?.['position'])
+  /** A picture laid over its box, free to move with it. */
+  const overlay = (id: string): boolean =>
+    MEDIA.has(String(node(id)?.componentId ?? '')) && pins(node(id)?.sx?.['position']) && !refused(id)
+  /**
+   * A picture's frame: a box in the flow whose picture is laid over it
+   * (`position: absolute`, filling it), beside at most the placeholder icon
+   * an empty slot shows. The frame IS the picture, so it moves as one,
+   * picture and all; its picture being out of the flow does not hold it still
+   * the way a cover's backdrop holds its band, which is itself out of the flow.
+   */
+  const isFrame = (id: string): boolean => {
+    const kids = children(id)
+    return (
+      !closed(id) &&
+      kids.some(overlay) &&
+      kids.every((child) => overlay(child) || (node(child)?.componentId === 'icon' && !refused(child) && !children(child).length))
+    )
   }
   const holdsClosed = new Map<string, boolean>()
   /** The element, or one inside it, is left alone: it cannot move as one block. */
@@ -258,7 +289,7 @@ export function applyElementMotion<T extends Record<string, any>>(nodes: T, opti
     const known = holdsClosed.get(id)
     if (known !== undefined) return known
     holdsClosed.set(id, false)
-    const result = closed(id) || children(id).some(holds)
+    const result = closed(id) || (!isFrame(id) && children(id).some(holds))
     holdsClosed.set(id, result)
     return result
   }
@@ -297,11 +328,11 @@ export function applyElementMotion<T extends Record<string, any>>(nodes: T, opti
     belowMemo.set(id, result)
     return result
   }
-  /** Leads with a picture: its first leaf, down its first children, is one. */
+  /** Leads with a picture: its first leaf, down its first children, is one, or the frame of one. */
   const leadsWithMedia = (id: string): boolean => {
     let at = id
     for (let depth = 0; depth < 12; depth += 1) {
-      if (MEDIA.has(String(node(at)?.componentId ?? ''))) return true
+      if (MEDIA.has(String(node(at)?.componentId ?? '')) || isFrame(at)) return true
       const kids = children(at)
       if (!kids.length) return false
       at = kids[0]
@@ -321,7 +352,7 @@ export function applyElementMotion<T extends Record<string, any>>(nodes: T, opti
     side?: AnimationPreset,
   ): void => {
     const group = isGroup(id)
-    const preset = presetOf(id, group, words)
+    const preset = presetOf(id, group, group && character.groupPreset ? character.groupPreset : words)
     patches.set(id, {
       [NODE_ANIMATION_PROP]: side && !preset.startsWith('zoom') ? side : preset,
       [NODE_ANIMATION_TRIGGER_PROP]: trigger,
@@ -361,10 +392,10 @@ export function applyElementMotion<T extends Record<string, any>>(nodes: T, opti
   /** A later section's content: on scroll, groups staggered, splits from their sides, nothing nested. */
   const place = (id: string, words: AnimationPreset): void => {
     if (closed(id)) return
-    if (character.sides && isSplit(id)) {
+    if (isSplit(id)) {
       const [start, end] = children(id)
-      animate(start, 'scroll', 0, words, 'slide-right')
-      animate(end, 'scroll', character.staggerStepMs, words, 'slide-left')
+      animate(start, 'scroll', 0, words, character.sides ? 'slide-right' : undefined)
+      animate(end, 'scroll', character.staggerStepMs, words, character.sides ? 'slide-left' : undefined)
       return
     }
     if (holds(id) || (!isGroup(id) && holdsGroup(id))) {
@@ -456,7 +487,7 @@ export function applyElementMotion<T extends Record<string, any>>(nodes: T, opti
     if (content === id && !children(id).length) return
     const words = turns[(index - 1) % turns.length] ?? character.preset
     if (index === 0) ladder(content)
-    else if (content === id && !isGroup(id) && !(character.sides && isSplit(id)))
+    else if (content === id && !isGroup(id) && !isSplit(id))
       for (const child of children(id)) place(child, words)
     else place(content, words)
   })

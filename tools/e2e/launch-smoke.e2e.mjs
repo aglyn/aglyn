@@ -16,21 +16,27 @@
  */
 
 // The launch smoke (AGL-1514): the whole path a first customer walks —
-// SIGN UP → ORG → HOST → PUBLISH → served on the `*.aglyn.app` equivalent —
-// against the local Firebase emulators, with a deliberate failure beside
-// every assertion.
+// SIGN UP → (name held) → VERIFY → WORKSPACE → HOST → PUBLISH → served on the
+// `*.aglyn.app` equivalent — against the local Firebase emulators, with a
+// deliberate failure beside every assertion. The workspace is made on the
+// first verified session, not at sign-up (AGL-2590), so it is asserted after
+// verification, by continuing to the console the way a person does.
 //
 // Why the negatives are in the harness rather than in a runbook: a green
 // check only proves what it reads. Each step here first breaks its own
 // precondition and asserts the matching refusal, so a step that silently
 // stopped enforcing anything goes red instead of staying green.
 //
-// Prerequisites (docs/E2E_LOCAL.md):
-//   1. Emulators: cloud/ `npx -y firebase-tools@13 emulators:start
-//      --config firebase.e2e.json --project aglyn-main --only auth,firestore`
-//   2. A console dev server with the emulator flags (any port; default 4300).
-//   3. A tenant server on port 4500 — the middleware's `*.localhost:4500`
-//      case is the local stand-in for `*.aglyn.app`.
+// Prerequisites (docs/E2E_LOCAL.md), from a checkout `npm run worktree:new`
+// made (it brings the gitignored env files):
+//   1. Emulators: cloud/ `npx -y -p firebase-tools@15.24.0 firebase
+//      emulators:start --config firebase.e2e.json --project aglyn-main
+//      --only auth,firestore`
+//   2. `npm run serve:console:emulated -- --port 4300`.
+//   3. `npm run serve:tenant:emulated -- --port 4500` — the middleware's
+//      `*.localhost:4500` case is the local stand-in for `*.aglyn.app`, and
+//      the script gives the tenant the local-only `REVALIDATE_SECRET` the
+//      publish step's cache drop needs.
 //
 //   FIRESTORE_EMULATOR_HOST=localhost:8082 \
 //   FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 \
@@ -234,6 +240,58 @@ function tenantFetch(path, { host = `${SUBDOMAIN}.localhost:${TENANT_PORT}` } = 
   })
 }
 
+/**
+ * The cache announce a drained outbox entry sends, delivered to the LOCAL
+ * tenant. `REVALIDATE_SECRET` defaults to the one `serve:tenant:emulated`
+ * starts the tenant with.
+ */
+function tenantRevalidate(body) {
+  return new Promise((resolve) => {
+    const payload = JSON.stringify(body)
+    const req = httpRequest(
+      {
+        host: '127.0.0.1',
+        port: TENANT_PORT,
+        path: '/api/revalidate',
+        method: 'POST',
+        headers: {
+          Host: `${SUBDOMAIN}.localhost:${TENANT_PORT}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+          'x-revalidate-secret': process.env.REVALIDATE_SECRET ?? 'emulated-revalidate-secret',
+        },
+        timeout: TIMEOUT_MS,
+      },
+      (res) => {
+        let text = ''
+        res.setEncoding('utf8')
+        res.on('data', (chunk) => (text += chunk))
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, text }))
+      },
+    )
+    req.on('error', (error) => resolve({ status: 0, text: String(error) }))
+    req.on('timeout', () => req.destroy(new Error('timed out')))
+    req.end(payload)
+  })
+}
+
+/** The document title of a served page, or null. */
+function pageTitle(html) {
+  return /<title[^>]*>([^<]*)<\/title>/i.exec(html ?? '')?.[1]?.trim() ?? null
+}
+
+/**
+ * The holding page a site with nothing published serves (AGL-3594): a 200
+ * titled "Coming soon", kept out of search.
+ */
+function isHoldingPage(response) {
+  return (
+    response.status === 200 &&
+    /^Coming soon\b/.test(pageTitle(response.text) ?? '') &&
+    /<meta[^>]+name="robots"[^>]+noindex/i.test(response.text ?? '')
+  )
+}
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -343,9 +401,13 @@ if (
 }
 
 const UID = user?.uid
-const acceptances = UID
-  ? (await adminDb.collection('users').doc(UID).collection('legalAcceptances').get()).docs
-  : []
+// The acceptance is written beside the account, not before it, so the auth
+// record can exist a moment before it does. Waited for, up to 15 s.
+let acceptances = []
+for (let attempt = 0; attempt < 15 && UID && acceptances.length === 0; attempt += 1) {
+  acceptances = (await adminDb.collection('users').doc(UID).collection('legalAcceptances').get()).docs
+  if (acceptances.length === 0) await sleep(1000)
+}
 check(
   '1-signup',
   'clickwrap acceptance recorded (AGL-1497)',
@@ -360,48 +422,45 @@ check(
 )
 
 // ─────────────────────────────────────────────────────────────────────────
-// Step 2 — the org the signup form provisioned
+// Step 2 — the workspace name, HELD until the address is proven
 // ─────────────────────────────────────────────────────────────────────────
 
-let orgId = null
-for (let attempt = 0; attempt < 30 && !orgId; attempt += 1) {
-  const owned = await adminDb.collection('orgs').where('ownerUid', '==', UID).get()
-  if (owned.size) orgId = owned.docs[0].id
-  else await sleep(1000)
+// Sign-up no longer creates the workspace (AGL-2590). An unverified account
+// can open nothing, so a workspace made at sign-up was a claim on an address
+// handed out before anyone proved the inbox. The name the person typed is
+// held on the account instead, and the console's home page creates the
+// workspace on the first VERIFIED session (step 3). Asserted both ways: the
+// hold exists, and no workspace does.
+let hold = null
+for (let attempt = 0; attempt < 15 && !hold; attempt += 1) {
+  hold = (await adminDb.collection('users').doc(UID).get()).get('pendingSignUpWorkspace') ?? null
+  if (!hold) await sleep(1000)
 }
-check('2-org', 'signup provisioned an org (AGL-1523)', Boolean(orgId), orgId)
-check('2-org', 'the org is NEW, not a seeded fixture', orgId && !preexisting.has(orgId), orgId)
-
-const orgDoc = orgId ? (await adminDb.collection('orgs').doc(orgId).get()).data() : null
-check('2-org', 'org name is the one typed at signup', orgDoc?.name === ORG_NAME, orgDoc?.name)
-check('2-org', 'org owner is the new account', orgDoc?.ownerUid === UID)
-
-// The FREE plan. A brand-new org carries NO `plan` field at all —
-// `resolveEffectivePlan` (libs/aglyn/.../plan-entitlements.ts) answers 'free'
-// for a missing or unknown plan — so a data assertion on the field would be
-// asserting the absence of a value and calling it a tier. What is asserted
-// instead, here and at step 5, is the free tier's BEHAVIOUR: the gates the
-// free entitlements actually drive.
 check(
-  '2-org',
-  'org carries no paid plan (free is the absence of one)',
-  !orgDoc?.plan || orgDoc.plan === 'free',
-  `plan=${JSON.stringify(orgDoc?.plan)} subscriptionStatus=${JSON.stringify(orgDoc?.subscriptionStatus)}`,
+  '2-hold',
+  'the typed workspace name is held on the account (AGL-2590)',
+  hold?.name === ORG_NAME && hold?.nameWasTyped === true,
+  hold && `${hold.name} (typed=${hold.nameWasTyped})`,
 )
 check(
-  '2-org',
-  'org carries no subscription',
-  !orgDoc?.subscriptionId && !orgDoc?.stripeSubscriptionId,
+  '2-hold',
+  'the hold is bound to the password credential that wrote it',
+  hold?.provider === 'password',
+  hold?.provider,
+)
+const ownedBeforeVerify = await adminDb.collection('orgs').where('ownerUid', '==', UID).get()
+check(
+  '2-hold',
+  'NEGATIVE: no workspace exists before the address is verified',
+  ownedBeforeVerify.size === 0,
+  `${ownedBeforeVerify.size} owned`,
 )
 
-const membership = orgId
-  ? (await adminDb.collection('orgs').doc(orgId).collection('members').doc(UID).get()).data()
-  : null
-check('2-org', 'owner membership row exists', membership?.role === 'owner', membership?.role)
+// The workspace this run gets, once step 3 lets the console create it.
+let orgId = null
 
-// NEGATIVE — the AGL-1523 grace is ONE workspace for a brand-new unverified
-// account, not a hole. A second create with the same still-unverified token
-// must be refused.
+// NEGATIVE — and the door is shut, not merely unused: the unverified token
+// cannot create a workspace through the API either.
 const unverifiedToken = await freshIdToken()
 const secondOrg = await consoleApi(
   '/api/orgs/create',
@@ -409,8 +468,8 @@ const secondOrg = await consoleApi(
   unverifiedToken,
 )
 check(
-  '2-org',
-  'NEGATIVE: a second org on the unverified account is refused',
+  '2-hold',
+  'NEGATIVE: the unverified account cannot create a workspace',
   secondOrg.status === 403,
   `HTTP ${secondOrg.status} ${JSON.stringify(secondOrg.payload)}`,
 )
@@ -485,6 +544,85 @@ check(
 )
 
 // ─────────────────────────────────────────────────────────────────────────
+// Step 3b — the workspace, made on the first verified session
+// ─────────────────────────────────────────────────────────────────────────
+
+// The verify page stops on "Email verified" and leaves the next move to the
+// person, so this presses "Continue to Aglyn" the way they do, which lands on
+// the console home, which claims the hold and creates the workspace. Waited
+// on in Firestore, never on the address bar, the same as the signup canary.
+const workspaceCreates = []
+const onWorkspaceCreate = (response) => {
+  if (response.url().includes('/api/orgs/create')) workspaceCreates.push(response.status())
+}
+page.on('response', onWorkspaceCreate)
+const workspaceBy = Date.now() + 90_000
+while (!orgId && Date.now() < workspaceBy) {
+  const owned = await adminDb.collection('orgs').where('ownerUid', '==', UID).get()
+  if (owned.size) {
+    orgId = owned.docs[0].id
+    break
+  }
+  const proceed = page.getByRole('button', { name: /^Continue to / })
+  if (await proceed.isVisible().catch(() => false)) {
+    await proceed.click().catch(() => undefined)
+  }
+  await sleep(2000)
+}
+page.off('response', onWorkspaceCreate)
+const landedAt = page.url()
+const landedOn = orgId
+  ? null
+  : (await page.innerText('body').catch(() => '')).replace(/\s+/g, ' ').slice(0, 160)
+// Repeated local runs from one machine meet the workspace-create limiter by
+// design, so a 429 is named rather than read as a broken landing: clear the
+// emulator's `rateLimits` collection and run again.
+const createdWith = workspaceCreates.length
+  ? `console create answered ${workspaceCreates.join(', ')}${workspaceCreates.includes(429) ? ' (rate-limited: clear the emulator rateLimits collection)' : ''}`
+  : 'the console never asked to create one'
+check(
+  '3-workspace',
+  'the first verified session created the workspace (AGL-2590)',
+  Boolean(orgId),
+  orgId ?? `none after 90 s, at ${new URL(landedAt).pathname} (${createdWith}): ${landedOn}`,
+)
+check('3-workspace', 'the workspace is NEW, not a seeded fixture', orgId && !preexisting.has(orgId), orgId)
+
+const orgDoc = orgId ? (await adminDb.collection('orgs').doc(orgId).get()).data() : null
+check('3-workspace', 'workspace name is the one typed at signup', orgDoc?.name === ORG_NAME, orgDoc?.name)
+check('3-workspace', 'workspace owner is the new account', orgDoc?.ownerUid === UID)
+const holdAfter = (await adminDb.collection('users').doc(UID).get()).get('pendingSignUpWorkspace')
+check(
+  '3-workspace',
+  'the hold was claimed, so it cannot name a second workspace',
+  holdAfter === null,
+  JSON.stringify(holdAfter ?? null),
+)
+
+// The FREE plan. A brand-new org carries NO `plan` field at all —
+// `resolveEffectivePlan` (libs/aglyn/.../plan-entitlements.ts) answers 'free'
+// for a missing or unknown plan — so a data assertion on the field would be
+// asserting the absence of a value and calling it a tier. What is asserted
+// instead, here and at step 5, is the free tier's BEHAVIOUR: the gates the
+// free entitlements actually drive.
+check(
+  '3-workspace',
+  'workspace carries no paid plan (free is the absence of one)',
+  !orgDoc?.plan || orgDoc.plan === 'free',
+  `plan=${JSON.stringify(orgDoc?.plan)} subscriptionStatus=${JSON.stringify(orgDoc?.subscriptionStatus)}`,
+)
+check(
+  '3-workspace',
+  'workspace carries no subscription',
+  !orgDoc?.subscriptionId && !orgDoc?.stripeSubscriptionId,
+)
+
+const membership = orgId
+  ? (await adminDb.collection('orgs').doc(orgId).collection('members').doc(UID).get()).data()
+  : null
+check('3-workspace', 'owner membership row exists', membership?.role === 'owner', membership?.role)
+
+// ─────────────────────────────────────────────────────────────────────────
 // Step 4 — the Host
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -545,14 +683,17 @@ check(
 // Step 5 — publish, and the page actually served
 // ─────────────────────────────────────────────────────────────────────────
 
-// NEGATIVE, and the one that makes the 200 below mean something: the site
-// exists and answers, but its root has nothing published yet.
+// NEGATIVE, and the one that makes the content check below mean something:
+// the site exists, but its root has nothing published yet. Such a site
+// answers with the holding page (AGL-3594), a 200 titled "Coming soon" and
+// kept out of search, so the visitor never meets a 404 at a real address.
+// What must NOT be there is anything this run made.
 const beforeAnything = await tenantFetch('/')
 check(
   '5-publish',
-  'NEGATIVE: the registered site 404s before anything is published',
-  beforeAnything.status === 404,
-  `HTTP ${beforeAnything.status}`,
+  'NEGATIVE: before anything is published the root is the holding page (AGL-3594)',
+  isHoldingPage(beforeAnything) && !beforeAnything.text.includes(MARKER_PUBLISHED),
+  `HTTP ${beforeAnything.status} title=${JSON.stringify(pageTitle(beforeAnything.text))}`,
 )
 
 const screenId = `agl1514-${RUN}-home`
@@ -621,9 +762,9 @@ check(
 const beforePublish = await tenantFetch('/')
 check(
   '5-publish',
-  'NEGATIVE: an unrouted screen is still not served',
-  beforePublish.status === 404,
-  `HTTP ${beforePublish.status}`,
+  'NEGATIVE: an unrouted screen is still not served (the holding page is)',
+  isHoldingPage(beforePublish) && !beforePublish.text.includes(MARKER_PUBLISHED),
+  `HTTP ${beforePublish.status} title=${JSON.stringify(pageTitle(beforePublish.text))}`,
 )
 
 // PUBLISH — through the console UI, the way a customer does it: the screens
@@ -654,6 +795,38 @@ check(
   JSON.stringify(publishedHost?.screens ?? {}),
 )
 const publishMs = Date.now() - publishStarted
+
+// THE CACHE DROP. The routing map is half a publish: the tenant keeps serving
+// what it cached until it is told to drop it. The publish writes that
+// announce into the outbox in the same batch (AGL-2575), and production's
+// scheduled drain delivers it to `https://{subdomain}.aglyn.app`. A local
+// stack has no such address, so the console's own delivery cannot land here.
+// The run asserts the durable half the product wrote, then delivers exactly
+// that announce to the LOCAL tenant, whose revalidate route
+// `serve:tenant:emulated` gives a local-only secret.
+const outbox = hostId
+  ? (await adminDb.collection('publishOutbox').where('hostId', '==', hostId).get()).docs.map((entry) => entry.data())
+  : []
+const announced = [...new Set(outbox.flatMap((entry) => entry.paths ?? []))]
+check(
+  '5-publish',
+  'the publish wrote its cache announce to the outbox (AGL-2575)',
+  announced.includes('/'),
+  JSON.stringify(announced),
+)
+// The same `{ host, hostId, paths }` body the console's delivery sends
+// (`utils/server/tenant-revalidate.ts`), with `host` the subdomain.
+const dropped = await tenantRevalidate({
+  host: SUBDOMAIN,
+  hostId,
+  paths: announced.length ? announced : ['/'],
+})
+check(
+  '5-publish',
+  'the local tenant dropped the cached page on that announce',
+  dropped.status === 200,
+  `HTTP ${dropped.status} ${dropped.text.slice(0, 160)}`,
+)
 
 // THE ASSERTION THAT MATTERS: content this run typed, on the public address.
 const served = await tenantFetch('/')
@@ -783,6 +956,19 @@ async function publishRootThroughConsole(pageHandle, viewUrl) {
       )
     const before = await chip()
     await slugField.fill('/')
+    // Publish is disabled until the slug holds a value, and it enables on the
+    // re-render that follows the fill, not on the fill itself. Clicking in the
+    // same tick found it still disabled, so wait for it, bounded.
+    await pageHandle
+      .waitForFunction(
+        () =>
+          [...document.querySelectorAll('button')].some(
+            (candidate) => candidate.textContent.trim() === 'Publish' && !candidate.disabled,
+          ),
+        null,
+        { timeout: 15_000 },
+      )
+      .catch(() => undefined)
     // Located by textContent, NOT by accessible name: MUI uppercases button
     // labels with `text-transform`, and Playwright's accessible name is the
     // RENDERED text, so `getByRole('button', { name: 'Publish', exact: true })`

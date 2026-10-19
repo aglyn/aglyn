@@ -1365,6 +1365,18 @@ jobs:
       - run: npm run test:id-minting
       - run: npm run check:id-minting
 
+      # AGL-3412, AGL-3868, AGL-3947 — a registry the boot fills, kept at
+      # module scope, is empty where a route reads it: Next compiles
+      # `instrumentation.ts` apart from the routes, so the two hold separate
+      # copies of every module. It shipped three times, silently each time
+      # (the trust signer, every native push, eleven plugin registries
+      # including the site automations). This walks every `register…` the
+      # boot reaches, from both apps' instrumentation and every plugin's
+      # declarations, and refuses a module-scoped Map, Set, array or `let`
+      # one of them writes. The self-test runs first.
+      - run: npm run test:boot-registries
+      - run: npm run check:boot-registries
+
       # AGL-118, AGL-2823. Every path that creates, destroys or transfers a
       # durable customer object writes an activity entry, or is classified
       # with the reason it does not. The listed modules live under apps/ and

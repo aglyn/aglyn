@@ -35,6 +35,7 @@ import {
   type AiSiteLookAnswer,
   type AiSiteStyle,
 } from '../model/ai-site-look'
+import { AI_SITE_MOTION_STYLE_RANGES, aiSiteMotionStylesFor } from '../layout-language/ai-layout-motion'
 import { aiCatalogEntry, aiDefaultModelFor } from '../providers/catalog'
 import { aiModelForStep } from '../providers/routing'
 import { runValidatedGeneration, type AiGenerationCheck } from '../runtime/ai-doctrine'
@@ -47,7 +48,8 @@ import { AI_JOB_BRIEF_MAX_CHARS, type AiJobStepContext, type AiJobStepOutcome } 
  * A site's look, designed first (AGL-3660): the scaffold's theme unit.
  *
  * One short answer from the fast tier — the base theme, two hues, a ground,
- * a font pairing and the building blocks' styles, chosen for this business
+ * a font pairing, the building blocks' styles and how the pages move
+ * (AGL-3941), chosen for this business
  * within its kind — then code builds the theme (`ai-site-look.ts`) and saves
  * it the way Setup → Theme saves a pick and its edits: the base theme
  * selected, the site's own look as the override over it, and the style
@@ -85,6 +87,7 @@ export const AI_SITE_LOOK_INSTRUCTIONS: readonly AiSystemBlock[] = [
       '- hue is the brand color and accent sits beside it; pick colors people would expect of this business, and let the design seed tip a close call.',
       '- A hex color written in the brief is the brand color: put it in brand. Otherwise brand is null.',
       '- Choose the building blocks to suit the kind: quiet, flat cards and small eyebrows for minimal sites; raised cards and capitals for bold ones; soft tinted cards for calm ones.',
+      '- motion is how the pages arrive as a visitor scrolls: choose from the motion list the request gives, for this business, never by habit; a quiet practice suits little motion, a lively studio more.',
     ].join('\n'),
     cacheBreakpoint: true,
   },
@@ -124,6 +127,7 @@ export function aiSiteLookPrompt(input: {
     `Base themes that suit it: ${shuffled(input.bases, seed).map((entry) => `${entry.base} (${entry.words})`).join('; ')}.`,
     `Font pairings that suit it: ${shuffled(pairings, seed + 1).map((pairing) => `${pairing.id} (${pairing.feel})`).join('; ')}.`,
     `Corners that suit it: ${kind.look.corners.join(', ')}. Its palette runs ${kind.look.chroma === 'neutral' ? 'neutral, ink and paper with one accent color' : kind.look.chroma}.`,
+    `Motion that suits it: ${shuffled(aiSiteMotionStylesFor(kind.id), seed + 2).map((motion) => `${motion} (${AI_SITE_MOTION_STYLE_RANGES[motion].words})`).join('; ')}.`,
     `Design seed: ${job.$id.slice(-6)}.`,
   ]
     .filter(Boolean)

@@ -351,6 +351,14 @@ TYPE carried on a token, so a seam a plugin invents needs no core module.
 | `resolvePluginServices(contract)` / `resolvePluginService(contract)` | Every implementation, highest `priority` first and registration order within a priority — or the first one. |
 | `hasPluginService(contract)` / `unregisterPluginServices(pluginId)` / `resetPluginServicesForTests()` | Presence, a plugin unloading, and the spec reset. |
 
+Every registry a plugin's server declarations fill is one per process, on
+`globalThis` under a `Symbol.for` key. Both apps run the declarations from
+`instrumentation.ts`, which Next compiles apart from the routes, so a registry
+kept in a module would be filled in the boot's copy and read empty in the
+route's. `npm run check:boot-registries` walks every `register…` function the
+boot reaches and refuses one that writes a module-scoped `Map`, `Set`, array or
+`let` (AGL-3947).
+
 Worked example — the AI plugin declares its provider contract and a
 marketplace plugin adds a provider:
 
