@@ -369,8 +369,10 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     val banner: @Composable () -> Unit = {
       impersonation?.let { ImpersonationBanner(it, onExit = { exitScope.launch { services.auth.endImpersonation() } }) }
     }
+    // The ☆ for the place on screen: a screen's title row draws it (the shared list scaffold); else the breadcrumbs do.
+    val starSlot = remember(here) { here?.let { item -> com.aglyn.ui.PageStarSlot { StarButton(services, item, prefs) } } }
     val body: @Composable () -> Unit = {
-      CompositionLocalProvider(com.aglyn.ui.LocalScreenTitle provides screenTitle) {
+      CompositionLocalProvider(com.aglyn.ui.LocalScreenTitle provides screenTitle, com.aglyn.ui.LocalPageStar provides starSlot) {
         entries.SaveableStateProvider(tabKey + navigator.currentKey) {
           ShellBody(services, context, navigator, workspace, widthClass, uid, route, openInBrowser, banner, screenSession.claims.isStaff) { chrome.colorFor = it }
         }
@@ -473,7 +475,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
                   place?.let { add(Crumb(it) { navigator.select(navigator.top) }) }
                   if (route != null && title.isNotBlank() && title != place) add(Crumb(title, null))
                 }.filter { it.label.isNotBlank() }
-                Breadcrumbs(steps)
+                Breadcrumbs(steps, star = starSlot?.takeIf { !it.claimed })
               }
               banner()
               sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
@@ -780,7 +782,7 @@ private data class Crumb(val label: String, val open: (() -> Unit)?)
 
 /** "Bakery › Sell › Orders": where the screen sits; every step but the last leads back to it. */
 @Composable
-private fun Breadcrumbs(steps: List<Crumb>) {
+private fun Breadcrumbs(steps: List<Crumb>, star: com.aglyn.ui.PageStarSlot? = null) {
   Row(
     Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 4.dp).testTag("title-crumb"),
     verticalAlignment = Alignment.CenterVertically,
@@ -799,6 +801,7 @@ private fun Breadcrumbs(steps: List<Crumb>) {
         modifier = if (!last && step.open != null) Modifier.clip(RoundedCornerShape(4.dp)).clickable(onClick = step.open).padding(horizontal = 2.dp) else Modifier,
       )
     }
+    star?.star?.invoke()
   }
 }
 

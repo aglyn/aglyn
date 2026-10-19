@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -106,45 +107,50 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null, sta
   // Opened from Create new: the new-site form comes up at once (for those who may make one).
   var creating by remember { mutableStateOf(startNew && canCreate) }
 
-  AglynListDetail(
-    initialSelected = initialSiteId,
-    list = { selected, onSelect ->
-      val listState = rememberLazyListState()
-      LoadMoreEffect(listState, model.hasMore, onLoadMore = model::loadMore)
-      Column(Modifier.fillMaxSize()) {
-        ListHeader("Sites") {
-          Button(onClick = { creating = true }, enabled = canCreate, modifier = Modifier.testTag("add-site")) {
-            Icon(AglynIcons.named("add"), contentDescription = null)
-            Text("Create site", Modifier.padding(start = space(1f)))
-          }
-        }
-        Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-          SearchField(model.search, model::type, placeholder = "Search sites")
-          ChoiceChipRow(SiteDomainFilter.entries.map { ChipOption(it.name, it.label) }, model.domain.name, { model.pick(SiteDomainFilter.valueOf(it)) })
-        }
-        RefreshableBox(model.refreshing, model::refresh) {
-          LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load sites") { rows ->
-            if (rows.isEmpty()) {
-              EmptyState(
-                if (model.search.isBlank() && model.domain == SiteDomainFilter.ALL) "No sites yet" else "No sites match",
-                body = if (model.search.isBlank()) "Create a site to start building." else "Try another search.",
-                icon = AglynIcons.named("public"),
-              )
-            } else {
-              LazyColumn(Modifier.fillMaxSize().testTag("sites-list"), state = listState) {
-                items(rows, key = { it.id }) { row -> SiteListRow(context, row, row.id == selected) { onSelect(row.id) } }
-                if (model.hasMore) item { SkeletonList(rows = 2) }
-              }
+  // One list, as Figma's Sites (Mac 13:3): the title with ☆ and Create site, search and one Filter, the sites; a site
+  // opens on its own, with the way back to the list.
+  var selected by androidx.compose.runtime.saveable.rememberSaveable(initialSiteId) { mutableStateOf(initialSiteId) }
+  val open = selected
+  if (open != null) {
+    Column(Modifier.fillMaxSize()) {
+      androidx.compose.material3.TextButton(onClick = { selected = null }, modifier = Modifier.padding(start = space(1.5f), top = space(0.5f)).testTag("sites-back")) {
+        Icon(AglynIcons.named("chevron_left"), contentDescription = null)
+        Text("Sites")
+      }
+      Box(Modifier.weight(1f)) { SiteOverview(context, open) }
+    }
+  } else {
+    val listState = rememberLazyListState()
+    LoadMoreEffect(listState, model.hasMore, onLoadMore = model::loadMore)
+    com.aglyn.ui.ListScreenScaffold(
+      title = "Sites",
+      query = model.search,
+      onQuery = model::type,
+      placeholder = "Search sites",
+      tag = "sites",
+      primary = com.aglyn.ui.PrimaryAction("add-site", "New site", enabled = canCreate) { creating = true },
+      filters = SiteDomainFilter.entries.map { com.aglyn.ui.FilterChoice("Domain", it.name, it.label) },
+      picked = mapOf("Domain" to model.domain.name),
+      onPick = { model.pick(SiteDomainFilter.valueOf(it.key)) },
+    ) {
+      RefreshableBox(model.refreshing, model::refresh) {
+        LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load sites") { rows ->
+          if (rows.isEmpty()) {
+            EmptyState(
+              if (model.search.isBlank() && model.domain == SiteDomainFilter.ALL) "No sites yet" else "No sites match",
+              body = if (model.search.isBlank()) "Create a site to start building." else "Try another search.",
+              icon = AglynIcons.named("public"),
+            )
+          } else {
+            LazyColumn(Modifier.fillMaxSize().padding(horizontal = space(1f)).testTag("sites-list"), state = listState) {
+              items(rows, key = { it.id }) { row -> SiteListRow(context, row, false) { selected = row.id } }
+              if (model.hasMore) item { SkeletonList(rows = 2) }
             }
           }
         }
       }
-    },
-    detail = { selected ->
-      if (selected == null) SelectionPlaceholder("Pick a site to see it here", icon = AglynIcons.named("public"))
-      else SiteOverview(context, selected)
-    },
-  )
+    }
+  }
 
   if (creating) CreateSiteDialog(context, orgId) { creating = false }
 }

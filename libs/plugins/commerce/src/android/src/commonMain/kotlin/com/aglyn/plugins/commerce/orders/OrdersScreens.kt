@@ -171,7 +171,6 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
   // Opened from Create new: the draft order comes up at once.
   var drafting by remember { mutableStateOf(startNew) }
   var exportPreset by remember { mutableStateOf<String?>(null) }
-  var presetMenu by remember { mutableStateOf(false) }
   var said by remember { mutableStateOf<String?>(null) }
   val hostId = context.hostId
   // Charges a shopper's bank is disputing, on their own query whatever the list is filtered to (the console's banner).
@@ -187,37 +186,62 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
     }
   }
   LaunchedEffect(nearEnd, model.hasMore) { if (nearEnd && model.hasMore) model.loadMore() }
-  Column(Modifier.fillMaxSize()) {
-    Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f)) { SearchField(model.search, model::type, placeholder = "Search by order number or customer") }
-        TextButton(
-          onClick = { selecting = !selecting; picked = emptySet() },
-          modifier = Modifier.testTag("orders-select"),
-        ) { Text(if (selecting) "Done" else "Select") }
-      }
+  // The shared list screen (Figma Mac Orders 13:483): "Orders" with ☆ and New order; search and one Filter (status and
+  // sort); Select, Export for shipping, Import tracking and More filters in ⋯.
+  var advanced by remember { mutableStateOf(model.clauses.isNotEmpty()) }
+  val sorts = Contracts.orderListQuery.sorts
+  val filterChoices = OrderFilter.entries.map { com.aglyn.ui.FilterChoice("Status", it.name, it.label) } +
+    sorts.mapIndexed { index, sort -> com.aglyn.ui.FilterChoice("Sort", "sort-$index", com.aglyn.plugins.commerce.lists.sortLabel(sort)) }
+  val sortKey = sorts.indexOf(model.sort ?: sorts.firstOrNull()).takeIf { it >= 0 }?.let { "sort-$it" }
+  val moreActions = buildList {
+    add(com.aglyn.ui.MenuAction("orders-select", if (selecting) "Done selecting" else "Select orders", "fact_check") { selecting = !selecting; picked = emptySet() })
+    Contracts.orderShippingPresetChoices.forEach { preset ->
+      add(com.aglyn.ui.MenuAction("orders-export-${preset.id}", "Export for shipping: ${preset.label}", "local_shipping") {
+        val id = hostId ?: return@MenuAction
+        scope.launch {
+          prepareOrdersForShipping(context.api, id)
+          exportPreset = preset.id
+        }
+      })
+    }
+    if (com.aglyn.plugins.commerce.products.canImportProducts(context)) {
+      add(com.aglyn.ui.MenuAction("orders-import-tracking", "Import tracking", "upload") {
+        context.navigate(com.aglyn.plugins.commerce.products.CORE_DATA_IMPORT_SCREEN, trackingImportParams(hostId))
+      })
+    }
+    add(com.aglyn.ui.MenuAction("orders-more-filters", if (advanced) "Hide more filters" else "More filters", "tune") { advanced = !advanced })
+  }
+  com.aglyn.ui.ListScreenScaffold(
+    title = "Orders",
+    query = model.search,
+    onQuery = model::type,
+    placeholder = "Order, customer or email",
+    tag = "orders",
+    primary = com.aglyn.ui.PrimaryAction("orders-draft", "New order") { drafting = true },
+    more = moreActions,
+    filters = filterChoices,
+    picked = mapOf("Status" to model.filter.name) + (sortKey?.let { mapOf("Sort" to it) } ?: emptyMap()),
+    onPick = { choice ->
+      if (choice.group == "Status") model.pick(OrderFilter.valueOf(choice.key))
+      else choice.key.removePrefix("sort-").toIntOrNull()?.let { index -> model.sortBy(if (index == 0) null else sorts[index]) }
+    },
+  ) {
+    Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
       outcome?.let { done ->
         NoticeBanner(describeBulkFulfill(done), if (done.refused.isEmpty() && done.unknown.isEmpty()) StatusTone.SUCCESS else StatusTone.WARNING)
       }
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        ChoiceChipRow(
-          options = OrderFilter.entries.map { ChipOption(it.name, it.label) },
-          selected = model.filter.name,
-          onSelect = { key -> model.pick(OrderFilter.valueOf(key)) },
-          modifier = Modifier.weight(1f),
+      // Any filter the console's grid takes (status, channel, customer, date, product, disputes), once asked for.
+      if (advanced || model.clauses.isNotEmpty()) {
+        ClauseFilterBar(
+          fields = Contracts.orderListQuery.fields,
+          headers = Contracts.orderListHeaders,
+          choices = orderFilterChoices(),
+          clauses = model.clauses,
+          onChange = model::setFilters,
+          refused = model.plan?.let { filterRefusals(it, model.clauses) } ?: emptyList(),
+          notices = model.plan?.notices ?: emptyList(),
         )
-        ListSortMenu(Contracts.orderListQuery.sorts, model.sort, model::sortBy, Modifier.padding(start = space(1f)))
       }
-      // Any filter the console's grid takes: status, channel, customer, date, product, disputes.
-      ClauseFilterBar(
-        fields = Contracts.orderListQuery.fields,
-        headers = Contracts.orderListHeaders,
-        choices = orderFilterChoices(),
-        clauses = model.clauses,
-        onChange = model::setFilters,
-        refused = model.plan?.let { filterRefusals(it, model.clauses) } ?: emptyList(),
-        notices = model.plan?.notices ?: emptyList(),
-      )
       model.notice?.let { NoticeBanner(it, StatusTone.WARNING) }
       said?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { said = null }) { Text("Dismiss") } }) }
       if (disputes.count > 0) {
@@ -227,39 +251,6 @@ private fun OrdersList(context: NativePluginContext, model: OrdersListModel, sel
           modifier = Modifier.testTag("orders-disputes"),
           action = if (model.filter == OrderFilter.DISPUTES) null else ({ TextButton(onClick = { model.pick(OrderFilter.DISPUTES) }) { Text("Show them") } }),
         )
-      }
-      FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-        // Selling to someone directly: their order as a payment link (the console's Draft order).
-        OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = { drafting = true }, modifier = Modifier.testTag("orders-draft")) { Text("Draft order") }
-        Box {
-          OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = { presetMenu = true }, modifier = Modifier.testTag("orders-export-shipping")) { Text("Export for shipping") }
-          androidx.compose.material3.DropdownMenu(expanded = presetMenu, onDismissRequest = { presetMenu = false }) {
-            Contracts.orderShippingPresetChoices.forEach { preset ->
-              androidx.compose.material3.DropdownMenuItem(
-                text = {
-                  Column {
-                    Text(preset.label)
-                    preset.description?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                  }
-                },
-                onClick = {
-                  presetMenu = false
-                  val id = hostId ?: return@DropdownMenuItem
-                  scope.launch {
-                    prepareOrdersForShipping(context.api, id)
-                    exportPreset = preset.id
-                  }
-                },
-              )
-            }
-          }
-        }
-        if (com.aglyn.plugins.commerce.products.canImportProducts(context)) {
-          OutlinedButton(shape = com.aglyn.ui.controlShape(), 
-            onClick = { context.navigate(com.aglyn.plugins.commerce.products.CORE_DATA_IMPORT_SCREEN, trackingImportParams(hostId)) },
-            modifier = Modifier.testTag("orders-import-tracking"),
-          ) { Text("Import tracking") }
-        }
       }
     }
     if (drafting) {
