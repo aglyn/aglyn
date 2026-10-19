@@ -165,6 +165,7 @@ export const STAFF_AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'billing.webhookInert': 'Ignored a billing webhook',
   'billing.webhookSignatureRejected': 'Rejected a billing webhook signature',
   'broadcast.send': 'Sent a broadcast',
+  'client-build.preview-sent': 'Sent a client build preview',
   'contact.phone.erased': 'Erased a phone number',
   'contact.suppression.recorded': 'Added a contact suppression',
   'contact.suppression.released': 'Released a contact suppression',

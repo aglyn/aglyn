@@ -350,11 +350,10 @@ at any step: staff take none of a workspace's seats.
    owner row is marked **staff · no seat**, so the workspace's one Free team seat
    stays free. A customer never sees the switch, and the server refuses the comp
    from anyone without the staff role.
-2. **Build the site.** To use the client's own photos, open the site's **Media** page,
-   choose **Get a photo link**, and have the client scan the QR code with their phone
-   and pick photos. They land in the site's **From the owner** folder, and when
-   Aglyn AI writes the site's pages it places them before any stock photo. See
-   [Photos from a phone](../content-and-data/media/overview.md#photo-link).
+2. **Build the site on one screen.** Creating the workspace with the switch on opens
+   **Build for a client**, a single screen made for a phone held at a booth or on a
+   doorstep. Its steps run top to bottom, and each finished step shows its answer
+   under its name. See [The client build screen](#client-build-screen) below.
 3. **Hand it over.** On the organization's page (or the site's **Ownership** card),
    choose **Hand off to a new owner**, enter the client's email, and choose whether
    you **Stay on as an admin after the handoff** or **Leave after the handoff**. The
@@ -371,6 +370,50 @@ at any step: staff take none of a workspace's seats.
 7. **It cleans up after itself.** When the subscription goes live, the proposal and
    the sales-trial comp are removed, each with an audit row. A comp granted for any
    other reason stays dormant until you remove it.
+
+#### The client build screen {#client-build-screen}
+
+The screen a build for a client opens on. It is saved as you go, so a reload, or
+a second phone signed in to the same staff account, opens at the first step not
+yet finished. Only staff can open it.
+
+1. **Business details.** The business name, what they do, the towns they serve,
+   the owner's phone and email, their hours, and the business in the owner's own
+   words. The phone and email are where the preview goes, and the site shows them
+   as how to get in touch. They stay with the build, which only staff can read,
+   until the owner joins.
+2. **Domain.** Choose **Use the free address for now**, **They already have a
+   domain** and type it, or, where domain registration is set up, **Find a domain
+   to buy**: search, then **Pick** one of the names found, with its first-year and
+   renewal price. Nothing is bought here. The owner buys the domain on their own
+   phone after they subscribe, from the hand-off, with their own details. Where
+   registration is not set up, the search choice is not shown and the other two
+   still work. A domain can be added any time later from Setup.
+3. **Site and photos.** **Create the site** makes it now, empty, on the comped plan,
+   with the address filled in from the business name. A QR code then appears: the
+   owner scans it with their phone camera and picks their photos, with no sign-in.
+   The count of photos received updates on its own. **Continue** when they are in,
+   or **Continue without photos**. See
+   [Photos from a phone](../content-and-data/media/overview.md#photo-link).
+4. **Build with AI.** **Open the guided start** opens Aglyn AI's guided start on its
+   review, already filled in from the details. Check it with the owner, then plan
+   the site; it builds and publishes the site in a few minutes. When the workspace
+   cannot run the guided start, the step says what it needs, with a link to the
+   organization's staff page where AI can be added to the comp, and **Use the
+   starter site** gives the site the starter instead.
+5. **Send the preview.** The button waits until the site is published, and says
+   what it is waiting on. Then **Text and email the preview** sends the owner the
+   link by text and by email, naming who it is from and the address the site will
+   live at. Where texting is not set up, it goes by email only, and the result says
+   what each channel came to. The step also shows what the hand-off will propose:
+   the comped plan with Site Care, billed monthly, and the domain picked in step 2
+   with its price. **Hand off to a new owner** is on the same step.
+
+Sending the preview writes a row to the [Audit Log](#audit-log) naming the
+workspace and the site, without the owner's phone or email. To keep a lost phone
+from being used to send texts, the domain search allows a few dozen searches a
+minute per staff account and the preview can be sent a handful of times an hour
+per workspace.
 
 A non-staff owner on a plan with no free team seat cannot hand off and stay on: the
 handoff is refused when it is sent and points them to **Leave after the handoff**,

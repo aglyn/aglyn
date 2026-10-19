@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { ClientBuildIntake } from '@aglyn/aglyn/app-utils/client-build'
 import { aiSiteKind, aiSiteKindFor, type AiSiteKind } from './ai-site-kinds'
 import {
   AI_SITE_INSPIRATION_INPUT,
@@ -373,4 +374,92 @@ export function aiSiteStartAnswersFromInputs(
       ? { inspiration: text(AI_SITE_INSPIRATION_INPUT).split(/\s+/).filter(Boolean).slice(0, aiSiteInspirationLimit(options.freeTaste)) }
       : {}),
   }
+}
+
+// ── A build staff run for a client (AGL-3958) ───────────────────────────────
+
+/** Shortens an answer to what a scalar input admits, on a word where it can. */
+function bounded(value: string, max: number): string {
+  const trimmed = value.trim().replace(/\s+/g, ' ')
+  if (trimmed.length <= max) return trimmed
+  const cut = trimmed.slice(0, max)
+  const space = cut.lastIndexOf(' ')
+  return (space > max / 2 ? cut.slice(0, space) : cut).trim()
+}
+
+/**
+ * The questions' answers for a site staff are building for a client: what
+ * the business does is the kind of site, and every other answer keeps its
+ * default, which the review shows to change. The rest of the intake is not an
+ * answer to these questions; it reaches the job through
+ * {@link aiSiteStartClientInputs} and {@link aiSiteStartClientBrief}.
+ */
+export function aiSiteStartAnswersFromClientBuild(intake: ClientBuildIntake): AiSiteStartAnswers {
+  return {
+    ...AI_SITE_START_ANSWERS,
+    siteType: bounded(intake.whatTheyDo, AI_SITE_INPUT_MAX_CHARS),
+  }
+}
+
+/**
+ * The per-site inputs the intake fills, which the guided start's own
+ * questions leave empty: the business's name for the header and footer, and
+ * the towns it serves as its place.
+ */
+export function aiSiteStartClientInputs(
+  intake: ClientBuildIntake,
+): Pick<AiSiteJobInputs, 'businessName' | 'city'> {
+  return {
+    businessName: bounded(intake.businessName, AI_SITE_INPUT_MAX_CHARS),
+    city: bounded(intake.towns, AI_SITE_INPUT_MAX_CHARS),
+  }
+}
+
+/**
+ * The intake as sentences added to the brief: how to reach the business and
+ * when it is open, which the site should say where a visitor looks for them,
+ * and the owner's own words, quoted, which the copy should sound like. Empty
+ * answers say nothing.
+ */
+export function aiSiteStartClientBrief(intake: ClientBuildIntake): string {
+  const name = intake.businessName.trim()
+  const towns = intake.towns.trim()
+  const phone = intake.phone.trim()
+  const email = intake.email.trim()
+  const hours = intake.hours.trim()
+  const words = intake.ownerWords.trim().replace(/\s+/g, ' ')
+  const sentences: string[] = []
+  if (name) sentences.push(`The business is called ${name}.`)
+  if (towns) sentences.push(`It serves ${towns}.`)
+  const contact = [phone ? `call ${phone}` : '', email ? `email ${email}` : ''].filter(Boolean)
+  if (contact.length) {
+    sentences.push(`Visitors reach it to ${contact.join(' or ')}; say so wherever the site tells them how to get in touch.`)
+  }
+  if (hours) sentences.push(`Its hours are ${hours}.`)
+  if (words) sentences.push(`In the owner's own words: "${words}" Write the copy so it sounds like them.`)
+  return sentences.join(' ')
+}
+
+/**
+ * What the review says the client build adds, so staff see the intake is
+ * used without it being asked again: "Also from the client's details:
+ * Harbor Plumbing, serving Austin, its phone, email and hours, and the
+ * owner's own words."
+ */
+export function aiSiteStartClientNote(intake: ClientBuildIntake): string {
+  const name = intake.businessName.trim()
+  const towns = intake.towns.trim()
+  const reach = [
+    intake.phone.trim() ? 'phone' : '',
+    intake.email.trim() ? 'email' : '',
+    intake.hours.trim() ? 'hours' : '',
+  ].filter(Boolean)
+  const parts = [
+    name && towns ? `${name}, serving ${towns}` : name || (towns ? `serving ${towns}` : ''),
+    reach.length ? `its ${reach.length > 1 ? `${reach.slice(0, -1).join(', ')} and ${reach[reach.length - 1]}` : reach[0]}` : '',
+    intake.ownerWords.trim() ? "the owner's own words" : '',
+  ].filter(Boolean)
+  if (!parts.length) return 'Built from the client’s details.'
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}` : parts[0]
+  return `Also from the client’s details: ${list}.`
 }
