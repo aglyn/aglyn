@@ -9,6 +9,59 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.272 — 2026-10-19
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.271...v1.0.0-beta.272)
+
+### Added
+
+- **native:** the demo seed carries this month's usage, so meters read real fills ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
+- **apple:** grouped forms fill their column on the Mac, on the content edges ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
+- **apple:** the plan card is a slow carousel of usage meters, the screen's own first ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
+- **native:** the Kotlin plan card is a slow carousel of usage meters, context first ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
+- **native:** the Kotlin plan card mapping replays the console's planCard cases ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
+- **native:** one plan card mapping for both apps: meters, context, order ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
+- **ai:** the "Bring my site" card, its import job page and guide, behind the flag ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976))
+- **ai:** import job brings a proved site in, in reviewed waves, behind the flag ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976), [AGL-3974](https://linear.app/aglyn/issue/AGL-3974))
+- **ai:** site-import ownership and crawl doors behind release_ai_site_import ([AGL-3974](https://linear.app/aglyn/issue/AGL-3974), [AGL-3973](https://linear.app/aglyn/issue/AGL-3973))
+- **ai:** add the AglynBot site-import crawler and an untrusted-text fence ([AGL-3974](https://linear.app/aglyn/issue/AGL-3974), [AGL-3973](https://linear.app/aglyn/issue/AGL-3973))
+- **domains:** website ownership claims by DNS, meta tag or emailed code ([AGL-3974](https://linear.app/aglyn/issue/AGL-3974), [AGL-3973](https://linear.app/aglyn/issue/AGL-3973))
+
+### Fixed
+
+- **native:** the plan card never cuts its figures, and reads its meters at once ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
+- **apple:** a brand picture that fails to load is tried again ([AGL-3991](https://linear.app/aglyn/issue/AGL-3991))
+- **apple:** the Automation hub's section column sits on the content edge ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
+- **apple:** debug builds are "Aglyn Debug" and "Aglyn POS Debug", never the shipped ids ([AGL-3994](https://linear.app/aglyn/issue/AGL-3994))
+- **apple:** the plan card cross-fades in place and never cuts its figures ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
+- **native:** the snapshot tool's sweep filter matches #1842's line ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **native:** the snapshot tool can name sweep states, and passes them otherwise ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
+- **native:** a section tab strip starts its first label on the content edge E ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **native:** the plan card matches the reworked Figma 98:1048 ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
+- **apple:** scroll views and selectable lists keep their own edges under the list look ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
+- **apple:** default lists, card grids and pickers sit on the content edge ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
+- **native:** the plan card's campaign meter is emailSends, the entitlement's word ([AGL-3992](https://linear.app/aglyn/issue/AGL-3992))
+- **native:** a workspace logo sits on Figma's paper plate at the 70% slot ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **native:** the content area brings every screen to the one edge E ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **apple:** a workspace logo sits on its rail tile's plate at Figma's size ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
+- **ai:** a wave read the clock cuts short resumes, and pages keep their own names ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976))
+- **ai:** the site-import crawler names the operator's bot page, from an env var ([AGL-3983](https://linear.app/aglyn/issue/AGL-3983))
+- **ai:** the "Bring my site" card names the configured brand, not a literal ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976))
+
+### Documentation
+
+- **ai:** the import job's resumable wave read and page names, in AI_JOBS.md ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976))
+
+<details>
+<summary>Also in this release: 3 test, 1 chore</summary>
+
+- **native:** production-shaped seed workspace and list tests on both apps ([AGL-3993](https://linear.app/aglyn/issue/AGL-3993))
+- **native:** spell SectionTabs' comment the American way, drop unused tab imports ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **console:** the egress sweep skips fixtures folders, as its own doc says ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976))
+- **tenant:** the image-sink inventory names the site import's crawler and fixtures ([AGL-3976](https://linear.app/aglyn/issue/AGL-3976))
+
+</details>
+
 ## v1.0.0-beta.271 — 2026-10-19
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.270...v1.0.0-beta.271)
