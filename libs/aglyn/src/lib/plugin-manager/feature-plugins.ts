@@ -1940,6 +1940,27 @@ export interface ConsoleWidget {
    */
   showWhenNotEntitled?: boolean
   /**
+   * Draw a locked card in this widget's place when the ONLY thing missing is
+   * a feature a higher plan includes (AGL-3977).
+   *
+   * Without it such a card is absent, as above. With it, the shell mounts a
+   * card of its own instead of the widget — the widget's `title`, this
+   * `description`, "Included from {plan}" and an Upgrade link to the plan
+   * grid — so a workspace can see what the paid plans add where it would be
+   * used. The widget itself never mounts, so it never opens a listener the
+   * plan does not allow. Every other gate still applies: the reader's
+   * permission, the release flag, the plugin being on. A feature no plan
+   * carries stays absent, since there is no plan to name.
+   *
+   * For a card worth selling on a page the reader opens anyway (a dashboard
+   * tile), not for a control inside a form or a table: the locked card is a
+   * card.
+   */
+  lockedPreview?: {
+    /** What the card does, in the operator's terms, so the lock sells it. */
+    description: string
+  }
+  /**
    * The release flag this widget is behind, which the shell resolves from the
    * flags it already loads for every page (AGL-3601) — staff bypass applied,
    * as the server's own doors apply it. The widget is absent while the flag

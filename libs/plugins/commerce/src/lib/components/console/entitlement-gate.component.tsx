@@ -16,26 +16,25 @@
  */
 'use client'
 
-import { checkEntitlement, planLabelGrantingFeature } from '@aglyn/aglyn'
 import type { OrgFeatureFlags } from '@aglyn/aglyn'
+import { CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import {
-  AppLink,
-  CardDisplay,
-  type HelpTipContent,
-} from '@aglyn/shared-ui-jsx'
-import { Alert, Typography } from '@mui/material'
+  PlanUpsellNotice,
+  type PlanUpsellNoticeProps,
+} from '@aglyn/shared-ui-jsx/components/plan-upsell-notice.component'
+import { Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useConsoleHostRoute, useOrgPlan } from '@aglyn/tenant-feature-instance'
+import {
+  resolvePlanFeatureLock,
+  type PlanFeatureLock,
+} from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 
-export interface CommerceEntitlementState {
-  /** The plan doc has settled. NEVER refuse before this is true. */
-  ready: boolean
-  entitled: boolean
-  /** Console billing route, or undefined before the org slug resolves. */
-  upgradeHref: string | undefined
-  /** Cheapest plan carrying the feature — "Business". */
-  planLabel: string | undefined
-}
+/**
+ * The shared plan-lock state (AGL-3977), under the name commerce's surfaces
+ * already import.
+ */
+export type CommerceEntitlementState = PlanFeatureLock
 
 /**
  * The three-state entitlement read every commerce console surface needs
@@ -51,7 +50,9 @@ export interface CommerceEntitlementState {
  *
  * `planLabel` comes from `planGrantingFeature`, derived from
  * `PLAN_ENTITLEMENTS` on every call, so the upsell can never name a tier
- * that no longer carries the feature.
+ * that no longer carries the feature. The answer itself is the shared
+ * `resolvePlanFeatureLock`, so commerce's locks read like every other
+ * console surface's.
  */
 export function useCommerceEntitlement(
   hostId: string | undefined,
@@ -59,22 +60,15 @@ export function useCommerceEntitlement(
 ): CommerceEntitlementState {
   const consoleRoute = useConsoleHostRoute(hostId)
   const { org, ready } = useOrgPlan(hostId)
-  return {
+  return resolvePlanFeatureLock({
+    org,
     ready,
-    entitled: checkEntitlement(org as never, feature),
-    upgradeHref: consoleRoute.orgSlug
-      ? `/${consoleRoute.orgSlug}/billing`
-      : undefined,
-    planLabel: planLabelGrantingFeature(feature),
-  }
+    feature,
+    orgSlug: consoleRoute.orgSlug,
+  })
 }
 
-export interface EntitlementUpsellProps {
-  /** What the feature is and what it does, in the operator's terms. */
-  children: ReactNode
-  planLabel: string | undefined
-  upgradeHref: string | undefined
-}
+export type EntitlementUpsellProps = PlanUpsellNoticeProps
 
 /**
  * The locked-state notice: what the feature is, which plan carries it, and
@@ -86,27 +80,7 @@ export interface EntitlementUpsellProps {
  * bypasses the client router and full-reloads the console.
  */
 export function EntitlementUpsell(props: EntitlementUpsellProps) {
-  const { children, planLabel, upgradeHref } = props
-  return (
-    <Alert
-      severity="info"
-      action={
-        upgradeHref ? (
-          <AppLink
-            componentVariant="button"
-            color="inherit"
-            size="small"
-            href={upgradeHref}
-          >
-            {'Upgrade'}
-          </AppLink>
-        ) : undefined
-      }
-    >
-      {children}
-      {planLabel ? ` Included from ${planLabel}.` : null}
-    </Alert>
-  )
+  return <PlanUpsellNotice {...props} />
 }
 
 export interface EntitlementGatedCardProps {

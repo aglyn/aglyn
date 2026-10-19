@@ -73,17 +73,17 @@ const NO_BAND = {
   entitlements: { assistCreditsPerMonth: 0 },
 } as any
 
-/** Named for the ONE pool (AGL-2899): the add-on widens it, never a second meter. */
+/** Named for the ONE pool (AGL-2899): a tier widens it, never a second meter. */
 const METER = 'AI credits (this month)'
-/** Pro without the add-on: 2,750 credits, and the add-on on offer. */
+/** Pro with no tier: 2,750 credits, and the tiers on offer. */
 const PRO = { $id: 'org-1', plan: 'pro' } as any
-/** Pro with the add-on: 2,750 + 9,000 in one band. */
+/** Pro with the add-on bought before tiers (Boost): 2,750 + 9,000 in one band. */
 const PRO_WITH_AI = {
   $id: 'org-1',
   plan: 'pro',
   seatAddons: { aiAddon: 1 },
 } as any
-/** Starter with the add-on: its own 750, plus 4,000 from the add-on. */
+/** Starter with the add-on bought before tiers (Spark): its own 750, plus 4,000. */
 const STARTER_WITH_AI = {
   $id: 'org-1',
   plan: 'starter',
@@ -197,12 +197,12 @@ describe('a workspace with a band can see how much of it is left', () => {
 })
 
 /**
- * ONE meter, ONE pool (AGL-2899). The Aglyn AI add-on adds
- * `AI_ADDON_CREDITS_PER_MONTH[plan]` to `assistCreditsPerMonth`, so the
- * denominator here is plan plus add-on, the caption names the add-on's share,
- * and a plan that sells the add-on but has not bought it is pointed at the
- * add-ons card — on the Billing overview, because these meters render on the
- * Usage section where a bare hash resolves to nothing.
+ * ONE meter, ONE pool (AGL-2899, AGL-3965). An Aglyn AI tier adds its credits
+ * (`AI_TIERS[tier].credits`) to `assistCreditsPerMonth`, so the denominator
+ * here is plan plus tier, the caption names the tier's share, and a plan that
+ * sells tiers but holds none is pointed at the add-ons card — on the Billing
+ * overview, because these meters render on the Usage section where a bare
+ * hash resolves to nothing.
  */
 describe('an uncapped staff comp has a meter and no band (AGL-3049)', () => {
   const INTERNAL = {
@@ -254,8 +254,8 @@ describe('an uncapped staff comp has a meter and no band (AGL-3049)', () => {
   })
 })
 
-describe('the Aglyn AI add-on widens the one meter (AGL-2899)', () => {
-  it('without the add-on: the plan band, and the Add Aglyn AI link', async () => {
+describe('an Aglyn AI tier widens the one meter (AGL-2899, AGL-3965)', () => {
+  it('without a tier: the plan band, and the Choose a tier link', async () => {
     mockCredits = { used: 1_000, limit: 2_750, remaining: 1_750 }
     render(
       <AiCreditsCard orgId="org-1" org={PRO} billingHref="/acme/billing" />,
@@ -263,14 +263,14 @@ describe('the Aglyn AI add-on widens the one meter (AGL-2899)', () => {
     await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
     const row = screen.getByText(METER).parentElement?.parentElement
     await waitFor(() => expect(row?.textContent).toContain('1000 / 2750'))
-    const link = screen.getByRole('link', { name: 'Add Aglyn AI' })
+    const link = screen.getByRole('link', { name: 'Choose a tier' })
     expect(link.getAttribute('href')).toBe('/acme/billing#addons')
-    // The band it would add is the add-on's own figure for the plan.
-    expect(screen.getByText(/add 9,000 credits a month to this pool/)).toBeTruthy()
-    expect(screen.queryByText(/from the Aglyn AI add-on/)).toBeNull()
+    // The range the tiers add, smallest to largest, on any paid plan.
+    expect(screen.getByText(/tier adds 4,000 to 149,000 credits a month to this pool/)).toBeTruthy()
+    expect(screen.queryByText(/on top of your plan's/)).toBeNull()
   })
 
-  it('with the add-on: plan plus add-on as the included figure, and no link', async () => {
+  it('with a tier: plan plus tier as the included figure, and no link', async () => {
     // FORCED RED by a meter that read the plan band alone: 2,750 is not the
     // figure the assistant is refused at once the add-on is on.
     mockCredits = { used: 4_500, limit: 11_750, remaining: 7_250 }
@@ -278,10 +278,11 @@ describe('the Aglyn AI add-on widens the one meter (AGL-2899)', () => {
     await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
     const row = screen.getByText(METER).parentElement?.parentElement
     await waitFor(() => expect(row?.textContent).toContain('4500 / 11750'))
+    // No `aiTier` written: Pro's old add-on, which is Boost.
     expect(
-      screen.getByText('Includes 9,000 credits a month from the Aglyn AI add-on.'),
+      screen.getByText("Includes 9,000 credits a month from Aglyn AI Boost, on top of your plan's."),
     ).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Add Aglyn AI' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Choose a tier' })).toBeNull()
     // Still one meter: the add-on is not a second row.
     expect(screen.getAllByText(METER)).toHaveLength(1)
     expect(screen.queryAllByText(/credits \(this month\)/)).toHaveLength(1)
@@ -297,7 +298,7 @@ describe('the Aglyn AI add-on widens the one meter (AGL-2899)', () => {
     const row = screen.getByText(METER).parentElement?.parentElement
     await waitFor(() => expect(row?.textContent).toContain('500 / 4750'))
     expect(
-      screen.getByText('Includes 4,000 credits a month from the Aglyn AI add-on.'),
+      screen.getByText("Includes 4,000 credits a month from Aglyn AI Spark, on top of your plan's."),
     ).toBeTruthy()
     // Still one meter: the add-on widened the pool, it did not open a second.
     expect(screen.getAllByText(METER)).toHaveLength(1)
@@ -310,7 +311,7 @@ describe('the Aglyn AI add-on widens the one meter (AGL-2899)', () => {
     mockCredits = null
     render(<AiCreditsCard orgId="org-1" org={NO_BAND} billingHref="/acme/billing" />)
     await waitFor(() => expect(screen.queryAllByText(METER)).toHaveLength(0))
-    expect(screen.queryByRole('link', { name: 'Add Aglyn AI' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Choose a tier' })).toBeNull()
   })
 
   it('says a band of zero is the plan’s, and links to Billing’s plans (AGL-3982)', async () => {
@@ -338,9 +339,9 @@ describe('the Aglyn AI add-on widens the one meter (AGL-2899)', () => {
     await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
     const row = screen.getByText(METER).parentElement?.parentElement
     await waitFor(() => expect(row?.textContent).toContain('200 / 750'))
-    const link = screen.getByRole('link', { name: 'Add Aglyn AI' })
+    const link = screen.getByRole('link', { name: 'Choose a tier' })
     expect(link.getAttribute('href')).toBe('/acme/billing#addons')
-    expect(screen.getByText(/add 4,000 credits a month to this pool/)).toBeTruthy()
+    expect(screen.getByText(/tier adds 4,000 to 149,000 credits a month to this pool/)).toBeTruthy()
   })
 
   it('Free shows the taste as a meter and never the add-on link (AGL-2925)', async () => {
@@ -354,6 +355,6 @@ describe('the Aglyn AI add-on widens the one meter (AGL-2899)', () => {
       />,
     )
     await waitFor(() => expect(screen.getByText(METER)).toBeTruthy())
-    expect(screen.queryByRole('link', { name: 'Add Aglyn AI' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Choose a tier' })).toBeNull()
   })
 })

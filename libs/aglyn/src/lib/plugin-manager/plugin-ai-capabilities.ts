@@ -123,6 +123,18 @@ export interface PluginAiCapabilityDraftContext {
   dependencies: Readonly<Record<string, { op: string; id: string }>>
 }
 
+/** One field a capability asks a person to fill (AGL-3978). */
+export interface PluginAiCapabilityInputField {
+  /** The item's argument the answer is written to. */
+  arg: string
+  /** The field's label, naming the provider: "Meta pixel ID". */
+  label: string
+  /** What an answer looks like, as a person reads it: "8–20 digits". */
+  shape: string
+  /** What an answer is held to; no flags. */
+  pattern: RegExp
+}
+
 export interface PluginAiCapability {
   /** The operation's name in a plan, stable across releases: `page`, `note`. */
   op: string
@@ -176,6 +188,14 @@ export interface PluginAiCapability {
    * be built.
    */
   missingInput?(item: PluginAiCapabilityItem): string | null
+  /**
+   * The fields that ask what `missingInput` asks (AGL-3978), one per id the
+   * item needs, each naming its provider and held to the pattern the
+   * operation holds it to. Pure. With fields, a build that needs them waits
+   * in `needs_input` for the person to fill them and goes on from there;
+   * without, it ends with the question. Absent: no item asks.
+   */
+  inputFields?(item: PluginAiCapabilityItem): readonly PluginAiCapabilityInputField[]
   /** Operations an item of this one may depend on. */
   dependsOnOps?: readonly string[]
   degrade: PluginAiCapabilityDegrade

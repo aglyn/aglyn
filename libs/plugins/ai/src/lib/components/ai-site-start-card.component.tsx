@@ -90,6 +90,7 @@ import {
   aiSiteStartRefusal,
   type AiSiteStartAnswers,
 } from '../model/ai-site-start'
+import { aiSiteInspirationLimit } from '../model/ai-site-inspiration'
 import {
   aiSiteStartFieldErrors,
   aiSiteStartFirstInvalidStep,
@@ -417,6 +418,9 @@ export function AiSiteStartCard({
   const [started, setStarted] = useState<AiJobSummary | null>(null)
   // The Free taste's page band (AGL-3594), read off the verdict request.
   const [freeTaste, setFreeTaste] = useState(false)
+  // Whether the Style step asks for the sites the person likes (AGL-3975),
+  // read off the same verdict request: `release_ai_site_inspiration`.
+  const [siteInspiration, setSiteInspiration] = useState(false)
   // What the Free workspace has left this month (AGL-3660), as the same read
   // the create door refuses on: the less of its own band and its owner's
   // allowance across their Free workspaces. `null` when the route said none.
@@ -446,6 +450,7 @@ export function AiSiteStartCard({
         )
         const payload = response.ok ? await response.json().catch(() => null) : null
         if (active) {
+          setSiteInspiration(payload?.siteInspiration === true)
           if (payload?.freeTaste === true) {
             setFreeTaste(true)
             const credits = payload?.freeCredits as AiFreeCreditsLeft | undefined
@@ -535,8 +540,9 @@ export function AiSiteStartCard({
               .join(' '),
             // The guided start confirms its own plan (AGL-3594): the build
             // follows the plan with no approval to make.
+            // The sites they like go only while the start asks for them (AGL-3975).
             inputs: {
-              ...aiSiteStartInputs(asked),
+              ...aiSiteStartInputs(siteInspiration ? asked : { ...asked, inspiration: [] }),
               ...(clientIntake ? aiSiteStartClientInputs(clientIntake) : {}),
               [AI_JOB_AUTO_CONFIRM_INPUT]: true,
             },
@@ -614,7 +620,7 @@ export function AiSiteStartCard({
     } finally {
       setBusy(false)
     }
-  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel, pendingSite, siteKind, tracker, clientIntake])
+  }, [orgId, hostId, answers, answer, freeTaste, freeCredits, noneLeft, orgSlug, host, leave, router, pickedModel, pendingSite, siteKind, tracker, clientIntake, siteInspiration])
 
   // The zone's `startBlank`. Before the site exists it creates it with the
   // starter, and answers `false` when it could not — most often a name or
@@ -987,10 +993,19 @@ export function AiSiteStartCard({
               <Box component="section">
                 {step === 'kind' && <KindStep {...stepProps} />}
                 {step === 'audience' && <AudienceStep {...stepProps} />}
-                {step === 'style' && <StyleStep {...stepProps} />}
+                {step === 'style' && (
+                  <StyleStep
+                    {...stepProps}
+                    inspiration={
+                      siteInspiration
+                        ? { limit: aiSiteInspirationLimit(freeTaste), upgradeHref: orgSlug ? aiCreditsBillingHref(orgSlug) : null }
+                        : null
+                    }
+                  />
+                )}
                 {step === 'details' && <DetailsStep {...stepProps} freeTaste={freeTaste} band={band} />}
                 {step === 'review' && (
-                  <ReviewStep answers={answers} freeTaste={freeTaste} onEdit={edit}>
+                  <ReviewStep answers={answers} freeTaste={freeTaste} onEdit={edit} inspiration={siteInspiration}>
                     {clientIntake && (
                       <Alert severity="info" variant="outlined" data-start-area="client-intake">
                         {aiSiteStartClientNote(clientIntake)}

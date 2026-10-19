@@ -18,41 +18,44 @@
 
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
-/**
- * Re-fan a host's `users/{uid}/hostMemberships` rows after a CLIENT write to
- * the host doc (AGL-844, AGL-1071).
- *
- * The projection is Admin-SDK-maintained beside `memberRoles`, so anything
- * written straight from the console — `displayName`, `seo.favicon` — bypasses
- * the funnel that would normally update it, and the site switcher goes stale
- * while the sites list (which reads real host docs) looks fine. That
- * disagreement is the whole of AGL-1071.
- *
- * Deliberately fire-and-forget. A miss self-heals on the next membership
- * change or backfill, and the alternative — blocking a Save on a projection
- * refresh, or surfacing an error for a cosmetic mirror — costs the user more
- * than a briefly stale icon does.
- *
- * Centralised because this is the third caller: the setup page copied it for
- * `displayName`, the favicon card needs it for both set AND clear, and the
- * next denormalized field will need it too. A copy-pasted `fetch` is how one
- * of these paths ends up quietly missing the header.
- */
-export function resyncHostMemberships(
-  hostId: string,
-  user: { getIdToken?: () => Promise<string> } | null | undefined,
-): void {
-  void (async () => {
-    try {
-      await authorizedFetch(user, '/api/hosts/sync-memberships', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostId }),
-      })
-    } catch {
-      // Swallowed on purpose — see the fire-and-forget note above.
-    }
-  })()
+/** The mirrored host fields the console changes by hand. */
+export interface MirroredHostFields {
+  /** `displayName`. */
+  displayName?: string
+  /** `seo.favicon`; `''` clears it, as the Remove button does. */
+  favicon?: string
 }
 
-export default resyncHostMemberships
+/**
+ * Write a site's name or favicon through the server, which re-fans it into
+ * every member's `users/{uid}/hostMemberships` row in the same request
+ * (AGL-844, AGL-1071, AGL-3972).
+ *
+ * Those rows are what every site list and switcher reads, and only the Admin
+ * SDK writes them. These fields used to be written straight from the browser
+ * and followed by a fire-and-forget re-fan ping chained on the write's
+ * acknowledgement. Under the multi-tab cache that acknowledgement can take a
+ * minute (AGL-3806), so a page left in that minute, or a ping that failed,
+ * kept every list on the old name or icon for good — nothing later heals a
+ * row whose site and members do not change.
+ *
+ * Awaited, and it throws when the server refuses, so the caller can say the
+ * save did not happen rather than report one that only half landed.
+ */
+export async function saveMirroredHostFields(
+  hostId: string,
+  user: { getIdToken?: () => Promise<string> } | null | undefined,
+  fields: MirroredHostFields,
+): Promise<void> {
+  const response = await authorizedFetch(user, '/api/hosts/sync-memberships', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hostId, ...fields }),
+  })
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null)
+    throw new Error(payload?.error ?? `Save failed (${response.status})`)
+  }
+}
+
+export default saveMirroredHostFields

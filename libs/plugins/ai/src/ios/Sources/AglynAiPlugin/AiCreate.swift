@@ -269,6 +269,8 @@ struct AiCreateScreen: View {
   let context: NativePluginContext
   let kind: AiCreateKind?
   let initialJobID: String?
+  /// The brief already written where the flow was started (Home's prompt line).
+  var initialBrief: String? = nil
 
   private enum Load: Equatable {
     case loading
@@ -328,6 +330,7 @@ struct AiCreateScreen: View {
         jobID = initialJobID
         follow(initialJobID)
       } else if jobID == nil {
+        if brief.isEmpty, let initialBrief { brief = initialBrief }
         await loadDoor(fresh: false)
       }
     }

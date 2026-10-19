@@ -52,7 +52,7 @@ import {
   createAiBuildJobAdmission,
   createAiJobBuildStep,
 } from './ai-job-build-step'
-import { AI_BUILD_MADE_INPUT, aiBuildCreditRange, aiBuildFirstPagePlan, aiBuildInitialLedger, aiBuildUnits } from '../model/ai-build-job'
+import { AI_BUILD_MADE_INPUT, AI_BUILD_NEEDS_INPUT_CODE, aiBuildCreditRange, aiBuildFirstPagePlan, aiBuildInitialLedger, aiBuildUnits } from '../model/ai-build-job'
 import { AI_CREDITS_CONFIRM_CODE, aiCreditsPromptText } from '../model/ai-credit-estimate'
 import { aiFreeCreditsNoneLeftText } from '../model/ai-site-job'
 import { registerAiJobStep } from './ai-jobs'
@@ -823,10 +823,11 @@ describe('a build whose plan leaves out what only the person can give asks for i
 
   beforeAll(() => registerAiJobStep('page', pageRunner([])))
 
-  it('refuses the plan with the question, naming the tag, before anything is kept or built', async () => {
+  it('refuses the plan with the question, naming the tag, before anything is built — coded so the plan step waits for it (AGL-3978)', async () => {
     await expect(ask(trackingPlan({}))).resolves.toEqual({
       status: 400,
       error: 'What’s your Meta pixel ID? It’s the number (8–20 digits) shown for your pixel in Meta Events Manager.',
+      code: AI_BUILD_NEEDS_INPUT_CODE,
     })
   })
 

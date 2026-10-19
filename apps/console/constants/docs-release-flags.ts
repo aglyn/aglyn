@@ -338,6 +338,10 @@ export const FLAG_DOC_PAGES: Partial<
  * tree outside `docs/staff-console/` (where naming every flag is the point).
  */
 export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {
+  // AGL-3975. Off by default and documented nowhere yet: the Start with AI
+  // guide gains its Sites you like section in the change that turns it on.
+  release_ai_site_inspiration:
+    'Adds optional fields to the guided AI site start while it is off by default; no docs page describes them yet, and the Start with AI guide gains their section when the flag turns on.',
   // AGL-3520. The flag widens what a door already documented sends; it opens
   // no surface. The Privacy Policy and the subprocessor list were republished
   // with the whole-record wording on October 5, 2026 (legal v10), and the CRM

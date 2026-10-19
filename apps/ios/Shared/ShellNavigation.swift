@@ -97,6 +97,18 @@ final class ShellNavigation {
   var showAccount = false
   /// The Add account screen.
   var showAddAccount = false
+  /// The one box (⌘K): switching and search in one place.
+  var showOneBox = false
+  /// Add workspace (create one, or accept an invitation).
+  var showAddWorkspace = false
+  /// The notifications popover from the bell.
+  var showNotifications = false
+  /// Create new as a sheet (the phone's centre tab).
+  var showCreate = false
+  /// Where the window has been, for Back and Forward beside the search field: each section opened, in order.
+  private(set) var history: [ShellSection] = [.home]
+  private(set) var historyIndex = 0
+  @ObservationIgnored private var travelling = false
   /// A workspace waiting to be pinned while the five pins are full ("Pinned is full. Replace one?").
   var pinFull: PendingPin?
   /// The workspace whose color is being picked.
@@ -136,6 +148,29 @@ final class ShellNavigation {
   func select(_ next: ShellSection) {
     if section == next { paths[next] = [] }
     section = next
+    record(next)
+  }
+
+  /// Notes a section opened, for Back and Forward: going somewhere new drops what was ahead.
+  func record(_ next: ShellSection) {
+    guard !travelling, history.indices.contains(historyIndex), history[historyIndex] != next else { return }
+    history = Array(history.prefix(historyIndex + 1)) + [next]
+    if history.count > 50 { history.removeFirst(history.count - 50) }
+    historyIndex = history.count - 1
+  }
+
+  var canGoBack: Bool { historyIndex > 0 }
+  var canGoForward: Bool { historyIndex < history.count - 1 }
+
+  func goBack() { travel(to: historyIndex - 1) }
+  func goForward() { travel(to: historyIndex + 1) }
+
+  private func travel(to index: Int) {
+    guard history.indices.contains(index) else { return }
+    travelling = true
+    historyIndex = index
+    section = history[index]
+    travelling = false
   }
 }
 

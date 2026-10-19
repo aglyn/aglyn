@@ -18,6 +18,13 @@
 import type { ClientBuildIntake } from '@aglyn/aglyn/app-utils/client-build'
 import { aiSiteKind, aiSiteKindFor, type AiSiteKind } from './ai-site-kinds'
 import {
+  AI_SITE_INSPIRATION_INPUT,
+  aiSiteInspirationInput,
+  aiSiteInspirationLimit,
+  aiSiteInspirationRefusal,
+  aiSiteInspirationUrl,
+} from './ai-site-inspiration'
+import {
   AI_SITE_INPUT_MAX_CHARS,
   AI_SITE_SUBMISSIONS,
   aiSitePagesBand,
@@ -146,6 +153,11 @@ export interface AiSiteStartAnswers {
   submissions: AiSiteSubmissions
   /** Whether the scaffold also drafts a welcome email. */
   welcomeEmail: boolean
+  /**
+   * The sites they like (AGL-3975), as typed, one a field; absent or empty
+   * for none. Asked only while `release_ai_site_inspiration` is on.
+   */
+  inspiration?: string[]
 }
 
 /**
@@ -208,7 +220,24 @@ export function aiSiteStartRefusal(
   if (!(AI_SITE_SUBMISSIONS as readonly string[]).includes(answers.submissions)) {
     return 'Say where the contact form’s submissions go.'
   }
-  return null
+  return aiSiteStartInspirationRefusal(answers, options)
+}
+
+/** The sites they typed, without the empty fields. */
+export function aiSiteStartInspirationTyped(answers: Pick<AiSiteStartAnswers, 'inspiration'>): string[] {
+  return (answers.inspiration ?? []).map((entry) => entry.trim()).filter(Boolean)
+}
+
+/** Why the sites they like cannot go forward, as the door would refuse them; `null` when they can. */
+export function aiSiteStartInspirationRefusal(
+  answers: Pick<AiSiteStartAnswers, 'inspiration'>,
+  options: { freeTaste?: boolean } = {},
+): string | null {
+  const typed = aiSiteStartInspirationTyped(answers)
+  if (typed.some((entry) => !aiSiteInspirationUrl(entry))) {
+    return 'Give each site you like as its https address, like https://example.com.'
+  }
+  return aiSiteInspirationRefusal(typed, options.freeTaste)
 }
 
 /**
@@ -263,9 +292,12 @@ export function aiSiteStartBrief(answers: AiSiteStartAnswers): string {
  */
 export function aiSiteStartInputs(
   answers: AiSiteStartAnswers,
-): Omit<AiSiteJobInputs, 'batchId'> {
+): Omit<AiSiteJobInputs, 'batchId' | 'inspiration'> & { inspiration?: string } {
   const example = aiSiteStartExample(answers)
   const kind = aiSiteStartKind(answers)
+  // The sites they like travel only when there are some (AGL-3975), so a
+  // start without them asks for exactly what it always did.
+  const inspiration = aiSiteInspirationInput(aiSiteStartInspirationTyped(answers))
   return {
     businessType: answers.siteType.trim(),
     audience: answers.audience.trim(),
@@ -277,6 +309,7 @@ export function aiSiteStartInputs(
     brand: '',
     submissions: answers.submissions,
     welcomeEmail: answers.welcomeEmail,
+    ...(inspiration ? { [AI_SITE_INSPIRATION_INPUT]: inspiration } : {}),
   }
 }
 
@@ -292,6 +325,7 @@ export const AI_SITE_START_INPUT_KEYS = [
   'brand',
   'submissions',
   'welcomeEmail',
+  AI_SITE_INSPIRATION_INPUT,
 ] as const
 
 /** A site job's scalar inputs, and nothing else its inputs carry; `null` when it has none. */
@@ -335,6 +369,10 @@ export function aiSiteStartAnswersFromInputs(
       ? (submissions as AiSiteSubmissions)
       : AI_SITE_START_ANSWERS.submissions,
     welcomeEmail: options.freeTaste ? false : inputs?.['welcomeEmail'] !== false,
+    // The sites they liked come back as typed, within the workspace's limit (AGL-3975).
+    ...(text(AI_SITE_INSPIRATION_INPUT)
+      ? { inspiration: text(AI_SITE_INSPIRATION_INPUT).split(/\s+/).filter(Boolean).slice(0, aiSiteInspirationLimit(options.freeTaste)) }
+      : {}),
   }
 }
 

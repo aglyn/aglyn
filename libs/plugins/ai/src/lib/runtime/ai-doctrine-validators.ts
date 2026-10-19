@@ -5763,20 +5763,6 @@ function freePlanWall(
   return { asked, fits, layouts, pages, sitePages, overPages, homeMin }
 }
 
-/**
- * The most sections past the Free wall a plan is trimmed by rather than
- * re-asked (AGL-3737). The live candle-shop start of 2026-10-12 planned 9
- * sections against a wall of 8 on all three answers, each with a home of 7:
- * the model reaching for the budget the site redo names ("plan 7 to 8") and
- * landing one band past it, which no re-ask cured. Within two, the plan's
- * shape is right and only a band or two the brief needs least is extra, so
- * taking those from the end loses nothing the plan depends on. Further over,
- * the shape itself is off — a list planned as sections, a page the wall
- * cannot pay for — and cutting more would drop content the model meant, so
- * that plan is still re-asked.
- */
-export const AI_FREE_WALL_SETTLE_MAX_OVER = 2
-
 /** A section through which a visitor reaches the owner: contact, a visit, a booking. */
 const REACH_SECTION_NAME =
   /\b(?:contact|get in touch|visit(?: us)?|find us|locations?|hours|book(?:ing)?|reserve|reservations?)\b/i
@@ -5786,9 +5772,10 @@ const CALL_TO_ACTION_NAME =
   /\b(?:call to action|cta|get started|start (?:your|a|here|now|today)|join (?:us|now|today|the)|ready to)\b/i
 
 /**
- * Whether the Free wall's trim keeps a section of a page (AGL-3737): the
- * page's opening, any section that places something (a dataset it lists, a
- * form, a component — dropping it would leave a creation unplaced), one that
+ * Whether the Free wall's trim keeps a section of a page while the plan has
+ * any other to take (AGL-3737, AGL-3969): the page's opening, any section
+ * that places something (a dataset it lists, a form, a component — dropping
+ * it would leave a creation unplaced), one that
  * collects answers, says how to reach the owner or asks a visitor to act
  * (AGL-3899: a home's call to action is its way to the form), and a storefront's
  * listing parts — the bestsellers, the collections, the sign-up, and a Shop
@@ -5811,26 +5798,32 @@ function freeWallKeeps(screen: AiBuildPlan['screens'][number], index: number): b
 }
 
 /**
- * A Free plan a section or two past the wall is trimmed to fit before the
- * rules read the plan (AGL-3737), rather than re-asked: which sections go has
- * one answer, so the re-ask only costs the member a stopped start. The live
- * candle-shop start of 2026-10-12 asked for a home of 7 and a second page of
- * 2 against a wall of 8, three answers running, and stopped needing input.
+ * A Free plan past the wall is trimmed to the wall before the rules read the
+ * plan (AGL-3737, AGL-3969), rather than re-asked: a plan over its budget is
+ * the model's mistake, never the member's, and which sections go has one
+ * answer. The live candle-shop start of 2026-10-12 asked for a home of 7 and
+ * a second page of 2 against a wall of 8, three answers running, and stopped
+ * needing input; the Free candle shop of the beta.265 eval asked for 11, and
+ * its re-ask still for more than 8, and was refused (AGL-3969).
  *
- * One section goes at a time, the last of its page that `freeWallKeeps`
- * does not hold, from the page furthest past its share: the home at / past
- * its fewest (`aiSiteHomeMinSections`, five on a site start whose wall pays
- * for a full home), any other page past two; on a tie, the longer page, then
- * the home. No home goes under its fewest and no page under one section. The
- * shares are what a site start is told to plan (a home of five or six, the
- * other page two or three): the candle shop's 7 + 2 becomes 6 + 2, never
- * 7 + 1, and the recorded yoga answer's 6 + 4 becomes 5 + 3, the shape its
- * own redo chose.
+ * One section goes at a time, exactly as many as the plan is over, so the
+ * plan keeps the whole budget. Each goes from the lowest tier any page still
+ * has: first a section `freeWallKeeps` does not hold; then one it holds only
+ * by its name (a contact, a call to action, a storefront's sign-up); last one
+ * that places something every use of which another section still places, so
+ * no creation is left unplaced. Within a tier it is the last such section of
+ * the page furthest past its share: the home at / past its fewest
+ * (`aiSiteHomeMinSections`, five on a site start whose wall pays for a full
+ * home), any other page past two; on a tie, the longer page, then the home.
+ * No home goes under its fewest, no page under one section, and no page loses
+ * its opening or a Shop page its product grid. The shares are what a site
+ * start is told to plan (a home of five or six, the other page two or three):
+ * the candle shop's 7 + 2 becomes 6 + 2, never 7 + 1, and the recorded yoga
+ * answer's 6 + 4 becomes 5 + 3, the shape its own redo chose.
  *
- * A plan more than `AI_FREE_WALL_SETTLE_MAX_OVER` past the wall, a site
- * start past its page cap, a plan with a list split into sections, and a
- * plan the trim cannot fit without a section it keeps are returned
- * unchanged, for the wall to re-ask.
+ * A site start past its page cap and a plan with a list split into sections
+ * are returned unchanged, for their re-ask; so is the rare plan whose every
+ * section past the wall is one no tier may take.
  */
 export function aiSettlePlanFreeWall(
   plan: AiBuildPlan,
@@ -5840,7 +5833,7 @@ export function aiSettlePlanFreeWall(
   const wall = freePlanWall(plan, inventory, capabilities)
   if (!wall || wall.overPages) return plan
   const over = wall.asked - wall.fits
-  if (over <= 0 || over > AI_FREE_WALL_SETTLE_MAX_OVER) return plan
+  if (over <= 0) return plan
   // A list split into sections is joined by its re-ask, which frees the room;
   // a trim would cut one of its items and hide the split from the rule.
   if (detectPlanSplitLists(plan, inventory, capabilities).length) return plan
@@ -5848,31 +5841,51 @@ export function aiSettlePlanFreeWall(
   const home = plan.screens.findIndex(aiSitePlanIsHome)
   const floor = (screenIndex: number) => (screenIndex === home ? Math.max(wall.homeMin, 1) : 1)
   const target = (screenIndex: number) => (screenIndex === home ? Math.max(wall.homeMin, 1) : 2)
-  // The last section of a page the trim may take, or -1.
-  const last = (screenIndex: number) => {
+  // Whether another kept section places every use of this one.
+  const placedElsewhere = (screenIndex: number, at: number) =>
+    kept[screenIndex][at].section.uses.every((use) =>
+      kept.some((entries, other) =>
+        entries.some((entry, place) => (other !== screenIndex || place !== at) && entry.section.uses.includes(use)),
+      ),
+    )
+  // Whether the trim may take a page's section on a tier: 0 one the page does
+  // not hold, 1 one it holds by name only, 2 a placement another still makes.
+  const takes = (screenIndex: number, at: number, tier: number) => {
+    const screen = plan.screens[screenIndex]
+    const { section, index } = kept[screenIndex][at]
+    if (!freeWallKeeps(screen, index)) return true
+    if (tier === 0 || (aiLayoutIsShopPage(screen) && aiLayoutShopGridSection(screen.sections) === index)) return false
+    return section.uses.length === 0 || (tier === 2 && placedElsewhere(screenIndex, at))
+  }
+  // The last section of a page the trim may take on a tier, or -1.
+  const last = (screenIndex: number, tier: number) => {
     const entries = kept[screenIndex]
     if (entries.length <= floor(screenIndex)) return -1
     for (let at = entries.length - 1; at > 0; at -= 1) {
-      if (!freeWallKeeps(plan.screens[screenIndex], entries[at].index)) return at
+      if (takes(screenIndex, at, tier)) return at
     }
     return -1
   }
   for (let left = over; left > 0; left -= 1) {
     let pick = -1
-    for (let index = 0; index < kept.length; index += 1) {
-      if (last(index) === -1) continue
-      const room = kept[index].length - target(index)
-      const best = pick === -1 ? null : kept[pick].length - target(pick)
-      if (
-        best === null ||
-        room > best ||
-        (room === best && (kept[index].length > kept[pick].length || (kept[index].length === kept[pick].length && index === home)))
-      ) {
-        pick = index
+    let tier = -1
+    while (pick === -1 && tier < 2) {
+      tier += 1
+      for (let index = 0; index < kept.length; index += 1) {
+        if (last(index, tier) === -1) continue
+        const room = kept[index].length - target(index)
+        const best = pick === -1 ? null : kept[pick].length - target(pick)
+        if (
+          best === null ||
+          room > best ||
+          (room === best && (kept[index].length > kept[pick].length || (kept[index].length === kept[pick].length && index === home)))
+        ) {
+          pick = index
+        }
       }
     }
     if (pick === -1) return plan
-    kept[pick].splice(last(pick), 1)
+    kept[pick].splice(last(pick, tier), 1)
   }
   return {
     ...plan,
