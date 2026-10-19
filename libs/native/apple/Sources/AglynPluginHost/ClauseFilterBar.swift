@@ -82,12 +82,21 @@ public struct ClauseFilterBar: View {
   let refused: [FilterRefusal]
   let notices: [String]
   let onChange: ([ListFilterRequest]) -> Void
-  @State private var adding = false
+  /// Whether the bar draws its own "Add filter" chip; a list whose toolbar Filter menu offers "Add a filter…" hides it
+  /// and opens the sheet through `adding` (Calm rule 3: one Filter control, chips only once a filter is on).
+  let showsAdd: Bool
+  @State private var ownAdding = false
+  private let addingBinding: Binding<Bool>?
+
+  private var adding: Binding<Bool> { addingBinding ?? $ownAdding }
 
   public init(
     fields: [ListFilterField], headers: [String: String], choices: [String: [FilterChoice]], clauses: [ListFilterRequest],
-    refused: [FilterRefusal] = [], notices: [String] = [], onChange: @escaping ([ListFilterRequest]) -> Void
+    refused: [FilterRefusal] = [], notices: [String] = [], showsAdd: Bool = true, adding: Binding<Bool>? = nil,
+    onChange: @escaping ([ListFilterRequest]) -> Void
   ) {
+    self.showsAdd = showsAdd
+    self.addingBinding = adding
     self.fields = fields
     self.headers = headers
     self.choices = choices
@@ -99,28 +108,18 @@ public struct ClauseFilterBar: View {
 
   public var body: some View {
     VStack(alignment: .leading, spacing: AglynSpace.half) {
-      if !fields.isEmpty || !clauses.isEmpty {
+      if (showsAdd && !fields.isEmpty) || !clauses.isEmpty {
         AglynWrapRow(spacing: AglynSpace.one, lineSpacing: AglynSpace.half) {
           ForEach(Array(clauses.enumerated()), id: \.offset) { index, clause in
             let label = clauseLabel(clause, headers: headers, choices: choices)
-            Button {
+            AglynFilterChip(label) {
               onChange(clauses.enumerated().filter { $0.offset != index }.map(\.element))
-            } label: {
-              Label(label, systemImage: "xmark.circle.fill")
-                .labelStyle(.titleAndIcon)
-                .font(AglynFont.subheadline)
-                .padding(.horizontal, AglynSpace.oneAndHalf)
-                .padding(.vertical, AglynSpace.one)
-                .background(AglynColor.paper, in: Capsule())
-                .overlay(Capsule().strokeBorder(AglynColor.divider))
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Remove filter \(label)")
             .accessibilityIdentifier("filter-chip-\(index)")
           }
-          if !fields.isEmpty {
+          if showsAdd && !fields.isEmpty {
             Button {
-              adding = true
+              adding.wrappedValue = true
             } label: {
               Label("Add filter", systemImage: "line.3.horizontal.decrease")
                 .font(AglynFont.subheadline)
@@ -139,12 +138,12 @@ public struct ClauseFilterBar: View {
       }
       ForEach(notices, id: \.self) { AglynNotice($0, tone: .info) }
     }
-    .sheet(isPresented: $adding) {
+    .sheet(isPresented: adding) {
       AddClauseSheet(fields: fields, headers: headers, choices: choices) { clause in
         onChange(clauses + [clause])
-        adding = false
+        adding.wrappedValue = false
       } onCancel: {
-        adding = false
+        adding.wrappedValue = false
       }
     }
   }

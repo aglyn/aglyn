@@ -40,6 +40,7 @@ struct OrdersScreen: View {
   @State private var drafting = false
   @State private var exporting: TransferExportRequest?
   @State private var notice: String?
+  @State private var addingFilter = false
 
   var body: some View {
     WideLayoutReader { wide in
@@ -139,7 +140,15 @@ struct OrdersScreen: View {
     } message: {
       Text("Each order is checked on its own: one that cannot be fulfilled is skipped and the rest go ahead. Customers are emailed as they are for a single order.")
     }
-    .aglynSearchable(text: $searchText, prompt: "Order, customer or email", onSubmit: { model.search = searchText })
+    // Calm rule 3 (Figma Orders 13:483, Filter on 122:7056): a search and ONE Filter at rest; the chips show only once a
+    // filter is on.
+    .aglynSearchable(text: $searchText, prompt: "Order, customer or email", onSubmit: { model.search = searchText }) {
+      filterMenu
+    }
+    // The selected order leaves the detail pane once a filter or search leaves it out of the list.
+    .onChange(of: model.rows.map(\.id)) { _, ids in
+      if let selection, model.ready, !ids.contains(selection) { self.selection = nil }
+    }
     .onChange(of: searchText) { _, text in if text.isEmpty { model.search = "" } }
     .task(id: context.hostID) {
       if model.filter == .all { model.filter = initialFilter }
@@ -170,34 +179,38 @@ struct OrdersScreen: View {
     model.start(context.firestore, hostID: hostID)
   }
 
+  /// Whether any filter is on: a status, or a clause from Add a filter.
+  private var filtering: Bool { model.filter != .all || !model.clauses.isEmpty }
+
+  /// The list's filters for the calm controls: the console's status filters, its sorts and its grid's fields.
+  private var filterState: ListFilterState {
+    ListFilterState(
+      statuses: OrderFilter.allCases.map { FilterChoice($0 == .all ? "" : $0.rawValue, $0.label) },
+      status: model.filter == .all ? nil : model.filter.rawValue, sorts: ContractValues.shared.orderListQuery.sorts,
+      sort: model.sort, fields: ContractValues.shared.orderListQuery.fields, headers: ContractValues.shared.orderListHeaders,
+      choices: orderFilterChoices(), clauses: model.clauses,
+      refused: model.plan.map { filterRefusals($0, clauses: model.clauses) } ?? [], notices: model.plan?.notices ?? [])
+  }
+
+  private func setStatus(_ value: String?) { model.filter = value.flatMap(OrderFilter.init(rawValue:)) ?? .all }
+
+  /// The list's one Filter control (in the list's toolbar on the Mac and iPad).
+  private var filterMenu: some View {
+    ListFilterMenu(filterState, setStatus: setStatus, setSort: { model.sort = $0 }) { addingFilter = true }
+  }
+
+  /// The filters that are on, as chips; nothing at rest on the Mac and iPad.
   private var chips: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: AglynSpace.one) {
-          ForEach(OrderFilter.allCases) { filter in
-            AglynChoiceChip(filter.label, selected: model.filter == filter) { model.filter = filter }
-          }
-          ListSortMenu(sorts: ContractValues.shared.orderListQuery.sorts, selected: model.sort) { model.sort = $0 }
-        }
-        .padding(.horizontal, AglynSpace.two)
-        .padding(.vertical, AglynSpace.one)
-      }
-      .accessibilityIdentifier("orders-status-chips")
-      // Any filter the console's grid takes: status, channel, customer, date, product, disputes.
-      ClauseFilterBar(
-        fields: ContractValues.shared.orderListQuery.fields, headers: ContractValues.shared.orderListHeaders,
-        choices: orderFilterChoices(), clauses: model.clauses,
-        refused: model.plan.map { filterRefusals($0, clauses: model.clauses) } ?? [], notices: model.plan?.notices ?? []
-      ) { model.clauses = $0 }
-      .padding(.horizontal, AglynSpace.two)
-    }
+    ListActiveFilters(
+      filterState, adding: $addingFilter, setStatus: setStatus, setSort: { model.sort = $0 }, setClauses: { model.clauses = $0 })
   }
 
   @ViewBuilder
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       chips
-      if let notice = model.notice {
+      // Calm rule 8: no info banner at rest; the query's notice shows while a filter or search is on.
+      if let notice = model.notice, filtering || !model.search.isEmpty {
         AglynNotice(notice, tone: .info).padding(.horizontal, AglynSpace.two)
       }
       if let notice {

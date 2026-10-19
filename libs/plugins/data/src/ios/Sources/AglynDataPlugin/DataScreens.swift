@@ -201,7 +201,10 @@ struct DatasetsScreen: View {
 
   private func layout(_ orgID: String) -> some View {
     WideLayoutReader { wide in
-      if wide {
+      if model.ready && !model.failed && model.rows.isEmpty {
+        // Empty = start here (Figma Data · Empty 122:7480): the one New dataset, across the whole content.
+        list(selectable: false)
+      } else if wide {
         AglynListDetailColumns(listWidth: 360) {
           list(selectable: true)
         } detail: {
@@ -215,10 +218,14 @@ struct DatasetsScreen: View {
         list(selectable: false)
       }
     }
-    .aglynPrimaryAction(id: "add-dataset", "New dataset", systemImage: "plus", enabled: canWrite) {
-      runner.clear()
-      sheet = .create
-    }
+    // The head's New dataset, except on the empty list, whose own New dataset is the one way in.
+    .aglynPrimaryAction(
+      model.ready && model.rows.isEmpty
+        ? nil
+        : AglynPrimaryAction(id: "add-dataset", title: "New dataset", systemImage: "plus", enabled: canWrite) {
+          runner.clear()
+          sheet = .create
+        })
     .aglynPushDestination(item: $pushed) { id in detail(id, titled: true) }
     .safeAreaInset(edge: .bottom) {
       if sheet == nil, exporting == nil, let notice = runner.notice {
@@ -263,9 +270,7 @@ struct DatasetsScreen: View {
       if sheet == nil, exporting == nil, let error = runner.error {
         AglynNotice(error, tone: .error) { runner.clear() }.padding(.horizontal, AglynSpace.two)
       }
-      // The org Data page's note: a dataset made here names no site, so it starts on All sites.
-      AglynNotice(newDatasetSharingNote(siteOnly: false), tone: .neutral)
-        .padding(.horizontal, AglynSpace.two).padding(.vertical, AglynSpace.one)
+      // Calm rule 8: no banner at rest. Who a new dataset is shared with is said in New dataset itself.
       content(selectable: selectable)
     }
     .background(AglynColor.page)

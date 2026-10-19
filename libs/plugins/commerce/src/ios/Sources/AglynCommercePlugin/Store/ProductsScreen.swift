@@ -19,6 +19,7 @@ struct ProductsScreen: View {
   @State private var selection: ProductRow.ID?
   @State private var searchText = ""
   @State private var quota = ProductQuotaModel()
+  @State private var addingFilter = false
 
   var body: some View {
     WideLayoutReader { wide in
@@ -37,7 +38,7 @@ struct ProductsScreen: View {
       }
     }
     .navigationTitle("Products")
-    .aglynSearchable(text: $searchText, prompt: "Product name", onSubmit: { model.search = searchText })
+    .aglynSearchable(text: $searchText, prompt: "Product name", onSubmit: { model.search = searchText }) { filterMenu }
     .onChange(of: searchText) { _, text in if text.isEmpty { model.search = "" } }
     // New product is the list's one primary action; Scan and Import are in its More menu on the Mac and iPad, their own
     // buttons on a phone.
@@ -79,34 +80,33 @@ struct ProductsScreen: View {
     }
   }
 
-  private var chips: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: AglynSpace.one) {
-        AglynChoiceChip("All", selected: model.status == nil) { model.status = nil }
-        ForEach(ContractValues.shared.productListOptions["status"] ?? [], id: \.value) { option in
-          AglynChoiceChip(option.label, selected: model.status == option.value) { model.status = option.value }
-        }
-        ListSortMenu(sorts: ContractValues.shared.productListQuery.sorts, selected: model.sort) { model.sort = $0 }
-      }
-      .padding(.horizontal, AglynSpace.two)
-      .padding(.vertical, AglynSpace.one)
-    }
-  }
-
-  /// Any filter the console's grid takes: name, status, type, slug, SKU, barcode.
-  private var filters: some View {
-    ClauseFilterBar(
+  /// The list's filters for the calm controls: the console's statuses, sorts and grid fields (name, status, type, slug,
+  /// SKU, barcode).
+  private var filterState: ListFilterState {
+    ListFilterState(
+      statuses: [FilterChoice("", "All")]
+        + (ContractValues.shared.productListOptions["status"] ?? []).map { FilterChoice($0.value, $0.label) },
+      status: model.status, sorts: ContractValues.shared.productListQuery.sorts, sort: model.sort,
       fields: ContractValues.shared.productListQuery.fields, headers: ContractValues.shared.productListHeaders,
       choices: filterChoices(ContractValues.shared.productListOptions), clauses: model.clauses,
-      refused: model.plan.map { filterRefusals($0, clauses: model.clauses) } ?? [], notices: model.plan?.notices ?? []
-    ) { model.clauses = $0 }
-    .padding(.horizontal, AglynSpace.two)
+      refused: model.plan.map { filterRefusals($0, clauses: model.clauses) } ?? [], notices: model.plan?.notices ?? [])
+  }
+
+  /// The list's one Filter control (in the list's toolbar on the Mac and iPad).
+  private var filterMenu: some View {
+    ListFilterMenu(filterState, setStatus: { model.status = $0 }, setSort: { model.sort = $0 }) { addingFilter = true }
+  }
+
+  /// The filters that are on, as chips; nothing at rest on the Mac and iPad (Calm rule 3).
+  private var chips: some View {
+    ListActiveFilters(
+      filterState, adding: $addingFilter, setStatus: { model.status = $0 }, setSort: { model.sort = $0 },
+      setClauses: { model.clauses = $0 })
   }
 
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       chips
-      filters
       ProductsZone(context: context, slot: commerceProductsCreateSlot)
       ProductsZone(context: context, slot: commerceProductsHubSlot)
       if created != nil {
