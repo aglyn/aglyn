@@ -57,9 +57,8 @@ import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deli
 import StaffMediaLibraryCard from '../../../../../components/staff-media-library-card.component'
 import { PhotoLinkDialogOnOpen } from '../../../../../components/media/photo-link-dialog.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
-import StaffOrgOwnerHandoff, {
-  useStaffClientBuild,
-} from '../../../../../components/org-owner-handoff.component'
+import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.component'
+import { useStaffClientBuild } from '../../../../../components/staff-bundle-link.component'
 import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
 import StaffSiteTransfer from '../../../../../components/staff-site-transfer.component'
 import StaffSiteContentCard from '../../../../../components/staff-site-content-card.component'

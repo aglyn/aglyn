@@ -21,9 +21,11 @@
  * A workspace staff built for a client (AGL-3958) left an intent for its
  * hand-off: the plan, the add-ons, the cadence, a coupon, and the domain the
  * owner picked to register or already has. The staff dialog opens on it, and
- * staff change any of it from there; a workspace with no build opens on the
- * default bundle exactly as before. The record is read only through the
- * staff route, never from the client.
+ * so does the staff org page's bundle link card, whose QR is what staff show
+ * at a booth: the two propose the same bundle. Staff change any of it from
+ * there; a workspace with no build starts on the default bundle exactly as
+ * before. The record is read only through the staff route, never from the
+ * client.
  */
 
 import type { ClientBuildIntent } from '@aglyn/aglyn/app-utils/client-build'
@@ -48,15 +50,24 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: async (_user: unknown, url: string, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
     mockPosts.push({ url, body })
-    if (url === '/api/admin/bundle-link') return reply(200, { domainsAvailable: true })
+    if (url === '/api/admin/bundle-link') {
+      return init?.method === 'POST'
+        ? reply(200, { url: 'https://console.example.test/bundle/1', expiresAt: 1, intent: body })
+        : reply(200, { domainsAvailable: true })
+    }
     if (url === '/api/admin/client-build') return reply(mockBuildReply.status, mockBuildReply.body)
     throw new Error(`unexpected ${url}`)
   },
 }))
 
 import { bundleDraftFromClientBuildIntent, DEFAULT_BUNDLE_DRAFT } from './staff-bundle-fields.component'
-import { bundleDomainFromClientBuildIntent, EMPTY_BUNDLE_DOMAIN } from './staff-bundle-link.component'
-import { StaffOrgOwnerHandoff, useStaffClientBuild } from './org-owner-handoff.component'
+import {
+  bundleDomainFromClientBuildIntent,
+  EMPTY_BUNDLE_DOMAIN,
+  StaffBundleLinkCard,
+  useStaffClientBuild,
+} from './staff-bundle-link.component'
+import { StaffOrgOwnerHandoff } from './org-owner-handoff.component'
 
 const REGISTER: ClientBuildIntent = {
   plan: 'pro',
@@ -77,6 +88,10 @@ const SITES = [
   { hostId: 'host-1', name: 'Harbor Plumbing' },
   { hostId: 'host-2', name: 'Harbor Rentals' },
 ]
+
+beforeAll(() => {
+  Object.assign(navigator, { clipboard: { writeText: jest.fn(async () => undefined) } })
+})
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -125,6 +140,25 @@ describe('the bundle a client build leaves its hand-off (AGL-3995)', () => {
   })
 })
 
+const value = (scope: HTMLElement, label: string) =>
+  (within(scope).getByLabelText(label) as HTMLInputElement).value
+const pressed = (scope: HTMLElement, name: string) =>
+  within(scope).getByRole('button', { name }).getAttribute('aria-pressed')
+const checked = (scope: HTMLElement, name: RegExp) =>
+  (within(scope).getByRole('switch', { name }) as HTMLInputElement).checked
+const combobox = (scope: HTMLElement, name: string) => within(scope).getByRole('combobox', { name }).textContent
+
+/** What the last "Copy bundle link" asked the mint route for. */
+async function mintedBy(scope: HTMLElement) {
+  const before = mockPosts.length
+  await act(async () => {
+    fireEvent.click(within(scope).getByRole('button', { name: 'Copy bundle link' }))
+  })
+  const minted = mockPosts.slice(before).filter((post) => post.url === '/api/admin/bundle-link' && post.body['plan'])
+  expect(minted).toHaveLength(1)
+  return minted[0].body
+}
+
 describe('the staff hand-off dialog (AGL-3995)', () => {
   const open = async () => {
     await act(async () => {
@@ -132,19 +166,13 @@ describe('the staff hand-off dialog (AGL-3995)', () => {
     })
     return screen.getByRole('dialog')
   }
-  const value = (dialog: HTMLElement, label: string) =>
-    (within(dialog).getByLabelText(label) as HTMLInputElement).value
-  const pressed = (dialog: HTMLElement, name: string) =>
-    within(dialog).getByRole('button', { name }).getAttribute('aria-pressed')
-  const checked = (dialog: HTMLElement, name: RegExp) =>
-    (within(dialog).getByRole('switch', { name }) as HTMLInputElement).checked
 
   it('opens on the build: plan, add-ons, cadence, coupon and the domain with both prices', async () => {
     render(
       <StaffOrgOwnerHandoff orgId="org-1" orgName="Harbor Plumbing" sites={SITES} build={{ intent: REGISTER, hostId: 'host-1' }} />,
     )
     const dialog = await open()
-    expect(within(dialog).getByRole('combobox', { name: 'Plan' }).textContent).toBe('Pro')
+    expect(combobox(dialog, 'Plan')).toBe('Pro')
     expect(pressed(dialog, 'Monthly')).toBe('true')
     expect(checked(dialog, /^Site Care/)).toBe(true)
     expect(checked(dialog, /^Aglyn AI/)).toBe(true)
@@ -152,7 +180,7 @@ describe('the staff hand-off dialog (AGL-3995)', () => {
     expect(value(dialog, 'Domain name')).toBe('harborplumbing.com')
     expect(value(dialog, 'First year')).toBe('11.25')
     expect(value(dialog, 'Renews yearly at')).toBe('18.99')
-    expect(within(dialog).getByRole('combobox', { name: 'For the site' }).textContent).toBe('Harbor Plumbing')
+    expect(combobox(dialog, 'For the site')).toBe('Harbor Plumbing')
   })
 
   it('says the owner’s own domain is connected, not bought, and puts none on the link', async () => {
@@ -167,7 +195,7 @@ describe('the staff hand-off dialog (AGL-3995)', () => {
     render(<StaffOrgOwnerHandoff orgId="org-1" sites={SITES} build={null} />)
     const dialog = await open()
     expect(DEFAULT_BUNDLE_DRAFT).toMatchObject({ plan: 'starter', interval: 'year' })
-    expect(within(dialog).getByRole('combobox', { name: 'Plan' }).textContent).toBe('Starter')
+    expect(combobox(dialog, 'Plan')).toBe('Starter')
     expect(pressed(dialog, 'Yearly')).toBe('true')
     expect(checked(dialog, /^Site Care/)).toBe(true)
     expect(value(dialog, 'Coupon code (optional)')).toBe('')
@@ -200,6 +228,77 @@ describe('the staff hand-off dialog (AGL-3995)', () => {
     const dialog = await open()
     expect(value(dialog, 'Domain name')).toBe('harborplumbing.com')
     expect(within(dialog).getByText('Choose the site the domain is for')).toBeTruthy()
+  })
+})
+
+describe('the staff org page’s bundle link card (AGL-3995)', () => {
+  const card = () => screen.getByRole('button', { name: 'Copy bundle link' }).closest('.MuiCard-root') as HTMLElement
+  const BUILD = { intent: REGISTER, hostId: 'host-1' }
+
+  it('starts on the build’s bundle, as the hand-off dialog does', async () => {
+    render(<StaffBundleLinkCard orgId="org-1" sites={SITES} build={BUILD} />)
+    await act(async () => undefined)
+    const scope = card()
+    expect(combobox(scope, 'Plan')).toBe('Pro')
+    expect(pressed(scope, 'Monthly')).toBe('true')
+    expect(checked(scope, /^Site Care/)).toBe(true)
+    expect(checked(scope, /^Aglyn AI/)).toBe(true)
+    expect(value(scope, 'Coupon code (optional)')).toBe('BOOTH25')
+    expect(value(scope, 'Domain name')).toBe('harborplumbing.com')
+    expect(value(scope, 'First year')).toBe('11.25')
+    expect(value(scope, 'Renews yearly at')).toBe('18.99')
+    expect(combobox(scope, 'For the site')).toBe('Harbor Plumbing')
+  })
+
+  it('the QR the card shows at the booth and the link the hand-off sends propose the same bundle', async () => {
+    const view = render(<StaffBundleLinkCard orgId="org-1" sites={SITES} build={BUILD} />)
+    await act(async () => undefined)
+    const fromCard = await mintedBy(card())
+    view.unmount()
+    render(<StaffOrgOwnerHandoff orgId="org-1" sites={SITES} build={BUILD} />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Hand off' }))
+    })
+    const fromDialog = await mintedBy(screen.getByRole('dialog'))
+    expect(fromCard).toEqual(fromDialog)
+    expect(fromCard).toEqual({
+      orgId: 'org-1',
+      plan: 'pro',
+      addons: { siteCare: 1, aiAddon: 1 },
+      interval: 'month',
+      coupon: 'BOOTH25',
+      domain: { name: 'harborplumbing.com', firstYearCents: 1125, renewalCents: 1899, hostId: 'host-1' },
+    })
+  })
+
+  it('names the owner’s own domain as connected, not bought', async () => {
+    render(<StaffBundleLinkCard orgId="org-1" sites={SITES} build={{ intent: OWN, hostId: 'host-1' }} />)
+    await act(async () => undefined)
+    expect(value(card(), 'Domain name')).toBe('')
+    expect(within(card()).getByText(/harborplumbing\.com is the owner’s own domain/)).toBeTruthy()
+  })
+
+  it('CONTROL: with no build it starts on the default bundle, as before', async () => {
+    render(<StaffBundleLinkCard orgId="org-1" sites={SITES} build={null} />)
+    await act(async () => undefined)
+    const scope = card()
+    expect(combobox(scope, 'Plan')).toBe('Starter')
+    expect(pressed(scope, 'Yearly')).toBe('true')
+    expect(value(scope, 'Coupon code (optional)')).toBe('')
+    expect(value(scope, 'Domain name')).toBe('')
+    expect(within(scope).queryByText(/own domain/)).toBeNull()
+  })
+
+  it('puts the domain on the build’s site once the page’s sites arrive, and keeps what staff changed after', async () => {
+    const view = render(<StaffBundleLinkCard orgId="org-1" sites={[]} build={BUILD} />)
+    await act(async () => undefined)
+    expect(within(card()).getByText('Choose the site the domain is for')).toBeTruthy()
+    view.rerender(<StaffBundleLinkCard orgId="org-1" sites={SITES} build={BUILD} />)
+    expect(combobox(card(), 'For the site')).toBe('Harbor Plumbing')
+    fireEvent.change(within(card()).getByLabelText('Coupon code (optional)'), { target: { value: 'DOOR10' } })
+    // The page reads the same build again: an equal record changes nothing.
+    view.rerender(<StaffBundleLinkCard orgId="org-1" sites={[...SITES]} build={{ ...BUILD, intent: { ...REGISTER } }} />)
+    expect(value(card(), 'Coupon code (optional)')).toBe('DOOR10')
   })
 })
 

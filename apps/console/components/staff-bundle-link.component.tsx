@@ -22,7 +22,11 @@ import {
   describeBundle,
   normalizeBundleDomain,
 } from '@aglyn/aglyn/app-utils/bundle-intent'
-import type { ClientBuildIntent } from '@aglyn/aglyn/app-utils/client-build'
+import {
+  readClientBuildIntent,
+  type ClientBuildIntent,
+  type ClientBuildRecord,
+} from '@aglyn/aglyn/app-utils/client-build'
 import { mdiContentCopy, mdiQrcode } from '@aglyn/shared-data-mdi'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-jsx/components/mdi-icon'
@@ -45,10 +49,11 @@ import {
   Typography,
 } from '@mui/material'
 import { QRCodeSVG } from 'qrcode.react'
-import { type FocusEvent, useEffect, useState } from 'react'
+import { type FocusEvent, useEffect, useRef, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import {
   bundleDraftBody,
+  bundleDraftFromClientBuildIntent,
   DEFAULT_BUNDLE_DRAFT,
   StaffBundleFields,
   type BundleDraft,
@@ -119,6 +124,98 @@ export function bundleDomainFromClientBuildIntent(
     renewal: domain.renewalUsd.toFixed(2),
     hostId: hostId ?? '',
   }
+}
+
+/** What a build for a client leaves its hand-off (AGL-3958): the intent, and the site it made. */
+export type ClientBuildHandoff = Pick<ClientBuildRecord, 'intent' | 'hostId'>
+
+/**
+ * The build for a client a workspace has (AGL-3958), read through
+ * `/api/admin/client-build`: the record is closed to clients by the rules, so
+ * staff read it only through that route. `null` while it is on its way, for
+ * a workspace that was not built for a client, and when the read fails; each
+ * starts the bundle on the default, as before. A page reads it once and hands
+ * it to both the hand-off dialog and the bundle link card.
+ */
+export function useStaffClientBuild(orgId: string | null | undefined): ClientBuildHandoff | null {
+  const { data: user } = useUser()
+  // `user` identity churns with token refreshes; the uid names the reader.
+  const userRef = useRef(user)
+  userRef.current = user
+  const uid = user?.uid ?? null
+  const [build, setBuild] = useState<ClientBuildHandoff | null>(null)
+  useEffect(() => {
+    if (!uid || !orgId) return
+    let cancelled = false
+    void authorizedFetch(userRef.current, '/api/admin/client-build', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId, action: 'get' }),
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (cancelled) return
+        const record = payload?.record
+        const intent = readClientBuildIntent(record?.intent)
+        setBuild(
+          intent
+            ? { intent, hostId: typeof record?.hostId === 'string' ? record.hostId : null }
+            : null,
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setBuild(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [uid, orgId])
+  return build
+}
+
+/**
+ * The bundle and domain line staff edit, starting on what a build for a
+ * client left (AGL-3995) and on the default bundle without one. The hand-off
+ * dialog and the bundle link card both hold it, so the link the dialog mints
+ * and the QR the card shows at a booth propose the same thing.
+ *
+ * Seeded again only when the build changes, or when the site it made becomes
+ * one staff can pick (the page's sites load on their own), so what staff
+ * change stays until then.
+ */
+export function useClientBuildBundleDraft(
+  build: ClientBuildHandoff | null | undefined,
+  sites: readonly BundleSiteOption[],
+) {
+  const [draft, setDraft] = useState<BundleDraft>(DEFAULT_BUNDLE_DRAFT)
+  const [domain, setDomain] = useState<BundleDomainDraft>(EMPTY_BUNDLE_DOMAIN)
+  // The domain is for the site the build made, where staff can pick it.
+  const hostId = build?.hostId && sites.some((site) => site.hostId === build.hostId) ? build.hostId : null
+  const seed = build ? JSON.stringify([build.intent, hostId]) : null
+  const [seeded, setSeeded] = useState<string | null>(null)
+  if (build && seed !== seeded) {
+    // Adjusting state during render, React's documented alternative to an
+    // effect: the fields never paint the default before the build.
+    setSeeded(seed)
+    setDraft(bundleDraftFromClientBuildIntent(build.intent))
+    setDomain(bundleDomainFromClientBuildIntent(build.intent, hostId))
+  }
+  return { draft, setDraft, domain, setDomain }
+}
+
+/**
+ * Said beside the domain fields when the owner already has a domain: it is
+ * connected with them, not bought, so the link carries none.
+ */
+export function ClientBuildOwnDomainNote({ build }: { build?: ClientBuildHandoff | null }) {
+  const existing = build?.intent.existingDomain
+  if (!existing) return null
+  return (
+    <Alert severity="info">
+      {`${existing} is the owner’s own domain, so the link carries none to ` +
+        'buy. Connect it with them on the site’s Custom Domain page.'}
+    </Alert>
+  )
 }
 
 /**
@@ -406,15 +503,21 @@ export interface StaffBundleLinkCardProps {
   sites: readonly BundleSiteOption[]
   /** The workspace already pays: a link would open a checkout it refuses. */
   subscriptionLive?: boolean
+  /**
+   * The workspace's build for a client, when it has one (AGL-3995): the card
+   * starts on its bundle, as the hand-off dialog does. Without one it starts
+   * on the default bundle.
+   */
+  build?: ClientBuildHandoff | null
 }
 
 /**
  * The staff organization page's bundle link card (AGL-3955): choose the
- * bundle, then copy the link or show its QR from the card header.
+ * bundle, then copy the link or show its QR from the card header. A
+ * workspace built for a client starts on the build's bundle (AGL-3995).
  */
-export function StaffBundleLinkCard({ orgId, sites, subscriptionLive }: StaffBundleLinkCardProps) {
-  const [draft, setDraft] = useState<BundleDraft>(DEFAULT_BUNDLE_DRAFT)
-  const [domain, setDomain] = useState<BundleDomainDraft>(EMPTY_BUNDLE_DOMAIN)
+export function StaffBundleLinkCard({ orgId, sites, subscriptionLive, build }: StaffBundleLinkCardProps) {
+  const { draft, setDraft, domain, setDomain } = useClientBuildBundleDraft(build, sites)
   const available = useDomainsAvailable()
   const disabledReason = subscriptionLive
     ? 'This workspace already has a live subscription; change its plan from Billing.'
@@ -447,6 +550,7 @@ export function StaffBundleLinkCard({ orgId, sites, subscriptionLive }: StaffBun
           available={available}
           disabled={!!disabledReason}
         />
+        {disabledReason ? null : <ClientBuildOwnDomainNote build={build} />}
       </Stack>
     </CardDisplay>
   )
