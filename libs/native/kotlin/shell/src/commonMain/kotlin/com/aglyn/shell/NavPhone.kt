@@ -1,0 +1,232 @@
+package com.aglyn.shell
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.aglyn.contracts.NativeNavListId
+import com.aglyn.contracts.StarredItem
+import com.aglyn.core.AccountPreferences
+import com.aglyn.core.AuthUser
+import com.aglyn.core.WorkspaceState
+import com.aglyn.ui.AglynIcons
+import com.aglyn.ui.WithTooltip
+import com.aglyn.ui.WorkspaceTile
+import com.aglyn.ui.shellColors
+
+/**
+ * The phone shell: the scope chip (opening the two-step picker), search, the bell and your photo on top; Home, the
+ * scope's busiest area, Create, Inbox and Menu along the bottom; a pushed screen keeps the bottom bar under a back arrow.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun PhoneShell(
+  services: ShellServices,
+  navigator: ShellNavigator,
+  chrome: NavChromeState,
+  workspace: WorkspaceState,
+  prefs: AccountPreferences,
+  user: AuthUser?,
+  uid: String,
+  title: String,
+  route: Route?,
+  scopeGroups: List<NavGroupItem>,
+  settingsGroups: List<NavGroupItem>?,
+  sidebar: SidebarContent,
+  starred: List<StarredItem>,
+  sections: List<NavSectionItem>?,
+  banner: @Composable () -> Unit,
+  actions: ShellActions,
+  enabled: Collection<String>,
+  onRow: (NavItem) -> Unit,
+  onStar: (StarredItem) -> Unit,
+  body: @Composable () -> Unit,
+) {
+  val (busiest, inbox) = phoneTabRows(scopeGroups, workspace.site != null)
+  val top = navigator.top
+  if (route is Route.Web) {
+    // The browser screen brings its own bar; the system back gesture returns.
+    body()
+    return
+  }
+  val menuOpen = top == ShellNavigator.MENU && route == null
+  Scaffold(
+    containerColor = MaterialTheme.colorScheme.background,
+    topBar = {
+      Column {
+        banner()
+        TopAppBar(
+          title = {
+            if (route != null || settingsGroups != null && !menuOpen) {
+              Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            } else {
+              ScopeChip(services, workspace, prefs) { chrome.picker = PickerStep.WORKSPACE }
+            }
+          },
+          navigationIcon = {
+            if (route != null) TitleBarButton("Back", "arrow_back", "title-back") { navigator.back() }
+          },
+          actions = {
+            TitleBarButton("Search or jump to", "search", "phone-search") { chrome.picker = PickerStep.WORKSPACE }
+            BellButton(services, uid) { navigator.select(ShellNavigator.NOTIFICATIONS) }
+            AccountAvatar(user, size = 32, onClick = { chrome.accountMenu = true }, modifier = Modifier.padding(end = 8.dp).testTag("phone-account"))
+          },
+          colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+        )
+        if (route == null) sections?.let { SectionTabs(it, top) { key -> navigator.select(key) } }
+      }
+    },
+    bottomBar = {
+      NavigationBar(containerColor = shellColors.sidebar, modifier = Modifier.testTag("phone-tabs")) {
+        val colors = NavigationBarItemDefaults.colors(
+          indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+          selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+          selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+        PhoneTab("Home", "home", top == ShellNavigator.HOME && settingsGroups == null, "tab-home", colors) { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) }
+        busiest?.let { row ->
+          PhoneTab(row.label, row.icon, top in row.keys, "tab-${row.rowId}", colors) { chrome.settingsMode = null; navigator.select(row.key) }
+        }
+        NavigationBarItem(
+          selected = false,
+          onClick = { chrome.createMenu = true },
+          icon = {
+            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(40.dp, 32.dp)) {
+              Box(contentAlignment = Alignment.Center) { Icon(AglynIcons.named("add"), contentDescription = "Create new") }
+            }
+          },
+          modifier = Modifier.testTag("tab-create"),
+        )
+        inbox?.let { row ->
+          PhoneTab(row.label, row.icon, top in row.keys, "tab-${row.rowId}", colors) { chrome.settingsMode = null; navigator.select(row.key) }
+        }
+        PhoneTab("Menu", "menu", menuOpen || settingsGroups != null && route == null && top != ShellNavigator.HOME, "tab-menu", colors) {
+          navigator.select(ShellNavigator.MENU)
+        }
+      }
+    },
+  ) { padding ->
+    Box(Modifier.padding(padding).fillMaxSize()) {
+      if (menuOpen) {
+        PhoneMenu(services, workspace, chrome, sidebar, top, starred, onRow, onStar)
+      } else {
+        body()
+      }
+    }
+  }
+  if (chrome.accountMenu) {
+    ModalBottomSheet(onDismissRequest = { chrome.accountMenu = false }, modifier = Modifier.testTag("account-sheet")) {
+      Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 16.dp)) {
+        AccountMenuItems(services, user) { chrome.accountMenu = false }
+      }
+    }
+  }
+  if (chrome.createMenu) {
+    ModalBottomSheet(onDismissRequest = { chrome.createMenu = false }, modifier = Modifier.testTag("create-sheet")) {
+      Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 16.dp)) {
+        Text("Create new", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        CreateMenuItems(services, workspace, enabled) { entry ->
+          chrome.createMenu = false
+          actions.openScreen(entry.screen, mapOf("new" to "1"))
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.PhoneTab(
+  label: String,
+  icon: String,
+  selected: Boolean,
+  tag: String,
+  colors: androidx.compose.material3.NavigationBarItemColors,
+  onClick: () -> Unit,
+) {
+  NavigationBarItem(
+    selected = selected,
+    onClick = onClick,
+    icon = { Icon(AglynIcons.named(icon), contentDescription = null) },
+    label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+    colors = colors,
+    modifier = Modifier.testTag(tag),
+  )
+}
+
+/** The scope chip on a phone: the site (or the workspace) on screen, opening the picker. */
+@Composable
+private fun ScopeChip(services: ShellServices, workspace: WorkspaceState, prefs: AccountPreferences, onClick: () -> Unit) {
+  val org = workspace.org
+  val name = workspace.site?.name ?: org?.name ?: "Choose a workspace"
+  val (color) = org?.id?.let { rememberWorkspaceColor(it, workspace, prefs, services.api.origin) } ?: (null to false)
+  val (light, dark) = org?.id?.let { orgLogoUrls(workspace, it, services.api.origin) } ?: (null to null)
+  Surface(
+    onClick = onClick,
+    shape = RoundedCornerShape(20.dp),
+    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    modifier = Modifier.widthIn(max = 260.dp).testTag("scope-chip").semantics { contentDescription = "$name. Switch workspace or site" },
+  ) {
+    Row(Modifier.padding(start = 6.dp, end = 10.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      WorkspaceTile(org?.name ?: name, light, dark, color, size = 24.dp)
+      Text(name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+      Icon(AglynIcons.named("expand_more"), null, Modifier.size(18.dp))
+    }
+  }
+}
+
+/**
+ * The phone's Menu: the same grouped list as the tablet sidebar (Overview, Starred, Website, Sell, Customers, More, Site
+ * settings), with a settings list in its place while one is open, and the scope header above it.
+ */
+@Composable
+private fun PhoneMenu(
+  services: ShellServices,
+  workspace: WorkspaceState,
+  chrome: NavChromeState,
+  sidebar: SidebarContent,
+  selectedKey: String,
+  starred: List<StarredItem>,
+  onRow: (NavItem) -> Unit,
+  onStar: (StarredItem) -> Unit,
+) {
+  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp).testTag("phone-menu")) {
+    Text("Menu", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp))
+    if (sidebar.modeTitle != null) {
+      BackLink(sidebar.modeTitle, tag = "settings-mode-back", onClick = sidebar.onExitMode)
+    } else {
+      ScopeHeader(services, workspace, chrome)
+    }
+    NavGroupsList(sidebar.groups, sidebar.groups, chrome, selectedKey, starred, onRow, onStar, dense = false)
+  }
+}

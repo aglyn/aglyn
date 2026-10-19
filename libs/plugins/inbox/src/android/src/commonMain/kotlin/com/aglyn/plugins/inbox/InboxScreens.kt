@@ -84,8 +84,8 @@ const val INBOX_SUBMISSION_SCREEN = "inbox.submission"
 data class InboxSite(val name: String?, val role: String?)
 
 @Composable
-private fun rememberInboxSite(context: NativePluginContext): Live<InboxSite> {
-  val hostId = context.hostId ?: return Live.Ready(InboxSite(null, null))
+private fun rememberInboxSite(context: NativePluginContext, siteId: String? = context.hostId): Live<InboxSite> {
+  val hostId = siteId ?: return Live.Ready(InboxSite(null, null))
   val flow = remember(hostId, context.firestore) { context.firestore.observeDoc("hosts/$hostId") }
   return when (val live = flow.collectAsState(Live.Loading).value) {
     Live.Loading -> Live.Loading
@@ -108,7 +108,7 @@ private fun messageError(error: Throwable): String = error.message?.takeIf { it.
  */
 @Composable
 fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? = null, scopedForm: String? = null, scopedFormName: String? = null) {
-  val hostId = context.hostId ?: return
+  val hostId = context.hostId ?: return WorkspaceSubmissionsScreen(context)
   val scope = rememberCoroutineScope()
   val list = remember(hostId, context.firestore) { LiveQueryList(context.firestore, scope, SUBMISSIONS_PAGE_SIZE, ::submissionOf) }
   var read by rememberSaveable { mutableStateOf(ReadFilter.ALL) }
@@ -222,7 +222,7 @@ private fun SubmissionRow(row: Submission, selected: Boolean, onClick: () -> Uni
  */
 @Composable
 fun SubmissionScreen(context: NativePluginContext, submissionId: String?) {
-  val hostId = context.hostId ?: return
+  val hostId = context.hostId ?: return WorkspaceSubmissionsScreen(context)
   if (submissionId.isNullOrEmpty()) {
     SubmissionsScreen(context)
     return
@@ -503,7 +503,7 @@ private fun ListAssignmentCard(row: Submission, actions: InboxActions, onNotice:
 /** The site's members and the leads it may see; a lead opens in the CRM. */
 @Composable
 fun PeopleScreen(context: NativePluginContext) {
-  val hostId = context.hostId ?: return
+  val hostId = context.hostId ?: return WorkspaceLeadsScreen(context)
   val orgId = context.orgId
   val scope = rememberCoroutineScope()
   var tab by rememberSaveable { mutableStateOf("members") }
@@ -615,4 +615,111 @@ fun InboxGlanceWidget(context: NativePluginContext) {
     error = if (live is Live.Failed) "Could not load the Inbox." else null,
     onClick = { context.navigate(INBOX_SCREEN) },
   )
+}
+
+/**
+ * The workspace's own Inbox (the console's org Inbox, AGL-3303): every site's messages in one list, newest first, each
+ * naming its site; a message opens with its own site's reply and list tools.
+ */
+@Composable
+fun WorkspaceSubmissionsScreen(context: NativePluginContext) {
+  val orgId = context.orgId ?: return
+  val scope = rememberCoroutineScope()
+  val list = remember(orgId, context.firestore) { LiveQueryList(context.firestore, scope, SUBMISSIONS_PAGE_SIZE, ::submissionOf) }
+  var read by rememberSaveable { mutableStateOf(ReadFilter.ALL) }
+  var search by rememberSaveable { mutableStateOf("") }
+  var asked by rememberSaveable { mutableStateOf("") }
+  LaunchedEffect(list, read, asked) { list.show { limit -> workspaceSubmissionsQuery(orgId, read, asked, limit) } }
+  val sites = (com.aglyn.pluginhost.rememberWorkspaceSites(context) as? Live.Ready)?.value.orEmpty().associate { it.id to it.name }
+  AglynListDetail(
+    list = { selected, onSelect ->
+      Column(Modifier.fillMaxSize().testTag("workspace-inbox")) {
+        ListHeader("Inbox")
+        Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+          Text("Messages from every site in this workspace.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search messages", onSearch = { asked = search })
+          ChoiceChipRow(ReadFilter.entries.map { ChipOption(it.name, it.label) }, read.name, { read = ReadFilter.valueOf(it) })
+        }
+        LiveListPane(
+          list,
+          key = { "${it.hostId}/${it.id}" },
+          failed = "Could not load the Inbox",
+          empty = {
+            val filtered = read != ReadFilter.ALL || asked.isNotBlank()
+            EmptyState(
+              if (filtered) "No messages match" else "No messages yet",
+              body = if (filtered) "Try another filter or search." else "What visitors send through any site's forms arrives here.",
+              icon = AglynIcons.named("inbox"),
+            )
+          },
+        ) { row ->
+          val key = "${row.hostId}/${row.id}"
+          val named = row.copy(formName = listOfNotNull(row.hostId?.let { sites[it] }, row.formName).joinToString(" · "))
+          SubmissionRow(named, key == selected) { onSelect(key) }
+        }
+      }
+    },
+    detail = { selected ->
+      val siteId = selected?.substringBefore('/')?.takeIf { it.isNotEmpty() && it != "null" }
+      val id = selected?.substringAfter('/')
+      if (siteId == null || id == null) {
+        SelectionPlaceholder("Pick a message to read it here", icon = AglynIcons.named("inbox"))
+      } else {
+        val site = rememberInboxSite(context, siteId)
+        SubmissionDetail(context, siteId, id, (site as? Live.Ready)?.value, InboxPermissions.of((site as? Live.Ready)?.value?.role ?: context.orgRole))
+      }
+    },
+  )
+}
+
+/**
+ * Members & leads across the workspace (the console's org Inbox section, gated on the Manage data permission): every
+ * site's leads, which open in the CRM. Site members belong to one site, so they are listed from that site.
+ */
+@Composable
+fun WorkspaceLeadsScreen(context: NativePluginContext) {
+  val orgId = context.orgId ?: return
+  val access = com.aglyn.pluginhost.rememberOrgAccess(context, orgId)
+  val ready = (access as? Live.Ready)?.value
+  if (ready == null) {
+    if (access is Live.Failed) EmptyState("Could not load your access", body = messageError(access.error), icon = AglynIcons.named("error")) else com.aglyn.ui.SkeletonList(rows = 4)
+    return
+  }
+  // Manage data (owners, admins and editors by default) across every site the member reaches.
+  if (!ready.orgWide || ready.role !in setOf(com.aglyn.core.OrgRole.OWNER, com.aglyn.core.OrgRole.ADMIN, com.aglyn.core.OrgRole.EDITOR)) {
+    EmptyState(
+      "Members & leads are kept per site",
+      body = "Seeing every site's leads at once needs the Manage data permission on every site. Pick a site to see its own.",
+      icon = AglynIcons.named("group"),
+      modifier = Modifier.testTag("workspace-leads-locked"),
+    )
+    return
+  }
+  val scope = rememberCoroutineScope()
+  var search by rememberSaveable { mutableStateOf("") }
+  var asked by rememberSaveable { mutableStateOf("") }
+  val leads = remember(orgId, context.firestore) { LiveQueryList(context.firestore, scope, 25, ::leadRowOf) }
+  LaunchedEffect(asked) { leads.show { limit -> workspaceLeadsQuery(orgId, asked, limit) } }
+  Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    Column(Modifier.widthIn(max = 840.dp).fillMaxSize().testTag("workspace-leads")) {
+      Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        Text("Leads from every site in this workspace. Site members are listed on each site.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search leads", onSearch = { asked = search })
+      }
+      LiveListPane(
+        leads,
+        key = { it.id },
+        empty = { EmptyState("No leads yet", body = "People any site's forms capture as leads show up here.", icon = AglynIcons.named("person_add")) },
+      ) { lead ->
+        AglynListItem(
+          title = lead.name,
+          supporting = listOfNotNull(lead.email.takeIf { it != lead.name }, lead.company).joinToString(" · "),
+          icon = AglynIcons.named("person_add"),
+          trailing = lead.statusLabel?.let { { StatusChip(it) } },
+          onClick = { context.navigate("crm.lead", mapOf("lead" to lead.id)) },
+          modifier = Modifier.testTag("lead-${lead.id}"),
+        )
+      }
+    }
+  }
 }

@@ -79,9 +79,9 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
   private fun body(vararg pairs: Pair<String, Any?>): kotlinx.serialization.json.JsonElement =
     firestoreJson((scope.routeScope + pairs).filterValues { it != null })
 
-  /** The site scope alone, which the task routes take. */
+  /** The site alone, or the workspace from its own CRM: the scope the task routes take (`{ orgId }` is the org-level hub). */
   private fun taskBody(vararg pairs: Pair<String, Any?>): kotlinx.serialization.json.JsonElement =
-    firestoreJson((mapOf("hostId" to scope.hostId) + pairs).filterValues { it != null })
+    firestoreJson(((if (scope.hostId != null) mapOf("hostId" to scope.hostId) else mapOf("orgId" to scope.orgId)) + pairs).filterValues { it != null })
 
   private suspend fun quietly(block: suspend () -> Unit) {
     try { block() } catch (error: Throwable) { if (error is CancellationException) throw error }

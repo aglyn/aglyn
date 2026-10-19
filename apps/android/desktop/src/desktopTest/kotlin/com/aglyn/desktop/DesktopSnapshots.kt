@@ -40,7 +40,7 @@ fun main() = runBlocking {
     shoot(dir, "aglyn-desktop-redirects", dark, before = { navigator.select(ShellNavigator.screenKey("redirects.list")) }) { AglynShell(aglyn, navigator, dark = it) }
     shoot(dir, "aglyn-desktop-notifications", dark, before = { navigator.select(ShellNavigator.NOTIFICATIONS) }) { AglynShell(aglyn, navigator, dark = it) }
     shoot(dir, "aglyn-desktop-settings", dark, before = { navigator.select(ShellNavigator.SETTINGS) }) { AglynShell(aglyn, navigator, dark = it) }
-    shoot(dir, "aglyn-desktop-switcher", dark, before = { navigator.select(ShellNavigator.HOME); navigator.push(Route.Switcher) }) { AglynShell(aglyn, navigator, dark = it) }
+    shoot(dir, "aglyn-desktop-switcher", dark, before = { navigator.select(ShellNavigator.HOME); navigator.command = com.aglyn.shell.ShellCommand.SWITCH_SITE }) { AglynShell(aglyn, navigator, dark = it) }
     navigator.select(ShellNavigator.HOME)
   }
   // The store's orders live on the seeded store site (-Daglyn.snapshotStoreSite).
