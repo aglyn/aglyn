@@ -120,6 +120,7 @@ import {
   livemodeDecision,
 } from '../../../../utils/server/stripe-livemode'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { recordSiteCareProjectPayment } from '@aglyn/tenant-data-admin/server/site-care-projects'
 // The leaf, not the barrel: the webhook's specs substitute the barrel, and
 // the row a fraud signal files must be the real one under them (AGL-3356).
 import {
@@ -1685,6 +1686,28 @@ async function handler(request: Request): Promise<Response> {
           // registry, so a plugin that throws is logged and never this
           // route's failure.
           const invoiceMetadata = invoiceEventMetadata(object)
+          if (type === 'invoice.paid' && invoiceMetadata['siteCareProjectId']) {
+            // A Site Care project's own invoice (AGL-3970): the record learns
+            // it is paid, and the owner gets the receipt. Idempotent on a
+            // redelivery; AWAITED for the same reason as the plugin raise
+            // below, and never this route's failure — a missed record is
+            // what staff's "Check payments" and the daily reconciliation
+            // catch. The plain handle, not `observed()`: the record is
+            // written in a transaction, and its effect is named below once
+            // that transaction has committed.
+            try {
+              const outcome = await recordSiteCareProjectPayment(firebaseAdmin.app().firestore(), {
+                orgId,
+                invoiceId: String(object?.id ?? ''),
+                metadata: invoiceMetadata,
+                amountPaidCents: Math.max(0, Number(object?.amount_paid ?? 0)),
+                paidOutOfBand: object?.paid_out_of_band === true,
+              })
+              if (outcome === 'recorded') ledger.effect('site-care-project-paid')
+            } catch (projectError) {
+              console.error('site care project payment not recorded', projectError)
+            }
+          }
           if (type === 'invoice.paid') {
             await runPluginEventHandlers('billing.invoice.paid', {
               orgId,

@@ -142,6 +142,14 @@ describe('the create-workspace dialog for staff (AGL-3952)', () => {
         note: 'Booth build, Three Palms MX round 4',
       },
     })
+    // On to the one-screen build for the client (AGL-3958).
+    expect(mockPush).toHaveBeenCalledWith('/pecos-valley/client-build')
+  })
+
+  it('with the switch off, lands on the new workspace as before', async () => {
+    render(<CreateOrgDialog open onClose={() => undefined} />)
+    typeName('Pecos Valley')
+    await create('Create')
     expect(mockPush).toHaveBeenCalledWith('/pecos-valley/hosts')
   })
 })

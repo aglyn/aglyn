@@ -45,6 +45,29 @@ Each card says, in a line, what its look is like. Its picture is one variation o
 style; your site gets its own. A style also suggests the pages that kind
 of site usually has, such as a menu for a restaurant or services for a trade.
 
+## Each style's layout {#each-styles-layout}
+
+A style also decides how its pages are laid out, so two styles never read as the same page
+in different colors. Each style opens its pages in one of two ways of its own, and your site
+gets one of the two:
+
+- **A photo across the whole page**, with the words over it at the start (a trade, a
+  nonprofit, a band) or centered in large type (a restaurant, a coming soon page).
+- **A photo filling half the page**, edge to edge, with the words in the other half
+  (health and wellness, fitness).
+- **The words beside a photo** (business and services, courses and education), or beside
+  **two overlapping photos** (an online store, an event, a salon).
+- **A white card over a photo**, holding the words (law, finance and consulting, real
+  estate).
+- **Large type above a wide photo** (a design studio, a portfolio) or a **centered heading
+  above a wide photo** (a blog, yoga, a landing page).
+- **A round portrait above the words** (a personal page).
+
+The style also sets how its header is arranged, how its lists and cards are drawn (cards,
+lines under thin rules, or icons), whether its sections of text take a photo beside them,
+and whether a heading sits beside its items. The words, the sections and their order are
+still written for your business.
+
 ## How the look is made {#how-the-look-is-made}
 
 The style sets the range the look is chosen within: which base themes suit it, the range of

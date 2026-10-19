@@ -77,7 +77,17 @@ export function useInviteResponse() {
             { variant: 'success' },
           )
           if (invite.orgId) selectOrg(invite.orgId)
-          if (invite.orgSlug) {
+          // A hand-off that proposed its plan (AGL-3956) answers where Billing
+          // has the bundle preselected; the new owner goes straight there.
+          const billingDestination =
+            typeof payload?.billingDestination === 'string' &&
+            payload.billingDestination.startsWith('/') &&
+            !payload.billingDestination.startsWith('//')
+              ? payload.billingDestination
+              : null
+          if (billingDestination) {
+            void router.push(billingDestination)
+          } else if (invite.orgSlug) {
             void router.push(
               buildRoute(Route.ORG_HOME, { orgSlug: invite.orgSlug }),
             )

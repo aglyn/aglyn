@@ -11,6 +11,10 @@ plugins {
 /**
  * Embeds JSON files as Kotlin string constants, so every target reads the
  * same bytes with no platform resource loader. Build output only.
+ *
+ * Line endings are normalized to LF first: a Windows checkout has CRLF (the
+ * repo has no .gitattributes), and a raw CR inside a one-line string literal
+ * is a syntax error on windows-latest.
  */
 abstract class EmbedJson : DefaultTask() {
   @get:InputFiles
@@ -31,8 +35,8 @@ abstract class EmbedJson : DefaultTask() {
     for (file in sources.files.sortedBy { it.name }) {
       val name = file.name.removeSuffix(".generated.json").split('-')
         .mapIndexed { i, part -> if (i == 0) part else part.replaceFirstChar { it.uppercase() } }.joinToString("")
-      val chunks = file.readText().chunked(16_000).joinToString(",\n    ") { chunk ->
-        "\"" + chunk.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$").replace("\n", "\\n") + "\""
+      val chunks = file.readText().replace("\r\n", "\n").chunked(16_000).joinToString(",\n    ") { chunk ->
+        "\"" + chunk.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$").replace("\n", "\\n").replace("\r", "\\r") + "\""
       }
       body.append("  val $name: String by lazy {\n    listOf(\n    $chunks,\n    ).joinToString(\"\")\n  }\n")
     }

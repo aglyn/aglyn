@@ -600,6 +600,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#audit-log': 'A record of staff actions, newest first. Click an entry to read its reason, note and before/after below the list.',
     '#billing-insight': 'Every organization\'s Stripe invoice history and default payment method (with delinquency state) render on its detail page.',
     '#broadcast-announcements': 'Push a product announcement or maintenance notice as an in-app notification to every organization\'s owner/admins (optionally one plan tier), respecting each recipient\'s mute preferences; audited.',
+    '#bundle-link': 'The Bundle checkout link card on an organization\'s page, and the header of the Hand off dialog, make a link to the owner\'s Billing page with the plan, add-ons, billing interval and coupon already chosen.',
     '#contact-suppressions': 'The platform do-not-contact list for phone numbers — calls and texts.',
     '#coupons': 'Discount codes for Aglyn\'s own subscriptions. They live in Stripe — the console creates them there and reads them back, so a coupon made in the Stripe Dashboard shows up here and vice versa.',
     '#create-a-coupon': 'Make a discount code for Aglyn\'s own subscriptions here: give it a name, a type and a duration, read the cost warnings the form shows, then create it.',

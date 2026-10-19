@@ -360,16 +360,18 @@ describe('item counts and the compiler’s choices vary (AGL-3899)', () => {
       }
       return counts
     }
-    // Business opens split, cover or editorial: each about a third.
+    // Business opens split or on a panel over its photo (AGL-3985): each about half.
     const heroes = tally('business', (choices) => choices.hero)
-    expect([...heroes.keys()].sort()).toEqual(['cover', 'editorial', 'split'])
-    for (const count of heroes.values()) expect(count / seeds.length).toBeGreaterThan(0.25)
+    expect([...heroes.keys()].sort()).toEqual(['panel', 'split'])
+    for (const count of heroes.values()) expect(count / seeds.length).toBeGreaterThan(0.4)
     // A kind of two heroes takes each about half the time, never its first 77%.
     const yoga = tally('yoga', (choices) => choices.hero)
     for (const count of yoga.values()) expect(count / seeds.length).toBeGreaterThan(0.4)
+    // A kind's group styles are its signature's, each about as often (AGL-3985).
     const groups = tally('business', (choices) => choices.group)
-    expect([...groups.keys()].sort()).toEqual(['cards', 'icons', 'ruled'])
-    for (const count of groups.values()) expect(count / seeds.length).toBeGreaterThan(0.25)
+    expect([...groups.keys()].sort()).toEqual(['cards', 'icons'])
+    for (const count of groups.values()) expect(count / seeds.length).toBeGreaterThan(0.4)
+    expect([...tally('professional', (choices) => choices.group).keys()]).toEqual(['ruled'])
     const features = tally('business', (choices) => String(choices.features))
     expect([...features.keys()].sort()).toEqual(['false', 'true'])
     // A storefront's story always takes its photo (AGL-3676).

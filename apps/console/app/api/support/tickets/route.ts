@@ -354,6 +354,16 @@ async function handler(request: Request): Promise<Response> {
         .trim()
         .slice(0, MAX_BODY)
       const status = String(payload?.status ?? '')
+      // A Site Care request closes with its minutes, from the Site Care
+      // panel (AGL-3959); a bare close would leave its timer running and its
+      // time unlogged.
+      const siteCareState = (ticket['siteCare'] as { state?: unknown } | undefined)?.state
+      if (status === 'closed' && ticket['kind'] === 'siteCare' && siteCareState !== 'closed') {
+        return Response.json(
+          { error: 'Close a Site Care request from its Site Care panel, with the minutes it took.' },
+          { status: 409 },
+        )
+      }
       const updates: Record<string, unknown> = { updatedAt: now }
       if (body) {
         await ticketsRef.doc(ticketId).collection('messages').add({
@@ -371,7 +381,11 @@ async function handler(request: Request): Promise<Response> {
         // is the same shape as a control that is configured, tested and never
         // called. `firstRespondedAt` is write-once: a later staff message must
         // not move it, or a slow first answer is erased by a fast second one.
-        if (isStaff && !ticket['firstRespondedAt']) {
+        //
+        // Not on a Site Care request (AGL-3959): its promise is DONE within
+        // two business days, so its clock stops when staff close it with
+        // its minutes, not at a first reply.
+        if (isStaff && !ticket['firstRespondedAt'] && ticket['kind'] !== 'siteCare') {
           updates['firstRespondedAt'] = now
         }
         // A subscriber replying needs to reach staff (AGL-850); a staff reply

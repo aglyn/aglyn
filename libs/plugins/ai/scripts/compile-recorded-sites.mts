@@ -51,8 +51,10 @@
  * (AGL-3898): a starter photo's key (`hero`, `about`, `desk`, `plants`,
  * `craft`), a picture given whole (`{ src, width, height, alt }`), or `none`
  * — as every slot past the list is — the treatment a slot gets where the
- * stock library found nothing to fit; and, in `seed`, the look's seed, which
- * also picks the site's design variants (`ai-layout-design.ts`). A page the
+ * stock library found nothing to fit; in `seed`, the look's seed, which
+ * also picks the site's design variants (`ai-layout-design.ts`); and, in
+ * `nav`, the site's other pages (`[{ title, slug?, id? }]`, AGL-3985), which
+ * the header links and a button may go to, but which are not compiled. A page the
  * check refuses is reported and written anyway, so a shot still shows it. What it writes, per page, is a
  * `render-layout-shots.mts` input: `<out>/<key>-<page>.json`.
  */
@@ -139,6 +141,12 @@ async function main(): Promise<void> {
     records?: Dict | null
     /** What fills each picture slot, in order: a starter photo's key, a picture given whole, or `none` (AGL-3898). */
     photos?: readonly (string | Dict)[] | null
+    /**
+     * The site's other pages, by title and path, which a run names without
+     * recording them (AGL-3985): the header links them and a button may go to
+     * one, as on a site whose every page was built, but none is compiled.
+     */
+    nav?: ReadonlyArray<{ id: string; title: string; slug: string }> | null
   }) => {
     let site = given
     const inventory = {
@@ -161,6 +169,7 @@ async function main(): Promise<void> {
       // A blog's posts are linked by the header, second after Home, as a guided start links them.
       ...(posts ? [{ id: 'aiSiteBlog', label: 'Blog', slug: `/${posts.slug}`, href: `/${posts.slug}` }] : []),
       ...site.pages.filter((page) => page.slug !== '/').map((page) => ({ id: page.id, label: page.title, slug: page.slug })),
+      ...(site.nav ?? []).map((page) => ({ id: page.id, label: page.title, slug: page.slug })),
     ]
     const siteAliases = standIns.map((page) => ({ id: page.id, label: 'Blog', slug: `/${posts?.slug}`, href: `/${posts?.slug}`, standsInFor: page.title }))
     // The site's listings, as a guided start hands them to its units (AGL-3676).
@@ -377,7 +386,10 @@ async function main(): Promise<void> {
         : null
       const records = givenRecords ?? (recordedPosts ? { posts: recordedPosts } : null)
       const photos = Array.isArray(run['photos']) ? (run['photos'] as (string | Dict)[]) : null
-      await compileSite({ key, name, kind, style, facts, pages, frame: run['frame'], form, records, photos })
+      const nav = Array.isArray(run['nav'])
+        ? (run['nav'] as Dict[]).map((page) => ({ id: String(page['id'] ?? `nav-${slugKey(String(page['title']))}`), title: String(page['title']), slug: String(page['slug'] ?? `/${slugKey(String(page['title']))}`) }))
+        : null
+      await compileSite({ key, name, kind, style, facts, pages, frame: run['frame'], form, records, photos, nav })
       continue
     }
     // A layout-eval brief: <dir>/<key>.

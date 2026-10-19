@@ -315,6 +315,29 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     defaultEnabled: true,
   },
   {
+    // The scheduled reconciliation of Site Care extra time (AGL-3959): a
+    // request's billed hours and the Stripe invoice item that carries them
+    // disagree, or one exists without the other. Should know, not must:
+    // nothing is lost yet, the next invoice has not gone, and the fix is on
+    // the request. The same check compares a flat-quoted project's
+    // invoices (AGL-3970), whose findings arrive with `month` "projects".
+    type: 'billing.siteCareReconciliation',
+    label: 'Site Care billing does not match Stripe',
+    description:
+      'A Site Care request’s billed hours, amount or line description disagree with its Stripe invoice item, a Stripe item has no request row behind it, a month’s total disagrees with its statement, or a project invoice’s status or amount disagrees with Stripe (or exists in Stripe with no project row). Open the workspace’s staff page and correct it from the request or the project — never by hand in Stripe.',
+    tier: 'should',
+    category: 'billing',
+    title: 'Site Care billing mismatch on {{orgName}} ({{month}})',
+    body:
+      '{{count}} Site Care finding(s) on workspace {{orgName}} ({{orgId}}) for {{month}}: {{findings}} Fix it from the request on the staff organization page.',
+    link: '/admin/orgs/{{orgId}}#site-care',
+    delivery: 'immediate',
+    // One alert a day per workspace and month: the same finding re-checked
+    // tomorrow is the same news.
+    dedupeWindowMinutes: DAY,
+    defaultEnabled: true,
+  },
+  {
     type: 'billing.webhookSignatureRejected',
     label: 'Billing webhook failing its signature check',
     description:
