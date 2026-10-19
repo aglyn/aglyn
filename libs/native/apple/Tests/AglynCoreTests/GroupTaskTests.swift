@@ -9,10 +9,8 @@ import XCTest
 /// A stack is always there, so its task runs. Read from the checkout, as `AppConfigTests` does.
 final class GroupTaskTests: XCTestCase {
   /// Where the `if` does not wait on the task: Setup's site screens draw for a picked site, and the task only binds it.
-  /// The spec screens' zone row is a List row, where an empty stack would leave an empty row; it is tracked separately.
   private let allowed: Set<String> = [
-    "libs/native/apple/Sources/AglynSite/SetupScreens.swift",
-    "libs/native/apple/Sources/AglynScreens/SpecScreenView.swift",
+    "libs/native/apple/Sources/AglynSite/SetupScreens.swift"
   ]
 
   func testNoViewLoadsInATaskOnAGroupThatDrawsNothingUntilLoaded() throws {
@@ -23,6 +21,8 @@ final class GroupTaskTests: XCTestCase {
       .deletingLastPathComponent()  // native
       .deletingLastPathComponent()  // libs
       .deletingLastPathComponent()  // repo
+      // The umbrella test package reaches the checkout through a symlink, and the enumerator hands back resolved paths.
+      .resolvingSymlinksInPath()
     let roots = ["libs/native/apple/Sources", "libs/plugins", "apps/ios"]
     var found: [String] = []
     for root in roots {
@@ -33,7 +33,7 @@ final class GroupTaskTests: XCTestCase {
           walker.skipDescendants()
           continue
         }
-        let relative = String(file.path.dropFirst(repo.path.count + 1))
+        let relative = String(file.resolvingSymlinksInPath().path.dropFirst(repo.path.count + 1))
         guard file.pathExtension == "swift", !allowed.contains(relative) else { continue }
         let lines = try String(contentsOf: file, encoding: .utf8).components(separatedBy: "\n")
         for (index, line) in lines.enumerated() where line.trimmingCharacters(in: .whitespaces) == "Group {" {
