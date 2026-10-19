@@ -59,7 +59,7 @@ struct ShellTabs: View {
   var body: some View {
     let current = strip.current
     VStack(spacing: 0) {
-      ShellChrome(strip: strip).environment(current)
+      ShellChrome(strip: strip).environment(current).zIndex(1)
       // Every open tab stays alive, only the one in front shown and touchable, so each keeps its own path, selection,
       // scroll and unsaved fields while another is in front.
       ZStack {
@@ -75,13 +75,22 @@ struct ShellTabs: View {
       }
       .focusedSceneValue(\.shellNavigation, current)
     }
+    // The search's dropdown, under the title bar's field and over everything else (P3).
+    .modifier(OneBoxOverlay(navigation: current))
     .focusedSceneValue(\.shellTabs, strip)
     // The tab in front keeps the workspace and site it stands in as its own, so the others never follow it.
     .onChange(of: model.workspace?.effective) { _, pick in
-      if let pick { strip.current.remember(orgID: pick.orgID, hostID: pick.hostID) }
+      // A tab back in front reads live once its own workspace and site are back; until then it keeps its own.
+      if strip.current.frozenContext != nil { strip.settle(model: model) }
+      if strip.current.frozenContext == nil, let pick { strip.current.remember(orgID: pick.orgID, hostID: pick.hostID) }
     }
+    .onChange(of: model.workspace?.site?.id) { strip.settle(model: model) }
     #if os(macOS)
-      .background(WindowReader { MacWindowControls.attach($0) })
+      .background(
+        WindowReader { window in
+          MacWindowControls.attach(window)
+          MacWindowFocus.attach(window, strip: strip, model: model)
+        })
       // The chrome reaches the window's top edge; the window's own buttons sit in the tab strip. The window has no
       // system toolbar: a screen's actions are in its head, so nothing draws over the chrome.
       .ignoresSafeArea(.container, edges: .top)
@@ -102,6 +111,9 @@ struct ShellTabs: View {
 struct ShellChrome: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
+  #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+  #endif
   @Bindable var strip: TabStrip
   @State private var unreadFeed = NotificationFeed()
 
@@ -135,6 +147,14 @@ struct ShellChrome: View {
             strip.close(index, model: model, closedTabs: model.closedTabs)
           }
           .accessibilityIdentifier("tab-\(index)")
+          #if os(macOS)
+            // Dragged down out of the strip, a tab becomes a window of its own.
+            .gesture(
+              DragGesture(minimumDistance: 12).onEnded { drag in
+                guard drag.translation.height > Self.tabRow, let seed = strip.detach(index, model: model) else { return }
+                openWindow(id: "main", value: seed)
+              })
+          #endif
           }
         }
         Button {
@@ -187,7 +207,7 @@ struct ShellChrome: View {
             .keyboardShortcut("i", modifiers: [.command, .option])
           }
         }
-        TitleBarSearchField { navigation.showOneBox = true }
+        TitleBarSearch()
       }
       .padding(.horizontal, 12)
       .frame(height: Self.toolRow)
@@ -242,6 +262,26 @@ struct ShellChrome: View {
   }
 #endif
 
+#if os(macOS)
+  /// Another of the app's windows in front: this window's tab keeps its own workspace and site while it is behind,
+  /// and takes them back when it comes in front (the app keeps one workspace store for every window).
+  @MainActor
+  enum MacWindowFocus {
+    private static var watched: Set<ObjectIdentifier> = []
+
+    static func attach(_ window: NSWindow, strip: TabStrip, model: AppModel) {
+      guard watched.insert(ObjectIdentifier(window)).inserted else { return }
+      let center = NotificationCenter.default
+      center.addObserver(forName: NSWindow.didResignMainNotification, object: window, queue: .main) { [weak strip, weak model] _ in
+        MainActor.assumeIsolated { if let strip, let model { strip.windowWentBehind(model: model) } }
+      }
+      center.addObserver(forName: NSWindow.didBecomeMainNotification, object: window, queue: .main) { [weak strip, weak model] _ in
+        MainActor.assumeIsolated { if let strip, let model { strip.windowCameToFront(model: model) } }
+      }
+    }
+  }
+#endif
+
 /// The Home tab: the logo kit's mark, 16 points, icon only, never faded.
 struct HomeMarkTab: View {
   @Environment(AppModel.self) private var model
@@ -250,7 +290,7 @@ struct HomeMarkTab: View {
   @State private var hovered = false
 
   var body: some View {
-    AglynArtwork.mark.resizable().scaledToFit().frame(width: 16, height: 16)
+    mark
       .frame(width: AglynShellMetrics.barButton + 4, height: AglynShellMetrics.barButton)
       .background(
         RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
@@ -265,6 +305,20 @@ struct HomeMarkTab: View {
       .accessibilityElement(children: .ignore)
       .accessibilityLabel("\(model.brandName) Home")
       .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+  }
+
+  /// A white-label workspace's own mark when it set one (the console's brand profile), else the logo kit's.
+  @ViewBuilder
+  private var mark: some View {
+    if let custom = model.orgAccess.whiteLabelMark {
+      AglynBrandPicture(
+        model.mediaURL(custom.light, hostID: nil, width: 64), darkURL: model.mediaURL(custom.dark, hostID: nil, width: 64),
+        size: 16, cornerRadius: 3
+      ) { AglynArtwork.mark.resizable().scaledToFit().frame(width: 16, height: 16) }
+      .accessibilityIdentifier("tab-home-white-label")
+    } else {
+      AglynArtwork.mark.resizable().scaledToFit().frame(width: 16, height: 16)
+    }
   }
 }
 
@@ -349,7 +403,12 @@ struct ShellFrame<Content: View>: View {
       .sheet(isPresented: $navigation.showAddAccount) { AddAccountView().environment(model) }
       .sheet(isPresented: $navigation.showAccount) { AccountSheet().environment(model).environment(navigation) }
       .sheet(isPresented: keepPinsShown) { KeepPinsSheet().environment(model) }
-      .sheet(isPresented: $navigation.showOneBox) { OneBoxView().environment(model).environment(navigation) }
+      #if os(iOS)
+        // A phone's search is the same box, full screen; a wide window's is the title bar's field and its dropdown.
+        .fullScreenCover(isPresented: compact ? $navigation.showOneBox : .constant(false)) {
+          PhoneSearchView().environment(model).environment(navigation)
+        }
+      #endif
       .sheet(isPresented: $navigation.showAddWorkspace) {
         AddWorkspaceSheet { navigation.showAddWorkspace = false }.environment(model)
       }
@@ -527,12 +586,38 @@ struct ShellStack: View {
     NavigationStack(path: navigation.path(section)) {
       ShellRoot(section: section)
         .phoneTopBar()
-        .navigationDestination(for: Route.self) { route in PushedScreen(section: section) { RouteView(route: route) } }
+        .wideBarHidden()
+        .navigationDestination(for: Route.self) { route in
+          PushedScreen(section: section) { RouteView(route: route) }.wideBarHidden()
+        }
     }
     // A detail a screen opens goes on this stack's path, so a later push (a page in the browser) never drops it.
     .environment(\.aglynPush, AglynPushAction { [weak navigation] view in navigation?.push(.view(view)) })
   }
 }
+
+extension View {
+  /// On iPad, as on the Mac, the window's drawn chrome and the screen's head replace the system navigation bar (Figma
+  /// iPad frames): a screen's title, way back and actions are in its head.
+  @ViewBuilder
+  func wideBarHidden() -> some View {
+    #if os(iOS)
+      modifier(WideBarHidden())
+    #else
+      self
+    #endif
+  }
+}
+
+#if os(iOS)
+  private struct WideBarHidden: ViewModifier {
+    @Environment(\.aglynWideChrome) private var wide
+
+    func body(content: Content) -> some View {
+      content.toolbar(wide ? .hidden : .automatic, for: .navigationBar)
+    }
+  }
+#endif
 
 /// A screen pushed over a section's list, with its head on the Mac and iPad (the window has no toolbar there): the way
 /// back to the list, its title, and its actions (`aglynScreenTitle`, `aglynPrimaryAction`, `aglynScreenToolbar`).
@@ -820,58 +905,6 @@ struct Breadcrumbs: View {
   }
 }
 
-/// The title bar's own items on the Mac and iPad (Figma Mac/Titlebar): Back, Forward and the recent places, the
-/// "Search or jump to ⌘K" field that opens the one box, and the bell with its popover. The account menu lives at the
-/// foot of the rail.
-struct TitleBarItems: ToolbarContent {
-  @Environment(AppModel.self) private var model
-  @Environment(ShellNavigation.self) private var navigation
-  let unread: Int
-
-  var body: some ToolbarContent {
-    @Bindable var navigation = navigation
-    ToolbarItemGroup(placement: .navigation) {
-      // Shows or hides the workspace rail (the sidebar's own hide is in the View menu, ⌥⌘S).
-      TitleBarButton(
-        navigation.railHidden ? "Show workspace switcher" : "Hide workspace switcher", systemImage: "sidebar.left",
-        identifier: "titlebar-rail"
-      ) {
-        withAnimation(.easeOut(duration: 0.2)) { navigation.railHidden.toggle() }
-      }
-      .keyboardShortcut("s", modifiers: [.control, .command])
-      TitleBarButton("Back", systemImage: "chevron.left", identifier: "titlebar-back") { navigation.goBack() }
-        .disabled(!navigation.canGoBack)
-      TitleBarButton("Forward", systemImage: "chevron.right", identifier: "titlebar-forward") { navigation.goForward() }
-        .disabled(!navigation.canGoForward)
-      RecentPlacesMenu()
-    }
-    .aglynPlainToolbarBackground()
-    // The one search, centered in the title bar.
-    ToolbarItem(placement: .principal) {
-      TitleBarSearchField { navigation.showOneBox = true }
-    }
-    .aglynPlainToolbarBackground()
-    // The right side, in Figma's order: the bell, Help, the AI panel.
-    ToolbarItemGroup(placement: .primaryAction) {
-      TitleBarButton(
-        unread > 0 ? "Notifications, \(unread) unread" : "Notifications", systemImage: unread > 0 ? "bell.badge" : "bell",
-        identifier: "titlebar-bell"
-      ) { navigation.showNotifications.toggle() }
-      .popover(isPresented: $navigation.showNotifications, arrowEdge: .bottom) {
-        NotificationsPopover().environment(model).environment(navigation)
-      }
-      HelpMenuButton()
-      if AssistSlot.available(model) {
-        TitleBarButton("\(model.brandName) AI", systemImage: "sparkles", identifier: "titlebar-ai") {
-          navigation.showAssist.toggle()
-        }
-        .keyboardShortcut("i", modifiers: [.command, .option])
-      }
-    }
-    .aglynPlainToolbarBackground()
-  }
-}
-
 /// A title-bar button (Figma Titlebar/Icon button): a line symbol in the secondary text color on a square that fills
 /// faintly under the pointer, with no glass of its own.
 struct TitleBarButton: View {
@@ -897,41 +930,6 @@ struct TitleBarButton: View {
     .accessibilityIdentifier(identifier)
   }
 }
-
-/// "Search or jump to ⌘K" in the title bar (Figma Titlebar/Search field): a recessed field that opens the one box.
-struct TitleBarSearchField: View {
-  let action: () -> Void
-
-  var body: some View {
-    HStack(spacing: 8) {
-      Image(systemName: "magnifyingglass").font(.system(size: AglynShellMetrics.rowText - 1))
-        .foregroundStyle(AglynColor.textTertiary)
-      Text("Search or jump to").font(.system(size: AglynShellMetrics.rowText)).foregroundStyle(AglynColor.textTertiary)
-      Spacer(minLength: 8)
-      Text("⌘K").font(.system(size: AglynShellMetrics.rowText - 2, weight: .medium)).foregroundStyle(AglynColor.secondaryText)
-        .padding(.horizontal, 5).padding(.vertical, 1)
-        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(AglynColor.paper))
-        .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(AglynColor.divider))
-    }
-    .padding(.horizontal, 10)
-    // Centered on the window, 240 to 480 points wide (Figma Mac/Titlebar 12:910).
-    .frame(minWidth: 240, maxWidth: 480)
-    .frame(height: AglynShellMetrics.barButton)
-    .background(RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).fill(AglynColor.sunken))
-    .overlay(
-      RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).strokeBorder(AglynColor.divider))
-    .contentShape(Rectangle())
-    .onTapGesture(perform: action)
-    .help("Search or jump to (⌘K)")
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel("Search or jump to")
-    .accessibilityAddTraits(.isButton)
-    .accessibilityAction { action() }
-    .accessibilityIdentifier("titlebar-search")
-  }
-
-}
-
 
 /// The recent places beside Back and Forward: what the person opened lately, from the account's recents.
 struct RecentPlacesMenu: View {
@@ -1141,34 +1139,48 @@ struct MenuScreen: View {
     let scope = ShellScope(model: model, navigation: navigation)
     VStack(spacing: 0) {
       if navigation.mode == .main {
-        // Your AI and help sit in Menu on a phone, never floating over content.
-        HStack(spacing: AglynSpace.one) {
+        // Your AI and help sit in Menu on a phone, never floating over content (Figma 22:176, "Quick").
+        HStack(spacing: 10) {
           if AssistSlot.available(model) {
-            Button {
-              navigation.showAssist = true
-            } label: {
-              Label("\(model.brandName) AI", systemImage: "sparkles").frame(maxWidth: .infinity)
-            }
-            .accessibilityIdentifier("menu-ai")
+            quick("\(model.brandName) AI", "sparkles") { navigation.showAssist = true }
+              .accessibilityIdentifier("menu-ai")
           }
           Menu {
             HelpMenuItems()
           } label: {
-            Label("Help and docs", systemImage: "questionmark.circle").frame(maxWidth: .infinity)
+            quickLabel("Help and docs", "questionmark.circle")
           }
+          .buttonStyle(.plain)
           .accessibilityIdentifier("menu-help")
         }
-        .buttonStyle(.bordered)
-        .padding(.horizontal, AglynSpace.two)
-        .padding(.top, AglynSpace.one)
+        .padding(EdgeInsets(top: 12, leading: 16, bottom: 4, trailing: 16))
       }
-      if navigation.mode != .main || scope.site != nil {
+      // A settings mode says where it is and leads back; the everyday Menu is under the scope chip.
+      if navigation.mode != .main {
         ScopeHeader(scope: scope)
       }
       SidebarList(scope: scope, push: true)
     }
     .background(AglynColor.page)
     .navigationTitle(scope.modeTitle ?? "Menu")
+  }
+
+  private func quick(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) { quickLabel(title, icon) }.buttonStyle(.plain)
+  }
+
+  /// One of Menu's two quick buttons: an icon and a label on a 44-point card.
+  private func quickLabel(_ title: String, _ icon: String) -> some View {
+    HStack(spacing: 10) {
+      Image(systemName: icon).font(.system(size: 17)).foregroundStyle(AglynColor.accentIcon)
+      Text(title).font(.system(size: 15, weight: .medium)).foregroundStyle(AglynColor.textPrimary).lineLimit(1)
+      Spacer(minLength: 0)
+    }
+    .padding(.horizontal, 14)
+    .frame(maxWidth: .infinity, minHeight: 44)
+    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AglynColor.paper))
+    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(AglynColor.divider))
+    .contentShape(Rectangle())
   }
 }
 

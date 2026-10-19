@@ -127,12 +127,14 @@ struct SitesScreen: View {
             } label: {
               HStack(spacing: 8) {
                 SiteListRow(context: context, row: row)
-                Image(systemName: "chevron.forward").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                Image(systemName: "chevron.forward").font(.system(size: 12, weight: .semibold))
+                  .foregroundStyle(AglynColor.textTertiary).frame(width: 16, height: 16)
               }
               .contentShape(Rectangle())
             }
             .buttonStyle(.aglynRow)
             .aglynListRow()
+            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
             .accessibilityIdentifier("site-\(row.id)")
           }
           if model.hasMore { AglynLoadMoreRow("Show more sites") { model.loadMore() } }
@@ -158,18 +160,18 @@ struct SiteListRow: View {
     // The site's favicon, as the console's Sites list shows it (`HostIcon`): the host's own `seo.favicon`, else the
     // membership row's copy of it.
     let favicon = siteFavicon(doc) ?? row.favicon
-    HStack(spacing: 12) {
+    // Figma List/Site row 36:826: a 36-point favicon, the name at 14 semibold over the address at 12, then the chips and
+    // when it was edited; 62 points tall with 12/16 padding and 14 between.
+    HStack(spacing: 14) {
       AglynBrandPicture(
-        mediaPreviewURL(favicon, origin: context.api.origin, hostID: row.id, width: 96), size: 32,
-        cornerRadius: AglynShellMetrics.controlRadius
+        mediaPreviewURL(favicon, origin: context.api.origin, hostID: row.id, width: 96), size: 36, cornerRadius: 8
       ) {
-        AglynWorkspaceTile(name: row.name, logoURL: nil, colorHex: siteBrandColor(doc), selected: false, size: 32)
-          .padding(-3)
+        AglynWorkspaceTile(name: row.name, logoURL: nil, colorHex: siteBrandColor(doc), selected: false, size: 36)
       }
       VStack(alignment: .leading, spacing: 2) {
-        Text(row.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)
+        Text(row.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)
           .lineLimit(1).truncationMode(.tail)
-        Text(HostStatus.siteAddress(row.subdomain) ?? "").font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText)
+        Text(row.shownAddress ?? "").font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText)
           .lineLimit(1).truncationMode(.middle)
       }
       Spacer(minLength: 8)
@@ -177,10 +179,12 @@ struct SiteListRow: View {
       if let status { StatusChip(status.label, tone: hostStatusTone(status.kind)) }
       if let edited = (doc?.data["updatedAt"] as? Date) ?? (doc?.data["createdAt"] as? Date) {
         Text("Edited \(edited.formatted(.relative(presentation: .named)))")
-          .font(.system(size: 12)).foregroundStyle(AglynColor.textTertiary).lineLimit(1)
+          .font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText).lineLimit(1)
+          .layoutPriority(-1)
       }
     }
-    .frame(minHeight: 48)
+    .frame(minHeight: 38)
+    .padding(.vertical, 12)
     .task(id: row.id) { await host.bind(context.firestore, ["hosts", row.id]) }
   }
 }

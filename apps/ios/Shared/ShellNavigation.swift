@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynPluginHost
 import AglynUI
 import Observation
 import SwiftUI
@@ -28,6 +29,8 @@ enum Route: Hashable {
   case view(AglynPushedView)
   /// A plain web page (a live site, a preview, a docs or legal page) in the in-app browser screen.
   case web(AglynWebPage)
+  /// Every result for what was typed in the search ("See all results for 'x'").
+  case searchResults(String)
 }
 
 /// The shell's top-level sections: the sidebar on iPad and Mac, the tab bar on iPhone.
@@ -101,8 +104,18 @@ final class ShellNavigation {
   var showAccount = false
   /// The Add account screen.
   var showAddAccount = false
-  /// The one box (⌘K): switching and search in one place.
+  /// The search (⌘K) open: the title bar's field focused with its dropdown, or the phone's full-screen search.
   var showOneBox = false
+  /// What the search holds in this tab.
+  let search = OneBoxModel()
+  /// Whether this tab is the one in front of its window (always, where the shell has no tabs).
+  var front = true
+  /// The workspace and site this tab's screens read while another tab is in front, and until its own are back on its
+  /// return (P9): the app keeps one workspace store, so without this a hidden tab's screens followed the tab in front
+  /// and reloaded, losing their place.
+  var frozenContext: NativePluginContext?
+  /// The tab's title while it is behind another.
+  var frozenTitle: String?
   /// Add workspace (create one, or accept an invitation).
   var showAddWorkspace = false
   /// The notifications popover from the bell.

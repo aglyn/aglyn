@@ -23,6 +23,7 @@ struct RouteView: View {
     case .themeSettings: ThemeSettingsView()
     case .view(let pushed): pushed.view
     case .web(let page): AglynBrowserScreen(page)
+    case .searchResults(let query): SearchResultsScreen(initial: query)
     }
   }
 }

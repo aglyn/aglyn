@@ -389,22 +389,29 @@ struct OrdersScreen: View {
 }
 
 struct OrderListRow: View {
+  #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+  #endif
   let row: OrderRow
 
   var body: some View {
-    AglynRow(
+    #if os(iOS)
+      let phone = sizeClass == .compact
+    #else
+      let phone = false
+    #endif
+    // Figma List/Order row 11:358 (64 points; 68 on a phone).
+    AglynRecordRow(
       "\(row.number) · \(row.customer)",
-      subtitle: [
+      detail: [
         row.itemCount == 1 ? "1 item" : "\(row.itemCount) items",
         orderChannelLabel(row.order.channel?.rawValue),
         row.createdAt.map { relativeTime($0) },
       ].compactMap { $0 }.joined(separator: " · "),
       systemImage: "bag"
     ) {
-      VStack(alignment: .trailing, spacing: 4) {
-        Text(row.total).font(AglynFont.strongSubheadline).monospacedDigit()
-        StatusChip(row.statusLabel, tone: orderStatusTone(row.status).tone)
-      }
+      AglynRecordRow<EmptyView>.total(row.total, phone: phone)
+      StatusChip(row.statusLabel, tone: orderStatusTone(row.status).tone)
     }
   }
 }

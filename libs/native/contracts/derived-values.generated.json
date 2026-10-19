@@ -24,6 +24,7 @@
       "dropshipRouting": false,
       "contentGating": false,
       "crm": false,
+      "commerce": false,
       "bookings": false,
       "eventCalendar": false,
       "dataStore": false,
@@ -43,6 +44,7 @@
       "dropshipRouting": false,
       "contentGating": false,
       "crm": true,
+      "commerce": true,
       "bookings": true,
       "eventCalendar": false,
       "dataStore": true,
@@ -62,6 +64,7 @@
       "dropshipRouting": true,
       "contentGating": false,
       "crm": true,
+      "commerce": true,
       "bookings": true,
       "eventCalendar": false,
       "dataStore": true,
@@ -81,6 +84,7 @@
       "dropshipRouting": true,
       "contentGating": true,
       "crm": true,
+      "commerce": true,
       "bookings": true,
       "eventCalendar": false,
       "dataStore": true,
@@ -100,6 +104,7 @@
       "dropshipRouting": true,
       "contentGating": true,
       "crm": true,
+      "commerce": true,
       "bookings": true,
       "eventCalendar": false,
       "dataStore": true,
@@ -119,6 +124,7 @@
       "dropshipRouting": true,
       "contentGating": true,
       "crm": true,
+      "commerce": true,
       "bookings": true,
       "eventCalendar": false,
       "dataStore": true,
@@ -138,6 +144,7 @@
       "dropshipRouting": true,
       "contentGating": true,
       "crm": true,
+      "commerce": true,
       "bookings": true,
       "eventCalendar": false,
       "dataStore": true,
@@ -157,6 +164,7 @@
       "dropshipRouting": true,
       "contentGating": true,
       "crm": true,
+      "commerce": true,
       "bookings": true,
       "eventCalendar": false,
       "dataStore": true,
@@ -176,6 +184,7 @@
     "dropshipRouting": "Pro",
     "contentGating": "Business",
     "crm": "Starter",
+    "commerce": "Starter",
     "bookings": "Starter",
     "dataStore": "Starter",
     "redirects": "Starter",
@@ -273,6 +282,13 @@
       "org": {
         "plan": "free"
       },
+      "feature": "commerce",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free"
+      },
       "feature": "bookings",
       "result": false
     },
@@ -392,6 +408,13 @@
       "org": {
         "plan": "starter"
       },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter"
+      },
       "feature": "bookings",
       "result": true
     },
@@ -511,6 +534,13 @@
       "org": {
         "plan": "pro"
       },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "pro"
+      },
       "feature": "bookings",
       "result": true
     },
@@ -630,6 +660,13 @@
       "org": {
         "plan": "business"
       },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business"
+      },
       "feature": "bookings",
       "result": true
     },
@@ -749,6 +786,13 @@
       "org": {
         "plan": "enterprise"
       },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise"
+      },
       "feature": "bookings",
       "result": true
     },
@@ -868,6 +912,13 @@
       "org": {
         "plan": "nonsense"
       },
+      "feature": "commerce",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "nonsense"
+      },
       "feature": "bookings",
       "result": false
     },
@@ -1000,6 +1051,14 @@
         "plan": "business",
         "billingStatus": "canceled"
       },
+      "feature": "commerce",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "canceled"
+      },
       "feature": "bookings",
       "result": false
     },
@@ -1136,6 +1195,14 @@
         "plan": "business",
         "billingStatus": "past_due"
       },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "business",
+        "billingStatus": "past_due"
+      },
       "feature": "bookings",
       "result": true
     },
@@ -1298,6 +1365,16 @@
           "status": "unpaid"
         }
       },
+      "feature": "commerce",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "pro",
+        "subscription": {
+          "status": "unpaid"
+        }
+      },
       "feature": "bookings",
       "result": false
     },
@@ -1494,6 +1571,18 @@
           }
         }
       },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
       "feature": "bookings",
       "result": true
     },
@@ -1711,6 +1800,19 @@
           }
         }
       },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "active",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
       "feature": "bookings",
       "result": true
     },
@@ -1932,6 +2034,19 @@
           }
         }
       },
+      "feature": "commerce",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "starter",
+        "billingStatus": "canceled",
+        "entitlements": {
+          "planComp": {
+            "plan": "pro"
+          }
+        }
+      },
       "feature": "bookings",
       "result": true
     },
@@ -2153,6 +2268,19 @@
           }
         }
       },
+      "feature": "commerce",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "free",
+        "entitlements": {
+          "features": {
+            "abTesting": true,
+            "outreach": true
+          }
+        }
+      },
       "feature": "bookings",
       "result": false
     },
@@ -2350,6 +2478,18 @@
         }
       },
       "feature": "crm",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise",
+        "entitlements": {
+          "features": {
+            "marketingOverlays": false
+          }
+        }
+      },
+      "feature": "commerce",
       "result": true
     },
     {

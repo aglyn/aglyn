@@ -80,4 +80,20 @@ final class OrgAccess {
     Dictionary(
       keys.map { ($0, resolvedFeatures?[$0] ?? planFeatureCarried(org.document?.data, $0)) }, uniquingKeysWith: { a, _ in a })
   }
+
+  /// The mark a white-label workspace configured, for the Home tab (P2): read as the console's `useBranding` reads it,
+  /// only when the workspace carries `whiteLabel` and set a brand (`hasBrandingProfile`: a product name or a logo).
+  /// Its favicon is the square mark; a workspace with only a logo shows that. Nil means the platform's own mark.
+  var whiteLabelMark: (light: String, dark: String?)? {
+    guard features(["whiteLabel"])["whiteLabel"] == true,
+      let profile = org.document?.data["brandingProfile"] as? [String: Any]
+    else { return nil }
+    func clean(_ key: String) -> String? {
+      (profile[key] as? String).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
+    }
+    guard clean("productName") != nil || clean("logoUrl") != nil else { return nil }
+    if let favicon = clean("faviconUrl") { return (favicon, clean("faviconDarkUrl")) }
+    if let logo = clean("logoUrl") { return (logo, clean("logoDarkUrl")) }
+    return nil
+  }
 }

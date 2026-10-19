@@ -36,6 +36,25 @@ public enum AglynShellMetrics {
     public static let rowIcon: CGFloat = 16
     public static let pillRadius: CGFloat = 6
     public static let rowInset: CGFloat = 8
+    /// A sidebar row's inner padding and the gap between its icon and label (Figma Sidebar/Row, Compact).
+    public static let rowPadding: CGFloat = 8
+    public static let rowGap: CGFloat = 8
+    /// A group's rows sit this much further in than its heading, per level (Figma Sidebar, grouped rows: 20 = 8 + 12).
+    public static let groupIndent: CGFloat = 12
+    /// A group heading's chevron.
+    public static let groupChevron: CGFloat = 12
+    /// A divider's space above and below its hairline.
+    public static let dividerGap: CGFloat = 4
+    /// The header block's padding, and the scope head's own inside it (Figma Sidebar/Scope header 98:1023).
+    public static let headerPadding = EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
+    public static let scopeHeadPadding = EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
+    /// The workspace's logo, name and plan in its header; the site's name; a settings mode's title; the way back.
+    public static let workspaceLogo: CGFloat = 20
+    public static let workspaceLogoRadius: CGFloat = 5
+    public static let workspaceName: CGFloat = 13
+    public static let siteName: CGFloat = 15
+    public static let modeTitle: CGFloat = 17
+    public static let backText: CGFloat = 12
     /// A group heading's height and text.
     public static let groupHeight: CGFloat = 24
     public static let groupText: CGFloat = 11
@@ -70,10 +89,23 @@ public enum AglynShellMetrics {
     public static let rowText: CGFloat = 15
     public static let rowIcon: CGFloat = 18
     public static let pillRadius: CGFloat = 8
-    public static let rowInset: CGFloat = 10
-    public static let groupHeight: CGFloat = 30
-    public static let groupText: CGFloat = 13
-    public static let headerLogo: CGFloat = 24
+    public static let rowInset: CGFloat = 12
+    public static let rowPadding: CGFloat = 10
+    public static let rowGap: CGFloat = 10
+    public static let groupIndent: CGFloat = 12
+    public static let groupChevron: CGFloat = 14
+    public static let dividerGap: CGFloat = 6
+    public static let headerPadding = EdgeInsets(top: 12, leading: 12, bottom: 8, trailing: 12)
+    public static let scopeHeadPadding = EdgeInsets(top: 6, leading: 10, bottom: 8, trailing: 10)
+    public static let workspaceLogo: CGFloat = 28
+    public static let workspaceLogoRadius: CGFloat = 8
+    public static let workspaceName: CGFloat = 14
+    public static let siteName: CGFloat = 16
+    public static let modeTitle: CGFloat = 18
+    public static let backText: CGFloat = 12
+    public static let groupHeight: CGFloat = 28
+    public static let groupText: CGFloat = 11
+    public static let headerLogo: CGFloat = 20
     public static let headerLogoRadius: CGFloat = 6
     public static let sidebarWidth: CGFloat = 280
     public static let titlebarHeight: CGFloat = 52
@@ -115,7 +147,7 @@ public struct AglynSidebarRow<Leading: View, Trailing: View>: View {
 
   public var body: some View {
     Button(action: action) {
-      HStack(spacing: 8) {
+      HStack(spacing: AglynShellMetrics.rowGap) {
         leading
           .frame(width: AglynShellMetrics.rowIcon, height: AglynShellMetrics.rowIcon)
           .foregroundStyle(selected ? AglynColor.accentIcon : AglynColor.secondaryText)
@@ -126,8 +158,8 @@ public struct AglynSidebarRow<Leading: View, Trailing: View>: View {
         Spacer(minLength: 4)
         trailing
       }
-      .padding(.leading, 8 + CGFloat(indent) * 12)
-      .padding(.trailing, 8)
+      .padding(.leading, AglynShellMetrics.rowPadding + CGFloat(indent) * AglynShellMetrics.groupIndent)
+      .padding(.trailing, AglynShellMetrics.rowPadding)
       .frame(maxWidth: .infinity, minHeight: AglynShellMetrics.rowHeight, alignment: .leading)
       .background { pillView }
       .contentShape(RoundedRectangle(cornerRadius: AglynShellMetrics.pillRadius, style: .continuous))
@@ -161,6 +193,19 @@ public enum AglynShellMotion {
   public static let pill = Animation.spring(duration: 0.25, bounce: 0.15)
   /// Another workspace: a short cross-fade.
   public static let crossFade = Animation.easeInOut(duration: 0.15)
+}
+
+/// The sidebar's hairline (Figma Sidebar/Divider): the border token, inset to the rows' padding.
+public struct AglynSidebarDivider: View {
+  public init() {}
+
+  public var body: some View {
+    Rectangle().fill(AglynColor.divider).frame(height: 1)
+      .padding(.vertical, AglynShellMetrics.dividerGap)
+      .padding(.horizontal, AglynShellMetrics.rowPadding)
+      .padding(.horizontal, AglynShellMetrics.rowInset)
+      .accessibilityHidden(true)
+  }
 }
 
 /// A sidebar row's line icon, sized for the shell.

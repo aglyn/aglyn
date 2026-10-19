@@ -233,21 +233,24 @@ public struct AglynSidebarGroupHeader: View {
       // A small label with its chevron after it (Figma Sidebar/Group header 6:84), its count on the right while folded.
       HStack(spacing: 4) {
         Text(title)
-          .font(.system(size: 11, weight: .semibold))
+          .font(.system(size: AglynShellMetrics.groupText, weight: .semibold))
           .foregroundStyle(AglynColor.secondaryText)
         if foldable {
           Image(systemName: "chevron.right")
-            .font(.system(size: 8, weight: .bold))
-            .foregroundStyle(AglynColor.textTertiary)
+            .font(.system(size: AglynShellMetrics.groupChevron * 0.7, weight: .semibold))
+            .foregroundStyle(AglynColor.secondaryText)
+            .frame(width: AglynShellMetrics.groupChevron, height: AglynShellMetrics.groupChevron)
             .rotationEffect(.degrees(open ? 90 : 0))
         }
         Spacer(minLength: 4)
+        // While folded, how many rows it holds, right-aligned in the secondary color (Figma Sidebar/Group header).
         if foldable && !open && hiddenCount > 0 {
-          Text("\(hiddenCount)").font(.system(size: 11)).monospacedDigit()
-            .foregroundStyle(AglynColor.textTertiary)
+          Text("\(hiddenCount)").font(.system(size: AglynShellMetrics.groupText + 1)).monospacedDigit()
+            .foregroundStyle(AglynColor.secondaryText)
+            .padding(.horizontal, 6)
         }
       }
-      .padding(.horizontal, 8)
+      .padding(.horizontal, AglynShellMetrics.rowPadding)
       .frame(maxWidth: .infinity, minHeight: AglynShellMetrics.groupHeight, alignment: .leading)
       .contentShape(Rectangle())
     }

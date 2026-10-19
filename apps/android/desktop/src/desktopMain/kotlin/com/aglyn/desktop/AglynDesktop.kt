@@ -37,6 +37,8 @@ fun main(args: Array<String>) {
           val keys = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five)
           pins.forEachIndexed { i, pin -> Item("Pinned workspace ${i + 1}", shortcut = shortcut(keys[i]), onClick = { navigator.command = pin }) }
           Separator()
+          Item("Switch workspace…", onClick = { navigator.command = ShellCommand.SWITCH_WORKSPACE })
+          Item("Switch site…", onClick = { navigator.command = ShellCommand.SWITCH_SITE })
           Item("Settings", shortcut = shortcut(Key.Comma), onClick = { navigator.command = ShellCommand.SETTINGS })
         }
         Menu("View", mnemonic = 'V') {

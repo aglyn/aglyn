@@ -58,12 +58,15 @@ const require = createRequire(import.meta.url)
 const ROOT = join(import.meta.dirname, '../..')
 const CHECK = process.argv.includes('--check')
 
-/** The features a native screen gates on, by the console's names. */
+/**
+ * The features a native screen gates on, by the console's names: the screens' own, then the ones the nav manifest's
+ * create lists ask for (NATIVE_NAV_MANIFEST.create[].items[].planFeature), then the plugins' own flags, where the native
+ * screen shows the console's upgrade notice when the plan leaves them out (AGL-3966).
+ */
 export const NATIVE_PLAN_FEATURES = [
   'marketingOverlays', 'abTesting', 'screenAnalytics', 'outreach', 'giftCards', 'storefrontSubscriptions', 'commerceAnalytics',
-  'abandonedCart', 'productReviews', 'dropshipRouting', 'contentGating',
-  // A plugin's own flag: the native screen shows the console's upgrade notice where the plan leaves it out (AGL-3966).
-  'crm', 'bookings', 'eventCalendar', 'dataStore', 'redirects', 'workflows',
+  'abandonedCart', 'productReviews', 'dropshipRouting', 'contentGating', 'crm', 'commerce', 'bookings', 'eventCalendar',
+  'dataStore', 'redirects', 'workflows',
 ]
 
 const JSON_OUT = 'libs/native/contracts/derived-values.generated.json'

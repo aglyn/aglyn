@@ -578,3 +578,62 @@ public struct AglynDetailCrumbs: View {
       .background(AglynColor.paper)
   }
 }
+
+/// A record's row in a content list (Figma List/Order row 11:358): its kind's icon on a 32-point tile, the title at 14
+/// semibold over the detail at 12, and the trailing figures; 64 points tall on the Mac and iPad. On a phone (Size=Phone)
+/// the tile is 36, the title 17 and the detail 13, 68 points tall.
+public struct AglynRecordRow<Trailing: View>: View {
+  #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+  #endif
+  let title: String
+  let detail: String?
+  let systemImage: String
+  let trailing: Trailing
+
+  public init(_ title: String, detail: String?, systemImage: String, @ViewBuilder trailing: () -> Trailing) {
+    self.title = title
+    self.detail = detail
+    self.systemImage = systemImage
+    self.trailing = trailing()
+  }
+
+  private var phone: Bool {
+    #if os(iOS)
+      sizeClass == .compact
+    #else
+      false
+    #endif
+  }
+
+  public var body: some View {
+    HStack(spacing: 12) {
+      Image(systemName: systemImage)
+        .font(.system(size: phone ? 16 : 14))
+        .foregroundStyle(AglynColor.secondaryText)
+        .frame(width: phone ? 36 : 32, height: phone ? 36 : 32)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AglynColor.sunken))
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title).font(.system(size: phone ? 17 : 14, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)
+          .lineLimit(1)
+        if let detail, !detail.isEmpty {
+          Text(detail).font(.system(size: phone ? 13 : 12)).foregroundStyle(AglynColor.secondaryText).lineLimit(1)
+        }
+      }
+      Spacer(minLength: 8)
+      VStack(alignment: .trailing, spacing: 4) { trailing }
+    }
+    .padding(.vertical, phone ? 12 : 10)
+    .frame(minHeight: phone ? 44 : 44)
+    .accessibilityElement(children: .combine)
+  }
+}
+
+extension AglynRecordRow {
+  /// The trailing total in the row's own type (14 semibold; 15 regular on a phone).
+  public static func total(_ text: String, phone: Bool) -> some View {
+    Text(text).font(.system(size: phone ? 15 : 14, weight: phone ? .regular : .semibold)).monospacedDigit()
+      .foregroundStyle(AglynColor.textPrimary)
+  }
+}
