@@ -209,7 +209,9 @@ async function handler(request: Request): Promise<Response> {
             .doc(pending.docs[0].id)
             .set({ hostAccess: { [hostId]: role } }, { merge: true })
         } else {
-          await invitesRef.add({
+          // Named by the platform's id, as the org invite route names its
+          // invites: accept, revoke and resend address the row by it (AGL-3086).
+          await invitesRef.doc(createResourceUid()).set({
             email,
             role: 'viewer',
             allHosts: false,
