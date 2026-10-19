@@ -71,11 +71,12 @@ rules deny every client write). Fields:
 | field | meaning |
 | --- | --- |
 | `kind` | `AiJobKind` — what the job produces. `text`, `theme`, `layout`, `template`, `form`, `component`, `seo`, `page`, `email`, `campaign`, `products` and `site` have runners; every other kind fails fast with "not available yet" until its own issue lands. |
-| `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). |
+| `status` | `queued` → `running` → `done` / `failed` / `canceled`, with `needs_input` and `needs_review` as the two parked states (below). `needs_input` is the meter's pause, or — carrying `input` — a wait for an answer only the person can give ([below](#a-job-that-waits-for-an-answer)). |
 | `brief`, `inputs` | The customer's brief verbatim and the kind-specific scalars a runner reads. |
 | `steps[]` | The step plan: `name`, `status`, `startedAt`/`endedAt`, `creditsSpent`, `attempts`, a customer-safe `error`, and `draftIds`, the ids of the drafts the step writes. |
 | `outputs[]` | What the job wrote, addressed by `resource` + `id` (+ `versionId`, `hostId`, `hostSubdomain`) so the console can build an "open draft" link without knowing what the runner did. A console URL names a site by its subdomain, so a link is built from `hostSubdomain` and an output without one gets none. A page's document carries its estimated first-visit `load`. An output may carry a customer-safe `note`: what the person decides next about it, and the facts in square brackets its draft holds ([below](#what-a-draft-asks-the-member-to-fill)). |
 | `plan` | The plan a planned kind builds from: `reuse`, `create`, `screens` (each creation and screen the job builds as a draft with the `id` it is written under), the inventory `labels` it references, and `status` `proposed` → `confirmed` with who confirmed it and when. |
+| `input` | While the job is `needs_input` for a person (AGL-3978): the customer-safe `message` (the question, also the job's `error`) and its `fields`, each the plan `item` and `arg` it fills, a `label` naming the provider, the `shape` an answer takes and the `pattern` it is held to. Cleared by the answer. |
 | `review` | While the job is `needs_review`: the `reason` (`plan`, `doctrine` or `limit`), the customer-safe `message`, and the rules the last answer broke, each with the node ids or plan paths it names, beside an `outline` of those parts of the refused answer ([below](#what-a-refused-answer-leaves-on-the-job)). |
 | `creditsReserved`, `creditsSpent` | A nominal hold per outstanding step while the job can run — zero while it waits for a person, and a confirmed page or site plan's whole-job estimate where that is more — and the real spend at the plan's credit rate. |
 | `lease` | `{ owner, until }` while a step runs — see below. |
@@ -799,6 +800,37 @@ beat query matches `needs_review`, and only a member resumes it:
   it once more with its attempts started over.
 
 `resumeAiJob` is that transition, in one transaction, and cancel ends either.
+
+### A job that waits for an answer
+
+A plan can need something only the person has, an account id the planner
+must never make up: "add my Meta pixel" with no pixel ID (AGL-3978). The
+build's admission refuses such a plan with the operation's question under
+`AI_BUILD_NEEDS_INPUT_CODE`, and where the operation describes the fields
+for it (`inputFields` on the capability, read by `aiBuildPlanInputFields`)
+the plan step does not fail the job with the question. It keeps the plan and
+its plan review, and returns the fields as the outcome's `input`:
+
+- **Parked `needs_input`, not `failed`.** `recordStep` parks the job
+  `needs_input` with `input` and the review beside it, the question as its
+  `error`, and nothing held. The plan step is done and metered as any kept
+  plan; the pause and the answer spend nothing. The person is told once
+  ("needs one detail from you"), and the activity row's reason is `input`.
+- **The beat leaves it alone.** It is a person's to resume, so a sweep that
+  lists it runs nothing and moves its `updatedAt` on, which sends it to the
+  back of the parked query, so it never takes a meter park's place.
+- **The answer.** The console draws one field per entry, labeled with the
+  provider (`AiJobInputForm`, in the Assist build card and the AI jobs
+  drawer), and sends the answers through the resume door as `input`, keyed
+  `item/arg` (`aiJobInputKey`). The door holds each to its pattern
+  (`aiJobInputProblems`) and answers a wrong or empty one with a 400 and
+  `fieldErrors` by key, changing nothing. Every field good, `resumeAiJob`
+  writes each answer to its item's arguments (`aiPlanWithInput`), clears
+  `input` and returns the job to `needs_review` on its plan card, where
+  Confirm builds it as any plan: the admission is asked again then, now with
+  the id in the plan.
+- **Only where there is a field.** An item that asks without one — a
+  tracking change that names no tag — still ends the job with its question.
 
 ### What the plan may create
 
