@@ -44,10 +44,19 @@ object AndroidShell {
     val prefs = SharedPreferencesStore(context)
     // A support session (a staff member signed in as a customer) has a Firebase app of its own: its own sign-in and Firestore.
     val support = FirebaseSupportBackend(context, firebase, prefs)
-    val auth = FirebaseAuthSession(firebase.auth, support)
-    val supporting = { auth.impersonation.value != null }
-    val firestore = SwitchingFirestoreReader(FirebaseFirestoreReader(firebase.firestore), { FirebaseFirestoreReader(support.firestore()) }, supporting)
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    // Each signed-in account (Add account) has a Firebase app of its own: its sign-in and its Firestore.
+    val accountApps = com.aglyn.core.AccountFirebaseApps(context, firebase)
+    val auth = com.aglyn.core.AccountSessions(scope, { slot ->
+      if (slot == com.aglyn.core.AccountSessions.PRIMARY) FirebaseAuthSession(firebase.auth, support) else FirebaseAuthSession(accountApps.auth(slot))
+    }, prefs)
+    val supporting = { auth.impersonation.value != null }
+    val readers = mutableMapOf<String, FirebaseFirestoreReader>()
+    val writers = mutableMapOf<String, com.aglyn.core.FirebaseFirestoreWriter>()
+    val accountReader = com.aglyn.core.PickedFirestoreReader { auth.active.value.let { slot -> readers.getOrPut(slot) { FirebaseFirestoreReader(accountApps.firestore(slot)) } } }
+    val accountWriter = com.aglyn.core.PickedFirestoreWriter { auth.active.value.let { slot -> writers.getOrPut(slot) { com.aglyn.core.FirebaseFirestoreWriter(accountApps.firestore(slot)) } } }
+    val firestore = SwitchingFirestoreReader(accountReader, { FirebaseFirestoreReader(support.firestore()) }, supporting)
+    val slotOf = { uid: String -> auth.accounts.value.firstOrNull { it.uid == uid }?.slot ?: auth.active.value }
     val api = ConsoleApiClient(config.consoleOrigin, defaultHttpClient(), auth::idToken, config.brandName)
     val registry = NativePluginRegistry()
     registry.load(PLATFORM_ENTRIES + manifest).failed.forEach { android.util.Log.e("Aglyn", "plugin ${it.pluginId}: ${it.error}") }
@@ -63,10 +72,12 @@ object AndroidShell {
       besigner = { path, onExit, onConsoleLink -> BesignerWebView(config.consoleOrigin, path, auth, config.brandName, onExit, onConsoleLink) },
       debugSignIn = debugSignIn,
       peripherals = peripherals,
-      push = if (config.app.receivesPushes) com.aglyn.core.FcmPushRegistrar(firebase, prefs, config.app, appVersion) else com.aglyn.core.NoPush,
-      writer = SwitchingFirestoreWriter(
-        com.aglyn.core.FirebaseFirestoreWriter(firebase.firestore), { com.aglyn.core.FirebaseFirestoreWriter(support.firestore()) }, supporting,
-      ),
+      push = if (config.app.receivesPushes) {
+        com.aglyn.core.FcmPushRegistrar(firebase, prefs, config.app, appVersion, firestoreFor = { uid -> accountApps.firestore(slotOf(uid)) }, signedIn = { auth.accounts.value.map { it.uid } })
+      } else {
+        com.aglyn.core.NoPush
+      },
+      writer = SwitchingFirestoreWriter(accountWriter, { com.aglyn.core.FirebaseFirestoreWriter(support.firestore()) }, supporting),
       openHostedPage = { url -> openCustomTab(context, url) },
       // Single sign-on runs on the console in a Custom Tab, whose page hands the code back to this app's own scheme; the
       // activity hears it and finishes the sign-in (`finishConsoleHandoff`).

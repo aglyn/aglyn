@@ -15,8 +15,15 @@
  * limitations under the License.
  */
 
-// Fails when a DEPLOYED Cloud Function is older than the promoted commit that
-// changed `cloud/functions/**` (AGL-2580).
+// Fails when a DEPLOYED Cloud Function does not run the promoted
+// `cloud/functions` source (AGL-2580, AGL-3968).
+//
+// Each deploy stamps the checkout's sha onto every function as the
+// `AGLYN_SOURCE_SHA` environment variable (the functions predeploy hook,
+// `cloud/functions/scripts/stamp-source.mjs`). This check reads the stamp off
+// each deployed function and compares the package TREE at that commit with the
+// baseline's. A function with no stamp is UNKNOWN and fails: a deploy time
+// later than the last commit is not evidence that the deploy carried it.
 //
 // The third of the three manual deploy targets, and the one that had no check
 // at all until two production incidents in fifteen minutes on 2026-09-04 made
@@ -56,14 +63,16 @@
 // already has repo secrets — see the cannot-check message below.
 //
 // Exit codes — cannot-check must NEVER masquerade as clean:
-//   0  every deployed function is at or after the promoted commit
-//   1  at least one is stale, never deployed, orphaned, or not ACTIVE
+//   0  every deployed function is stamped with source whose package tree
+//      equals the baseline's
+//   1  at least one is stale, ahead, unstamped, dirty, of unknown source,
+//      never deployed, orphaned, or not ACTIVE — each is fixed by a deploy
 //   2  the comparison could not be made (no credential, auth, network, a
 //      baseline ref that does not resolve, or a region the API could not
 //      answer for) and nothing drifted; drift wins when both occur — both are
 //      red, and drift is the more actionable signal.
 
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { loadLocalEnv } from './lib/firebase-rules-api.mjs'
 import {
@@ -74,6 +83,7 @@ import {
   FUNCTIONS_ENTRY_FILE,
   FUNCTIONS_SOURCE_PATH,
   FUNCTIONS_SOURCE_PATHSPECS,
+  SOURCE_STAMP_ENV,
   classifyFunctionsDrift,
   functionRegion,
   parseFunctionExports,
@@ -154,9 +164,10 @@ if (!baselineIsHead) {
   )
 }
 
-// The newest commit AT THE BASELINE that touched the deployed package. `%ct`
-// is the committer date: a rebased or cherry-picked commit carries the moment
-// it landed on this history, which is what a deploy could have shipped.
+// The newest commit AT THE BASELINE that touched the deployed package. It is
+// printed for context and never grades anything (the source stamp does); its
+// absence is how a shallow clone shows itself, and a shallow clone cannot
+// answer the tree comparison either.
 let commit = null
 try {
   const line = git([
@@ -184,9 +195,9 @@ if (!commit) {
       'A shallow clone reports exactly this, because its graft commit has no',
       'history to search. Fetch the full history (fetch-depth: 0) and re-run.',
       '',
-      'Exiting 2 (cannot-check) — with no commit to compare against, every',
-      'deployment would grade current, which is the silent pass this check exists',
-      'to prevent.',
+      'Exiting 2 (cannot-check) — a history this shallow cannot hold the commits',
+      'the deployed functions are stamped with, so no comparison it made would',
+      'mean anything.',
     ].join('\n'),
   )
   process.exit(2)
@@ -243,8 +254,49 @@ try {
   process.exit(2)
 }
 
+/**
+ * Is the package at the stamped commit the package at the baseline? Tree
+ * equality decides it (`git diff --quiet`), so a squashed promotion that
+ * carries the same content matches; the two commit lists only explain a
+ * mismatch.
+ */
+function compareSource(stampSha) {
+  if (!/^[0-9a-f]{7,40}$/i.test(stampSha)) {
+    return { known: false, same: false, missing: [], extra: [] }
+  }
+  const exists = spawnSync('git', ['cat-file', '-e', `${stampSha}^{commit}`], {
+    cwd: repoRoot,
+    stdio: 'ignore',
+  })
+  if (exists.status !== 0) return { known: false, same: false, missing: [], extra: [] }
+  const diff = spawnSync(
+    'git',
+    ['diff', '--quiet', stampSha, baselineSha, '--', ...FUNCTIONS_SOURCE_PATHSPECS],
+    { cwd: repoRoot, stdio: 'ignore' },
+  )
+  if (diff.status === 0) return { known: true, same: true, missing: [], extra: [] }
+  if (diff.status !== 1) return { known: false, same: false, missing: [], extra: [] }
+  const commitsIn = (range) =>
+    git(['log', '--oneline', '--no-decorate', range, '--', ...FUNCTIONS_SOURCE_PATHSPECS])
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+  return {
+    known: true,
+    same: false,
+    missing: commitsIn(`${stampSha}..${baselineSha}`),
+    extra: commitsIn(`${baselineSha}..${stampSha}`),
+  }
+}
+
 const regions = new Set(deployed.map((fn) => functionRegion(fn.name)))
-const verdict = classifyFunctionsDrift({ deployed, declared, commit, unreachable })
+const verdict = classifyFunctionsDrift({
+  deployed,
+  declared,
+  baselineSha,
+  compareSource,
+  unreachable,
+})
 
 console.log(
   `Promoted: ${commit.sha.slice(0, 9)} ${new Date(commit.timestampMs).toISOString()} — ${commit.subject}`,
@@ -255,7 +307,7 @@ console.log(
 
 if (unreachable.length > 0) {
   console.error(
-    `Unreachable: ${unreachable.join(', ')} — any function there has an unknown age.`,
+    `Unreachable: ${unreachable.join(', ')} — any function there runs unknown source.`,
   )
   for (const entry of verdict.unverifiable) {
     console.error(`  UNVERIFIABLE ${entry.id}: ${entry.detail}`)
@@ -264,12 +316,16 @@ if (unreachable.length > 0) {
 
 if (!verdict.drifted) {
   console.log(
-    `\nEvery function the API could see is at or after ${commit.sha.slice(0, 9)}.`,
+    `\nEvery function the API could see runs ${baselineRef}'s ${FUNCTIONS_SOURCE_PATH} (source stamp tree-equal to ${baselineSha.slice(0, 9)}).`,
   )
   for (const line of renderFunctionLines(verdict.current)) console.log(line)
 } else {
   const label = {
     stale: 'STALE',
+    ahead: 'AHEAD',
+    unstamped: 'UNSTAMPED',
+    dirty: 'DIRTY',
+    'unknown-source': 'UNKNOWN SOURCE',
     'never-deployed': 'NEVER DEPLOYED',
     orphaned: 'ORPHANED',
     'not-active': 'NOT ACTIVE',
@@ -284,7 +340,7 @@ if (!verdict.drifted) {
     console.error(`    ${finding.detail}`)
   }
   if (verdict.current.length > 0) {
-    console.error('\n  At or after the promoted commit:')
+    console.error(`\n  Running ${baselineRef}'s source:`)
     for (const line of renderFunctionLines(verdict.current)) console.error(line)
   }
 }
@@ -320,8 +376,10 @@ if (verdict.drifted) {
   console.error(
     [
       '',
-      'To converge, from a checkout at the promoted SHA:',
+      'To converge, from a CLEAN checkout at the promoted SHA:',
       '  npm --prefix cloud/functions run deploy   # firebase deploy --only functions',
+      `Its predeploy hook stamps every function with that checkout's sha as ${SOURCE_STAMP_ENV},`,
+      'which is what this check compares; a full deploy, so every function gets the stamp.',
       '',
       'Then confirm the scheduler agrees, which is the half a stale deploy does',
       'not change:',
@@ -339,7 +397,7 @@ if (verdict.drifted) {
 if (unreachable.length > 0) {
   console.error(
     `\nCannot check: the API could not answer for ${unreachable.join(', ')}. ` +
-      'A function in an unreachable region has an unknown age, and unknown is not clean.',
+      'A function in an unreachable region runs unknown source, and unknown is not clean.',
   )
   process.exit(2)
 }

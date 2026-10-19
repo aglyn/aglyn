@@ -64,7 +64,7 @@ fun crmPath(orgId: String, collection: String) = "orgs/$orgId/$collection"
 
 /** The plan's scope clause: `visibleTo array-contains-any` the reader's tokens. */
 fun scopeBase(scope: CrmScope): List<ListQueryFilter> =
-  listOf(ListQueryFilter(ListQueryOp.ARRAY_CONTAINS_ANY, "visibleTo", JsonArray(scope.readTokens.map(::JsonPrimitive))))
+  scope.readTokens?.let { listOf(ListQueryFilter(ListQueryOp.ARRAY_CONTAINS_ANY, "visibleTo", JsonArray(it.map(::JsonPrimitive)))) }.orEmpty()
 
 /** A chip over a list: the clauses it adds to the one query. */
 data class CrmFilter(val key: String, val label: String, val clauses: List<ListFilterRequest> = emptyList(), val base: List<ListQueryFilter> = emptyList())
@@ -90,7 +90,8 @@ fun crmFilters(kind: CrmKind, scope: CrmScope): List<CrmFilter> {
     ) + Contracts.nativeCrmLeadStatuses.map { status ->
       CrmFilter(status, Contracts.crmLeadStatusLabels[status] ?: status, listOf(ListFilterRequest("status", "equals", status)))
     } + CrmFilter("mine", "Mine", listOf(mine))
-    CrmKind.CONTACT -> listOf(
+    // A contact's owner and stage are a site's own (its consent group's facet); the whole workspace lists them all.
+    CrmKind.CONTACT -> if (scope.workspaceWide) listOf(CrmFilter("all", "All")) else listOf(
       CrmFilter("all", "All"),
       CrmFilter("mine", "Mine", listOf(ListFilterRequest("facetKeys", "contains", "${scope.groupId}:owner=${facetKeyValue(scope.uid)}"))),
     ) + Contracts.contactLifecycleStageLabels.map { (stage, label) ->

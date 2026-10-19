@@ -42,12 +42,13 @@ import { directUploadMaxBytes, normalizeUploadContentType } from '../media-uploa
 import { mediaStorageGate, scopeBillsStorageOverage } from '../storage-overage'
 import { embeddedMetadataAtIngress } from './media-embedded'
 import { resolveOrgMediaBand } from './media-storage-band'
-import { mediaCdnPathUpdate, resolveMediaScope } from './media-scope'
+import { folderStoragePath, mediaCdnPathUpdate, resolveMediaScope } from './media-scope'
 
 /**
  * This app's implementation of `core.media-ingest` (AGL-3660): a picture a
  * server process holds, stored in a site's own media library as the member
- * named, with no browser request behind it.
+ * named, with no browser request behind it — an AI job copying a stock
+ * photo, or a site photo link storing what a phone sent (AGL-3957).
  *
  * The same checks, in the same order, as the console's direct upload route
  * (`app/api/media/upload/route.ts`) and the v1 API's create
@@ -133,8 +134,12 @@ export async function ingestMedia(request: PluginMediaIngestRequest): Promise<Pl
 
   const mediaId = createResourceUid()
   const token = randomUUID()
-  // The library's root, the way the upload route files an asset with no folder.
-  const objectPath = `${scope.base}/media/${mediaId}`
+  // Inside the folder's Storage prefix, the way an upload is, so the bucket
+  // tree mirrors the library tree; a stale or absent folder files the asset
+  // at the root, as the upload route does.
+  const folderId = request.folderId ?? null
+  const folderPath = await folderStoragePath(scope.scopeRef, folderId)
+  const objectPath = `${scope.base}/media/` + (folderPath ? `${folderPath}/` : '') + mediaId
   const bucket = firebaseAdmin.app().storage().bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
   await bucket.file(objectPath).save(buffer, {
     contentType,
@@ -183,7 +188,7 @@ export async function ingestMedia(request: PluginMediaIngestRequest): Promise<Pl
     sizeBytes: buffer.length,
     url,
     storagePath: objectPath,
-    folderId: null,
+    folderId,
     ...(dimensions ?? {}),
     ...(alt ? { alt } : {}),
     ...(description ? { description } : {}),
@@ -202,6 +207,9 @@ export async function ingestMedia(request: PluginMediaIngestRequest): Promise<Pl
     ...(variants?.error ? { variantsError: variants.error } : {}),
     ...(embeddedMetadata ? { embeddedMetadata } : {}),
     ...(request.stockPhoto ? { stockPhoto: { ...request.stockPhoto, importedAt: Timestamp.now() } } : {}),
+    // The business's own photo (AGL-3957): `true` and never false, so the
+    // owner-photo read below is one equality query with no index of its own.
+    ...(request.ownerPhotoLinkId ? { ownerPhoto: true, photoLinkId: request.ownerPhotoLinkId } : {}),
     cdnPath,
     createdAt: Timestamp.now(),
   })
@@ -253,7 +261,52 @@ export async function findStockPhotoMedia(input: {
   return null
 }
 
-export const consoleMediaIngest: PluginMediaIngest = {
+/** The most owner photos read for one site before the newest are kept. */
+const OWNER_PHOTOS_READ = 200
+
+/**
+ * The site's live, public photos of the business itself (AGL-3957), newest
+ * first: what came through a site photo link. Read by the Admin SDK on the
+ * site's own library alone. Ordered here rather than by the query, so the
+ * read needs no composite index on a field most libraries never carry.
+ */
+export async function listOwnerPhotoMedia(input: {
+  hostId: string
+  limit?: number
+}): Promise<PluginMediaAsset[]> {
+  if (!input.hostId) return []
+  const limit = Math.max(1, Math.min(OWNER_PHOTOS_READ, input.limit ?? 60))
+  const snapshot = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(input.hostId)
+    .collection('media')
+    .where('ownerPhoto', '==', true)
+    .limit(OWNER_PHOTOS_READ)
+    .get()
+  const createdMs = (value: unknown): number =>
+    typeof (value as { toMillis?: () => number } | null)?.toMillis === 'function'
+      ? (value as { toMillis: () => number }).toMillis()
+      : 0
+  const photos: Array<{ at: number; asset: PluginMediaAsset }> = []
+  for (const doc of snapshot.docs) {
+    const media = doc.data() as Record<string, unknown>
+    if (media['deletedAt'] || media['private'] === true) continue
+    if (!RASTER_TYPES.has(String(media['contentType'] ?? ''))) continue
+    const asset = assetOf(doc.id, media)
+    if (!asset) continue
+    const alt = typeof media['alt'] === 'string' ? media['alt'].trim() : ''
+    photos.push({ at: createdMs(media['createdAt']), asset: alt ? { ...asset, alt } : asset })
+  }
+  return photos
+    .sort((a, b) => b.at - a.at)
+    .slice(0, limit)
+    .map((entry) => entry.asset)
+}
+
+export const consoleMediaIngest: PluginMediaIngest & Required<Pick<PluginMediaIngest, 'listOwnerPhotos'>> = {
   ingest: ingestMedia,
   findStockPhoto: findStockPhotoMedia,
+  listOwnerPhotos: listOwnerPhotoMedia,
 }

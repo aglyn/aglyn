@@ -22,6 +22,7 @@ struct SignUpView: View {
   @State private var marketing = false
   @State private var tried = false
   @State private var busy = false
+  @State private var submitting = false
   @State private var error: String?
   @State private var paused: String?
 
@@ -39,72 +40,69 @@ struct SignUpView: View {
       "Sign up",
       subtitle: flow.plan?.signUpHeadline ?? "Create a new \(model.brandName) account"
     ) {
-      VStack(alignment: .leading, spacing: 12) {
-        HStack(alignment: .top, spacing: 12) {
-          AuthField(
-            label: "First name", text: $firstName, content: .name, message: tried ? problems[0] : nil,
-            identifier: "sign-up-first-name")
-          AuthField(
-            label: "Last name", text: $lastName, content: .familyName, message: tried ? problems[1] : nil,
-            identifier: "sign-up-last-name")
-        }
+      if let paused {
+        AglynAuthNotice(
+          "New signups are temporarily paused — \(paused)", systemImage: "exclamationmark.triangle", tone: .warning
+        )
+        .accessibilityIdentifier("sign-up-paused")
+      }
+      if flow.consentBounceUID != nil {
+        AglynAuthNotice(
+          "Looks like you’re new here — please accept the Terms of Service and Privacy Policy to finish setting up your account.",
+          systemImage: "info.circle", tone: .info)
+      }
+      HStack(alignment: .top, spacing: 12) {
         AuthField(
-          label: "Organization name", text: $organization, content: .organization, message: tried ? problems[2] : nil,
-          supporting: WorkspaceName.helper(workspaceDomain: model.config?.workspaceDomain ?? "aglyn.com"),
-          identifier: "sign-up-organization")
+          label: "First name", text: $firstName, content: .name, message: tried ? problems[0] : nil,
+          identifier: "sign-up-first-name")
         AuthField(
-          label: "Email", text: $email, content: .email, message: tried ? problems[3] : nil, identifier: "sign-up-email")
-        AuthField(
-          label: "Password", text: $password, secure: true, content: .newPassword, message: tried ? problems[4] : nil,
-          identifier: "sign-up-password")
-        AuthField(
-          label: "Confirm password", text: $confirm, secure: true, content: .newPassword,
-          message: tried ? problems[5] : nil, identifier: "sign-up-confirm")
+          label: "Last name", text: $lastName, content: .familyName, message: tried ? problems[1] : nil,
+          identifier: "sign-up-last-name")
+      }
+      AuthField(
+        label: "Organization name", text: $organization, content: .organization, message: tried ? problems[2] : nil,
+        supporting: WorkspaceName.helper(workspaceDomain: model.config?.workspaceDomain ?? "aglyn.com"),
+        identifier: "sign-up-organization")
+      AuthField(
+        label: "Email", text: $email, content: .email, placeholder: "you@example.com",
+        message: tried ? problems[3] : nil, identifier: "sign-up-email")
+      AuthField(
+        label: "Password", text: $password, secure: true, content: .newPassword, message: tried ? problems[4] : nil,
+        supporting: SignUpView.passwordHelp, identifier: "sign-up-password")
+      AuthField(
+        label: "Confirm password", text: $confirm, secure: true, content: .newPassword,
+        message: tried ? problems[5] : nil, identifier: "sign-up-confirm")
+
+      AuthCheckRow(
+        isOn: $consented, accessibilityLabel: "Agree to the Terms of Service and Privacy Policy",
+        identifier: "sign-up-consent"
+      ) {
+        LegalLinks(lead: "I agree to \(model.brandName)’s").tint(AglynAuthTokens.Colors.textPrimary.color)
+      }
+      .onChange(of: consented) { if consented { consentError = false } }
+      if consentError {
+        AglynFieldMessage("Please accept the Terms of Service and Privacy Policy to continue.", isError: true)
+          .accessibilityIdentifier("sign-up-consent-error")
+      }
+      // Below the required acceptance and never part of it: the terms gate the sign-up, this gates nothing.
+      AuthCheckRow(isOn: $marketing, accessibilityLabel: "Send me product updates", identifier: "sign-up-marketing") {
+        Text(MarketingConsent.text(brand: model.brandName))
       }
 
-      VStack(alignment: .leading, spacing: 12) {
-        if flow.consentBounceUID != nil {
-          AglynNotice(
-            "Looks like you’re new here — please accept the Terms of Service and Privacy Policy to finish setting up your account.",
-            tone: .info)
-        }
-        AuthCheckRow(
-          isOn: $consented, accessibilityLabel: "Agree to the Terms of Service and Privacy Policy",
-          identifier: "sign-up-consent"
-        ) {
-          LegalLinks(lead: "I agree to \(model.brandName)’s")
-        }
-        .onChange(of: consented) { if consented { consentError = false } }
-        if consentError {
-          Text("Please accept the Terms of Service and Privacy Policy to continue.")
-            .font(AglynFont.caption).foregroundStyle(AglynColor.error)
-        }
-        // Below the required acceptance and never part of it: the terms gate the sign-up, this gates nothing.
-        AuthCheckRow(isOn: $marketing, accessibilityLabel: "Send me product updates", identifier: "sign-up-marketing") {
-          Text(MarketingConsent.text(brand: model.brandName))
-        }
-      }
-
-      VStack(alignment: .leading, spacing: 12) {
-        AuthPrimaryButton(title: "Next", busy: busy, enabled: paused == nil, action: submit)
-          .accessibilityIdentifier("sign-up-submit")
-        if let paused {
-          AglynNotice("New signups are temporarily paused — \(paused)", tone: .warning)
-        }
-        if let error { AuthMessage(text: error) }
-        ProviderSignInButtons(
-          mode: .signUp, enabled: paused == nil, gate: gate, busy: $busy, error: $error, marketing: marketing,
-          consented: consented && paused == nil)
-      }
+      AuthPrimaryButton(title: "Next", busy: submitting, enabled: paused == nil, action: submit)
+        .accessibilityIdentifier("sign-up-submit")
+      if let error { AuthMessage(text: error) }
+      ProviderSignInButtons(
+        mode: .signUp, enabled: paused == nil, gate: gate, busy: $busy, error: $error, marketing: marketing,
+        consented: consented && paused == nil)
     } footer: {
-      HStack(spacing: 4) {
-        Text("Already have an account?")
-        Button("Sign in") { flow.reset() }.buttonStyle(.borderless).accessibilityIdentifier("sign-up-to-sign-in")
-      }
-      .font(AglynFont.subheadline)
+      AuthFooterLine(lead: "Already have an account?", link: "Sign in", identifier: "sign-up-to-sign-in") { flow.reset() }
     }
     .task { paused = await model.signUpService?.signupsPaused() }
   }
+
+  /// The password rule (`SignUpRules.password`) as one line under the field.
+  static let passwordHelp = "6–30 characters, with a lowercase and an uppercase letter, a number and a symbol."
 
   /// The agreement every door checks first; false (and said) without it.
   private func gate() -> Bool {
@@ -120,6 +118,7 @@ struct SignUpView: View {
     tried = true
     guard gate(), problems.allSatisfy({ $0 == nil }), !busy else { return }
     busy = true
+    submitting = true
     error = nil
     Task {
       do {
@@ -130,6 +129,7 @@ struct SignUpView: View {
         self.error = error.localizedDescription
       }
       busy = false
+      submitting = false
     }
   }
 }

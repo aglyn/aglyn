@@ -37,6 +37,14 @@ import {
   recordSignupRefusal,
 } from '@aglyn/tenant-data-admin'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
+// Leaf modules, not the barrel: the route specs mock `@aglyn/aglyn/server`
+// wholesale, and a helper pulled from it resolves `undefined` under them.
+import {
+  normalizeOrgOverrideReason,
+  type OrgOverrideReasonCode,
+} from '@aglyn/aglyn/app-utils/org-override-reason'
+import { SELF_SERVE_PLANS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import type { OrgPlan } from '@aglyn/aglyn'
 import { readFirstTouchCookie } from '@aglyn/shared-util-first-touch'
 import { recordSignUpAcquisition } from '@aglyn/tenant-data-admin/server/account-acquisition'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
@@ -132,6 +140,21 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
+    /*
+     * A STAFF BUILD FOR A CLIENT IS COMPED AT BIRTH (AGL-3952).
+     *
+     * `clientComp` is the dialog's "Build for a client" switch: the plan the
+     * workspace is comped to, the override reason and the staff note. It is
+     * read only off a token that carries the `staff` claim — the claim, never
+     * the body, decides — and anyone else who sends it is refused outright
+     * rather than quietly created without it, because a body that asks for
+     * a comp from a non-staff account is a crafted request, not a mistake.
+     *
+     * Every refusal here lands before the lockdown and rate-limit gates so a
+     * malformed staff request burns no token; nothing has been created yet.
+     */
+    const clientComp = readClientComp(body?.clientComp, decoded)
+    if (clientComp instanceof Response) return clientComp
     // Lockdown verdict (AGL-1506): the org scope has no carrier before the
     // org exists — platform and user locks still refuse creation; distinct
     // 423 body; staff bypass is the un-panic invariant.
@@ -242,6 +265,9 @@ async function handler(request: Request): Promise<Response> {
       // them to a top-level claim, so this was empty for every SSO account —
       // stamping the org's first roster row, its owner, as nameless.
       ownerDisplayName: resolveIdpDisplayName(decoded) || null,
+      // The comp rides the creation transaction (AGL-3952); absent for every
+      // self-serve caller, and for a staff member who left the switch off.
+      ...(clientComp ? { planComp: { ...clientComp, grantedBy: decoded.uid } } : {}),
     })
 
     // The welcome email and the staff notice, shared with the site door that
@@ -278,6 +304,53 @@ async function handler(request: Request): Promise<Response> {
     console.error(error)
     return Response.json({ error: 'Organization creation failed' }, { status: 500 })
   }
+}
+
+/** What the "Build for a client" switch sends, validated (AGL-3952). */
+interface ClientComp {
+  plan: OrgPlan
+  reason: OrgOverrideReasonCode
+  note: string
+}
+
+/**
+ * The comp a staff creator asked for, `null` when the body carries none,
+ * or the refusal that answers a body that asked wrongly.
+ *
+ * The plan is one a comp may grant — a self-serve plan other than Free,
+ * which grants nothing — and the reason is one of the override reason
+ * codes. The note is REQUIRED here, unlike the override dialog's: a booth
+ * build with no note is a comp nobody can trace to an event or an owner
+ * two months later, which is exactly the question it will be asked.
+ */
+function readClientComp(
+  raw: unknown,
+  decoded: { [key: string]: unknown },
+): ClientComp | null | Response {
+  if (raw === undefined || raw === null) return null
+  if (decoded['staff'] !== true) {
+    return Response.json({ error: 'Staff only' }, { status: 403 })
+  }
+  const body = (typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<
+    string,
+    unknown
+  >
+  const plan = body['plan']
+  if (
+    typeof plan !== 'string' ||
+    plan === 'free' ||
+    !SELF_SERVE_PLANS.includes(plan as OrgPlan)
+  ) {
+    return Response.json({ error: 'Choose a plan the comp can grant' }, { status: 400 })
+  }
+  const reason = normalizeOrgOverrideReason(body['reason'], body['note'])
+  if (!reason || !reason.note) {
+    return Response.json(
+      { error: 'Say why, and note the client or event, so the comp can be traced' },
+      { status: 400 },
+    )
+  }
+  return { plan: plan as OrgPlan, reason: reason.reason, note: reason.note }
 }
 
 export const dynamic = 'force-dynamic'

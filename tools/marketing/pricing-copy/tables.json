@@ -1295,6 +1295,12 @@
         },
         "priceLabel": "From $9 / mo",
         "blurb": "Starter $9 · Pro $19 · Business $39 · Scale $69 · Advanced $99 · Agency $299 a month, per workspace. Adds AI credits to your plan’s included band — 4,000 on Starter, 9,000 on Pro, 19,000 on Business, 34,000 on Scale, 49,000 on Advanced, 149,000 on Agency. Enterprise by agreement."
+      },
+      {
+        "label": "Site Care",
+        "priceUsd": 49,
+        "scope": "organization",
+        "maxQuantity": 1
       }
     ]
   }

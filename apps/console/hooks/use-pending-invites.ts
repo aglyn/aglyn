@@ -22,6 +22,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -57,24 +58,48 @@ export const PendingInvitesContext = createContext<PendingInvitesState | null>(
 )
 
 /**
+ * How old the list must be before bringing the tab forward re-reads it.
+ *
+ * A new invitation already reaches the banner the moment it lands, through
+ * the notifications feed calling `refresh`; this re-read is the backstop for
+ * a tab whose feed was not listening. Unthrottled, it fired on every
+ * `visibilitychange`, and a tab whose visibility flips every few seconds (an
+ * automated browser taking screenshots) asked the route 600 times an hour.
+ */
+export const PENDING_INVITES_VISIBLE_REFETCH_MS = 60_000
+
+/**
  * Fetches the signed-in user's pending invites. Best-effort: a failed fetch
  * resolves to an empty list rather than throwing — the team page remains the
  * authoritative invite list.
  *
  * Re-read when the tab comes back into view, because an invite sent while the
- * console sat open would otherwise wait for a reload to reach the banner.
- * `enabled: false` is the shape a caller inside the provider takes, so the
- * shared list is the only one fetched.
+ * console sat open would otherwise wait for a reload to reach the banner —
+ * at most once per {@link PENDING_INVITES_VISIBLE_REFETCH_MS}. `refresh`
+ * itself is never throttled: an accept, a decline or an arriving invitation
+ * re-reads at once. `enabled: false` is the shape a caller inside the
+ * provider takes, so the shared list is the only one fetched.
+ *
+ * Keyed on the uid, not the `User` object: the list belongs to an account,
+ * and a new object for the same account must not read it again.
  */
 export function usePendingInvitesSource(enabled = true): PendingInvitesState {
   const { data: user } = useUser()
+  const uid = user?.uid
+  const userRef = useRef(user)
+  userRef.current = user
+  const fetchedAt = useRef(0)
   const [invites, setInvites] = useState<PendingInvite[]>([])
   const [loading, setLoading] = useState(true)
 
   const refresh = useCallback(async () => {
     if (!enabled) return
+    fetchedAt.current = Date.now()
     try {
-      const response = await authorizedFetch(user, '/api/orgs/invites?mine=1')
+      const response = await authorizedFetch(
+        userRef.current,
+        '/api/orgs/invites?mine=1',
+      )
       // A refusal — the route's, or an unobtainable token — empties the list
       // rather than leaving somebody else's invitations on screen.
       if (!response.ok) return void setInvites([])
@@ -87,7 +112,8 @@ export function usePendingInvitesSource(enabled = true): PendingInvitesState {
     } finally {
       setLoading(false)
     }
-  }, [user, enabled])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `uid` is the key; the token comes from `userRef`
+  }, [uid, enabled])
 
   useEffect(() => {
     void refresh()
@@ -96,7 +122,11 @@ export function usePendingInvitesSource(enabled = true): PendingInvitesState {
   useEffect(() => {
     if (!enabled || typeof document === 'undefined') return undefined
     const onVisible = () => {
-      if (document.visibilityState === 'visible') void refresh()
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - fetchedAt.current < PENDING_INVITES_VISIBLE_REFETCH_MS) {
+        return
+      }
+      void refresh()
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)

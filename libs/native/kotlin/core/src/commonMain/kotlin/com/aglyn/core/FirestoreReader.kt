@@ -40,6 +40,11 @@ data class FirestoreQuery(
   val orderBy: List<FirestoreOrder> = emptyList(),
   val limit: Int? = null,
   val startAfter: List<Any?>? = null,
+  /**
+   * Every collection named [collectionPath] (a bare collection id such as `formSubmissions`) wherever it sits: the SDKs'
+   * `collectionGroup`, as the console reads a whole workspace's form submissions.
+   */
+  val collectionGroup: Boolean = false,
 )
 
 data class FirestorePage(
