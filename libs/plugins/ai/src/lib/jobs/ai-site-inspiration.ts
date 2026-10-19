@@ -16,6 +16,7 @@
  */
 
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin/server/release-flags'
 import type { AiJob } from '../model/ai-jobs.types'
 import {
   AI_SITE_INSPIRATION_FLAG,
@@ -128,12 +129,7 @@ export type AiSiteInspirationReader = (input: {
 
 /** Whether the release flag is on for a workspace; one that cannot be read is off. */
 export async function aiSiteInspirationReleased(orgId: string): Promise<boolean> {
-  try {
-    const { isServerReleaseFlagOnForOrg } = await import('@aglyn/tenant-data-admin/server/release-flags')
-    return await isServerReleaseFlagOnForOrg(AI_SITE_INSPIRATION_FLAG, orgId)
-  } catch {
-    return false
-  }
+  return isServerReleaseFlagOnForOrg(AI_SITE_INSPIRATION_FLAG, orgId).catch(() => false)
 }
 
 /**
