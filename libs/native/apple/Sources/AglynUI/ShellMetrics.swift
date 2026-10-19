@@ -93,15 +93,21 @@ public struct AglynSidebarRow<Leading: View, Trailing: View>: View {
   let selected: Bool
   let leading: Leading
   let trailing: Trailing
+  /// How deep the row sits under group headers: each level is 12 points (Figma Sidebar, grouped rows).
+  let indent: Int
+  /// The selection pill moves between rows when the rows share this namespace.
+  let pill: Namespace.ID?
   let action: () -> Void
   @State private var hovered = false
 
   public init(
-    _ title: String, selected: Bool, action: @escaping () -> Void, @ViewBuilder leading: () -> Leading,
-    @ViewBuilder trailing: () -> Trailing = { EmptyView() }
+    _ title: String, selected: Bool, indent: Int = 0, pill: Namespace.ID? = nil, action: @escaping () -> Void,
+    @ViewBuilder leading: () -> Leading, @ViewBuilder trailing: () -> Trailing = { EmptyView() }
   ) {
     self.title = title
     self.selected = selected
+    self.indent = indent
+    self.pill = pill
     self.action = action
     self.leading = leading()
     self.trailing = trailing()
@@ -120,11 +126,10 @@ public struct AglynSidebarRow<Leading: View, Trailing: View>: View {
         Spacer(minLength: 4)
         trailing
       }
-      .padding(.horizontal, 8)
+      .padding(.leading, 8 + CGFloat(indent) * 12)
+      .padding(.trailing, 8)
       .frame(maxWidth: .infinity, minHeight: AglynShellMetrics.rowHeight, alignment: .leading)
-      .background(
-        RoundedRectangle(cornerRadius: AglynShellMetrics.pillRadius, style: .continuous)
-          .fill(selected ? AglynColor.accentSoft : hovered ? AglynColor.hover : .clear))
+      .background { pillView }
       .contentShape(RoundedRectangle(cornerRadius: AglynShellMetrics.pillRadius, style: .continuous))
     }
     .buttonStyle(.plain)
@@ -132,6 +137,30 @@ public struct AglynSidebarRow<Leading: View, Trailing: View>: View {
     .padding(.horizontal, AglynShellMetrics.rowInset)
     .accessibilityAddTraits(selected ? [.isSelected] : [])
   }
+}
+
+extension AglynSidebarRow {
+  @ViewBuilder
+  fileprivate var pillView: some View {
+    let shape = RoundedRectangle(cornerRadius: AglynShellMetrics.pillRadius, style: .continuous)
+    if selected, let pill {
+      shape.fill(AglynColor.accentSoft).matchedGeometryEffect(id: "sidebar-pill", in: pill)
+    } else {
+      shape.fill(selected ? AglynColor.accentSoft : hovered ? AglynColor.hover : .clear)
+    }
+  }
+}
+
+/// The shell's motion (Figma Motion 121:6714): drilling in and out of a scope, folding a group, the selection pill.
+public enum AglynShellMotion {
+  /// Drill in or out: a slide with a fade, about 250 ms on a spring.
+  public static let drill = Animation.spring(duration: 0.25, bounce: 0.1)
+  /// Folding or opening a group: about 200 ms.
+  public static let fold = Animation.easeOut(duration: 0.2)
+  /// The selection pill moving to another row.
+  public static let pill = Animation.spring(duration: 0.25, bounce: 0.15)
+  /// Another workspace: a short cross-fade.
+  public static let crossFade = Animation.easeInOut(duration: 0.15)
 }
 
 /// A sidebar row's line icon, sized for the shell.

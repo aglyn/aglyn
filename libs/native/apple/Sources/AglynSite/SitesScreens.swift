@@ -120,11 +120,17 @@ struct SitesScreen: View {
       } else {
         List {
           ForEach(rows) { row in
-            AglynPushLink {
-              SiteOverview(context: context, hostID: row.id).navigationTitle(row.name)
+            // Clicking a site opens it: the sidebar drills into its scope (no separate "work on this site" step).
+            Button {
+              context.selectSite(row.id)
             } label: {
-              SiteListRow(context: context, row: row)
+              HStack(spacing: 8) {
+                SiteListRow(context: context, row: row)
+                Image(systemName: "chevron.forward").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+              }
+              .contentShape(Rectangle())
             }
+            .buttonStyle(.aglynRow)
             .aglynListRow()
             .accessibilityIdentifier("site-\(row.id)")
           }
@@ -241,13 +247,6 @@ struct SiteOverview: View {
         if current {
           Label("You are working on this site", systemImage: "checkmark.circle.fill")
             .foregroundStyle(AglynColor.info)
-        } else {
-          Button {
-            context.selectSite(hostID)
-          } label: {
-            Label("Work on this site", systemImage: "arrow.left.arrow.right")
-          }
-          .accessibilityIdentifier("site-switch")
         }
         if let domain, let url = URL(string: "https://\(domain)/") {
           Button {
