@@ -149,8 +149,8 @@ const METERED = {
   STRIPE_PRICE_METERED_YEARLY: 'price_metered_usage_yearly',
 }
 const AI_ADDON = {
-  STRIPE_PRICE_PRO_AI_ADDON: 'price_pro_ai_addon',
-  STRIPE_PRICE_PRO_AI_ADDON_YEARLY: 'price_pro_ai_addon_yearly',
+  STRIPE_PRICE_AI_BOOST: 'price_ai_boost',
+  STRIPE_PRICE_AI_BOOST_YEARLY: 'price_ai_boost_yearly',
 }
 const SITE_CARE = {
   STRIPE_PRICE_SITE_CARE: 'price_site_care',
@@ -278,7 +278,7 @@ describe('Site Care is sold with a paid plan (AGL-3954)', () => {
     const handler = loadCheckout({ ...METERED, ...AI_ADDON, ...SITE_CARE })
     await post(handler, { aiAddon: true, siteCare: true })
     const body = subscribeBody()
-    expect(body?.get('items[2][price]')).toBe('price_pro_ai_addon')
+    expect(body?.get('items[2][price]')).toBe('price_ai_boost')
     expect(body?.get('items[3][price]')).toBe('price_site_care')
     expect(body?.get('items[3][quantity]')).toBe('1')
   })
@@ -300,7 +300,7 @@ describe('Site Care is sold with a paid plan (AGL-3954)', () => {
     })
     expect(response.status).toBe(200)
     const query = previewQuery()
-    expect(query?.get('subscription_details[items][2][price]')).toBe('price_pro_ai_addon')
+    expect(query?.get('subscription_details[items][2][price]')).toBe('price_ai_boost')
     expect(query?.get('subscription_details[items][3][price]')).toBe('price_site_care')
     expect(query?.get('subscription_details[items][3][quantity]')).toBe('1')
     expect(subscribeBody()).toBeNull()
@@ -343,7 +343,7 @@ describe('Site Care is sold with a paid plan (AGL-3954)', () => {
     expect(response.status).toBe(501)
     const { error } = await response.json()
     expect(error).toContain('STRIPE_PRICE_SITE_CARE')
-    expect(error).not.toContain('AI_ADDON')
+    expect(error).not.toContain('STRIPE_PRICE_AI_')
     expect(error).not.toContain('STRIPE_PRICE_METERED')
   })
 })

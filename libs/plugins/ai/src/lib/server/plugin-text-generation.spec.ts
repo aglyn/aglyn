@@ -105,8 +105,8 @@ import { AI_TEXT_GENERATION_ROUTE, createAiTextGenerator, registerAiTextGenerato
 const ORG = 'org-1'
 /** A Pro workspace with the AI add-on: `aiGenerative` is on. */
 const ENTITLED_ORG = { plan: 'pro', billingStatus: 'active', seatAddons: { aiAddon: true } }
-/** Pro without the add-on. */
-const PLAIN_PRO_ORG = { plan: 'pro', billingStatus: 'active' }
+/** Below the rung: since AGL-3965 only a per-org override closes generation. */
+const PLAIN_PRO_ORG = { plan: 'pro', billingStatus: 'active', entitlements: { features: { aiGenerative: false } } }
 const NOW = new Date('2026-09-24T15:00:00.000Z')
 const RESERVED = {
   allowed: true,

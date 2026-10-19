@@ -168,6 +168,13 @@
       "description": "Weglot translation on published sites with the merchant's own Weglot key (AGL-3700). Platform-wide kill switch; each site still switches it on itself.",
       "valueType": "JSON"
     },
+    "release_ai_site_inspiration": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "Guided AI site start asks for sites the person likes (1 Free, 3 paid) and reads signals only, never their words, images or logos (AGL-3975). OFF by default.",
+      "valueType": "JSON"
+    },
     "release_ad_audience_sync": {
       "defaultValue": {
         "value": "{\"enabled\": false, \"rolloutPercent\": 0}"

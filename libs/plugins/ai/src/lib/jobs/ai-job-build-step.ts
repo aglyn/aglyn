@@ -35,6 +35,7 @@ import {
   aiBuildOrder,
   aiBuildItemOutputNote,
   aiBuildPlacedItemLines,
+  AI_BUILD_NEEDS_INPUT_CODE,
   aiBuildPlanMissingInput,
   aiBuildPlanShapeRefusal,
   aiBuildRefName,
@@ -1019,9 +1020,10 @@ export function createAiBuildJobAdmission(deps: AiBuildAdmissionDeps = {}): AiJo
     const ops = await opsFor({ orgId: context.orgId, hostId: context.hostId, org, host, freeTaste })
     const shape = aiBuildPlanShapeRefusal(plan, { freeTaste, ops })
     if (shape) return { status: 400, error: shape }
-    // Something only the person can give (AGL-3751): asked, never built without.
+    // Something only the person can give (AGL-3751): asked, never built
+    // without. The plan step waits for it in `needs_input` (AGL-3978).
     const missing = aiBuildPlanMissingInput(plan, ops)
-    if (missing) return { status: 400, error: missing }
+    if (missing) return { status: 400, error: missing, code: AI_BUILD_NEEDS_INPUT_CODE }
     if (freeTaste) {
       const refusal = await aiBuildFreeCreditsRefusal({
         firestore: context.firestore,

@@ -172,11 +172,10 @@ export interface CoreOrgFeatureFlags {
    * generate-section rung every tier from Pro up carries. This is the
    * expensive rung: a generated surface carries the node tree, the catalog
    * and the theme in and iterates, so it draws credits by the hundreds where
-   * a question draws tens. No self-serve tier includes it; the Aglyn AI
-   * add-on (`OrgSeatAddons.aiAddon`) switches it on and adds the credit band
-   * that funds it, and `resolveOrgEntitlements` flips this flag together
-   * with `aiAssist` when the add-on is present. Enterprise carries it in the
-   * agreement.
+   * a question draws tens. Since AGL-3965 every plan carries it: the plan's
+   * included `assistCreditsPerMonth` pays for generation and assist alike
+   * (one pool), an Aglyn AI tier adds credits on top, and Free's taste keeps
+   * its own wall. Enterprise carries it in the agreement.
    */
   aiGenerative?: boolean
   /** No-code workflow builder (AGL-101). */
@@ -715,6 +714,12 @@ export interface OrgPlanComp {
 }
 
 /**
+ * The Aglyn AI tiers (AGL-3965), smallest first. Sold on their own to any
+ * paid plan; the figures are `AI_TIERS` in `plan-entitlements.ts`.
+ */
+export type AiTierId = 'spark' | 'boost' | 'plus' | 'max' | 'ultra' | 'studio'
+
+/**
  * Paid addon quantities (AGL-112/524) purchased on top of the plan's
  * included allowances, billed as items on the org's Stripe subscription.
  * Seat/dataset kinds resolve as `included + purchased` clamped to the
@@ -769,11 +774,10 @@ export interface OrgSeatAddons {
   /**
    * Aglyn AI org-wide toggle, 0/1 (AGL-2896). One purchase covers every
    * host in the org, the way Event Calendar does: `resolveOrgEntitlements`
-   * reads any quantity >= 1 as one, adds the plan's
-   * `AI_ADDON_CREDITS_PER_MONTH` band to `assistCreditsPerMonth`, and
-   * switches `features.aiGenerative` and `features.aiAssist` on. Priced per
-   * plan at `PlanPricing.aiAddonMonthlyUsd`; `null` there means the plan
-   * does not sell it.
+   * reads any quantity >= 1 as one and adds the purchased tier's credits
+   * (`AI_TIERS[org.aiTier].credits`, AGL-3965) to `assistCreditsPerMonth`.
+   * WHICH tier is `AglynOrgBilling.aiTier`; the price is the tier's, on any
+   * paid plan (`planSellsAiTiers`).
    */
   aiAddon?: number
 }
@@ -1206,6 +1210,18 @@ export interface AglynOrgBilling extends AglynDocument {
   enabledPlugins?: string[]
   /** Purchased addon seats (AGL-112); billed monthly per seat. */
   seatAddons?: OrgSeatAddons
+  /**
+   * Which Aglyn AI tier `seatAddons.aiAddon` is (AGL-3965): Spark through
+   * Studio, read off the subscription's AI item by the webhook and the
+   * add-ons route, and written beside `seatAddons` by the same writes. An
+   * ENTITLEMENT INPUT like `seatAddons`, so Admin-SDK-only.
+   *
+   * Absent on an org whose add-on was bought before tiers existed: it then
+   * reads as the tier with that plan's old band and price
+   * (`LEGACY_AI_ADDON_TIER_BY_PLAN`), so no bill and no credit figure moved.
+   * `null` once written means no tier is held.
+   */
+  aiTier?: AiTierId | null
   /**
    * POS register seats assigned out of the org pool (AGL-1775). An
    * ENTITLEMENT INPUT: it raises a per-site cap, so it is Admin-SDK-only.

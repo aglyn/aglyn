@@ -70,12 +70,12 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#from-a-brief': 'Open Components for the site and choose Create with AI, beside Templates and Create Component.',
   },
   aiCreate: {
-    '#without-the-add-on': 'On a paid plan without the Aglyn AI add-on, the button is still there.',
+    '#without-the-add-on': 'On every paid plan, Create with AI runs on the AI credits your plan includes each month; nothing else needs to be bought.',
   },
   aiCredits: {
     '#before-a-job-starts': 'Every job tells you what it will cost before it spends anything: A plan shows Estimated cost: About N credits (up to M) beside Confirm plan: about what jobs like it cost on real builds, and the most it can cost.',
     '#past-the-band': 'On a paid plan, AI keeps working past the included band, and the extra credits are billed on your monthly invoice at your plan\'s rate per 1,000 credits.',
-    '#see-your-credits': 'Billing → Usage → AI credits shows the credits drawn this month against the included band, and what the add-on adds.',
+    '#see-your-credits': 'Billing → Usage → AI credits shows the credits drawn this month against the pool, and how many of them your tier adds.',
   },
   aiCrm: {
     '#draft-an-email': 'In the email composer on a contact, a deal or a lead, describe what the email should say (for example, "follow up on the quote and offer a call next week") and press Draft the message.',
@@ -176,6 +176,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#crm-records': 'Your CRM — the contacts captured from forms, member sign-ups, buyers and bookings, and the companies and deals your team files beside them — is priced as one CRM records band, not a hard cap.',
     '#current-plan': 'The Current plan card at the top of the Plan tab names your plan, the state of its subscription and its price, with the plan\'s headline limits — sites, team seats and campaign emails a month — beside it.',
     '#if-you-would-rather-uploads-stopped': 'Set a monthly storage cap on the Storage cap card under Billing → Usage when you would rather new uploads stopped than pay for extra storage past a figure you choose.',
+    '#locked-features': 'A feature your plan doesn\'t include stays on screen, turned off, with Included from and the plan that has it, and an Upgrade link to the plans on this page; moving to that plan turns it on, with nothing else to set up.',
     '#made-with-badge': 'Published pages on the Free plan show a small Made with Aglyn badge; plans that include badge removal drop it automatically, with nothing to switch on.',
     '#metered-usage-estimate': 'The Metered usage estimate card prices this month\'s usage so far, using the same arithmetic as the invoice: only what goes past your plan\'s included amount is charged, at our cost plus 30% after card fees.',
     '#one-to-one-email': 'A one-to-one email is a message a teammate writes to one person from a CRM record — Send email on a contact\'s, a lead\'s or a deal\'s page, described under Activities & the timeline — as against a campaign, which is…',

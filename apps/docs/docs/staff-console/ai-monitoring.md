@@ -28,13 +28,14 @@ the card shows per-person figures, and a look at those is recorded the same
 way a look at a customer's email is.
 
 **Add-on.** Whether the AI add-on is on — bought, and on a subscription that
-is still paying for it — at what price on this plan, and since when. The date
+is still paying for it — which Aglyn AI tier it is (Spark to Studio), at the
+tier's price, and since when. The date
 comes from the subscription item in Stripe and is cached for a quarter of an
 hour, so a purchase can take that long to show its date; when Stripe cannot
 be asked the card says so rather than showing nothing.
 
 **Credit pool.** The month's band as its named parts: the plan's own band, or
-a staff override where one is written in its place, plus the add-on's band
+a staff override where one is written in its place, plus the tier's credits
 when the add-on is on. Under it, what has been drawn in credits and in
 provider dollars, what is left, and a straight-line projection of where the
 month ends at the pace so far. The projection over-reads a burst on purpose —

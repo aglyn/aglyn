@@ -15,6 +15,18 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **console:** deal catalog, ai credits, payment methods, products, org sites state needs ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
+- **console:** kiosk pairing and AI finish-store state payment prerequisites ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
+- **legal:** v17, Terms, Privacy and Subprocessors: domain names and Site Care ([AGL-3964](https://linear.app/aglyn/issue/AGL-3964), [AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
+- **commerce:** publish its order events and order history as contracts ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
+- **plugins:** a contracts entry point per plugin, a uses field and the boundary guard ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
+- **marketing:** managed landing page, campaign and per-event utm ([AGL-3960](https://linear.app/aglyn/issue/AGL-3960))
+- **pricing:** site care is live on /pricing with the extra-time rate and project floors ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954), [AGL-3959](https://linear.app/aglyn/issue/AGL-3959), [AGL-3970](https://linear.app/aglyn/issue/AGL-3970))
+- **domains:** one-click DNS through Domain Connect ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963), [AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** the Get a domain card on the Custom Domain page ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** buy, connect and renew a domain unattended ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** the domains plugin, its registrar seam and Vercel's driver ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** connect a domain through one server function, with its www twin ([AGL-3961](https://linear.app/aglyn/issue/AGL-3961), [AGL-1311](https://linear.app/aglyn/issue/AGL-1311))
 - **billing:** site care add-on at a flat $49/mo on every paid plan ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
 - **media:** a site photo link drops phone photos in the library; the AI uses them first ([AGL-3957](https://linear.app/aglyn/issue/AGL-3957))
 - **console:** staff comp a client's workspace as they create it ([AGL-3952](https://linear.app/aglyn/issue/AGL-3952))
@@ -38,6 +50,17 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **commerce:** kiosk readiness reads pay-at-counter itself, off the eager chunk ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
+- **ai:** credits notice reads the AI features, not a brand literal ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
+- **marketing-platforms:** send no Stripe test-mode order to a merchant's email platform ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
+- **print-on-demand:** take commerce's order shape, and read test mode from livemode ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
+- **domains:** punctuate the registrations export note ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** the export note names no brand ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** self-hosts link their own terms; the export names both collections ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** serve the Domain Connect template logo from the public repo ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
+- **domains:** no free first year; every year is paid at cost + 30% ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** charge and email nothing for a workspace locked for security or abuse ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** boot the domains declarations without the server data layer ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
 - **tools:** grade deployed functions by source stamp, not deploy time ([AGL-3968](https://linear.app/aglyn/issue/AGL-3968))
 - **media:** photo link page is web-only, dialog mounts on open, excerpt check reads code ([AGL-3957](https://linear.app/aglyn/issue/AGL-3957))
 - **data:** datasets empty state names no template syntax
@@ -54,15 +77,29 @@ content on the marketing site and is written separately.
 
 ### Changed
 
+- **plugins:** fourteen plugins take commerce's shapes from its contracts ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
 - **native:** plugins declare their nav rows, the generator assembles them ([AGL-3943](https://linear.app/aglyn/issue/AGL-3943))
 
 ### Documentation
 
+- what the kiosk, payment methods, deals, ai credits and org sites need first ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
+- **legal:** v17 was published at 08:07 Central, not 08:35 ([AGL-3964](https://linear.app/aglyn/issue/AGL-3964))
+- **marketing:** managed campaign routing is on, env 16 recorded ([AGL-3960](https://linear.app/aglyn/issue/AGL-3960))
+- **decision-log:** the owner confirmed every site care figure on 2026-10-19 ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
+- **domains:** connect a domain automatically, unlisted until it is live ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
 - site care add-on decision of 2026-10-18 in the decision log index ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954), [AGL-3960](https://linear.app/aglyn/issue/AGL-3960))
 
 <details>
-<summary>Also in this release: 4 test, 2 chore</summary>
+<summary>Also in this release: 8 test, 6 chore</summary>
 
+- name the managed landing script as a screen door, and unflake the photo link secret check ([AGL-3960](https://linear.app/aglyn/issue/AGL-3960), [AGL-3957](https://linear.app/aglyn/issue/AGL-3957))
+- **native:** await the held workspace name instead of racing the verification email
+- **domains:** the repo-wide sweeps name the domains plugin ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** the domains package rides the repo version, beta.270 ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **pricing:** the figma pricing frames carry the site care card ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
+- **domains:** gate spec mocks the shared release helper the detach route now calls ([AGL-3961](https://linear.app/aglyn/issue/AGL-3961))
+- **domains:** guards and generated files for the domains plugin ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
+- **domains:** the Stripe product and environment for selling domains ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
 - **docs:** regenerate the feature matrix for the site care rows ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
 - **apple:** a workspace without a plan reads as Free in its logo row ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
 - **tools:** the launch logo spec checks the mark PNGs at 1x-3x ([AGL-3934](https://linear.app/aglyn/issue/AGL-3934))

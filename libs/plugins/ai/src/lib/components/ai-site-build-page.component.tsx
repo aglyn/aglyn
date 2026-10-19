@@ -65,7 +65,7 @@ import { aiSiteStartAnswersFromInputs } from '../model/ai-site-start'
 import { AiSiteStartCard } from './ai-site-start-card.component'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import { followAiJobEvents } from './ai-job-events'
-import { aiCreditsBillingHref, aiSiteBuildDoneLinks, aiStoreFinishLinks } from './ai-job-links'
+import { aiCreditsBillingHref, aiSiteBuildDoneLinks, aiStoreFinishHostId, aiStoreFinishLinks } from './ai-job-links'
 import { AiStoreFinishCard } from './ai-store-finish-card.component'
 import { AiJobPlan } from './ai-job-plan.component'
 import { aiBuildCanRetry, aiBuildRetryCreditRange } from '../model/ai-build-progress'
@@ -579,7 +579,7 @@ export function AiSiteBuildPage({ hostId, segments, basePath }: ConsolePluginPag
           )}
         </Stack>
       )}
-      {storeFinish && <AiStoreFinishCard steps={storeFinish} />}
+      {storeFinish && <AiStoreFinishCard steps={storeFinish} hostId={aiStoreFinishHostId(ready)} />}
       {paused && (
         // Paused by the meter (AGL-3660): the way to more credits — the
         // workspace's own Billing page, where plans and the AI add-on are

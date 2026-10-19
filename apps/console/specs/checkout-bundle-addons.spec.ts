@@ -139,9 +139,11 @@ const METERED = {
   STRIPE_PRICE_METERED: 'price_metered_usage',
   STRIPE_PRICE_METERED_YEARLY: 'price_metered_usage_yearly',
 }
+// Aglyn AI is sold per tier (AGL-3965); with no tier named, Pro's purchase
+// means Boost, the tier with Pro's old add-on price and band.
 const AI_ADDON = {
-  STRIPE_PRICE_PRO_AI_ADDON: 'price_pro_ai_addon',
-  STRIPE_PRICE_PRO_AI_ADDON_YEARLY: 'price_pro_ai_addon_yearly',
+  STRIPE_PRICE_AI_BOOST: 'price_ai_boost',
+  STRIPE_PRICE_AI_BOOST_YEARLY: 'price_ai_boost_yearly',
 }
 const SITE_CARE = {
   STRIPE_PRICE_SITE_CARE: 'price_site_care',
@@ -275,7 +277,7 @@ describe('a bundle checkout sells every add-on in one subscription (AGL-3955)', 
     expect(body?.get('items[2][quantity]')).toBe('2')
     expect(body?.get('items[3][price]')).toBe('price_event_calendar')
     expect(body?.get('items[3][quantity]')).toBe('1')
-    expect(body?.get('items[4][price]')).toBe('price_pro_ai_addon')
+    expect(body?.get('items[4][price]')).toBe('price_ai_boost')
     expect(body?.get('items[5][price]')).toBe('price_site_care')
   })
 
@@ -294,7 +296,7 @@ describe('a bundle checkout sells every add-on in one subscription (AGL-3955)', 
     await post(handler, { addons: { hosts: 1 }, aiAddon: true, siteCare: true })
     const body = subscribeBody()
     expect(body?.get('items[2][price]')).toBe('price_pro_extra_host')
-    expect(body?.get('items[3][price]')).toBe('price_pro_ai_addon')
+    expect(body?.get('items[3][price]')).toBe('price_ai_boost')
     expect(body?.get('items[4][price]')).toBe('price_site_care')
   })
 
@@ -360,7 +362,7 @@ describe('a bundle checkout sells every add-on in one subscription (AGL-3955)', 
     expect(response.status).toBe(501)
     const { error } = await response.json()
     expect(error).toContain('STRIPE_PRICE_PRO_EXTRA_HOST')
-    expect(error).not.toContain('AI_ADDON')
+    expect(error).not.toContain('STRIPE_PRICE_AI_')
     expect(error).not.toContain('STRIPE_PRICE_METERED')
   })
 })

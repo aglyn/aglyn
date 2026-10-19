@@ -184,13 +184,14 @@ describe('BillingAddonsCard billing claims (AGL-1380)', () => {
 })
 
 /**
- * The Aglyn AI row (AGL-2899). Three plans, three different rows: Free is
- * pointed at the plan grid, a paid tier gets the switch with its price and
- * its band, Enterprise is told it already has the thing. The catalog marks
- * Free and Enterprise `upgradeRequired` alike, so the row cannot be read off
- * the catalog — which is what the first and third cases pin.
+ * The Aglyn AI row (AGL-2899, AGL-3965). Three plans, three different rows:
+ * Free is pointed at the plan grid, a paid plan gets the TIER PICKER (every
+ * tier with its price and credits, the one held marked), Enterprise is told
+ * it already has the thing. The catalog marks Free and Enterprise
+ * `upgradeRequired` alike, so the row cannot be read off the catalog — which
+ * is what the first and last cases pin.
  */
-describe('the Aglyn AI row (AGL-2899)', () => {
+describe('the Aglyn AI row (AGL-2899, AGL-3965)', () => {
   /** Every body the card posted, in order. */
   const postedBodies = () =>
     (global.fetch as jest.Mock).mock.calls.map(([, init]) =>
@@ -203,9 +204,18 @@ describe('the Aglyn AI row (AGL-2899)', () => {
       .queryAllByRole('switch')
       .filter((element) => element.getAttribute('aria-label') !== 'Site Care')
 
+  const TIERS = [
+    { id: 'spark', label: 'Spark', credits: 4000, unitUsd: 9, configured: true },
+    { id: 'boost', label: 'Boost', credits: 9000, unitUsd: 19, configured: true },
+    { id: 'plus', label: 'Plus', credits: 19000, unitUsd: 39, configured: true },
+    { id: 'max', label: 'Max', credits: 34000, unitUsd: 69, configured: true },
+    { id: 'ultra', label: 'Ultra', credits: 49000, unitUsd: 99, configured: true },
+    { id: 'studio', label: 'Studio', credits: 149000, unitUsd: 299, configured: false },
+  ]
+
   const stateFor = (
     plan: string,
-    aiAddon: { unitUsd: number | null; quantity?: number },
+    aiAddon: { unitUsd: number | null; quantity?: number; tier?: string | null },
   ) => ({
     hasSubscription: true,
     plan,
@@ -219,48 +229,78 @@ describe('the Aglyn AI row (AGL-2899)', () => {
         upgradeRequired: aiAddon.unitUsd == null,
       },
     },
+    aiTier: aiAddon.tier ?? null,
+    aiTiers: aiAddon.unitUsd == null ? [] : TIERS,
   })
 
-  it('on a paid plan: a switch, the price, what it unlocks and the band it adds', async () => {
+  /** Open the picker and choose a tier by its visible name. */
+  const choose = async (name: RegExp) => {
+    fireEvent.mouseDown(await screen.findByRole('combobox'))
+    fireEvent.click(await screen.findByRole('option', { name }))
+  }
+
+  it('on a paid plan: a tier picker, one pool, and the plan’s own credits', async () => {
     global.fetch = jest.fn(async () =>
       jsonResponse(stateFor('pro', { unitUsd: 19 })),
     ) as unknown as typeof fetch
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
 
-    expect(await screen.findByText('Aglyn AI — $19/mo')).toBeTruthy()
-    // The band is the figure the resolver folds into the meter, not a
-    // hand-typed one: 9,000 is `AI_ADDON_CREDITS_PER_MONTH.pro`.
+    // The picker, showing no tier held.
+    const picker = await screen.findByRole('combobox')
+    expect(picker.textContent).toBe('No tier')
+    // The row names no per-plan price: each tier is priced in the picker.
+    expect(screen.getByText('Aglyn AI')).toBeTruthy()
+    expect(screen.queryByText('Aglyn AI — $19/mo')).toBeNull()
+    // One pool, and the included figure is the plan's own band (Pro 2,750).
     expect(
       screen.getByText(
-        /Generate pages, components, emails, campaigns, products and more, then edit anything\. Adds 9,000 AI credits a month/,
+        /draw on one pool of AI credits\. Your plan includes 2,750 a month; a tier adds its credits on top\./,
       ),
     ).toBeTruthy()
-    const toggles = screen.getAllByRole('switch') as HTMLInputElement[]
-    // One switch row in the catalog (Event Calendar has no entry, so it is
-    // "Not configured" and renders no switch): the AI switch, off.
-    expect(toggles).toHaveLength(1)
-    expect(toggles[0].checked).toBe(false)
-    expect(toggles[0].disabled).toBe(false)
+    // No AI switch any more.
+    expect(aiSwitches()).toHaveLength(0)
     expect(screen.queryByText('Upgrade your plan to add Aglyn AI')).toBeNull()
     expect(screen.queryByText('Included in your plan')).toBeNull()
   })
 
-  it('flipping the switch previews `aiAddon` at quantity 1, exactly as the other kinds', async () => {
-    // FORCED RED by posting `quantity: true`: the route reads the number.
+  it('lists every tier with its price and credits, an unconfigured one disabled with the reason', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse(stateFor('starter', { unitUsd: 9, quantity: 1, tier: 'boost' })),
+    ) as unknown as typeof fetch
+
+    render(<BillingAddonsCardComponent orgId="org-1" canManage />)
+    // The tier held, in the field.
+    expect((await screen.findByRole('combobox')).textContent).toBe('Boost — $19/mo')
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    const options = await screen.findAllByRole('option')
+    expect(options.map((option) => option.textContent)).toEqual([
+      "No tierYour plan's included credits only",
+      'Spark — $9/mo+4,000 credits a month',
+      'Boost — $19/mo+9,000 credits a monthCurrent',
+      'Plus — $39/mo+19,000 credits a month',
+      'Max — $69/mo+34,000 credits a month',
+      'Ultra — $99/mo+49,000 credits a month',
+      'Studio — $299/mo+149,000 credits a month (not configured yet)',
+    ])
+    expect(options[6].getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('choosing a tier previews it, then sets it, with the tier named', async () => {
     global.fetch = jest.fn(async (_url: unknown, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
       if (body.action === 'preview') {
-        return jsonResponse({ prorationCents: 1_900, chargedNowCents: 1_900, currency: 'usd' })
+        return jsonResponse({ prorationCents: 3_900, chargedNowCents: 3_900, currency: 'usd' })
       }
       if (body.action === 'set') {
-        return jsonResponse({ quantities: { aiAddon: 1 } })
+        return jsonResponse({ quantities: { aiAddon: 1 }, aiTier: 'plus' })
       }
       return jsonResponse(stateFor('pro', { unitUsd: 19 }))
     }) as unknown as typeof fetch
 
     render(<BillingAddonsCardComponent orgId="org-1" canManage />)
-    fireEvent.click(await screen.findByRole('switch'))
+    await choose(/^Plus/)
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
 
     await waitFor(() =>
       expect(postedBodies()).toContainEqual({
@@ -268,6 +308,7 @@ describe('the Aglyn AI row (AGL-2899)', () => {
         action: 'preview',
         kind: 'aiAddon',
         quantity: 1,
+        tier: 'plus',
       }),
     )
     // The confirm resolved (mocked), so the set followed with the same shape.
@@ -277,11 +318,53 @@ describe('the Aglyn AI row (AGL-2899)', () => {
         action: 'set',
         kind: 'aiAddon',
         quantity: 1,
+        tier: 'plus',
+      }),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('combobox').textContent).toBe('Plus — $39/mo'),
+    )
+  })
+
+  it('"No tier" on a held tier removes it, as quantity 0 with no tier', async () => {
+    global.fetch = jest.fn(async (_url: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      if (body.action === 'preview') {
+        return jsonResponse({ defersToPeriodEnd: true, effectiveAt: '2026-11-01T00:00:00.000Z' })
+      }
+      if (body.action === 'set') {
+        return jsonResponse({
+          quantities: { aiAddon: 1 },
+          pendingAddonChange: { kind: 'aiAddon', quantity: 0, effectiveAt: '2026-11-01T00:00:00.000Z' },
+        })
+      }
+      return jsonResponse(stateFor('pro', { unitUsd: 19, quantity: 1, tier: 'boost' }))
+    }) as unknown as typeof fetch
+
+    render(<BillingAddonsCardComponent orgId="org-1" canManage />)
+    await choose(/^No tier/)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    await waitFor(() =>
+      expect(postedBodies()).toContainEqual({
+        orgId: 'org-1',
+        action: 'set',
+        kind: 'aiAddon',
+        quantity: 0,
       }),
     )
   })
 
-  it('on Free: the row, an upgrade link to the plan grid, and NO switch', async () => {
+  it('a manager without billing rights sees the picker disabled, not hidden', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse(stateFor('pro', { unitUsd: 19 })),
+    ) as unknown as typeof fetch
+
+    render(<BillingAddonsCardComponent orgId="org-1" canManage={false} />)
+    const picker = await screen.findByRole('combobox')
+    expect(picker.getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('on Free: the row, an upgrade link to the plan grid, and NO picker', async () => {
     global.fetch = jest.fn(async () =>
       jsonResponse(stateFor('free', { unitUsd: null })),
     ) as unknown as typeof fetch
@@ -291,18 +374,19 @@ describe('the Aglyn AI row (AGL-2899)', () => {
     expect(await screen.findByText('Aglyn AI')).toBeTruthy()
     const link = screen.getByRole('link', { name: 'Upgrade your plan to add Aglyn AI' })
     expect(link.getAttribute('href')).toBe('#plans')
-    // No AI switch. The one switch on the card is Site Care's, shown off and
+    // No AI control. The one switch on the card is Site Care's, shown off and
     // disabled with its own reason (AGL-3954).
     expect(aiSwitches()).toHaveLength(0)
-    // Free sells no band, so the sentence names what it unlocks and no figure.
-    expect(screen.queryByText(/Adds .* AI credits a month/)).toBeNull()
+    expect(screen.queryByRole('combobox')).toBeNull()
+    // Free's own 300 credits are the pool; no tier is sold.
+    expect(screen.getByText(/Your plan includes 300 a month/)).toBeTruthy()
     // …and NOT the generic upgrade caption, which cannot say where to go.
     expect(screen.queryByText('Upgrade your plan to add these')).toBeNull()
   })
 
-  it('on Enterprise: "included", and NO switch', async () => {
+  it('on Enterprise: "included", and NO picker', async () => {
     // Same catalog shape as Free — `unitUsd: null`, `upgradeRequired` — and
-    // the opposite sentence, because the plan carries `aiGenerative`.
+    // the opposite sentence, because the plan's AI is in its agreement.
     global.fetch = jest.fn(async () =>
       jsonResponse(stateFor('enterprise', { unitUsd: null })),
     ) as unknown as typeof fetch
@@ -311,6 +395,7 @@ describe('the Aglyn AI row (AGL-2899)', () => {
 
     expect(await screen.findByText('Included in your plan')).toBeTruthy()
     expect(aiSwitches()).toHaveLength(0)
+    expect(screen.queryByRole('combobox')).toBeNull()
     expect(screen.queryByText('Upgrade your plan to add Aglyn AI')).toBeNull()
   })
 })

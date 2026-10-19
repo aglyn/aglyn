@@ -22,9 +22,16 @@ import {
   PLATFORM_BRAND_NAME,
   planSellsSiteCare,
   pluginRequestFromWeb,
+  type AiTierId,
   type AttemptClaim,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
+// The Aglyn AI tiers (AGL-3965) by their own module, not the server barrel
+// route specs stub with a partial object.
+import {
+  defaultAiTierForPlan,
+  isAiTierId,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   emailUnverifiedResponse,
   featureLockdownRefusal,
@@ -268,6 +275,8 @@ function promotionCodeFullUseMetadata(
   interval: 'month' | 'year',
   addons: BundleAddons,
   promo: Awaited<ReturnType<typeof resolvePromotionCode>>,
+  /** The Aglyn AI tier the checkout sells (AGL-3965), when it sells one. */
+  aiTier: AiTierId | null = null,
 ): Record<string, string> {
   if (!promo.id) return {}
   try {
@@ -276,6 +285,7 @@ function promotionCodeFullUseMetadata(
         plan,
         subscription: { status: 'active', interval },
         seatAddons: { ...addons },
+        ...((addons.aiAddon ?? 0) > 0 && aiTier ? { aiTier } : {}),
       } as never,
       {
         percentOff: promo.percentOff ?? undefined,
@@ -389,8 +399,21 @@ async function handler(request: Request): Promise<Response> {
   // through `/api/billing/addons` would. Refused rather than dropped when it
   // cannot be priced: a checkout that quietly sold the plan without the
   // add-on the visitor clicked would bill less and deliver less than shown.
-  const aiAddonWanted = (requested.addons.aiAddon ?? 0) > 0
-  if (aiAddonWanted && addonUnitUsd('aiAddon', plan as OrgPlan) === null) {
+  //
+  // Since AGL-3965 the add-on is a TIER chosen on its own: `aiTier` names it
+  // (`?ai=boost`), and `aiAddon: true` alone means the tier with the plan's
+  // old price and band (`defaultAiTierForPlan`), so a link published before
+  // tiers still sells what it quoted. An unknown tier is refused, not
+  // guessed.
+  if (body?.aiTier != null && !isAiTierId(body.aiTier)) {
+    return Response.json({ error: 'Unknown AI tier' }, { status: 400 })
+  }
+  const aiAddonWanted =
+    (requested.addons.aiAddon ?? 0) > 0 || isAiTierId(body?.aiTier)
+  const aiTier: AiTierId | null = aiAddonWanted
+    ? (isAiTierId(body?.aiTier) ? body.aiTier : defaultAiTierForPlan(plan))
+    : null
+  if (aiAddonWanted && addonUnitUsd('aiAddon', plan as OrgPlan, aiTier) === null) {
     return Response.json(
       { error: `This plan does not include the ${PLATFORM_BRAND_NAME} AI add-on.` },
       { status: 400 },
@@ -443,14 +466,14 @@ async function handler(request: Request): Promise<Response> {
     otherAddonLines.push({ kind, quantity, priceId: addonPrice, envVar })
   }
   const aiAddonPriceId = aiAddonWanted
-    ? addonPriceId('aiAddon', plan as OrgPlan, interval)
+    ? addonPriceId('aiAddon', plan as OrgPlan, interval, aiTier)
     : null
   if (aiAddonWanted && !aiAddonPriceId) {
     return Response.json({
       error:
-        'Billing is not configured: STRIPE_PRICE_' +
-        `${plan.toUpperCase()}_AI_ADDON${interval === 'year' ? '_YEARLY' : ''} ` +
-        `is unset, so the ${PLATFORM_BRAND_NAME} AI add-on cannot be sold on this plan yet.`,
+        'Billing is not configured: STRIPE_PRICE_AI_' +
+        `${String(aiTier).toUpperCase()}${interval === 'year' ? '_YEARLY' : ''} ` +
+        `is unset, so the ${PLATFORM_BRAND_NAME} AI add-on cannot be sold yet.`,
     }, { status: 501 })
   }
   // Site Care bought WITH the plan (AGL-3954), the way the AI add-on is: one
@@ -889,6 +912,7 @@ async function handler(request: Request): Promise<Response> {
           ...(siteCareWanted ? { siteCare: 1 } : {}),
         },
         promo,
+        aiTier,
       ),
     )) {
       subParams.set(key, value)
@@ -919,6 +943,7 @@ async function handler(request: Request): Promise<Response> {
         interval,
         aiAddonItemIndex,
         siteCareItemIndex,
+        aiTier,
         otherAddonItems,
       )
       if (missing) return Response.json({ error: missing }, { status: 501 })

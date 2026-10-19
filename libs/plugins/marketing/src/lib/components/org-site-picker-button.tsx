@@ -17,9 +17,14 @@
 'use client'
 
 import { AppLink, type AppLinkNakedLinkProps } from '@aglyn/shared-ui-jsx'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { Button, Menu, MenuItem } from '@mui/material'
 import { forwardRef, useState } from 'react'
 import { orgSiteHubPath, type MarketingOrgMount } from './marketing-org-mount'
+
+/** Why the picker is off in an organization with no sites (AGL-3982). */
+export const ORG_SITE_PICKER_NO_SITES =
+  'Add a site first: this is set up on one of your sites, and the organization has none yet.'
 
 /** A site's own Marketing hub at `section`, or `null` when it has no address. */
 export function orgSiteSectionHref(
@@ -82,16 +87,20 @@ export function OrgSitePickerButton(props: OrgSitePickerButtonProps) {
 
   return (
     <>
-      <Button
-        size="small"
-        color="primary"
-        variant="contained"
-        disabled={!sites.length}
-        aria-haspopup="true"
-        onClick={(event) => setAnchorEl(event.currentTarget)}
-      >
-        {label}
-      </Button>
+      {/* No sites yet (AGL-3982): the button stays, saying why, once the
+          shell has settled the list — never while it is still loading. */}
+      <BlockedControl blocked={mount.hostsReady && !sites.length} reason={ORG_SITE_PICKER_NO_SITES}>
+        <Button
+          size="small"
+          color="primary"
+          variant="contained"
+          disabled={!sites.length}
+          aria-haspopup="true"
+          onClick={(event) => setAnchorEl(event.currentTarget)}
+        >
+          {label}
+        </Button>
+      </BlockedControl>
       <Menu
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}

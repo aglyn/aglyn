@@ -295,6 +295,18 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    * because the quote prices and this page buys.
    */
   const [bundleAddons, setBundleAddons] = useState<BundleAddons>({})
+  /**
+   * The checkout body for a set of add-ons: the map, and the Aglyn AI tier
+   * the link named (`?ai=boost`, AGL-3965) when the AI add-on is in it.
+   */
+  const linkAiTier = planIntent?.aiTier ?? null
+  const withAiTier = useCallback(
+    (addons: BundleAddons) => ({
+      addons,
+      ...((addons.aiAddon ?? 0) > 0 && linkAiTier ? { aiTier: linkAiTier } : {}),
+    }),
+    [linkAiTier],
+  )
   const intentAddonsKey = bundleAddonsParam(intentAddons(planIntent))
   useEffect(() => {
     setBundleAddons(intentAddons(planIntent))
@@ -875,8 +887,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             promotionCode,
             // The add-ons the link or the quote's switches chose (AGL-2897,
             // AGL-3955), fitted to the plan being bought and quoted on the
-            // same invoice so the total shown is the total charged.
-            addons: fitBundleAddonsToPlan(bundleAddons, targetPlan).addons,
+            // same invoice so the total shown is the total charged. The
+            // Aglyn AI tier the link named rides with the AI add-on
+            // (AGL-3965); absent, the route sells the plan's default tier.
+            ...withAiTier(fitBundleAddonsToPlan(bundleAddons, targetPlan).addons),
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -935,7 +949,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         return null
       }
     },
-    [user, orgId, interval, bundleAddons, enqueueSnackbar],
+    [user, orgId, interval, bundleAddons, withAiTier, enqueueSnackbar],
   )
 
   /**
@@ -1077,8 +1091,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             // priced quote the customer just confirmed, so the purchase and
             // the confirmed figure describe the same invoice.
             ...(pricedCode ? { promotionCode: pricedCode } : {}),
-            // The same add-ons the quote above priced (AGL-2897, AGL-3955).
-            addons: purchasedAddons,
+            // The same add-ons the quote above priced (AGL-2897, AGL-3955),
+            // with the same Aglyn AI tier (AGL-3965).
+            ...withAiTier(purchasedAddons),
             gaClientId: await readGaClientId(
               process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
             ),
@@ -1263,6 +1278,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       orgSlug,
       interval,
       bundleAddons,
+      withAiTier,
       bundleDomain,
       router,
       appliedPromotionCode,

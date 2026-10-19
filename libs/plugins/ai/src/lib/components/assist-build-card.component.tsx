@@ -25,11 +25,12 @@ import { useEffect, useRef, useState } from 'react'
 import { aiBuildCanRetry, aiBuildItemRows, aiBuildOutcomeLine, aiBuildRetryCreditRange } from '../model/ai-build-progress'
 import { aiCreditRangeText, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import { AiCreditsPromptNotice } from './ai-credits-prompt.component'
-import { aiCreditsBillingHref, aiStoreFinishLinks } from './ai-job-links'
+import { aiCreditsBillingHref, aiStoreFinishHostId, aiStoreFinishLinks } from './ai-job-links'
 import { AiStoreFinishCard } from './ai-store-finish-card.component'
 import { AI_JOB_TERMINAL_STATUSES, type AiJobSummary } from '../model/ai-jobs.types'
 import type { AssistBuildProposal } from '../model/assist-build'
 import { followAiJobEvents } from './ai-job-events'
+import { AiJobInputForm } from './ai-job-input-form.component'
 import { AiJobPlan } from './ai-job-plan.component'
 import { resumeAiJobRequest, type AiJobResumeOptions } from './ai-job-requests'
 import { openAiJobs } from './ai-jobs-store'
@@ -169,7 +170,11 @@ export function AssistBuildCard({
           ))}
         </Box>
       )}
-      {job && paused && (
+      {job && paused && job.input ? (
+        // A plan that needs an ID only the person has (AGL-3978): asked here,
+        // and answered back onto the plan card.
+        <AiJobInputForm job={{ ...job, input: job.input }} orgId={orgId} user={user} onJob={onJob} />
+      ) : job && paused && (
         // Out of credits mid-build (AGL-3722): paused, never failed. What is
         // built is kept, and Resume carries on from the next item.
         <Alert
@@ -207,7 +212,7 @@ export function AssistBuildCard({
       )}
       {storeFinish && (
         <Box sx={{ mt: 1 }}>
-          <AiStoreFinishCard steps={storeFinish} />
+          <AiStoreFinishCard steps={storeFinish} hostId={job ? aiStoreFinishHostId(job) : null} />
         </Box>
       )}
       {job && (

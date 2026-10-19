@@ -143,6 +143,10 @@ jest.mock('@aglyn/aglyn', () => ({
   checkEntitlement: jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
   ).checkEntitlement,
+  // The plan the locked Schedule and "Write with AI" controls name (AGL-3977).
+  planLabelGrantingFeature: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  ).planLabelGrantingFeature,
   isHostCollectionKind: () => () => true,
   COLLECTION_CATEGORIES_MAX: 20,
   findCollectionSlugOwner: () => null,
@@ -749,23 +753,23 @@ describe('the entry detail is its OWN route (AGL-2498)', () => {
       expect(mockUpdateDoc).not.toHaveBeenCalled()
     })
 
-    it('refuses a Free org once the plan is actually known', async () => {
+    it('refuses a Free org once the plan is actually known, before the time is picked (AGL-3977)', async () => {
       mockOrg.org = { plan: 'free' }
       mockOrg.ready = true
       at('/acme/hosts/shop/content/blog/entries/entry-1')
       render(<Detail />)
 
       fireEvent.click(screen.getByRole('button', { name: /^Schedule/ }))
-      const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-      future.setSeconds(0, 0)
-      fireEvent.change(screen.getByLabelText('Publish at'), {
-        target: { value: localValue(future) },
-      })
-      fireEvent.click(screen.getByRole('button', { name: 'Schedule' }))
-
-      await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
-      const [message] = mockEnqueueSnackbar.mock.calls[0]
-      expect(message).toMatch(/Business plan/)
+      // The dialog names the plan and links to it, and its Schedule button is
+      // disabled with the same reason, so nothing is picked to be refused.
+      const dialog = screen.getByRole('dialog')
+      expect(dialog.textContent).toContain('Included from Business.')
+      const confirm = within(dialog).getByRole('button', { name: 'Schedule' })
+      expect((confirm as HTMLButtonElement).disabled).toBe(true)
+      expect(
+        within(dialog).getByLabelText('Scheduled publishing is included from Business.'),
+      ).toBeTruthy()
+      fireEvent.click(confirm)
       expect(mockUpdateDoc).not.toHaveBeenCalled()
     })
   })

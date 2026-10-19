@@ -35,15 +35,19 @@
  */
 
 import type {
+  AiTierId,
   OrgPlan,
   OrgSeatAddons,
 } from '../foundation/definitions/org-billing.types'
 import {
+  AI_TIERS,
   aiAddonName,
+  defaultAiTierForPlan,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   EXTRA_HOSTS_ADDON_MAX,
   PLAN_LABELS,
   PLAN_PRICING,
+  planSellsAiTiers,
   planSellsSiteCare,
   POS_REGISTER_ADDON_MONTHLY_USD,
   POS_REGISTERS_ADDON_MAX,
@@ -85,9 +89,15 @@ export function isAddonKind(value: unknown): value is AddonKind {
 /**
  * Monthly USD per unit for an add-on on a plan (yearly prices are ×12 of
  * this); null when the plan doesn't sell the kind. Single pricing source
- * of truth: `PLAN_PRICING` + the three flat add-on constants.
+ * of truth: `PLAN_PRICING`, the three flat add-on constants and `AI_TIERS`
+ * (`tier` as `addonPriceId` reads it; absent, the tier a plan-named purchase
+ * means, `defaultAiTierForPlan`, AGL-3965).
  */
-export function addonUnitUsd(kind: AddonKind, plan: OrgPlan): number | null {
+export function addonUnitUsd(
+  kind: AddonKind,
+  plan: OrgPlan,
+  tier?: AiTierId | null,
+): number | null {
   const pricing = PLAN_PRICING[plan]
   switch (kind) {
     case 'managers':
@@ -102,8 +112,10 @@ export function addonUnitUsd(kind: AddonKind, plan: OrgPlan): number | null {
       return POS_REGISTER_ADDON_MONTHLY_USD
     case 'eventCalendar':
       return EVENT_CALENDAR_ADDON_MONTHLY_USD
-    case 'aiAddon':
-      return pricing.aiAddonMonthlyUsd
+    case 'aiAddon': {
+      const chosen = planSellsAiTiers(plan) ? (tier ?? defaultAiTierForPlan(plan)) : null
+      return chosen ? AI_TIERS[chosen].monthlyUsd : null
+    }
     case 'siteCare':
       return SITE_CARE_ADDON_MONTHLY_USD
   }
@@ -143,9 +155,9 @@ export function addonMaxForBaseline(
     case 'eventCalendar':
       return 1
     case 'aiAddon':
-      // Org-wide like the Event Calendar: one purchase, and the price map
-      // (null on Free and Enterprise) says whether the plan sells it at all.
-      return 1
+      // Org-wide like the Event Calendar: one purchase, of one tier, on any
+      // plan that sells tiers (AGL-3965) — not Free, not Enterprise.
+      return planSellsAiTiers(plan) ? 1 : 0
     case 'siteCare':
       // Flat-priced, so the price map cannot say "not sold here" the way it
       // does for Aglyn AI. This ceiling is the rule that keeps Free (no

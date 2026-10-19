@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { OrgPlan } from '../foundation/definitions/org-billing.types'
+import type { AiTierId, OrgPlan } from '../foundation/definitions/org-billing.types'
 import {
   bundleAddonsParam,
   hasBundleAddons,
@@ -23,13 +23,14 @@ import {
   parseBundleAddons,
   type BundleAddons,
 } from './bundle-intent'
-import { isCustomPricedPlan } from './plan-entitlements'
+import { isAiTierId, isCustomPricedPlan } from './plan-entitlements'
 
 /**
  * The marketing → console onboarding deep link (AGL-1117).
  *
  * `app.aglyn.com/signup?plan=pro&interval=year`, optionally `&ai=1` for the
- * Aglyn AI add-on (AGL-2897). The bundle checkout link (AGL-3955) adds
+ * Aglyn AI add-on (AGL-2897), or `&ai=<tier>` (`&ai=boost`) for a named
+ * Aglyn AI tier (AGL-3965). The bundle checkout link (AGL-3955) adds
  * `&addons=siteCare,ai,extraHost:2` for any add-on the plan sells and
  * `&coupon=<code>` for a promotion code to apply at checkout.
  *
@@ -76,6 +77,12 @@ export interface OnboardingPlanIntent {
    * the add-on is quoted with the deal, not bought through a checkout.
    */
   ai?: true
+  /**
+   * The Aglyn AI tier the link named (AGL-3965): `?ai=boost`. Present only
+   * with `ai`; absent, `ai=1` means the tier with the plan's old price and
+   * band (`defaultAiTierForPlan`), which is what checkout sells.
+   */
+  aiTier?: AiTierId
   /**
    * Every add-on the `addons=` param preselects (AGL-3955), parsed by the
    * shared `parseBundleAddons`. Absent when it named none. `ai=1` stays the
@@ -150,7 +157,6 @@ export function parseOnboardingPlanIntent(
   // empty, `0`, `false`, a typo — is "not asked for": a checkout that adds a
   // paid item off a malformed link is the expensive direction to be wrong in.
   const ai = read('ai')
-  const aiStated = ai === '1' || ai === 'true' || ai === 'yes'
   // The bundle (AGL-3955). Read case-preserving: a coupon code is typed the
   // way Stripe stores it, and `read` lower-cases.
   const rawParam = (key: string): string => {
@@ -160,6 +166,8 @@ export function parseOnboardingPlanIntent(
   const parsedAddons = parseBundleAddons(rawParam('addons'))
   const addons: BundleAddons = { ...parsedAddons.addons }
   const coupon = normalizeBundleCoupon(rawParam('coupon'))
+  const aiTier = isAiTierId(ai) ? ai : null
+  const aiStated = ai === '1' || ai === 'true' || ai === 'yes' || aiTier !== null
   return {
     plan: plan as OrgPlan,
     // Anything unrecognized falls to monthly, never to yearly: guessing the
@@ -172,6 +180,7 @@ export function parseOnboardingPlanIntent(
     intervalStated: known,
     contactSales: false,
     ...(aiStated || addons.aiAddon ? { ai: true } : {}),
+    ...(aiTier ? { aiTier } : {}),
     ...(hasBundleAddons(addons) ? { addons } : {}),
     ...(coupon ? { coupon } : {}),
     ...(parsedAddons.dropped.length ? { droppedAddons: parsedAddons.dropped } : {}),
@@ -210,7 +219,7 @@ export function onboardingPlanQuery(intent: OnboardingPlanIntent): string {
         // readable when it is read aloud or typed off a QR's caption.
         `&addons=${bundleAddonsParam(addons)}`
       : addons.aiAddon
-        ? '&ai=1'
+        ? `&ai=${intent.aiTier ?? '1'}`
         : '') +
     (coupon ? `&coupon=${encodeURIComponent(coupon)}` : '')
   )
@@ -244,7 +253,7 @@ export function onboardingSignupHref(
   signupUrl: string,
   plan: OrgPlan,
   interval: OnboardingInterval | null,
-  options: { ai?: boolean } = {},
+  options: { ai?: boolean; aiTier?: AiTierId } = {},
 ): string {
   const contactSales = isCustomPricedPlan(plan)
   // A custom-priced plan is quoted, not bought, so `parseOnboardingPlanIntent`
@@ -262,7 +271,8 @@ export function onboardingSignupHref(
     // The add-on CTA (AGL-2897). Dropped for a custom-priced plan for the
     // same reason the interval is: the parser refuses it there, so writing
     // it would publish a claim no reader honors.
-    ...(options.ai && !contactSales ? { ai: true } : {}),
+    ...((options.ai || options.aiTier) && !contactSales ? { ai: true } : {}),
+    ...(options.aiTier && !contactSales ? { aiTier: options.aiTier } : {}),
   })}`
 }
 

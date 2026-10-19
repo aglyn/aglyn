@@ -50,6 +50,8 @@ import {
   parseUnitRates,
   indexStripePrices,
   comparePlansToStripe,
+  compareAiTiersToStripe,
+  AI_TIER_IDS,
   compareFeeLadder,
   compareUnitRateTables,
   publishedMeteredRates,
@@ -299,7 +301,14 @@ if (metered && markupMatch && cdnMatch && feeMatch) {
 if (args.stripe) {
   const stripe = fetchStripePrices()
   if (!stripe.ok) note('unreadable', 'stripe', stripe.detail)
-  else verdicts.push(...comparePlansToStripe(planPricing, indexStripePrices(stripe.payload)))
+  else {
+    const prices = indexStripePrices(stripe.payload)
+    verdicts.push(...comparePlansToStripe(planPricing, prices))
+    // The Aglyn AI tiers (AGL-3965), and the per-plan prices they replace.
+    verdicts.push(
+      ...compareAiTiersToStripe(parsePlanRecord(entitlementsSrc, 'AI_TIERS', AI_TIER_IDS), prices),
+    )
+  }
 } else {
   note('unreadable', 'stripe', 'skipped with --no-stripe')
 }

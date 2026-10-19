@@ -23,9 +23,13 @@
  * that matters is that `aiAddonRevenueUsd` is inside `listPriceUsd`, not on
  * top of it. Then the three cases where naming it would be wrong — no
  * add-on, a dead subscription, a custom-priced deal — all read 0.
+ *
+ * Since AGL-3965 the revenue is the TIER's price, whatever the plan: Studio
+ * on Pro earns Studio's $299, and an add-on bought before tiers (no
+ * `aiTier`) earns the tier with its plan's old price.
  */
 
-import { PLAN_PRICING } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { AI_TIERS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { fleetUtilization, orgMarginRow } from '@aglyn/aglyn/app-utils/margin-utilization'
 
 const row = (org: Record<string, unknown>) =>
@@ -39,12 +43,25 @@ describe('margin utilization names the AI add-on revenue (AGL-2930)', () => {
       seatAddons: { aiAddon: 1 },
     })
     const without = row({ plan: 'pro', subscription: { status: 'active' } })
-    expect(withAddon.aiAddonRevenueUsd).toBe(PLAN_PRICING.pro.aiAddonMonthlyUsd)
+    // No `aiTier` written: Pro's old add-on, which is Boost.
+    expect(withAddon.aiAddonRevenueUsd).toBe(AI_TIERS.boost.monthlyUsd)
     expect(without.aiAddonRevenueUsd).toBe(0)
     // Already inside the price: the two list prices differ by exactly it.
     expect(withAddon.listPriceUsd - without.listPriceUsd).toBe(
       withAddon.aiAddonRevenueUsd,
     )
+  })
+
+  it('names the TIER held, whatever the plan (AGL-3965)', () => {
+    const studio = row({
+      plan: 'pro',
+      subscription: { status: 'active' },
+      seatAddons: { aiAddon: 1 },
+      aiTier: 'studio',
+    })
+    const without = row({ plan: 'pro', subscription: { status: 'active' } })
+    expect(studio.aiAddonRevenueUsd).toBe(AI_TIERS.studio.monthlyUsd)
+    expect(studio.listPriceUsd - without.listPriceUsd).toBe(AI_TIERS.studio.monthlyUsd)
   })
 
   it('reads 0 when the subscription is dead — the add-on has stopped billing', () => {
@@ -70,12 +87,16 @@ describe('margin utilization names the AI add-on revenue (AGL-2930)', () => {
   it('totals it across the fleet', () => {
     const fleet = fleetUtilization([
       row({ plan: 'pro', subscription: { status: 'active' }, seatAddons: { aiAddon: 1 } }),
-      row({ plan: 'starter', subscription: { status: 'active' }, seatAddons: { aiAddon: 1 } }),
+      row({
+        plan: 'starter',
+        subscription: { status: 'active' },
+        seatAddons: { aiAddon: 1 },
+        aiTier: 'max',
+      }),
       row({ plan: 'business', subscription: { status: 'active' } }),
     ])
     expect(fleet.totalAiAddonRevenueUsd).toBe(
-      (PLAN_PRICING.pro.aiAddonMonthlyUsd ?? 0) +
-        (PLAN_PRICING.starter.aiAddonMonthlyUsd ?? 0),
+      AI_TIERS.boost.monthlyUsd + AI_TIERS.max.monthlyUsd,
     )
   })
 })

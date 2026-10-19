@@ -68,6 +68,16 @@ describe('a plan waiting to be confirmed', () => {
     expect(notice.title).toBe('Your page job needs you')
     expect(notice.body).toBe('The page broke a building rule.')
   })
+
+  it('asks for the one detail a plan waits on before it can be confirmed, never as a failure (AGL-3978)', () => {
+    const message = 'What’s your Meta pixel ID? It’s the number (8–20 digits) shown for your pixel in Meta Events Manager.'
+    const notice = aiJobNotice(source({ kind: 'build', review: { reason: 'plan' }, error: message, input: { message } }), 'needs-review')
+    expect(notice.type).toBe('content.aiJobNeedsYou')
+    expect(notificationLevel(notice)).toBe('warning')
+    expect(notice.title).toMatch(/needs one detail from you$/)
+    expect(notice.body).toBe(`${message} Nothing is built until you answer it and confirm the plan. It waits in AI jobs.`)
+    expect(normalizeNotificationLink(notice.link, context)).toBe('/acme/hosts/roofers?aiJob=job-1')
+  })
 })
 
 describe('a finished job', () => {

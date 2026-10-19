@@ -81,6 +81,16 @@ repository on `raw.githubusercontent.com`. It is not on `aglyn.com` on purpose:
 the edge's bot protection answers every non-browser request there with 429,
 which would refuse the linter and a DNS provider's own logo fetch alike.
 
+The logo is `logo/aglyn-logo-full-dark.png` beside this file. It is the
+official logo kit's default lockup for light backgrounds (kit v1.5,
+`png/logo/dark/aglyn-logo-full-dark.png`: the colored mark and the blue Aglyn
+word), copied byte for byte from the kit on aglyn.com/press, and
+`logo/aglyn-logo-full-dark.svg` is the same lockup as vector, for the
+providers that ask for an SVG. Use only kit files here: never a re-typed
+wordmark, a one-color mark, or the mark alone in place of the lockup. If the
+kit changes, copy the new files over these two and raise each template's
+`version`.
+
 Then test both templates in the online editor,
 <https://domainconnect.paulonet.eu/dc/free/templateedit>: paste each file,
 confirm the syntax check passes, apply it to a test domain at the root
@@ -136,8 +146,9 @@ Subject: Domain Connect onboarding: aglyn.com (website, website-subdomain)
 > The details you ask for:
 >
 > - **syncPubKeyDomain TXT records:** `_dcpubkeyv1.aglyn.com`
-> - **Logo:** attached as SVG (`aglyn-logo-mark-blue.svg`). The templates'
->   `logoUrl` is https://raw.githubusercontent.com/aglyn/aglyn/main/apps/tenant/public/_static/images/brand/aglyn-logo-500x500.png.
+> - **Logo:** attached as SVG and PNG (`aglyn-logo-full-dark.svg`,
+>   `aglyn-logo-full-dark.png`). The templates' `logoUrl` is
+>   https://raw.githubusercontent.com/aglyn/aglyn/main/tools/domain-connect/logo/aglyn-logo-full-dark.png.
 > - **Default proxy status:** DNS only (not proxied) for every record, the A
 >   and both CNAMEs. Our hosting edge issues the site's certificate itself and
 >   needs to receive the traffic directly.
@@ -148,7 +159,7 @@ Subject: Domain Connect onboarding: aglyn.com (website, website-subdomain)
 > Thank you,
 > <name>, Aglyn
 
-Attach `apps/tenant/public/_static/images/brand/aglyn-logo-mark-blue.svg`.
+Attach both files in `logo/` beside this README.
 
 ## What happens once a provider has the template
 

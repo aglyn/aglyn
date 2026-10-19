@@ -100,13 +100,13 @@ public let sitePlatformContributes: [String: [String]] = [
 @MainActor
 public func registerSitePlatformNative(_ r: NativePluginRegistrar) {
   r.screen(siteSitesScreen, title: "Sites", icon: SiteSymbols.site) { context, params in
-    SitesScreen(context: context, initialSiteID: params["site"])
+    SitesScreen(context: context, initialSiteID: params["site"], startNew: params["new"] == "1")
   }
   r.screen(siteSiteScreen, title: "Site", requiresSite: true, icon: SiteSymbols.site) { context, params in
     CurrentSiteScreen(context: context, params: params)
   }
   r.screen(sitePagesScreen, title: "Pages", requiresSite: true, icon: SiteSymbols.page) { context, params in
-    PagesScreen(context: context, initialPageID: params["page"] ?? params["screenId"])
+    PagesScreen(context: context, initialPageID: params["page"] ?? params["screenId"], startNew: params["new"] == "1")
   }
   r.screen(siteMediaScreen, title: "Media", icon: SiteSymbols.media) { context, params in
     MediaScreen(context: context, params: params)
