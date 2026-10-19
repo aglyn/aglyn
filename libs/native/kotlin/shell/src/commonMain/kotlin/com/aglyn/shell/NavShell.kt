@@ -133,7 +133,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   val version by services.registry.version.collectAsState()
   val widthClass = currentWidthClass()
   val wide = widthClass != WidthClass.COMPACT
-  val compactChrome = usesCompactChrome
+  val compactChrome = LocalUsesCompactChrome.current
   val context = ShellPluginContext(uid, workspace, services, navigator, emptySet())
 
   // The workspace on screen is the most recent one; each account remembers the workspaces it holds for links.

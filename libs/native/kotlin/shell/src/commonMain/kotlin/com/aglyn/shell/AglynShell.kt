@@ -139,7 +139,7 @@ internal fun AccountTheme(services: ShellServices, dark: Boolean? = null, brand:
     textScale = if (appSetsTextSize) com.aglyn.ui.textScaleOf(theme.textSize) else 1f,
   ) {
     // The desktop is Compact everywhere (sign-in, dialogs and the shell): its sizes and its radii.
-    if (usesCompactChrome) {
+    if (LocalUsesCompactChrome.current) {
       MaterialTheme(colorScheme = MaterialTheme.colorScheme, typography = MaterialTheme.typography, shapes = com.aglyn.ui.CompactShapes) {
         androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalShellMetrics provides com.aglyn.ui.CompactShellMetrics, content = content)
       }

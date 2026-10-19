@@ -90,4 +90,42 @@ class NavFakeShots {
       }
     }
   }
+
+  /** The tablet's Touch shell (Figma's Touch sizes) at an Android tablet's 1280 × 800 dp, for measuring off a device. */
+  @Test
+  fun shootTouch() {
+    if (dir == null) return
+    for (dark in listOf(false, true)) {
+      val suffix = if (dark) "-dark" else ""
+      runDesktopComposeUiTest(width = 1280, height = 800) {
+        setContent {
+          androidx.compose.runtime.CompositionLocalProvider(LocalUsesCompactChrome provides false) {
+            AglynShell(testServices(userDoc = emptyMap()), dark = dark)
+          }
+        }
+        signIn()
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithTagCount("nav-group-website") > 0 }
+        onNodeWithTag("nav-group-website").performClick()
+        waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-pages") > 0 }
+        onNodeWithTag("nav-site-pages").performClick()
+        mainClock.advanceTimeBy(600)
+        shoot("touch-site-pages$suffix")
+        onAllNodes(androidx.compose.ui.test.hasText("Site settings")).onLast().performClick()
+        mainClock.advanceTimeBy(600)
+        shoot("touch-site-settings$suffix")
+      }
+      runDesktopComposeUiTest(width = 1280, height = 800) {
+        setContent {
+          androidx.compose.runtime.CompositionLocalProvider(LocalUsesCompactChrome provides false) {
+            AglynShell(testServices(userDoc = emptyMap(), orgDoc = mapOf("plan" to "pro")), dark = dark)
+          }
+        }
+        signIn()
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithTagCount("scope-back-to-workspace") > 0 }
+        onNodeWithTag("scope-back-to-workspace").performClick()
+        mainClock.advanceTimeBy(600)
+        shoot("touch-workspace$suffix")
+      }
+    }
+  }
 }
