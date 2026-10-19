@@ -57,6 +57,9 @@ class NavThemeUiTest {
     waitUntil(timeoutMillis = 3_000) { services.accountPrefs.state.value.theme.density == AppDensity.COMPACT }
     onNodeWithTag("accent-violet").performScrollTo().performClick()
     waitUntil(timeoutMillis = 3_000) { services.accountPrefs.state.value.theme.accent == "#7A5CF0" }
+    // The accent's own write lands on its coroutine; count from after it, so a slow machine cannot slip it in later.
+    waitUntil(timeoutMillis = 10_000) { writes.all.any { (path, data) -> path == "users/u1" && (data["appTheme"] as? Map<*, *>)?.get("accent") == "#7A5CF0" } }
+    waitForIdle()
     // This device only: the account's theme stays; the device's copy is what the app wears.
     val synced = writes.all.size
     onNodeWithTag("theme-device-only").performScrollTo().performClick()
