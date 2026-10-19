@@ -16,31 +16,35 @@
  */
 
 import {
-  EVENT_CALENDAR_ADDON_MONTHLY_USD,
-  EXTRA_HOSTS_ADDON_MAX,
-  PLAN_PRICING,
-  planSellsSiteCare,
-  POS_REGISTER_ADDON_MONTHLY_USD,
-  POS_REGISTERS_ADDON_MAX,
-  resolveOrgEntitlements,
   SELF_SERVE_PLANS,
-  SITE_CARE_ADDON_MONTHLY_USD,
-  UNLIMITED,
   type AiTierId,
   type OrgPlan,
-  type OrgSeatAddons,
 } from '@aglyn/aglyn/server'
+import {
+  ADDON_KINDS,
+  addonMaxForBaseline,
+  addonMaxForPlan,
+  addonUnitUsd,
+  type AddonKind,
+} from '@aglyn/aglyn/app-utils/bundle-intent'
 // The Aglyn AI tiers (AGL-3965) by their own module rather than the server
 // barrel: the webhook and every billing route read a subscription's AI item
 // through here, and the many route specs that stub `@aglyn/aglyn/server`
 // with a partial object would otherwise see every tier helper as undefined.
 import {
   AI_TIER_IDS,
-  AI_TIERS,
   defaultAiTierForPlan,
   LEGACY_AI_ADDON_TIER_BY_PLAN,
   planSellsAiTiers,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
+
+/*
+ * The add-on kinds, their unit prices (the Aglyn AI tier's included) and
+ * their ceilings live beside the bundle-link parser (AGL-3955), so the link,
+ * the Billing card and this price map read one list. Re-exported here for
+ * every server reader that already imports them from this module.
+ */
+export { ADDON_KINDS, addonMaxForBaseline, addonMaxForPlan, addonUnitUsd, type AddonKind }
 
 /**
  * Self-serve add-on price map (AGL-525): the bridge between
@@ -54,19 +58,6 @@ import {
  * on any paid plan. Prices are minted by `tools/scripts/setup-stripe.mjs` —
  * keep the three in sync.
  */
-export type AddonKind = keyof Required<OrgSeatAddons>
-
-export const ADDON_KINDS: readonly AddonKind[] = [
-  'managers',
-  'members',
-  'datasets',
-  'hosts',
-  'posRegisters',
-  'eventCalendar',
-  'aiAddon',
-  'siteCare',
-]
-
 export type BillingInterval = 'month' | 'year'
 
 /** Kinds priced per plan (env `STRIPE_PRICE_{PLAN}_{SUFFIX}[_YEARLY]`). */
@@ -193,17 +184,34 @@ export function addonPriceId(
   interval: BillingInterval,
   tier?: AiTierId | null,
 ): string | null {
+  const name = addonPriceEnvName(kind, plan, interval, tier)
+  return name ? env(name) : null
+}
+
+/**
+ * The env var that holds an add-on's price id on a plan at an interval, or
+ * null where the plan sells no such price. Named on its own so a checkout
+ * that Stripe refuses can say which variable points at a missing price.
+ * For the Aglyn AI add-on it is the tier's (`STRIPE_PRICE_AI_{TIER}`,
+ * AGL-3965), `tier` read as `addonPriceId` reads it.
+ */
+export function addonPriceEnvName(
+  kind: AddonKind,
+  plan: OrgPlan,
+  interval: BillingInterval,
+  tier?: AiTierId | null,
+): string | null {
   const yearly = interval === 'year' ? '_YEARLY' : ''
   if (kind === 'aiAddon') {
     if (!planSellsAiTiers(plan)) return null
     const chosen = tier ?? defaultAiTierForPlan(plan)
-    return chosen ? aiTierPriceId(chosen, interval) : null
+    return chosen ? `STRIPE_PRICE_AI_${chosen.toUpperCase()}${yearly}` : null
   }
   const flat = FLAT_ENV_NAME[kind]
-  if (flat) return env(`STRIPE_PRICE_${flat}${yearly}`)
+  if (flat) return `STRIPE_PRICE_${flat}${yearly}`
   const suffix = PER_PLAN_ENV_SUFFIX[kind]
   if (!suffix || plan === 'free') return null
-  return env(`STRIPE_PRICE_${plan.toUpperCase()}_${suffix}${yearly}`)
+  return `STRIPE_PRICE_${plan.toUpperCase()}_${suffix}${yearly}`
 }
 
 /**
@@ -366,40 +374,6 @@ export function findPlanItem<T extends { price?: { id?: string } | null }>(
 }
 
 /**
- * Monthly USD per unit for an add-on on a plan (yearly prices are ×12 of
- * this); null when the plan doesn't sell the kind. Single pricing source
- * of truth: `PLAN_PRICING`, the three flat add-on constants and `AI_TIERS`
- * (`tier` as `addonPriceId` reads it).
- */
-export function addonUnitUsd(
-  kind: AddonKind,
-  plan: OrgPlan,
-  tier?: AiTierId | null,
-): number | null {
-  const pricing = PLAN_PRICING[plan]
-  switch (kind) {
-    case 'managers':
-      return pricing.extraSeatMonthlyUsd
-    case 'members':
-      return pricing.extraCollaboratorMonthlyUsd
-    case 'datasets':
-      return pricing.extraDatasetMonthlyUsd
-    case 'hosts':
-      return pricing.extraHostMonthlyUsd
-    case 'posRegisters':
-      return POS_REGISTER_ADDON_MONTHLY_USD
-    case 'eventCalendar':
-      return EVENT_CALENDAR_ADDON_MONTHLY_USD
-    case 'aiAddon': {
-      const chosen = planSellsAiTiers(plan) ? (tier ?? defaultAiTierForPlan(plan)) : null
-      return chosen ? AI_TIERS[chosen].monthlyUsd : null
-    }
-    case 'siteCare':
-      return SITE_CARE_ADDON_MONTHLY_USD
-  }
-}
-
-/**
  * Full add-on quantity map (explicit zeros for absent kinds) from a
  * subscription's items — the shape written to `org.seatAddons` so
  * removals and dashboard edits converge on sync (AGL-527).
@@ -420,60 +394,4 @@ export function addonQuantitiesFromItems(
     }
   }
   return quantities
-}
-
-/**
- * Max purchasable quantity per kind, from a purchases-free entitlement
- * resolution (plan defaults + staff overrides only) so the ceiling does not
- * drift as the org buys: seat/dataset kinds stop at the plan's hard max,
- * hosts/registers use flat ceilings, the Event Calendar, Aglyn AI and Site
- * Care are 0/1 toggles. POS registers additionally require the `pos`
- * feature, and Site Care a plan that sells it (`planSellsSiteCare`), which is
- * why the plan travels with the baseline.
- *
- * Lives here rather than inside `/api/billing/addons` because a PLAN CHANGE
- * needs the same ceiling for a different plan. The addons route asks "how many
- * may this org buy on the plan it is on"; `buildTargetItems` asks "how many of
- * what it already bought can the plan it is moving to actually deliver". Two
- * readers, one definition — a second copy is how they answer differently.
- */
-export function addonMaxForBaseline(
-  kind: AddonKind,
-  baseline: ReturnType<typeof resolveOrgEntitlements>,
-  plan: OrgPlan,
-): number {
-  const bounded = (included: number, max: number) =>
-    Number.isFinite(max) ? Math.max(0, max - included) : EXTRA_HOSTS_ADDON_MAX
-  switch (kind) {
-    case 'managers':
-      return bounded(baseline.managersPerOrg, baseline.maxManagersPerOrg)
-    case 'members':
-      return bounded(baseline.membersPerHost, baseline.maxMembersPerHost)
-    case 'datasets':
-      return bounded(baseline.datasetsPerOrg, baseline.maxDatasetsPerOrg)
-    case 'hosts':
-      return baseline.hostLimit === UNLIMITED ? 0 : EXTRA_HOSTS_ADDON_MAX
-    case 'posRegisters':
-      return baseline.features.pos ? POS_REGISTERS_ADDON_MAX : 0
-    case 'eventCalendar':
-      return 1
-    case 'aiAddon':
-      // Org-wide like the Event Calendar: one purchase, of one tier, on any
-      // plan that sells tiers (AGL-3965) — not Free, not Enterprise.
-      return planSellsAiTiers(plan) ? 1 : 0
-    case 'siteCare':
-      // Flat-priced, so the price map cannot say "not sold here" the way it
-      // does for Aglyn AI. This ceiling is the rule that keeps Free (no
-      // subscription) and Enterprise (quoted per deal) from buying it.
-      return planSellsSiteCare(plan) ? 1 : 0
-  }
-}
-
-/** The ceiling a PLAN would impose on an add-on kind, purchases excluded. */
-export function addonMaxForPlan(kind: AddonKind, plan: OrgPlan): number {
-  return addonMaxForBaseline(
-    kind,
-    resolveOrgEntitlements({ plan } as never),
-    plan,
-  )
 }

@@ -15011,6 +15011,67 @@ describe("a site's live chat settings are written by their route alone (AGL-3698
   })
 })
 
+/**
+ * Staff-minted bundle checkout links (AGL-3955).
+ *
+ * A live link waives the domains plugin's invoice-age gate for one purchase,
+ * so a client that could plant or rewind one could waive its own gate. The
+ * console mints, reads and spends them on the Admin SDK; no client reads or
+ * writes one — not the workspace owner it is for, not staff.
+ */
+describe('bundle checkout links are server-only (AGL-3955)', () => {
+  const linkDoc = (db) => doc(db, 'bundleLinks', 'link-1')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(linkDoc(context.firestore()), {
+        mintedBy: STAFF,
+        workspaceId: ORG,
+        createdAt: 1,
+        expiresAt: 2,
+        usedAt: null,
+        preclearsDomainGate: true,
+        intent: { plan: 'starter', addons: { siteCare: 1 }, interval: 'year' },
+      })
+    })
+  })
+
+  it('no member, no staff and no visitor reads or lists a link', async () => {
+    const readers = [
+      ['the workspace owner', authed(OWNER)],
+      ['a site editor', authed(EDITOR)],
+      ['staff', authed(STAFF, { staff: true })],
+      ['a visitor', anon()],
+    ]
+    for (const [who, db] of readers) {
+      await mustDeny(`${who} reading a bundle link`, getDoc(linkDoc(db)))
+      await mustDeny(
+        `${who} listing bundle links`,
+        getDocs(query(collection(db, 'bundleLinks'), limit(10))),
+      )
+    }
+  })
+
+  it('no client mints, rewinds or deletes one: the console does, on the Admin SDK', async () => {
+    await mustDeny(
+      'the owner minting a link that waives their own gate',
+      setDoc(doc(authed(OWNER), 'bundleLinks', 'link-2'), {
+        mintedBy: OWNER,
+        workspaceId: ORG,
+        expiresAt: Date.now() + 86_400_000,
+        usedAt: null,
+        preclearsDomainGate: true,
+      }),
+    )
+    await mustDeny('the owner un-spending a used link', updateDoc(linkDoc(authed(OWNER)), { usedAt: null }))
+    await mustDeny(
+      'staff extending a link from the browser',
+      updateDoc(linkDoc(authed(STAFF, { staff: true })), { expiresAt: Date.now() + 86_400_000 }),
+    )
+    await mustDeny('staff deleting a link from the browser', deleteDoc(linkDoc(authed(STAFF, { staff: true }))))
+  })
+})
+
 describe('bought domains are the server’s alone (AGL-3962)', () => {
   const registrationDoc = (db) => doc(db, 'domainRegistrations', 'testbakery.com')
 

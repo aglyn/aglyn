@@ -69,7 +69,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { overLimitSummary as computeOverLimitSummary } from '../../../../../utils/over-limit-summary'
@@ -79,6 +79,14 @@ import BillingAddonsCardComponent, {
   TOGGLE_ADDON_KINDS,
 } from '../../../../../components/billing/billing-addons-card.component'
 import { standingUpgradeProposal } from '@aglyn/aglyn/app-utils/upgrade-proposal'
+import { intentAddons } from '@aglyn/aglyn/app-utils/onboarding-deep-link'
+import {
+  bundleAddonLabel,
+  bundleAddonsParam,
+  bundleDomainLine,
+  fitBundleAddonsToPlan,
+  type BundleAddons,
+} from '@aglyn/aglyn/app-utils/bundle-intent'
 import OrgUpgradeProposalCard from '../../../../../components/org-upgrade-proposal-card.component'
 import BillingPlanCardsComponent, {
   PLAN_LABELS,
@@ -133,6 +141,9 @@ import { useOrgSlug } from '../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useOrgHosts } from '../../../../../hooks/use-org-hosts'
 import useCurrentOrg from '../../../../../hooks/use-current-org'
+import SiteCareBillingCard from '../../../../../components/site-care/site-care-billing-card.component'
+import SiteCareProjectsBillingCard from '../../../../../components/site-care/site-care-projects-billing-card.component'
+import { hasSiteCare } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import useConfirmedDoc from '../../../../../hooks/use-confirmed-doc'
 import useOrgPermissions from '../../../../../hooks/use-org-permissions'
 
@@ -163,6 +174,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     () => mergeOrgBillingOverOrg(orgDoc as Record<string, unknown>, orgBilling),
     [orgDoc, orgBilling],
   )
+  // Whether Site Care is in force (AGL-3959), for its card below the add-ons.
+  const siteCareOn = hasSiteCare(org as never)
   const {
     permissions,
     can,
@@ -280,6 +293,34 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     () => parseOnboardingPlanIntent(searchParams),
     [searchParams],
   )
+  /**
+   * The add-ons the purchase carries (AGL-3955): preselected from the link
+   * (`addons=`, `ai=1`) or the proposal it came from, changed by the quote's
+   * switches, fitted to whichever plan is bought. Held here, beside the code,
+   * because the quote prices and this page buys.
+   */
+  const [bundleAddons, setBundleAddons] = useState<BundleAddons>({})
+  /**
+   * The checkout body for a set of add-ons: the map, and the Aglyn AI tier
+   * the link named (`?ai=boost`, or `ai:boost` in `addons=`, AGL-3965) when
+   * the AI add-on is in it. The quote's AI switch is worded and priced as
+   * that tier, so the tier the link preselected is the one quoted and paid.
+   */
+  const linkAiTier = planIntent?.aiTier ?? null
+  const withAiTier = useCallback(
+    (addons: BundleAddons) => ({
+      addons,
+      ...((addons.aiAddon ?? 0) > 0 && linkAiTier ? { aiTier: linkAiTier } : {}),
+    }),
+    [linkAiTier],
+  )
+  const intentAddonsKey = bundleAddonsParam(intentAddons(planIntent))
+  useEffect(() => {
+    setBundleAddons(intentAddons(planIntent))
+    // Keyed by the add-ons as written: `planIntent` is a fresh object each
+    // time the search params are re-read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intentAddonsKey])
   // `parseOnboardingPlanIntent` defaults a missing interval to 'month', which is
   // the safe reading for checkout but the wrong one for the toggle: some CTAs
   // carry a plan and deliberately no interval (the /pricing scale strip quotes
@@ -325,6 +366,69 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    */
   const quotedPlan = planIntent?.plan ?? null
 
+  /**
+   * What the link asked for that cannot be bought here, in one line
+   * (AGL-3955): add-on names nobody sells, and add-ons the quoted plan does
+   * not carry. Left off, never an error page.
+   */
+  const bundleLinkNotice = useMemo(() => {
+    if (!planIntent || planIntent.contactSales) return null
+    const notSold = fitBundleAddonsToPlan(intentAddons(planIntent), planIntent.plan).notSold.map(
+      (kind) => bundleAddonLabel(kind),
+    )
+    const unknown = planIntent.droppedAddons ?? []
+    const left = [...notSold, ...unknown.map((token) => `“${token}”`)]
+    if (!left.length) return null
+    return (
+      `Not available on the ${PLAN_LABELS[planIntent.plan] ?? planIntent.plan} plan, ` +
+      `so left off: ${left.join(', ')}.`
+    )
+  }, [planIntent])
+
+  /**
+   * The domain a staff-minted bundle link carries (AGL-3955), read from the
+   * link's record by its id — never from the URL — with whether this
+   * deployment sells domains at all. Bought after subscribing, on the site's
+   * Custom Domain page.
+   */
+  const bundleLinkId = searchParams?.get('bundle')?.trim() || null
+  const [bundleDomain, setBundleDomain] = useState<{
+    available: boolean
+    domain: {
+      name: string
+      firstYearCents: number
+      renewalCents: number
+      host: string
+    }
+  } | null>(null)
+  const router = useRouter()
+  const canViewBilling = permissionsLoaded && can('billing.view')
+  useEffect(() => {
+    if (!bundleLinkId || !user || !orgId || !canViewBilling) return
+    let cancelled = false
+    void authorizedFetch(
+      user,
+      `/api/billing/bundle-link?orgId=${encodeURIComponent(orgId)}&id=${encodeURIComponent(bundleLinkId)}`,
+      { method: 'GET' },
+    )
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (cancelled || !payload?.domain?.name) return
+        setBundleDomain({ available: payload.available === true, domain: payload.domain })
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [bundleLinkId, user, orgId, canViewBilling])
+  /** The quote's total, for the Pay button: the figure the owner is looking at. */
+  const [quotedTotal, setQuotedTotal] = useState<{ totalCents: number; currency: string } | null>(
+    null,
+  )
+  const onQuoted = useCallback(
+    (preview: { totalCents: number; currency: string } | null) => setQuotedTotal(preview),
+    [],
+  )
   // The toggle starts on the live subscription's interval (AGL-532) so
   // annual orgs see their real prices and switches keep their interval.
   //
@@ -788,11 +892,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             plan: targetPlan,
             interval,
             promotionCode,
-            // The Aglyn AI add-on the deep link asked for (AGL-2897), quoted
-            // on the same invoice so the total shown is the total charged.
-            ...(planIntent?.ai
-              ? { aiAddon: true, ...(planIntent.aiTier ? { aiTier: planIntent.aiTier } : {}) }
-              : {}),
+            // The add-ons the link or the quote's switches chose (AGL-2897,
+            // AGL-3955), fitted to the plan being bought and quoted on the
+            // same invoice so the total shown is the total charged. The
+            // Aglyn AI tier the link named rides with the AI add-on
+            // (AGL-3965); absent, the route sells the plan's default tier.
+            ...withAiTier(fitBundleAddonsToPlan(bundleAddons, targetPlan).addons),
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -851,7 +956,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         return null
       }
     },
-    [user, orgId, interval, planIntent, enqueueSnackbar],
+    [user, orgId, interval, bundleAddons, withAiTier, enqueueSnackbar],
   )
 
   /**
@@ -880,7 +985,16 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
    * charging on a click.
    */
   const startSubscribe = useCallback(
-    async (targetPlan: OrgPlan) => {
+    async (
+      targetPlan: OrgPlan,
+      /**
+       * The total the owner was looking at when they pressed Pay on the
+       * quote (AGL-3955). When the server prices the same total, the amount
+       * was already in front of them on the button they pressed, so the
+       * purchase goes through on that one tap; any difference asks first.
+       */
+      options: { shownTotalCents?: number | null } = {},
+    ) => {
       // A fresh attempt clears the last refusal: a stale "checkout is paused"
       // sitting above the cards after the lock lifted would be its own lie.
       setCheckoutLockdown(null)
@@ -912,13 +1026,19 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         promotionDuration: quote.promotionCodeDuration ?? null,
         promotionDurationInMonths: quote.promotionCodeDurationInMonths ?? null,
       })
-      const accepted = await confirm({
-        title: confirmQuote.title,
-        description: confirmQuote.description,
-        confirmationText: confirmQuote.confirmationText,
-      })
-        .then(() => true)
-        .catch(() => false)
+      const alreadyShown =
+        typeof options.shownTotalCents === 'number' &&
+        options.shownTotalCents === Number(priced.totalCents ?? NaN) &&
+        pricedCode === promotionCode
+      const accepted = alreadyShown
+        ? true
+        : await confirm({
+            title: confirmQuote.title,
+            description: confirmQuote.description,
+            confirmationText: confirmQuote.confirmationText,
+          })
+            .then(() => true)
+            .catch(() => false)
       // Dismissed. Nothing is POSTed, no attempt key is minted and no
       // conversion is marked pending — the customer is exactly where they
       // were, with the plan grid still in front of them.
@@ -941,7 +1061,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
          * different attempt, while a repeat of the SAME code still collapses
          * to the one key the double-click guard needs.
          */
-        const attemptScope = `${orgId}:${targetPlan}:${interval}:${pricedCode}`
+        const purchasedAddons = fitBundleAddonsToPlan(bundleAddons, targetPlan).addons
+        // The add-ons are part of the attempt too (AGL-3955): a different set
+        // is a different purchase and must not replay the last one's answer.
+        const attemptScope =
+          `${orgId}:${targetPlan}:${interval}:${pricedCode}:` +
+          bundleAddonsParam(purchasedAddons)
         const attemptKey =
           checkoutAttempts.current.get(attemptScope) ??
           (globalThis.crypto?.randomUUID?.() ??
@@ -973,10 +1098,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             // priced quote the customer just confirmed, so the purchase and
             // the confirmed figure describe the same invoice.
             ...(pricedCode ? { promotionCode: pricedCode } : {}),
-            // The same add-on the quote above priced (AGL-2897).
-            ...(planIntent?.ai
-              ? { aiAddon: true, ...(planIntent.aiTier ? { aiTier: planIntent.aiTier } : {}) }
-              : {}),
+            // The same add-ons the quote above priced (AGL-2897, AGL-3955),
+            // with the same Aglyn AI tier (AGL-3965).
+            ...withAiTier(purchasedAddons),
             gaClientId: await readGaClientId(
               process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
             ),
@@ -1133,6 +1257,18 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             'workspace updates as soon as Stripe confirms the payment.',
           { variant: 'success', persist: false },
         )
+        // The bundle's domain (AGL-3955) is bought next, by the owner, on the
+        // site's Custom Domain page with the name filled in: the purchase
+        // charges the card just saved, and the registrant details and terms
+        // are theirs to give. Only where this deployment sells domains.
+        if (bundleDomain?.available && bundleDomain.domain && orgSlug) {
+          void router.push(
+            `${buildRoute(Route.HOST_ADMIN_DOMAIN, {
+              orgSlug,
+              host: bundleDomain.domain.host,
+            })}?domain=${encodeURIComponent(bundleDomain.domain.name)}`,
+          )
+        }
       } catch (error) {
         console.error(error)
         enqueueSnackbar('Could not start checkout', {
@@ -1146,8 +1282,12 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     [
       user,
       orgId,
+      orgSlug,
       interval,
-      planIntent,
+      bundleAddons,
+      withAiTier,
+      bundleDomain,
+      router,
       appliedPromotionCode,
       priceSubscribe,
       confirm,
@@ -1161,7 +1301,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   const handleUpgrade = useCallback(
-    (targetPlan: OrgPlan) => async () => {
+    (targetPlan: OrgPlan, options: { shownTotalCents?: number | null } = {}) => async () => {
       const dequeue = queueLoading()
       // A fresh attempt clears the last refusal: a stale "checkout is paused"
       // sitting above the cards after the lock lifted would be its own lie.
@@ -1352,7 +1492,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           return
         }
         dequeue()
-        await startSubscribe(targetPlan)
+        await startSubscribe(targetPlan, options)
         return
       } catch (error) {
         console.error(error)
@@ -1419,6 +1559,93 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             // everything it is about, for the people who can buy it.
             ...(showUpgradeProposal
               ? [{ size: { xs: 12 }, children: <OrgUpgradeProposalCard /> }]
+              : []),
+            // The quote, only when there is a plan to quote: `quotedPlan` is
+            // null on an ordinary visit — no `?plan=` — and an empty "What
+            // you will pay" box reads as a thing that failed to load.
+            //
+            // FIRST, under the proposal (AGL-3955): a bundle link is opened on
+            // a phone, at a booth, and the bundle with its total and its Pay
+            // button is the whole reason the owner is on this page. On a
+            // phone the masonry is one column, so first means first.
+            ...(quotedPlan
+              ? [{
+                  size: { xs: 12, md: 8 },
+                  children: (
+                    <CardDisplay
+                      header={'What you will pay'}
+                      help={docsHelp('billing', {
+                        anchor: '#what-you-will-pay',
+                      })}
+                      subheader={
+                        'The total for the plan you are looking at, tax included, ' +
+                        'straight from Stripe.'
+                      }
+                      HeaderProps={
+                        // Pay, in the card's header, for a workspace with no
+                        // live subscription (a subscribed one changes plans
+                        // from the grid). Labelled with the total on screen,
+                        // so the one tap is a tap on the amount.
+                        !subscriptionActive && can('billing.manage') && permissions.editBilling
+                          ? {
+                              action: (
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  onClick={() =>
+                                    void handleUpgrade(quotedPlan, {
+                                      shownTotalCents: quotedTotal?.totalCents ?? null,
+                                    })()
+                                  }
+                                >
+                                  {quotedTotal
+                                    ? `Pay ${new Intl.NumberFormat(undefined, {
+                                        style: 'currency',
+                                        currency: quotedTotal.currency.toUpperCase(),
+                                      }).format(quotedTotal.totalCents / 100)}`
+                                    : `Start ${PLAN_LABELS[quotedPlan] ?? quotedPlan}`}
+                                </Button>
+                              ),
+                            }
+                          : undefined
+                      }
+                      contentGutterX
+                      contentGutterY
+                    >
+                      <BillingPlanQuoteComponent
+                        orgId={orgId}
+                        plan={quotedPlan}
+                        interval={interval}
+                        canManage={can('billing.manage')}
+                        appliedCode={appliedPromotionCode}
+                        onAppliedCodeChange={setAppliedPromotionCode}
+                        addons={bundleAddons}
+                        onAddonsChange={setBundleAddons}
+                        aiTier={linkAiTier}
+                        initialCoupon={planIntent?.coupon ?? null}
+                        linkNotice={bundleLinkNotice}
+                        onQuoted={onQuoted}
+                        footer={
+                          bundleDomain ? (
+                            bundleDomain.available ? (
+                              <Alert severity="info">
+                                {`Domain: ${bundleDomainLine(bundleDomain.domain)}. ` +
+                                  'After you pay, you buy it on your site’s Custom ' +
+                                  'Domain page with the name already filled in.'}
+                              </Alert>
+                            ) : (
+                              <Alert severity="info">
+                                {`Domain: ${bundleDomain.domain.name} — buying a domain ` +
+                                  'is not available yet, so your site starts on its free ' +
+                                  'address and the domain can be connected later.'}
+                              </Alert>
+                            )
+                          ) : null
+                        }
+                      />
+                    </CardDisplay>
+                  ),
+                }]
               : []),
             {
               size: { xs: 12, md: 4 },
@@ -1685,39 +1912,6 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       
               ),
             },
-            // The quote, in the same band and only when there is a plan to
-            // quote. `quotedPlan` is null on an ordinary visit — no `?plan=`
-            // — and the card still rendered, so an empty "What you will pay"
-            // box sat at full page width under everything. A card with a
-            // header and no content reads as a thing that failed to load.
-            ...(quotedPlan
-              ? [{
-                  size: { xs: 12, md: 8 },
-                  children: (
-                    <CardDisplay
-                      header={'What you will pay'}
-                      help={docsHelp('billing', {
-                        anchor: '#what-you-will-pay',
-                      })}
-                      subheader={
-                        'The total for the plan you are looking at, tax included, ' +
-                        'straight from Stripe.'
-                      }
-                      contentGutterX
-                      contentGutterY
-                    >
-                      <BillingPlanQuoteComponent
-                        orgId={orgId}
-                        plan={quotedPlan}
-                        interval={interval}
-                        canManage={can('billing.manage')}
-                        appliedCode={appliedPromotionCode}
-                        onAppliedCodeChange={setAppliedPromotionCode}
-                      />
-                    </CardDisplay>
-                  ),
-                }]
-              : []),
             // BUY, then ASSIGN — as two bands in that order, not as three
             // cards the masonry flow may separate.
             //
@@ -1762,6 +1956,26 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                             </Box>
                     ),
                   },
+                  // Site Care's month (AGL-3959): requests, minutes of the
+                  // included hour, extra time billed, and what was recorded.
+                  ...(orgId && siteCareOn && can('billing.view')
+                    ? [
+                        {
+                          size: { xs: 12 },
+                          children: <SiteCareBillingCard orgId={orgId} />,
+                        },
+                      ]
+                    : []),
+                  // Flat-quoted projects (AGL-3970), with or without Site
+                  // Care: the card draws nothing until there is one.
+                  ...(orgId && can('billing.view')
+                    ? [
+                        {
+                          size: { xs: 12 },
+                          children: <SiteCareProjectsBillingCard orgId={orgId} />,
+                        },
+                      ]
+                    : []),
                   {
                     size: { xs: 12 },
                     children: (
@@ -1969,6 +2183,8 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         <BillingUpgradeDialogComponent
           plan={collectingForPlan}
           interval={interval}
+          addons={bundleAddons}
+          aiTier={linkAiTier}
           orgId={orgId}
           profile={billingProfile}
           canManage={can('billing.manage')}
