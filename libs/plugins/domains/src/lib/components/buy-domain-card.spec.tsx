@@ -17,7 +17,7 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { DOMAINS_API_ROUTES } from '../constants/bundle-common'
-import BuyDomainCard, { priceLine } from './buy-domain-card.component'
+import BuyDomainCard, { prefillDomainFrom, priceLine } from './buy-domain-card.component'
 import type { RegistrationsAnswer } from './domains-api'
 
 /**
@@ -62,6 +62,15 @@ beforeEach(() => {
   request.mockReset()
   enqueueSnackbar.mockReset()
 })
+
+afterEach(() => window.history.replaceState(null, '', '/'))
+
+/** The searches the card asked for, by query. */
+function searchedFor(): string[] {
+  return request.mock.calls
+    .filter(([route]) => route === DOMAINS_API_ROUTES.search)
+    .map(([, options]) => (options as { query: { q: string } }).query.q)
+}
 
 describe('Get a domain', () => {
   it('names the plan that includes domains on a plan without them, and reads nothing', () => {
@@ -122,6 +131,61 @@ describe('Get a domain', () => {
     expect(screen.getByText(/Confirm the email the registrar sent/)).toBeTruthy()
     expect(screen.getByText('Move to another registrar')).toBeTruthy()
     expect(screen.queryByLabelText('Search for a domain')).toBeNull()
+  })
+})
+
+describe('?domain= from Billing (AGL-3955)', () => {
+  const opened = (search: string) =>
+    window.history.replaceState(null, '', `/test-org/hosts/host-1/custom-domain${search}`)
+
+  it('opens the search with the name and searches it once', async () => {
+    opened('?domain=TestBakery.com')
+    answer({}, [{ domain: 'testbakery.com', available: true, firstYearCents: 1599, renewalCents: 1599 }])
+    render(<BuyDomainCard {...props} entitled />)
+    expect(await screen.findByText('$15.99 a year')).toBeTruthy()
+    expect((screen.getByLabelText('Search for a domain') as HTMLInputElement).value).toBe('testbakery.com')
+    expect(searchedFor()).toEqual(['testbakery.com'])
+  })
+
+  it('ignores a value that is not a name the card sells', async () => {
+    for (const value of ['not%20a%20domain', 'example.us', 'https%3A%2F%2Fexample.com%2Fx', '%3Cscript%3E.com']) {
+      request.mockReset()
+      opened(`?domain=${value}`)
+      answer()
+      const { unmount } = render(<BuyDomainCard {...props} entitled />)
+      await screen.findByText(/Search for a name for your site/)
+      expect((screen.getByLabelText('Search for a domain') as HTMLInputElement).value).toBe('')
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      expect(searchedFor()).toEqual([])
+      unmount()
+    }
+  })
+
+  it('searches nothing while the site already has a domain bought for it', async () => {
+    opened('?domain=testbakery.com')
+    answer({
+      registrations: [
+        {
+          domain: 'testbakery.net', hostId: 'host-1', status: 'active', autoRenew: true,
+          renewalCents: 1599, expiresAtMs: Date.parse('2027-10-19T00:00:00Z'), registeredAtMs: 1,
+          registrantEmail: 'alex@testbakery.com', verifyByMs: null, verificationEmail: null,
+          renewalFailing: false, failure: null,
+        },
+      ],
+    })
+    render(<BuyDomainCard {...props} entitled />)
+    expect(await screen.findByText('Your domain')).toBeTruthy()
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    expect(searchedFor()).toEqual([])
+  })
+
+  it('reads only a bare name under an ending the card sells', () => {
+    expect(prefillDomainFrom('?domain=testbakery.com')).toBe('testbakery.com')
+    expect(prefillDomainFrom('?domain=%20TestBakery.SHOP%20')).toBe('testbakery.shop')
+    expect(prefillDomainFrom('?domain=www.testbakery.com')).toBe('')
+    expect(prefillDomainFrom('?domain=testbakery')).toBe('')
+    expect(prefillDomainFrom('?domain=')).toBe('')
+    expect(prefillDomainFrom('')).toBe('')
   })
 })
 
