@@ -812,7 +812,7 @@ private fun WideToolbar(
       RecentHistoryButton(services.accountPrefs.state.collectAsState().value) { item -> openRecent?.invoke(item) }
     }
     // The global search is a real field, centered on the window (Figma 8:90); its dropdown hangs under it.
-    search(Modifier.align(Alignment.Center).fillMaxWidth(0.42f).widthIn(min = 240.dp, max = 480.dp).testTag("search-or-jump"))
+    search(Modifier.align(Alignment.Center).padding(horizontal = 160.dp).widthIn(max = 480.dp).fillMaxWidth().testTag("search-or-jump"))
     Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
       BellButton(services, uid) { navigator.select(ShellNavigator.NOTIFICATIONS) }
       trailing()

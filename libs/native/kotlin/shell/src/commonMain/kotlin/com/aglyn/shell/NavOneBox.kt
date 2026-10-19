@@ -280,7 +280,7 @@ internal fun OneBoxList(
 @Composable
 internal fun OneBoxFooter(workspace: WorkspaceState, typing: Boolean) {
   HorizontalDivider(color = shellColors.divider)
-  Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+  Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
     KeyCap("↑↓"); Hint("to move"); Box(Modifier.size(10.dp)); KeyCap("↵"); Hint("to open"); Box(Modifier.size(10.dp)); KeyCap("esc"); Hint("to close")
     Box(Modifier.weight(1f))
     Hint(
