@@ -22,6 +22,7 @@
 
 import {
   domainSearchRegistered,
+  type PluginDomainSearch,
   registerPluginDomainSearch,
   searchDomains,
 } from './plugin-domain-search'
@@ -77,7 +78,7 @@ describe('plugin-domain-search', () => {
   })
 
   it('is a slot: one owner, and a second plugin is refused naming both', () => {
-    const impl = { search: async () => [] }
+    const impl: PluginDomainSearch = { search: async () => [] }
     expect(() => registerPluginDomainSearch(impl)).toThrow(/no owner/)
     registerPluginDomainSearch(impl, { pluginId: 'domains' })
     expect(() => registerPluginDomainSearch(impl, { pluginId: 'acme-domains' })).toThrow(
