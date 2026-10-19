@@ -458,7 +458,7 @@ function compileSection(
   // A row whose columns all say the same kind of thing, three or more across,
   // is a group of cards: one design, the words the columns gave.
   if (filled.length >= 3 && sameShape(filled.map((entry) => entry.column))) {
-    head.push(columnsAsCards(filled.map((entry) => entry.column)))
+    head.push(...columnsAsCards(filled.map((entry) => entry.column)))
     page.settled.push({
       at,
       what: `${filled.length} like columns drawn as cards`,
@@ -799,22 +799,36 @@ function shapeOf(column: readonly AiLayoutBlock[]): string {
   return column.map((block) => block.kind).join(',')
 }
 
+/** What a like column may hold and still be read as a card: its words, a picture and one button. */
+const CARD_COLUMN_KINDS: ReadonlySet<string> = new Set(['heading', 'text', 'lede', 'eyebrow', 'image', 'note', 'button'])
+
+/** The words of a column a card says: its heading, or its first words. */
+const WORDS_KINDS: ReadonlySet<string> = new Set(['heading', 'text', 'lede', 'note'])
+
+/**
+ * Whether a row's columns all say the same kind of thing (AGL-3660): the
+ * same blocks in the same order, words among them, one button at most. The
+ * beta.270 Sugar Hollow Galleries page (AGL-3988) was refused for rule 1,
+ * "The same Grid block appears 4 times": four like columns this read did not
+ * fold, each of them drawn as a Grid cell of its own.
+ */
 function sameShape(columns: readonly AiLayoutBlock[][]): boolean {
   const first = shapeOf(columns[0])
   return (
     columns.every((column) => shapeOf(column) === first) &&
-    columns[0].some((block) => block.kind === 'heading') &&
-    columns[0].every((block) =>
-      ['heading', 'text', 'lede', 'eyebrow', 'image', 'note'].includes(
-        block.kind,
-      ),
-    )
+    columns[0].some((block) => WORDS_KINDS.has(block.kind)) &&
+    columns[0].every((block) => CARD_COLUMN_KINDS.has(block.kind)) &&
+    columns[0].filter((block) => block.kind === 'button').length <= 1
   )
 }
 
-/** Like columns as one group of cards: each column's heading its title, its words its text. */
-function columnsAsCards(columns: readonly AiLayoutBlock[][]): AiLayoutBlock {
-  return {
+/**
+ * Like columns as one group of cards: each column's heading its title, its
+ * words its text. Their buttons follow the group (AGL-3988): one, where they
+ * all go to the same place, else a list of links, each named by its card.
+ */
+function columnsAsCards(columns: readonly AiLayoutBlock[][]): AiLayoutBlock[] {
+  const cards: AiLayoutBlock = {
     kind: 'cards',
     items: columns.map((column) => {
       const title = column.find((block) => block.kind === 'heading')?.text ?? ''
@@ -831,6 +845,27 @@ function columnsAsCards(columns: readonly AiLayoutBlock[][]): AiLayoutBlock {
       return { title, text: words, ...(icon ? { icon } : {}) }
     }),
   }
+  const buttons = columns.flatMap((column) => {
+    const button = column.find((block) => block.kind === 'button')
+    return button?.to?.trim() ? [{ button, column }] : []
+  })
+  if (!buttons.length) return [cards]
+  const places = new Set(buttons.map(({ button }) => (button.to ?? '').trim().toLowerCase()))
+  if (places.size === 1) {
+    const { button } = buttons[0] as { button: AiLayoutBlock }
+    return [cards, { kind: 'button', text: button.text ?? '', to: button.to, ...(button.style ? { style: button.style } : {}) }]
+  }
+  return [
+    cards,
+    {
+      kind: 'list',
+      items: buttons.map(({ button, column }) => ({
+        title: column.find((block) => block.kind === 'heading')?.text || button.text || '',
+        text: '',
+        to: button.to ?? '',
+      })),
+    },
+  ]
 }
 
 // ── A row of columns ──────────────────────────────────────────────────────
