@@ -9,6 +9,66 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.271 — 2026-10-19
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.270...v1.0.0-beta.271)
+
+### Added
+
+- **console:** search the DAM by ID or link; Choose media shows a file before using it ([AGL-3989](https://linear.app/aglyn/issue/AGL-3989))
+- **crm:** the Kotlin apps create currency fields and read each at its own minor unit ([AGL-3971](https://linear.app/aglyn/issue/AGL-3971))
+- **pricing:** the ai tiers are live on /pricing, with the tier faq and site care link ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
+- **crm:** the Apple apps create currency fields and read each at its own minor unit ([AGL-3971](https://linear.app/aglyn/issue/AGL-3971))
+- **ai:** a guided start's site listing replaces the seeded default when untouched ([AGL-3979](https://linear.app/aglyn/issue/AGL-3979))
+- **billing:** tier migration dry run counts before minting, aiTier rules test, docs ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
+- **billing:** finish Aglyn AI tiers on any paid plan, one credit pool, tier picker ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
+- **ai:** entity logo, contact type, business details and photo alts for AI sites ([AGL-3979](https://linear.app/aglyn/issue/AGL-3979))
+- **console:** dashboards draw a locked CRM card on plans without it ([AGL-3977](https://linear.app/aglyn/issue/AGL-3977), [AGL-3973](https://linear.app/aglyn/issue/AGL-3973))
+- **console:** show paid features locked on Free, with the plan and an upgrade link ([AGL-3977](https://linear.app/aglyn/issue/AGL-3977), [AGL-3973](https://linear.app/aglyn/issue/AGL-3973))
+- **shared:** one plan-lock pattern for paid features on Free ([AGL-3977](https://linear.app/aglyn/issue/AGL-3977), [AGL-3973](https://linear.app/aglyn/issue/AGL-3973))
+- **ai:** take structure and style signals from the sites a person likes, behind a flag ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975), [AGL-3973](https://linear.app/aglyn/issue/AGL-3973), [AGL-3941](https://linear.app/aglyn/issue/AGL-3941))
+- **apple:** tabs, the AI panel and the help menu ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
+- **apple:** one box, title-bar history, bell popover, stars, Create new and Home ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
+
+### Fixed
+
+- **native:** draw a logo mark or favicon whole instead of cropping it to the badge ([AGL-3991](https://linear.app/aglyn/issue/AGL-3991))
+- **console:** a site collaborator's new invite is named by the platform's id ([AGL-3984](https://linear.app/aglyn/issue/AGL-3984), [AGL-3086](https://linear.app/aglyn/issue/AGL-3086))
+- **console:** a site collaborator's pending invite gains the site, never a second invite ([AGL-3984](https://linear.app/aglyn/issue/AGL-3984), [AGL-1111](https://linear.app/aglyn/issue/AGL-1111), [AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
+- **crm:** contacts-create judges and keeps the custom values sent with it ([AGL-3971](https://linear.app/aglyn/issue/AGL-3971))
+- **native:** a write over REST re-reads at once, so an editor shows its own save ([AGL-3971](https://linear.app/aglyn/issue/AGL-3971))
+- **ai:** offer only the parts a start builds; the liked site's order leads the home ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975), [AGL-3755](https://linear.app/aglyn/issue/AGL-3755), [AGL-3899](https://linear.app/aglyn/issue/AGL-3899))
+- **console:** a locked card opens a Locked features docs section of its own ([AGL-3977](https://linear.app/aglyn/issue/AGL-3977))
+- **domains:** the Domain Connect templates carry the official logo kit lockup ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
+- **ai:** the inspiration plan block names the platform's parts, not the brand ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975))
+- **ai:** read the inspiration flag statically and keep recorded pages as html and css ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975))
+- **ai:** a tracking change with no pixel ID waits in needs_input for it ([AGL-3978](https://linear.app/aglyn/issue/AGL-3978))
+- **console,tenant-data-admin,ai:** site lists stop lagging the site's name and icon ([AGL-3972](https://linear.app/aglyn/issue/AGL-3972), [AGL-3806](https://linear.app/aglyn/issue/AGL-3806))
+- **ai:** a Free plan past its section budget is trimmed to it, never refused ([AGL-3969](https://linear.app/aglyn/issue/AGL-3969))
+
+### Documentation
+
+- **domains:** list the Buy a domain guide for domain go-live ([AGL-3964](https://linear.app/aglyn/issue/AGL-3964))
+- **decision-log:** the AI tiers entry matches its Drive entry and records the go-live ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
+- **billing:** regenerate the feature matrix, generation on every paid plan ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
+
+<details>
+<summary>Also in this release: 7 test, 1 chore, 1 style</summary>
+
+- **native:** both apps' create body nests custom values in minor units ([AGL-3971](https://linear.app/aglyn/issue/AGL-3971))
+- **console:** the pricing publish script is no screen create; the AI excerpt fits ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
+- **ai:** the Anthropic and image-sink inventories name Sites I like's files ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975))
+- **native:** the plan change says the AI tier is not sold on Free ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
+- **pricing:** the figma frames carry the ai tiers, and a script publishes them ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965), [AGL-3615](https://linear.app/aglyn/issue/AGL-3615))
+- **ai:** a live eval of Sites I like on recorded pages, held to a spend cap ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975))
+- **ai:** the live site-plan eval plans a start given every business detail ([AGL-3979](https://linear.app/aglyn/issue/AGL-3979))
+- **ai:** the More details section is rounded and outlined like the build page's plan ([AGL-3979](https://linear.app/aglyn/issue/AGL-3979))
+- **ai:** the layout language's cached span is up 19 and 20 for phone and email links ([AGL-3979](https://linear.app/aglyn/issue/AGL-3979))
+
+</details>
+
+2 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.0.0-beta.270 — 2026-10-19
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.269...v1.0.0-beta.270)
