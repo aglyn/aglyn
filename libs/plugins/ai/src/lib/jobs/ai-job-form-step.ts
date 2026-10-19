@@ -50,6 +50,7 @@ import {
 } from '../runtime/ai-doctrine'
 import type { AiDoctrineTree, AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
 import type { AiLoadEstimate } from '../runtime/ai-palette'
+import { aiHasPlaceholderToken } from '../runtime/ai-placeholder-tokens'
 import { AI_PALETTE } from '../runtime/ai-palette.generated'
 import type { AiSystemBlock, AiTool } from '../runtime/ai-runtime'
 import { readSiteInventory } from '../runtime/site-inventory'
@@ -268,6 +269,7 @@ export const AI_JOB_FORM_INSTRUCTIONS: readonly AiSystemBlock[] = [
       'You build one form for a website: the fields a visitor fills in and the button that sends them. Answer with submit_form: the whole form as one flat node map, how its submissions are routed, and what the brief asks for that a form cannot collect.',
       'The root is one Form (form) holding its fields in the order a visitor fills them in. Each piece of a field is its own element: a field is a Form Control (muiFormControl) holding a Form Label (muiFormLabel) whose text a visitor reads, then the answer, then optionally Helper Text (muiFormHelperText). Give the form a submitLabel and a successMessage in the site’s voice. The Form draws its own button, so a Button (muiButton) with type submit is optional.',
       'The answer is an Input (muiInput) to type in: type email for an email address, tel for a phone number, multiline true for a description; a Select (muiSelect) holding one Select Option (muiSelectOption) per choice, or a Radio Group (muiRadioGroup) holding one Choice Label (muiFormControlLabel) per choice, each holding a Radio (muiRadio) whose value is the choice, for one choice; a Choice Label holding a Checkbox (muiCheckbox) per choice, the Checkboxes sharing one name, for several; a Rating (muiRating) for a score; a Date Picker (muiDatePicker) for a day, such as a preferred date; and a Time Picker (muiTimePicker) for a time of day. A single yes-or-no tick is a Choice Label holding one Checkbox, outside any Form Control.',
+      'A placeholder is optional: a short example of an answer, in the words a visitor would type. Never a note in square brackets such as [Phone number], and none where the label already says what to type.',
       'Every Input, Select, Radio Group, Checkbox, Rating, Date Picker and Time Picker has a name that is unique in the form, apart from Checkboxes of one question, and says what it holds in camelCase, such as fullName, email, phone or roofType; and required only when the form cannot do its job without it.',
       'A form collects text, choices, ratings, dates and times only. When the brief asks for something else, such as a file or photo upload, a signature or a payment, leave it out and name it in cannotCollect.',
       'Never draw a marketing consent, newsletter or subscribe checkbox: when the form asks for an email address, the platform adds its own.',
@@ -394,6 +396,21 @@ export interface AiFormDraft {
   dataset?: { dataset: AiFormDataset; binding: AiFormDatasetBinding }
 }
 
+/** Text in square brackets: the marker a page's copy leaves for a fact the brief never gave (rule 14). */
+const BRACKETED = /\[[^[\]\n]{1,80}\]/
+
+/**
+ * Whether a field's placeholder is a template's marker rather than a hint
+ * (AGL-3942). A placeholder is the hint a visitor reads in an empty field,
+ * never a fact the owner fills in: the beta.267 Copper Hollow Film &
+ * Portrait contact form showed "[Phone number]" in its phone field, the
+ * marker the site context asks copy to leave for a missing fact, and the
+ * draft's note then asked the owner to replace it.
+ */
+export function aiFormPlaceholderIsMarker(placeholder: string): boolean {
+  return BRACKETED.test(placeholder) || aiHasPlaceholderToken(placeholder)
+}
+
 /**
  * The draft a validated design and its answer make: the form node bound to
  * `formId` and captioned `name`, the platform's consent field when the
@@ -417,6 +434,10 @@ export function aiFormDraft(
       props: { ...(node.props ?? {}) },
       nodes: Array.isArray(node.nodes) ? [...(node.nodes as string[])] : [],
     }
+    // A field's hint that is a marker shows nothing a visitor can use: its label says what to type.
+    const props = nodes[id]?.props as Record<string, unknown>
+    const placeholder = props['placeholder']
+    if (typeof placeholder === 'string' && aiFormPlaceholderIsMarker(placeholder)) delete props['placeholder']
   }
   const form = nodes[formNodeId]
   let consentFieldName: string | null = null
@@ -987,8 +1008,9 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
     const note = [
       aiFormOutputNote(draft.answer),
       draft.dataset ? aiFormDatasetNote(draft.dataset.dataset, draft.dataset.binding) : null,
+      // Read off the draft as written, so a marker it never shows is never listed.
       aiBracketedFactsNote({
-        tree: { rootId: result.value.rootId, nodes: result.value.nodes as unknown as AiDoctrineTree['nodes'] },
+        tree: { rootId: draft.rootId, nodes: draft.nodes as unknown as AiDoctrineTree['nodes'] },
         inventory,
       }),
     ]

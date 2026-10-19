@@ -63,13 +63,13 @@ fun main(args: Array<String>) {
           Item("Keyboard shortcuts", shortcut = shortcut(Key.Slash), onClick = { navigator.command = ShellCommand.SHORTCUTS })
         }
       },
-    ) {
+    ) { onIntroRevealed ->
       androidx.compose.runtime.CompositionLocalProvider(
         com.aglyn.screens.LocalGoogleCredentialSource provides google,
       ) {
         // The Mac's traffic lights sit over the transparent title bar: the rail and the title bar start below them.
         androidx.compose.runtime.CompositionLocalProvider(com.aglyn.shell.LocalTitleBarInset provides if (isMacOs) 28.dp else 0.dp) {
-          AglynShell(services, navigator, autoSignIn = autoSignIn)
+          AglynShell(services, navigator, autoSignIn = autoSignIn, playIntro = true, onIntroRevealed = onIntroRevealed)
         }
       }
     }
