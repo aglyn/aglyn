@@ -56,6 +56,11 @@ fun main() = runBlocking {
     "marketplace" to { nav -> site?.let { aglyn.workspace.selectSite(it) }; nav.select(NavKeys.of("marketplace.browse")) },
     "theme-night" to { nav -> theme { it.copy(theme = com.aglyn.contracts.AppThemeName.NIGHT) }; site?.let { aglyn.workspace.selectSite(it) }; nav.select(NavKeys.of("commerce.orders")) },
     "theme-ocean" to { nav -> theme { it.copy(theme = com.aglyn.contracts.AppThemeName.OCEAN) }; site?.let { aglyn.workspace.selectSite(it) }; nav.select(NavKeys.of("commerce.orders")) },
+    // The fidelity round: Sites, an order, the one box open, and the workspace switcher hidden.
+    "workspace-sites-list" to { nav -> aglyn.workspace.selectWholeWorkspace(); nav.select(NavKeys.of("site.sites")) },
+    "site-order" to { nav -> site?.let { aglyn.workspace.selectSite(it) }; nav.select(NavKeys.of("commerce.orders", System.getProperty("aglyn.snapshotOrder")?.let { mapOf("order" to it) } ?: emptyMap())) },
+    "onebox" to { nav -> site?.let { aglyn.workspace.selectSite(it) }; nav.select(ShellNavigator.HOME); nav.command = ShellCommand.FIND },
+    "rail-hidden" to { nav -> aglyn.prefs.set("aglyn.nav.railHidden", "1"); site?.let { aglyn.workspace.selectSite(it) }; nav.select(NavKeys.of("commerce.orders")) },
     "theme-compact" to { nav -> theme { it.copy(density = com.aglyn.contracts.AppDensity.COMPACT, accent = "#7A5CF0") }; site?.let { aglyn.workspace.selectSite(it) }; nav.select(NavKeys.of("commerce.orders")) },
   )
   val only = System.getProperty("aglyn.snapshotOnly")?.split(',')
@@ -67,6 +72,7 @@ fun main() = runBlocking {
         val navigator = ShellNavigator()
         withContext(Dispatchers.Main) {
           if (aglyn.accountPrefs.state.value.deviceTheme != null && !name.startsWith("theme-")) aglyn.accountPrefs.setTheme(original, deviceOnly = true)
+          if (name != "rail-hidden") aglyn.prefs.set("aglyn.nav.railHidden", null)
           prepare(navigator)
         }
         delay(1500)

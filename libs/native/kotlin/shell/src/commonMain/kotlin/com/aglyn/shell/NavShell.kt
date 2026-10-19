@@ -747,13 +747,15 @@ private fun WideToolbar(
         TitleBarButton("Back", "arrow_back", "history-back", enabled = navigator.canGoBackInHistory) { navigator.historyBack() }
       }
       TitleBarButton("Forward", "arrow_forward", "history-forward", enabled = !pushed && navigator.canGoForwardInHistory) { navigator.historyForward() }
+      val openRecent = LocalOpenRecent.current
+      RecentHistoryButton(services.accountPrefs.state.collectAsState().value) { item -> openRecent?.invoke(item) }
     }
     Surface(
       onClick = { chrome.oneBox = true },
       shape = RoundedCornerShape(m.controlRadius),
       color = MaterialTheme.colorScheme.surfaceContainerHigh,
       border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-      modifier = Modifier.align(Alignment.Center).fillMaxWidth(0.42f).widthIn(min = 220.dp, max = 480.dp).height(if (m.compact) 30.dp else 36.dp)
+      modifier = Modifier.align(Alignment.Center).fillMaxWidth(0.42f).widthIn(min = 240.dp, max = 480.dp).height(if (m.compact) 30.dp else 36.dp)
         .testTag("search-or-jump").semantics { contentDescription = "Search or jump to" },
     ) {
       Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -865,6 +867,20 @@ internal fun StarButton(services: ShellServices, here: com.aglyn.contracts.Accou
       text = { Text("You can star ${com.aglyn.contracts.Contracts.starredMax} places. Unstar one from the sidebar's Starred group to make room.") },
       confirmButton = { androidx.compose.material3.TextButton(onClick = { full = false }) { Text("OK") } },
     )
+  }
+}
+
+/** The clock in the title bar: what was opened recently, across workspaces. */
+@Composable
+private fun RecentHistoryButton(prefs: com.aglyn.core.AccountPreferences, open: (com.aglyn.contracts.AccountItemRef) -> Unit) {
+  var expanded by remember { mutableStateOf(false) }
+  Box {
+    TitleBarButton("Recent", "history", "history-recent", enabled = prefs.recents.isNotEmpty()) { expanded = true }
+    androidx.compose.material3.DropdownMenu(expanded, onDismissRequest = { expanded = false }, modifier = Modifier.testTag("history-menu")) {
+      for (item in prefs.recents.take(12)) {
+        MenuRow(item.label, oneBoxIcon(item.kind), tag = "history-${item.id}") { expanded = false; open(item.toRef()) }
+      }
+    }
   }
 }
 

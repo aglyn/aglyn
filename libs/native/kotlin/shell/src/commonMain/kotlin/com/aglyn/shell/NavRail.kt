@@ -99,7 +99,7 @@ internal fun WorkspaceRail(
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     // The brand's mark, small, at the top (the logo kit's multi-color mark, never faded).
-    com.aglyn.ui.AglynMark(Modifier.size(20.dp).testTag("rail-brand-mark"), contentDescription = services.config.brandName)
+    com.aglyn.ui.AglynMark(Modifier.size(if (m.compact) 20.dp else 24.dp).testTag("rail-brand-mark"), contentDescription = services.config.brandName)
     Spacer(Modifier.height(10.dp))
     Column(
       Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
