@@ -28,7 +28,7 @@
  * | ---------------- | --------------------------------------------- | -------------------------------------- | --------------------------- |
  * | `storage`        | Storage (organization)                        | `/api/media/storage` usedBytes         | its allowanceMb             |
  * | `bandwidth`      | Bandwidth (this month, organization)          | `/api/billing/host-usage`, every site + the org | `bandwidthGb`       |
- * | `campaignEmails` | Campaign emails (this month, organization)    | `orgs/{org}/counters/campaignEmailSends` | `emailSendsPerMonth`      |
+ * | `emailSends`     | Campaign emails (this month, organization)    | `orgs/{org}/counters/campaignEmailSends` | `emailSendsPerMonth`      |
  * | `aiCredits`      | AI credits (this month)                       | `/api/ai/billing/credits`              | `assistCreditsPerMonth`     |
  * | `dataStorage`    | Data storage (organization)                   | `orgs/{org}/usage/{month}` dataStorageMb | `dataStorageMbPerOrg`     |
  * | `seats`          | Team seats (incl. you)                        | `/api/orgs/members?counts=1`           | the managers seat quota     |
@@ -43,7 +43,7 @@
 const METERS = [
   'storage',
   'bandwidth',
-  'campaignEmails',
+  'emailSends',
   'aiCredits',
   'dataStorage',
   'seats',
@@ -65,7 +65,7 @@ export const PLAN_CARD_METERS: string[] = [...METERS]
 export const PLAN_CARD_METER_LABELS: Record<string, string> = {
   storage: 'Storage',
   bandwidth: 'Bandwidth (this month)',
-  campaignEmails: 'Campaign emails (this month)',
+  emailSends: 'Campaign emails (this month)',
   aiCredits: 'AI credits (this month)',
   dataStorage: 'Data storage',
   seats: 'Team seats (incl. you)',
@@ -78,7 +78,7 @@ export const PLAN_CARD_METER_LABELS: Record<string, string> = {
 export const PLAN_CARD_METER_UNITS: Record<string, string> = {
   storage: 'MB',
   bandwidth: 'GB',
-  campaignEmails: '',
+  emailSends: '',
   aiCredits: '',
   dataStorage: 'MB',
   seats: '',
@@ -98,7 +98,7 @@ export const PLAN_CARD_CONTEXTS: string[] = [...CONTEXTS]
 export const PLAN_CARD_CONTEXT_METERS: Record<string, string[]> = {
   media: ['storage'],
   website: ['bandwidth'],
-  email: ['campaignEmails'],
+  email: ['emailSends'],
   ai: ['aiCredits'],
   forms: ['forms'],
   data: ['dataStorage'],

@@ -26069,7 +26069,7 @@
                 "limit": 10
               },
               {
-                "meter": "campaignEmails",
+                "meter": "emailSends",
                 "used": 100,
                 "limit": 1000
               },
@@ -26089,7 +26089,7 @@
           "result": [
             "storage",
             "bandwidth",
-            "campaignEmails",
+            "emailSends",
             "sites"
           ]
         },
@@ -26112,7 +26112,7 @@
                 "limit": 10
               },
               {
-                "meter": "campaignEmails",
+                "meter": "emailSends",
                 "used": 100,
                 "limit": 1000
               },
@@ -26130,7 +26130,7 @@
             "email"
           ],
           "result": [
-            "campaignEmails",
+            "emailSends",
             "bandwidth",
             "storage",
             "sites"
@@ -26155,7 +26155,7 @@
                 "limit": 10
               },
               {
-                "meter": "campaignEmails",
+                "meter": "emailSends",
                 "used": 100,
                 "limit": 1000
               },
@@ -26175,7 +26175,7 @@
           "result": [
             "bandwidth",
             "storage",
-            "campaignEmails",
+            "emailSends",
             "sites"
           ]
         },
@@ -26198,7 +26198,7 @@
                 "limit": 10
               },
               {
-                "meter": "campaignEmails",
+                "meter": "emailSends",
                 "used": 100,
                 "limit": 1000
               },
@@ -26219,7 +26219,7 @@
             "sites",
             "bandwidth",
             "storage",
-            "campaignEmails"
+            "emailSends"
           ]
         },
         {
@@ -26241,7 +26241,7 @@
                 "limit": 10
               },
               {
-                "meter": "campaignEmails",
+                "meter": "emailSends",
                 "used": 100,
                 "limit": 1000
               },
@@ -26261,7 +26261,7 @@
           "result": [
             "bandwidth",
             "storage",
-            "campaignEmails",
+            "emailSends",
             "sites"
           ]
         },
@@ -26284,7 +26284,7 @@
                 "limit": 10
               },
               {
-                "meter": "campaignEmails",
+                "meter": "emailSends",
                 "used": 100,
                 "limit": 1000
               },
@@ -26304,7 +26304,7 @@
           "result": [
             "bandwidth",
             "storage",
-            "campaignEmails",
+            "emailSends",
             "sites"
           ]
         },
@@ -26327,7 +26327,7 @@
                 "limit": 10
               },
               {
-                "meter": "campaignEmails",
+                "meter": "emailSends",
                 "used": 100,
                 "limit": 1000
               },
@@ -26347,7 +26347,7 @@
           "result": [
             "bandwidth",
             "storage",
-            "campaignEmails",
+            "emailSends",
             "sites"
           ]
         },

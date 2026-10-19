@@ -28354,7 +28354,7 @@
               "limit": 10
             },
             {
-              "meter": "campaignEmails",
+              "meter": "emailSends",
               "used": 100,
               "limit": 1000
             },
@@ -28389,7 +28389,7 @@
               "limit": 10
             },
             {
-              "meter": "campaignEmails",
+              "meter": "emailSends",
               "used": 100,
               "limit": 1000
             },
@@ -28424,7 +28424,7 @@
               "limit": 10
             },
             {
-              "meter": "campaignEmails",
+              "meter": "emailSends",
               "used": 100,
               "limit": 1000
             },
@@ -28459,7 +28459,7 @@
               "limit": 10
             },
             {
-              "meter": "campaignEmails",
+              "meter": "emailSends",
               "used": 100,
               "limit": 1000
             },
@@ -28494,7 +28494,7 @@
               "limit": 10
             },
             {
-              "meter": "campaignEmails",
+              "meter": "emailSends",
               "used": 100,
               "limit": 1000
             },
@@ -28529,7 +28529,7 @@
               "limit": 10
             },
             {
-              "meter": "campaignEmails",
+              "meter": "emailSends",
               "used": 100,
               "limit": 1000
             },
@@ -28564,7 +28564,7 @@
               "limit": 10
             },
             {
-              "meter": "campaignEmails",
+              "meter": "emailSends",
               "used": 100,
               "limit": 1000
             },

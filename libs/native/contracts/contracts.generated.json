@@ -7665,7 +7665,7 @@
       "dataStorage"
     ],
     "email": [
-      "campaignEmails"
+      "emailSends"
     ],
     "forms": [
       "forms"
@@ -7697,8 +7697,8 @@
   "PLAN_CARD_METER_LABELS": {
     "aiCredits": "AI credits (this month)",
     "bandwidth": "Bandwidth (this month)",
-    "campaignEmails": "Campaign emails (this month)",
     "dataStorage": "Data storage",
+    "emailSends": "Campaign emails (this month)",
     "forms": "Saved forms",
     "pages": "Pages",
     "seats": "Team seats (incl. you)",
@@ -7708,8 +7708,8 @@
   "PLAN_CARD_METER_UNITS": {
     "aiCredits": "",
     "bandwidth": "GB",
-    "campaignEmails": "",
     "dataStorage": "MB",
+    "emailSends": "",
     "forms": "",
     "pages": "",
     "seats": "",
@@ -7719,7 +7719,7 @@
   "PLAN_CARD_METERS": [
     "storage",
     "bandwidth",
-    "campaignEmails",
+    "emailSends",
     "aiCredits",
     "dataStorage",
     "seats",

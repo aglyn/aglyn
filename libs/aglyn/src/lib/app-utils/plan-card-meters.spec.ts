@@ -30,25 +30,25 @@ const readings: PlanCardReading[] = [
   { meter: 'sites', used: 3, limit: 3 },
   { meter: 'storage', used: 400, limit: 1000 },
   { meter: 'bandwidth', used: 9, limit: 10 },
-  { meter: 'campaignEmails', used: 100, limit: 1000 },
+  { meter: 'emailSends', used: 100, limit: 1000 },
   { meter: 'aiCredits', used: null, limit: 500 },
   { meter: 'dataStorage', used: 5, limit: null },
 ]
 
 describe('planCardMeterOrder', () => {
   it('leads with the context meter, then the rest fullest first', () => {
-    expect(planCardMeterOrder(readings, 'media')).toEqual(['storage', 'bandwidth', 'campaignEmails', 'sites'])
-    expect(planCardMeterOrder(readings, 'email')).toEqual(['campaignEmails', 'bandwidth', 'storage', 'sites'])
+    expect(planCardMeterOrder(readings, 'media')).toEqual(['storage', 'bandwidth', 'emailSends', 'sites'])
+    expect(planCardMeterOrder(readings, 'email')).toEqual(['emailSends', 'bandwidth', 'storage', 'sites'])
   })
 
   it('puts Sites first only on the Sites list, however full it is', () => {
-    expect(planCardMeterOrder(readings, null)).toEqual(['bandwidth', 'storage', 'campaignEmails', 'sites'])
-    expect(planCardMeterOrder(readings, 'sites')).toEqual(['sites', 'bandwidth', 'storage', 'campaignEmails'])
+    expect(planCardMeterOrder(readings, null)).toEqual(['bandwidth', 'storage', 'emailSends', 'sites'])
+    expect(planCardMeterOrder(readings, 'sites')).toEqual(['sites', 'bandwidth', 'storage', 'emailSends'])
   })
 
   it('leaves out a failed read and an uncapped meter, and a context with nothing to show', () => {
-    expect(planCardMeterOrder(readings, 'ai')).toEqual(['bandwidth', 'storage', 'campaignEmails', 'sites'])
-    expect(planCardMeterOrder(readings, 'data')).toEqual(['bandwidth', 'storage', 'campaignEmails', 'sites'])
+    expect(planCardMeterOrder(readings, 'ai')).toEqual(['bandwidth', 'storage', 'emailSends', 'sites'])
+    expect(planCardMeterOrder(readings, 'data')).toEqual(['bandwidth', 'storage', 'emailSends', 'sites'])
     expect(planCardMeterOrder([{ meter: 'pages', used: 2, limit: 0 }], null)).toEqual([])
   })
 
