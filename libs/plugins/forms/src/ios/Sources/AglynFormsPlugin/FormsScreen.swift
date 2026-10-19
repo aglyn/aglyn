@@ -80,9 +80,10 @@ struct FormsScreen: View {
       }
     }
     .navigationTitle("Forms")
+    .aglynScreenTitle("Forms")
     .aglynSearchable(text: $searchText, prompt: "Search forms")
     .onChange(of: searchText) { _, text in model.type(text) }
-    .aglynPrimaryAction(id: "add-form", "New form", systemImage: "plus", enabled: role.canEditContent) {
+    .aglynPrimaryAction(id: "add-form", "New form", systemImage: "plus", enabled: role.canEditContent, shortcut: KeyboardShortcut("n", modifiers: .command)) {
       runner.clear()
       sheet = .create
     }
@@ -385,6 +386,7 @@ struct FormNameSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(title)
+      .aglynScreenTitle(title)
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

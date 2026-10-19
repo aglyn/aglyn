@@ -30,6 +30,7 @@ struct RedirectsListScreen: View {
       }
     }
     .navigationTitle("Redirects")
+    .aglynScreenTitle("Redirects")
     .aglynPrimaryAction(id: "redirects-add", "Add redirect", systemImage: "plus", enabled: editor != nil) { editor?.add() }
     .safeAreaInset(edge: .bottom) {
       if let notice = editor?.notice {
@@ -164,6 +165,7 @@ struct RedirectEditorSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(editor.draft?.id == nil ? "Add redirect" : "Edit redirect")
+      .aglynScreenTitle(editor.draft?.id == nil ? "Add redirect" : "Edit redirect")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
@@ -247,6 +249,7 @@ struct RedirectDetail: View {
       .formStyle(.grouped)
       .aglynListBackground()
       .navigationTitle(titled ? row.source : "Redirects")
+      .aglynScreenTitle(titled ? row.source : "Redirects")
     } else {
       AglynSelectionPlaceholder("No redirect selected", systemImage: RedirectsSymbols.rule)
     }

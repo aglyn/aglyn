@@ -180,16 +180,22 @@ public struct AglynBrowserScreen: View {
         }
       }
       .navigationTitle(title)
-      #if os(macOS)
-        .navigationSubtitle(address)
-      #endif
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .toolbar { toolbar }
       #else
         // The Mac window has no system toolbar: back, forward, reload and the page menu sit in the screen's head.
+        .aglynScreenTitle(title)
         .aglynScreenToolbar(id: "browser") {
+          // The page's address beside its controls, as the subtitle the window's title bar used to carry.
+          Text(address)
+            .font(.system(size: AglynShellMetrics.rowText - 1))
+            .foregroundStyle(AglynColor.secondaryText)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .frame(maxWidth: 320, alignment: .trailing)
+            .accessibilityIdentifier("browser-address")
           back
           forward
           reload

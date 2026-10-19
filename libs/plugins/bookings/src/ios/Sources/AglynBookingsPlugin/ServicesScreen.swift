@@ -37,6 +37,7 @@ struct BookingServicesScreen: View {
       }
     }
     .navigationTitle("Services")
+    .aglynScreenTitle("Services")
     .aglynPrimaryAction(id: "add-service", "Add service", systemImage: "plus") {
       adding = true
       selection = Self.newID
@@ -266,6 +267,7 @@ struct ServiceEditor: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(service == nil ? "New service" : form.name.isEmpty ? "Service" : form.name)
+    .aglynScreenTitle(service == nil ? "New service" : form.name.isEmpty ? "Service" : form.name)
     // Beside the list on the Mac and iPad, Save sits in the head as a bordered button; the list keeps Add service.
     .aglynEditorActions(
       id: "service-save", save: service == nil ? "Add" : "Save", enabled: bookingServiceDraftProblem(name: form.name) == nil,

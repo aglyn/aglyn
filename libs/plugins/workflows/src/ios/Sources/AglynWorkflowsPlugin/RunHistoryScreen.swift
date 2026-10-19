@@ -63,6 +63,7 @@ struct RunHistoryScreen: View {
       if text.isEmpty { filters.search = "" }
     }
     .navigationTitle("Runs — \(params["name"] ?? "")")
+    .aglynScreenTitle("Runs — \(params["name"] ?? "")")
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
     #endif

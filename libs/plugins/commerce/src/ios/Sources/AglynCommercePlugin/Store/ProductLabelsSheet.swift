@@ -104,6 +104,7 @@ struct ProductLabelsSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Labels — \(productName)")
+      .aglynScreenTitle("Labels — \(productName)")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

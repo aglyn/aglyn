@@ -114,6 +114,7 @@ struct LogicScreen: View {
       }
     }
     .navigationTitle("Functions & Variables")
+    .aglynScreenTitle("Functions & Variables")
     .aglynPrimaryAction(
       tab == .health
         ? nil
@@ -315,6 +316,7 @@ private struct UsageSheet: View {
         }
       }
       .navigationTitle("Where \"\(name)\" is used")
+      .aglynScreenTitle("Where \"\(name)\" is used")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
@@ -392,6 +394,7 @@ private struct VariableEditorSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(draft.id == nil ? "New variable" : "Edit variable")
+      .aglynScreenTitle(draft.id == nil ? "New variable" : "Edit variable")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

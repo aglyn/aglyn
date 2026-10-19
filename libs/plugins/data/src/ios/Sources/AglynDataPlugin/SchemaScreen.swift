@@ -71,6 +71,7 @@ struct SchemaScreen: View {
       }
     }
     .navigationTitle("Schema")
+    .aglynScreenTitle("Schema")
     .task(id: "\(context.orgID ?? "")-\(datasetID)") {
       if let orgID = context.orgID { await live.bind(context.firestore, datasetsPath(orgID) + [datasetID]) }
     }
@@ -433,6 +434,7 @@ private struct FieldEditorSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(isNew ? "New field" : "Edit field")
+      .aglynScreenTitle(isNew ? "New field" : "Edit field")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

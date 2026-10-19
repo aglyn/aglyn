@@ -49,6 +49,7 @@ struct SitesScreen: View {
       }
     }
     .navigationTitle("Sites")
+    .aglynScreenTitle("Sites")
     .aglynSearchable(text: $searchText, prompt: "Search sites") {
       AglynFilterMenu(active: model.domain == .all ? nil : model.domain.label) {
         Picker("Sites", selection: Binding(get: { model.domain }, set: { model.domain = $0 })) {

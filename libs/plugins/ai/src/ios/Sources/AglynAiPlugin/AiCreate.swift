@@ -325,6 +325,7 @@ struct AiCreateScreen: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(title)
+    .aglynScreenTitle(title)
     .task {
       if let initialJobID, jobID == nil {
         jobID = initialJobID

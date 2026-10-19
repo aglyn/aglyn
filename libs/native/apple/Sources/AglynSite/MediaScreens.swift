@@ -63,6 +63,7 @@ struct MediaScreen: View {
       }
     }
     .navigationTitle("Media")
+    .aglynScreenTitle("Media")
   }
 }
 
@@ -167,7 +168,10 @@ struct MediaLibrary: View {
     }
     // Upload is the library's one primary action in its head on the Mac and iPad, with its other sources and the sort and
     // folder actions in More; a phone keeps both menus in its navigation bar.
-    .aglynWidePrimaryAction(id: "media-upload", "Upload", systemImage: "square.and.arrow.up", enabled: canEdit && !runner.busy) {
+    .aglynWidePrimaryAction(
+      id: "media-upload", "Upload", systemImage: "square.and.arrow.up", enabled: canEdit && !runner.busy,
+      shortcut: KeyboardShortcut("u", modifiers: .command), help: "Upload photos, videos and documents"
+    ) {
       pickSource = Self.defaultSource
     }
     .aglynScreenToolbar(id: "media") { toolbar }
@@ -478,6 +482,7 @@ struct MediaLibrary: View {
             canEdit: canEdit, onDeleted: deleted
           )
           .navigationTitle(item.fileName)
+          .aglynScreenTitle(item.fileName)
         } label: {
           label
         }

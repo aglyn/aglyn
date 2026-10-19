@@ -60,6 +60,7 @@ struct OrdersScreen: View {
       }
     }
     .navigationTitle("Orders")
+    .aglynScreenTitle("Orders")
     // Draft order is the list's primary action; Select and the shipping tools sit beside it (in the head on the Mac
     // and iPad, the navigation bar on a phone).
     .aglynPrimaryAction(id: "orders-draft", "Draft order", systemImage: "link.badge.plus") { drafting = true }

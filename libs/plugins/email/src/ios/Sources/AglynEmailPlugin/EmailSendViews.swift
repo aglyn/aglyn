@@ -78,9 +78,12 @@ struct EmailsScreen: View {
       }
     }
     .navigationTitle("Emails")
+    .aglynScreenTitle("Emails")
     .aglynSearchable(text: $searchText, prompt: "Search subjects", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .aglynPrimaryAction(id: "email-compose", "Write an email", systemImage: "square.and.pencil", enabled: role.canSend) {
+    .aglynPrimaryAction(
+      id: "email-compose", "Write an email", systemImage: "square.and.pencil", enabled: role.canSend, shortcut: KeyboardShortcut("n", modifiers: .command)
+    ) {
       composing = true
     }
     .sheet(isPresented: $composing) { ComposeSheet(context: context, send: nil, siteName: role.siteName, campaignID: composeCampaign) }
@@ -282,6 +285,7 @@ struct EmailDetail: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(send.subject)
+    .aglynScreenTitle(send.subject)
     .sheet(item: $sheet) { kind in sendSheet(kind, send) }
   }
 
@@ -359,6 +363,7 @@ struct CountedConfirmSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(title)
+      .aglynScreenTitle(title)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Not now") { dismiss() }.disabled(busy) }
         ToolbarItem(placement: .confirmationAction) {

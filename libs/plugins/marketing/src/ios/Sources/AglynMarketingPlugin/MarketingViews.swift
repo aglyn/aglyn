@@ -56,6 +56,7 @@ struct MarketingHubScreen: View {
     }
     .background(AglynColor.page)
     .navigationTitle(section == .overview ? "Marketing" : section.label)
+    .aglynScreenTitle(section == .overview ? "Marketing" : section.label)
     .task(id: context.hostID) { access.start(context) }
     .onDisappear { access.stop() }
   }
@@ -367,6 +368,7 @@ struct CampaignDetail: View {
         .formStyle(.grouped)
         .aglynListBackground()
         .navigationTitle(row.name)
+        .aglynScreenTitle(row.name)
         .aglynScreenToolbar(id: "campaign") {
           if access.canEdit {
             Menu {
@@ -872,6 +874,7 @@ struct ExperimentDetail: View {
         .formStyle(.grouped)
         .aglynListBackground()
         .navigationTitle(row.name)
+        .aglynScreenTitle(row.name)
         .aglynScreenToolbar(id: "experiment") {
           if access.canEdit {
             Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }

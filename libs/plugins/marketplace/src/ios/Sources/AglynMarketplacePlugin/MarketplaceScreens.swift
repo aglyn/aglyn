@@ -86,6 +86,7 @@ struct BrowseScreen: View {
       }
     }
     .navigationTitle("Marketplace")
+    .aglynScreenTitle("Marketplace")
     .aglynPushDestination(item: $pushed) { id in ListingDetail(context: context, listingID: id).navigationTitle("Listing") }
     .aglynSearchable(text: $search, prompt: "Search the marketplace")
     .task(id: "\(search)|\(category ?? "")|\(sort.rawValue)|\(context.orgID ?? "")") {
@@ -677,6 +678,7 @@ struct InstalledScreen: View {
       }
     }
     .navigationTitle("Installed")
+    .aglynScreenTitle("Installed")
     .sheet(item: $removing) { pin in
       AglynActionSheet(
         "Remove \(pin.name)?",
@@ -774,6 +776,7 @@ struct LicencesScreen: View {
       }
     }
     .navigationTitle("Licenses")
+    .aglynScreenTitle("Licenses")
   }
 
   private func name(_ licence: LicenceRow) -> String { listingNames[licence.listingID] ?? licence.listingID }

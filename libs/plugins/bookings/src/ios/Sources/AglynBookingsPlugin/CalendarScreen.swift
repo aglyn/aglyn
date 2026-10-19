@@ -117,6 +117,7 @@ struct BookingsCalendarScreen: View {
       }
     }
     .navigationTitle("Bookings")
+    .aglynScreenTitle("Bookings")
     .aglynScreenToolbar(id: "bookings") {
       Button {
         context.navigate(bookingsServicesScreen)

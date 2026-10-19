@@ -46,6 +46,7 @@ struct FunnelsScreen: View {
       }
     }
     .navigationTitle("Funnels")
+    .aglynScreenTitle("Funnels")
     .task(id: context.hostID) {
       access.start(context)
       editor = context.hostID.map {
@@ -205,6 +206,7 @@ struct FunnelDetail: View {
     }
     .background(AglynColor.page)
     .navigationTitle(row.name)
+    .aglynScreenTitle(row.name)
     .task(id: "\(row.id)|\(row.version)|\(days)|\(editor.refreshKey)") {
       guard !row.draft else { return }
       state = .loading
@@ -395,6 +397,7 @@ struct FunnelEditorSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(editor.draft?.id == nil ? "New funnel" : "Edit funnel")
+      .aglynScreenTitle(editor.draft?.id == nil ? "New funnel" : "Edit funnel")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
@@ -505,6 +508,7 @@ struct FunnelProposeSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Create a funnel with AI")
+      .aglynScreenTitle("Create a funnel with AI")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
@@ -551,6 +555,7 @@ struct DropOffSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Act on this drop-off")
+      .aglynScreenTitle("Act on this drop-off")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

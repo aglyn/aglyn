@@ -56,6 +56,7 @@ struct OutreachHubScreen: View {
       }
     }
     .navigationTitle("Sequences")
+    .aglynScreenTitle("Sequences")
     .task(id: context.orgID) { gate.start(context) }
     .onChange(of: gate.member.document?.string("roleId")) { _, _ in gate.follow(context) }
     .onDisappear { gate.stop() }
@@ -265,6 +266,7 @@ struct SequenceDetail: View {
         .formStyle(.grouped)
         .aglynListBackground()
         .navigationTitle(row.name)
+        .aglynScreenTitle(row.name)
         .aglynScreenToolbar(id: "sequence") {
           Menu {
             Button("Edit", systemImage: "pencil") { editing = true }
@@ -391,6 +393,7 @@ struct SequenceEditor: View {
       }
       .formStyle(.grouped)
       .navigationTitle(sequence == nil ? "New sequence" : "Edit sequence")
+      .aglynScreenTitle(sequence == nil ? "New sequence" : "Edit sequence")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
         ToolbarItem(placement: .confirmationAction) {
@@ -502,6 +505,7 @@ struct EnrollSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Enroll people")
+      .aglynScreenTitle("Enroll people")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
         ToolbarItem(placement: .confirmationAction) {

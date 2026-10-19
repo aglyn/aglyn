@@ -192,10 +192,11 @@ private struct RecordsBody: View {
       }
     }
     .navigationTitle(dataset.plural.trimmingCharacters(in: .whitespaces).isEmpty ? dataset.name : dataset.plural)
+    .aglynScreenTitle(dataset.plural.trimmingCharacters(in: .whitespaces).isEmpty ? dataset.name : dataset.plural)
     .aglynSearchable(text: $searchText, prompt: "Search \(dataset.name)")
     .onChange(of: searchText) { _, text in model.type(text) }
     // Add is the one primary action; Import and Export are in the More menu on the Mac and iPad.
-    .aglynPrimaryAction(id: "add-record", "Add \(noun)", systemImage: "plus", enabled: canWrite) {
+    .aglynPrimaryAction(id: "add-record", "Add \(noun)", systemImage: "plus", enabled: canWrite, shortcut: KeyboardShortcut("n", modifiers: .command)) {
       runner.clear()
       sheet = .edit(recordID: nil, values: newRecordInputs(dataset.model))
     }
@@ -430,6 +431,7 @@ struct RecordDetailView: View {
       }
     }
     .navigationTitle(titled ? "Record" : "Records")
+    .aglynScreenTitle(titled ? "Record" : "Records")
     .task(id: "\(dataset.id)-\(recordID)") { await live.bind(context.firestore, recordsPath(orgID, dataset.id) + [recordID]) }
   }
 
@@ -536,6 +538,7 @@ private struct RecordEditorSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(recordID == nil ? "New \(noun)" : "Edit \(noun)")
+      .aglynScreenTitle(recordID == nil ? "New \(noun)" : "Edit \(noun)")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

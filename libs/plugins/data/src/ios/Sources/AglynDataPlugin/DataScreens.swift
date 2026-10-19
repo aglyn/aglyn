@@ -197,6 +197,7 @@ struct DatasetsScreen: View {
       }
     }
     .navigationTitle("Data")
+    .aglynScreenTitle("Data")
   }
 
   private func layout(_ orgID: String) -> some View {
@@ -222,7 +223,9 @@ struct DatasetsScreen: View {
     .aglynPrimaryAction(
       model.ready && model.rows.isEmpty
         ? nil
-        : AglynPrimaryAction(id: "add-dataset", title: "New dataset", systemImage: "plus", enabled: canWrite) {
+        : AglynPrimaryAction(id: "add-dataset", title: "New dataset", systemImage: "plus", enabled: canWrite,
+          shortcut: KeyboardShortcut("n", modifiers: .command)
+        ) {
           runner.clear()
           sheet = .create
         })
@@ -499,6 +502,7 @@ struct DatasetDetailView: View {
       }
     }
     .navigationTitle(titled ? (dataset?.name ?? "Dataset") : "Data")
+    .aglynScreenTitle(titled ? (dataset?.name ?? "Dataset") : "Data")
   }
 
   private func content(_ dataset: DatasetRow) -> some View {

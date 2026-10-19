@@ -86,6 +86,7 @@ struct ContentScreen: View {
       }
     }
     .navigationTitle("Content")
+    .aglynScreenTitle("Content")
   }
 
   @ViewBuilder
@@ -183,7 +184,7 @@ private struct CollectionEntries: View {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }
     }
-    .aglynPrimaryAction(id: "add-entry", "New entry", systemImage: "plus", enabled: env.canWrite) {
+    .aglynPrimaryAction(id: "add-entry", "New entry", systemImage: "plus", enabled: env.canWrite, shortcut: KeyboardShortcut("n", modifiers: .command)) {
       env.open(.newEntry(collection.id))
     }
     .aglynScreenToolbar(id: "collection") {
@@ -304,6 +305,7 @@ private struct EntryEditor: View {
       }
     }
     .navigationTitle("Entry")
+    .aglynScreenTitle("Entry")
     .task(id: entryID) {
       await live.bind(env.context.firestore, ["hosts", env.hostID, "collections", collection.id, "entries", entryID])
     }

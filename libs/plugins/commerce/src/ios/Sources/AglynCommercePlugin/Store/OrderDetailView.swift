@@ -51,6 +51,7 @@ struct OrderDetailView: View {
       }
     }
     .navigationTitle(titled ? (model.row?.number ?? "Order") : "Orders")
+    .aglynScreenTitle(titled ? (model.row?.number ?? "Order") : "Orders")
     #if os(iOS)
       // The record's head below already shows the number large.
       .navigationBarTitleDisplayMode(.inline)

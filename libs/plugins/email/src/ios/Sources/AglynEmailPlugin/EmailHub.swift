@@ -260,6 +260,7 @@ struct EmailHubScreen: View {
     }
     .background(AglynColor.page)
     .navigationTitle(section == .messages ? "Emails" : section.label)
+    .aglynScreenTitle(section == .messages ? "Emails" : section.label)
   }
 
   @ViewBuilder
@@ -568,6 +569,7 @@ struct ListDetail: View {
       }
     }
     .navigationTitle(row?.name ?? "List")
+    .aglynScreenTitle(row?.name ?? "List")
     // Add people is the head's one primary action on the Mac and iPad; on a phone it stays first in the list's menu.
     .aglynWidePrimaryAction(id: "list-add-people", "Add people", systemImage: "person.badge.plus") { adding = true }
     .aglynScreenToolbar(id: "email-list") {
@@ -667,6 +669,7 @@ struct AddPeopleSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Add people")
+      .aglynScreenTitle("Add people")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
         ToolbarItem(placement: .confirmationAction) {

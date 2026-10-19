@@ -52,6 +52,7 @@ struct ListAssignmentSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Add to a marketing list")
+      .aglynScreenTitle("Add to a marketing list")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
         ToolbarItem(placement: .confirmationAction) {
@@ -102,6 +103,7 @@ struct PeopleScreen: View {
         "Leads are for data managers", systemImage: "lock",
         message: "Listing every site's leads needs a role that manages the workspace's data. Choose a site to see its members and leads.")
         .navigationTitle("Members & leads")
+        .aglynScreenTitle("Members & leads")
     } else {
       people
     }
@@ -134,6 +136,7 @@ struct PeopleScreen: View {
     .aglynListColumn()
     .background(AglynColor.page)
     .navigationTitle("Members & leads")
+    .aglynScreenTitle("Members & leads")
     .onDisappear {
       members.stop()
       leads.stop()

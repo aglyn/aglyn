@@ -50,6 +50,7 @@ struct WorkflowEditorScreen: View {
       }
     }
     .navigationTitle(editingID == nil ? "Add Workflow" : "Edit Workflow")
+    .aglynScreenTitle(editingID == nil ? "Add Workflow" : "Edit Workflow")
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
     #endif

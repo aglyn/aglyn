@@ -729,6 +729,7 @@ struct ActionInputSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: pending.scope))
+      .aglynScreenTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: pending.scope))
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
@@ -821,6 +822,7 @@ struct LookupSheet: View {
       }
       .aglynSearchable(text: $words, prompt: "Search by name or email")
       .navigationTitle(ScreenValues.render(field.label, in: context))
+      .aglynScreenTitle(ScreenValues.render(field.label, in: context))
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
@@ -872,6 +874,7 @@ struct ReauthSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Confirm it is you")
+      .aglynScreenTitle("Confirm it is you")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {

@@ -36,6 +36,7 @@ struct OrgAutomationEditorScreen: View {
       }
     }
     .navigationTitle(editingID == nil ? "Add org automation" : "Edit org automation")
+    .aglynScreenTitle(editingID == nil ? "Add org automation" : "Edit org automation")
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
     #endif
@@ -229,6 +230,7 @@ struct WebhookEditorScreen: View {
       }
     }
     .navigationTitle("Add webhook")
+    .aglynScreenTitle("Add webhook")
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
     #endif

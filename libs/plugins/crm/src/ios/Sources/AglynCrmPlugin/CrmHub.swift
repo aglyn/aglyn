@@ -191,6 +191,7 @@ struct CrmHubScreen: View {
       .background(AglynColor.page)
     }
     .navigationTitle(section == .contacts ? "CRM" : section.label)
+    .aglynScreenTitle(section == .contacts ? "CRM" : section.label)
   }
 
   @ViewBuilder

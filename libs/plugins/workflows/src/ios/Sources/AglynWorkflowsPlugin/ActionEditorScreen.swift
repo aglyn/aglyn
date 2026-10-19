@@ -34,6 +34,7 @@ struct ActionEditorScreen: View {
       }
     }
     .navigationTitle(editingID == nil ? "Add action" : "Edit action")
+    .aglynScreenTitle(editingID == nil ? "Add action" : "Edit action")
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
     #endif

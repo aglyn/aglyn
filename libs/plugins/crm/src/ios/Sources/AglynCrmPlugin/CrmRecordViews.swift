@@ -70,7 +70,8 @@ struct RecordsSection: View {
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     // Shown to everyone, and off for a member whose role cannot add records.
     .aglynPrimaryAction(
-      id: "crm-new-\(kind.collection)", "New \(kind.singular.lowercased())", systemImage: "plus", enabled: scope.canWrite
+      id: "crm-new-\(kind.collection)", "New \(kind.singular.lowercased())", systemImage: "plus", enabled: scope.canWrite,
+      shortcut: KeyboardShortcut("n", modifiers: .command)
     ) { creating = true }
     .sheet(isPresented: $creating) {
       CreateRecordSheet(kind: kind, scope: scope, api: api, reference: reference) { id in selection = id }
@@ -314,6 +315,7 @@ struct RecordDetail: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(row.title)
+    .aglynScreenTitle(row.title)
     #if os(iOS)
       // The record's head already shows the name large.
       .navigationBarTitleDisplayMode(.inline)

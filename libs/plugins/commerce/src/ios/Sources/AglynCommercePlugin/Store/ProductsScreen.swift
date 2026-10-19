@@ -38,11 +38,15 @@ struct ProductsScreen: View {
       }
     }
     .navigationTitle("Products")
+    .aglynScreenTitle("Products")
     .aglynSearchable(text: $searchText, prompt: "Product name", onSubmit: { model.search = searchText }) { filterMenu }
     .onChange(of: searchText) { _, text in if text.isEmpty { model.search = "" } }
     // New product is the list's one primary action; Scan and Import are in its More menu on the Mac and iPad, their own
     // buttons on a phone.
-    .aglynPrimaryAction(id: "new-product", "New product", systemImage: "plus", enabled: quota.hasRoom) {
+    .aglynPrimaryAction(
+      id: "new-product", "New product", systemImage: "plus", enabled: quota.hasRoom,
+      help: quota.hasRoom ? "Add a product to this site" : "Your plan includes \(Int(quota.limit ?? 0)) products — upgrade for more"
+    ) {
       creating = .creating()
     }
     .aglynScreenToolbar(id: "products") {
@@ -241,6 +245,7 @@ struct ProductDetailView: View {
       }
     }
     .navigationTitle(titled ? (model.row?.name ?? "Product") : "Products")
+    .aglynScreenTitle(titled ? (model.row?.name ?? "Product") : "Products")
     #if os(iOS)
       // The header below already shows the name large.
       .navigationBarTitleDisplayMode(.inline)

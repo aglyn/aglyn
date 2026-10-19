@@ -94,6 +94,7 @@ public struct MediaChooserSheet: View {
       }
       .background(AglynColor.page)
       .navigationTitle("Choose from media")
+      .aglynScreenTitle("Choose from media")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

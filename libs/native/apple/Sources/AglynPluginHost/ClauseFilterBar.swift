@@ -204,6 +204,7 @@ private struct AddClauseSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Add filter")
+      .aglynScreenTitle("Add filter")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

@@ -80,6 +80,7 @@ struct SetupScreen: View {
       }
     }
     .navigationTitle("Setup")
+    .aglynScreenTitle("Setup")
     .task(id: context.hostID) { if let id = context.hostID { await host.bind(context.firestore, ["hosts", id]) } }
     .task(id: context.orgID) { if let id = context.orgID { await org.bind(context.firestore, ["orgs", id]) } }
   }
@@ -131,6 +132,7 @@ struct SetupDetail: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(section.title)
+    .aglynScreenTitle(section.title)
     .accessibilityIdentifier("setup-detail-\(section.id)")
   }
 }
@@ -1117,6 +1119,7 @@ private struct FontBrowserSheet: View {
       }
       .aglynSearchable(text: $search, prompt: "Search fonts")
       .navigationTitle("Font family")
+      .aglynScreenTitle("Font family")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

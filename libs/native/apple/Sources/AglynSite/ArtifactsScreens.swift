@@ -104,12 +104,15 @@ struct ArtifactsScreen: View {
       }
     }
     .navigationTitle(kind.title)
+    .aglynScreenTitle(kind.title)
     .aglynSearchable(text: $searchText, prompt: "Search \(kind.title.lowercased())")
     .task(id: searchText) {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }
     }
-    .aglynPrimaryAction(id: "add-\(kind.singular)", "New \(kind.singular)", systemImage: "plus", enabled: canEdit) {
+    .aglynPrimaryAction(
+      id: "add-\(kind.singular)", "New \(kind.singular)", systemImage: "plus", enabled: canEdit, shortcut: KeyboardShortcut("n", modifiers: .command)
+    ) {
       runner.clear()
       dialog = .create
     }
@@ -318,6 +321,7 @@ private struct ArtifactDetail: View {
       }
     }
     .navigationTitle(kind.title)
+    .aglynScreenTitle(kind.title)
     .task(id: id) { await live.bind(context.firestore, ["hosts", hostID, kind.collection, id]) }
     .task(id: id) {
       guard kind.versionKind != nil else { return }

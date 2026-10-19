@@ -179,8 +179,9 @@ struct PagesScreen: View {
       }
     }
     .navigationTitle("Pages")
+    .aglynScreenTitle("Pages")
     // New page is the one primary action; a template and a group are in the More menu on the Mac and iPad.
-    .aglynPrimaryAction(id: "add-page", "New page", systemImage: "plus", enabled: canEdit) { open(.newPage) }
+    .aglynPrimaryAction(id: "add-page", "New page", systemImage: "plus", enabled: canEdit, shortcut: KeyboardShortcut("n", modifiers: .command)) { open(.newPage) }
     .aglynScreenToolbar(id: "pages") {
       AglynSecondaryActions {
         Button {
@@ -269,6 +270,7 @@ struct PagesScreen: View {
                   canEdit: canEdit, canPublish: canPublish, pushed: true
                 )
                 .navigationTitle(row.page.name)
+                .aglynScreenTitle(row.page.name)
               } label: {
                 PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
                   Task { await model.toggle(row.id) }
@@ -287,6 +289,7 @@ struct PagesScreen: View {
                 canEdit: canEdit, canPublish: canPublish, pushed: true
               )
               .navigationTitle(row.page.name)
+              .aglynScreenTitle(row.page.name)
             }
           }
           .onChange(of: rows, initial: true) { _, rows in

@@ -38,6 +38,7 @@ struct FunctionEditorScreen: View {
       }
     }
     .navigationTitle(functionID == nil ? "New function" : "Edit function")
+    .aglynScreenTitle(functionID == nil ? "New function" : "Edit function")
     .task(id: "\(context.hostID ?? "")-\(functionID ?? "")") {
       if let hostID = context.hostID, let functionID { await live.bind(context.firestore, functionsPath(hostID) + [functionID]) }
     }

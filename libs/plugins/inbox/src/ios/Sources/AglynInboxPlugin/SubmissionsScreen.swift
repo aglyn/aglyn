@@ -93,6 +93,7 @@ struct SubmissionsScreen: View {
       }
     }
     .navigationTitle(title)
+    .aglynScreenTitle(title)
     .aglynSearchable(text: $searchText, prompt: "Search submissions")
     .onChange(of: searchText) { _, text in model.type(text) }
     .aglynScreenToolbar(id: "submissions") {

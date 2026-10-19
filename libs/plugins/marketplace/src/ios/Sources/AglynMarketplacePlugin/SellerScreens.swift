@@ -75,6 +75,7 @@ struct SellScreen: View {
       }
     }
     .navigationTitle("Selling")
+    .aglynScreenTitle("Selling")
   }
 }
 

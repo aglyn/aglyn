@@ -295,6 +295,7 @@ struct SalesScreen: View {
       }
     }
     .navigationTitle("Sales")
+    .aglynScreenTitle("Sales")
     .task(id: "\(context.hostID ?? "")|\(range)") {
       model.start(context.firestore, hostID: context.hostID, orgID: context.orgID, range: range)
     }

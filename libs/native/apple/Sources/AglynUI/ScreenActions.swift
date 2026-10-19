@@ -45,7 +45,7 @@ private struct AglynEditorActionsModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     if wide {
-      content.preference(key: AglynScreenChromeKey.self, value: chrome)
+      content.transformPreference(AglynScreenChromeKey.self) { $0.merge(chrome) }
     } else {
       content.toolbar {
         if let cancel {
@@ -81,11 +81,13 @@ extension View {
   /// A primary action for the screen's head on the Mac and iPad only, for a screen whose phone layout keeps the action
   /// where it always was (inside its navigation-bar menu).
   public func aglynWidePrimaryAction(
-    id: String, _ title: String, systemImage: String, enabled: Bool = true, action: @escaping @MainActor () -> Void
+    id: String, _ title: String, systemImage: String, enabled: Bool = true, shortcut: KeyboardShortcut? = nil,
+    help: String? = nil, action: @escaping @MainActor () -> Void
   ) -> some View {
     modifier(
       AglynWidePrimaryActionModifier(
-        action: AglynPrimaryAction(id: id, title: title, systemImage: systemImage, enabled: enabled, run: action)))
+        action: AglynPrimaryAction(
+          id: id, title: title, systemImage: systemImage, enabled: enabled, shortcut: shortcut, help: help, run: action)))
   }
 }
 
@@ -95,7 +97,7 @@ private struct AglynWidePrimaryActionModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     if wide {
-      content.preference(key: AglynScreenChromeKey.self, value: AglynScreenChrome(primary: action))
+      content.transformPreference(AglynScreenChromeKey.self) { $0.merge(AglynScreenChrome(primary: action)) }
     } else {
       content
     }
@@ -116,17 +118,29 @@ private struct AglynOptionalPrimaryActionModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     if wide {
-      content.preference(key: AglynScreenChromeKey.self, value: AglynScreenChrome(primary: action))
+      content.transformPreference(AglynScreenChromeKey.self) { $0.merge(AglynScreenChrome(primary: action)) }
     } else {
       content.toolbar {
         if let action {
           ToolbarItem(placement: .primaryAction) {
             Button { action.run() } label: { Label(action.title, systemImage: action.systemImage) }
               .disabled(!action.enabled)
+              .keyboardShortcut(action.shortcut)
+              .help(action.help ?? action.title)
               .accessibilityIdentifier(action.id)
           }
         }
       }
     }
+  }
+}
+
+extension AglynScreenChrome {
+  /// Adds what an outer modifier publishes to what the screen inside it already did: the screen's own primary action and
+  /// title stay first, actions add up. Every chrome modifier merges this way, so stacking them never hides one.
+  public mutating func merge(_ outer: AglynScreenChrome) {
+    primary = primary ?? outer.primary
+    title = title ?? outer.title
+    entries.append(contentsOf: outer.entries)
   }
 }

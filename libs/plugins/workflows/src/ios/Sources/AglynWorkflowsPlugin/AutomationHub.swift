@@ -119,6 +119,7 @@ struct AutomationHubScreen: View {
       }
     }
     .navigationTitle(hostID == nil ? "Org automation" : "Automation")
+    .aglynScreenTitle(hostID == nil ? "Org automation" : "Automation")
     .aglynToast($toasts.toast)
     .task(id: "\(hostID ?? "")|\(context.orgID ?? "")") {
       orgSites.start(context)
@@ -482,6 +483,7 @@ struct DuplicateWorkflowSheet: View {
       }
       .formStyle(.grouped)
       .navigationTitle("Duplicate workflow")
+      .aglynScreenTitle("Duplicate workflow")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif

@@ -181,6 +181,7 @@ struct EventsScreen: View {
       }
     }
     .navigationTitle("Events")
+    .aglynScreenTitle("Events")
     .aglynPrimaryAction(id: "add-event", "Add event", systemImage: "plus") {
       if sizeClass == .compact { adding = true } else { selection = Self.newID }
     }
@@ -366,6 +367,7 @@ struct EventEditor: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle(draft.id == nil ? "New event" : draft.title.isEmpty ? "Event" : draft.title)
+    .aglynScreenTitle(draft.id == nil ? "New event" : draft.title.isEmpty ? "Event" : draft.title)
     .onAppear { if draft.startsAt == nil { draft.startsAt = Self.nextHour } }
     // Beside the list on the Mac and iPad, Save sits in the head as a bordered button; the list keeps Add event.
     .aglynEditorActions(id: "event-save", save: "Save", enabled: problem == nil, primary: false) {
