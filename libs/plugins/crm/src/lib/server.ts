@@ -58,8 +58,11 @@ import { registerDealFigureReaders } from './server/deal-figures'
 import { registerPeopleFigureReader } from './server/people-figures'
 import {
   CONTACT_ERASED_MESSAGE,
+  CONTACT_FIELDS_MAX_PER_ORG,
   contactFacetPath,
   composeContactName,
+  type ContactCustomValue,
+  type ContactFieldDefinition,
   CRM_COLLECTIONS,
   CRM_SALUTATION_PICKLIST,
   crmReadTokens,
@@ -73,6 +76,7 @@ import {
   type PluginApiHandler,
   type PluginApiRequest,
   readContactFacet,
+  readCrmCustomInput,
   registerPluginApiRoute,
   visibleToHost,
 } from '@aglyn/aglyn/server'
@@ -436,6 +440,17 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
   // (AGL-3320): the opt-in covers the site's group only while it is the
   // group's current one, and the capturing site alone otherwise.
   const disclosedConsentGroup = typed(body['disclosedConsentGroup'], 64)
+  // The org's own contact fields, sent in this same call (AGL-3971): a
+  // value the create dropped would read as saved and be gone, and a second
+  // write after it could land half. Judged below against the definitions.
+  const rawCustom = body['custom']
+  if (
+    rawCustom !== undefined &&
+    (!rawCustom || typeof rawCustom !== 'object' || Array.isArray(rawCustom))
+  ) {
+    res.status(400).json({ error: 'Custom fields must be values keyed by field key.' })
+    return
+  }
 
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
@@ -498,6 +513,39 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       salutation = judged.value ?? ''
     }
 
+    /*
+     * The custom values, judged exactly as `crm/contact-update` judges them
+     * (AGL-3971): the org's definitions read only when the body carried a
+     * map, an unknown, retired or mistyped key refused with the definition
+     * reader's own sentence, and a currency amount stored as that field's
+     * minor units. Before any write, so a refusal leaves nothing behind.
+     */
+    let custom: Record<string, ContactCustomValue> | undefined
+    if (rawCustom !== undefined) {
+      const definitions = await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('orgs')
+        .doc(resolved.orgId)
+        .collection(CRM_COLLECTIONS.contactFields)
+        .limit(CONTACT_FIELDS_MAX_PER_ORG)
+        .get()
+      const judged = readCrmCustomInput(
+        rawCustom,
+        definitions.docs.map((entry) => entry.data() as ContactFieldDefinition),
+        'contact',
+      )
+      if ('errors' in judged) {
+        const [field, message] = Object.entries(judged.errors)[0] ?? []
+        res.status(400).json({
+          error: message ?? 'A custom value could not be saved.',
+          ...(field ? { field } : {}),
+        })
+        return
+      }
+      custom = judged.values
+    }
+
     if (companyId) {
       const group = await consentGroupForSite(
         hostId,
@@ -558,6 +606,9 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
         ...(rawStage && isContactLifecycleStage(rawStage)
           ? { lifecycleStage: rawStage }
           : {}),
+        // Written nested into the capturing holder's facet by the upsert,
+        // on a new person and on a merge alike.
+        ...(custom && Object.keys(custom).length ? { custom } : {}),
       },
     })
 
