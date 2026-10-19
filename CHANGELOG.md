@@ -217,6 +217,7 @@ content on the marketing site and is written separately.
 
 ### Documentation
 
+- **release:** beta.271 changelog carries #1831 and the invoice host fix ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **release:** beta.271 changelog carries the full Windows embed fix ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **release:** beta.271 changelog carries the Windows contract embed fix ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **release:** beta.271 changelog carries Site Care (#1840, #1820) merged in from main ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
@@ -232,8 +233,10 @@ content on the marketing site and is written separately.
 - **staff:** client build screen walkthrough, What's New, domain search reference ([AGL-3958](https://linear.app/aglyn/issue/AGL-3958))
 
 <details>
-<summary>Also in this release: 24 test, 6 chore, 1 style</summary>
+<summary>Also in this release: 26 test, 6 chore, 1 style</summary>
 
+- **native:** the nav manifest spec knows the Customer texts row is gated on commerce ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
+- **ai:** record the Pixabay tag words colour and colours in the spelling baseline ([AGL-3988](https://linear.app/aglyn/issue/AGL-3988))
 - **tools:** raise the Linear id floor to AGL-3991, read off the workspace ([AGL-3991](https://linear.app/aglyn/issue/AGL-3991), [AGL-3986](https://linear.app/aglyn/issue/AGL-3986), [AGL-3989](https://linear.app/aglyn/issue/AGL-3989), [AGL-3984](https://linear.app/aglyn/issue/AGL-3984))
 - **release:** v1.0.0-beta.271 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **apple:** the phone's Workspace settings opens on Team, its first row ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
