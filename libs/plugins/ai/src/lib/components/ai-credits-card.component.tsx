@@ -108,7 +108,7 @@ export default function AiCreditsCard(props: AiCreditsCardProps) {
     return (
       <CardDisplay header={'AI credits'} help={help} contentGutterX contentGutterY>
         <PrerequisiteNotice href={billingHref ? `${billingHref}#plans` : '#plans'} actionLabel="See plans">
-          {'Your plan includes no AI credits. Choose a plan with AI credits in Billing to use Aglyn’s AI.'}
+          {'Your plan includes no AI credits. Choose a plan with AI credits in Billing to use the AI features.'}
         </PrerequisiteNotice>
       </CardDisplay>
     )
