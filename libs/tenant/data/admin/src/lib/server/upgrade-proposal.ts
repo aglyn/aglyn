@@ -39,8 +39,10 @@ import { PLAN_LABELS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   isUpgradeProposalPlan,
+  normalizeUpgradeProposalBundle,
   normalizeUpgradeProposalNote,
   upgradeProposalDestination,
+  upgradeProposalSummary,
 } from '@aglyn/aglyn/app-utils/upgrade-proposal'
 // Leaf modules, as `organizations.ts` imports its constants (AGL-1289).
 import {
@@ -78,6 +80,13 @@ export interface ProposeOrgUpgradeOptions {
   orgId: string
   plan: unknown
   note?: unknown
+  /**
+   * The add-ons, cadence and coupon proposed with the plan (AGL-3956), in any
+   * shape `parseBundleAddons` reads; fitted to the plan before storing.
+   */
+  addons?: unknown
+  interval?: unknown
+  coupon?: unknown
   /** The staff member proposing. */
   actor: { uid: string; email?: string | null }
   /** The console origin the email's link is built on. */
@@ -106,6 +115,29 @@ export async function proposeOrgUpgrade(
   options: ProposeOrgUpgradeOptions,
 ): Promise<ProposeOrgUpgradeResult> {
   const { orgId, actor, origin } = options
+  const proposal = buildUpgradeProposal(options)
+  const db = firestore()
+  const orgRef = db.collection('orgs').doc(orgId)
+  const org = await db.runTransaction(async (tx) => {
+    const data = await readUpgradeProposalTarget(tx, orgRef)
+    stageUpgradeProposal(tx, db, { orgId, proposal, before: data, actorUid: actor.uid })
+    return data
+  })
+  await recordUpgradeProposalActivity(orgId, actor, proposal)
+  const emailed = await emailUpgradeProposal({ orgId, org, proposal, origin })
+  return { proposal, emailed }
+}
+
+/**
+ * The proposal as it will be stored, or the refusal: a plan the workspace
+ * can buy itself, a bounded note, and the bundle fitted to the plan
+ * (AGL-3956). Nothing is read or written.
+ */
+export function buildUpgradeProposal(
+  options: Pick<ProposeOrgUpgradeOptions, 'plan' | 'note' | 'addons' | 'interval' | 'coupon' | 'actor'> & {
+    now?: number
+  },
+): OrgUpgradeProposal {
   if (!isUpgradeProposalPlan(options.plan)) {
     throw new UpgradeProposalError(
       'Choose a paid plan the workspace can buy itself',
@@ -113,54 +145,95 @@ export async function proposeOrgUpgrade(
   }
   const plan: OrgPlan = options.plan
   const note = normalizeUpgradeProposalNote(options.note)
-  const db = firestore()
-  const orgRef = db.collection('orgs').doc(orgId)
-  const proposal: OrgUpgradeProposal = {
+  return {
     plan,
-    proposedBy: actor.uid,
-    proposedAt: Date.now(),
+    proposedBy: options.actor.uid,
+    proposedAt: options.now ?? Date.now(),
     ...(note ? { note } : {}),
+    ...normalizeUpgradeProposalBundle(plan, options),
   }
-  const org = await db.runTransaction(async (tx) => {
-    const snapshot = await tx.get(orgRef)
-    if (!snapshot.exists) throw new UpgradeProposalError('Unknown organization', 404)
-    const data = snapshot.data() as Partial<AglynOrgBilling>
-    const billing = await tx.get(
-      orgRef.collection(ORG_BILLING_SUBCOLLECTION).doc(ORG_BILLING_DOC_ID),
+}
+
+/**
+ * Read the org a proposal is for, inside the caller's transaction, refusing
+ * an unknown workspace and one whose subscription is already live — the
+ * question a proposal asks is then already answered.
+ */
+export async function readUpgradeProposalTarget(
+  tx: FirebaseFirestore.Transaction,
+  orgRef: FirebaseFirestore.DocumentReference,
+): Promise<Partial<AglynOrgBilling>> {
+  const snapshot = await tx.get(orgRef)
+  if (!snapshot.exists) throw new UpgradeProposalError('Unknown organization', 404)
+  const data = snapshot.data() as Partial<AglynOrgBilling>
+  const billing = await tx.get(
+    orgRef.collection(ORG_BILLING_SUBCOLLECTION).doc(ORG_BILLING_DOC_ID),
+  )
+  const status =
+    (billing.get('subscription') as { status?: unknown } | undefined)?.status ??
+    data.billingStatus
+  if (isLiveSubscriptionStatus(status)) {
+    throw new UpgradeProposalError(
+      'This workspace already has a live subscription, so there is nothing to propose',
+      409,
     )
-    const status =
-      (billing.get('subscription') as { status?: unknown } | undefined)?.status ??
-      data.billingStatus
-    if (isLiveSubscriptionStatus(status)) {
-      throw new UpgradeProposalError(
-        'This workspace already has a live subscription, so there is nothing to propose',
-        409,
-      )
-    }
-    tx.set(
-      orgRef,
-      { upgradeProposal: proposal, updatedAt: FieldValue.serverTimestamp() },
-      { merge: true },
-    )
-    setAdminAudit(tx, db, {
-      actorUid: actor.uid,
-      action: 'org.upgradeProposal.propose',
-      target: `orgs/${orgId}`,
-      before: { upgradeProposal: data.upgradeProposal ?? null },
-      after: { upgradeProposal: proposal },
-      at: FieldValue.serverTimestamp(),
-    })
-    return data
+  }
+  return data
+}
+
+/**
+ * Write the proposal and its audit row into the caller's transaction, so
+ * they commit with whatever else the caller writes (AGL-1784) — the owner
+ * invitation, for a hand-off that proposes in the same act (AGL-3956).
+ */
+export function stageUpgradeProposal(
+  tx: FirebaseFirestore.Transaction,
+  db: FirebaseFirestore.Firestore,
+  options: {
+    orgId: string
+    proposal: OrgUpgradeProposal
+    before: Partial<AglynOrgBilling>
+    actorUid: string
+  },
+): void {
+  const { orgId, proposal, before, actorUid } = options
+  tx.set(
+    db.collection('orgs').doc(orgId),
+    { upgradeProposal: proposal, updatedAt: FieldValue.serverTimestamp() },
+    { merge: true },
+  )
+  setAdminAudit(tx, db, {
+    actorUid,
+    action: 'org.upgradeProposal.propose',
+    target: `orgs/${orgId}`,
+    before: { upgradeProposal: before.upgradeProposal ?? null },
+    after: { upgradeProposal: proposal },
+    at: FieldValue.serverTimestamp(),
   })
+}
+
+/** "Proposed the Starter plan", naming the bundle when there is one. */
+export function proposalActivityLine(proposal: OrgUpgradeProposal): string {
+  const label = planName(proposal.plan)
+  const summary = upgradeProposalSummary(proposal)
+  return summary === label
+    ? `Proposed the ${label} plan`
+    : `Proposed the ${label} plan (${summary})`
+}
+
+/** The workspace's feed line for a proposal, after it commits. */
+export async function recordUpgradeProposalActivity(
+  orgId: string,
+  actor: { uid: string; email?: string | null },
+  proposal: OrgUpgradeProposal,
+): Promise<void> {
   await logOrgActivity(
     orgId,
     { uid: actor.uid, email: actor.email ?? null },
-    `Proposed the ${PLAN_LABELS[plan]} plan`,
+    proposalActivityLine(proposal),
     { type: 'subscription', id: orgId },
     { staffActorId: actor.uid },
   )
-  const emailed = await emailUpgradeProposal({ orgId, org, proposal, origin })
-  return { proposal, emailed }
 }
 
 /** Remove a standing proposal, audited. Answers whether one stood. */
@@ -324,12 +397,14 @@ async function emailUpgradeProposal(options: {
       : origin
     const label = planName(proposal.plan)
     const productName = brand.merge['brand.productName'] || PLATFORM_BRAND_NAME
+    const summary = upgradeProposalSummary(proposal, { brand: productName })
     const content = await renderSystemEmailContent(
       'org-upgrade-proposal',
       {
         'org.name': orgName,
         'plan.name': label,
         'proposal.note': proposal.note ?? '',
+        'proposal.summary': summary === label ? '' : summary,
         billingUrl,
       },
       brand,
@@ -337,7 +412,8 @@ async function emailUpgradeProposal(options: {
         subject: `Your ${productName} team proposed the ${label} plan for ${orgName}`,
         text:
           `Your ${productName} team proposed moving ${orgName} to the ${label} ` +
-          'plan. When you are ready, start the subscription from Billing, ' +
+          (summary === label ? 'plan. ' : `plan (${summary}). `) +
+          'When you are ready, start the subscription from Billing, ' +
           `where the plan is already selected:\n\n${billingUrl}` +
           (proposal.note ? `\n\n${proposal.note}` : ''),
       },

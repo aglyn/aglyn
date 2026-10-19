@@ -137,10 +137,16 @@ lower plan still goes through us, because there is no subscription to move down 
 
 When the Aglyn team proposes a plan for your workspace, the owner gets an email, and
 everyone who manages billing sees a card on the workspace's home and at the top of the
-Billing page: **"*Workspace*'s Aglyn team proposed the *Plan* plan"**. **Review the
-plan** opens Billing with that plan selected. Nothing is charged until you start the
-subscription yourself. The card goes away once a subscription is live, or when the team
-withdraws the proposal. Other members never see it.
+Billing page: **"*Workspace*'s Aglyn team proposed the *Plan* plan"**. A proposal can
+include add-ons (such as Site Care or Aglyn AI), monthly or yearly billing, and a
+promotion code, and the card names them. **Review the plan** opens Billing with all of
+it selected. Nothing is charged until you start the subscription yourself. The card
+goes away once a subscription is live, or when the team withdraws the proposal. Other
+members never see it.
+
+If the team built your site and handed the workspace to you, the plan comes with the
+invitation: the email's button opens Billing, and once you accept the invitation you
+land there with the plan and add-ons already chosen.
 
 ### Enterprise
 
@@ -618,6 +624,20 @@ The **What you will pay** card appears on the **Plan** tab once you pick a plan 
 to, and quotes that plan's total for the billing interval you chose, tax included,
 straight from Stripe. With **Manage billing** you can enter a promotion code on the card
 and see it applied before you confirm.
+
+When you arrive from a link the Aglyn team gave you (a QR code at an event, or the
+button in a handoff email), the card comes first on the page with everything the link
+chose: the plan, monthly or yearly billing, each add-on as a switch you can turn off,
+and the promotion code already applied. The button in the card's header shows the total,
+and pressing it pays with the card on file. If you have no card or billing address yet,
+it asks for them first. An add-on your plan does not include, or a code that has
+expired, is left off with a one-line note instead of an error.
+
+If the link also chose a domain name for your site, the card shows it with its
+first-year and renewal price. After you pay, you go to your site's **Custom Domain**
+page with the name filled in, and you buy it there yourself: you enter your contact
+details and accept the registration terms. Where buying domains is not available yet,
+the card says so, and your site starts on its free address.
 
 ### Billing history {#billing-history}
 

@@ -1397,6 +1397,19 @@ function BesignerPage(props) {
       })
     }
     setDraftPending(false)
+    // The site's activity log records the publish, not only the save before
+    // it (AGL-3959): a Site Care request links the publish that shipped its
+    // change by the row whose action starts "Published", and without this
+    // row a change made and published here linked nothing. Best effort, like
+    // the cache drop above. An email screen publishes no site page.
+    if (!isEmailScreen) {
+      void logActivity('Published the screen', {
+        type: 'screen',
+        id: screenId,
+        name: screenResult?.data?.displayName,
+        versionId,
+      })
+    }
     enqueueSnackbar(
       isEmailScreen
         ? // The version pointer is what `loadEmailTemplate` and the
@@ -1427,6 +1440,8 @@ function BesignerPage(props) {
     user,
     hostId,
     screenId,
+    screenResult?.data?.displayName,
+    logActivity,
     enqueueSnackbar,
   ])
 

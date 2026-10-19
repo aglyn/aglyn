@@ -121,6 +121,16 @@ on:
     # for the same reason the CRM digest is not: the route beats on every
     # POST, so the row is added once a beat exists.
     - cron: '0 13 * * 1' # weekly-summary — Mondays 13:00 UTC (08:00 America/Chicago)
+    # The Site Care reconciliation (AGL-3959): daily at 14:15 UTC (09:15
+    # America/Chicago), each Site Care request's billed hours against its
+    # Stripe invoice item and each month's total against its statement; a
+    # difference raises `billing.siteCareReconciliation`. Daily on this runner
+    # for the CRM digest's reasons: an hour of drift costs nothing to a check
+    # of yesterday's charges, and the route only reads and alerts, deduped per
+    # workspace-month, so a manual re-dispatch raises nothing new. NOT in
+    # `SCHEDULED_JOBS` yet, for the same reason as the digest: the route beats
+    # on every POST, so the row is added once a beat exists.
+    - cron: '15 14 * * *' # site-care-reconcile — daily 14:15 UTC (09:15 America/Chicago)
     # ⛔ The hourly CRM task reminders (AGL-2659) are NOT here any more; they
     # run on Cloud Scheduler as `consoleCrmTaskReminders`. GitHub delivered
     # this `0 * * * *` entry about once every six hours — 00:12 and 06:12 on
@@ -255,6 +265,11 @@ on:
           # each person is sent a week's summary once, so a second run in the
           # same week reaches only whoever the first one did not.
           - /api/admin/weekly-summary
+          # The Site Care reconciliation (AGL-3959). A GET compares and
+          # reports; the scheduled POST raises the operator alert. Safe by
+          # hand at any time — it changes no charge, and an alert is deduped
+          # per workspace and month for a day.
+          - /api/admin/site-care/reconcile
           # Task reminders (AGL-2659). A GET reports the plan; the scheduled
           # POST sends. Safe to run by hand at any time — a handled reminder
           # is stamped on the task, so a second run reaches only what the
@@ -364,6 +379,7 @@ jobs:
           case "$FIRED_SCHEDULE" in
             '0 13 * * *') path=/api/crm/daily-digest ;;
             '0 13 * * 1') path=/api/admin/weekly-summary ;;
+            '15 14 * * *') path=/api/admin/site-care/reconcile ;;
             '0 5 * * 1') path=/api/admin/firestore-export ;;
             '30 5 * * 1') path=/api/admin/reap-plugin-artifacts ;;
             '0 6 * * 1') path=/api/admin/reverify-plugin-versions ;;

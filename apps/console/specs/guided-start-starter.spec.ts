@@ -61,7 +61,7 @@ import { guidedStartOffered } from '../utils/server/guided-start-offered'
 type EntitlementsModule = typeof Entitlements
 const ENTITLEMENTS_MODULE = ['@aglyn/aglyn', 'plugin-manager', 'plugin-entitlements'].join('/')
 import { NEW_SITE_ENABLED_PLUGINS } from '../utils/server/provision-host'
-import { hostIsBlankSite, requestStarterSite } from '../utils/host-first-run'
+import { hostIsBlankSite, requestStarterSite, requestStarterSiteOutcome } from '../utils/host-first-run'
 
 const OWNER = { role: 'owner' } as const
 const ask = (patch: Partial<Parameters<typeof guidedStartOffered>[0]> = {}) =>
@@ -166,6 +166,18 @@ describe('leaving the guided start for a blank site asks for the starter', () =>
     mockFetch.mockRejectedValueOnce(new Error('offline'))
     await expect(requestStarterSite({ uid: 'u1' } as never, 'host-1')).resolves.toBe(false)
     expect(mockTrack).not.toHaveBeenCalled()
+  })
+
+  it('tells a wrote-nothing answer apart from a refusal or an outage (AGL-3958)', async () => {
+    mockFetch.mockResolvedValueOnce(json({ provisioned: true, screenId: 'scrHome' }))
+    await expect(requestStarterSiteOutcome({ uid: 'u1' } as never, 'host-1')).resolves.toBe('provisioned')
+    mockFetch.mockResolvedValueOnce(json({ provisioned: false, screenId: null }))
+    await expect(requestStarterSiteOutcome({ uid: 'u1' } as never, 'host-1')).resolves.toBe('unchanged')
+    mockFetch.mockResolvedValueOnce(json({ error: 'no' }, 403))
+    await expect(requestStarterSiteOutcome({ uid: 'u1' } as never, 'host-1')).resolves.toBe('failed')
+    mockFetch.mockRejectedValueOnce(new Error('offline'))
+    await expect(requestStarterSiteOutcome({ uid: 'u1' } as never, 'host-1')).resolves.toBe('failed')
+    await expect(requestStarterSiteOutcome({ uid: 'u1' } as never, '')).resolves.toBe('failed')
   })
 })
 

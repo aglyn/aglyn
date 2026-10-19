@@ -1158,6 +1158,48 @@ export const EVENT_CALENDAR_ADDON_MONTHLY_USD = 9
 export const SITE_CARE_ADDON_MONTHLY_USD = 49
 
 /**
+ * Site Care's included time (AGL-3959): about an hour of staff work a month,
+ * no rollover. `SITE_CARE_INCLUDED_BLOCK_MINUTES` is the step each request is
+ * counted against it in, always rounded up — a 10-minute change uses one
+ * 15-minute block. The timer's actual minutes are still logged beside it.
+ */
+export const SITE_CARE_INCLUDED_MINUTES = 60
+
+/** The block a request counts against the included hour in (AGL-3959). */
+export const SITE_CARE_INCLUDED_BLOCK_MINUTES = 15
+
+/**
+ * Site Care extra time (AGL-3959): $79 per STARTED hour past the included
+ * hour in a month. Billed in whole hours, rounded up — any part of an hour is
+ * the full rate — and never less than the hours the owner approved. Only with
+ * the owner's recorded yes, as an invoice item on the next subscription
+ * invoice; never recurring. `site-care.ts` holds the arithmetic.
+ */
+export const SITE_CARE_EXTRA_HOUR_USD = 79
+
+/**
+ * Site Care projects (AGL-3970): work that adds a page, a form, a design or
+ * a campaign is a flat quote, never hourly. The quote is the estimated hours
+ * × `SITE_CARE_EXTRA_HOUR_USD`, rounded up to the whole hour, and never below
+ * the published starting price of the kind of project it is. These three are
+ * those starting prices, as `/pricing` publishes them.
+ */
+export const SITE_CARE_PROJECT_LANDING_PAGE_FROM_USD = 249
+
+/** A redesign's published starting price (AGL-3970). */
+export const SITE_CARE_PROJECT_REDESIGN_FROM_USD = 749
+
+/** A logo or brand kit's published starting price (AGL-3970). */
+export const SITE_CARE_PROJECT_BRAND_KIT_FROM_USD = 349
+
+/**
+ * A project priced ABOVE this is billed half up front and half at launch, on
+ * two invoices from the same record; at or below it, in full up front
+ * (AGL-3970). `site-care-project.ts` holds the arithmetic.
+ */
+export const SITE_CARE_PROJECT_SPLIT_ABOVE_USD = 500
+
+/**
  * POS Pro register add-on (AGL-329): $89/mo per extra register/location
  * (Shopify POS Pro parity). Purchased add-ons land as a per-org
  * `posRegisters` entitlement override, which

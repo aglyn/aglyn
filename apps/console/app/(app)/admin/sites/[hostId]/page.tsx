@@ -469,13 +469,21 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 />
                               ) : null}
                               {/* Handing the workspace to the client the site was
-                                  built for, and later asking them to upgrade, are
-                                  the same two acts as on the organization page
-                                  (AGL-3466). */}
+                                  built for, with its plan proposed in the same
+                                  act, and asking an existing owner to upgrade, are
+                                  the same as on the organization page (AGL-3466,
+                                  AGL-3956). */}
                               {orgId ? (
                                 <StaffOrgOwnerHandoff
                                   orgId={orgId}
                                   orgName={site?.org?.name}
+                                  org={(site?.org ?? null) as never}
+                                  sites={[
+                                    {
+                                      hostId,
+                                      name: site?.displayName ?? site?.subdomain ?? hostId,
+                                    },
+                                  ]}
                                   onSent={() => setSiteNonce((nonce) => nonce + 1)}
                                 />
                               ) : null}

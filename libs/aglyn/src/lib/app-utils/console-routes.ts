@@ -107,6 +107,8 @@ export enum Route {
   // like the rest of `/admin/*` rather than nested under `[orgSlug]`.
   ADMIN_EMAIL_BESIGNER = '/admin/emails/[templateKey]/versions/[versionId]/besigner',
   ORG_HOME = '/[orgSlug]',
+  // Staff build a site for a client on one phone screen (AGL-3958).
+  ORG_CLIENT_BUILD = '/[orgSlug]/client-build',
   ORG_MEDIA = '/[orgSlug]/media',
   ORG_DATA = '/[orgSlug]/data',
   /*
@@ -552,6 +554,7 @@ export interface RoutePayload {
     versionId: string
   }
   [Route.ORG_HOME]: { orgSlug: string }
+  [Route.ORG_CLIENT_BUILD]: { orgSlug: string }
   [Route.HOST_DASHBOARD]: { orgSlug: string; host: string }
   [Route.ADMIN_ORGS]: undefined
   [Route.ADMIN_ORG_DETAIL]: { orgId: string }
