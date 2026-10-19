@@ -75,6 +75,11 @@ import { GET as aiUsage } from './server/ai-usage'
 import { GET as aiAllotments } from './server/ai-allotments'
 import { GET as aiInsightAnswer } from './server/ai-insight-answer'
 import { POST as runAiInsightsDigest } from './server/ai-insight-digest-route'
+import {
+  listSiteImportOwnership,
+  postSiteImportCrawl,
+  postSiteImportOwnership,
+} from './server/ai-site-import-route'
 import { AI_INSIGHTS_DIGEST_PATH } from './insights/ai-insight-digest'
 import { GET as aiModels } from './server/ai-models'
 import { GET as billingCredits } from './server/billing-credits'
@@ -268,6 +273,14 @@ export function registerAiConsoleApi(): void {
   // illustrations, stored through the media upload route. POST only — the
   // button draws from the shell's gates and asks nothing until it is used.
   registerPluginApiRoute('ai/media/images', { web: createAiMediaImages })
+  // "Bring my site" (AGL-3974): proving the workspace owns a website, and
+  // reading it once it has. Behind `release_ai_site_import`, paid plans,
+  // owners and admins; the crawl refuses a domain without a current proof.
+  registerPluginApiRoute('ai/site-import/ownership', {
+    web: (request) =>
+      request.method === 'GET' ? listSiteImportOwnership(request) : postSiteImportOwnership(request),
+  })
+  registerPluginApiRoute('ai/site-import/crawl', { web: (request) => postSiteImportCrawl(request) })
   registerPluginApiRoute('ai/billing/credits', { web: billingCredits })
   registerPluginApiRoute('ai/billing/overage', { web: billingOverage })
   registerPluginApiRoute('ai/usage', { web: aiUsage })

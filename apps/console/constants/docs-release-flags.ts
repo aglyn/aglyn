@@ -338,6 +338,11 @@ export const FLAG_DOC_PAGES: Partial<
  * tree outside `docs/staff-console/` (where naming every flag is the point).
  */
 export const FLAGS_WITHOUT_DOCS: Partial<Record<ReleaseFlagKey, string>> = {
+  // AGL-3974. The server half of "Bring my site": the ownership and crawl
+  // doors, with no console surface yet. The lane that builds the screen adds
+  // its docs page, and that page takes the rolling-out admonition here.
+  release_ai_site_import:
+    'Server doors only (domain ownership claims and the site crawl); no console surface or docs page exists yet. The lane that adds the screen adds its page to FLAG_DOC_PAGES with the rolling-out admonition.',
   // AGL-3520. The flag widens what a door already documented sends; it opens
   // no surface. The Privacy Policy and the subprocessor list were republished
   // with the whole-record wording on October 5, 2026 (legal v10), and the CRM

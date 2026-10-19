@@ -2191,6 +2191,46 @@ and stop there — no rate window, no reservation — through
 `libs/plugins/ai/src/lib/server/ai-jobs-gate.ts`. Every door requires the request
 to NAME the org (AGL-1934).
 
+### Bring my site: ownership and the crawl (AGL-3974)
+
+The server half of importing a person's existing website (AGL-3973), behind
+`release_ai_site_import` (OFF by default). It spends no credits and creates
+no job; the import job that turns an inventory into pages is its own lane.
+Every door is `siteImportGate` in `server/ai-site-import-route.ts`: a named
+org, its owner or an admin, a paid plan (`resolveEffectivePlan` is not
+`free`), the flag (404 while off, staff preview) and lockdown.
+
+- **Ownership first.** `orgs/{orgId}/domainOwnershipClaims/{domain}`
+  (`@aglyn/tenant-data-admin/server/domain-ownership`), one claim per org and
+  domain, written only by the Admin SDK and read by owners and admins. Any one
+  of three proofs: the TXT record `aglyn-domain-verification=<token>` at
+  `_aglyn-challenge.<domain>`; `<meta name="aglyn-site-verification"
+  content="<token>">` on the home page; or a six-digit code emailed to an
+  address at the domain (the `domain-ownership-code` system email), stored as
+  an HMAC, good for 15 minutes and five tries. Each check answers `proven`,
+  `not-yet` or `unreachable`; an unreachable check never demotes a proof. A
+  proof is current for 30 days.
+- **`GET|POST /api/ai/site-import/ownership`**: `{ orgId }` lists claims;
+  `{ orgId, action: 'claim' | 'check' | 'send-code' | 'confirm-code', domain,
+  method?, email?, code? }` acts on one. Checks are 60 an hour per org.
+- **`POST /api/ai/site-import/crawl`** `{ orgId, domain, maxPages? }`: refused
+  (403 `ownership`) without a current proof, 20 a day per org, at most 25
+  pages and the plan's page count. Answers the inventory.
+- **The crawler** (`site-import/site-import-crawl.ts`) reads through
+  `fetchPublicTextDetailed`, the theme job's SSRF-guarded fetch, as
+  `AglynBot/1.0 (+https://aglyn.com/bot)`: robots.txt first (a 404 allows
+  all; an unreadable one stops the crawl), sitemaps next, then same-site
+  links. The site is the domain and its `www.` twin; a redirect or link
+  anywhere else is refused. Budgets: pages, bytes per page (a page over it is
+  refused, not cut), bytes in total and time. A brand lookalike is refused
+  before any request. `site-import/site-import-html.ts` extracts each page's
+  title, description, headings and text in order, images and menu links; it
+  drops scripts, iframes, embeds and any form with a payment field, and a
+  page with a password field is refused as `login-form`.
+- **To a model, only fenced.** `siteImportPagePromptText` wraps a page with
+  `fenceUntrustedText` (`@aglyn/shared-util-tools/untrusted-text`), and the
+  prompt that reads it carries `UNTRUSTED_TEXT_RULE`.
+
 ## The theme kind
 
 `theme` (AGL-2938) proposes a change to one site's theme covering every control
