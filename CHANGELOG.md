@@ -31,13 +31,19 @@ content on the marketing site and is written separately.
 - **crm:** the Kotlin apps create currency fields and read each at its own minor unit ([AGL-3971](https://linear.app/aglyn/issue/AGL-3971))
 - **pricing:** the ai tiers are live on /pricing, with the tier faq and site care link ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
 - **crm:** the Apple apps create currency fields and read each at its own minor unit ([AGL-3971](https://linear.app/aglyn/issue/AGL-3971))
+- **console:** "Charge for work" on the staff org page, projects on Billing ([AGL-3970](https://linear.app/aglyn/issue/AGL-3970))
+- **site-care:** project invoices, payments, reversals and reconciliation ([AGL-3970](https://linear.app/aglyn/issue/AGL-3970))
+- **site-care:** the flat project quote, its split and its record ([AGL-3970](https://linear.app/aglyn/issue/AGL-3970))
 - **ai:** a guided start's site listing replaces the seeded default when untouched ([AGL-3979](https://linear.app/aglyn/issue/AGL-3979))
 - **billing:** tier migration dry run counts before minting, aiTier rules test, docs ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
+- **besigner:** log "Published the screen" on a successful Save & publish ([AGL-3959](https://linear.app/aglyn/issue/AGL-3959))
 - **billing:** finish Aglyn AI tiers on any paid plan, one credit pool, tier picker ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
 - **ai:** entity logo, contact type, business details and photo alts for AI sites ([AGL-3979](https://linear.app/aglyn/issue/AGL-3979))
 - **kotlin:** desktop menu rows are Figma's Menu/Row, 30 tall ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **kotlin:** calm Data with one start-here action; the AI offer is the promo card ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **kotlin:** list rows match Figma for Orders and Sites; opening a site drills in ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **staff:** one-screen client build with domain step, paused ([AGL-3958](https://linear.app/aglyn/issue/AGL-3958))
+- **billing:** bundle link and one-action hand-off, wip paused ([AGL-3955](https://linear.app/aglyn/issue/AGL-3955))
 - **kotlin:** on Windows the tab row draws minimize, maximize and close ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **apple:** site and order rows to Figma's list rows, custom domain subtitle ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
 - **console:** dashboards draw a locked CRM card on plans without it ([AGL-3977](https://linear.app/aglyn/issue/AGL-3977), [AGL-3973](https://linear.app/aglyn/issue/AGL-3973))
@@ -103,11 +109,15 @@ content on the marketing site and is written separately.
 - **apple:** the site sheet counts the workspace's sites as the console's dialog does ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
 - **native:** the Aglyn theme's accent token is Figma's #0073AE, not its #00B0FF seed ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **tools:** canary passes a candidate a newer deploy replaced before serving ([AGL-3986](https://linear.app/aglyn/issue/AGL-3986))
+- **billing:** an ai:<tier> entry on a bundle link sells that Aglyn AI tier ([AGL-3955](https://linear.app/aglyn/issue/AGL-3955), [AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
 - **native:** the order detail matches Figma 13:483 / 13:2167 and Apple's ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **site-care:** mint project ids with createResourceUid ([AGL-3970](https://linear.app/aglyn/issue/AGL-3970), [AGL-3079](https://linear.app/aglyn/issue/AGL-3079))
 - **native:** the splash icon holds the mark on Android 12-13; the draw-in moves to 14+ ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **native:** a workspace picked from All workspaces opens on its Home ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **native:** desktop HTTP client speaks HTTP/1.1 so console calls and logos load ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **native:** a list's detail column shows its own page's crumbs, never another tab's ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **site-care:** mint request, message and history ids with createResourceUid ([AGL-3959](https://linear.app/aglyn/issue/AGL-3959), [AGL-3079](https://linear.app/aglyn/issue/AGL-3079))
+- **billing:** mint the bundle link id with createResourceUid ([AGL-3955](https://linear.app/aglyn/issue/AGL-3955), [AGL-3079](https://linear.app/aglyn/issue/AGL-3079))
 - **console:** a site collaborator's new invite is named by the platform's id ([AGL-3984](https://linear.app/aglyn/issue/AGL-3984), [AGL-3086](https://linear.app/aglyn/issue/AGL-3086))
 - **console:** a site collaborator's pending invite gains the site, never a second invite ([AGL-3984](https://linear.app/aglyn/issue/AGL-3984), [AGL-1111](https://linear.app/aglyn/issue/AGL-1111), [AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
 - **apple:** the order's tax and refund notes line up with its totals on the Mac and iPad ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
@@ -142,9 +152,15 @@ content on the marketing site and is written separately.
 - **domains:** the Domain Connect templates carry the official logo kit lockup ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
 - **android:** a first launch hands the splash to the intro, mark held, wordmark wiped in ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **apple:** full-screen tab row, focus-only search, scopes open at their roots ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
+- **site-care:** idempotent corrections, case-kept reply ids, pooled sender lookup ([AGL-3959](https://linear.app/aglyn/issue/AGL-3959))
 - **kotlin:** search results and the site switcher keep Figma's 44 rows ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **kotlin:** sidebar header, rows and list controls measure as Figma's Compact ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
+- **billing:** blame only the code's own refusal on a link's coupon ([AGL-3955](https://linear.app/aglyn/issue/AGL-3955))
+- **staff:** the starter flag is saved only once the starter site exists ([AGL-3958](https://linear.app/aglyn/issue/AGL-3958))
 - **apple:** phone Orders draws Figma 22:499's title row, toolbar and flush rows ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
+- **staff:** name the client build preview row in the staff audit trail ([AGL-3958](https://linear.app/aglyn/issue/AGL-3958))
+- **email:** count the client build preview email and regenerate staff constants ([AGL-3958](https://linear.app/aglyn/issue/AGL-3958))
+- **staff:** a client build given the starter site resumes at the send step ([AGL-3958](https://linear.app/aglyn/issue/AGL-3958))
 - **native:** the workspace Automation row opens the organization's hub ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
 - **native:** seeded teammates get verified emulator accounts ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
 - **kotlin:** a search result's glyph falls back to its group heading ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
@@ -162,6 +178,7 @@ content on the marketing site and is written separately.
 - **kotlin:** the title-bar search is 480 wide with its footer ground, as Figma ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **kotlin:** the sign-up screen survives its own account appearing ([AGL-3981](https://linear.app/aglyn/issue/AGL-3981))
 - **apple:** the list column's title row is Figma's 28 points ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
+- **staff:** client build names the product by the configured brand ([AGL-3958](https://linear.app/aglyn/issue/AGL-3958))
 - **kotlin:** the launch intro is one motion with no flash ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **ai:** the inspiration plan block names the platform's parts, not the brand ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975))
 - **ai:** read the inspiration flag statically and keep recorded pages as html and css ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975))
@@ -192,13 +209,18 @@ content on the marketing site and is written separately.
 
 ### Documentation
 
+- **release:** beta.271 changelog carries everything merged in from main ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 - **ai:** each style's layout, and the style cards' new pictures ([AGL-3985](https://linear.app/aglyn/issue/AGL-3985))
+- **decision-log:** record the Site Care time constants ([AGL-3959](https://linear.app/aglyn/issue/AGL-3959))
 - **domains:** list the Buy a domain guide for domain go-live ([AGL-3964](https://linear.app/aglyn/issue/AGL-3964))
+- **site-care:** staff runbook for Charge for work, owner Projects on Billing ([AGL-3970](https://linear.app/aglyn/issue/AGL-3970))
 - **decision-log:** the AI tiers entry matches its Drive entry and records the go-live ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
 - **billing:** regenerate the feature matrix, generation on every paid plan ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965))
+- **site-care:** staff runbook, owner statement, self-host variables and card help ([AGL-3959](https://linear.app/aglyn/issue/AGL-3959))
+- **staff:** client build screen walkthrough, What's New, domain search reference ([AGL-3958](https://linear.app/aglyn/issue/AGL-3958))
 
 <details>
-<summary>Also in this release: 16 test, 4 chore, 1 style</summary>
+<summary>Also in this release: 24 test, 6 chore, 1 style</summary>
 
 - **tools:** raise the Linear id floor to AGL-3991, read off the workspace ([AGL-3991](https://linear.app/aglyn/issue/AGL-3991), [AGL-3986](https://linear.app/aglyn/issue/AGL-3986), [AGL-3989](https://linear.app/aglyn/issue/AGL-3989), [AGL-3984](https://linear.app/aglyn/issue/AGL-3984))
 - **release:** v1.0.0-beta.271 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
@@ -212,10 +234,20 @@ content on the marketing site and is written separately.
 - **pricing:** the figma frames carry the ai tiers, and a script publishes them ([AGL-3965](https://linear.app/aglyn/issue/AGL-3965), [AGL-3615](https://linear.app/aglyn/issue/AGL-3615))
 - **ai:** a live eval of Sites I like on recorded pages, held to a spend cap ([AGL-3975](https://linear.app/aglyn/issue/AGL-3975))
 - **ai:** the live site-plan eval plans a start given every business detail ([AGL-3979](https://linear.app/aglyn/issue/AGL-3979))
+- **rules:** prove every client is refused on a project record and its history ([AGL-3970](https://linear.app/aglyn/issue/AGL-3970))
+- **native:** regenerate staff constants for the Site Care emails ([AGL-3959](https://linear.app/aglyn/issue/AGL-3959))
+- **rules:** prove every client is refused on the Site Care paths ([AGL-3959](https://linear.app/aglyn/issue/AGL-3959))
+- **site-care:** cover the arithmetic, records, Stripe calls, requests and routes ([AGL-3959](https://linear.app/aglyn/issue/AGL-3959))
 - **ai:** the More details section is rounded and outlined like the build page's plan ([AGL-3979](https://linear.app/aglyn/issue/AGL-3979))
 - **ai:** the layout language's cached span is up 19 and 20 for phone and email links ([AGL-3979](https://linear.app/aglyn/issue/AGL-3979))
+- **invites:** pin hand off and propose as one act ([AGL-3956](https://linear.app/aglyn/issue/AGL-3956))
+- **billing:** pin the bundle link doors, bundle checkout and the boot-time waiver ([AGL-3955](https://linear.app/aglyn/issue/AGL-3955))
+- **email:** count the hand-off-with-a-plan email among the editable ones ([AGL-3956](https://linear.app/aglyn/issue/AGL-3956))
+- **billing:** mock the router the Billing page now reads ([AGL-3955](https://linear.app/aglyn/issue/AGL-3955))
+- **staff:** type the domain search slot stub so the spec config compiles ([AGL-3958](https://linear.app/aglyn/issue/AGL-3958))
 - **kotlin:** a double-click on the tab row zooms the window ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **linear:** raise the issue ceiling to AGL-3981, which exists ([AGL-3981](https://linear.app/aglyn/issue/AGL-3981))
+- **site-care:** wip requests, timer, approvals and audit, paused ([AGL-3959](https://linear.app/aglyn/issue/AGL-3959))
 - **kotlin:** the theme test counts writes after the accent's own lands ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 - **apple:** editor actions reach the screen head beside the list's primary ([AGL-3966](https://linear.app/aglyn/issue/AGL-3966))
 - **kotlin:** the sign-up test waits for the pending workspace write ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
@@ -223,6 +255,8 @@ content on the marketing site and is written separately.
 - **kotlin:** nav snapshots shoot tabs, AI panel, theme states and marketplace ([AGL-3946](https://linear.app/aglyn/issue/AGL-3946))
 
 </details>
+
+2 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
 
 ## v1.0.0-beta.270 — 2026-10-19
 
