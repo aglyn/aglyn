@@ -186,14 +186,22 @@ public struct AglynBrowserScreen: View {
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
+        .toolbar { toolbar }
+      #else
+        // The Mac window has no system toolbar: back, forward, reload and the page menu sit in the screen's head.
+        .aglynScreenToolbar(id: "browser") {
+          back
+          forward
+          reload
+          menu
+        }
       #endif
-      .toolbar { toolbar }
       .accessibilityIdentifier("browser-screen")
   }
 
-  @ToolbarContentBuilder
-  private var toolbar: some ToolbarContent {
-    #if os(iOS)
+  #if os(iOS)
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
       ToolbarItem(placement: .principal) { heading }
       if compact {
         ToolbarItemGroup(placement: .bottomBar) {
@@ -212,16 +220,8 @@ public struct AglynBrowserScreen: View {
           menu
         }
       }
-    #else
-      ToolbarItemGroup(placement: .primaryAction) {
-        back
-        forward
-        reload
-        menu
-      }
-      .aglynPlainToolbarBackground()
-    #endif
-  }
+    }
+  #endif
 
   /// The page's title over its address, in the middle of a phone's or iPad's bar.
   private var heading: some View {
