@@ -22,10 +22,17 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { posKioskGaps } from './pos-kiosk-readiness.component'
 import { posRegistersSettingsHref, usePosPairing } from './pos-pairing.component'
 
 const calls: any[] = []
 let refuse = false
+
+/** Swapped per case: the register's readers, as the readers route lists them. */
+let readersAnswer: Record<string, unknown> = {
+  available: true,
+  readers: [{ id: 'tmr_1', registerId: 'reg-1' }],
+}
 
 jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: async (_user: unknown, url: string, init: any) => {
@@ -34,12 +41,29 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
     if (refuse) {
       return { ok: false, status: 403, json: async () => ({ error: 'Not permitted' }) }
     }
+    if (url === '/api/commerce/pos-readers') {
+      return { ok: true, status: 200, json: async () => readersAnswer }
+    }
     return {
       ok: true,
       status: 200,
       json: async () => ({ code: body.mode === 'kiosk' ? '654321' : '123456', expiresAtMs: 1 }),
     }
   },
+}))
+
+/** Swapped per case: what the store's Stripe account can do. */
+const PAYMENTS_READY = { state: 'ready', settled: true, ready: true, blocked: false, reason: null, href: null }
+let mockPayments: Record<string, unknown> = PAYMENTS_READY
+/** Swapped per case: the commerce plugin's settings as the site resolves them. */
+let mockConfig: Record<string, unknown> = { posKioskPayAtCounter: true }
+
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useMerchantPayments: () => mockPayments,
+  useHostOrgId: () => 'org-1',
+  useSitePluginConfig: () => ({ config: mockConfig, overrides: [], ready: true }),
+  useConsoleHostRoute: () => ({ base: '/acme/hosts/shop', orgSlug: 'acme', subdomain: 'shop' }),
+  useStoreSettingsHref: (_hostId: string, page: string) => `/acme/hosts/shop/products/${page}`,
 }))
 
 function Harness({ onError }: { onError: (message: string) => void }) {
@@ -57,7 +81,19 @@ function Harness({ onError }: { onError: (message: string) => void }) {
 beforeEach(() => {
   calls.length = 0
   refuse = false
+  readersAnswer = { available: true, readers: [{ id: 'tmr_1', registerId: 'reg-1' }] }
+  mockPayments = PAYMENTS_READY
+  mockConfig = { posKioskPayAtCounter: true }
 })
+
+/** Opens the dialog and switches it to a kiosk, as a merchant pairing one does. */
+async function openKiosk() {
+  render(<Harness onError={jest.fn()} />)
+  fireEvent.click(screen.getByText('open'))
+  await screen.findByText('123456')
+  fireEvent.click(screen.getByRole('button', { name: 'Self-service kiosk' }))
+  await screen.findByText('654321')
+}
 
 describe('usePosPairing', () => {
   it('shows a code for the register, and a kiosk code when switched', async () => {
@@ -89,6 +125,99 @@ describe('usePosPairing', () => {
     fireEvent.click(screen.getByText('open'))
     await waitFor(() => expect(onError).toHaveBeenCalledWith('Not permitted'))
     expect(screen.queryByText('Pair a customer display')).toBeNull()
+  })
+})
+
+describe('kiosk payment prerequisites (AGL-3982)', () => {
+  it('says nothing when the register has a reader and Stripe is ready', async () => {
+    await openKiosk()
+    await waitFor(() =>
+      expect(calls.some((call) => call.url === '/api/commerce/pos-readers' && call.body.action === 'list')).toBe(true),
+    )
+    expect(screen.queryByTestId('pos-kiosk-readiness')).toBeNull()
+  })
+
+  it('names Stripe with a Payments link while the account is not ready', async () => {
+    mockPayments = {
+      state: 'not-connected',
+      settled: true,
+      ready: false,
+      blocked: true,
+      reason: 'Connect Stripe to take card payments.',
+      href: '/acme/hosts/shop/products/payments',
+    }
+    await openKiosk()
+    expect(
+      await screen.findByText(
+        'Connect Stripe to take card payments. Until then the kiosk can’t take cards; customers pay at the counter.',
+      ),
+    ).toBeTruthy()
+    expect(screen.getByText('Open Payments').closest('a')?.getAttribute('href')).toBe(
+      '/acme/hosts/shop/products/payments',
+    )
+  })
+
+  it('sends a register with no reader to POS devices', async () => {
+    readersAnswer = { available: true, readers: [{ id: 'tmr_1', registerId: 'reg-2' }] }
+    await openKiosk()
+    expect(await screen.findByText(/No card reader is assigned to Front counter\./)).toBeTruthy()
+    expect(screen.getByText('Open POS devices').closest('a')?.getAttribute('href')).toBe(
+      '/acme/hosts/shop/products/pos#pos-devices',
+    )
+  })
+
+  it('warns when the kiosk has no way to take payment at all', async () => {
+    readersAnswer = { available: true, readers: [] }
+    mockConfig = { posKioskPayAtCounter: false }
+    await openKiosk()
+    expect(await screen.findByText(/This kiosk can’t take payment yet/)).toBeTruthy()
+    expect(screen.getByText('Open store settings').closest('a')?.getAttribute('href')).toBe(
+      '/acme/hosts/shop/admin/plugins/commerce',
+    )
+  })
+
+  it('names no reader or Stripe step where the deployment takes no card payments', async () => {
+    readersAnswer = { available: false, readers: [] }
+    mockPayments = { ...PAYMENTS_READY, state: 'not-connected', ready: false, blocked: true, reason: 'Connect Stripe.' }
+    await openKiosk()
+    await waitFor(() => expect(calls.some((call) => call.url === '/api/commerce/pos-readers')).toBe(true))
+    expect(screen.queryByText('Open Payments')).toBeNull()
+    expect(screen.queryByText('Open POS devices')).toBeNull()
+  })
+
+  it('shows nothing about a kiosk on a customer display code', async () => {
+    mockPayments = { ...PAYMENTS_READY, state: 'not-connected', ready: false, blocked: true, reason: 'Connect Stripe.' }
+    render(<Harness onError={jest.fn()} />)
+    fireEvent.click(screen.getByText('open'))
+    await screen.findByText('123456')
+    expect(screen.queryByTestId('pos-kiosk-readiness')).toBeNull()
+    expect(calls.some((call) => call.url === '/api/commerce/pos-readers')).toBe(false)
+  })
+})
+
+describe('posKioskGaps', () => {
+  const ready = { cardsOffered: true, registerReaders: 1, payAtCounter: true, stripeBlocked: false }
+  it('finds nothing missing on a ready register', () => {
+    expect(posKioskGaps(ready)).toEqual([])
+  })
+  it('lists every gap, the kiosk-wide one first', () => {
+    expect(posKioskGaps({ ...ready, registerReaders: 0, payAtCounter: false, stripeBlocked: true })).toEqual([
+      'no-payment',
+      'stripe',
+      'reader',
+    ])
+  })
+  it('keeps pay at the counter off as a choice while cards work', () => {
+    expect(posKioskGaps({ ...ready, payAtCounter: false })).toEqual([])
+  })
+  it('asks for a reader choice on a register with several', () => {
+    expect(posKioskGaps({ ...ready, registerReaders: 2 })).toEqual(['reader-choice'])
+  })
+  it('says only "no payment" where the deployment takes no cards', () => {
+    expect(posKioskGaps({ ...ready, cardsOffered: false, payAtCounter: false, stripeBlocked: true })).toEqual([
+      'no-payment',
+    ])
+    expect(posKioskGaps({ ...ready, cardsOffered: false, registerReaders: 0 })).toEqual([])
   })
 })
 
