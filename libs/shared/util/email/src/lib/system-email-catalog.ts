@@ -330,6 +330,65 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       source: 'apps/console/app/api/orgs/invites/route.ts',
     },
     {
+      key: 'org-owner-handoff-proposal',
+      name: 'Workspace handoff with a plan',
+      description:
+        'Sent when the platform team hands a workspace to a new owner and ' +
+        'proposes its plan in the same step: the invitation, with a link to ' +
+        'Billing where the plan, add-ons, cadence and coupon are already chosen.',
+      deliveredBy: 'resend',
+      defaultSubject: '{{org.name}} is ready for you on {{brand.productName}}',
+      mergeTokens: [
+        {
+          name: 'org.name',
+          description: 'Name of the workspace being handed over',
+          sample: 'Test Org',
+        },
+        {
+          name: 'handoff.previousOwner',
+          description:
+            'What happens to the current owner once the handoff is accepted',
+          sample: 'The current owner stays on as an admin.',
+        },
+        {
+          name: 'plan.name',
+          description: 'The proposed plan',
+          sample: 'Starter',
+        },
+        {
+          name: 'proposal.summary',
+          description: 'The plan with the add-ons, cadence and coupon proposed with it',
+          sample: 'Starter with Site Care, billed yearly, code BOOTH25',
+        },
+        {
+          name: 'proposal.note',
+          description: 'A line from the team, or nothing when none was written',
+          sample: 'Great meeting you at the booth.',
+        },
+        {
+          name: 'billingUrl',
+          description:
+            'Billing page with the bundle preselected; signing in with this ' +
+            'address shows the invitation to accept first',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/billing?plan=starter&interval=year&addons=siteCare`,
+        },
+      ],
+      // Mirrors the fallback text in invites/route.ts.
+      defaultBody: [
+        { block: 'text', text: 'Your new website · {{org.name}}', variant: 'eyebrow' },
+        { block: 'text', text: '{{org.name}} is ready for you', variant: 'heading' },
+        { block: 'text', text: 'You\'ve been invited to take over {{org.name}} as its owner. The owner holds the workspace, every site in it, and its billing. {{handoff.previousOwner}}', variant: 'body' },
+        { block: 'text', text: '{{proposal.note}}', variant: 'body' },
+        { block: 'text', text: 'Your plan: {{proposal.summary}}', variant: 'details' },
+        { block: 'button', label: 'Accept and start the {{plan.name}} plan', href: '{{billingUrl}}' },
+        { block: 'text', text: 'Sign in with this email address, accept the invitation, and Billing opens with everything already chosen. Nothing is charged until you confirm.', variant: 'caption' },
+      ],
+      footerReason:
+        'You’re receiving this because the {{brand.productName}} team invited ' +
+        'you to take over {{org.name}}.',
+      source: 'apps/console/app/api/orgs/invites/route.ts',
+    },
+    {
       key: 'org-upgrade-proposal',
       name: 'Upgrade proposal',
       description:
@@ -354,9 +413,16 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: 'As we discussed on Tuesday.',
         },
         {
+          name: 'proposal.summary',
+          description:
+            'The plan with the add-ons, cadence and coupon proposed with it, ' +
+            'or nothing when only a plan was proposed',
+          sample: 'Starter with Site Care, billed yearly, code BOOTH25',
+        },
+        {
           name: 'billingUrl',
-          description: 'Billing page with the proposed plan preselected',
-          sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/billing?plan=starter`,
+          description: 'Billing page with the proposed plan, add-ons, cadence and coupon preselected',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/billing?plan=starter&interval=year&addons=siteCare`,
         },
       ],
       // Mirrors the fallback text in /api/admin/org-upgrade-proposal.
@@ -364,6 +430,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: '{{org.name}}', variant: 'eyebrow' },
         { block: 'text', text: 'The {{plan.name}} plan, proposed for {{org.name}}', variant: 'heading' },
         { block: 'text', text: 'Your {{brand.productName}} team proposed moving {{org.name}} to the {{plan.name}} plan.', variant: 'body' },
+        { block: 'text', text: '{{proposal.summary}}', variant: 'details' },
         { block: 'text', text: '{{proposal.note}}', variant: 'body' },
         { block: 'text', text: 'When you are ready, start the subscription from Billing. The plan is already selected there, beside the others so you can compare them first.', variant: 'body' },
         { block: 'button', label: 'Review the {{plan.name}} plan', href: '{{billingUrl}}' },

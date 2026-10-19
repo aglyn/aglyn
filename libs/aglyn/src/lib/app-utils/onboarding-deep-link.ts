@@ -16,13 +16,22 @@
  */
 
 import type { OrgPlan } from '../foundation/definitions/org-billing.types'
+import {
+  bundleAddonsParam,
+  hasBundleAddons,
+  normalizeBundleCoupon,
+  parseBundleAddons,
+  type BundleAddons,
+} from './bundle-intent'
 import { isCustomPricedPlan } from './plan-entitlements'
 
 /**
  * The marketing → console onboarding deep link (AGL-1117).
  *
  * `app.aglyn.com/signup?plan=pro&interval=year`, optionally `&ai=1` for the
- * Aglyn AI add-on (AGL-2897).
+ * Aglyn AI add-on (AGL-2897). The bundle checkout link (AGL-3955) adds
+ * `&addons=siteCare,ai,extraHost:2` for any add-on the plan sells and
+ * `&coupon=<code>` for a promotion code to apply at checkout.
  *
  * This is a CONTRACT with a site we do not control and cannot deploy in
  * lockstep with. So it is parsed defensively and in one place: the pricing
@@ -67,6 +76,26 @@ export interface OnboardingPlanIntent {
    * the add-on is quoted with the deal, not bought through a checkout.
    */
   ai?: true
+  /**
+   * Every add-on the `addons=` param preselects (AGL-3955), parsed by the
+   * shared `parseBundleAddons`. Absent when it named none. `ai=1` stays the
+   * `ai` flag above; an `ai` token here sets that flag too, so a reader that
+   * wants the whole set reads both (`intentAddons`).
+   * Whether the plan sells each one is the reader's question
+   * (`fitBundleAddonsToPlan`), because the owner can pick another plan.
+   */
+  addons?: BundleAddons
+  /**
+   * A promotion code to apply at checkout (AGL-3955). Applied only: codes are
+   * minted on the staff Coupons page. An invalid or expired one is dropped by
+   * the Billing page with a notice, never an error page.
+   */
+  coupon?: string
+  /**
+   * Add-on tokens the link named that nothing understood, as written, so the
+   * page can say in one line that they were left off.
+   */
+  droppedAddons?: string[]
 }
 
 const SELF_SERVE_PLANS: readonly OrgPlan[] = [
@@ -122,6 +151,15 @@ export function parseOnboardingPlanIntent(
   // paid item off a malformed link is the expensive direction to be wrong in.
   const ai = read('ai')
   const aiStated = ai === '1' || ai === 'true' || ai === 'yes'
+  // The bundle (AGL-3955). Read case-preserving: a coupon code is typed the
+  // way Stripe stores it, and `read` lower-cases.
+  const rawParam = (key: string): string => {
+    const raw = params instanceof URLSearchParams ? params.get(key) : params[key]
+    return String((Array.isArray(raw) ? raw[0] : raw) ?? '').trim()
+  }
+  const parsedAddons = parseBundleAddons(rawParam('addons'))
+  const addons: BundleAddons = { ...parsedAddons.addons }
+  const coupon = normalizeBundleCoupon(rawParam('coupon'))
   return {
     plan: plan as OrgPlan,
     // Anything unrecognized falls to monthly, never to yearly: guessing the
@@ -133,8 +171,16 @@ export function parseOnboardingPlanIntent(
     // org rather than be told "monthly" with a straight face.
     intervalStated: known,
     contactSales: false,
-    ...(aiStated ? { ai: true } : {}),
+    ...(aiStated || addons.aiAddon ? { ai: true } : {}),
+    ...(hasBundleAddons(addons) ? { addons } : {}),
+    ...(coupon ? { coupon } : {}),
+    ...(parsedAddons.dropped.length ? { droppedAddons: parsedAddons.dropped } : {}),
   }
+}
+
+/** The whole add-on set an intent asks for: `addons=` and the `ai` flag together. */
+export function intentAddons(intent: Pick<OnboardingPlanIntent, 'ai' | 'addons'> | null | undefined): BundleAddons {
+  return { ...(intent?.addons ?? {}), ...(intent?.ai ? { aiAddon: 1 } : {}) }
 }
 
 /**
@@ -147,10 +193,26 @@ export function parseOnboardingPlanIntent(
  * a statement the next reader could not tell from the real thing.
  */
 export function onboardingPlanQuery(intent: OnboardingPlanIntent): string {
+  // `ai=1` stays the spelling when Aglyn AI is the only add-on, so the
+  // published pricing CTAs and every hop between them read unchanged. Any
+  // other add-on writes the whole set as `addons=` (AGL-3955), Aglyn AI with it.
+  const addons: BundleAddons = { ...(intent.addons ?? {}) }
+  if (intent.ai) addons.aiAddon = 1
+  const others = Object.keys(addons).some(
+    (kind) => kind !== 'aiAddon' && (addons[kind as keyof BundleAddons] ?? 0) > 0,
+  )
+  const coupon = normalizeBundleCoupon(intent.coupon)
   return (
     `plan=${encodeURIComponent(intent.plan)}` +
     (intent.intervalStated ? `&interval=${intent.interval}` : '') +
-    (intent.ai ? '&ai=1' : '')
+    (others
+      ? // Fixed tokens, letters, digits, `:` and `,` only, so the link stays
+        // readable when it is read aloud or typed off a QR's caption.
+        `&addons=${bundleAddonsParam(addons)}`
+      : addons.aiAddon
+        ? '&ai=1'
+        : '') +
+    (coupon ? `&coupon=${encodeURIComponent(coupon)}` : '')
   )
 }
 

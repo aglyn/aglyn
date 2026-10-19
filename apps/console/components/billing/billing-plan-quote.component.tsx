@@ -18,6 +18,18 @@
 'use client'
 
 import { parseLockdownRefusal, type LockdownRefusalNotice } from '@aglyn/aglyn'
+import type { OrgPlan } from '@aglyn/aglyn'
+import {
+  ADDON_KINDS,
+  addonUnitUsd,
+  bundleAddonsParam,
+  describeBundleAddon,
+  fitBundleAddonsToPlan,
+  planSellsAddon,
+  TOGGLE_ADDON_KIND_LIST,
+  type AddonKind,
+  type BundleAddons,
+} from '@aglyn/aglyn/app-utils/bundle-intent'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -25,11 +37,13 @@ import {
   Box,
   Button,
   Divider,
+  FormControlLabel,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import LockdownNotice from '../lockdown-notice.component'
@@ -78,6 +92,36 @@ export interface BillingPlanQuoteProps {
    * be carried into a purchase as though it had worked.
    */
   onAppliedCodeChange: (code: string) => void
+  /**
+   * The add-ons quoted with the plan (AGL-3955), owned by the page like the
+   * code: the quote prices exactly what the purchase will send. Fitted to the
+   * plan here, so a kind it does not sell is never quoted.
+   */
+  addons?: BundleAddons
+  /** Present when the add-ons can be changed here: the switches render. */
+  onAddonsChange?: (next: BundleAddons) => void
+  /**
+   * A promotion code the link carried (AGL-3955), tried on the first quote.
+   * One that Stripe refuses is left off with a one-line notice, never an
+   * error: the owner is mid-purchase on a phone.
+   */
+  initialCoupon?: string | null
+  /** A one-line notice from the page: what the link asked for that was left off. */
+  linkNotice?: string | null
+  /** A line under the total: the bundle's domain, bought after subscribing. */
+  footer?: ReactNode
+  /** The priced total each time the quote lands, or null while there is none. */
+  onQuoted?: (preview: { totalCents: number; currency: string } | null) => void
+}
+
+const ADDON_ROW_KINDS = TOGGLE_ADDON_KIND_LIST as readonly string[]
+
+/** "$49/mo", "$588/yr", "$15/mo each". */
+function addonPrice(kind: AddonKind, plan: OrgPlan, interval: 'month' | 'year'): string {
+  const unit = addonUnitUsd(kind, plan)
+  if (unit == null) return ''
+  const each = ADDON_ROW_KINDS.includes(kind) ? '' : ' each'
+  return interval === 'year' ? `$${unit * 12}/yr${each}` : `$${unit}/mo${each}`
 }
 
 function money(cents: number, currency: string): string {
@@ -124,7 +168,21 @@ export default function BillingPlanQuoteComponent({
   canManage,
   appliedCode,
   onAppliedCodeChange,
+  addons,
+  onAddonsChange,
+  initialCoupon,
+  linkNotice,
+  footer,
+  onQuoted,
 }: BillingPlanQuoteProps) {
+  const knownPlan = plan ? (plan as OrgPlan) : null
+  const quotedAddons = knownPlan ? fitBundleAddonsToPlan(addons, knownPlan).addons : {}
+  // A stable key for the effect below: the add-ons as the link writes them.
+  const addonsKey = bundleAddonsParam(quotedAddons)
+  // The link's code is tried once, on the first quote, and then belongs to
+  // the box like any typed code.
+  const linkCoupon = useRef<string | null>(initialCoupon?.trim() || null)
+  const [couponNotice, setCouponNotice] = useState<string | null>(null)
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
@@ -145,7 +203,7 @@ export default function BillingPlanQuoteComponent({
   const [lockdown, setLockdown] = useState<LockdownRefusalNotice | null>(null)
 
   const fetchQuote = useCallback(
-    async (promotionCode: string) => {
+    async (promotionCode: string, fromLink = false) => {
       if (!orgId || !plan || !user) return
       setBusy(true)
       setFailed(false)
@@ -159,11 +217,25 @@ export default function BillingPlanQuoteComponent({
             plan,
             interval,
             promotionCode,
+            // Quoted on the same invoice as the plan, so the total shown is
+            // the total charged (AGL-3955).
+            ...(addonsKey ? { addons: quotedAddons } : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
         const locked = parseLockdownRefusal(response.status, payload)
         if (locked) return void setLockdown(locked)
+        // The link's code did not resolve: say so in one line and quote
+        // without it, rather than greeting the owner with an error.
+        if (!response.ok && response.status === 400 && fromLink && promotionCode) {
+          setCouponNotice(
+            `The code ${promotionCode} from your link is not valid or has ` +
+              'expired, so it was left off.',
+          )
+          onAppliedCodeChange('')
+          setBusy(false)
+          return void fetchQuoteRef.current?.('', false)
+        }
         if (!response.ok) {
           // The server's own sentence for a code it does not recognize; the
           // generic fallback survives for everything that is not a lockdown.
@@ -175,24 +247,114 @@ export default function BillingPlanQuoteComponent({
         setCodeError(null)
         setQuote(payload as QuoteState)
         onAppliedCodeChange(payload?.promotionCodeApplied ?? '')
+        if (payload?.preview) {
+          onQuoted?.({
+            totalCents: Number(payload.preview.totalCents ?? 0),
+            currency: String(payload.preview.currency ?? 'usd'),
+          })
+        } else {
+          onQuoted?.(null)
+        }
       } catch {
         setFailed(true)
+        onQuoted?.(null)
       } finally {
         setBusy(false)
       }
     },
-    [orgId, plan, interval, user, enqueueSnackbar, onAppliedCodeChange],
+    // `quotedAddons` is keyed by `addonsKey`: a fresh object every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [orgId, plan, interval, addonsKey, user, enqueueSnackbar, onAppliedCodeChange, onQuoted],
   )
+  const fetchQuoteRef = useRef<((code: string, fromLink?: boolean) => Promise<void>) | null>(null)
+  fetchQuoteRef.current = fetchQuote
 
   useEffect(() => {
-    // Re-quoted when the plan or the interval changes. The preview is
-    // deliberately above the idempotency claim on the server, so comparing two
-    // plans cannot burn the key that pays for one.
-    if (plan) void fetchQuote(appliedCode)
+    // Re-quoted when the plan, the interval or the add-ons change. The
+    // preview is deliberately above the idempotency claim on the server, so
+    // comparing two plans cannot burn the key that pays for one. The link's
+    // coupon is tried on the first quote only.
+    if (!plan) return
+    const fromLink = linkCoupon.current
+    linkCoupon.current = null
+    if (fromLink && !appliedCode) {
+      setCodeInput(fromLink)
+      void fetchQuote(fromLink, true)
+      return
+    }
+    void fetchQuote(appliedCode)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, interval])
+  }, [plan, interval, addonsKey])
 
   if (!plan) return null
+
+  /*
+   * What the link asked for that is not here (AGL-3955), in one line each:
+   * an add-on nobody sells under that name or the plan does not carry, and a
+   * code Stripe would not resolve. Never an error page.
+   */
+  const notices =
+    linkNotice || couponNotice ? (
+      <Stack spacing={1}>
+        {linkNotice ? <Alert severity="info">{linkNotice}</Alert> : null}
+        {couponNotice ? (
+          <Alert severity="info" onClose={() => setCouponNotice(null)}>
+            {couponNotice}
+          </Alert>
+        ) : null}
+      </Stack>
+    ) : null
+
+  /*
+   * The add-ons, preselected from the link or the proposal (AGL-3955): every
+   * org-wide add-on the plan sells as a switch, and any counted add-on the
+   * bundle asked for. Turning one off re-quotes, and the purchase sends
+   * exactly what is switched on.
+   */
+  const addonKinds = knownPlan
+    ? ADDON_KINDS.filter(
+        (kind) =>
+          planSellsAddon(kind, knownPlan) &&
+          (ADDON_ROW_KINDS.includes(kind) || (quotedAddons[kind] ?? 0) > 0),
+      )
+    : []
+  const addonRows =
+    knownPlan && onAddonsChange && addonKinds.length ? (
+      <Stack spacing={0}>
+        <Typography variant="overline" color="text.secondary">
+          {'Add-ons'}
+        </Typography>
+        {addonKinds.map((kind) => {
+          const quantity = quotedAddons[kind] ?? 0
+          return (
+            <FormControlLabel
+              key={kind}
+              disabled={busy || !canManage}
+              control={
+                <Switch
+                  size="small"
+                  checked={quantity > 0}
+                  onChange={(event) => {
+                    const next: BundleAddons = { ...quotedAddons }
+                    if (event.target.checked) next[kind] = Math.max(1, addons?.[kind] ?? 1)
+                    else delete next[kind]
+                    onAddonsChange(next)
+                  }}
+                />
+              }
+              label={
+                <Typography variant="body2">
+                  {describeBundleAddon(kind, Math.max(1, quantity))}
+                  <Typography component="span" variant="body2" color="text.secondary">
+                    {` · ${addonPrice(kind, knownPlan, interval)}`}
+                  </Typography>
+                </Typography>
+              }
+            />
+          )
+        })}
+      </Stack>
+    ) : null
 
   if (lockdown) {
     return <LockdownNotice notice={lockdown} onClose={() => setLockdown(null)} />
@@ -207,21 +369,32 @@ export default function BillingPlanQuoteComponent({
   }
 
   if (quote?.needsBillingDetails || quote?.needsBillingAddress) {
-    // Not a total with the tax quietly missing from it.
+    // Not a total with the tax quietly missing from it. The bundle still
+    // shows, so the owner can see what was chosen before the details.
     return (
-      <Alert severity="info">
-        {'Add your billing address above to see what this plan costs with ' +
-          'tax included.'}
-      </Alert>
+      <Stack spacing={1.5}>
+        {notices}
+        {addonRows}
+        <Alert severity="info">
+          {'Add your billing address to see what this costs with tax ' +
+            'included. Pay asks for anything missing.'}
+        </Alert>
+        {footer}
+      </Stack>
     )
   }
 
   const preview = quote?.preview
   if (!preview) {
     return (
-      <Typography variant="body2" color="text.secondary">
-        {busy ? 'Pricing this plan…' : 'Select a plan to see its total.'}
-      </Typography>
+      <Stack spacing={1.5}>
+        {notices}
+        {addonRows}
+        <Typography variant="body2" color="text.secondary">
+          {busy ? 'Pricing this plan…' : 'Select a plan to see its total.'}
+        </Typography>
+        {footer}
+      </Stack>
     )
   }
 
@@ -241,6 +414,8 @@ export default function BillingPlanQuoteComponent({
 
   return (
     <Stack spacing={1.5}>
+      {notices}
+      {addonRows}
       <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
         <Typography variant="body2">{'Subtotal'}</Typography>
         <Typography variant="body2">
@@ -299,6 +474,8 @@ export default function BillingPlanQuoteComponent({
         changes the outcome is Stripe's determination and depends on
         jurisdiction, so this raises the question rather than answering it.
       */}
+      {footer}
+
       {tax.kind === 'charged' && quote?.hasTaxId === false ? (
         <Alert severity="info">
           {'Registered for VAT, GST or a similar business tax? Add your tax ID ' +

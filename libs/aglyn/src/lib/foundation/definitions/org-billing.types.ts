@@ -1324,6 +1324,15 @@ export interface OrgUpgradeProposal {
   proposedAt: number
   /** An optional line from staff, shown with the proposal. */
   note?: string
+  /**
+   * The add-ons proposed with the plan (AGL-3956), by `org.seatAddons` kind,
+   * fitted to what the plan sells. Billing preselects them beside the plan.
+   */
+  addons?: Partial<Record<keyof Required<OrgSeatAddons>, number>>
+  /** The cadence proposed, when staff chose one; absent leaves Billing's toggle alone. */
+  interval?: 'month' | 'year'
+  /** A promotion code minted on the staff Coupons page, applied at checkout. */
+  coupon?: string
 }
 
 /**

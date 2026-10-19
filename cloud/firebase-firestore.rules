@@ -2712,6 +2712,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Staff-minted bundle checkout links (AGL-3955): one workspace, 24 hours,
+    // and a one-time waiver of the domains plugin's invoice-age gate. Minted,
+    // read and spent only by the console on the Admin SDK — a client that
+    // could write one could waive its own gate, and one that could read them
+    // could learn which workspaces staff are selling to. Staff included.
+    match /bundleLinks/{linkId} {
+      allow read, write: if false;
+    }
+
     // The POS customer display (AGL-3608): pairing codes, display tokens and
     // each register's display state, all stored by hash or by site+register
     // and read and written only by /api/commerce/pos-display on the Admin

@@ -2717,6 +2717,15 @@ allow read, write: if false;
 
 
 
+match /bundleLinks/{linkId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
 
 match /posDisplayPairings/{codeHash} {
 allow read, write: if false;

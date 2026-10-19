@@ -1361,7 +1361,7 @@
             },
             {
               "id": "propose",
-              "label": "Propose a plan",
+              "label": "Ask to upgrade",
               "icon": "sparkles|workspace_premium",
               "url": "/api/admin/org-upgrade-proposal",
               "prompt": [
@@ -1370,6 +1370,7 @@
                   "label": "Plan",
                   "kind": "select",
                   "required": true,
+                  "initial": "starter",
                   "options": [
                     {
                       "value": "starter",
@@ -1398,6 +1399,70 @@
                   ]
                 },
                 {
+                  "key": "interval",
+                  "label": "Billing",
+                  "kind": "select",
+                  "initial": "year",
+                  "options": [
+                    {
+                      "value": "year",
+                      "label": "Yearly"
+                    },
+                    {
+                      "value": "month",
+                      "label": "Monthly"
+                    }
+                  ]
+                },
+                {
+                  "key": "siteCare",
+                  "label": "Site Care",
+                  "kind": "toggle",
+                  "initial": "true"
+                },
+                {
+                  "key": "aiAddon",
+                  "label": "Aglyn AI",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "eventCalendar",
+                  "label": "Event Calendar",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "hosts",
+                  "label": "Extra sites",
+                  "kind": "number"
+                },
+                {
+                  "key": "managers",
+                  "label": "Extra manager seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "members",
+                  "label": "Extra collaborator seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "datasets",
+                  "label": "Extra datasets",
+                  "kind": "number"
+                },
+                {
+                  "key": "posRegisters",
+                  "label": "POS registers",
+                  "kind": "number",
+                  "help": "Add-ons the plan does not sell are left off."
+                },
+                {
+                  "key": "coupon",
+                  "label": "Coupon code (optional)",
+                  "kind": "text",
+                  "help": "A code from the staff Coupons page, applied at checkout."
+                },
+                {
                   "key": "note",
                   "label": "Note to the owner (optional)",
                   "kind": "multiline"
@@ -1407,6 +1472,18 @@
                 "orgId": "{params.orgId}",
                 "action": "propose",
                 "plan": "{form.plan}",
+                "addons": {
+                  "siteCare": "{form.siteCare}",
+                  "aiAddon": "{form.aiAddon}",
+                  "eventCalendar": "{form.eventCalendar}",
+                  "hosts": "{form.hosts}",
+                  "managers": "{form.managers}",
+                  "members": "{form.members}",
+                  "datasets": "{form.datasets}",
+                  "posRegisters": "{form.posRegisters}"
+                },
+                "interval": "{form.interval}",
+                "coupon": "{form.coupon}",
                 "note": "{form.note}"
               },
               "success": "Proposed; the owner is told",
@@ -1745,7 +1822,7 @@
             },
             {
               "id": "handoff",
-              "label": "Hand off to a new owner",
+              "label": "Hand off",
               "icon": "person.badge.plus|person_add",
               "url": "/api/orgs/invites",
               "prompt": [
@@ -1770,9 +1847,111 @@
                       "label": "Leave after the handoff"
                     }
                   ]
+                },
+                {
+                  "key": "plan",
+                  "label": "Plan",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "starter",
+                  "options": [
+                    {
+                      "value": "starter",
+                      "label": "Starter"
+                    },
+                    {
+                      "value": "pro",
+                      "label": "Pro"
+                    },
+                    {
+                      "value": "business",
+                      "label": "Business"
+                    },
+                    {
+                      "value": "scale",
+                      "label": "Scale"
+                    },
+                    {
+                      "value": "advanced",
+                      "label": "Advanced"
+                    },
+                    {
+                      "value": "agency",
+                      "label": "Agency"
+                    }
+                  ]
+                },
+                {
+                  "key": "interval",
+                  "label": "Billing",
+                  "kind": "select",
+                  "initial": "year",
+                  "options": [
+                    {
+                      "value": "year",
+                      "label": "Yearly"
+                    },
+                    {
+                      "value": "month",
+                      "label": "Monthly"
+                    }
+                  ]
+                },
+                {
+                  "key": "siteCare",
+                  "label": "Site Care",
+                  "kind": "toggle",
+                  "initial": "true"
+                },
+                {
+                  "key": "aiAddon",
+                  "label": "Aglyn AI",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "eventCalendar",
+                  "label": "Event Calendar",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "hosts",
+                  "label": "Extra sites",
+                  "kind": "number"
+                },
+                {
+                  "key": "managers",
+                  "label": "Extra manager seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "members",
+                  "label": "Extra collaborator seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "datasets",
+                  "label": "Extra datasets",
+                  "kind": "number"
+                },
+                {
+                  "key": "posRegisters",
+                  "label": "POS registers",
+                  "kind": "number",
+                  "help": "Add-ons the plan does not sell are left off."
+                },
+                {
+                  "key": "coupon",
+                  "label": "Coupon code (optional)",
+                  "kind": "text",
+                  "help": "A code from the staff Coupons page, applied at checkout."
+                },
+                {
+                  "key": "note",
+                  "label": "Note to the owner (optional)",
+                  "kind": "multiline"
                 }
               ],
-              "confirm": "They become the owner once they accept. Nothing changes until then, and the invitation reserves no seat.",
+              "confirm": "They become the owner once they accept, and the plan is proposed with the invitation: its email opens Billing with the plan, add-ons, billing and coupon already chosen. Nothing changes until they accept, and the invitation reserves no seat. A workspace that already pays is handed off without a proposal.",
               "body": {
                 "orgId": "{params.orgId}",
                 "action": "create",
@@ -1780,6 +1959,22 @@
                 "role": "owner",
                 "handoff": {
                   "previousOwner": "{form.previousOwner}"
+                },
+                "proposal": {
+                  "plan": "{form.plan}",
+                  "addons": {
+                    "siteCare": "{form.siteCare}",
+                    "aiAddon": "{form.aiAddon}",
+                    "eventCalendar": "{form.eventCalendar}",
+                    "hosts": "{form.hosts}",
+                    "managers": "{form.managers}",
+                    "members": "{form.members}",
+                    "datasets": "{form.datasets}",
+                    "posRegisters": "{form.posRegisters}"
+                  },
+                  "interval": "{form.interval}",
+                  "coupon": "{form.coupon}",
+                  "note": "{form.note}"
                 }
               },
               "success": "Handoff sent to {form.email}"
@@ -2685,7 +2880,7 @@
             },
             {
               "id": "handoff",
-              "label": "Hand off to a new owner",
+              "label": "Hand off",
               "icon": "person.badge.plus|person_add",
               "url": "/api/orgs/invites",
               "prompt": [
@@ -2710,32 +2905,13 @@
                       "label": "Leave after the handoff"
                     }
                   ]
-                }
-              ],
-              "confirm": "They become the owner once they accept. Nothing changes until then, and the invitation reserves no seat.",
-              "body": {
-                "orgId": "{data.site.sites.0.orgId}",
-                "action": "create",
-                "email": "{form.email}",
-                "role": "owner",
-                "handoff": {
-                  "previousOwner": "{form.previousOwner}"
-                }
-              },
-              "success": "Handoff sent to {form.email}",
-              "when": "data.site.sites.0.orgId"
-            },
-            {
-              "id": "propose",
-              "label": "Propose a plan",
-              "icon": "sparkles|workspace_premium",
-              "url": "/api/admin/org-upgrade-proposal",
-              "prompt": [
+                },
                 {
                   "key": "plan",
                   "label": "Plan",
                   "kind": "select",
                   "required": true,
+                  "initial": "starter",
                   "options": [
                     {
                       "value": "starter",
@@ -2764,6 +2940,208 @@
                   ]
                 },
                 {
+                  "key": "interval",
+                  "label": "Billing",
+                  "kind": "select",
+                  "initial": "year",
+                  "options": [
+                    {
+                      "value": "year",
+                      "label": "Yearly"
+                    },
+                    {
+                      "value": "month",
+                      "label": "Monthly"
+                    }
+                  ]
+                },
+                {
+                  "key": "siteCare",
+                  "label": "Site Care",
+                  "kind": "toggle",
+                  "initial": "true"
+                },
+                {
+                  "key": "aiAddon",
+                  "label": "Aglyn AI",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "eventCalendar",
+                  "label": "Event Calendar",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "hosts",
+                  "label": "Extra sites",
+                  "kind": "number"
+                },
+                {
+                  "key": "managers",
+                  "label": "Extra manager seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "members",
+                  "label": "Extra collaborator seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "datasets",
+                  "label": "Extra datasets",
+                  "kind": "number"
+                },
+                {
+                  "key": "posRegisters",
+                  "label": "POS registers",
+                  "kind": "number",
+                  "help": "Add-ons the plan does not sell are left off."
+                },
+                {
+                  "key": "coupon",
+                  "label": "Coupon code (optional)",
+                  "kind": "text",
+                  "help": "A code from the staff Coupons page, applied at checkout."
+                },
+                {
+                  "key": "note",
+                  "label": "Note to the owner (optional)",
+                  "kind": "multiline"
+                }
+              ],
+              "confirm": "They become the owner once they accept, and the plan is proposed with the invitation: its email opens Billing with the plan, add-ons, billing and coupon already chosen. Nothing changes until they accept, and the invitation reserves no seat. A workspace that already pays is handed off without a proposal.",
+              "body": {
+                "orgId": "{data.site.sites.0.orgId}",
+                "action": "create",
+                "email": "{form.email}",
+                "role": "owner",
+                "handoff": {
+                  "previousOwner": "{form.previousOwner}"
+                },
+                "proposal": {
+                  "plan": "{form.plan}",
+                  "addons": {
+                    "siteCare": "{form.siteCare}",
+                    "aiAddon": "{form.aiAddon}",
+                    "eventCalendar": "{form.eventCalendar}",
+                    "hosts": "{form.hosts}",
+                    "managers": "{form.managers}",
+                    "members": "{form.members}",
+                    "datasets": "{form.datasets}",
+                    "posRegisters": "{form.posRegisters}"
+                  },
+                  "interval": "{form.interval}",
+                  "coupon": "{form.coupon}",
+                  "note": "{form.note}"
+                }
+              },
+              "success": "Handoff sent to {form.email}",
+              "when": "data.site.sites.0.orgId"
+            },
+            {
+              "id": "propose",
+              "label": "Ask to upgrade",
+              "icon": "sparkles|workspace_premium",
+              "url": "/api/admin/org-upgrade-proposal",
+              "prompt": [
+                {
+                  "key": "plan",
+                  "label": "Plan",
+                  "kind": "select",
+                  "required": true,
+                  "initial": "starter",
+                  "options": [
+                    {
+                      "value": "starter",
+                      "label": "Starter"
+                    },
+                    {
+                      "value": "pro",
+                      "label": "Pro"
+                    },
+                    {
+                      "value": "business",
+                      "label": "Business"
+                    },
+                    {
+                      "value": "scale",
+                      "label": "Scale"
+                    },
+                    {
+                      "value": "advanced",
+                      "label": "Advanced"
+                    },
+                    {
+                      "value": "agency",
+                      "label": "Agency"
+                    }
+                  ]
+                },
+                {
+                  "key": "interval",
+                  "label": "Billing",
+                  "kind": "select",
+                  "initial": "year",
+                  "options": [
+                    {
+                      "value": "year",
+                      "label": "Yearly"
+                    },
+                    {
+                      "value": "month",
+                      "label": "Monthly"
+                    }
+                  ]
+                },
+                {
+                  "key": "siteCare",
+                  "label": "Site Care",
+                  "kind": "toggle",
+                  "initial": "true"
+                },
+                {
+                  "key": "aiAddon",
+                  "label": "Aglyn AI",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "eventCalendar",
+                  "label": "Event Calendar",
+                  "kind": "toggle"
+                },
+                {
+                  "key": "hosts",
+                  "label": "Extra sites",
+                  "kind": "number"
+                },
+                {
+                  "key": "managers",
+                  "label": "Extra manager seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "members",
+                  "label": "Extra collaborator seats",
+                  "kind": "number"
+                },
+                {
+                  "key": "datasets",
+                  "label": "Extra datasets",
+                  "kind": "number"
+                },
+                {
+                  "key": "posRegisters",
+                  "label": "POS registers",
+                  "kind": "number",
+                  "help": "Add-ons the plan does not sell are left off."
+                },
+                {
+                  "key": "coupon",
+                  "label": "Coupon code (optional)",
+                  "kind": "text",
+                  "help": "A code from the staff Coupons page, applied at checkout."
+                },
+                {
                   "key": "note",
                   "label": "Note to the owner (optional)",
                   "kind": "multiline"
@@ -2773,6 +3151,18 @@
                 "orgId": "{data.site.sites.0.orgId}",
                 "action": "propose",
                 "plan": "{form.plan}",
+                "addons": {
+                  "siteCare": "{form.siteCare}",
+                  "aiAddon": "{form.aiAddon}",
+                  "eventCalendar": "{form.eventCalendar}",
+                  "hosts": "{form.hosts}",
+                  "managers": "{form.managers}",
+                  "members": "{form.members}",
+                  "datasets": "{form.datasets}",
+                  "posRegisters": "{form.posRegisters}"
+                },
+                "interval": "{form.interval}",
+                "coupon": "{form.coupon}",
                 "note": "{form.note}"
               },
               "success": "Proposed; the owner is told",
@@ -8205,6 +8595,13 @@
             "editable": true
           },
           {
+            "key": "org-owner-handoff-proposal",
+            "name": "Workspace handoff with a plan",
+            "description": "Sent when the platform team hands a workspace to a new owner and proposes its plan in the same step: the invitation, with a link to Billing where the plan, add-ons, cadence and coupon are already chosen.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
             "key": "org-upgrade-proposal",
             "name": "Upgrade proposal",
             "description": "Sent to a workspace's owner when the platform team proposes a paid plan for it, after the workspace has been evaluated.",
@@ -8823,6 +9220,53 @@
               "sample": "https://app.aglyn.com/support"
             }
           ],
+          "org-owner-handoff-proposal": [
+            {
+              "name": "org.name",
+              "description": "Name of the workspace being handed over",
+              "sample": "Test Org"
+            },
+            {
+              "name": "handoff.previousOwner",
+              "description": "What happens to the current owner once the handoff is accepted",
+              "sample": "The current owner stays on as an admin."
+            },
+            {
+              "name": "plan.name",
+              "description": "The proposed plan",
+              "sample": "Starter"
+            },
+            {
+              "name": "proposal.summary",
+              "description": "The plan with the add-ons, cadence and coupon proposed with it",
+              "sample": "Starter with Site Care, billed yearly, code BOOTH25"
+            },
+            {
+              "name": "proposal.note",
+              "description": "A line from the team, or nothing when none was written",
+              "sample": "Great meeting you at the booth."
+            },
+            {
+              "name": "billingUrl",
+              "description": "Billing page with the bundle preselected; signing in with this address shows the invitation to accept first",
+              "sample": "https://app.aglyn.com/test-org/billing?plan=starter&interval=year&addons=siteCare"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
           "org-upgrade-proposal": [
             {
               "name": "org.name",
@@ -8840,9 +9284,14 @@
               "sample": "As we discussed on Tuesday."
             },
             {
+              "name": "proposal.summary",
+              "description": "The plan with the add-ons, cadence and coupon proposed with it, or nothing when only a plan was proposed",
+              "sample": "Starter with Site Care, billed yearly, code BOOTH25"
+            },
+            {
               "name": "billingUrl",
-              "description": "Billing page with the proposed plan preselected",
-              "sample": "https://app.aglyn.com/test-org/billing?plan=starter"
+              "description": "Billing page with the proposed plan, add-ons, cadence and coupon preselected",
+              "sample": "https://app.aglyn.com/test-org/billing?plan=starter&interval=year&addons=siteCare"
             },
             {
               "name": "brand.productName",

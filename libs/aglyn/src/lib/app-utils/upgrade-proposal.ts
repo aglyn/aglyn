@@ -32,6 +32,14 @@ import type {
   OrgUpgradeProposal,
 } from '../foundation/definitions/org-billing.types'
 import {
+  describeBundle,
+  fitBundleAddonsToPlan,
+  hasBundleAddons,
+  normalizeBundleCoupon,
+  parseBundleAddons,
+  type BundleAddons,
+} from './bundle-intent'
+import {
   onboardingDestination,
   type OnboardingPlanIntent,
 } from './onboarding-deep-link'
@@ -78,11 +86,36 @@ export function readUpgradeProposal(
     return null
   }
   const note = normalizeUpgradeProposalNote(raw.note)
+  const bundle = normalizeUpgradeProposalBundle(raw.plan, raw)
   return {
     plan: raw.plan,
     proposedBy: typeof raw.proposedBy === 'string' ? raw.proposedBy : '',
     proposedAt: Number.isFinite(raw.proposedAt) ? Number(raw.proposedAt) : 0,
     ...(note ? { note } : {}),
+    ...bundle,
+  }
+}
+
+/**
+ * The bundle half of a proposal (AGL-3956) as it is stored: add-ons through
+ * the shared parser and fitted to the plan, an interval only when one was
+ * chosen, a coupon only when it reads as a code. Whatever cannot be honored
+ * is left out rather than stored, so Billing is never asked to preselect
+ * something the checkout would refuse.
+ */
+export function normalizeUpgradeProposalBundle(
+  plan: OrgPlan,
+  input: { addons?: unknown; interval?: unknown; coupon?: unknown } | null | undefined,
+): Pick<OrgUpgradeProposal, 'addons' | 'interval' | 'coupon'> {
+  const parsed = parseBundleAddons(input?.addons)
+  const addons: BundleAddons = fitBundleAddonsToPlan(parsed.addons, plan).addons
+  const interval =
+    input?.interval === 'year' || input?.interval === 'month' ? input.interval : undefined
+  const coupon = normalizeBundleCoupon(input?.coupon)
+  return {
+    ...(hasBundleAddons(addons) ? { addons } : {}),
+    ...(interval ? { interval } : {}),
+    ...(coupon ? { coupon } : {}),
   }
 }
 
@@ -103,26 +136,56 @@ export function standingUpgradeProposal(
   return readUpgradeProposal(org)
 }
 
-/** The plan intent a proposal carries into Billing: the plan, no interval. */
-export function upgradeProposalIntent(
-  proposal: Pick<OrgUpgradeProposal, 'plan'>,
-): OnboardingPlanIntent {
+type ProposalBundle = Pick<OrgUpgradeProposal, 'plan'> &
+  Partial<Pick<OrgUpgradeProposal, 'addons' | 'interval' | 'coupon'>>
+
+/**
+ * The intent a proposal carries into Billing: the plan, and the add-ons,
+ * cadence and coupon staff proposed with it (AGL-3956) — the same fields the
+ * bundle checkout link carries (AGL-3955), so the proposal card and the link
+ * land on the same preselected page.
+ */
+export function upgradeProposalIntent(proposal: ProposalBundle): OnboardingPlanIntent {
+  const addons = fitBundleAddonsToPlan(proposal.addons, proposal.plan).addons
+  const coupon = normalizeBundleCoupon(proposal.coupon)
+  const interval = proposal.interval === 'year' || proposal.interval === 'month'
+    ? proposal.interval
+    : null
   return {
     plan: proposal.plan,
-    interval: 'month',
-    // The proposal names a plan, not a cadence, so the page keeps whatever
-    // its toggle says rather than being told "monthly".
-    intervalStated: false,
+    interval: interval ?? 'month',
+    // A proposal with no cadence names a plan, not a cadence, so the page
+    // keeps whatever its toggle says rather than being told "monthly".
+    intervalStated: interval !== null,
     contactSales: false,
+    ...(addons.aiAddon ? { ai: true as const } : {}),
+    ...(hasBundleAddons(addons) ? { addons } : {}),
+    ...(coupon ? { coupon } : {}),
   }
 }
 
-/** Where the proposal's button goes: Billing, with the plan preselected. */
+/** Where the proposal's button goes: Billing, with the bundle preselected. */
 export function upgradeProposalDestination(
   orgSlug: string,
-  proposal: Pick<OrgUpgradeProposal, 'plan'>,
+  proposal: ProposalBundle,
 ): string {
   return onboardingDestination(orgSlug, upgradeProposalIntent(proposal))
+}
+
+/** "Starter with Site Care, billed yearly, code BOOTH25". */
+export function upgradeProposalSummary(
+  proposal: ProposalBundle,
+  options: { brand?: string } = {},
+): string {
+  return describeBundle(
+    {
+      plan: proposal.plan,
+      addons: proposal.addons ?? null,
+      interval: proposal.interval ?? null,
+      coupon: proposal.coupon ?? null,
+    },
+    options,
+  )
 }
 
 /** "Acme's Aglyn team proposed the Starter plan". */
