@@ -134,7 +134,7 @@ const FIELDS: ReadonlyArray<{
   {
     field: 'hours',
     label: 'Hours',
-    placeholder: 'Mon–Fri 8–5, Sat by appointment',
+    placeholder: 'Mon–Fri 8am–5pm, Sat by appointment',
   },
   {
     field: 'ownerWords',

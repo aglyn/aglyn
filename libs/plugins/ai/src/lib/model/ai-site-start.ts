@@ -16,10 +16,12 @@
  */
 
 import type { ClientBuildIntake } from '@aglyn/aglyn/app-utils/client-build'
+import { weeklyHoursFromText, weeklyHoursToText } from '@aglyn/shared-ui-jsx/utils/weekly-hours'
 import {
   AI_SITE_DETAIL_KEYS,
   AI_SITE_NO_DETAILS,
   aiSiteDetailProblem,
+  aiSiteDetailsOf,
   type AiSiteDetailKey,
   type AiSiteDetails,
 } from './ai-site-details'
@@ -464,17 +466,68 @@ function bounded(value: string, max: number): string {
   return (space > max / 2 ? cut.slice(0, space) : cut).trim()
 }
 
+/** A time with am or pm: "9am", "5:30 pm", "12 a.m.". */
+const TWELVE_HOUR_TIME = /\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?(?![a-z])/gi
+
+/**
+ * The hours an owner gave, in the shape the Details step's hours picker
+ * writes (`Tu-Sa 09:00-17:00`, one set of days a line), so the plan reads
+ * them as it reads hours picked there. A time with am or pm is the time it
+ * names, "to" joins a range as a dash does, and days with their hours may be
+ * set apart by a comma, a semicolon or a line. Whatever still does not read
+ * as hours — "8–5", "Sat by appointment" — is left out rather than guessed at.
+ */
+function clientBuildHours(hours: string): string {
+  const lines = hours
+    .replace(TWELVE_HOUR_TIME, (time, hour: string, minutes: string | undefined, half: string) => {
+      const h = Number(hour)
+      if (h < 1 || h > 12) return time
+      const clock = (h % 12) + (half.toLowerCase() === 'p' ? 12 : 0)
+      return `${String(clock).padStart(2, '0')}:${minutes ?? '00'}`
+    })
+    .replace(/\s+to\s+/gi, '-')
+    .replace(/(\d{1,2}:\d{2})\s*,\s*/g, '$1\n')
+    .replace(/;/g, '\n')
+  const week = weeklyHoursFromText(lines).hours
+  return week.some((day) => day.length) ? weeklyHoursToText(week) : ''
+}
+
+/**
+ * The towns an intake serves, one a line, as the Details step's "Areas you
+ * serve" holds them: "Austin, Round Rock and Pflugerville" is three.
+ */
+function clientBuildServiceArea(towns: string): string {
+  return towns
+    .split(/\r?\n|[,;]|\s+(?:and|&)\s+/i)
+    .map((town) => town.trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
 /**
  * The questions' answers for a site staff are building for a client: what
- * the business does is the kind of site, and every other answer keeps its
- * default, which the review shows to change. The rest of the intake is not an
- * answer to these questions; it reaches the job through
- * {@link aiSiteStartClientInputs} and {@link aiSiteStartClientBrief}.
+ * the business does is the kind of site, and the details the intake holds
+ * fill the Details step's own fields (AGL-3979, AGL-3995): the phone, the
+ * email, the towns as the areas it serves and the hours, each held to that
+ * detail's own rule, so one the Details step would refuse is left empty
+ * there. Every other answer keeps its default, which the review shows to
+ * change. The intake, a refused detail included, also reaches the job
+ * through {@link aiSiteStartClientInputs} and {@link aiSiteStartClientBrief}.
  */
 export function aiSiteStartAnswersFromClientBuild(intake: ClientBuildIntake): AiSiteStartAnswers {
+  const details = aiSiteDetailsOf({
+    phone: intake.phone,
+    email: intake.email,
+    serviceArea: clientBuildServiceArea(intake.towns),
+    hours: clientBuildHours(intake.hours),
+  })
   return {
     ...AI_SITE_START_ANSWERS,
     siteType: bounded(intake.whatTheyDo, AI_SITE_INPUT_MAX_CHARS),
+    phone: details.phone,
+    email: details.email,
+    serviceArea: details.serviceArea,
+    hours: details.hours,
   }
 }
 
