@@ -39,12 +39,14 @@
  * as a designed hero. Each page's `nav` names the site's other pages, which
  * its header links and its header's button goes to, as a built site's does.
  *
- * THE PHOTOS are the starter photos, never a download: whole, or a part of
- * one (`crop`), so the café's shelves and its owner can lead two different
- * pages. Every preview carries one (AGL-3985): a band of type with no photo
- * read as a picture that failed to load, so each kind's stand-in business is
- * one a starter photo truly shows. `render-layout-shots.mts` renders each
- * page with the real component bundles in headless Chrome.
+ * THE PHOTOS are files in the repo, never fetched at render time: the
+ * starter photos, and the previews' own (`style-preview-photos/`, one of
+ * each kind's own business, each credited in the CREDITS.md beside them and
+ * read by nothing else), whole or a part of one (`crop`), so the café's
+ * shelves and its owner can lead two different pages. Every preview carries
+ * one (AGL-3985): a band of type with no photo read as a picture that failed
+ * to load. `render-layout-shots.mts` renders each page with the real
+ * component bundles in headless Chrome.
  *
  * WHAT IT WRITES, per kind, into `libs/plugins/ai/src/lib/assets/site-styles/`:
  * `<kind>.webp`, the top 1024 × 1024 of the page drawn in a 1024 × 480 window

@@ -1,11 +1,14 @@
 {
- "_note": "Stand-in home pages for the guided start's style previews (AGL-3898), one per AI_SITE_KINDS id, each in its own kind's shape (a gallery for photography, a menu for a café, a product grid for a store, a reading list for a blog, dates for events, listings for real estate, a class schedule for yoga), in the layout language a site job's page step answers in (ai-layout-language.ts). Written by hand, never by a model: render-site-style-previews.mts compiles each through compile-recorded-sites.mts (the real page check and compiler, the kind's design variants, the look the kind's look unit builds) and shoots it. `hero` is the kind's signature hero (aiLayoutKindSignature's first, AGL-3985), which the seed is chosen for with any `choices` (other design variants) and `look` (the header's arrangement); `opensOnGrid` marks a page whose first section is a grid of pictures, drawn as written. `photos` fills each picture slot in order with a starter photo's key (hero, about, desk, plants, craft) or a `{ photo, crop: [left, top, width, height], alt }` part of one; every page opens on one, since a band of type with no photo reads as a picture that failed to load (AGL-3985). `nav` names the site's other pages, which the header links, and `cta` the header's button, which goes to the last of them or to `ctaTo`; a section's `items` says how many records it lists where its blocks carry none (a blog's posts); `products` are a store's records, `posts` a blog's, and `facts` what the brief says beside the kind (a time or a date the page shows must be in it).",
+ "_note": "Stand-in home pages for the guided start's style previews (AGL-3898), one per AI_SITE_KINDS id, each in its own kind's shape (a gallery for photography, a menu for a café, a product grid for a store, a reading list for a blog, dates for events, listings for real estate, a class schedule for yoga), in the layout language a site job's page step answers in (ai-layout-language.ts). Written by hand, never by a model: render-site-style-previews.mts compiles each through compile-recorded-sites.mts (the real page check and compiler, the kind's design variants, the look the kind's look unit builds) and shoots it. `hero` is the kind's signature hero (aiLayoutKindSignature's first, AGL-3985), which the seed is chosen for with any `choices` (other design variants) and `look` (the header's arrangement); `opensOnGrid` marks a page whose first section is a grid of pictures, drawn as written. `photos` fills each picture slot in order with a starter photo's key (hero, about, desk, plants, craft), a `{ photo, crop: [left, top, width, height], alt }` part of one, or a `{ file, crop?, alt }` preview photo of the kind's own business from style-preview-photos/ (credited in its CREDITS.md, never a site's starter); every page opens on one, since a band of type with no photo reads as a picture that failed to load (AGL-3985). `nav` names the site's other pages, which the header links, and `cta` the header's button, which goes to the last of them or to `ctaTo`; a section's `items` says how many records it lists where its blocks carry none (a blog's posts); `products` are a store's records, `posts` a blog's, and `facts` what the brief says beside the kind (a time or a date the page shows must be in it).",
  "kinds": {
   "business": {
    "name": "Fairway Office Co.",
    "hero": "split",
    "photos": [
-    "desk"
+    {
+     "file": "business-cleaning.jpg",
+     "alt": "Gloved hands wiping down a desk"
+    }
    ],
    "cta": "Get a quote",
    "sections": [
@@ -107,18 +110,12 @@
    ]
   },
   "trades": {
-   "name": "Ridgeline Remodeling",
+   "name": "Ridgeline Roofing",
    "hero": "cover",
    "photos": [
     {
-     "photo": "hero",
-     "crop": [
-      560,
-      160,
-      1040,
-      585
-     ],
-     "alt": "A contractor going over remodel plans at the board"
+     "file": "trades-roof.jpg",
+     "alt": "A roofer carrying shingles across a roof"
     }
    ],
    "cta": "Free estimate",
@@ -129,16 +126,16 @@
      "blocks": [
       {
        "kind": "eyebrow",
-       "text": "Kitchens, baths and repairs"
+       "text": "Roofing and gutters"
       },
       {
        "kind": "heading",
-       "text": "Remodels done right, the first time",
+       "text": "Roofs fixed right, the first time",
        "style": "large"
       },
       {
        "kind": "lede",
-       "text": "Kitchens, bathrooms and repairs, with a written estimate before any work starts."
+       "text": "Leak repairs, full replacements and gutters, with a written estimate before any work starts."
       },
       {
        "kind": "button",
@@ -160,25 +157,25 @@
      "blocks": [
       {
        "kind": "heading",
-       "text": "What we build"
+       "text": "Roofing services"
       },
       {
        "kind": "cards",
        "items": [
         {
-         "title": "Kitchens",
-         "text": "Cabinets, counters and lighting, planned with you.",
+         "title": "Leak repair",
+         "text": "Found, patched and checked after the next rain.",
+         "icon": "wrench"
+        },
+        {
+         "title": "Roof replacement",
+         "text": "Tear-off to final inspection in days, not weeks.",
          "icon": "home"
         },
         {
-         "title": "Bathrooms",
-         "text": "Tile, fixtures and showers, start to finish.",
-         "icon": "water"
-        },
-        {
-         "title": "Repairs",
-         "text": "Doors, floors and drywall, fixed in a day.",
-         "icon": "hammer"
+         "title": "Gutters",
+         "text": "Cleaning, guards and new seamless gutters.",
+         "icon": "shield"
         }
        ]
       }
@@ -196,8 +193,8 @@
        "kind": "steps",
        "items": [
         {
-         "title": "Walkthrough",
-         "text": "We measure and photograph what is there."
+         "title": "Inspection",
+         "text": "We look at the roof and photograph what we find."
         },
         {
          "title": "Written estimate",
@@ -205,7 +202,7 @@
         },
         {
          "title": "The work",
-         "text": "Done, cleaned up and checked with you."
+         "text": "Done, cleaned up and checked."
         }
        ]
       }
@@ -336,14 +333,8 @@
    "hero": "bleed",
    "photos": [
     {
-     "photo": "plants",
-     "crop": [
-      430,
-      420,
-      770,
-      480
-     ],
-     "alt": "A quiet sofa corner with a monstera by the window"
+     "file": "wellness-room.jpg",
+     "alt": "A calm, sunlit room with a sofa and plants"
     }
    ],
    "cta": "Book a first session",
@@ -945,6 +936,16 @@
    "hero": "editorial",
    "photos": [
     {
+     "file": "photography-wedding.jpg",
+     "crop": [
+      300,
+      0,
+      640,
+      800
+     ],
+     "alt": "A bride and groom with her bouquet"
+    },
+    {
      "photo": "about",
      "crop": [
       620,
@@ -953,16 +954,6 @@
       900
      ],
      "alt": "A smiling café owner in her apron"
-    },
-    {
-     "photo": "plants",
-     "crop": [
-      0,
-      150,
-      600,
-      750
-     ],
-     "alt": "A hanging plant in a bright bay window"
     },
     {
      "photo": "craft",
@@ -983,7 +974,7 @@
      "blocks": [
       {
        "kind": "eyebrow",
-       "text": "Portraits, interiors and brands"
+       "text": "Weddings, portraits and brands"
       },
       {
        "kind": "heading",
@@ -999,12 +990,12 @@
       },
       {
        "kind": "image",
-       "text": "A portrait of a café owner at her counter",
+       "text": "A bride and groom with her bouquet",
        "col": 0
       },
       {
        "kind": "image",
-       "text": "A sunlit window full of hanging plants",
+       "text": "A portrait of a café owner at her counter",
        "col": 1
       },
       {
@@ -1069,14 +1060,14 @@
    "hero": "column",
    "photos": [
     {
-     "photo": "desk",
+     "file": "blog-ingredients.jpg",
      "crop": [
-      440,
-      520,
-      1160,
-      548
+      0,
+      260,
+      1200,
+      525
      ],
-     "alt": "A writing desk with a notebook and reading glasses"
+     "alt": "Fresh vegetables and eggs on a cutting board"
     }
    ],
    "cta": "Subscribe",
@@ -1161,32 +1152,32 @@
    ]
   },
   "events": {
-   "name": "Harvest Makers Fair",
+   "name": "Harvest Moon Festival",
    "hero": "collage",
    "photos": [
     {
-     "photo": "craft",
+     "file": "events-lanterns.jpg",
      "crop": [
+      260,
       0,
-      0,
-      1600,
-      1065
+      640,
+      800
      ],
-     "alt": "A maker pressing wax seals at her stall"
+     "alt": "Food stalls under red lanterns at the night market"
     },
     {
-     "photo": "desk",
+     "file": "events-lanterns.jpg",
      "crop": [
-      640,
-      340,
-      340,
-      380
+      0,
+      0,
+      480,
+      480
      ],
-     "alt": "Pink roses at the flower stall"
+     "alt": "Red lanterns strung over the market"
     }
    ],
    "cta": "Get tickets",
-   "facts": "The fair runs September 19 to 21 in Riverside Park: the night market on Friday, September 19 from 6 pm; makers and two stages on Saturday, September 20; the lantern walk on Sunday, September 21 at dusk.",
+   "facts": "The festival runs September 19 to 21 in Riverside Park: the opening concert and night market on Friday, September 19 from 6 pm; family day on Saturday, September 20; the lantern walk on Sunday, September 21 at dusk.",
    "sections": [
     {
      "name": "hero",
@@ -1194,28 +1185,33 @@
      "blocks": [
       {
        "kind": "eyebrow",
-       "text": "September 19 to 21 · Riverside Park"
+       "text": "September 19 to 21 · Riverside Park",
+       "col": 0
       },
       {
        "kind": "heading",
-       "text": "Three days of makers, music and food",
-       "style": "large"
+       "text": "Three days of music, food and lanterns",
+       "style": "large",
+       "col": 0
       },
       {
        "kind": "lede",
-       "text": "Local makers, a night market and live music along the river."
+       "text": "Local bands, a night market and the lantern walk along the river.",
+       "col": 0
       },
       {
        "kind": "button",
        "text": "Get tickets",
        "to": "#3",
-       "style": "primary"
+       "style": "primary",
+       "col": 0
       },
       {
        "kind": "button",
        "text": "See the program",
        "to": "#2",
-       "style": "secondary"
+       "style": "secondary",
+       "col": 0
       }
      ]
     },
@@ -1232,11 +1228,11 @@
        "items": [
         {
          "title": "Friday, September 19",
-         "text": "The night market from 6 pm."
+         "text": "The opening concert and night market from 6 pm."
         },
         {
          "title": "Saturday, September 20",
-         "text": "Makers and two stages all day."
+         "text": "Family day with food stalls and two stages."
         },
         {
          "title": "Sunday, September 21",
@@ -1248,8 +1244,7 @@
     },
     {
      "name": "tickets",
-     "band": "brand",
-     "align": "center",
+     "band": "soft",
      "blocks": [
       {
        "kind": "heading",
@@ -1261,7 +1256,8 @@
        "to": "form",
        "style": "primary"
       }
-     ]
+     ],
+     "align": "center"
     }
    ],
    "look": {
@@ -1283,14 +1279,14 @@
    "hero": "bleed",
    "photos": [
     {
-     "photo": "hero",
+     "file": "fitness-gym.jpg",
      "crop": [
       420,
-      300,
-      400,
-      660
+      0,
+      720,
+      800
      ],
-     "alt": "A coach with her training notebook"
+     "alt": "Rows of dumbbells in a bright gym"
     }
    ],
    "cta": "Try a class",
@@ -1390,14 +1386,14 @@
    "hero": "column",
    "photos": [
     {
-     "photo": "plants",
+     "file": "yoga-class.jpg",
      "crop": [
       0,
-      0,
-      1200,
-      525
+      380,
+      800,
+      350
      ],
-     "alt": "A sunny window hung with plants"
+     "alt": "A class stretching on mats in the studio"
     }
    ],
    "cta": "See the schedule",
@@ -1524,24 +1520,24 @@
    "hero": "collage",
    "photos": [
     {
-     "photo": "desk",
+     "file": "beauty-cut.jpg",
      "crop": [
+      280,
+      0,
       640,
-      120,
-      720,
-      880
+      800
      ],
-     "alt": "Pink roses and glass jars at the styling station"
+     "alt": "A stylist washing a client’s hair"
     },
     {
-     "photo": "about",
+     "file": "beauty-salon.jpg",
      "crop": [
-      800,
       0,
-      440,
-      440
+      320,
+      675,
+      675
      ],
-     "alt": "Freshly styled curls"
+     "alt": "The salon’s chairs and mirrors"
     }
    ],
    "cta": "Book now",
@@ -1638,14 +1634,8 @@
    "hero": "panel",
    "photos": [
     {
-     "photo": "plants",
-     "crop": [
-      0,
-      120,
-      1200,
-      780
-     ],
-     "alt": "A plant-filled living room with tall windows"
+     "file": "realestate-house.jpg",
+     "alt": "A white two-story house with a front porch"
     },
     {
      "photo": "desk",
@@ -1786,14 +1776,14 @@
    "hero": "split",
    "photos": [
     {
-     "photo": "hero",
+     "file": "education-tutor.jpg",
      "crop": [
-      150,
-      420,
-      480,
-      600
+      600,
+      0,
+      600,
+      750
      ],
-     "alt": "A tutor working through a problem on her tablet"
+     "alt": "A tutor smiling at the whiteboard"
     }
    ],
    "cta": "Book a trial lesson",
@@ -1829,7 +1819,7 @@
       },
       {
        "kind": "image",
-       "text": "A tutor working through a problem on her tablet"
+       "text": "A tutor smiling at the whiteboard"
       }
      ]
     },
@@ -1910,14 +1900,8 @@
    "hero": "cover",
    "photos": [
     {
-     "photo": "hero",
-     "crop": [
-      0,
-      180,
-      1100,
-      620
-     ],
-     "alt": "Volunteers planning the week’s deliveries"
+     "file": "nonprofit-food-bank.jpg",
+     "alt": "Volunteers sorting canned food donations"
     }
    ],
    "cta": "Donate",
@@ -2020,14 +2004,8 @@
    "hero": "cover",
    "photos": [
     {
-     "photo": "about",
-     "crop": [
-      0,
-      0,
-      880,
-      495
-     ],
-     "alt": "Warm lights over the bar of a small venue"
+     "file": "music-stage.jpg",
+     "alt": "A band playing under stage lights"
     }
    ],
    "cta": "Tour dates",
@@ -2127,18 +2105,18 @@
    "ctaTo": "Shows"
   },
   "personal": {
-   "name": "Sam Ortiz",
+   "name": "Lena Ortiz",
    "hero": "portrait",
    "photos": [
     {
-     "photo": "hero",
+     "file": "personal-portrait.jpg",
      "crop": [
-      1300,
-      190,
-      300,
-      300
+      77,
+      110,
+      800,
+      800
      ],
-     "alt": "Sam Ortiz"
+     "alt": "Lena Ortiz, smiling"
     }
    ],
    "cta": "Get in touch",
@@ -2174,7 +2152,7 @@
       },
       {
        "kind": "image",
-       "text": "Sam Ortiz, smiling"
+       "text": "Lena Ortiz, smiling"
       }
      ]
     },
@@ -2240,14 +2218,8 @@
    "hero": "column",
    "photos": [
     {
-     "photo": "desk",
-     "crop": [
-      230,
-      420,
-      1000,
-      437
-     ],
-     "alt": "The shared budget open on a laptop"
+     "file": "landing-couple.jpg",
+     "alt": "A couple planning together on a phone"
     }
    ],
    "cta": "Join the beta",
@@ -2336,18 +2308,18 @@
    "nav": []
   },
   "coming-soon": {
-   "name": "Fern & Folly",
+   "name": "Orchard Lane Café",
    "hero": "poster",
    "photos": [
     {
-     "photo": "plants",
+     "file": "coming-soon-cafe.jpg",
      "crop": [
-      560,
       0,
-      640,
-      900
+      260,
+      900,
+      506
      ],
-     "alt": "Hanging plants by a tall window"
+     "alt": "Shelves of coffee and books in the café"
     }
    ],
    "cta": "",
@@ -2362,18 +2334,22 @@
       },
       {
        "kind": "heading",
-       "text": "Something green is coming to Orchard Lane",
+       "text": "Something warm is coming to Orchard Lane",
        "style": "large"
       },
       {
        "kind": "lede",
-       "text": "A small plant shop is on its way. Leave your email and we will tell you the day we open."
+       "text": "A neighborhood café is on its way. Leave your email and we will tell you the day we open."
       },
       {
        "kind": "button",
        "text": "Get notified",
        "to": "#2",
        "style": "primary"
+      },
+      {
+       "kind": "image",
+       "text": "Shelves of coffee and books in the café"
       }
      ]
     },
