@@ -285,7 +285,7 @@ struct DatasetsScreen: View {
         scoped ? "No datasets are shared with you" : "No datasets yet", systemImage: DataSymbols.dataset,
         message: scoped
           ? "Ask an owner or admin to share a dataset with one of your sites."
-          : "Create a dataset (e.g. Products) and repeat a component over its records with {{item.field}} bindings."
+          : "Create a dataset, like Products, then add a repeating section to any page to show one item per record."
       ) {
         if !scoped && canWrite { Button("New dataset") { sheet = .create }.buttonStyle(.borderedProminent) }
       }

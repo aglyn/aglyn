@@ -1249,8 +1249,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         ) : null}
         {datasets.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            {'Create a dataset (e.g. Products) and repeat a component over ' +
-              'its records with {{item.field}} bindings.'}
+            {'Create a dataset, like Products, then add a repeating section ' +
+              'to any page to show one item per record.'}
           </Typography>
         ) : (
           <Stack
