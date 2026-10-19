@@ -176,7 +176,7 @@ struct OrdersScreen: View {
             }
             .keyboardShortcut("n", modifiers: .command)
             .accessibilityIdentifier("orders-draft")
-            moreMenu(select: true).labelStyle(.iconOnly)
+            moreMenu(select: true, iconOnly: true)
           }
         }
         AglynListToolbar(
@@ -194,7 +194,7 @@ struct OrdersScreen: View {
 
   /// Orders' other actions in one More menu: Select (in the list column's head), the shipping export and the tracking
   /// import.
-  private func moreMenu(select: Bool) -> some View {
+  private func moreMenu(select: Bool, iconOnly: Bool = false) -> some View {
     Menu {
       if select {
         Button {
@@ -224,7 +224,13 @@ struct OrdersScreen: View {
         .accessibilityIdentifier("orders-import-tracking")
       }
     } label: {
-      Label("More", systemImage: "ellipsis")
+      // The list column's ⋯ is the icon alone (Figma 13:483); a label style set outside a Menu does not reach its label
+      // on iPad, so it is set on the label itself.
+      if iconOnly {
+        Label("More", systemImage: "ellipsis").labelStyle(.iconOnly)
+      } else {
+        Label("More", systemImage: "ellipsis")
+      }
     }
     .menuIndicator(.hidden)
     .accessibilityIdentifier("orders-export-shipping")

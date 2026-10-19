@@ -250,69 +250,6 @@ struct ProductDetailView: View {
       // The header below already shows the name large.
       .navigationBarTitleDisplayMode(.inline)
     #endif
-    .aglynScreenToolbar(id: "product", phone: .secondaryAction) {
-      if let doc = model.doc, let row = model.row {
-        // HIG toolbars: the two actions used most stay visible, every other one is in one labeled More menu.
-        // The calmer screens: the one filled button sits in the header below; every other act is in this one menu.
-        AglynMoreMenu {
-          if row.status == "draft" {
-            Button {
-              editing = .editing(doc)
-            } label: {
-              Label("Edit product", systemImage: "pencil")
-            }
-            .accessibilityIdentifier("edit-product")
-          }
-          Button {
-            adjusting = true
-          } label: {
-            Label("Adjust stock", systemImage: "plusminus")
-          }
-          .disabled(row.item.variants.isEmpty)
-          .accessibilityIdentifier("adjust-stock")
-          if row.type == "physical" {
-            // Shelf labels with a barcode the register scans back (the console's Labels).
-            Button {
-              labels = productLabelRows(JSONValue.from(doc.data))
-            } label: {
-              Label("Labels", systemImage: "barcode")
-            }
-            .accessibilityIdentifier("product-labels")
-          }
-          if row.type == "digital" {
-            Button {
-              keys = true
-            } label: {
-              Label("Keys", systemImage: "key")
-            }
-            .accessibilityIdentifier("product-keys")
-          }
-          Divider()
-          Button {
-            Task { await duplicate() }
-          } label: {
-            Label("Duplicate", systemImage: "plus.square.on.square")
-          }
-          .disabled(working)
-          .accessibilityIdentifier("product-duplicate")
-          Button {
-            Task { await setStatus(doc, row, row.status == "archived" ? "active" : "archived") }
-          } label: {
-            Label(row.status == "archived" ? "Activate" : "Archive", systemImage: row.status == "archived" ? "tray.and.arrow.up" : "archivebox")
-          }
-          .disabled(working)
-          .accessibilityIdentifier("product-archive")
-          Divider()
-          Button(role: .destructive) {
-            deleting = true
-          } label: {
-            Label("Delete", systemImage: "trash")
-          }
-          .disabled(working)
-          .accessibilityIdentifier("product-delete")
-        }
-      }
-    }
     .sheet(item: $editing) { editor in ProductEditorSheet(context: context, model: editor) }
     .sheet(isPresented: Binding(get: { labels != nil }, set: { if !$0 { labels = nil } })) {
       ProductLabelsSheet(productName: model.row?.name ?? "Product", rows: labels ?? [])
@@ -344,7 +281,8 @@ struct ProductDetailView: View {
           row.name, subtitle: row.price,
           imageURL: row.item.imageURL.flatMap { mediaPreviewURL($0, origin: context.api.origin, hostID: context.hostID) },
           systemImage: "shippingbox",
-          status: (row.statusLabel, row.status == "active" ? .success : .neutral), primary: primaryAction(row))
+          status: (row.statusLabel, row.status == "active" ? .success : .neutral), primary: primaryAction(row),
+          more: moreActions(row))
       }
       // The address, supplier, tags, categories, tax and search listing, and the pictures and downloads: one step in,
       // as rows rather than more buttons.
@@ -418,6 +356,47 @@ extension ProductDetailView {
     } catch {
       notice = (productWriteProblem(error).errorDescription ?? "Could not duplicate product", .warning)
     }
+  }
+
+  /// Every other act, in the head's ⋯ beside the filled button (as an order's are), so the product beside the list
+  /// never adds a second More to the screen's head; destructive ones last.
+  private func moreActions(_ row: ProductRow) -> [AglynRecordAction] {
+    guard let doc = model.doc else { return [] }
+    var actions: [AglynRecordAction] = []
+    if row.status == "draft" {
+      actions.append(AglynRecordAction("edit-product", "Edit product", systemImage: "pencil") { editing = .editing(doc) })
+    }
+    actions.append(
+      AglynRecordAction("adjust-stock", "Adjust stock", systemImage: "plusminus", enabled: !row.item.variants.isEmpty) {
+        adjusting = true
+      })
+    if row.type == "physical" {
+      // Shelf labels with a barcode the register scans back (the console's Labels).
+      actions.append(
+        AglynRecordAction("product-labels", "Labels", systemImage: "barcode") {
+          labels = productLabelRows(JSONValue.from(doc.data))
+        })
+    }
+    if row.type == "digital" {
+      actions.append(AglynRecordAction("product-keys", "Keys", systemImage: "key") { keys = true })
+    }
+    actions.append(
+      AglynRecordAction("product-duplicate", "Duplicate", systemImage: "plus.square.on.square", enabled: !working) {
+        Task { await duplicate() }
+      })
+    let archived = row.status == "archived"
+    actions.append(
+      AglynRecordAction(
+        "product-archive", archived ? "Activate" : "Archive", systemImage: archived ? "tray.and.arrow.up" : "archivebox",
+        enabled: !working
+      ) {
+        Task { await setStatus(doc, row, archived ? "active" : "archived") }
+      })
+    actions.append(
+      AglynRecordAction("product-delete", "Delete", systemImage: "trash", destructive: true, enabled: !working) {
+        deleting = true
+      })
+    return actions
   }
 
   /// The one filled button, the product's next step: a draft goes live; anything else is edited.
