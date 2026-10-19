@@ -99,9 +99,16 @@ export const tenantDataTag = (hostId: string): string => `tenant-data:${hostId}`
  * ⛔ NOT for reads that change OUTSIDE a publish. Two deliberately keep their
  * own short TTLs and must not be moved onto this one:
  *
- *   - `ORG_BILLING_TTL_SECONDS` — a plan change happens in the console and
- *     nothing busts the tenant tag for it, so this TTL is the ONLY thing
- *     propagating an upgrade or a downgrade to the live site.
+ *   - `ORG_BILLING_TTL_SECONDS` — the request-time org read (the lockdown
+ *     verdict and the other dynamic routes), where a bandwidth cap or a
+ *     suspension stamped straight onto the doc arrives by TTL alone. The
+ *     render's own org read is on this backstop instead (`scope: 'render'`):
+ *     plan transitions, staff overrides and org settings all announce
+ *     themselves through `revalidateOrgHosts`.
+ *
+ * ⚠️ Any TTL read inside the ISR render also caps the PAGE: `unstable_cache`
+ * lowers the regeneration's `revalidate` to the shortest TTL it saw, so one
+ * 60s entry holds the catch-all's 3600 at 60.
  *   - `HOST_ALIAS_TTL_SECONDS` / `HOST_DOC_TTL_SECONDS` — a custom domain
  *     attaching is the customer sitting there waiting for their site
  *     (AGL-2010), and the `cname--` alias entry expires only by TTL.
