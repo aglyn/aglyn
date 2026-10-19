@@ -577,7 +577,10 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       )
     }
     // The picker, the pin and color dialogs, and the one-time "Keep which 5 pins?".
-    ScopePicker(services, workspace, chrome, fullScreen = !wide, twoStep = !wide || chrome.picker == PickerStep.SITE, onPinFull = { chrome.pinFullFor = it }) { screen ->
+    ScopePicker(
+      services, workspace, chrome, fullScreen = !wide, twoStep = !wide || chrome.picker == PickerStep.SITE, onPinFull = { chrome.pinFullFor = it },
+      onOpenWorkspace = { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) },
+    ) { screen ->
       navigator.select(NavKeys.of(screen))
     }
     chrome.pinFullFor?.let { orgId -> PinnedFullDialog(services, workspace, orgId) { chrome.pinFullFor = null } }

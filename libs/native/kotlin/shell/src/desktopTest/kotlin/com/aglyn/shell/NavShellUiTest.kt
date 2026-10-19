@@ -299,6 +299,24 @@ class NavShellUiTest {
   }
 
   @Test
+  fun aWorkspacePickedFromThePickerOpensOnItsHome() = runComposeUiTest {
+    // Picked from "All workspaces" while a site page is open, a workspace lands on its Home, as a rail tile does, never
+    // on "Pick a site first" (driven on the tablet: Orders, then Harbor Light Yoga from the picker).
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-site-overview") > 0 }
+    onNodeWithTag("nav-group-website").performClick()
+    onNodeWithTag("nav-site-pages").performClick()
+    waitUntil(timeoutMillis = 3_000) { navigator.top != ShellNavigator.HOME }
+    runOnIdle { navigator.command = ShellCommand.SWITCH_WORKSPACE }
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("picker-org-o1") > 0 }
+    onNodeWithTag("picker-org-o1").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("scope-picker") == 0 }
+    waitUntil(timeoutMillis = 3_000) { navigator.top == ShellNavigator.HOME }
+  }
+
+  @Test
   fun tabsKeepTheirOwnPlaceAndReopenWhenClosed() = runComposeUiTest {
     val navigator = ShellNavigator()
     setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
