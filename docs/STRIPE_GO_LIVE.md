@@ -56,7 +56,7 @@ is what adds the tier's credits to the assist band. Generation itself is open
 on every plan against the plan's own credits.
 
 The twelve per-plan `aglyn_{plan}_ai_addon[_yearly]` prices minted on
-2026-09-14 are grandfathered: the console still reads
+2026-09-14 stay live until the migration: the console still reads
 `STRIPE_PRICE_{PLAN}_AI_ADDON[_YEARLY]` to recognise an item on one as the
 tier with the same price, and `tools/scripts/migrate-ai-addon-tiers.mjs`
 (dry run by default, `--commit` to apply) moves each such item to its tier's
@@ -64,7 +64,7 @@ price, after the console that reads the tier prices is deployed. Archive the
 per-plan prices only once the migration reports nothing left to move. An
 unset tier env refuses the purchase (501 naming the env), and
 `npm run check:pricing-drift` reports an unminted tier as `UNMINTED` and a
-grandfathered price that no longer charges its tier's amount as `DIFFERS`.
+legacy price that no longer charges its tier's amount as `DIFFERS`.
 
 ### The Site Care add-on (AGL-3954)
 

@@ -16,9 +16,6 @@
  */
 
 import {
-  AI_TIER_IDS,
-  AI_TIERS,
-  defaultAiTierForPlan,
   EVENT_CALENDAR_ADDON_MONTHLY_USD,
   EXTRA_HOSTS_ADDON_MAX,
   PLAN_PRICING,
@@ -29,12 +26,21 @@ import {
   SELF_SERVE_PLANS,
   SITE_CARE_ADDON_MONTHLY_USD,
   UNLIMITED,
-  LEGACY_AI_ADDON_TIER_BY_PLAN,
-  planSellsAiTiers,
   type AiTierId,
   type OrgPlan,
   type OrgSeatAddons,
 } from '@aglyn/aglyn/server'
+// The Aglyn AI tiers (AGL-3965) by their own module rather than the server
+// barrel: the webhook and every billing route read a subscription's AI item
+// through here, and the many route specs that stub `@aglyn/aglyn/server`
+// with a partial object would otherwise see every tier helper as undefined.
+import {
+  AI_TIER_IDS,
+  AI_TIERS,
+  defaultAiTierForPlan,
+  LEGACY_AI_ADDON_TIER_BY_PLAN,
+  planSellsAiTiers,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 /**
  * Self-serve add-on price map (AGL-525): the bridge between

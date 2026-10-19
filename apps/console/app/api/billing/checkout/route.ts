@@ -17,8 +17,6 @@
 
 import {
   claimAttempt,
-  defaultAiTierForPlan,
-  isAiTierId,
   isCustomPricedPlan,
   isOrgSubscriptionLive,
   PLATFORM_BRAND_NAME,
@@ -28,6 +26,12 @@ import {
   type AttemptClaim,
   type OrgPlan,
 } from '@aglyn/aglyn/server'
+// The Aglyn AI tiers (AGL-3965) by their own module, not the server barrel
+// route specs stub with a partial object.
+import {
+  defaultAiTierForPlan,
+  isAiTierId,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   emailUnverifiedResponse,
   featureLockdownRefusal,

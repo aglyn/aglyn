@@ -78,9 +78,11 @@ import {
   METERED_UNIT_RATES_USD,
 } from '../utils/usage-metering'
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
+  AI_TIER_IDS,
+  AI_TIERS,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  planSellsAiTiers,
   RELEASE_FLAGS,
   SELF_SERVE_PLANS,
   SITE_CARE_ADDON_MONTHLY_USD,
@@ -816,26 +818,26 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * THE GENERATIVE DOOR (AGL-2900). The page's cell is "add-on" on every
-     * plan that prices the add-on, "300 credits" on Free — whose generative
-     * flag is on and whose band is the taste — and a tick on Enterprise,
-     * which carries it in the agreement. "add-on" is a claim that the plan
-     * SELLS it, so the pin is the price being non-null, not the flag.
+     * THE GENERATIVE DOOR (AGL-2900, AGL-3965). ONE POOL since AGL-3965:
+     * every paid plan's included credits pay for generation, so the cell is a
+     * tick on every paid plan and on Enterprise, and "300 credits" on Free —
+     * whose band is the taste. The page printed "add-on" on the paid plans
+     * until the AGL-3965 republish (the go-live runbook publishes the page
+     * before this merges, page first); this pins the cells that page states.
      */
     describe('Aglyn AI: generate pages, emails, campaigns, products and more', () => {
-      it('300 credits · add-on ×6 · ✓ — Free generates against its taste, every paid plan sells the add-on', () => {
-        const PUBLISHED = ['300 credits', 'add-on', 'add-on', 'add-on', 'add-on', 'add-on', 'add-on']
+      it('300 credits · ✓ ×6 · ✓ — Free generates against its taste, every paid plan against its own credits', () => {
+        const PUBLISHED = ['300 credits', '✓', '✓', '✓', '✓', '✓', '✓']
         expect(
           PUBLISHED_COLUMNS.map((plan) =>
-            PLAN_PRICING[plan].aiAddonMonthlyUsd !== null
-              ? 'add-on'
-              : PLAN_ENTITLEMENTS[plan].features.aiGenerative
+            !PLAN_ENTITLEMENTS[plan].features.aiGenerative
+              ? '—'
+              : plan === 'free'
                 ? `${PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth} credits`
-                : '—',
+                : '✓',
           ),
         ).toEqual(PUBLISHED)
         expect(PLAN_ENTITLEMENTS.enterprise.features.aiGenerative).toBe(true)
-        expect(PLAN_PRICING.enterprise.aiAddonMonthlyUsd).toBeNull()
       })
     })
 
@@ -848,8 +850,12 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * PAYING plan including fewer AI credits than the free one — on the one
      * row a visitor reads straight down. AGL-3203 set Starter to 750, and the
      * page now serves it on the compare table and in the Starter plan panel.
+     *
+     * Relabeled "AI credits included / mo" by AGL-3965: the figure is the
+     * plan's own band, the one pool every AI action draws on, and an Aglyn AI
+     * tier adds on top of it.
      */
-    it('AI credits / mo — 300 · 750 · 2.75k · 7.5k · 10k · 13k · 58k', () => {
+    it('AI credits included / mo — 300 · 750 · 2.75k · 7.5k · 10k · 13k · 58k', () => {
       const PUBLISHED: Row = [300, 750, 2750, 7500, 10000, 13000, 58000]
       expect(quotaColumn('assistCreditsPerMonth')).toEqual(PUBLISHED)
       // The decision this row records: the first PAID rung must not include
@@ -956,8 +962,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         free.extraApiRequestsUsdPer1k,
         free.extraContactsUsdPer1k,
         free.extraAssistCreditsUsdPer1k,
-        free.aiAddonMonthlyUsd,
-      ]).toEqual([null, null, null, null, null, null, null, null, null])
+      ]).toEqual([null, null, null, null, null, null, null, null])
+      // …and no Aglyn AI tier (AGL-3965).
+      expect(planSellsAiTiers('free')).toBe(false)
     })
 
     /**
@@ -1094,24 +1101,29 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * THE AGLYN AI CARD (AGL-2900). The page prints "From $9 / mo" and the
-     * ladder in the card's sentence, with the credits each plan's purchase
-     * adds to its band. Free prices none; Enterprise carries generative
-     * building in the agreement and prices none either.
+     * THE AGLYN AI CARD (AGL-2900, AGL-3965). The page prints "From $9 / mo"
+     * and the six TIERS once in the card's sentence — Spark, Boost, Plus,
+     * Max, Ultra, Studio — each with the credits it adds on top of the
+     * plan's included credits, on any paid plan. Free sells none; Enterprise
+     * by agreement. (Until the AGL-3965 republish the page printed a price
+     * per plan; the go-live runbook publishes this card before the merge.)
      */
-    describe('Aglyn AI add-on card', () => {
-      it('From $9 / mo — $9 · $19 · $39 · $69 · $99 · $299 a month, per workspace', () => {
-        const PUBLISHED = [9, 19, 39, 69, 99, 299]
-        expect(PAID.map((p) => PLAN_PRICING[p].aiAddonMonthlyUsd)).toEqual(PUBLISHED)
-        expect(Math.min(...PUBLISHED)).toBe(9)
-        expect(PLAN_PRICING.free.aiAddonMonthlyUsd).toBeNull()
-        expect(PLAN_PRICING.enterprise.aiAddonMonthlyUsd).toBeNull()
+    describe('Aglyn AI card', () => {
+      it('From $9 / mo — Spark $9 · Boost $19 · Plus $39 · Max $69 · Ultra $99 · Studio $299 a month, per workspace', () => {
+        const PUBLISHED = { Spark: 9, Boost: 19, Plus: 39, Max: 69, Ultra: 99, Studio: 299 }
+        expect(
+          Object.fromEntries(AI_TIER_IDS.map((id) => [AI_TIERS[id].label, AI_TIERS[id].monthlyUsd])),
+        ).toEqual(PUBLISHED)
+        expect(Math.min(...Object.values(PUBLISHED))).toBe(9)
+        // On any paid plan; Free and Enterprise sell none.
+        expect(PAID.every((p) => planSellsAiTiers(p))).toBe(true)
+        expect(planSellsAiTiers('free')).toBe(false)
+        expect(planSellsAiTiers('enterprise')).toBe(false)
       })
 
-      it('adds 4,000 · 9,000 · 19,000 · 34,000 · 49,000 · 149,000 AI credits a month', () => {
+      it('adds 4,000 · 9,000 · 19,000 · 34,000 · 49,000 · 149,000 AI credits a month, on top of the plan', () => {
         const PUBLISHED = [4000, 9000, 19000, 34000, 49000, 149000]
-        expect(PAID.map((p) => AI_ADDON_CREDITS_PER_MONTH[p])).toEqual(PUBLISHED)
-        expect(AI_ADDON_CREDITS_PER_MONTH.free).toBe(0)
+        expect(AI_TIER_IDS.map((id) => AI_TIERS[id].credits)).toEqual(PUBLISHED)
       })
     })
 

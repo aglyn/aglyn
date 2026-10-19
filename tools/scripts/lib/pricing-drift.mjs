@@ -91,7 +91,7 @@ export const PRICE_FIELD_MAP = Object.freeze([
   // The Aglyn AI add-on is no longer priced per plan (AGL-3965): its tiers
   // are `AI_TIERS`, checked by `compareAiTiersToStripe` below, and the
   // per-plan `aglyn_{plan}_ai_addon[_yearly]` prices sold before it are
-  // checked there as grandfathered prices of the tier with their band.
+  // checked there as legacy prices of the tier with their band.
 ])
 
 /** The Aglyn AI tiers (AGL-3965), smallest first, as `AI_TIERS` keys them. */
@@ -174,10 +174,10 @@ export function compareAiTiersToStripe(tiers, stripe) {
         verdicts.push({
           status: 'differs',
           key: lookupKey,
-          detail: `grandfathered at $${live.amount} but its tier (${id}) charges $${cents(expected)} — the migration would move a bill`,
+          detail: `legacy price at $${live.amount} but its tier (${id}) charges $${cents(expected)} — the migration would move a bill`,
         })
       } else {
-        verdicts.push({ status: 'in-sync', key: lookupKey, detail: `$${cents(expected)}, grandfathered as ${id}` })
+        verdicts.push({ status: 'in-sync', key: lookupKey, detail: `$${cents(expected)}, legacy price read as ${id}` })
       }
     }
   }

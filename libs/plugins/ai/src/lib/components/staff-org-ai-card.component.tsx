@@ -16,7 +16,8 @@
  */
 'use client'
 
-import { aiAddonName, aiTierName } from '@aglyn/aglyn'
+import { aiAddonName } from '@aglyn/aglyn'
+import { AI_TIERS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { mdiOpenInNew } from '@aglyn/shared-data-mdi'
@@ -554,7 +555,7 @@ const StaffOrgAiCard = ({ orgId }: { orgId: string }) => {
                 color={data.addon.on ? 'primary' : 'default'}
                 label={
                   data.addon.on
-                    ? `${data.addon.tier ? aiTierName(data.addon.tier) : name} on`
+                    ? `${name}${data.addon.tier ? ` ${AI_TIERS[data.addon.tier].label}` : ''} on`
                     : `${name} off`
                 }
               />

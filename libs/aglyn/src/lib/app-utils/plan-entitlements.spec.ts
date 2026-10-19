@@ -77,7 +77,11 @@ import {
   aiTierCreditsPerMonth,
   aiTierName,
   aiTierQuotaPerUnit,
+  aiTierAddonKey,
   defaultAiTierForPlan,
+  ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH,
+  listAiTierAddons,
+  parseAiTierAddonKey,
   hasAiAddon,
   isAiTierId,
   LEGACY_AI_ADDON_TIER_BY_PLAN,
@@ -3097,16 +3101,21 @@ describe('the Aglyn AI tiers (AGL-2896, AGL-3965)', () => {
     const pastDue = { ...dead, subscription: { status: 'past_due' } }
     expect(resolveAiTier(pastDue)).toBe('max')
     expect(resolveOrgEntitlements(pastDue).assistCreditsPerMonth).toBe(2_750 + 34_000)
-    // Free and Enterprise sell no tier: a quantity there adds nothing.
+    // Free and Enterprise sell no tier. On Free a quantity adds nothing; on
+    // Enterprise it keeps the contract figure it always added (twice Studio,
+    // `ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH`), whatever tier is written —
+    // "Enterprise keeps its contract figure", so no Enterprise band moved.
     for (const plan of ['free', 'enterprise'] as const) {
       expect(planSellsAiTiers(plan)).toBe(false)
       expect(defaultAiTierForPlan(plan)).toBeNull()
       const org = { plan, seatAddons: { aiAddon: 1 }, aiTier: 'studio' } as any
       expect(resolveAiTier(org)).toBeNull()
       expect(resolveOrgEntitlements(org).assistCreditsPerMonth).toBe(
-        PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth,
+        PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth +
+          (plan === 'enterprise' ? ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH : 0),
       )
     }
+    expect(ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH).toBe(298_000)
     expect(
       orgListPriceMonthlyUsd({
         plan: 'enterprise',
@@ -3205,5 +3214,43 @@ describe('Site Care add-on (AGL-3954)', () => {
     expect(planSellsSiteCare('enterprise')).toBe(false)
     expect(planSellsSiteCare('nonsense')).toBe(false)
     expect(planSellsSiteCare(undefined)).toBe(false)
+  })
+})
+
+describe('the `ai:<tier>` add-on key (AGL-3965)', () => {
+  it('round-trips every tier', () => {
+    for (const tier of ['spark', 'boost', 'plus', 'max', 'ultra', 'studio'] as const) {
+      expect(aiTierAddonKey(tier)).toBe(`ai:${tier}`)
+      expect(parseAiTierAddonKey(aiTierAddonKey(tier))).toBe(tier)
+    }
+  })
+
+  it('refuses anything that is not exactly a tier key', () => {
+    for (const key of ['ai', 'ai:', 'ai:mega', 'AI:boost', 'ai:Boost', 'siteCare', 'boost', 1, null, undefined, {}]) {
+      expect(parseAiTierAddonKey(key)).toBeNull()
+    }
+  })
+
+  it('lists the tiers smallest first, with price and credits, and none on a plan that sells none', () => {
+    const all = listAiTierAddons()
+    expect(all.map((option) => option.key)).toEqual([
+      'ai:spark',
+      'ai:boost',
+      'ai:plus',
+      'ai:max',
+      'ai:ultra',
+      'ai:studio',
+    ])
+    expect(all[1]).toEqual({
+      key: 'ai:boost',
+      tier: 'boost',
+      label: 'Boost',
+      monthlyUsd: 19,
+      yearlyUsd: 228,
+      credits: 9_000,
+    })
+    expect(listAiTierAddons('starter')).toHaveLength(6)
+    expect(listAiTierAddons('free')).toEqual([])
+    expect(listAiTierAddons('enterprise')).toEqual([])
   })
 })

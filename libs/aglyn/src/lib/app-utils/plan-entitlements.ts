@@ -1289,6 +1289,60 @@ export function isAiTierId(value: unknown): value is AiTierId {
 }
 
 /**
+ * The add-on key an Aglyn AI tier travels under outside the billing routes
+ * (AGL-3965): `ai:<tier>`, e.g. `ai:boost`. The ONE spelling a bundle
+ * checkout link (AGL-3955) and a hand-off proposal's add-on list (AGL-3956)
+ * name a tier by, parsed and listed here, beside the tiers, so neither
+ * restates the ids.
+ */
+export type AiTierAddonKey = `ai:${AiTierId}`
+
+/** `ai:<tier>` for a tier. */
+export function aiTierAddonKey(tier: AiTierId): AiTierAddonKey {
+  return `ai:${tier}`
+}
+
+/**
+ * The tier an `ai:<tier>` key names, or null for anything else — another
+ * add-on's key, a bare `ai`, an unknown tier, a non-string. Exact and
+ * case-sensitive: a key is read off a link, and guessing is the expensive
+ * direction to be wrong in (`parseOnboardingPlanIntent` reads `?ai=` the
+ * same way).
+ */
+export function parseAiTierAddonKey(key: unknown): AiTierId | null {
+  if (typeof key !== 'string' || !key.startsWith('ai:')) return null
+  const tier = key.slice(3)
+  return isAiTierId(tier) ? tier : null
+}
+
+/** One tier as an add-on a bundle or a proposal can carry. */
+export interface AiTierAddonOption {
+  key: AiTierAddonKey
+  tier: AiTierId
+  label: string
+  monthlyUsd: number
+  yearlyUsd: number
+  credits: number
+}
+
+/**
+ * Every tier as an `ai:<tier>` add-on, smallest first — what a picker that
+ * offers "Aglyn AI" beside the other add-ons lists. Empty for a plan that
+ * sells no tier (Free, Enterprise) when a plan is given.
+ */
+export function listAiTierAddons(plan?: OrgPlan | string | null): AiTierAddonOption[] {
+  if (plan !== undefined && !planSellsAiTiers(plan)) return []
+  return AI_TIER_IDS.map((tier) => ({
+    key: aiTierAddonKey(tier),
+    tier,
+    label: AI_TIERS[tier].label,
+    monthlyUsd: AI_TIERS[tier].monthlyUsd,
+    yearlyUsd: AI_TIERS[tier].yearlyUsd,
+    credits: AI_TIERS[tier].credits,
+  }))
+}
+
+/**
  * Whether a plan may buy an Aglyn AI tier (AGL-3965): every paid self-serve
  * plan. Not Free, which has no subscription to carry it, and not Enterprise,
  * whose AI is in the agreement.
@@ -3339,30 +3393,44 @@ export function resolveAiTier(
 }
 
 /**
- * The credits a month the org's Aglyn AI tier adds to its plan's included
- * band (AGL-3965) — 0 with no tier. The figure `resolveOrgEntitlements`
- * folds into `assistCreditsPerMonth`, so a surface quoting "your tier adds"
- * and the meter agree.
+ * What `seatAddons.aiAddon` adds on an Enterprise org (AGL-2896, kept by
+ * AGL-3965): twice Studio's band, the figure the per-plan table carried as
+ * twice Agency's (the rule every Enterprise fallback follows since AGL-2654),
+ * and still what a contract that names the add-on starts from before its own
+ * number is written. Enterprise buys no tier — its AI is in the agreement —
+ * so this is the contract figure kept, not a price; finite, never
+ * `UNLIMITED`, for the reason `ENTERPRISE_ASSIST_CREDITS_PER_MONTH` gives.
  */
-export function aiTierCreditsPerMonth(
-  org: Partial<AglynOrgBilling> | null | undefined,
-): number {
-  const tier = resolveAiTier(org)
-  return tier ? AI_TIERS[tier].credits : 0
-}
+export const ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH = AI_TIERS.studio.credits * 2
 
 /**
  * The Aglyn AI add-on's per-unit quota as `resolveOrgEntitlements` folds it
- * (AGL-3965): the purchased tier's credits, on a plan that sells tiers, else
- * 0. The AI plugin declares its seat add-on with this as `quota.perUnit`.
+ * (AGL-3965): the purchased tier's credits, on a plan that sells tiers;
+ * Enterprise's contract figure (`ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH`);
+ * else 0 (Free). The AI plugin declares its seat add-on with this as
+ * `quota.perUnit`.
  */
 export function aiTierQuotaPerUnit(
   org: Partial<AglynOrgBilling> | null | undefined,
   plan: OrgPlan,
 ): number {
+  if (plan === 'enterprise') return ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH
   if (!planSellsAiTiers(plan)) return 0
   const tier = aiTierOfPurchase(org)
   return tier ? AI_TIERS[tier].credits : 0
+}
+
+/**
+ * The credits a month the org's Aglyn AI add-on adds to its plan's included
+ * band (AGL-3965) — 0 with none held. The SAME figure `resolveOrgEntitlements`
+ * folds into `assistCreditsPerMonth` (`aiTierQuotaPerUnit`), so a surface
+ * quoting "your tier adds" and the meter agree.
+ */
+export function aiTierCreditsPerMonth(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number {
+  if (!hasAiAddon(org)) return 0
+  return aiTierQuotaPerUnit(org, resolveEffectivePlan(org))
 }
 
 /**

@@ -182,6 +182,16 @@ function AiTierPicker(props: {
         value={draft}
         disabled={disabled}
         onChange={(event) => setDraft(event.target.value as AiTierId | 'none')}
+        slotProps={{
+          select: {
+            // One line in the field; the menu carries the credits and the
+            // "Current" mark for every tier.
+            renderValue: (value) => {
+              const tier = tiers.find((option) => option.id === value)
+              return tier ? `${tier.label} — $${tier.unitUsd}/mo` : 'No tier'
+            },
+          },
+        }}
         sx={{ minWidth: 260 }}
       >
         <MenuItem value="none">
@@ -449,6 +459,11 @@ export default function BillingAddonsCardComponent({
       const tierOption = tier
         ? (state.aiTiers ?? []).find((option) => option.id === tier)
         : undefined
+      // The tier held now, for a move between tiers (AGL-3965).
+      const heldTier =
+        row.kind === 'aiAddon' && state.aiTier
+          ? (state.aiTiers ?? []).find((option) => option.id === state.aiTier)
+          : undefined
       setBusy(true)
       try {
         // The loading overlay must drop BEFORE the confirm dialog opens —
@@ -505,9 +520,14 @@ export default function BillingAddonsCardComponent({
             : `${row.label}: ${quantity}?`,
           description:
             (preview.defersToPeriodEnd
-              ? `Nothing is charged and nothing is refunded. You keep this ` +
-                `capacity for the rest of the period you have paid for` +
-                (effectiveOn ? `, and it ends on ${effectiveOn}` : '') +
+              ? `Nothing is charged and nothing is refunded. You keep ` +
+                (heldTier && tierOption
+                  ? `${heldTier.label} for the rest of the period you have ` +
+                    `paid for, and ${tierOption.label} starts` +
+                    (effectiveOn ? ` on ${effectiveOn}` : ' when it ends')
+                  : 'this capacity for the rest of the period you have paid ' +
+                    'for' +
+                    (effectiveOn ? `, and it ends on ${effectiveOn}` : '')) +
                 '. From then: '
               : `$${chargedNowUsd} ${currency}${taxCaveat} will be charged to ` +
                 `your card now, prorated for the rest of this period. Ongoing: `) +
@@ -516,6 +536,11 @@ export default function BillingAddonsCardComponent({
               : `$${monthlyUsd}/mo` +
                 (state.interval === 'year'
                   ? ` (billed yearly with your plan)`
+                  : '') +
+                // What the tier buys, on top of the plan's own credits.
+                (tierOption
+                  ? `, adding ${tierOption.credits.toLocaleString()} AI credits a ` +
+                    "month on top of your plan's"
                   : '') +
                 '.'),
           confirmationText: 'Confirm change',
@@ -585,7 +610,22 @@ export default function BillingAddonsCardComponent({
              * `persist: true` because it is the only notice of a change
              * that lands weeks later, and there is a real action to take.
              */
-            if (applied.scheduleRefreshFailed) {
+            // A deferred change (a tier down, a removal) applies at the
+            // period end, so the card still shows what is held: say when.
+            const pending = applied.pendingAddonChange
+            const pendingOn = pending?.effectiveAt
+              ? new Date(String(pending.effectiveAt)).toLocaleDateString()
+              : null
+            if (pending && pendingOn) {
+              enqueueSnackbar(
+                tierOption && quantity > 0
+                  ? `${row.label} moves to ${tierOption.label} on ${pendingOn}.`
+                  : quantity === 0
+                    ? `${row.label} ends on ${pendingOn}.`
+                    : `${row.label} changes on ${pendingOn}.`,
+                { variant: 'success', persist: false },
+              )
+            } else if (applied.scheduleRefreshFailed) {
               enqueueSnackbar(
                 `${row.label} was purchased, but your scheduled plan ` +
                   'change did not pick it up — it will be dropped at the ' +
@@ -685,7 +725,11 @@ export default function BillingAddonsCardComponent({
         const draft = drafts[row.kind] ?? current
         const purchasable = Boolean(entry) &&
           !entry.upgradeRequired &&
-          entry.configured &&
+          // The AI row sells whichever tier is configured, so one is enough
+          // (AGL-3965); the picker disables the rest with the reason.
+          (entry.configured ||
+            (row.kind === 'aiAddon' &&
+              (state.aiTiers ?? []).some((tier) => tier.configured))) &&
           // Belt as well as braces: the write route refuses without a
           // subscription anyway, so an enabled control here could only ever
           // produce a failed request.

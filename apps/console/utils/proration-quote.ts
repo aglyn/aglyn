@@ -18,6 +18,7 @@
 import {
   type AglynOrgBilling,
   AI_TIERS,
+  aiAddonName,
   aiTierName,
   aiTierOfPurchase,
   hasAiAddon,
@@ -49,10 +50,21 @@ export function carriedAiAddonSentence(
   if (!hasAiAddon(org)) return ''
   const label = PLAN_LABELS[targetPlan] ?? targetPlan
   const tier = aiTierOfPurchase(org)
-  if (!tier || (droppedAddons ?? []).includes('aiAddon') || !planSellsAiTiers(targetPlan)) {
+  const name = tier ? aiTierName(tier) : aiAddonName()
+  if (!tier || !planSellsAiTiers(targetPlan)) {
     return (
-      ` Your ${tier ? aiTierName(tier) : 'AI'} tier is not sold on ${label}, so it is ` +
+      ` Your ${name} tier is not sold on ${label}, so it is ` +
       'removed with this change and its AI credits go with it.'
+    )
+  }
+  // The target sells tiers, but the server could not carry this one (its
+  // price is not configured at the target interval): say what happens
+  // without claiming the plan does not sell it.
+  if ((droppedAddons ?? []).includes('aiAddon')) {
+    return (
+      ` Your ${name} tier cannot move to ${label} with this change, so it is ` +
+      'removed and its AI credits go with it. You can choose a tier again ' +
+      'under Plan add-ons afterwards.'
     )
   }
   return (

@@ -227,7 +227,7 @@ export const AI_TIERS: Readonly<Record<AiTierId, AiTier>> = {
     assert.equal(overallExitCode(v), 1)
   })
 
-  await t.test('a grandfathered per-plan price must charge what its tier charges', () => {
+  await t.test('a legacy per-plan price must charge what its tier charges', () => {
     const same = compareAiTiersToStripe(
       tiers,
       indexStripePrices({ data: [price('aglyn_pro_ai_addon', 19), price('aglyn_agency_ai_addon_yearly', 3588, 'year')] }),

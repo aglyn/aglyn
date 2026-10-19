@@ -16,11 +16,7 @@
  */
 
 import {
-  AI_TIER_IDS,
-  AI_TIERS,
-  defaultAiTierForPlan,
   EXTRA_HOSTS_ADDON_MAX,
-  isAiTierId,
   isLiveSubscriptionStatus,
   pluginRequestFromWeb,
   POS_REGISTERS_ADDON_MAX,
@@ -29,6 +25,14 @@ import {
   UNLIMITED,
   type AiTierId,
 } from '@aglyn/aglyn/server'
+// The Aglyn AI tiers (AGL-3965) by their own module, not the server barrel
+// route specs stub with a partial object.
+import {
+  AI_TIER_IDS,
+  AI_TIERS,
+  defaultAiTierForPlan,
+  isAiTierId,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -502,13 +506,23 @@ async function handler(request: Request): Promise<Response> {
       const quantities = addonQuantitiesFromItems(items)
       const catalog = Object.fromEntries(
         ADDON_KINDS.map((kind) => {
-    const unitUsd = addonUnitUsd(kind, plan, kind === 'aiAddon' ? currentAiTier : null)
+          // The Aglyn AI row is priced at the tier held, else the tier a
+          // plain "turn it on" buys (`defaultAiTierForPlan`, AGL-3965).
+          const tier = kind === 'aiAddon' ? currentAiTier : null
+          const unitUsd = addonUnitUsd(kind, plan, tier)
           const max = addonMax(kind, baseline, plan)
+          const aiTier = kind === 'aiAddon' && unitUsd !== null
+            ? (tier ?? defaultAiTierForPlan(plan))
+            : null
           return [kind, {
             unitUsd,
             max,
-            configured: Boolean(addonPriceId(kind, plan, interval)),
+            configured: Boolean(addonPriceId(kind, plan, interval, tier)),
             upgradeRequired: unitUsd === null || max <= 0,
+            // The credits that tier adds on top of the plan's own, so a
+            // client without the tier list (the native screen) states the
+            // figure the toggle buys.
+            ...(aiTier ? { credits: AI_TIERS[aiTier].credits } : {}),
           }]
         }),
       )
@@ -601,17 +615,19 @@ async function handler(request: Request): Promise<Response> {
       }, { status: 409 })
     }
     const priceId = addonPriceId(kind, plan, interval, tier)
-    if (!priceId) {
-      return Response.json({
-        error: 'This add-on price is not configured yet',
-      }, { status: 501 })
-    }
-
     // The AI add-on is ONE line in whichever tier (or legacy per-plan) price
     // it carries, so it is found by kind; every other kind by its price.
     const existing = kind === 'aiAddon'
       ? items.find((item) => addonKindFromPriceId(item?.price?.id) === 'aiAddon')
       : items.find((item) => item?.price?.id === priceId)
+    // Removing an AI line that is already there needs no price to sell: the
+    // line goes by its id, whatever tier or legacy price it carries.
+    const removingHeldAiLine = kind === 'aiAddon' && Boolean(existing) && quantity === 0
+    if (!priceId && !removingHeldAiLine) {
+      return Response.json({
+        error: 'This add-on price is not configured yet',
+      }, { status: 501 })
+    }
     /**
      * A move between Aglyn AI tiers (AGL-3965): the line stays, its price
      * changes. Up is charged now, prorated, like a plan upgrade; down waits
@@ -826,8 +842,9 @@ async function handler(request: Request): Promise<Response> {
         secretKey,
         subscription,
         items,
-        // The line as it stands today: for a tier move, its current price.
-        priceId: tierChange ? String(existing?.price?.id) : priceId,
+        // The line as it stands today: for the AI add-on, the price it
+        // carries now (a tier, or a legacy per-plan price).
+        priceId: kind === 'aiAddon' && existing ? String(existing?.price?.id) : String(priceId),
         kind,
         quantity,
         ...(tierChange && tier ? { toTier: tier } : {}),

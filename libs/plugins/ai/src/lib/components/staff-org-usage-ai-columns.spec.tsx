@@ -32,7 +32,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { render, screen } from '@testing-library/react'
 import {
-  AI_ADDON_CREDITS_PER_MONTH,
+  AI_TIERS,
   PLAN_ENTITLEMENTS,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 // The AI add-on's band is this plugin's declaration: without it the pool
@@ -125,8 +125,22 @@ describe('the AI credit pool line on the staff usage table', () => {
       } as never),
     ).toEqual({
       aiAddon: true,
-      addonCredits: AI_ADDON_CREDITS_PER_MONTH.pro,
-      creditsPerMonth: 12_000 + AI_ADDON_CREDITS_PER_MONTH.pro,
+      // No `aiTier` written: Pro's old add-on, which is Boost (AGL-3965).
+      addonCredits: AI_TIERS.boost.credits,
+      creditsPerMonth: 12_000 + AI_TIERS.boost.credits,
+    })
+    // The tier held, whatever the plan.
+    expect(
+      staffAssistPool({
+        plan: 'pro',
+        seatAddons: { aiAddon: 1 },
+        aiTier: 'studio',
+        subscription: { status: 'active' },
+      } as never),
+    ).toEqual({
+      aiAddon: true,
+      addonCredits: AI_TIERS.studio.credits,
+      creditsPerMonth: PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth + AI_TIERS.studio.credits,
     })
     // A bare plan row reads as its own band: Starter includes 750 credits
     // since AGL-3203.
