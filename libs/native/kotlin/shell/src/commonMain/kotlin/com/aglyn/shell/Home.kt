@@ -95,8 +95,9 @@ internal fun HomeScreen(
 
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-      Modifier.widthIn(max = 880.dp).fillMaxWidth().verticalScroll(rememberScrollState())
-        .padding(horizontal = space(2f), vertical = space(2f)).testTag("home"),
+      // The whole content area, on the content edge E (Zach 10/19: no left-aligned or capped column).
+      Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+        .padding(horizontal = com.aglyn.ui.contentInset(), vertical = space(2f)).testTag("home"),
       verticalArrangement = Arrangement.spacedBy(space(3f)),
     ) {
       workspace.error?.let { error -> SectionCard(null) { Text(error, color = MaterialTheme.colorScheme.error) } }

@@ -336,7 +336,7 @@ private fun NotificationDetail(row: FeedNotification, catalog: NotificationCatal
   val level = catalog.level(row.level, row.type)
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-      Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("notification-detail"),
+      Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)).testTag("notification-detail"),
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {
       SectionCard(null, Modifier.fillMaxWidth()) {

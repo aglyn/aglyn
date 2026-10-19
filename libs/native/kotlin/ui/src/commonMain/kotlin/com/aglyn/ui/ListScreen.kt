@@ -172,9 +172,10 @@ fun ListScreenScaffold(
   val compactHead = metrics.compact || currentWidthClass() != WidthClass.COMPACT
   val groups = filters.groupBy { it.group }
   val active = groups.mapNotNull { (group, options) -> options.firstOrNull { it.key == picked[group] }?.takeIf { it != options.first() } }
+  val edge = contentInset()
   Column(modifier.fillMaxSize().testTag("$tag-screen")) {
     Row(
-      Modifier.fillMaxWidth().padding(start = space(3f), end = space(3f), top = space(1f), bottom = space(1.5f)),
+      Modifier.fillMaxWidth().padding(start = edge, end = edge, top = space(1f), bottom = space(1.5f)),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
@@ -203,7 +204,7 @@ fun ListScreenScaffold(
       if (more.isNotEmpty() && compactHead) OverflowMenu(more, contentDescription = "More actions", boxed = true)
     }
     Row(
-      Modifier.fillMaxWidth().padding(horizontal = space(3f)).padding(bottom = space(1f)),
+      Modifier.fillMaxWidth().padding(horizontal = edge).padding(bottom = space(1f)),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
@@ -241,7 +242,7 @@ fun ListScreenScaffold(
     }
     // The filters in force, each with × to clear it back to its group's first option.
     if (active.isNotEmpty()) {
-      Row(Modifier.fillMaxWidth().padding(horizontal = space(3f)).padding(bottom = space(1f)), horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+      Row(Modifier.fillMaxWidth().padding(horizontal = edge).padding(bottom = space(1f)), horizontalArrangement = Arrangement.spacedBy(space(1f))) {
         for (choice in active) {
           InputChip(
             selected = true,
@@ -254,7 +255,7 @@ fun ListScreenScaffold(
         }
       }
     }
-    content()
+    androidx.compose.runtime.CompositionLocalProvider(LocalContentInset provides edge) { content() }
   }
 }
 
@@ -287,8 +288,10 @@ fun ScaffoldListRow(
   val padV = if (phone || site) 12.dp else 10.dp
   val gap = if (site) 14.dp else 12.dp
   val shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+  // The tile and the trailing figure sit on the column's content inset E; the selection's fill reaches past them.
+  val outer = (contentInset() - padH).coerceAtLeast(0.dp)
   Row(
-    modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 1.dp).clip(shape)
+    modifier.fillMaxWidth().padding(horizontal = outer, vertical = 1.dp).clip(shape)
       .background(if (selected) shellColors.selected else Color.Transparent)
       .clickable(onClick = onClick)
       .heightIn(min = height)

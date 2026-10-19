@@ -36,7 +36,8 @@ fun main() = runBlocking {
   // A theme state shoots on this device's own copy, so the seeded account's theme is never changed.
   val original = aglyn.accountPrefs.state.value.theme
   fun theme(change: (com.aglyn.contracts.AppThemePrefs) -> com.aglyn.contracts.AppThemePrefs) = aglyn.accountPrefs.setTheme(change(original), deviceOnly = true)
-  val sizes = mapOf("phone" to (412 to 892), "tablet" to (1024 to 768), "desktop" to (1440 to 900))
+  // "narrow": the desktop window at its narrow end, for the content-edge sweep (Zach 10/19).
+  val sizes = mapOf("phone" to (412 to 892), "tablet" to (1024 to 768), "desktop" to (1440 to 900), "narrow" to (1024 to 720))
     .filterKeys { it in (System.getProperty("aglyn.snapshotSizes") ?: "phone,tablet,desktop").split(',') }
   val states: List<Pair<String, suspend (ShellNavigator) -> Unit>> = listOf(
     "site-home" to { nav -> site?.let { aglyn.workspace.selectSite(it) }; nav.select(ShellNavigator.HOME) },
@@ -65,12 +66,25 @@ fun main() = runBlocking {
     "rail-hidden" to { nav -> aglyn.prefs.set("aglyn.nav.railHidden", "1"); site?.let { aglyn.workspace.selectSite(it) }; nav.select(NavKeys.of("commerce.orders")) },
     "theme-compact" to { nav -> theme { it.copy(density = com.aglyn.contracts.AppDensity.COMPACT, accent = "#7A5CF0") }; site?.let { aglyn.workspace.selectSite(it) }; nav.select(NavKeys.of("commerce.orders")) },
   )
+  // -Daglyn.snapshotSweep=site,workspace: every sidebar destination of each scope, for the content-edge sweep.
+  val sweep: List<Pair<String, suspend (ShellNavigator) -> Unit>> = System.getProperty("aglyn.snapshotSweep")?.split(',').orEmpty().flatMap { scope ->
+    val inSite = scope == "site"
+    val list = if (inSite) com.aglyn.contracts.NativeNavListId.SITE else com.aglyn.contracts.NativeNavListId.WORKSPACE
+    val ids = NativePluginManifest.entries.map { it.id }
+    com.aglyn.shell.navGroups(list, ids, hostAdmin = true, registry = aglyn.registry, inSite = inSite).flatMap { it.rows }.map { row ->
+      "sweep-$scope-${row.rowId}" to { nav: ShellNavigator ->
+        if (inSite) site?.let { aglyn.workspace.selectSite(it) } else aglyn.workspace.selectWholeWorkspace()
+        nav.select(row.key)
+      }
+    }
+  }
   val only = System.getProperty("aglyn.snapshotOnly")?.split(',')
-  for ((name, prepare) in states) {
+  val lightOnly = System.getProperty("aglyn.snapshotLightOnly") == "true"
+  for ((name, prepare) in states + sweep) {
     if (only != null && name !in only) continue
     for ((size, dims) in sizes) {
       if (name == "phone-menu" && size != "phone") continue
-      for (dark in listOf(false, true)) {
+      for (dark in if (lightOnly) listOf(false) else listOf(false, true)) {
         val navigator = ShellNavigator()
         withContext(Dispatchers.Main) {
           if (aglyn.accountPrefs.state.value.deviceTheme != null && !name.startsWith("theme-")) aglyn.accountPrefs.setTheme(original, deviceOnly = true)
@@ -81,7 +95,7 @@ fun main() = runBlocking {
         shootNav(dir, "nav-$name-$size${if (dark) "-dark" else ""}", dims.first, dims.second) {
           // A Mac window's title-bar inset, so the tab row keeps the traffic lights' room as the real window does (the offscreen
           // scene draws no system buttons itself).
-          CompositionLocalProvider(com.aglyn.shell.LocalTitleBarInset provides androidx.compose.ui.unit.Dp(if (size == "desktop") 28f else 0f)) {
+          CompositionLocalProvider(com.aglyn.shell.LocalTitleBarInset provides androidx.compose.ui.unit.Dp(if (size == "desktop" || size == "narrow") 28f else 0f)) {
             AglynShell(aglyn, navigator, dark = dark)
           }
         }

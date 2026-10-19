@@ -83,10 +83,12 @@ fun AglynListItem(
   val focused by interaction.collectIsFocusedAsState()
   val content = if (selected) colors.onPrimaryContainer else colors.onSurface
   val compact = LocalUiDensity.current.compact
+  // In a full-bleed list the row's icon and trailing sit on the column's content inset E; in a padded pane, its own 8.
+  val outer = LocalContentInset.current?.let { (it - ListRowInset).coerceAtLeast(0.dp) } ?: ListRowInset
   Row(
     modifier
       .fillMaxWidth()
-      .padding(horizontal = ListRowInset, vertical = 1.dp)
+      .padding(horizontal = outer, vertical = 1.dp)
       .clip(shape)
       .background(if (selected) colors.primaryContainer else Color.Transparent)
       .then(if (focused) Modifier.border(2.dp, colors.primary, shape) else Modifier)

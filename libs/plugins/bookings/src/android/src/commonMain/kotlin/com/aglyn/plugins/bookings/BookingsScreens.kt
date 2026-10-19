@@ -466,7 +466,7 @@ fun BookingDetail(context: NativePluginContext, bookingId: String, onBooker: (St
 
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-      Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("booking-detail"),
+      Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)).testTag("booking-detail"),
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {
       notice?.let { (message, noticeTone) -> NoticeBanner(message, noticeTone, action = { TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }

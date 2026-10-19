@@ -496,7 +496,7 @@ fun AiCreateScreen(context: NativePluginContext, kind: AiCreateKind?, initialJob
 
   Box(Modifier.fillMaxSize().testTag("ai-create"), contentAlignment = Alignment.TopCenter) {
     Column(
-      Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(2f)),
+      Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)),
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {
       val currentJob = jobId

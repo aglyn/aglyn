@@ -854,8 +854,11 @@ private data class Crumb(val label: String, val open: (() -> Unit)?)
 /** "Bakery › Sell › Orders": where the screen sits; every step but the last leads back to it. */
 @Composable
 private fun Breadcrumbs(steps: List<Crumb>, star: com.aglyn.ui.PageStarSlot? = null) {
+  // On the column's content edge E: a step that leads back pads its own text by 2 for its hover, so the row starts 2 in.
+  val edge = com.aglyn.ui.contentInset()
+  val firstPads = steps.firstOrNull()?.let { it.open != null && steps.size > 1 } == true
   Row(
-    Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 4.dp).testTag("title-crumb"),
+    Modifier.fillMaxWidth().padding(start = if (firstPads) edge - 2.dp else edge, end = edge, top = 12.dp, bottom = 4.dp).testTag("title-crumb"),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {

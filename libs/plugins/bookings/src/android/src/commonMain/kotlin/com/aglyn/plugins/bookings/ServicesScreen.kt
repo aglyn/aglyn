@@ -228,7 +228,7 @@ private fun ServiceEditor(
   val problem = bookingServiceDraftProblem(form.name)
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-      Modifier.widthIn(max = 760.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("service-editor"),
+      Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)).testTag("service-editor"),
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {
       Row(verticalAlignment = Alignment.CenterVertically) {

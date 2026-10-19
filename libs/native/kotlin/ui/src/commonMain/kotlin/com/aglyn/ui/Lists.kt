@@ -152,7 +152,7 @@ fun OverflowMenu(
 @Composable
 fun ListHeader(title: String, modifier: Modifier = Modifier, actions: @Composable () -> Unit = {}) {
   FlowRow(
-    modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1f)),
+    modifier.fillMaxWidth().padding(horizontal = LocalContentInset.current ?: space(2f), vertical = space(1f)),
     horizontalArrangement = Arrangement.spacedBy(space(1f), Alignment.End),
     verticalArrangement = Arrangement.spacedBy(space(1f)),
     // A Compact 28 action sits centered beside the ⋯ button's taller touch box.

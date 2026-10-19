@@ -100,7 +100,7 @@ fun CardReadersScreen(context: NativePluginContext) {
 
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-      Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("pos-card-readers"),
+      Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)).testTag("pos-card-readers"),
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {
       SectionCard("This store") {

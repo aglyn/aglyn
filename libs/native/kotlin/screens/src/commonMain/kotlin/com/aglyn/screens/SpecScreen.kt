@@ -421,23 +421,23 @@ private fun SpecBodyContent(
       ) {
         LazyColumn(
           Modifier.fillMaxSize(),
-          horizontalAlignment = Alignment.CenterHorizontally,
           verticalArrangement = Arrangement.spacedBy(space(1.5f)),
-          contentPadding = androidx.compose.foundation.layout.PaddingValues(space(2f)),
+          // The whole content area, on the content edge E (Zach 10/19: no capped column).
+          contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)),
         ) {
           notice?.let { (text, tone) ->
             item("notice") {
               NoticeBanner(
                 text,
                 tone,
-                Modifier.widthIn(max = 840.dp).fillMaxWidth().testTag("spec-notice"),
+                Modifier.fillMaxWidth().testTag("spec-notice"),
                 action = { TextButton(onClick = { notice = null }, Modifier.testTag("spec-notice-dismiss")) { Text("Dismiss") } },
               )
             }
           }
           if (actions.isNotEmpty()) {
             item("actions") {
-              FlowRow(Modifier.widthIn(max = 840.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+              FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space(1f))) {
                 actions.forEachIndexed { index, action ->
                   val content: @Composable () -> Unit = {
                     Icon(AglynIcons.named(action.icon ?: "add"), null, Modifier.size(18.dp))
@@ -462,13 +462,13 @@ private fun SpecBodyContent(
                   if (it.isEmpty()) { model.search[searchLoad] = ""; scope.launch { model.load() } }
                 },
                 placeholder = "Search",
-                modifier = Modifier.widthIn(max = 840.dp),
+                modifier = Modifier.fillMaxWidth(),
                 onSearch = { model.search[searchLoad] = query; scope.launch { model.load() } },
               )
             }
           }
           items(blocks, key = { it.id }) { block ->
-            Box(Modifier.widthIn(max = 840.dp).fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth()) {
               Block(
                 block, plugin, model, context, selection, running,
                 open = ::open,
