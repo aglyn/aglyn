@@ -15,6 +15,8 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **console:** deal catalog, ai credits, payment methods, products, org sites state needs ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
+- **console:** kiosk pairing and AI finish-store state payment prerequisites ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
 - **legal:** v17, Terms, Privacy and Subprocessors: domain names and Site Care ([AGL-3964](https://linear.app/aglyn/issue/AGL-3964), [AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
 - **commerce:** publish its order events and order history as contracts ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
 - **plugins:** a contracts entry point per plugin, a uses field and the boundary guard ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
@@ -48,6 +50,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **commerce:** kiosk readiness reads pay-at-counter itself, off the eager chunk ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
+- **ai:** credits notice reads the AI features, not a brand literal ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
 - **marketing-platforms:** send no Stripe test-mode order to a merchant's email platform ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
 - **print-on-demand:** take commerce's order shape, and read test mode from livemode ([AGL-3980](https://linear.app/aglyn/issue/AGL-3980))
 - **domains:** punctuate the registrations export note ([AGL-3962](https://linear.app/aglyn/issue/AGL-3962))
@@ -78,6 +82,7 @@ content on the marketing site and is written separately.
 
 ### Documentation
 
+- what the kiosk, payment methods, deals, ai credits and org sites need first ([AGL-3982](https://linear.app/aglyn/issue/AGL-3982))
 - **legal:** v17 was published at 08:07 Central, not 08:35 ([AGL-3964](https://linear.app/aglyn/issue/AGL-3964))
 - **marketing:** managed campaign routing is on, env 16 recorded ([AGL-3960](https://linear.app/aglyn/issue/AGL-3960))
 - **decision-log:** the owner confirmed every site care figure on 2026-10-19 ([AGL-3954](https://linear.app/aglyn/issue/AGL-3954))
