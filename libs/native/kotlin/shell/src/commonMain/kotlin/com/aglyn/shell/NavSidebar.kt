@@ -227,7 +227,16 @@ private fun SettingsSearchField(value: String, onChange: (String) -> Unit) {
 
 /** A small search field (Figma Menu/Search field): 28 to 32 tall, a 14 icon, 13 text, the control radius. */
 @Composable
-internal fun CompactSearchField(value: String, placeholder: String, tag: String, modifier: Modifier = Modifier, autoFocus: Boolean = false, onChange: (String) -> Unit) {
+internal fun CompactSearchField(
+  value: String,
+  placeholder: String,
+  tag: String,
+  modifier: Modifier = Modifier,
+  autoFocus: Boolean = false,
+  /** Figma's settings search is 28 tall at Compact; a menu's (Menu/Search field) is 32. */
+  height: androidx.compose.ui.unit.Dp = 28.dp,
+  onChange: (String) -> Unit,
+) {
   val m = com.aglyn.ui.shellMetrics
   val focus = remember { androidx.compose.ui.focus.FocusRequester() }
   if (autoFocus) LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
@@ -236,19 +245,19 @@ internal fun CompactSearchField(value: String, placeholder: String, tag: String,
     value,
     onValueChange = onChange,
     singleLine = true,
-    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = m.rowText, color = ink),
+    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = m.rowText, lineHeight = 18.sp, color = ink),
     cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
     modifier = modifier.fillMaxWidth().focusRequester(focus).testTag(tag),
     decorationBox = { field ->
       Row(
-        Modifier.fillMaxWidth().heightIn(min = if (m.compact) 28.dp else 36.dp).clip(RoundedCornerShape(m.controlRadius))
+        Modifier.fillMaxWidth().heightIn(min = if (m.compact) height else 36.dp).clip(RoundedCornerShape(m.controlRadius))
           .background(MaterialTheme.colorScheme.surfaceContainerHighest).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
       ) {
         Icon(AglynIcons.named("search"), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Box(Modifier.weight(1f)) {
-          if (value.isEmpty()) Text(placeholder, fontSize = m.rowText, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+          if (value.isEmpty()) Text(placeholder, fontSize = m.rowText, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
           field()
         }
       }
@@ -381,7 +390,7 @@ internal fun SiteSwitcherPopover(services: ShellServices, workspace: WorkspaceSt
         .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && e.key == Key.Escape) { onDismiss(); true } else false },
     ) {
       Column(Modifier.padding(6.dp)) {
-        CompactSearchField(query, "Find a site", "site-switcher-search", autoFocus = true) { query = it }
+        CompactSearchField(query, "Find a site", "site-switcher-search", autoFocus = true, height = 32.dp) { query = it }
         Spacer(Modifier.height(6.dp))
         Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
           if (matches != null) {
@@ -418,7 +427,8 @@ internal class BelowAnchor(private val gap: Int = 4) : androidx.compose.ui.windo
 
 @Composable
 private fun MenuLabel(text: String) {
-  Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp))
+  // Figma Menu/Section label: 28 tall, 8 above and 4 below 12/16 semibold.
+  Text(text, fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 4.dp))
 }
 
 /** One site in the switcher (Figma: 44 tall, favicon 24 radius 6, name 13 semibold, address 12, a check on the current). */
@@ -434,8 +444,8 @@ private fun SwitcherSiteRow(services: ShellServices, site: WorkspaceSite, curren
       WorkspaceTile(site.name, null, null, null, size = 24.dp, cornerRadius = 6.dp, initialSize = 10.sp)
     }
     Column(Modifier.weight(1f)) {
-      Text(site.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      Text(com.aglyn.core.siteAddress(site.subdomain) ?: site.subdomain, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Text(site.name, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Text(com.aglyn.core.siteAddress(site.subdomain) ?: site.subdomain, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
     if (current) Icon(AglynIcons.named("check"), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
   }
@@ -449,7 +459,7 @@ private fun SwitcherAction(label: String, icon: String, tag: String, onClick: ()
     horizontalArrangement = Arrangement.spacedBy(10.dp),
   ) {
     Icon(AglynIcons.named(icon), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface)
-    Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+    Text(label, fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurface)
   }
 }
 

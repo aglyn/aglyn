@@ -255,7 +255,8 @@ internal fun OneBoxList(
         item(key = "see-all-divider") { HorizontalDivider(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = shellColors.divider) }
       } else if (heading != last && heading.isNotEmpty()) {
         item(key = "h-$i-$heading") {
-          Text(heading, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp).semantics { heading() })
+          // Figma's group label: 28 tall, 8 above and 4 below 12/16 semibold.
+          Text(heading, fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 4.dp).semantics { heading() })
         }
       }
       last = heading
@@ -407,7 +408,7 @@ internal fun InlineSearchField(
     ) {
       Icon(AglynIcons.named("search"), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
       Box(Modifier.weight(1f)) {
-        if (query.isEmpty()) Text("Search or jump to", fontSize = m.rowText, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        if (query.isEmpty()) Text("Search or jump to", fontSize = m.rowText, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         BasicTextField(
           query,
           onValueChange = { query = it; index = 0; if (!chrome.oneBox) chrome.oneBox = true },
@@ -545,8 +546,8 @@ private fun OneBoxResult(services: ShellServices, workspace: WorkspaceState, pre
       }
     }
     Column(Modifier.weight(1f)) {
-      Text(row.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      row.detail?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+      Text(row.label, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      row.detail?.let { Text(it, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
     }
     if (line.group == PINNED_GROUP) {
       val at = prefs.pinned.indexOf(row.id)
