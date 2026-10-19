@@ -14,7 +14,8 @@ import com.aglyn.pluginhost.NativePluginRegistry
  */
 
 /** A section inside a row's area (Deals inside CRM), shown as the area's own tabs. */
-data class NavSectionItem(val key: String, val id: String, val label: String, val screen: String, val params: Map<String, String>)
+/** One section of a row; [docs] is its help page on the docs site (path and anchor), when it has its own. */
+data class NavSectionItem(val key: String, val id: String, val label: String, val screen: String, val params: Map<String, String>, val docs: String? = null)
 
 /** One row: its key on the navigator, its words and icon, what it opens and what sits inside it. */
 data class NavItem(
@@ -33,7 +34,12 @@ data class NavItem(
   val keywords: List<String>,
   /** Where the row's twin lives in the console, for the page the AI panel says it is reading. */
   val console: com.aglyn.contracts.NativeNavConsoleRef? = null,
+  /** The row's help page on the docs site (path and anchor), which Help docs opens while it is on screen. */
+  val docs: String? = null,
 ) {
+  /** The help page for [key] on screen: its section's own, else the row's. */
+  fun docsFor(key: String): String? = sections.firstOrNull { it.key == key }?.docs ?: docs
+
   /** Every navigator key that belongs to this row: its own and its sections'. */
   val keys: Set<String> get() = setOf(key) + sections.map { it.key }
 
@@ -109,7 +115,7 @@ fun navGroups(
   return resolveNavList(listId, enabledPluginIds, hostAdmin).groups.mapNotNull { group ->
     val rows = group.rows.filter { available(it.screen) }.map { row ->
       val sections = row.sections.orEmpty().filter { available(it.screen) }.map {
-        NavSectionItem(NavKeys.of(it.screen, it.params), it.id, it.label, it.screen, it.params.orEmpty())
+        NavSectionItem(NavKeys.of(it.screen, it.params), it.id, it.label, it.screen, it.params.orEmpty(), it.docs)
       }
       NavItem(
         key = NavKeys.of(row.screen, row.params),
@@ -125,6 +131,7 @@ fun navGroups(
         pluginId = row.pluginId,
         keywords = row.keywords.orEmpty(),
         console = row.console,
+        docs = row.docs,
       )
     }
     if (rows.isEmpty() && group.dynamic == null) null else NavGroupItem(group.id, group.label, group.foldable, group.dynamic, rows)

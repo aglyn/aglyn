@@ -258,7 +258,9 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     }
   }
 
-  val help = helpEntries(services, navigator::openWeb, { screen -> chrome.settingsMode = null; navigator.select(NavKeys.of(screen)) }, { chrome.shortcuts = true })
+  // Help docs opens the docs page of the row (or section) on screen.
+  val docsPath = allGroups.rowFor(navigator.top)?.docsFor(navigator.top)
+  val help = helpEntries(services, navigator::openWeb, { screen -> chrome.settingsMode = null; navigator.select(NavKeys.of(screen)) }, { chrome.shortcuts = true }, docsPath)
   // Commands come in on the root navigator (the desktop's menu bar) and act on the tab on screen.
   LaunchedEffect(root.command) {
     val command = root.command ?: return@LaunchedEffect

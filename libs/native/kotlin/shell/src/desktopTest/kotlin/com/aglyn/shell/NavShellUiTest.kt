@@ -193,6 +193,21 @@ class NavShellUiTest {
   }
 
   @Test
+  fun helpDocsOpensThePageOfTheRowOnScreen() = runComposeUiTest {
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("scope-back-to-workspace") > 0 }
+    onNodeWithTag("scope-back-to-workspace").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("nav-workspace-sites") > 0 }
+    onNodeWithTag("nav-workspace-sites").performClick()
+    onNodeWithTag("help-button").performClick()
+    onNodeWithTag("help-docs").performClick()
+    waitUntil(timeoutMillis = 3_000) { navigator.current is Route.Web }
+    assertEquals("https://docs.aglyn.com/getting-started/console-tour#the-sites-list", (navigator.current as Route.Web).url)
+  }
+
+  @Test
   fun addAccountSignsInASecondAccountAndSwitchesBack() = runComposeUiTest {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     val services = testServices(userDoc = emptyMap(), authFor = { prefs ->

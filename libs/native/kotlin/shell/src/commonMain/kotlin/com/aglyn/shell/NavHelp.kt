@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 internal data class HelpEntry(val id: String, val label: String, val icon: String, val open: () -> Unit, val divider: Boolean = false)
 
 /**
- * The help "?" menu: Help docs (for the screen on screen once rows carry their docs page; the docs home until then),
+ * The help "?" menu: Help docs (the docs page of the row or section on screen, else the docs home),
  * What's new, Keyboard shortcuts, Terms and Privacy, Report an issue, Contact support, Report abuse. Pages open in the
  * in-app browser screen, so the side panel stays for AI.
  */
@@ -39,10 +39,12 @@ internal fun helpEntries(
   openWeb: (String) -> Unit,
   openScreen: (String) -> Unit,
   showShortcuts: () -> Unit,
+  docsPath: String? = null,
 ): List<HelpEntry> {
   val links = helpLinks(services.config).associateBy { it.id }
+  val docs = docsPath?.takeIf { it.startsWith("/") }?.let { "${services.config.docsOrigin.trimEnd('/')}$it" } ?: links["docs"]?.url
   return listOf(
-    HelpEntry("help-docs", "Help docs", "article", { links["docs"]?.let { openWeb(it.url) } }),
+    HelpEntry("help-docs", "Help docs", "article", { docs?.let(openWeb) }),
     HelpEntry("help-whats-new", "What's new", "auto_awesome", { links["whats-new"]?.let { openWeb(it.url) } }),
     HelpEntry("help-shortcuts", "Keyboard shortcuts", "keyboard", showShortcuts),
     HelpEntry("help-terms", "Terms of Service", "gavel", { links["terms"]?.let { openWeb(it.url) } }, divider = true),
