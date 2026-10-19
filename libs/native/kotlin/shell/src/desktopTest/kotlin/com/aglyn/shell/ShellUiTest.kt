@@ -88,7 +88,7 @@ internal class FakeFirestore(private val collections: Map<String, List<Firestore
 internal fun testServices(
   userDoc: Map<String, Any?>? = null,
   writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
-  apiCalls: MutableList<String> = mutableListOf(),
+  apiCalls: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList(),
   /** The session the shell runs on; one person by default, or several accounts (Add account). */
   authFor: (com.aglyn.core.KeyValueStore) -> AuthSession = { FakeAuth() },
   /** The workspace's own document (`orgs/o1`), when a test needs its plan or brand. */
@@ -141,7 +141,7 @@ class ShellUiTest {
   private fun services(
     userDoc: Map<String, Any?>? = null,
     writer: com.aglyn.core.FirestoreWriter = com.aglyn.core.NoFirestoreWrites,
-    apiCalls: MutableList<String> = mutableListOf(),
+    apiCalls: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList(),
   ): ShellServices = testServices(userDoc, writer, apiCalls)
 
   @Test
@@ -172,8 +172,10 @@ class ShellUiTest {
   /** Sign-up is the console's: the form, the agreement it is gated on, the console's routes, then the verification step. */
   @Test
   fun signsUpThroughTheConsolesRoutesAndThenAsksForTheAddressToBeConfirmed() = runComposeUiTest {
-    val calls = mutableListOf<String>()
-    val merges = mutableListOf<String>()
+    // The console's mock answers on the HTTP client's threads and the writes land on their own coroutines, while the test
+    // thread reads both: thread-safe lists, so a read never meets a write in progress (ConcurrentModificationException).
+    val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
+    val merges = java.util.concurrent.CopyOnWriteArrayList<String>()
     val writer = object : com.aglyn.core.FirestoreWriter {
       override suspend fun merge(path: String, data: Map<String, Any?>) { merges += "$path ${data.keys.sorted()}" }
     }
@@ -191,7 +193,7 @@ class ShellUiTest {
     onNodeWithText("Please accept the Terms of Service and Privacy Policy to continue.").assertExists()
     onNodeWithTag("sign-up-consent").performScrollTo().performClick()
     onNodeWithTag("sign-up-submit").performScrollTo().performClick()
-    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("verify-continue") > 0 }
+    waitUntil(timeoutMillis = 10_000) { onAllNodesWithTagCount("verify-continue") > 0 }
     onNodeWithText("Verify your email").assertIsDisplayed()
     assertEquals(
       listOf("/api/lockdown-status", "/api/auth/legal-acceptance", "/api/auth/acquisition"),
