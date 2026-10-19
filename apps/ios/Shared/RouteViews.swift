@@ -42,6 +42,7 @@ struct PluginScreenView: View {
           "Not available", systemImage: "lock",
           message: "This page is for Aglyn staff whose role includes it.")
         .navigationTitle(screen.title)
+        .aglynScreenTitle(screen.title)
       } else if screen.needsSite && context.hostID == nil {
         AglynEmptyState(
           "Pick a site", systemImage: "globe",
@@ -50,6 +51,7 @@ struct PluginScreenView: View {
           Button("Choose a site") { navigation.showSwitcher = true }
         }
         .navigationTitle(screen.title)
+        .aglynScreenTitle(screen.title)
       } else {
         screen.make(context, params)
           .id("\(screenID):\(context.hostID ?? "")")
@@ -73,6 +75,7 @@ struct NotInAppView: View {
       "This page is not in the app yet", systemImage: "questionmark.square.dashed",
       message: "\(model.appName) opens it here once its screen is built.")
     .navigationTitle("Not in the app")
+    .aglynScreenTitle("Not in the app")
     .accessibilityIdentifier("not-in-app")
   }
 }
@@ -159,6 +162,7 @@ struct BesignerScreen: View {
     // The screen's own name, never the web page's: the page title carried an
     // unread count and the brand into the Mac window title (AGL-3894).
     .navigationTitle("Besigner")
+    .aglynScreenTitle("Besigner")
     #if os(iOS)
       .navigationBarTitleDisplayMode(.inline)
       // The editor takes the whole screen: on a phone the tab bar covered the bottom of its canvas.

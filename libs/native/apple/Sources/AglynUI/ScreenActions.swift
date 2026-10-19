@@ -26,11 +26,15 @@ extension View {
   /// An editor's Cancel and Save. On a phone they stay in the navigation bar (Cancel leading, Save trailing). On the
   /// Mac and iPad they sit in the screen's head: Save as its one filled button with Cancel beside it, or, for an editor
   /// shown beside its list (`primary: false`), Save as a bordered button so the list keeps the head's one primary action.
+  /// `busy` (a save in flight) shows a spinner in place of Save on a phone and "Saving…" in the head.
   public func aglynEditorActions(
-    id: String, save title: String, enabled: Bool = true, primary: Bool = true, cancel: (() -> Void)? = nil,
-    action: @escaping @MainActor () -> Void
+    id: String, save title: String, enabled: Bool = true, busy: Bool = false, primary: Bool = true,
+    cancel: (() -> Void)? = nil, action: @escaping @MainActor () -> Void
   ) -> some View {
-    modifier(AglynEditorActionsModifier(id: id, title: title, enabled: enabled, primary: primary, cancel: cancel, save: action))
+    modifier(
+      AglynEditorActionsModifier(
+        id: id, title: busy ? "Saving…" : title, enabled: enabled && !busy, busy: busy, primary: primary, cancel: cancel,
+        save: action))
   }
 }
 
@@ -39,6 +43,7 @@ private struct AglynEditorActionsModifier: ViewModifier {
   let id: String
   let title: String
   let enabled: Bool
+  let busy: Bool
   let primary: Bool
   let cancel: (() -> Void)?
   let save: @MainActor () -> Void
@@ -52,9 +57,13 @@ private struct AglynEditorActionsModifier: ViewModifier {
           ToolbarItem(placement: .cancellationAction) { Button("Cancel") { cancel() } }
         }
         ToolbarItem(placement: .confirmationAction) {
-          Button(title) { save() }
-            .disabled(!enabled)
-            .accessibilityIdentifier(id)
+          if busy {
+            ProgressView().accessibilityLabel(title).accessibilityIdentifier("\(id)-busy")
+          } else {
+            Button(title) { save() }
+              .disabled(!enabled)
+              .accessibilityIdentifier(id)
+          }
         }
       }
     }
@@ -132,5 +141,20 @@ private struct AglynOptionalPrimaryActionModifier: ViewModifier {
         }
       }
     }
+  }
+}
+
+/// Why an action is off for the person's role, in the console's words (its Create site dialog: "Your role in this
+/// workspace does not allow creating sites. Ask a workspace owner or admin to create it, or to change your role."), for a
+/// primary action's `help`, which the button shows instead of going silently dead.
+public enum AglynRoleReason {
+  /// A site role: `doing` is what the role does not allow ("creating forms").
+  public static func site(_ doing: String) -> String {
+    "Your role on this site does not allow \(doing). Ask a site admin to do it, or to change your role."
+  }
+
+  /// A workspace role.
+  public static func workspace(_ doing: String) -> String {
+    "Your role in this workspace does not allow \(doing). Ask a workspace owner or admin to do it, or to change your role."
   }
 }

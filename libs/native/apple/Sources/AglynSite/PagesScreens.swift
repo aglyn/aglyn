@@ -181,7 +181,7 @@ struct PagesScreen: View {
     .navigationTitle("Pages")
     .aglynScreenTitle("Pages")
     // New page is the one primary action; a template and a group are in the More menu on the Mac and iPad.
-    .aglynPrimaryAction(id: "add-page", "New page", systemImage: "plus", enabled: canEdit, shortcut: KeyboardShortcut("n", modifiers: .command)) { open(.newPage) }
+    .aglynPrimaryAction(id: "add-page", "New page", systemImage: "plus", enabled: canEdit, shortcut: KeyboardShortcut("n", modifiers: .command), help: AglynRoleReason.site("creating pages")) { open(.newPage) }
     .aglynScreenToolbar(id: "pages") {
       AglynSecondaryActions {
         Button {

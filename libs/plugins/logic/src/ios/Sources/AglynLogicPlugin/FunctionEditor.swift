@@ -122,8 +122,9 @@ private struct FunctionEditor: View {
     }
     .formStyle(.grouped)
     .aglynEditorActions(
-      id: "function-save", save: runner.busy ? "Saving…" : "Done",
-      enabled: canEdit && !runner.busy && !(draft.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !nameTaken,
+      id: "function-save", save: "Done",
+      enabled: canEdit && !(draft.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !nameTaken,
+      busy: runner.busy,
       cancel: { context.back() }
     ) {
       guard let hostID = context.hostID else { return }

@@ -184,7 +184,7 @@ private struct CollectionEntries: View {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }
     }
-    .aglynPrimaryAction(id: "add-entry", "New entry", systemImage: "plus", enabled: env.canWrite, shortcut: KeyboardShortcut("n", modifiers: .command)) {
+    .aglynPrimaryAction(id: "add-entry", "New entry", systemImage: "plus", enabled: env.canWrite, shortcut: KeyboardShortcut("n", modifiers: .command), help: AglynRoleReason.site("adding entries")) {
       env.open(.newEntry(collection.id))
     }
     .aglynScreenToolbar(id: "collection") {

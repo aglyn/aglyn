@@ -243,7 +243,7 @@ struct TasksSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search tasks", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .aglynPrimaryAction(id: "crm-new-task", "New task", systemImage: "plus", enabled: scope.canWrite) { creating = true }
+    .aglynPrimaryAction(id: "crm-new-task", "New task", systemImage: "plus", enabled: scope.canWrite, help: AglynRoleReason.workspace("adding tasks")) { creating = true }
     .task(id: "\(view.rawValue)|\(search)") {
       let plan = taskViewPlan(view, nowMs: Int64(Date().timeIntervalSince1970 * 1000), uid: scope.uid)
       let search = search

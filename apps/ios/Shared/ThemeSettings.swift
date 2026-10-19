@@ -245,6 +245,7 @@ struct ThemeSettingsView: View {
     .formStyle(.grouped)
     .aglynListBackground()
     .navigationTitle("Theme")
+    .aglynScreenTitle("Theme")
   }
 
   /// The workspaces the person can color: those on the rail first.

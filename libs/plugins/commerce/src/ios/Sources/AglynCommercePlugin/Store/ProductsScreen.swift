@@ -250,7 +250,7 @@ struct ProductDetailView: View {
       // The header below already shows the name large.
       .navigationBarTitleDisplayMode(.inline)
     #endif
-    .aglynScreenToolbar(id: "product") {
+    .aglynScreenToolbar(id: "product", phone: .secondaryAction) {
       if let doc = model.doc, let row = model.row {
         // HIG toolbars: the two actions used most stay visible, every other one is in one labeled More menu.
         // The calmer screens: the one filled button sits in the header below; every other act is in this one menu.

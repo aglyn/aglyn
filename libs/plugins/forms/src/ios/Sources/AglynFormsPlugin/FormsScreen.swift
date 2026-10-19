@@ -83,7 +83,7 @@ struct FormsScreen: View {
     .aglynScreenTitle("Forms")
     .aglynSearchable(text: $searchText, prompt: "Search forms")
     .onChange(of: searchText) { _, text in model.type(text) }
-    .aglynPrimaryAction(id: "add-form", "New form", systemImage: "plus", enabled: role.canEditContent, shortcut: KeyboardShortcut("n", modifiers: .command)) {
+    .aglynPrimaryAction(id: "add-form", "New form", systemImage: "plus", enabled: role.canEditContent, shortcut: KeyboardShortcut("n", modifiers: .command), help: AglynRoleReason.site("creating forms")) {
       runner.clear()
       sheet = .create
     }

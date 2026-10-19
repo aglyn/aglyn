@@ -196,7 +196,7 @@ private struct RecordsBody: View {
     .aglynSearchable(text: $searchText, prompt: "Search \(dataset.name)")
     .onChange(of: searchText) { _, text in model.type(text) }
     // Add is the one primary action; Import and Export are in the More menu on the Mac and iPad.
-    .aglynPrimaryAction(id: "add-record", "Add \(noun)", systemImage: "plus", enabled: canWrite, shortcut: KeyboardShortcut("n", modifiers: .command)) {
+    .aglynPrimaryAction(id: "add-record", "Add \(noun)", systemImage: "plus", enabled: canWrite, shortcut: KeyboardShortcut("n", modifiers: .command), help: AglynRoleReason.workspace("adding records")) {
       runner.clear()
       sheet = .edit(recordID: nil, values: newRecordInputs(dataset.model))
     }

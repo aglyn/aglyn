@@ -240,7 +240,7 @@ struct CampaignsSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search campaigns", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .aglynPrimaryAction(id: "campaign-new", "New campaign", systemImage: "plus", enabled: access.canEdit) { creating = true }
+    .aglynPrimaryAction(id: "campaign-new", "New campaign", systemImage: "plus", enabled: access.canEdit, help: AglynRoleReason.site("creating campaigns")) { creating = true }
     .task(id: search) {
       if selection == nil { selection = initial }
       let orgID = actions.orgID, hostID = actions.hostID, search = search, orgLevel = actions.orgLevel
@@ -809,7 +809,7 @@ struct ExperimentsSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search experiments", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .aglynPrimaryAction(id: "experiment-new", "New experiment", systemImage: "plus", enabled: access.canEdit) { creating = true }
+    .aglynPrimaryAction(id: "experiment-new", "New experiment", systemImage: "plus", enabled: access.canEdit, help: AglynRoleReason.site("creating experiments")) { creating = true }
     .task(id: search) {
       let hostID = actions.hostID, search = search
       list.show(context.firestore) { experimentsQuery(hostID, search: search, limit: $0) }

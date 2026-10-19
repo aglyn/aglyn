@@ -199,6 +199,16 @@ public struct AglynContentHeader<Crumbs: View, Accessory: View>: View {
   }
 }
 
+extension AglynPrimaryHeaderButton {
+  /// A screen's primary action as its head's filled button; off for a reason, it says why (`AglynBlockableButton`).
+  public static func blockable(_ action: AglynPrimaryAction) -> some View {
+    AglynBlockableButton(action) {
+      AglynPrimaryHeaderButton.face(action.title, systemImage: action.systemImage)
+    }
+    .buttonStyle(.plain)
+  }
+}
+
 /// The one filled primary button of a screen's head (Figma Button, Primary, Medium; Compact radius 6 on the Mac).
 public struct AglynPrimaryHeaderButton: View {
   let title: String
@@ -219,20 +229,23 @@ public struct AglynPrimaryHeaderButton: View {
   }
 
   public var body: some View {
-    Button(action: action) {
-      HStack(spacing: 6) {
-        Image(systemName: systemImage).font(.system(size: AglynShellMetrics.rowText, weight: .semibold))
-        Text(title).font(.system(size: AglynShellMetrics.rowText + 1, weight: .semibold)).lineLimit(1)
-      }
-      .foregroundStyle(AglynColor.primaryContrast)
-      .padding(.horizontal, 14)
-      .frame(height: 36)
-      .background(RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).fill(AglynColor.primary))
-      .contentShape(Rectangle())
+    Button(action: action) { Self.face(title, systemImage: systemImage) }
+      .buttonStyle(.plain)
+      .keyboardShortcut(shortcut)
+      .help(help ?? title)
+  }
+
+  /// The button's face: icon and title on the primary fill.
+  static func face(_ title: String, systemImage: String) -> some View {
+    HStack(spacing: 6) {
+      Image(systemName: systemImage).font(.system(size: AglynShellMetrics.rowText, weight: .semibold))
+      Text(title).font(.system(size: AglynShellMetrics.rowText + 1, weight: .semibold)).lineLimit(1)
     }
-    .buttonStyle(.plain)
-    .keyboardShortcut(shortcut)
-    .help(help ?? title)
+    .foregroundStyle(AglynColor.primaryContrast)
+    .padding(.horizontal, 14)
+    .frame(height: 36)
+    .background(RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous).fill(AglynColor.primary))
+    .contentShape(Rectangle())
   }
 }
 
@@ -313,15 +326,58 @@ private struct AglynPrimaryActionModifier: ViewModifier {
       content.transformPreference(AglynScreenChromeKey.self) { $0.merge(AglynScreenChrome(primary: action)) }
     } else {
       content.toolbar {
-        ToolbarItem(placement: .primaryAction) {
-          Button { action.run() } label: { Label(action.title, systemImage: action.systemImage) }
-            .disabled(!action.enabled)
-            .keyboardShortcut(action.shortcut)
-            .help(action.help ?? action.title)
-            .accessibilityIdentifier(action.id)
-        }
+        ToolbarItem(placement: .primaryAction) { AglynBlockableButton(action) { Label(action.title, systemImage: action.systemImage) } }
       }
     }
+  }
+}
+
+/// A screen's primary action as a button: when it is off for a reason the person can act on (its `help`), it stays
+/// on screen dimmed and says why, never silently dead (the console's BlockedControl). The Mac says it on hover, as
+/// the console's tooltip does; a touch screen has no hover, so a tap shows the reason beside the button.
+public struct AglynBlockableButton<Label: View>: View {
+  let action: AglynPrimaryAction
+  let label: Label
+  @State private var explaining = false
+
+  public init(_ action: AglynPrimaryAction, @ViewBuilder label: () -> Label) {
+    self.action = action
+    self.label = label()
+  }
+
+  private var reason: String? { action.enabled ? nil : action.help }
+
+  public var body: some View {
+    #if os(iOS)
+      if let reason {
+        Button { explaining = true } label: { label }
+          .opacity(0.5)
+          .accessibilityHint(reason)
+          .accessibilityIdentifier(action.id)
+          .popover(isPresented: $explaining) {
+            Text(reason)
+              .font(AglynFont.body)
+              .fixedSize(horizontal: false, vertical: true)
+              .frame(idealWidth: 280)
+              .padding(AglynSpace.two)
+              .presentationCompactAdaptation(.popover)
+              .accessibilityIdentifier("\(action.id)-reason")
+          }
+      } else {
+        plain
+      }
+    #else
+      plain
+    #endif
+  }
+
+  private var plain: some View {
+    Button { action.run() } label: { label }
+      .disabled(!action.enabled)
+      .opacity(action.enabled ? 1 : 0.5)
+      .keyboardShortcut(action.shortcut)
+      .help(action.help ?? action.title)
+      .accessibilityIdentifier(action.id)
   }
 }
 
@@ -357,14 +413,18 @@ public struct AglynScreenToolbarEntry: Identifiable {
 extension View {
   /// A screen's own actions besides its primary one (Select, an export menu): in its head beside the primary button on
   /// the Mac and iPad, never in the window's title bar; in the navigation bar on a phone.
-  public func aglynScreenToolbar<Content: View>(id: String, @ViewBuilder content: @escaping () -> Content) -> some View {
-    modifier(AglynScreenToolbarModifier(id: id, content: content))
+  /// `phone` is where a phone's navigation bar puts them: a More menu that was secondary there stays secondary.
+  public func aglynScreenToolbar<Content: View>(
+    id: String, phone: ToolbarItemPlacement = .primaryAction, @ViewBuilder content: @escaping () -> Content
+  ) -> some View {
+    modifier(AglynScreenToolbarModifier(id: id, phone: phone, content: content))
   }
 }
 
 private struct AglynScreenToolbarModifier<Items: View>: ViewModifier {
   @Environment(\.aglynWideChrome) private var wide
   let id: String
+  let phone: ToolbarItemPlacement
   let content: () -> Items
 
   func body(content view: Content) -> some View {
@@ -373,7 +433,7 @@ private struct AglynScreenToolbarModifier<Items: View>: ViewModifier {
         $0.merge(AglynScreenChrome(entries: [AglynScreenToolbarEntry(id: id, content: AnyView(content()))]))
       }
     } else {
-      view.toolbar { ToolbarItemGroup(placement: .primaryAction) { content() } }
+      view.toolbar { ToolbarItemGroup(placement: phone) { content() } }
     }
   }
 }

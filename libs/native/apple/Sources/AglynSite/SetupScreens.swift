@@ -75,6 +75,7 @@ struct SetupScreen: View {
         .aglynListBackground()
         .aglynPushDestination(item: $pushed) { section in
           SetupDetail(context: context, section: section, integrations: integrations).navigationTitle(section.title)
+            .aglynScreenTitle(section.title)
         }
         .onAppear { if pushed == nil, !opened, let initialSection { pushed = SetupSection.of(initialSection); opened = true } }
       }

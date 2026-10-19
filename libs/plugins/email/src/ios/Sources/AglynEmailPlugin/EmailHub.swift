@@ -341,7 +341,7 @@ struct TemplatesSection: View {
     }
     .aglynSearchable(text: $searchText, prompt: "Search templates", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
-    .aglynPrimaryAction(id: "template-new", "New design", systemImage: "plus", enabled: role.canEdit) { creating = true }
+    .aglynPrimaryAction(id: "template-new", "New design", systemImage: "plus", enabled: role.canEdit, help: AglynRoleReason.site("creating email designs")) { creating = true }
     .task(id: search) {
       role.start(context)
       let search = search, hostID = actions.hostID
