@@ -19,7 +19,13 @@ import { aiSiteKindOfInputs } from '../model/ai-site-kinds'
 import { aiSiteHomeArc, aiSiteHomeArcSentence, type AiSiteHomeArc } from '../model/ai-site-home-arcs'
 import { aiSiteSeed } from '../model/ai-site-look'
 import { AI_SITE_INSPIRATION_INPUT } from '../model/ai-site-inspiration'
-import { aiSiteInspirationPlanLines, readAiJobSiteInspiration, type AiSiteInspirationReader } from './ai-site-inspiration'
+import {
+  aiSiteInspirationHomeOrder,
+  aiSiteInspirationPlanLines,
+  readAiJobSiteInspiration,
+  type AiSiteInspirationReader,
+  type AiSiteInspirationStart,
+} from './ai-site-inspiration'
 import type { AiSiteInspiration } from './ai-site-inspiration-signals'
 import { createHash } from 'node:crypto'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
@@ -219,6 +225,7 @@ export function aiJobPlanPrompt(
   inventory: AiSiteInventory | null = null,
   ops: AiBuildOps | null = null,
   now: Date | null = null,
+  options: AiPlanSiteOptions = {},
 ): string {
   const lines = [`Job kind: ${job.kind}`, `Brief: ${job.brief.slice(0, AI_JOB_BRIEF_MAX_CHARS)}`]
   for (const [key, value] of Object.entries(job.inputs ?? {})) {
@@ -235,9 +242,18 @@ export function aiJobPlanPrompt(
     lines.push(AI_PLAN_NO_FORM_SENTENCE)
   }
   lines.push(...aiPlanTemplateTokenLines(job))
-  lines.push(...aiPlanSiteLines(job, inventory, capabilities))
+  lines.push(...aiPlanSiteLines(job, inventory, capabilities, options))
   lines.push(...aiPlanBuildLines(job, capabilities, ops, now))
   return lines.join('\n')
+}
+
+/** What a site plan's turn is told beyond its job (AGL-3975). */
+export interface AiPlanSiteOptions {
+  /**
+   * The sites the person likes give the home its order (`aiSiteInspirationHomeOrder`),
+   * so the seeded home arc (AGL-3899) is not stated beside it.
+   */
+  ownOrder?: boolean
 }
 
 /**
@@ -286,6 +302,7 @@ export function aiPlanSiteLines(
   job: Pick<AiJob, 'kind'> & Partial<Pick<AiJob, 'inputs' | 'brief' | '$id'>>,
   inventory: AiSiteInventory | null,
   capabilities: AiPlanCapabilities | null,
+  options: AiPlanSiteOptions = {},
 ): string[] {
   if (job.kind !== 'site') return []
   const lines: string[] = []
@@ -327,8 +344,9 @@ export function aiPlanSiteLines(
     const bands = aiSiteKindOfInputs(job.inputs)?.id === 'store' ? AI_SITE_STORE_HOME_BANDS : AI_SITE_HOME_BANDS
     lines.push(`The home page at / reads as a full website: at least ${home.min} sections — ${bands}.`)
     // And its own arc, chosen by the job's seed (AGL-3899): two identical
-    // briefs are two different homes.
-    const arc = aiSitePlanHomeArc(job)
+    // briefs are two different homes. A start whose person named sites they
+    // like takes its order from them instead (AGL-3975).
+    const arc = options.ownOrder ? null : aiSitePlanHomeArc(job)
     if (arc) lines.push(aiSiteHomeArcSentence(arc))
   }
   // The sections are a budget to use (AGL-3660): a prod start of 2026-10-08
@@ -1191,10 +1209,22 @@ export function createAiJobPlanStep(deps: AiJobPlanStepDeps = {}): AiJobStepRunn
     // provider's fast tier (AGL-3594), unless the creator picked a model.
     const model = aiSitePlanModel(job, modelFor?.('job.plan'), freeTaste)
     const route = AI_ROUTING_TABLE['job.plan']
+    // What this start can build of what the person's sites offer (AGL-3975):
+    // a restaurant is never offered the events list an event-led start
+    // drafts, or a store's sign-up; and their first site's order, where it
+    // gives one, is the home's in place of the seeded arc.
+    const inspirationStart: AiSiteInspirationStart = {
+      siteKind: aiSiteKindOfInputs(job.inputs)?.id ?? null,
+      posts: aiSiteContentPart(job.inputs ?? null, freeTaste) === 'posts',
+      sells: aiSiteContentPart(job.inputs ?? null, freeTaste) === 'products',
+      events: Boolean(siteEvents),
+      customerWords: aiPlanHasCustomerWords({ brief: job.brief, inventory, siteKind: aiSiteKindOfInputs(job.inputs)?.id }),
+    }
+    const ownOrder = Boolean(aiSiteInspirationHomeOrder(inspiration, inspirationStart))
     const prompt = [
-      aiJobPlanPrompt(job, capabilities, inventory, ops, now),
+      aiJobPlanPrompt(job, capabilities, inventory, ops, now, { ownOrder }),
       ...(siteEvents ? aiSiteEventPlanLines(siteEvents, now) : []),
-      ...aiSiteInspirationPlanLines(inspiration, { paid: !freeTaste }),
+      ...aiSiteInspirationPlanLines(inspiration, { paid: !freeTaste, start: inspirationStart }),
     ].join('\n')
 
     /**
