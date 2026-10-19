@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -146,17 +145,30 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
         ListHeader("Pages") {
-          OverflowMenu(listOf(MenuAction("new-group", "New group", "folder", enabled = canEdit) { dialog = PageDialog.NewGroup }))
-          OutlinedButton(onClick = { dialog = PageDialog.Gallery }, enabled = canEdit, modifier = Modifier.testTag("page-from-template")) { Text("From a template") }
-          Button(onClick = { dialog = PageDialog.NewPage }, enabled = canEdit, modifier = Modifier.testTag("add-page")) {
-            Icon(AglynIcons.named("add"), contentDescription = null)
-            Text("New page", Modifier.padding(start = space(1f)))
-          }
+          OverflowMenu(
+            listOf(
+              MenuAction("new-group", "New group", "folder", enabled = canEdit) { dialog = PageDialog.NewGroup },
+              MenuAction("page-from-template", "From a template", "widgets", enabled = canEdit) { dialog = PageDialog.Gallery },
+            ),
+          )
+          com.aglyn.ui.ListHeaderAction("New page", "add", { dialog = PageDialog.NewPage }, Modifier.testTag("add-page"), enabled = canEdit)
           // Create with AI and anything else a plugin puts beside New page (the console's `hostScreens` zone).
           SlotWidgets(context, ListCreateZone.PAGES, SlotPlacement.HEADER)
         }
         if (dialog == null) {
           Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) { RunnerBanners(runner) }
+        }
+        // "Start from a template", until it is dismissed on this device; the ⋯ menu keeps the way in.
+        val stripKey = "aglyn.pages.templateStrip.dismissed.$hostId"
+        var stripShown by remember(hostId) { mutableStateOf(context.deviceStore.get(stripKey) == null) }
+        if (stripShown && canEdit) {
+          com.aglyn.ui.TemplateStrip(
+            "Start a page from one of this site's templates.",
+            "Browse templates",
+            onOpen = { dialog = PageDialog.Gallery },
+            onDismiss = { context.deviceStore.set(stripKey, "1"); stripShown = false },
+            modifier = Modifier.padding(horizontal = space(2f), vertical = space(0.5f)),
+          )
         }
         // Collapsed like the console's hub; what is open is kept per site for as long as the app runs.
         var expanded by remember(hostId) { mutableStateOf(PagesTreeMemory.expanded(hostId)) }
@@ -320,11 +332,9 @@ private fun PageDetail(
         if (primary != publish) add(publish)
         liveUrl?.let { url -> add(com.aglyn.ui.RecordAction("page-open-live", "Open live page", "open_in_new") { uri.openUri(url) }) }
       }
-      add(com.aglyn.ui.RecordAction("rename", if (page.isGroup) "Rename group" else "Rename", "edit", enabled = canEdit) { open(PageDialog.Rename(page)) })
       if (!page.isGroup) {
         add(com.aglyn.ui.RecordAction("duplicate", "Duplicate", "content_copy", enabled = canEdit) { open(PageDialog.Duplicate(page)) })
         add(com.aglyn.ui.RecordAction("save-template", "Save as template", "bookmark", enabled = canEdit) { open(PageDialog.SaveTemplate(page)) })
-        add(com.aglyn.ui.RecordAction("move", "Move", "drive_file_move", enabled = canPublish) { open(PageDialog.Move(page)) })
         if (row.livePath != null) add(com.aglyn.ui.RecordAction("unpublish", "Unpublish", "visibility_off", enabled = canPublish) { open(PageDialog.Unpublish(page, row.childCount > 0)) })
       }
       add(com.aglyn.ui.RecordAction("delete", if (page.isGroup) "Delete group" else "Delete", "delete", destructive = true, enabled = canPublish) { open(PageDialog.Delete(page, row.livePath, row.childCount > 0)) })
@@ -340,6 +350,11 @@ private fun PageDetail(
       },
       primary = primary,
       more = more,
+      // The page's own settings, from its title ▾: its name and where it sits.
+      settings = buildList {
+        add(com.aglyn.ui.RecordAction("rename", if (page.isGroup) "Rename group" else "Rename", "edit", enabled = canEdit) { open(PageDialog.Rename(page)) })
+        if (!page.isGroup) add(com.aglyn.ui.RecordAction("move", "Move", "drive_file_move", enabled = canPublish) { open(PageDialog.Move(page)) })
+      },
     )
     page.description?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     if (!page.isGroup) {

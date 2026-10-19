@@ -6323,6 +6323,18 @@
         },
         {
           "args": [
+            "blue"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "#12345"
+          ],
+          "result": null
+        },
+        {
+          "args": [
             "#e040fa"
           ],
           "result": {
@@ -6336,18 +6348,6 @@
             "textDark": "#e668fb",
             "textLight": "#c406e2"
           }
-        },
-        {
-          "args": [
-            "blue"
-          ],
-          "result": null
-        },
-        {
-          "args": [
-            "#12345"
-          ],
-          "result": null
         }
       ]
     },
@@ -50118,7 +50118,7 @@
                     },
                     "docs": "/commerce-and-bookings/commerce/overview",
                     "icon": {
-                      "android": "shopping_basket",
+                      "android": "shopping_bag",
                       "apple": "bag"
                     },
                     "id": "orders",
@@ -50792,7 +50792,7 @@
                     },
                     "docs": "/commerce-and-bookings/commerce/overview",
                     "icon": {
-                      "android": "shopping_basket",
+                      "android": "shopping_bag",
                       "apple": "bag"
                     },
                     "id": "orders",

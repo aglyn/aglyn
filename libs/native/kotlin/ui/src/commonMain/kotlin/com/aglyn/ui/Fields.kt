@@ -368,7 +368,7 @@ fun FormCard(
       horizontalArrangement = Arrangement.spacedBy(space(1f), androidx.compose.ui.Alignment.End),
     ) {
       if (dirty) TextButton(onClick = onDiscard, enabled = !busy, modifier = Modifier.testTag("form-discard")) { Text("Discard") }
-      androidx.compose.material3.Button(onClick = onSave, enabled = dirty && canSave && !busy, modifier = Modifier.testTag("form-save")) {
+      androidx.compose.material3.Button(shape = controlShape(), onClick = onSave, enabled = dirty && canSave && !busy, modifier = Modifier.testTag("form-save")) {
         if (busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
         else Text(saveLabel)
       }

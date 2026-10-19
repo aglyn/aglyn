@@ -1043,6 +1043,8 @@
     "SeoAuditReport.skipped",
     "SeoPageReport.score",
     "StarredItem.starredAtMs",
+    "WhereUsedResult.legacyCount",
+    "WhereUsedResult.total",
     "ThemeDensity.controlHeight",
     "ThemeDensity.listRowHeight",
     "ThemeDensity.phoneRowHeight",
@@ -1067,9 +1069,7 @@
     "ThemeDensity.space6",
     "ThemeDensity.space64",
     "ThemeDensity.space8",
-    "ThemeDensity.titlebarHeight",
-    "WhereUsedResult.legacyCount",
-    "WhereUsedResult.total"
+    "ThemeDensity.titlebarHeight"
   ],
   "json": [
     "ListQueryFilter.value",
@@ -27978,13 +27978,13 @@
           "#00B0FF"
         ],
         [
-          "#e040fa"
-        ],
-        [
           "blue"
         ],
         [
           "#12345"
+        ],
+        [
+          "#e040fa"
         ]
       ]
     },

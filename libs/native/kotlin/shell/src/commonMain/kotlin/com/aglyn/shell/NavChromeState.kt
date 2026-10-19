@@ -36,6 +36,18 @@ internal class NavChromeState(private val device: KeyValueStore) {
   /** The settings list swapped in for the sidebar ("‹ Juniper Street Co. settings"), null for the everyday list. */
   var settingsMode by mutableStateOf<NativeNavListId?>(null)
   var picker by mutableStateOf<PickerStep?>(null)
+  /** The AI panel, docked right on wide windows and a sheet on phones; whether it is open is remembered on this device. */
+  var aiPanel by mutableStateOf(device.get("aglyn.nav.aiPanel") == "1")
+    private set
+
+  fun toggleAiPanel(open: Boolean = !aiPanel) {
+    aiPanel = open
+    device.set("aglyn.nav.aiPanel", if (open) "1" else null)
+  }
+
+  /** The keyboard shortcuts sheet (Help → Keyboard shortcuts). */
+  var shortcuts by mutableStateOf(false)
+
   /** The one box (Ctrl/⌘K, "Search or jump to"). */
   var oneBox by mutableStateOf(false)
   var accountMenu by mutableStateOf(false)
@@ -69,13 +81,23 @@ internal class NavChromeState(private val device: KeyValueStore) {
    * A foldable group is open when the person opened it, or when it holds the screen in use; only one group per list stays
    * open, remembered on this device.
    */
+  /**
+   * Whether a group shows its rows. Starred is open at rest (Figma Sidebar 12:703, as on Apple) until the person folds it;
+   * the other groups open with the place in use, or once the person opens them, one at a time.
+   */
   fun isOpen(listId: NativeNavListId, groupId: String, holdsCurrent: Boolean): Boolean =
-    holdsCurrent || "${listId.raw}.$groupId" in openGroups.value
+    if (groupId == "starred") "${listId.raw}.starred.folded" !in openGroups.value
+    else holdsCurrent || "${listId.raw}.$groupId" in openGroups.value
 
   fun toggle(listId: NativeNavListId, groupId: String, open: Boolean) {
-    val key = "${listId.raw}.$groupId"
-    val others = openGroups.value.filterNot { it.startsWith("${listId.raw}.") && it != "${listId.raw}.starred" }
-    val next = if (open) (if (groupId == "starred") openGroups.value + key else others + key) else openGroups.value - key
+    val next = if (groupId == "starred") {
+      val folded = "${listId.raw}.starred.folded"
+      if (open) openGroups.value - folded else openGroups.value + folded
+    } else {
+      val key = "${listId.raw}.$groupId"
+      val others = openGroups.value.filterNot { it.startsWith("${listId.raw}.") && !it.startsWith("${listId.raw}.starred") }
+      if (open) others + key else openGroups.value - key
+    }
     openGroups.value = next.toSet()
     device.set(OPEN_GROUPS, next.joinToString(","))
   }
@@ -92,6 +114,16 @@ internal class NavChromeState(private val device: KeyValueStore) {
     private const val OPEN_GROUPS = "aglyn.nav.openGroups"
   }
 }
+
+/**
+ * The accent a workspace lends the app while you are in it (Zach, decision 5, 2026-10-18): a white-label workspace's brand
+ * color (`brandingProfile.primaryColor`, read only when the workspace has the `whiteLabel` feature, from
+ * `/api/orgs/entitlements`, as the console's branding does) while "Use each workspace's brand" is on; otherwise none, so the account theme's
+ * own accent stays (Aglyn blue unless the person picked one). A color the person picked, or one taken from the logo, only
+ * colors the rail tile and the light sidebar wash, never the accent.
+ */
+internal fun workspaceAccent(brandColor: String?, whiteLabel: Boolean, useWorkspaceBrand: Boolean): String? =
+  brandColor?.takeIf { whiteLabel && useWorkspaceBrand && com.aglyn.contracts.isAccountColor(it) }
 
 /** A workspace's logo as a URL the image loader reads, light and dark. */
 internal fun orgLogoUrls(workspace: WorkspaceState, orgId: String, origin: String): Pair<String?, String?> {

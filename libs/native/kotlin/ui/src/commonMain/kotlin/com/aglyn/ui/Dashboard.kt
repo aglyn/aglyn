@@ -370,13 +370,13 @@ fun SiteHeaderCard(
       }
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
         if (onVisit != null) {
-          androidx.compose.material3.Button(onClick = onVisit, modifier = Modifier.testTag("visit-site")) {
+          androidx.compose.material3.Button(shape = controlShape(), onClick = onVisit, modifier = Modifier.testTag("visit-site")) {
             Icon(AglynIcons.named("launch"), null, Modifier.size(18.dp))
             Spacer(Modifier.width(space(1f)))
             Text("Visit site")
           }
         }
-        androidx.compose.material3.OutlinedButton(onClick = onSwitch, modifier = Modifier.testTag("home-switcher")) {
+        androidx.compose.material3.OutlinedButton(shape = controlShape(), onClick = onSwitch, modifier = Modifier.testTag("home-switcher")) {
           Icon(AglynIcons.named("swap_horiz"), null, Modifier.size(18.dp))
           Spacer(Modifier.width(space(1f)))
           Text("Switch site")

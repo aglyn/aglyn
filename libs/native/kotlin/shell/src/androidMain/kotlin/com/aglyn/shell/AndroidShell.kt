@@ -85,6 +85,8 @@ object AndroidShell {
         openCustomTab(context, page(com.aglyn.core.ConsoleHandoff.appRedirectUri(config.app)))
         null
       },
+      // Only the Aglyn app carries the logo kit's alternate icons.
+      appIcons = if (app == NativeApp.AGLYN) LauncherIconSwitcher(context) else null,
     )
   }
 

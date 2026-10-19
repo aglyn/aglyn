@@ -55,11 +55,14 @@ kotlin {
         implementation(project(":plugin-manifest"))
         implementation(compose.desktop.currentOs)
         implementation(libs.kotlinx.coroutines.swing)
+        // Windows: the window's own caption (WindowsCaption.kt) subclasses its window procedure.
+        implementation(libs.jna)
       }
     }
     named("desktopTest") {
       dependencies {
         implementation(libs.compose.ui.test)
+        implementation(kotlin("test"))
       }
     }
   }

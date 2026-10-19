@@ -138,10 +138,11 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
     initialSelected = initialDatasetId,
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
+        // Calm (Figma Data · Empty 122:7480): one primary action. With no datasets yet it is the empty state's own.
+        val none = (datasets as? Live.Ready)?.value?.isEmpty() == true
         ListHeader("Datasets") {
-          Button(onClick = { dialog = DatasetDialog.Create }, enabled = canWrite, modifier = Modifier.testTag("add-dataset")) {
-            Icon(AglynIcons.named("add"), contentDescription = null)
-            Text("New dataset", Modifier.padding(start = space(1f)))
+          if (!none) {
+            com.aglyn.ui.ListHeaderAction("New dataset", "add", { dialog = DatasetDialog.Create }, Modifier.testTag("add-dataset"), enabled = canWrite)
           }
         }
         Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
@@ -149,8 +150,7 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
             runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = runner::clear) { Text("Dismiss") } }) }
             runner.error?.let { NoticeBanner(it, StatusTone.ERROR) }
           }
-          // The org Data page's note: a dataset made here names no site, so it starts on All sites.
-          NoticeBanner(newDatasetSharingNote(siteOnly = false), StatusTone.NEUTRAL)
+          // Who a new dataset is shared with is said where one is made (the New dataset dialog), not as a banner at rest.
         }
         when (val live = datasets) {
           Live.Loading -> SkeletonList(rows = 5, modifier = Modifier.padding(space(2f)))
@@ -161,6 +161,9 @@ fun DatasetsScreen(context: NativePluginContext, initialDatasetId: String? = nul
               if (scoped) "No datasets are shared with you" else "No datasets yet",
               body = if (scoped) "Ask an owner or admin to share a dataset with one of your sites." else "Create a dataset, like Products, then add a repeating section to any page to show one item per record.",
               icon = AglynIcons.named("dataset"),
+              action = if (scoped) null else ({
+                Button(onClick = { dialog = DatasetDialog.Create }, enabled = canWrite, modifier = Modifier.testTag("add-dataset")) { Text("New dataset") }
+              }),
             )
           } else {
             LazyColumn(Modifier.fillMaxSize().testTag("datasets-list")) {

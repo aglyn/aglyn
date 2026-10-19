@@ -189,7 +189,7 @@ fun AssistPanel(context: NativePluginContext) {
         Box(Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(0.5f)), contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart) {
           Column(
             Modifier.widthIn(max = 520.dp)
-              .background(if (mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(14.dp))
+              .background(if (mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(com.aglyn.ui.shellMetrics.cardRadius))
               .padding(space(1.5f))
               .testTag("assist-turn-$i")
               .semantics { if (!mine) liveRegion = LiveRegionMode.Polite },
@@ -221,7 +221,7 @@ fun AssistPanel(context: NativePluginContext) {
         placeholder = { Text(context.hostId?.let { "Ask about this site" } ?: "Ask about this workspace") },
         modifier = Modifier.weight(1f).testTag("assist-field"),
         maxLines = 4,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(com.aglyn.ui.shellMetrics.cardRadius),
       )
       FilledIconButton(onClick = { ask(question) }, enabled = question.isNotBlank() && !busy, modifier = Modifier.testTag("assist-send").semantics { contentDescription = "Send" }) {
         Icon(AglynIcons.named("send"), null)

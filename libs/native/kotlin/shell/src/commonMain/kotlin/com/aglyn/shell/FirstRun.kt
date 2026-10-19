@@ -79,7 +79,7 @@ internal fun FirstRunContent(services: ShellServices) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
           Text(invite.sentence, Modifier.weight(1f))
           TextButton(onClick = { answer(invite, false) }, enabled = answering == null) { Text("Decline") }
-          Button(onClick = { answer(invite, true) }, enabled = answering == null, modifier = Modifier.testTag("first-run-accept-${invite.id}")) {
+          Button(shape = com.aglyn.ui.controlShape(), onClick = { answer(invite, true) }, enabled = answering == null, modifier = Modifier.testTag("first-run-accept-${invite.id}")) {
             Text(if (answering == invite.id) "Joining…" else "Accept")
           }
         }
@@ -145,6 +145,6 @@ private fun Empty(services: ShellServices, onCreate: () -> Unit) {
     "No workspaces yet",
     body = "A workspace is your organization: its sites, team, billing and plan live together.",
     icon = AglynIcons.named("workspaces"),
-    action = { Button(onClick = onCreate, modifier = Modifier.testTag("first-run-create")) { Text("Create an organization") } },
+    action = { Button(shape = com.aglyn.ui.controlShape(), onClick = onCreate, modifier = Modifier.testTag("first-run-create")) { Text("Create an organization") } },
   )
 }

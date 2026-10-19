@@ -5342,7 +5342,7 @@
                 },
                 "docs": "/commerce-and-bookings/commerce/overview",
                 "icon": {
-                  "android": "shopping_basket",
+                  "android": "shopping_bag",
                   "apple": "bag"
                 },
                 "id": "orders",
