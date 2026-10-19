@@ -107,11 +107,12 @@ private fun messageError(error: Throwable): String = error.message?.takeIf { it.
  * hands the shown filter to the console's transfer route.
  */
 @Composable
-fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? = null, scopedForm: String? = null, scopedFormName: String? = null) {
+fun SubmissionsScreen(context: NativePluginContext, initialSubmission: String? = null, scopedForm: String? = null, scopedFormName: String? = null, initialRead: ReadFilter = ReadFilter.ALL) {
   val hostId = context.hostId ?: return WorkspaceSubmissionsScreen(context)
   val scope = rememberCoroutineScope()
   val list = remember(hostId, context.firestore) { LiveQueryList(context.firestore, scope, SUBMISSIONS_PAGE_SIZE, ::submissionOf) }
-  var read by rememberSaveable { mutableStateOf(ReadFilter.ALL) }
+  // Opened from Home's line: Unread.
+  var read by rememberSaveable { mutableStateOf(initialRead) }
   var formId by rememberSaveable { mutableStateOf<String?>(null) }
   var search by rememberSaveable { mutableStateOf("") }
   var asked by rememberSaveable { mutableStateOf("") }
@@ -722,4 +723,18 @@ fun WorkspaceLeadsScreen(context: NativePluginContext) {
       }
     }
   }
+}
+
+/** Home's "Needs you" line for the Inbox (`inbox.needs-you`): messages nobody has read, opening the Inbox on Unread. */
+@Composable
+fun InboxNeedsYouWidget(context: NativePluginContext) {
+  val hostId = context.hostId ?: return
+  val flow = remember(hostId, context.firestore) { context.firestore.observe(submissionsQuery(hostId, ReadFilter.UNREAD, null, "", SUBMISSIONS_PAGE_SIZE)) }
+  val live by flow.collectAsState(Live.Loading)
+  val count = (live as? Live.Ready)?.value?.size?.takeIf { it > 0 } ?: return
+  val shown = if (count >= SUBMISSIONS_PAGE_SIZE) "$SUBMISSIONS_PAGE_SIZE+" else count.toString()
+  com.aglyn.ui.NeedsYouLine(
+    "inbox-unread", "inbox", "$shown ${if (count == 1) "message waiting" else "messages waiting"} for a reply", "Inbox",
+    onClick = { context.navigate(INBOX_SCREEN, mapOf("read" to "false")) },
+  )
 }

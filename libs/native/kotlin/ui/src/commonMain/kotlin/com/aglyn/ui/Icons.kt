@@ -10,6 +10,8 @@ import androidx.compose.material.icons.automirrored.outlined.Notes
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.ViewSidebar
+import androidx.compose.material.icons.filled.Star as FilledStar
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.GridView
@@ -242,6 +244,8 @@ object AglynIcons {
     "keep" to Icons.Outlined.PushPin,
     "keep_off" to Icons.Outlined.PushPin,
     "unfold_more" to Icons.Outlined.UnfoldMore,
+    "star_filled" to Icons.Filled.FilledStar,
+    "view_sidebar" to Icons.Outlined.ViewSidebar,
     "apps" to Icons.Outlined.Apps,
     "arrow_back" to Icons.AutoMirrored.Outlined.ArrowBack,
     "bolt" to Icons.Outlined.Bolt,

@@ -58,8 +58,11 @@ const require = createRequire(import.meta.url)
 const ROOT = join(import.meta.dirname, '../..')
 const CHECK = process.argv.includes('--check')
 
-/** The features a native screen gates on, by the console's names. */
-export const NATIVE_PLAN_FEATURES = ['marketingOverlays', 'abTesting', 'screenAnalytics', 'outreach', 'giftCards', 'storefrontSubscriptions', 'commerceAnalytics', 'abandonedCart', 'productReviews', 'dropshipRouting', 'contentGating']
+/**
+ * The features a native screen gates on, by the console's names: the screens' own, then the ones the nav manifest's
+ * create lists ask for (NATIVE_NAV_MANIFEST.create[].items[].planFeature).
+ */
+export const NATIVE_PLAN_FEATURES = ['marketingOverlays', 'abTesting', 'screenAnalytics', 'outreach', 'giftCards', 'storefrontSubscriptions', 'commerceAnalytics', 'abandonedCart', 'productReviews', 'dropshipRouting', 'contentGating', 'crm', 'commerce', 'bookings', 'eventCalendar']
 
 const JSON_OUT = 'libs/native/contracts/derived-values.generated.json'
 const SWIFT_OUT = 'libs/native/apple/Sources/AglynCore/DerivedValues.generated.swift'

@@ -98,7 +98,7 @@ internal fun PhoneShell(
             if (route != null) TitleBarButton("Back", "arrow_back", "title-back") { navigator.back() }
           },
           actions = {
-            TitleBarButton("Search or jump to", "search", "phone-search") { chrome.picker = PickerStep.WORKSPACE }
+            TitleBarButton("Search or jump to", "search", "phone-search") { chrome.oneBox = true }
             BellButton(services, uid) { navigator.select(ShellNavigator.NOTIFICATIONS) }
             AccountAvatar(user, size = 32, onClick = { chrome.accountMenu = true }, modifier = Modifier.padding(end = 8.dp).testTag("phone-account"))
           },
@@ -156,9 +156,9 @@ internal fun PhoneShell(
     ModalBottomSheet(onDismissRequest = { chrome.createMenu = false }, modifier = Modifier.testTag("create-sheet")) {
       Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 16.dp)) {
         Text("Create new", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-        CreateMenuItems(services, workspace, enabled) { entry ->
+        CreateMenuItems(services, workspace, enabled, uid) { item ->
           chrome.createMenu = false
-          actions.openScreen(entry.screen, mapOf("new" to "1"))
+          actions.openScreen(item.screen, item.params ?: mapOf("new" to "1"))
         }
       }
     }

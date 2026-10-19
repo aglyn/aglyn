@@ -206,7 +206,7 @@ fun CrmHubScreen(context: NativePluginContext, initial: CrmSection, params: Map<
         modifier = Modifier.padding(horizontal = space(2f), vertical = space(1f)).testTag("crm-sections"),
       )
       when (section) {
-        CrmSection.CONTACTS -> RecordsSection(context, CrmKind.CONTACT, scope, api, reference, params[CrmKind.CONTACT.param], params[CONTACTS_LIST_EMAIL_PARAM])
+        CrmSection.CONTACTS -> RecordsSection(context, CrmKind.CONTACT, scope, api, reference, params[CrmKind.CONTACT.param], params[CONTACTS_LIST_EMAIL_PARAM], startNew = params["new"] == "1")
         CrmSection.LEADS -> RecordsSection(context, CrmKind.LEAD, scope, api, reference, params[CrmKind.LEAD.param])
         CrmSection.COMPANIES -> RecordsSection(context, CrmKind.COMPANY, scope, api, reference, params[CrmKind.COMPANY.param])
         CrmSection.DEALS -> DealsSection(context, scope, api, reference, params[CrmKind.DEAL.param])

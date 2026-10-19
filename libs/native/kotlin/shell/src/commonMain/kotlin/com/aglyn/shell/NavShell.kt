@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.NativeNavListId
+import com.aglyn.contracts.toRef
 import com.aglyn.core.AuthState
 import com.aglyn.core.WorkspaceState
 import com.aglyn.ui.AglynIcons
@@ -220,7 +221,7 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
     val pin = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five).indexOf(event.key)
     when {
       pin >= 0 -> prefs.pinned.getOrNull(pin)?.let { services.workspace.selectOrg(it); true } ?: false
-      event.key == Key.K -> { chrome.picker = PickerStep.WORKSPACE; true }
+      event.key == Key.K -> { chrome.oneBox = true; true }
       event.key == Key.LeftBracket -> navigator.back()
       event.key == Key.Comma && !event.isShiftPressed -> { actions.enterSettings(if (inSite) NativeNavListId.SITE_SETTINGS else NativeNavListId.WORKSPACE_SETTINGS); true }
       else -> false
@@ -231,7 +232,8 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
     val command = navigator.command ?: return@LaunchedEffect
     navigator.command = null
     when (command) {
-      ShellCommand.FIND -> chrome.picker = PickerStep.WORKSPACE
+      ShellCommand.FIND -> chrome.oneBox = true
+      ShellCommand.SWITCH_WORKSPACE -> chrome.picker = PickerStep.WORKSPACE
       ShellCommand.SWITCH_SITE -> chrome.picker = PickerStep.SITE
       ShellCommand.SETTINGS -> actions.enterSettings(if (inSite) NativeNavListId.SITE_SETTINGS else NativeNavListId.WORKSPACE_SETTINGS)
       ShellCommand.TOGGLE_SIDEBAR -> chrome.toggleSidebar()
@@ -251,6 +253,15 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
     LocalShellActions provides actions,
     LocalShellColors provides shell,
   ) {
+  var openRecentHolder by remember { mutableStateOf<((com.aglyn.contracts.AccountItemRef) -> Unit)?>(null) }
+  val bellPopover: @Composable (Boolean, () -> Unit) -> Unit = { expanded, dismiss ->
+    BellPopover(
+      services, context, workspace, uid, expanded, dismiss,
+      onSeeAll = { chrome.settingsMode = null; navigator.select(ShellNavigator.NOTIFICATIONS) },
+      onSettings = { chrome.settingsMode = null; navigator.select(ShellNavigator.SETTINGS); navigator.push(Route.NotificationSettings) },
+    )
+  }
+  CompositionLocalProvider(LocalOpenRecent provides openRecentHolder, LocalBellPopover provides bellPopover) {
   // Every plain web page a screen opens is pushed onto this stack as the browser screen (AGL-3935).
   com.aglyn.webview.ProvideInAppBrowser(secureTab = services.openHostedPage, openPage = navigator::openWeb) {
     val entries = rememberSaveableStateHolder()
@@ -266,6 +277,22 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
     val route = navigator.current
     val row = allGroups.rowFor(navigator.top)
     val title = titleFor(services, navigator, route, row, screenTitle.value)
+    // Where the person is, as an account item: what ☆ stars and what Recents remember.
+    val here = placeRef(navigator, route, row, title, workspace)
+    LaunchedEffect(here) {
+      val item = here ?: return@LaunchedEffect
+      // A screen names itself once its data is in; the visit counts once it has stayed a moment.
+      kotlinx.coroutines.delay(1_500)
+      services.accountPrefs.opened(item)
+    }
+    // Opens a recent or starred item: its workspace and site first, then its screen.
+    val openRef: (com.aglyn.contracts.AccountItemRef) -> Unit = { item ->
+      if (item.orgId != workspace.org?.id || (item.hostId != null && item.hostId != workspace.site?.id)) {
+        services.workspace.select(item.orgId, item.hostId)
+      }
+      chrome.settingsMode = settingsModeFor(item.screen, item.params, settingsLists(enabled, orgEnabled, hostAdmin, services))
+      navigator.select(NavKeys.of(item.screen, item.params))
+    }
     val banner: @Composable () -> Unit = {
       impersonation?.let { ImpersonationBanner(it, onExit = { exitScope.launch { services.auth.endImpersonation() } }) }
     }
@@ -289,7 +316,7 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
       onExitMode = { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) },
     )
     val starred = prefs.starred.filter { it.orgId == workspace.org?.id && (it.hostId == null || it.hostId == workspace.site?.id) }
-    val onStar: (com.aglyn.contracts.StarredItem) -> Unit = { item -> navigator.select(NavKeys.of(item.screen, item.params)) }
+    val onStar: (com.aglyn.contracts.StarredItem) -> Unit = { item -> openRef(item.toRef()) }
     if (wide) {
       Row(Modifier.fillMaxSize().then(shortcuts).testTag("nav-shell-wide")) {
         if (!chrome.railHidden) {
@@ -309,7 +336,7 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
             )
             Box(Modifier.align(Alignment.BottomStart)) {
               AccountMenu(services, user, chrome)
-              CreateMenu(services, workspace, chrome, enabled, actions)
+              CreateMenu(services, workspace, chrome, enabled, uid, actions)
             }
           }
           VerticalDivider(color = shellColors.divider)
@@ -322,7 +349,7 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
         }
         Column(Modifier.weight(1f).fillMaxHeight().background(MaterialTheme.colorScheme.background)) {
           if (route !is Route.Web) {
-            WideTitleBar(services, navigator, chrome, title, route != null, uid)
+            WideTitleBar(services, navigator, chrome, title, route != null, uid, here, prefs)
             banner()
             sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
           }
@@ -335,6 +362,16 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
         sections, banner, actions, enabled, onRow = { openRow(it) }, onStar = onStar, body = body,
       )
     }
+    if (chrome.oneBox) {
+      OneBox(
+        services, workspace, prefs, enabled, hostAdmin, fullScreen = !wide,
+        onOpen = { line ->
+          chrome.oneBox = false
+          openOneBoxLine(services, navigator, chrome, context, workspace, line, openRef)
+        },
+        onClose = { chrome.oneBox = false },
+      )
+    }
     // The picker, the pin and color dialogs, and the one-time "Keep which 5 pins?".
     ScopePicker(services, workspace, chrome, fullScreen = !wide, twoStep = !wide || chrome.picker == PickerStep.SITE, onPinFull = { chrome.pinFullFor = it }) { screen ->
       navigator.select(NavKeys.of(screen))
@@ -344,7 +381,79 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
     if (prefs.loaded && prefs.overCap && !chrome.keepPinsLater && impersonation == null) {
       KeepPinsDialog(services, workspace) { chrome.keepPinsLater = true }
     }
+    openRecentHolder = openRef
   }
+  }
+  }
+}
+
+/** Which settings mode a screen belongs to, so opening a setting from search or Recents shows its list. */
+private fun settingsModeFor(screen: String, params: Map<String, String>?, lists: Map<NativeNavListId, List<NavGroupItem>>): NativeNavListId? {
+  val key = NavKeys.of(screen, params)
+  return lists.entries.firstOrNull { (_, groups) -> groups.rowFor(key) != null }?.key
+}
+
+private fun settingsLists(enabled: Collection<String>, orgEnabled: Collection<String>, hostAdmin: Boolean, services: ShellServices) = mapOf(
+  NativeNavListId.SITE_SETTINGS to navGroups(NativeNavListId.SITE_SETTINGS, enabled, hostAdmin, services.registry, inSite = true),
+  NativeNavListId.WORKSPACE_SETTINGS to navGroups(NativeNavListId.WORKSPACE_SETTINGS, orgEnabled, hostAdmin, services.registry, inSite = true),
+)
+
+/**
+ * The place on screen as an account item: a destination (`screen`, its row's id), or a pushed record (`record`, its
+ * screen and params); nothing for Home, Menu, the account's own pages and web pages.
+ */
+private fun placeRef(navigator: ShellNavigator, route: Route?, row: NavItem?, title: String, workspace: WorkspaceState): com.aglyn.contracts.AccountItemRef? {
+  val orgId = workspace.org?.id ?: return null
+  val hostId = workspace.site?.id
+  if (title.isBlank()) return null
+  return when (route) {
+    is Route.Screen -> com.aglyn.contracts.AccountItemRef(
+      hostId = hostId, id = NavKeys.of(route.screenId, route.params), kind = "record", label = title, orgId = orgId,
+      params = route.params.ifEmpty { null }, screen = route.screenId,
+    )
+    null -> {
+      val (screen, params) = NavKeys.parse(navigator.top) ?: return null
+      com.aglyn.contracts.AccountItemRef(
+        hostId = hostId.takeIf { row?.listId != NativeNavListId.WORKSPACE && row?.listId != NativeNavListId.WORKSPACE_SETTINGS },
+        id = row?.rowId ?: navigator.top, kind = "screen", label = title, orgId = orgId, params = params.ifEmpty { null }, screen = screen,
+      )
+    }
+    else -> null
+  }
+}
+
+/** Opens a one-box line: a workspace or site switches scope; a screen opens; a record follows its console link. */
+private fun openOneBoxLine(
+  services: ShellServices,
+  navigator: ShellNavigator,
+  chrome: NavChromeState,
+  context: ShellPluginContext,
+  workspace: WorkspaceState,
+  line: OneBoxLine,
+  openRef: (com.aglyn.contracts.AccountItemRef) -> Unit,
+) {
+  val row = line.row
+  when {
+    row.group == com.aglyn.contracts.Contracts.oneBoxWorkspacesGroup -> {
+      chrome.settingsMode = null
+      services.workspace.selectOrg(row.id)
+      navigator.select(ShellNavigator.HOME)
+    }
+    row.group == "sites" -> {
+      chrome.settingsMode = null
+      services.workspace.select(row.orgId ?: workspace.org?.id ?: return, row.id)
+      navigator.select(ShellNavigator.HOME)
+    }
+    row.screen != null -> openRef(
+      com.aglyn.contracts.AccountItemRef(
+        hostId = row.hostId ?: workspace.site?.id, id = row.id, kind = "screen", label = row.label,
+        orgId = row.orgId ?: workspace.org?.id ?: return, params = row.params, screen = row.screen!!,
+      ),
+    )
+    row.link != null -> {
+      chrome.settingsMode = null
+      context.openLink(row.link!!)
+    }
   }
 }
 
@@ -432,24 +541,43 @@ internal fun SectionTabs(sections: List<NavSectionItem>, selected: String, onSel
  * (Ctrl/⌘K) and the bell.
  */
 @Composable
-private fun WideTitleBar(services: ShellServices, navigator: ShellNavigator, chrome: NavChromeState, title: String, pushed: Boolean, uid: String) {
+private fun WideTitleBar(
+  services: ShellServices,
+  navigator: ShellNavigator,
+  chrome: NavChromeState,
+  title: String,
+  pushed: Boolean,
+  uid: String,
+  here: com.aglyn.contracts.AccountItemRef?,
+  prefs: com.aglyn.core.AccountPreferences,
+) {
   Row(
     Modifier.fillMaxWidth().background(shellColors.titleBar).padding(top = LocalTitleBarInset.current).height(52.dp).padding(horizontal = 8.dp).testTag("title-bar"),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {
     TitleBarButton(if (chrome.sidebarHidden) "Show sidebar" else "Hide sidebar", "view_sidebar", "toggle-sidebar") { chrome.toggleSidebar() }
-    if (pushed) TitleBarButton("Back", "arrow_back", "title-back") { navigator.back() }
+    if (pushed) {
+      TitleBarButton("Back", "arrow_back", "title-back") { navigator.back() }
+    } else {
+      // Back and forward through the places visited, and what was opened recently.
+      TitleBarButton("Back", "chevron_left", "history-back", enabled = navigator.canGoBackInHistory) { navigator.historyBack() }
+      TitleBarButton("Forward", "chevron_right", "history-forward", enabled = navigator.canGoForwardInHistory) { navigator.historyForward() }
+      val openRecent = LocalOpenRecent.current
+      RecentHistoryButton(prefs) { item -> openRecent?.invoke(item) }
+    }
     Text(
       title,
       style = MaterialTheme.typography.titleMedium,
       fontWeight = FontWeight.SemiBold,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
-      modifier = Modifier.padding(start = 8.dp).weight(1f).semantics { heading() },
+      modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false).semantics { heading() },
     )
+    here?.let { StarButton(services, it, prefs) }
+    Box(Modifier.weight(1f))
     Surface(
-      onClick = { chrome.picker = PickerStep.WORKSPACE },
+      onClick = { chrome.oneBox = true },
       shape = RoundedCornerShape(10.dp),
       color = MaterialTheme.colorScheme.surfaceContainerHigh,
       modifier = Modifier.widthIn(min = 220.dp, max = 340.dp).height(36.dp).testTag("search-or-jump").semantics { contentDescription = "Search or jump to" },
@@ -466,24 +594,70 @@ private fun WideTitleBar(services: ShellServices, navigator: ShellNavigator, chr
 }
 
 @Composable
-internal fun TitleBarButton(label: String, icon: String, tag: String, onClick: () -> Unit) {
+internal fun TitleBarButton(label: String, icon: String, tag: String, enabled: Boolean = true, onClick: () -> Unit) {
   WithTooltip(label) {
-    androidx.compose.material3.IconButton(onClick = onClick, modifier = Modifier.testTag(tag)) { Icon(AglynIcons.named(icon), contentDescription = label) }
+    androidx.compose.material3.IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.testTag(tag)) { Icon(AglynIcons.named(icon), contentDescription = label) }
   }
 }
 
-/** The bell, with a dot while anything is unread. */
+/** Opens one of the person's recent items: set by the shell, which knows how to reach its workspace and site. */
+internal val LocalOpenRecent = androidx.compose.runtime.staticCompositionLocalOf<((com.aglyn.contracts.AccountItemRef) -> Unit)?> { null }
+
+/** ☆ in the title bar: stars the screen or record on screen (synced on the account); filled while it is starred. */
 @Composable
-internal fun BellButton(services: ShellServices, uid: String, onClick: () -> Unit) {
-  val unread = unreadByOrg(services, uid).values.sum()
-  WithTooltip("Notifications") {
-    androidx.compose.material3.IconButton(onClick = onClick, modifier = Modifier.testTag("bell").semantics { contentDescription = if (unread > 0) "Notifications, $unread unread" else "Notifications" }) {
-      androidx.compose.material3.BadgedBox(badge = { if (unread > 0) androidx.compose.material3.Badge(containerColor = shellColors.badge) }) {
-        Icon(AglynIcons.named("notifications"), null)
+internal fun StarButton(services: ShellServices, here: com.aglyn.contracts.AccountItemRef, prefs: com.aglyn.core.AccountPreferences) {
+  val starred = prefs.isStarred(here)
+  var full by remember { mutableStateOf(false) }
+  TitleBarButton(if (starred) "Unstar ${here.label}" else "Star ${here.label}", if (starred) "star_filled" else "star", "title-star") {
+    full = !services.accountPrefs.toggleStar(here)
+  }
+  if (full) {
+    androidx.compose.material3.AlertDialog(
+      onDismissRequest = { full = false },
+      title = { Text("Starred is full") },
+      text = { Text("You can star ${com.aglyn.contracts.Contracts.starredMax} places. Unstar one from the sidebar's Starred group to make room.") },
+      confirmButton = { androidx.compose.material3.TextButton(onClick = { full = false }) { Text("OK") } },
+    )
+  }
+}
+
+/** The clock in the title bar: what was opened recently, across workspaces. */
+@Composable
+private fun RecentHistoryButton(prefs: com.aglyn.core.AccountPreferences, open: (com.aglyn.contracts.AccountItemRef) -> Unit) {
+  var expanded by remember { mutableStateOf(false) }
+  Box {
+    TitleBarButton("Recent", "history", "history-recent", enabled = prefs.recents.isNotEmpty()) { expanded = true }
+    androidx.compose.material3.DropdownMenu(expanded, onDismissRequest = { expanded = false }, modifier = Modifier.testTag("history-menu")) {
+      for (item in prefs.recents.take(12)) {
+        MenuRow(item.label, oneBoxIcon(item.kind), tag = "history-${item.id}") { expanded = false; open(item.toRef()) }
       }
     }
   }
 }
+
+/** The bell, with a dot while anything is unread; it opens the notifications popover. */
+@Composable
+internal fun BellButton(services: ShellServices, uid: String, onClick: () -> Unit) {
+  val unread = unreadByOrg(services, uid).values.sum()
+  val popover = LocalBellPopover.current
+  var open by remember { mutableStateOf(false) }
+  Box {
+    WithTooltip("Notifications") {
+      androidx.compose.material3.IconButton(
+        onClick = { if (popover != null) open = true else onClick() },
+        modifier = Modifier.testTag("bell").semantics { contentDescription = if (unread > 0) "Notifications, $unread unread" else "Notifications" },
+      ) {
+        androidx.compose.material3.BadgedBox(badge = { if (unread > 0) androidx.compose.material3.Badge(containerColor = shellColors.badge) }) {
+          Icon(AglynIcons.named("notifications"), null)
+        }
+      }
+    }
+    popover?.invoke(open) { open = false }
+  }
+}
+
+/** The bell's popover, bound by the shell: (expanded, dismiss). */
+internal val LocalBellPopover = androidx.compose.runtime.staticCompositionLocalOf<(@Composable (Boolean, () -> Unit) -> Unit)?> { null }
 
 /** Unread notifications by workspace, from the newest 50 the feed holds: the rail's badges and the bell's dot. */
 @Composable
