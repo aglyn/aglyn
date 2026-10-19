@@ -15,102 +15,11 @@
  * limitations under the License.
  */
 
-import type { OperatorAlertDefinition } from '@aglyn/aglyn/app-utils/operator-alerts'
 import { raiseOperatorAlert } from '@aglyn/tenant-data-admin'
 import type { DomainRegistrationDoc } from '../model/registration'
 import type { DomainAlertKind } from './lifecycle'
 
-/*
- * What staff are told about bought domains (AGL-3962). Only what the sweep
- * cannot settle on its own: money taken that a refund did not return, an
- * order the registrar never finished, a name nobody is paying for. Every
- * other branch of the lifecycle ends without a person.
- */
-
-const HOUR = 60
-const DAY = 24 * HOUR
-
-export const DOMAINS_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
-  {
-    type: 'domains.refundFailed',
-    label: 'A domain refund did not go through',
-    description:
-      'A domain charge had to be refunded — its registration failed — and Stripe refused the refund. The customer has paid for a name they do not hold: refund the invoice from the staff org page.',
-    tier: 'must',
-    category: 'billing',
-    title: 'Refund failed for {{domain}}',
-    body: 'The charge for {{domain}} (workspace {{orgId}}) could not be refunded after {{reason}}. Refund it by hand.',
-    delivery: 'immediate',
-    dedupeWindowMinutes: DAY,
-    defaultEnabled: true,
-  },
-  {
-    type: 'domains.orderStuck',
-    label: 'A domain order is stuck at the registrar',
-    description:
-      'A registrar order has been pending for over a day. The customer was charged; ask the registrar what became of it.',
-    tier: 'must',
-    category: 'ops',
-    title: 'Domain order pending a day: {{domain}}',
-    body: 'Order {{reason}} for {{domain}} (workspace {{orgId}}) is still pending. The sweep keeps reading it; ask the registrar if it does not finish.',
-    delivery: 'immediate',
-    dedupeWindowMinutes: DAY,
-    defaultEnabled: true,
-  },
-  {
-    type: 'domains.renewalFailedAtRegistrar',
-    label: 'A paid domain renewal was refused by the registrar',
-    description:
-      'The customer paid for a renewal and the registrar would not renew. The charge was refunded and the sweep will try again; if the name is near expiry, renew it by hand.',
-    tier: 'must',
-    category: 'ops',
-    title: 'Renewal refused for {{domain}}',
-    body: 'The registrar refused the renewal of {{domain}} (workspace {{orgId}}): {{reason}}. The charge was refunded.',
-    delivery: 'immediate',
-    dedupeWindowMinutes: DAY,
-    defaultEnabled: true,
-  },
-  {
-    type: 'domains.renewalUnpaid',
-    label: 'A domain renewed without a payment',
-    description:
-      'The registrar renewed a name on its own (the backstop) and the customer’s card refused the charge for it. Decide whether to collect or let it go.',
-    tier: 'should',
-    category: 'billing',
-    title: '{{domain}} renewed unpaid',
-    body: 'The registrar renewed {{domain}} (workspace {{orgId}}) and the charge for it was declined ({{reason}}).',
-    delivery: 'digest',
-    dedupeWindowMinutes: 7 * DAY,
-    defaultEnabled: true,
-  },
-  {
-    type: 'domains.orphanRegistration',
-    label: 'A domain in the registrar account has no owner here',
-    description:
-      'The daily reconcile found a name in the registrar account that no registration accounts for — usually a workspace erased while it held one. Its auto-renew was turned off.',
-    tier: 'should',
-    category: 'billing',
-    title: 'Unowned domain: {{domain}}',
-    body: '{{domain}} is registered in the platform’s registrar account with no registration here. Auto-renew was turned off for it.',
-    delivery: 'digest',
-    dedupeWindowMinutes: 30 * DAY,
-    defaultEnabled: true,
-  },
-  {
-    type: 'domains.disputed',
-    label: 'A domain charge was disputed',
-    description:
-      'A cardholder disputed a domain charge. Renewals for the name stopped and its auto-renew was turned off; nothing else changed.',
-    tier: 'should',
-    category: 'payments',
-    title: 'Dispute on a domain charge: {{domain}}',
-    body: 'A charge for {{domain}} (workspace {{orgId}}) was disputed. Its renewals are paused.',
-    delivery: 'immediate',
-    dedupeWindowMinutes: DAY,
-    defaultEnabled: true,
-  },
-]
-
+/** The operator alert each lifecycle alert raises, from `alert-definitions.ts`. */
 const TYPE: Record<DomainAlertKind, string> = {
   refundFailed: 'domains.refundFailed',
   orderStuck: 'domains.orderStuck',

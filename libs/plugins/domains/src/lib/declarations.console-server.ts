@@ -19,7 +19,7 @@ import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-ale
 import { registerPluginConsoleCron } from '@aglyn/aglyn/plugin-manager/plugin-console-crons'
 import { registerPluginEventHandler } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import { BUNDLE_ID } from './constants/bundle-common'
-import { DOMAINS_OPERATOR_ALERTS } from './server/alerts'
+import { DOMAINS_OPERATOR_ALERTS } from './server/alert-definitions'
 import { registerDomainConnectDeclarations } from './server/domain-connect/declarations'
 
 /** The lifecycle sweep's job id: its beat document and its health row. */
