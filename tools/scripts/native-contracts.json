@@ -1,5 +1,5 @@
 {
-  "$comment": "What tools/scripts/generate-native-contracts.mjs emits for the native apps (docs/mobile/native-architecture.md §5). Every module must be on tools/scripts/mobile-pure-modules.json. `types` become Swift/Kotlin types, `values` become contracts.generated.json entries (typed by ContractValues). `ints` narrows a number field to an integer, `json` reads a field as raw JSON, `omit` leaves a field out; each names `Type.field` and must match a field the run emits. `optional` makes a field (`Type.field`) or every field of a struct (`Type`) decode when a stored document lacks it, and must match a field or struct the run emits. `listQueryCases` names the list declarations whose planner cases are recorded. `functionCases` runs pure functions over listed inputs (`args`, or `argsProduct` for every combination) into function-cases.generated.json, so each platform's formatter or rule replays the console's answers.",
+  "$comment": "What tools/scripts/generate-native-contracts.mjs emits for the native apps (docs/mobile/native-architecture.md §5). Every module must be on tools/scripts/mobile-pure-modules.json. `types` become Swift/Kotlin types, `values` become contracts.generated.json entries (typed by ContractValues). `ints` narrows a number field to an integer, `json` reads a field as raw JSON, `omit` leaves a field out; each names `Type.field` and must match a field the run emits. `optional` makes a field (`Type.field`) or every field of a struct (`Type`) decode when a stored document lacks it, and must match a field or struct the run emits. `listQueryCases` names the list declarations whose planner cases are recorded. `assembled` builds a value from its module's half and the parts other pure modules declare (the nav manifest: the core's lists and each plugin's rows), and a functionCases entry with `leadingValue` is called with that contract value ahead of its recorded args. `functionCases` runs pure functions over listed inputs (`args`, or `argsProduct` for every combination) into function-cases.generated.json, so each platform's formatter or rule replays the console's answers.",
   "modules": {
     "libs/shared/util/tools/src/lib/list-query/list-query-plan.ts": {
       "types": [
@@ -874,7 +874,8 @@
         "NativeNavConsoleRef",
         "NativeNavConsoleSurface",
         "NativeNavElsewhere",
-        "ResolvedNavList"
+        "ResolvedNavList",
+        "NativeNavContribution"
       ],
       "values": [
         "NATIVE_NAV_MANIFEST",
@@ -894,6 +895,36 @@
         "ONE_BOX_QUERY_MAX",
         "ONE_BOX_WORKSPACES_GROUP",
         "ONE_BOX_SCREENS_GROUP"
+      ]
+    }
+  },
+  "assembled": {
+    "NATIVE_NAV_MANIFEST": {
+      "$comment": "The core's lists and rows, with each plugin's NATIVE_NAV_ROWS placed and its NATIVE_NAV_ELSEWHERE added (assembleNativeNav). apps/console/specs/native-nav-manifest.spec.ts holds this list to every plugin that has a native-nav module.",
+      "with": "assembleNativeNav",
+      "collect": [
+        "NATIVE_NAV_ROWS",
+        "NATIVE_NAV_ELSEWHERE"
+      ],
+      "parts": [
+        "libs/plugins/accounting/src/lib/native-nav.ts",
+        "libs/plugins/ai/src/lib/native-nav.ts",
+        "libs/plugins/bookings/src/lib/native-nav.ts",
+        "libs/plugins/commerce/src/lib/native-nav.ts",
+        "libs/plugins/crm/src/lib/native-nav.ts",
+        "libs/plugins/data/src/lib/native-nav.ts",
+        "libs/plugins/email/src/lib/native-nav.ts",
+        "libs/plugins/events-calendar/src/lib/native-nav.ts",
+        "libs/plugins/forms/src/lib/native-nav.ts",
+        "libs/plugins/funnels/src/lib/native-nav.ts",
+        "libs/plugins/inbox/src/lib/native-nav.ts",
+        "libs/plugins/logic/src/lib/native-nav.ts",
+        "libs/plugins/marketing/src/lib/native-nav.ts",
+        "libs/plugins/marketplace/src/lib/native-nav.ts",
+        "libs/plugins/outreach/src/lib/native-nav.ts",
+        "libs/plugins/redirects/src/lib/native-nav.ts",
+        "libs/plugins/sms/src/lib/native-nav.ts",
+        "libs/plugins/workflows/src/lib/native-nav.ts"
       ]
     }
   },
@@ -2745,6 +2776,20 @@
         ],
         [
           "text"
+        ],
+        [
+          {
+            "type": "content.order",
+            "link": "/h1/orders",
+            "orgId": "o1",
+            "uid": "u-2"
+          }
+        ],
+        [
+          {
+            "type": "content.order",
+            "uid": 7
+          }
         ]
       ]
     },
@@ -27502,6 +27547,7 @@
     },
     "resolveNavList": {
       "module": "libs/aglyn/src/lib/app-utils/native-nav.ts",
+      "leadingValue": "NATIVE_NAV_MANIFEST",
       "args": [
         [
           "site",
@@ -27569,6 +27615,7 @@
     },
     "searchNavScreens": {
       "module": "libs/aglyn/src/lib/app-utils/one-box-search.ts",
+      "leadingValue": "NATIVE_NAV_MANIFEST",
       "args": [
         [
           "billing",

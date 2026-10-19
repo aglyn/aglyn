@@ -73,7 +73,18 @@ export interface RegisteredPluginSearchSource {
   source: PluginSearchSource
 }
 
-const registrations: RegisteredPluginSearchSource[] = []
+/**
+ * On `globalThis` under `Symbol.for`, never at module scope (AGL-3947). The
+ * sources are registered at boot, from `instrumentation.ts`, which Next
+ * compiles apart from the routes, so the boot and `/api/search` each hold
+ * their own copy of this module.
+ */
+const REGISTRY_KEY = Symbol.for('@aglyn/aglyn:plugin-search-sources')
+const globalScope = globalThis as typeof globalThis & {
+  [REGISTRY_KEY]?: RegisteredPluginSearchSource[]
+}
+const registrations: RegisteredPluginSearchSource[] =
+  globalScope[REGISTRY_KEY] ?? (globalScope[REGISTRY_KEY] = [])
 
 /**
  * Registers a plugin's server search sources. Owner = the loader's marker
