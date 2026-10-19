@@ -45,6 +45,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.backhandler.BackHandler
@@ -752,7 +754,7 @@ private fun WindowTabStrip(tabs: ShellTabs, onSelectTab: (ShellTab) -> Unit, onC
     Modifier.fillMaxWidth().background(shellColors.titleBar)
       // The row stands in for the title bar: a double-click on it zooms the window (or what the Mac is set to do).
       .then(if (doubleClick != null) Modifier.pointerInput(doubleClick) { detectTapGestures(onDoubleTap = { doubleClick() }) } else Modifier)
-      .height(if (m.compact) 34.dp else 40.dp).padding(start = lights, end = 8.dp).testTag("tab-strip"),
+      .height(if (m.compact) 34.dp else 40.dp).padding(start = lights, end = if (LocalWindowCaption.current != null) 0.dp else 8.dp).testTag("tab-strip"),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {
@@ -762,6 +764,17 @@ private fun WindowTabStrip(tabs: ShellTabs, onSelectTab: (ShellTab) -> Unit, onC
     TitleBarButton("New tab  ${shortcutText("T")}", "add", "tab-new", onClick = onNewTab)
     // A tablet has no menu bar (Tab ▸ Show all tabs), so its strip offers the overview.
     if (!hasMenuBar && tabs.tabs.size > 1) TitleBarButton("All tabs", "grid_view", "tab-overview") { tabs.overview = true }
+    // A window that draws its own caption (Windows): the row's empty stretch drags it, and its buttons end the row.
+    val caption = LocalWindowCaption.current
+    if (caption != null) {
+      Spacer(
+        Modifier.weight(1f).fillMaxHeight().testTag("window-caption-drag").onGloballyPositioned { c ->
+          val at = c.positionInWindow()
+          caption.drag = CaptionRect(at.x, at.y, at.x + c.size.width, at.y + c.size.height)
+        },
+      )
+      caption.buttons()
+    }
   }
   HorizontalDivider(color = shellColors.divider.copy(alpha = shellColors.divider.alpha * 0.6f))
 }

@@ -3,6 +3,7 @@ package com.aglyn.desktop
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.key.Key
@@ -53,7 +54,26 @@ fun ApplicationScope.AglynWindow(
   content: @Composable FrameWindowScope.(onIntroRevealed: () -> Unit) -> Unit,
 ) {
   val state = rememberWindowState(size = INTRO_SIZE, position = WindowPosition(Alignment.Center))
-  Window(onCloseRequest = ::exitApplication, title = title, state = state, icon = aglynMarkPainter()) {
+  // Windows draws no title bar: the app's tab row is the caption, with Windows-styled buttons at its end (Zach, option A).
+  val caption = if (isWindows) {
+    remember {
+      lateinit var made: com.aglyn.shell.WindowCaption
+      made = com.aglyn.shell.WindowCaption {
+        WindowsCaptionButtons(
+          made,
+          onMinimize = { state.isMinimized = true },
+          onToggleMaximize = { state.placement = if (state.placement == WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized },
+          onClose = ::exitApplication,
+        )
+      }
+      made
+    }
+  } else null
+  Window(onCloseRequest = ::exitApplication, title = title, state = state, icon = aglynMarkPainter(), undecorated = isWindows) {
+    if (caption != null) {
+      LaunchedEffect(Unit) { WindowsFrame.install(window, caption) }
+      LaunchedEffect(state.placement) { caption.maximized = state.placement == WindowPlacement.Maximized }
+    }
     val dark = isSystemInDarkTheme()
     LaunchedEffect(dark) {
       val background = (if (dark) AglynTokens.dark else AglynTokens.light).background
@@ -77,7 +97,11 @@ fun ApplicationScope.AglynWindow(
         TitleBarAction.ZOOM -> state.placement = if (state.placement == WindowPlacement.Maximized) WindowPlacement.Floating else WindowPlacement.Maximized
       }
     }
-    androidx.compose.runtime.CompositionLocalProvider(com.aglyn.shell.LocalWindowDoubleClick provides doubleClick) {
+    androidx.compose.runtime.CompositionLocalProvider(
+      // On Windows the caption itself answers double-clicks (HTCAPTION), so the row's own handler stands down there.
+      com.aglyn.shell.LocalWindowDoubleClick provides doubleClick.takeIf { caption == null },
+      com.aglyn.shell.LocalWindowCaption provides caption,
+    ) {
       content {
         scope.launch {
           // Grow about the window's center over the destination's 220 ms.
@@ -118,3 +142,5 @@ private fun titleBarDoubleClickAction(): TitleBarAction {
     else -> TitleBarAction.ZOOM
   }
 }
+
+private val isWindows = System.getProperty("os.name").orEmpty().startsWith("Windows")

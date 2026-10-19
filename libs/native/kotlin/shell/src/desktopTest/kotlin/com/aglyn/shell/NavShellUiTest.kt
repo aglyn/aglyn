@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
@@ -145,6 +146,20 @@ class NavShellUiTest {
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("search-results") > 0 }
     assertEquals(0, onAllNodesWithTagCount("one-box"))
     onNodeWithTag("search-results-field").assertTextContains("pages")
+  }
+
+  @Test
+  fun aWindowThatDrawsItsCaptionPutsItsButtonsAndDragAreaInTheTabRow() = runComposeUiTest {
+    val caption = WindowCaption { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.testTag("caption-buttons")) }
+    setContent {
+      androidx.compose.runtime.CompositionLocalProvider(LocalWindowCaption provides caption) { AglynShell(testServices(userDoc = emptyMap())) }
+    }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("caption-buttons") > 0 }
+    onNodeWithTag("window-caption-drag").assertExists()
+    waitUntil(timeoutMillis = 3_000) { caption.drag != null }
+    // The drag area is the row's empty stretch: it starts after the tabs and the + button.
+    assertTrue(caption.drag!!.left > 0f && caption.drag!!.right > caption.drag!!.left)
   }
 
   @Test
