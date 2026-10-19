@@ -617,7 +617,7 @@ struct DatasetDetailView: View {
         AglynDetailRow("Singular name", value: dataset.singular.isEmpty ? nil : dataset.singular)
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .accessibilityIdentifier("dataset-detail")
     .task(id: "\(dataset.id)-\(dataset.updatedAt?.timeIntervalSince1970 ?? 0)") {

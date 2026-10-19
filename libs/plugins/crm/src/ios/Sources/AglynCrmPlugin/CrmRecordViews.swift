@@ -312,7 +312,7 @@ struct RecordDetail: View {
         ForEach(activity.rows, id: \.id) { entry in activityRow(entry) }
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .navigationTitle(row.title)
     .aglynScreenTitle(row.title)

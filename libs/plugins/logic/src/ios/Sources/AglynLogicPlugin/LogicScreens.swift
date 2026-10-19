@@ -392,7 +392,7 @@ private struct VariableEditorSheet: View {
           Text("Optional: a workflow that computes the value; the value above is its fallback")
         }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle(draft.id == nil ? "New variable" : "Edit variable")
       .aglynScreenTitle(draft.id == nil ? "New variable" : "Edit variable")
       #if os(iOS)

@@ -70,7 +70,7 @@ public struct AglynBoard<Item: Identifiable, Card: View>: View {
           .accessibilityIdentifier("board-column-\(column.id)")
         }
       }
-      .padding(AglynSpace.two)
+      .aglynContentEdges().padding(.vertical, AglynSpace.two)
     }
     .background(AglynColor.page)
   }

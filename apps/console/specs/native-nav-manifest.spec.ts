@@ -59,6 +59,16 @@ const ROOT = resolve(__dirname, '../../..')
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8')
 
 /**
+ * Rows gated on a plugin other than the one that owns their screen, by screen,
+ * each for a reason its native-nav module states (AGL-3966): `sms` is
+ * infrastructure with no switch, so its Customer texts row shows where the
+ * store is on, and the switch lives on commerce's Customer notifications card.
+ * Anything not named here is gated on its own plugin.
+ */
+const GATED_ON_ANOTHER_PLUGIN: Readonly<Record<string, string>> = { 'sms.texts': 'commerce' }
+const screenOwner = (screen: string) => screen.split('.')[0]
+
+/**
  * The manifest the apps read: the core's lists with every plugin's rows
  * placed, as `generate:native-contracts` assembles it (its `--check` keeps
  * the file current). Read from disk, so this app spec imports no plugin.
@@ -230,7 +240,7 @@ describe('the native nav manifest says the console’s words', () => {
 
   it('a native-only row is named as its screen is named on both platforms', () => {
     for (const row of allRows.filter((entry) => entry.console.surface === 'nativeOnly')) {
-      const plugin = row.pluginId as string
+      const plugin = GATED_ON_ANOTHER_PLUGIN[row.screen] ? screenOwner(row.screen) : (row.pluginId as string)
       expect(read(`libs/plugins/${plugin}/src/android/src/commonMain/kotlin/com/aglyn/plugins/${plugin}/Register.kt`)).toContain(`"${row.label}"`)
       const swift = readdirSync(join(ROOT, `libs/plugins/${plugin}/src/ios/Sources`))[0]
       expect(read(`libs/plugins/${plugin}/src/ios/Sources/${swift}/Register.swift`)).toContain(`"${row.label}"`)
@@ -310,8 +320,11 @@ describe('every plugin’s rows are assembled', () => {
     }
     for (const part of config.assembled.NATIVE_NAV_MANIFEST.parts) {
       const plugin = part.split('/')[2]
+      const gatedElsewhere = Object.entries(GATED_ON_ANOTHER_PLUGIN)
+        .filter(([screen]) => screenOwner(screen) === plugin)
+        .map(([, gate]) => gate)
       for (const match of read(part).matchAll(/pluginId: '([^']+)',\n\s+order/g)) {
-        expect([part, match[1]]).toEqual([part, plugin])
+        expect([part, gatedElsewhere.includes(match[1]) ? plugin : match[1]]).toEqual([part, plugin])
       }
     }
   })
@@ -374,7 +387,8 @@ describe('every row opens something real', () => {
     // A plugin's screen belongs to that plugin.
     if (pluginId && !screen.startsWith('core.') && !screen.startsWith('site.') && !screen.startsWith('shell.')) {
       const owner = plugins.find((plugin) => plugin.mobile?.contributes?.screens?.includes(screen))
-      expect([screen, owner?.id]).toEqual([screen, pluginId])
+      const expected = GATED_ON_ANOTHER_PLUGIN[screen] === pluginId ? screenOwner(screen) : pluginId
+      expect([screen, owner?.id]).toEqual([screen, expected])
     }
   })
 

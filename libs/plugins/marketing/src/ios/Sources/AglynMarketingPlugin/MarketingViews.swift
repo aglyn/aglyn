@@ -174,7 +174,7 @@ struct OverviewSection: View {
           caption: "running · \(experiments.rows.filter { $0.winnerVariantID != nil }.count) decided", actionLabel: "Open A/B testing") { open(.experiments) }
         }
       }
-      .padding(AglynSpace.two)
+      .aglynContentEdges().padding(.vertical, AglynSpace.two)
     }
     .task {
       let hostID = actions.hostID, orgID = actions.orgID, orgLevel = actions.orgLevel
@@ -365,7 +365,7 @@ struct CampaignDetail: View {
             Button("See its conversions", systemImage: "target") { context.navigate("marketing.conversions", ["campaign": campaignID]) }
           }
         }
-        .formStyle(.grouped)
+        .formStyle(.aglynGrouped)
         .aglynListBackground()
         .navigationTitle(row.name)
         .aglynScreenTitle(row.name)
@@ -871,7 +871,7 @@ struct ExperimentDetail: View {
             }
           }
         }
-        .formStyle(.grouped)
+        .formStyle(.aglynGrouped)
         .aglynListBackground()
         .navigationTitle(row.name)
         .aglynScreenTitle(row.name)

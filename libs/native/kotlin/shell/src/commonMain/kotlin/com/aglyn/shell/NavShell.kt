@@ -5,6 +5,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,9 +28,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
@@ -439,24 +439,41 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
         ) { widget.content(context) }
       }
     }
-    // The plan card (Figma 98:1048): the console meter closest to its limit where the window stands, until it is hidden for
-    // that limit here.
+    // The plan card (Figma 98:1048, AGL-3992): a slow carousel of the console's usage meters, the one that fits the screen in
+    // front first (the shared mapping, planCardMeterOrder); shown while the viewer can upgrade or a meter is near its limit.
     var planHides by remember(uid) { mutableStateOf(0) }
     val planOrgId = workspace.org?.id
     val planHostId = workspace.site?.id
-    val planNear by androidx.compose.runtime.produceState<PlanNear?>(null, planOrgId, planHostId, workspace.sites.size) {
-      value = planOrgId?.let { loadPlanNear(services, it, planHostId, workspace.sites.size) }
+    val planSiteIds = workspace.sites.map { it.id }
+    val planReadings by androidx.compose.runtime.produceState<PlanReadings?>(null, planOrgId, planHostId, planSiteIds) {
+      value = planOrgId?.let { loadPlanReadings(services, it, planHostId, planSiteIds) }
     }
+    val planScreen = navigator.current.let { it as? Route.Screen }?.screenId ?: NavKeys.parse(navigator.top)?.first
+      ?: if (navigator.top == ShellNavigator.HOME) NavKeys.HOME_SCREEN else null
+    val planContext = com.aglyn.contracts.planCardContext(planScreen, workspace.site != null)
     val planFoot: @Composable () -> Unit = {
-      val near = planNear
-      if (near != null && planOrgId != null && planHides >= 0 && services.prefs.get(planNearDismissedKey(planOrgId, near)) == null) {
-        com.aglyn.ui.PlanMeterCard(
-          detail = "${workspace.site?.name ?: workspace.org?.name ?: ""} · ${near.plan} plan",
-          label = near.label,
-          used = near.used,
-          limit = near.limit,
-          onUpgrade = { navigator.select(NavKeys.of("core.billing")) },
-          onHide = { services.prefs.set(planNearDismissedKey(planOrgId, near), "1"); planHides++ },
+      val loaded = planReadings
+      val logo = workspace.orgLogo
+      val offersUpgrade = logo?.plan != null && logo.plan !in setOf("agency", "enterprise") && !logo.enterprise &&
+        workspace.org?.role in setOf("owner", "admin")
+      if (loaded != null && planOrgId != null && planHides >= 0 && services.prefs.get(planCardHiddenKey(planOrgId, loaded.plan)) == null &&
+        com.aglyn.contracts.planCardShows(loaded.readings, offersUpgrade)
+      ) {
+        val byMeter = loaded.readings.associateBy { it.meter }
+        val lines = com.aglyn.contracts.planCardMeterOrder(loaded.readings, planContext).mapNotNull { meter ->
+          val reading = byMeter[meter] ?: return@mapNotNull null
+          val used = reading.used ?: return@mapNotNull null
+          val limit = reading.limit ?: return@mapNotNull null
+          com.aglyn.ui.PlanMeterLine(meter, com.aglyn.contracts.Contracts.planCardMeterLabels[meter] ?: meter, planMeterFigures(meter, used, limit), (used / limit).toFloat())
+        }
+        com.aglyn.ui.PlanMeterCarousel(
+          detail = "${workspace.site?.name ?: workspace.org?.name ?: ""} · ${loaded.plan} plan",
+          meters = lines,
+          advanceMs = com.aglyn.contracts.Contracts.planCardAdvanceMs,
+          warningShare = com.aglyn.contracts.Contracts.planCardWarningShare.toFloat(),
+          onUpgrade = if (offersUpgrade) ({ actions.openScreen("core.billing", emptyMap()) }) else null,
+          onOpenUsage = { actions.openScreen("core.billing.usage", emptyMap()) },
+          onHide = { services.prefs.set(planCardHiddenKey(planOrgId, loaded.plan), "1"); planHides++ },
           modifier = Modifier.padding(start = com.aglyn.ui.shellMetrics.sidebarPad, end = com.aglyn.ui.shellMetrics.sidebarPad, bottom = 12.dp),
         )
       }
@@ -545,7 +562,16 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
               sections?.let { SectionTabs(it, navigator.top) { key -> navigator.select(key) } }
             }
             Row(Modifier.weight(1f).fillMaxWidth()) {
-              Box(Modifier.weight(1f).fillMaxHeight()) { CompositionLocalProvider(com.aglyn.ui.LocalPageCrumbs provides crumbsSlot) { body() } }
+              // The content area brings every screen in by E − 16, so a screen that pads its content by 16 lands on the one
+              // content edge E (Zach 10/19); an in-app browser page stays full-bleed.
+              val bodyInset = if (route is Route.Web) 0.dp else (com.aglyn.ui.contentInset() - com.aglyn.ui.DetailPanePadding).coerceAtLeast(0.dp)
+              Box(Modifier.weight(1f).fillMaxHeight().padding(horizontal = bodyInset)) {
+                CompositionLocalProvider(
+                  com.aglyn.ui.LocalPageCrumbs provides crumbsSlot,
+                  com.aglyn.ui.LocalBodyInset provides bodyInset,
+                  com.aglyn.ui.LocalContentInset provides com.aglyn.ui.DetailPanePadding,
+                ) { body() }
+              }
               if (assist != null && chrome.aiPanel && route !is Route.Web) {
                 VerticalDivider(color = shellColors.divider)
                 Column(Modifier.width(380.dp).fillMaxHeight().background(shellColors.sidebar).testTag("ai-panel")) {
@@ -739,25 +765,43 @@ private fun ShellBody(
   }
 }
 
-/** An area's sections as tabs over it (Contacts, Leads, Deals… inside CRM), the console's section rail. */
+/**
+ * An area's sections as tabs over it (Contacts, Leads, Deals… inside CRM), the console's section rail. The strip scrolls
+ * edge to edge, but its first label starts on the content edge E and the underline sits under each label (Figma draws no
+ * full-bleed strip, so the rule's edge holds; a Material tab row centers a short label in a 90 minimum and missed it).
+ */
 @Composable
 internal fun SectionTabs(sections: List<NavSectionItem>, selected: String, onSelect: (String) -> Unit) {
   val index = sections.indexOfFirst { it.key == selected }.coerceAtLeast(0)
-  PrimaryScrollableTabRow(
-    selectedTabIndex = index,
-    edgePadding = 16.dp,
-    containerColor = MaterialTheme.colorScheme.background,
-    modifier = Modifier.testTag("section-tabs"),
-    divider = { HorizontalDivider(color = shellColors.divider) },
-  ) {
-    sections.forEachIndexed { i, section ->
-      Tab(
-        selected = i == index,
-        onClick = { onSelect(section.key) },
-        text = { Text(section.label, maxLines = 1) },
-        modifier = Modifier.testTag("section-${section.id}"),
-      )
+  val edge = com.aglyn.ui.contentInset()
+  val scroll = androidx.compose.foundation.rememberScrollState()
+  Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).testTag("section-tabs")) {
+    Row(
+      Modifier.fillMaxWidth().horizontalScroll(scroll).padding(start = edge - 12.dp, end = edge - 12.dp).selectableGroup(),
+      verticalAlignment = Alignment.Bottom,
+    ) {
+      sections.forEachIndexed { i, section ->
+        val on = i == index
+        Column(
+          Modifier.clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+            .selectable(selected = on, role = Role.Tab, onClick = { onSelect(section.key) })
+            .padding(horizontal = 12.dp).height(44.dp).testTag("section-${section.id}"),
+          verticalArrangement = Arrangement.Bottom,
+          horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+          Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Text(
+              section.label, maxLines = 1, fontSize = 14.sp, lineHeight = 20.sp,
+              fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
+              color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+          // The underline spans the label, the console's tab indicator.
+          Box(Modifier.height(3.dp).then(if (on) Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)).background(MaterialTheme.colorScheme.primary) else Modifier))
+        }
+      }
     }
+    HorizontalDivider(color = shellColors.divider)
   }
 }
 
@@ -855,7 +899,8 @@ private data class Crumb(val label: String, val open: (() -> Unit)?)
 @Composable
 private fun Breadcrumbs(steps: List<Crumb>, star: com.aglyn.ui.PageStarSlot? = null) {
   // On the column's content edge E: a step that leads back pads its own text by 2 for its hover, so the row starts 2 in.
-  val edge = com.aglyn.ui.contentInset()
+  // E above the content area; inside it (atop a detail column) what is left of E there.
+  val edge = com.aglyn.ui.LocalContentInset.current ?: com.aglyn.ui.contentInset()
   val firstPads = steps.firstOrNull()?.let { it.open != null && steps.size > 1 } == true
   Row(
     Modifier.fillMaxWidth().padding(start = if (firstPads) edge - 2.dp else edge, end = edge, top = 12.dp, bottom = 4.dp).testTag("title-crumb"),

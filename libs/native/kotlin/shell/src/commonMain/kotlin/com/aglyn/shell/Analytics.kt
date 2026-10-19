@@ -182,7 +182,7 @@ internal fun AnalyticsScreen(services: ShellServices, context: ShellPluginContex
 
   Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.TopCenter) {
     Column(
-      Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = com.aglyn.ui.contentInset(), vertical = space(2f)).testTag("analytics"),
+      Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)).testTag("analytics"),
       verticalArrangement = Arrangement.spacedBy(space(2f)),
     ) {
       SectionCard("Traffic", Modifier.fillMaxWidth().testTag("analytics-traffic")) {

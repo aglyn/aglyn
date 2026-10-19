@@ -213,6 +213,7 @@ const areas = [
   ['accounting', 'seedAccounting'],
   ['listings', 'seedListings'],
   ['white-label', 'seedWhiteLabel'],
+  ['usage', 'seedUsage'],
   ['legacy-workspace', 'seedLegacyWorkspace'],
 ]
 let staff = null

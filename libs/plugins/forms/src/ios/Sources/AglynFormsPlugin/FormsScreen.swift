@@ -384,7 +384,7 @@ struct FormNameSheet: View {
           if let message { Text(message) }
         }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle(title)
       .aglynScreenTitle(title)
       #if os(iOS)

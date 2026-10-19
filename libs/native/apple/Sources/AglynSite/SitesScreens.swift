@@ -291,7 +291,7 @@ struct SiteOverview: View {
         }
       }
     }
-    .formStyle(.grouped)
+    .formStyle(.aglynGrouped)
     .aglynListBackground()
     .accessibilityIdentifier("site-detail")
   }
@@ -328,7 +328,7 @@ struct CreateSiteSheet: View {
       Form {
         Section { AglynNotice(block.message, tone: block == .role ? .warning : .info) }
       }
-      .formStyle(.grouped)
+      .formStyle(.aglynGrouped)
       .navigationTitle("Create a site")
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
