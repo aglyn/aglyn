@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.aglyn.shell.handOver
+import com.aglyn.shell.handOverToIntro
 import androidx.lifecycle.lifecycleScope
 import com.aglyn.shell.handleConsoleHandoffReturn
 import com.aglyn.core.AuthState
@@ -27,10 +28,14 @@ import com.aglyn.shell.EXTRA_UID
 import com.aglyn.shell.showAccountOfPush
 import com.aglyn.shell.AglynShell
 import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
   /** A link to open once signed in: a tapped notification's, or an aglyn:// / App Link URL. */
   private var pendingLink by mutableStateOf<String?>(null)
+
+  /** The platform splash has gone, so the launch intro under it may move (P14). */
+  private var splashGone by mutableStateOf(false)
 
   private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
@@ -42,8 +47,10 @@ class MainActivity : ComponentActivity() {
     window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(getColor(R.color.aglyn_splash_ground)))
     enableEdgeToEdge()
     val services = (application as AglynApplication).services
-    // The splash stays up until the auth state is known, then hands over with the spec's exit (AGL-3934).
-    splash.handOver(services)
+    // A first launch hands the splash straight to the launch intro, whose first frame is the splash's own picture (P14); a
+    // warm start keeps the splash up until the auth state is known, then exits with the spec's motion (AGL-3934).
+    val playIntro = !com.aglyn.ui.LaunchIntro.hasPlayed
+    if (playIntro) splash.handOverToIntro { splashGone = true } else splash.handOver(services)
     // Single sign-on's console page handing the code back finishes the sign-in here; anything else opens in the shell.
     openLink(intent, linkOf(intent)?.takeUnless { services.handleConsoleHandoffReturn(it, lifecycleScope) })
     // Debug builds only: `adb shell am start … --ez autoSignIn true` signs the seeded member in.
@@ -67,7 +74,10 @@ class MainActivity : ComponentActivity() {
         // "Connect Google": the Credential Manager's Google ID token.
         com.aglyn.screens.LocalGoogleCredentialSource provides com.aglyn.shell.rememberAndroidGoogleCredentialSource(BuildConfig.GOOGLE_WEB_CLIENT_ID),
       ) {
-        AglynShell(services, autoSignIn = autoSignIn, pendingLink = pendingLink, onLinkOpened = { pendingLink = null })
+        AglynShell(
+          services, autoSignIn = autoSignIn, pendingLink = pendingLink, onLinkOpened = { pendingLink = null },
+          playIntro = playIntro, launchMark = SPLASH_MARK, launchScreenGone = { splashGone },
+        )
       }
     }
   }
@@ -112,5 +122,8 @@ class MainActivity : ComponentActivity() {
 
   private companion object {
     const val ASKED = "aglyn.notifications.asked"
+
+    /** The splash icon's mark (res/drawable-v31/splash_icon: 112 on the 288 canvas, Figma "Android / Splash"). */
+    val SPLASH_MARK = 112.dp
   }
 }

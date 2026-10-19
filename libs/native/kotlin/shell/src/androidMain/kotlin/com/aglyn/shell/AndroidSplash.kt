@@ -40,3 +40,22 @@ fun SplashScreen.handOver(services: ShellServices) {
     }
   }
 }
+
+/**
+ * P14 (Zach 10/19: "the splash logo animation to lockup flashes a lot and doesn't flow"): a first launch hands the splash to
+ * the Compose launch intro, whose frame 1 is the splash's own picture (its ground, its mark at the same size and place). So
+ * nothing waits on the splash: the app's first frame takes over at once and the intro moves on from there (the wordmark wipes
+ * in, the lockup holds until the auth state is known, the destination rises in). The splash is removed once its icon has drawn
+ * in, with no exit motion of its own, and then [onGone] lets the intro start. A warm start (the intro already played) keeps
+ * [handOver].
+ */
+fun SplashScreen.handOverToIntro(onGone: () -> Unit) {
+  setOnExitAnimationListener { splash ->
+    val iconEnds = runCatching { splash.iconAnimationStartMillis + splash.iconAnimationDurationMillis }.getOrDefault(0L)
+    val wait = (iconEnds - android.os.SystemClock.uptimeMillis()).coerceIn(0L, AuthTokens.Intro.ANDROID_ICON_MS.toLong())
+    splash.view.postDelayed({
+      splash.remove()
+      onGone()
+    }, wait)
+  }
+}

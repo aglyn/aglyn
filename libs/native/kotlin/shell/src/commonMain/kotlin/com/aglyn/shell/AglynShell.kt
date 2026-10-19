@@ -61,10 +61,13 @@ fun AglynShell(
   onLinkOpened: () -> Unit = {},
   /** Light or dark regardless of the system's; null follows the system. */
   dark: Boolean? = null,
-  /** The desktop's first window plays the launch intro (Android's splash screen plays instead). */
+  /** The desktop's first window, and Android's first launch (on from its splash), play the launch intro. */
   playIntro: Boolean = false,
   /** The intro has handed over to the destination (the desktop's window grows then). */
   onIntroRevealed: () -> Unit = {},
+  /** Android: the splash screen's mark size the intro starts from, and whether the splash has gone (the intro then moves). */
+  launchMark: androidx.compose.ui.unit.Dp? = null,
+  launchScreenGone: () -> Boolean = { true },
 ) {
   AccountTheme(services, dark) {
     androidx.compose.runtime.CompositionLocalProvider(
@@ -94,7 +97,10 @@ fun AglynShell(
     // One signed-out screen, moved rather than rebuilt when the account appears mid sign-up: rebuilding it cancelled the
     // sign-up's own coroutine, so its acceptance, names and held workspace could go unwritten.
     val signedOutScreen = remember(services, autoSignIn) { movableContentOf { SignedOutScreen(services, autoSignIn) } }
-    LaunchHost(services, ready = state !is AuthState.Restoring, backdrop = authScreen, playIntro = playIntro, onRevealed = onIntroRevealed) { reveal ->
+    LaunchHost(
+      services, ready = state !is AuthState.Restoring, backdrop = authScreen, playIntro = playIntro, onRevealed = onIntroRevealed,
+      launchMark = launchMark, mayStart = launchScreenGone,
+    ) { reveal ->
       when (state) {
         AuthState.Restoring -> Unit
         AuthState.SignedOut -> AddAccountFrame(services) { signedOutScreen() }

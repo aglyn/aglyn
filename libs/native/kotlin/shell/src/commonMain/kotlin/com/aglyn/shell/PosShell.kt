@@ -78,6 +78,9 @@ fun PosShell(
   /** The desktop's first window plays the launch intro (Android's splash screen plays instead). */
   playIntro: Boolean = false,
   onIntroRevealed: () -> Unit = {},
+  /** Android: the splash screen's mark size the intro starts from, and whether the splash has gone (the intro then moves). */
+  launchMark: androidx.compose.ui.unit.Dp? = null,
+  launchScreenGone: () -> Boolean = { true },
 ) {
   AccountTheme(services, dark) {
     com.aglyn.webview.ProvideInAppBrowser(secureTab = services.openHostedPage) {
@@ -104,7 +107,10 @@ fun PosShell(
       val state = auth
       val authScreen = state is AuthState.SignedOut ||
         (state is AuthState.SignedIn && (services.authFlow.landing || (!state.user.emailVerified && impersonation == null)))
-      LaunchHost(services, ready = state !is AuthState.Restoring, backdrop = authScreen, playIntro = playIntro, onRevealed = onIntroRevealed) { reveal ->
+      LaunchHost(
+        services, ready = state !is AuthState.Restoring, backdrop = authScreen, playIntro = playIntro, onRevealed = onIntroRevealed,
+        launchMark = launchMark, mayStart = launchScreenGone,
+      ) { reveal ->
         when (state) {
           AuthState.Restoring -> Unit
           AuthState.SignedOut -> SignedOutScreen(services, autoSignIn, deviceScreens, onDeviceMode)

@@ -20,9 +20,10 @@ import com.aglyn.ui.frame
 
 /**
  * The window's first layer (AGL-3934): the Facets ground behind every signed-out screen (so it holds still as they change) and,
- * where [playIntro] is set (the desktop's first window), the launch intro over it until the app is [ready]. Android plays its
- * own splash screen instead, kept up until the auth state is known. [content] gets the reveal to apply: a sign-in screen's card
- * rises in, the signed-in shell fades in whole.
+ * where [playIntro] is set, the launch intro over it until the app is [ready]. The desktop's first window plays it from a
+ * centered lockup. Android's first launch plays it on from the platform splash (P14): frame 1 is the splash's plain ground and
+ * [launchMark] mark, centered on the whole window, and the motion waits for [mayStart] (the splash gone). [content] gets the
+ * reveal to apply: a sign-in screen's card rises in, the signed-in shell fades in whole.
  */
 @Composable
 internal fun LaunchHost(
@@ -31,19 +32,21 @@ internal fun LaunchHost(
   backdrop: Boolean,
   playIntro: Boolean,
   onRevealed: () -> Unit = {},
+  launchMark: androidx.compose.ui.unit.Dp? = null,
+  mayStart: () -> Boolean = { true },
   content: @Composable (AuthReveal) -> Unit,
 ) {
   val intro = remember { if (playIntro) LaunchIntro.create() else LaunchIntro.skipped() }
   val isReady by rememberUpdatedState(ready)
   val reduce = com.aglyn.ui.reduceMotion()
   LaunchedEffect(intro) {
-    intro.run(reduceMotion = reduce) { isReady }
+    intro.run(reduceMotion = reduce, isReady = { isReady }, mayStart = mayStart)
     onRevealed()
   }
   val frame = intro.frame()
   val brand = services.config.brandName
   Box(Modifier.fillMaxSize()) {
-    if (backdrop || !intro.finished) FacetsBackground(Modifier.fillMaxSize(), frame.settle, frame.light)
+    if (backdrop || !intro.finished) FacetsBackground(Modifier.fillMaxSize(), frame.settle, frame.light, flatStart = launchMark != null && !intro.finished)
     if (ready) {
       val reveal = AuthReveal(frame.rise, frame.reveal)
       CompositionLocalProvider(LocalAuthReveal provides reveal) { content(reveal) }
@@ -51,7 +54,9 @@ internal fun LaunchHost(
     if (!intro.finished) {
       LaunchMark(
         intro, if (services.app == NativeApp.POS) "$brand POS" else brand, currentWidthClass() == WidthClass.COMPACT,
-        Modifier.fillMaxSize().safeDrawingPadding(),
+        // The splash centers its mark on the whole window, system bars included.
+        if (launchMark != null) Modifier.fillMaxSize() else Modifier.fillMaxSize().safeDrawingPadding(),
+        launchMark = launchMark,
       )
     }
   }

@@ -9,6 +9,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.aglyn.shell.handOver
+import com.aglyn.shell.handOverToIntro
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.aglyn.camera.CameraXBarcodeScanner
 import com.aglyn.ui.LocalCameraScanner
@@ -19,6 +24,9 @@ import com.aglyn.shell.PosShell
 import kotlinx.coroutines.CompletableDeferred
 
 class MainActivity : ComponentActivity() {
+  /** The platform splash has gone, so the launch intro under it may move (P14). */
+  private var splashGone by mutableStateOf(false)
+
   /** The card reader's permission ask: one at a time, answered by this activity. */
   private var pendingReaderAsk: CompletableDeferred<Boolean>? = null
   private val askReaderPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { answers ->
@@ -42,8 +50,10 @@ class MainActivity : ComponentActivity() {
     enableEdgeToEdge()
     val app = application as AglynPosApplication
     val services = app.services
-    // The splash stays up until the auth state is known, then hands over with the spec's exit (AGL-3934).
-    splash.handOver(services)
+    // A first launch hands the splash straight to the launch intro, whose first frame is the splash's own picture (P14); a
+    // warm start keeps the splash up until the auth state is known, then exits with the spec's motion (AGL-3934).
+    val playIntro = !com.aglyn.ui.LaunchIntro.hasPlayed
+    if (playIntro) splash.handOverToIntro { splashGone = true } else splash.handOver(services)
     app.permissionGate = readerGate
     // Stripe's card form registers for its result now, before this activity starts.
     app.keyedCards.attach(this)
@@ -59,7 +69,8 @@ class MainActivity : ComponentActivity() {
         // "Continue with Google": the Credential Manager's Google ID token.
         com.aglyn.screens.LocalGoogleCredentialSource provides com.aglyn.shell.rememberAndroidGoogleCredentialSource(BuildConfig.GOOGLE_WEB_CLIENT_ID),
       ) {
-        PosShell(services, autoSignIn = autoSignIn)
+        // The splash icon's mark is 112 on its 288 canvas (res/drawable-v31/splash_icon, Figma "Android / Splash").
+        PosShell(services, autoSignIn = autoSignIn, playIntro = playIntro, launchMark = 112.dp, launchScreenGone = { splashGone })
       }
     }
   }
