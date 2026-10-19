@@ -46,8 +46,8 @@ export function PlanLockedWidget(props: { lockedWidget?: PlanLockedWidgetContent
     <CardDisplay
       header={lockedWidget.title}
       help={docsHelp('billing', {
-        anchor: '#current-plan',
-        excerpt: 'What each plan includes, and how to change plans from Billing.',
+        anchor: '#locked-features',
+        excerpt: 'Why a card is locked, and the plan that turns it on.',
       })}
       contentGutterX
       contentGutterY
