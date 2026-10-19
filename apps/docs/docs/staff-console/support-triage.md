@@ -157,10 +157,21 @@ worse than one that admits the gap:
 
 A **Site Care** request is a support ticket from a workspace that has the Site Care
 add-on. It arrives when a member presses **Request a change** on a site's dashboard,
-or by email to the Site Care address (a reply to any Site Care email joins its own
-request). The queue marks it with a **Site Care** chip and a clock: the promise is the
-change **done** within 2 business days, so the clock runs until the request is closed,
-not until the first reply, and a reply on the thread does not stop it.
+or by email. Site Care has no email address of its own: owners write to the support
+address, and a message from a member of a workspace with Site Care, sent from the
+address they sign in with, files itself as a Site Care request on that workspace. A
+reply to any Site Care email joins its own request. The queue marks it with a
+**Site Care** chip and a clock: the promise is the change **done** within 2 business
+days, so the clock runs until the request is closed, not until the first reply, and a
+reply on the thread does not stop it.
+
+- **Everything else stays as it was.** A message to the support address from anyone
+  who is not a member of a workspace with Site Care is ordinary support mail, and
+  nothing is sent back to its sender automatically. Out-of-office and other automatic
+  replies are never filed, even from a member.
+- **Answer on the request, not from the inbox.** A Site Care request that came by
+  email is still in the support inbox too. Reply from the request's thread, so the
+  owner's answer joins the same request instead of opening a new one.
 
 ### Working a request {#site-care-working}
 
