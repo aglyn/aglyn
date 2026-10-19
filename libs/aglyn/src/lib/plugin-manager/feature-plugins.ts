@@ -39,6 +39,7 @@
  */
 
 import { runInAction } from 'mobx'
+import type { ClientBuildIntake } from '../app-utils/client-build'
 import type { OrgPermissions } from '../app-utils/org-permissions'
 import type { ReleaseFlagKey } from '../app-utils/release-flags'
 import type { SeoAuditReport } from '../app-utils/seo-audit'
@@ -1386,6 +1387,31 @@ export interface ConsoleHostFirstRunZoneProps {
    * resolves `false` when it could not, with the reason shown.
    */
   pendingSite?: ConsolePendingSite
+  /**
+   * Present when staff build the site for a client (AGL-3958), from the
+   * one-screen build. See {@link ConsoleClientBuildStart}.
+   */
+  clientBuild?: ConsoleClientBuildStart
+}
+
+/**
+ * A guided start for a site staff are building for a client (AGL-3958).
+ *
+ * The one-screen build asks the business details first, and creates the
+ * site and gathers the owner's photos before the start, so the start places
+ * those photos first. A widget given this asks none of what the intake
+ * already answered: it opens on its last step with the answers filled in,
+ * and passes the rest of the intake (the name, the towns, the phone, the
+ * email, the hours, the owner's own words) to what it builds. It stays with
+ * what it started, on the same screen, rather than navigating away from the
+ * build, which goes on to send the owner the preview.
+ */
+export interface ConsoleClientBuildStart {
+  intake: ClientBuildIntake
+  /** Called once the widget has started the site, with what it started. */
+  onStarted?: (started: { id: string }) => void
+  /** The widget's answer to whether it draws anything, as {@link ConsolePendingSite.ready}. */
+  ready?: (shown: boolean) => void
 }
 
 /**

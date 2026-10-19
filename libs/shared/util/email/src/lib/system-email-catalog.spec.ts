@@ -123,16 +123,19 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
 
     it('gives every Resend-delivered email a reason, and nothing else one', () => {
       // Premise: the catalog's Resend emails, all of them.
-      // The 31 written out — the workspace handoff and the upgrade proposal
+      // The 33 written out — the workspace handoff and the upgrade proposal
       // joined them in AGL-3466, the staff follow-up in AGL-3691, the weekly
-      // summary's workspace and site emails in AGL-3867 — the five
+      // summary's workspace and site emails in AGL-3867, the client build
+      // preview in AGL-3958, the hand-off that carries a proposal and its
+      // bundle link in AGL-3956 — the five
       // getting-started emails (AGL-3692), one per risk notice kind plus the risk
       // digest and review acknowledgment (AGL-3368, pinned in
       // `risk-notice-catalog.spec.ts`), the nine emails of a domain bought
-      // through the domains plugin (AGL-3962, `domain-emails.ts`), and the
-      // eight Site Care emails (AGL-3959).
+      // through the domains plugin (AGL-3962, `domain-emails.ts`), the
+      // eight Site Care emails (AGL-3959), and the four Site Care project
+      // emails (AGL-3970).
       expect(editable.length).toBe(
-        31 + 5 + 8 + RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length + Object.keys(DOMAIN_EMAIL_KEYS).length,
+        33 + 5 + 8 + 4 + RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length + Object.keys(DOMAIN_EMAIL_KEYS).length,
       )
       for (const entry of SYSTEM_EMAIL_TEMPLATES) {
         if (isSystemEmailEditable(entry)) {

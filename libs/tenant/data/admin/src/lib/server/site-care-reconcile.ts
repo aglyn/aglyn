@@ -27,6 +27,10 @@ import { readOrgBilling } from './org-billing'
 import { raiseOperatorAlert } from './operator-alerts'
 import { readSiteCareRequest } from './site-care-requests'
 import {
+  reconcileSiteCareProjects,
+  type SiteCareProjectFindingCode,
+} from './site-care-project-reconcile'
+import {
   listSiteCareExtraTimeItems,
   readExtraTimeItem,
   type SiteCareStripeOptions,
@@ -64,6 +68,8 @@ export type SiteCareFindingCode =
   | 'hours-mismatch'
   | 'month-total'
   | 'no-customer'
+  // A flat-quoted project's invoices (AGL-3970), in the same check.
+  | SiteCareProjectFindingCode
 
 export interface SiteCareFinding {
   orgId: string
@@ -77,6 +83,8 @@ export interface SiteCareReconcileReport {
   months: string[]
   orgs: number
   requests: number
+  /** Projects compared (AGL-3970). */
+  projects: number
   findings: SiteCareFinding[]
   alerted: number
   errors: string[]
@@ -221,6 +229,7 @@ export async function reconcileSiteCare(
     months,
     orgs: byOrg.size,
     requests: [...byOrg.values()].reduce((sum, rows) => sum + rows.length, 0),
+    projects: 0,
     findings: [],
     alerted: 0,
     errors: [],
@@ -303,5 +312,62 @@ export async function reconcileSiteCare(
       report.errors.push(`${orgId}: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
+  await reconcileProjectsInto(firestore, report, { nowMs, dryRun: input.dryRun, stripe: input.stripe })
   return report
+}
+
+/**
+ * The flat-quoted projects (AGL-3970), in the same run and on the same
+ * alert: one per workspace with findings, deduplicated a day like the
+ * month's, its `month` naming the projects rather than a month.
+ */
+async function reconcileProjectsInto(
+  firestore: FirebaseFirestore.Firestore,
+  report: SiteCareReconcileReport,
+  input: { nowMs: number; dryRun: boolean; stripe?: SiteCareStripeOptions },
+): Promise<void> {
+  const current = siteCareMonthKey(input.nowMs)
+  let projects
+  try {
+    projects = await reconcileSiteCareProjects(firestore, { nowMs: input.nowMs, stripe: input.stripe })
+  } catch (error) {
+    report.errors.push(`projects: ${error instanceof Error ? error.message : String(error)}`)
+    return
+  }
+  report.projects = projects.projects
+  report.errors.push(...projects.errors)
+  const byOrg = new Map<string, SiteCareFinding[]>()
+  for (const finding of projects.findings) {
+    const row: SiteCareFinding = {
+      orgId: finding.orgId,
+      month: current,
+      requestId: finding.projectId,
+      code: finding.code,
+      detail: finding.detail,
+    }
+    report.findings.push(row)
+    const list = byOrg.get(finding.orgId) ?? []
+    list.push(row)
+    byOrg.set(finding.orgId, list)
+  }
+  if (input.dryRun) return
+  for (const [orgId, list] of byOrg) {
+    try {
+      const orgSnap = await firestore.collection('orgs').doc(orgId).get()
+      const result = await raiseOperatorAlert('billing.siteCareReconciliation', {
+        dedupeKey: `${orgId}:projects`,
+        context: {
+          orgId,
+          orgName: String(orgSnap.get('name') ?? orgId),
+          month: 'projects',
+          count: list.length,
+          findings: list.map((finding) => finding.detail).join(' '),
+        },
+        orgId,
+      })
+      if (result.outcome !== 'deduped' && result.outcome !== 'below-threshold') report.alerted += 1
+    } catch (error) {
+      report.errors.push(`${orgId}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
 }

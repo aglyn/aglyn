@@ -293,6 +293,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   addOns: {
     '#assigning-collaborator-seats': 'Collaborator seats work exactly like register seats: a seat is bought once for your workspace and then assigned to one site.',
     '#assigning-register-seats': 'Unlike every other add-on, a POS register seat is bought once for your workspace and then assigned to one site.',
+    '#site-care-projects': 'A project is billed on its own invoice, separate from your plan.',
     '#site-care-statement': 'The Site Care card on Billing is the month\'s statement, kept up to date as we work.',
     '#what-you-can-add': 'Buy extra capacity for the whole workspace on the Plan add-ons card under Billing → Plan: manager seats, datasets and extra sites apply straight away, while collaborator seats and POS registers become pools you then…',
   },
@@ -948,6 +949,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#audit-log': 'A record of staff actions, newest first. Click an entry to read its reason, note and before/after below the list.',
     '#billing-insight': 'Every organization\'s Stripe invoice history and default payment method (with delinquency state) render on its detail page.',
     '#broadcast-announcements': 'Push a product announcement or maintenance notice as an in-app notification to every organization\'s owner/admins (optionally one plan tier), respecting each recipient\'s mute preferences; audited.',
+    '#bundle-link': 'The Bundle checkout link card on an organization\'s page, and the header of the Hand off dialog, make a link to the owner\'s Billing page with the plan, add-ons, billing interval and coupon already chosen.',
     '#contact-suppressions': 'The platform do-not-contact list for phone numbers — calls and texts.',
     '#coupons': 'Discount codes for Aglyn\'s own subscriptions. They live in Stripe — the console creates them there and reads them back, so a coupon made in the Stripe Dashboard shows up here and vice versa.',
     '#create-a-coupon': 'Make a discount code for Aglyn\'s own subscriptions here: give it a name, a type and a duration, read the cost warnings the form shows, then create it.',
@@ -1028,6 +1030,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   supportTriage: {
     '#site-care-month': 'The Site Care card on the staff page for the workspace shows the month: every request with its minutes, billing and history, the totals, and the month\'s own records.',
+    '#site-care-projects': 'Work that adds something new (a page, a form, a redesign, logo or brand work, a campaign) is a project with one flat price, never hourly.',
     '#site-care-working': 'The Site Care card in the ticket\'s thread is where every step is taken.',
   },
   tasks: {

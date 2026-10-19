@@ -227,6 +227,8 @@ export * from './support-tiers'
 export * from './site-care'
 export * from './owner-approval-record'
 export * from './append-only-history'
+// Site Care projects (AGL-3970): the flat quote, its split and its record.
+export * from './site-care-project'
 export * from './release-flags'
 // Who runs THIS deployment, and where its notices go (AGL-2016). Ordered
 // before the four surfaces that print it, all of which used to declare their

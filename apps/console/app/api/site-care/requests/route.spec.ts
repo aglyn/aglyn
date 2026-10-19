@@ -35,6 +35,7 @@ const mockResolveOrgMembership = jest.fn()
 const mockMemberHasOrgPermission = jest.fn()
 const mockOpen = jest.fn()
 const mockReadMonth = jest.fn()
+const mockReadProjects = jest.fn()
 let mockOrg: Record<string, unknown> | null = null
 let mockHasSiteCare = true
 
@@ -79,7 +80,13 @@ jest.mock('@aglyn/tenant-data-admin/server/site-care-requests', () => {
   }
 })
 
+jest.mock('@aglyn/tenant-data-admin/server/site-care-projects', () => ({
+  __esModule: true,
+  readSiteCareProjects: (...args: unknown[]) => mockReadProjects(...args),
+}))
+
 import { siteCareMonthStatement } from '@aglyn/aglyn/app-utils/site-care'
+import { siteCareProjectQuote } from '@aglyn/aglyn/app-utils/site-care-project'
 import { SiteCareError } from '@aglyn/tenant-data-admin/server/site-care-requests'
 import { GET, POST } from './route'
 
@@ -218,5 +225,79 @@ describe('GET', () => {
     const text = JSON.stringify(body)
     expect(text).not.toContain('staff@aglyn.com')
     expect(text).not.toContain('ii_secret')
+  })
+})
+
+describe('GET view=projects (AGL-3970)', () => {
+  const quote = (() => {
+    const read = siteCareProjectQuote({ kind: 'redesign', estimatedHours: 2 })
+    if (read.ok === false) throw new Error(read.error)
+    return read.quote
+  })()
+  const invoice = (seq: number, status: string, url: string | null) => ({
+    seq,
+    kind: seq === 1 ? 'deposit' : 'final',
+    status,
+    amountCents: 37450,
+    invoiceId: `in_secret_${seq}`,
+    hostedInvoiceUrl: url,
+    number: `N-${seq}`,
+  })
+
+  it('needs billing.view, with or without Site Care', async () => {
+    mockMemberHasOrgPermission.mockResolvedValue(false)
+    expect((await GET(call('GET', '?orgId=org-1&view=projects'))).status).toBe(403)
+    expect(mockReadProjects).not.toHaveBeenCalled()
+    mockMemberHasOrgPermission.mockResolvedValue(true)
+    mockHasSiteCare = false
+    mockReadProjects.mockResolvedValue([])
+    expect(await (await GET(call('GET', '?orgId=org-1&view=projects'))).json()).toEqual({ projects: [] })
+  })
+
+  it('lists each project as a past charge in the owner’s words, with the pay link only while unpaid', async () => {
+    mockReadProjects.mockResolvedValue([
+      {
+        projectId: 'p1',
+        project: {
+          title: 'New site',
+          scope: ['Home page', 'About page'],
+          quote,
+          status: 'deposit-paid',
+          createdAtMs: 1,
+          invoices: [
+            invoice(1, 'paid', 'https://invoice.stripe.com/i/paid'),
+            invoice(2, 'open', 'https://invoice.stripe.com/i/open'),
+            invoice(3, 'failed', null),
+          ],
+        },
+        history: [
+          { atMs: 1, kind: 'project.quoted', summary: 'Quoted.', reason: null, byEmail: 'staff@aglyn.com', stripe: null },
+          { atMs: 2, kind: 'invoice.requested', summary: 'Raising.', reason: null, byEmail: 'staff@aglyn.com', stripe: null },
+          { atMs: 3, kind: 'invoice.sent', summary: 'Sent.', reason: null, byEmail: 'staff@aglyn.com', stripe: { object: 'invoice', id: 'in_secret_1' } },
+          { atMs: 4, kind: 'email.notSent', summary: 'Not sent.', reason: null, byEmail: null, stripe: null },
+        ],
+      },
+    ])
+    const body = await (await GET(call('GET', '?orgId=org-1&view=projects'))).json()
+    expect(body.projects).toEqual([
+      expect.objectContaining({
+        projectId: 'p1',
+        title: 'New site',
+        scope: ['Home page', 'About page'],
+        split: '$749: half ($374.50) before work starts and half ($374.50) at launch.',
+        statusLabel: 'Deposit paid',
+        invoices: [
+          { seq: 1, line: 'Deposit $374.50: paid', number: 'N-1', payUrl: null },
+          { seq: 2, line: 'Balance $374.50: waiting for payment', number: 'N-2', payUrl: 'https://invoice.stripe.com/i/open' },
+        ],
+        history: [
+          { atMs: 1, summary: 'Quoted.', reason: null },
+          { atMs: 3, summary: 'Sent.', reason: null },
+        ],
+      }),
+    ])
+    const text = JSON.stringify(body)
+    expect(text).not.toContain('staff@aglyn.com')
+    expect(text).not.toContain('in_secret')
   })
 })

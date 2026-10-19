@@ -190,9 +190,13 @@ export function CreateOrgDialog(props: CreateOrgDialogProps) {
       onClose()
       // The server returns the reserved slug — land in the new workspace.
       const createdSlug = payload.slug ?? slug.trim()
+      // A build for a client goes on to its one-screen build (AGL-3958):
+      // the details, the domain, the owner's photos, the site, the preview.
       router.push(
-        destination?.(createdSlug) ??
-          buildRoute(Route.HOST_LIST, { orgSlug: createdSlug }),
+        compActive
+          ? buildRoute(Route.ORG_CLIENT_BUILD, { orgSlug: createdSlug })
+          : (destination?.(createdSlug) ??
+              buildRoute(Route.HOST_LIST, { orgSlug: createdSlug })),
       )
     } catch (error) {
       console.error(error)
@@ -269,7 +273,7 @@ export function CreateOrgDialog(props: CreateOrgDialogProps) {
                     <Chip label="Staff" size="small" color="primary" variant="outlined" />
                   </Stack>
                   <Typography variant="caption" color="text.secondary">
-                    {'Comp a plan now, hand it off later. You take no seat.'}
+                    {'Comp a plan, then build their site on one screen and hand it off. You take no seat.'}
                   </Typography>
                 </Stack>
               }

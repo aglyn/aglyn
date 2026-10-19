@@ -20,7 +20,9 @@ import {
   standingUpgradeProposal,
   upgradeProposalDestination,
   upgradeProposalHeadline,
+  upgradeProposalSummary,
 } from '@aglyn/aglyn/app-utils/upgrade-proposal'
+import { PLAN_LABELS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, Typography } from '@mui/material'
 import { docsHelp } from '../constants/docs-links'
@@ -51,6 +53,10 @@ export function OrgUpgradeProposalCard() {
   const proposal = ready ? standingUpgradeProposal(org) : null
   if (!proposal || !loaded || !can('billing.manage') || !orgSlug) return null
   const destination = upgradeProposalDestination(orgSlug, proposal)
+  // The bundle proposed with the plan (AGL-3956), named so the owner knows
+  // what Billing will have chosen before they open it.
+  const summary = upgradeProposalSummary(proposal, { brand: branding.productName })
+  const bundled = summary !== PLAN_LABELS[proposal.plan]
   return (
     <CardDisplay
       header={upgradeProposalHeadline(proposal, {
@@ -74,9 +80,15 @@ export function OrgUpgradeProposalCard() {
       contentGutterY
       sx={{ mb: 2 }}
     >
+      {bundled ? (
+        <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>
+          {summary}
+        </Typography>
+      ) : null}
       <Typography variant="body2" color="text.secondary">
         {'When you are ready, start the subscription from Billing, where the ' +
-          'plan is already selected. Nothing changes until you do.'}
+          (bundled ? 'whole bundle is' : 'plan is') +
+          ' already selected. Nothing changes until you do.'}
       </Typography>
       {proposal.note ? (
         <Typography variant="body2" sx={{ mt: 1 }}>
