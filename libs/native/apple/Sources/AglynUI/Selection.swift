@@ -163,6 +163,7 @@ public struct AglynSelectableRowStyle: ButtonStyle {
 
     var body: some View {
       configuration.label
+        .environment(\.aglynRowPadding, density.vertical)
         .fontWeight(selected && density == .sidebar ? .semibold : nil)
         .padding(.horizontal, density.horizontal)
         .padding(.vertical, density.vertical)
@@ -278,5 +279,18 @@ extension View {
       .scrollContentBackground(.hidden)
       .background(AglynColor.paper)
       .environment(\.defaultMinListRowHeight, 1)
+  }
+}
+
+private struct AglynRowPaddingKey: EnvironmentKey {
+  static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+  /// The vertical padding the row a view sits in already gives it (a selectable row's), so a row drawn to a measured
+  /// height (`AglynRecordRow`) keeps that height inside it.
+  public var aglynRowPadding: CGFloat {
+    get { self[AglynRowPaddingKey.self] }
+    set { self[AglynRowPaddingKey.self] = newValue }
   }
 }

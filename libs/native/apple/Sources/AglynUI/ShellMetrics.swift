@@ -68,11 +68,13 @@ public enum AglynShellMetrics {
     public static let trafficLights: CGFloat = 78
     /// A title-bar button's side and radius; controls, cards and sheets.
     public static let barButton: CGFloat = 28
+    /// The title bar's search field's height (Figma Titlebar/Search field 8:90, Compact).
+    public static let searchField: CGFloat = 28
     public static let controlRadius: CGFloat = 6
     public static let cardRadius: CGFloat = 10
     public static let sheetRadius: CGFloat = 12
   #else
-    public static let railWidth: CGFloat = 64
+    public static let railWidth: CGFloat = 68
     public static let tile: CGFloat = 40
     public static let tileRadius: CGFloat = 10
     public static let badge: CGFloat = 18
@@ -107,10 +109,11 @@ public enum AglynShellMetrics {
     public static let groupText: CGFloat = 11
     public static let headerLogo: CGFloat = 20
     public static let headerLogoRadius: CGFloat = 6
-    public static let sidebarWidth: CGFloat = 280
+    public static let sidebarWidth: CGFloat = 248
     public static let titlebarHeight: CGFloat = 52
     public static let trafficLights: CGFloat = 0
     public static let barButton: CGFloat = 34
+    public static let searchField: CGFloat = 30
     public static let controlRadius: CGFloat = 8
     public static let cardRadius: CGFloat = 12
     public static let sheetRadius: CGFloat = 14

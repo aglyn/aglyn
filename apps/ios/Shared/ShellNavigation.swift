@@ -108,6 +108,9 @@ final class ShellNavigation {
   var showOneBox = false
   /// What the search holds in this tab.
   let search = OneBoxModel()
+  /// The starred shortcut the section was opened through, so the selection shows on that row rather than on its
+  /// group's row too (one selection in the sidebar).
+  var starKey: String?
   /// Whether this tab is the one in front of its window (always, where the shell has no tabs).
   var front = true
   /// The workspace and site this tab's screens read while another tab is in front, and until its own are back on its
@@ -192,6 +195,7 @@ final class ShellNavigation {
 
   func select(_ next: ShellSection) {
     if section == next { paths[next] = [] }
+    starKey = nil
     section = next
     record(next)
   }

@@ -159,6 +159,7 @@ private struct WorkspaceButton: View {
           AglynWorkspaceTile(
             name: org?.name ?? "Workspace", logoURL: nil, colorHex: model.workspaceColor(org?.id).color, selected: false,
             size: AglynShellMetrics.workspaceLogo)
+            .padding(-3)
         }
         VStack(alignment: .leading, spacing: 2) {
           HStack(spacing: 4) {
@@ -209,6 +210,7 @@ private struct SiteTitleRow: View {
             name: site.name, logoURL: nil, colorHex: model.workspaceColor(model.workspace?.org?.id).color, selected: false,
             size: AglynShellMetrics.headerLogo
           )
+          .padding(-3)
         }
         HStack(spacing: 4) {
           Text(site.name).font(.system(size: AglynShellMetrics.siteName, weight: .semibold)).lineLimit(1)
@@ -286,7 +288,9 @@ struct SidebarList: View {
   }
 
   private func isOpen(_ group: NativeNavGroup, holding: String?) -> Bool {
-    !group.foldable || !filter.isEmpty || group.id == holding || navigation.openGroups.contains(groupKey(group))
+    // Starred stays open at rest (Figma 12:703) until the person folds it; the other groups open with the place in use.
+    if group.dynamic == "starred" { return !navigation.openGroups.contains(groupKey(group) + ".folded") }
+    return !group.foldable || !filter.isEmpty || group.id == holding || navigation.openGroups.contains(groupKey(group))
   }
 
   /// The fold state is remembered per scope kind and group (`site.sell`), on this device.
@@ -310,7 +314,14 @@ struct SidebarList: View {
         }
       }
     } else if !rows.isEmpty {
-      if push {
+      if push && group.id == "more" && group.foldable && filter.isEmpty {
+        // More is a row of its own on the phone too (Figma 22:176, "··· More ›"), opening its rows under it.
+        PhoneMenuRow(title: "More", action: { toggle(group) }) {
+          Image(systemName: "ellipsis").font(.system(size: 18)).foregroundStyle(AglynColor.accentIcon)
+        }
+        .accessibilityValue(open ? "Open" : "Folded")
+        .accessibilityIdentifier("sidebar-group-more")
+      } else if push {
         if let label = group.label {
           PhoneMenuSectionHead(
             title: label, foldable: group.foldable, open: open, count: rows.count,
@@ -360,7 +371,7 @@ struct SidebarList: View {
 
   /// Folds or opens a group, remembered for the scope kind (Figma Motion: about 200 ms).
   private func toggle(_ group: NativeNavGroup) {
-    let key = groupKey(group)
+    let key = group.dynamic == "starred" ? groupKey(group) + ".folded" : groupKey(group)
     withAnimation(AglynShellMotion.fold) {
       if navigation.openGroups.contains(key) { navigation.openGroups.remove(key) } else { navigation.openGroups.insert(key) }
     }
@@ -383,7 +394,7 @@ struct SidebarList: View {
   private func rowView(_ row: NativeNavRow, indent: Int = 0) -> some View {
     if push {
       PhoneMenuRow(title: row.label, action: { activate(ShellScope.target(of: row)) }) {
-        Image(systemName: row.appleIcon).font(.system(size: 18)).foregroundStyle(AglynColor.secondaryText)
+        Image(systemName: row.appleIcon).font(.system(size: 18)).foregroundStyle(AglynColor.accentIcon)
       }
       .contextMenu { starMenu(row) }
       .accessibilityIdentifier("sidebar-\(row.id)")
@@ -394,7 +405,7 @@ struct SidebarList: View {
 
   private func sidebarRow(_ row: NativeNavRow, indent: Int) -> some View {
     let target = ShellScope.target(of: row)
-    let selected = !push && ShellScope.row(row, holds: navigation.section)
+    let selected = !push && navigation.starKey == nil && ShellScope.row(row, holds: navigation.section)
     return AglynSidebarRow(row.label, selected: selected, indent: indent, pill: pill, action: { activate(target) }) {
       AglynSidebarIcon(row.appleIcon)
     } trailing: {
@@ -418,8 +429,13 @@ struct SidebarList: View {
       if push {
         PhoneMenuRow(title: item.label, action: { activate(.section(section)) }) { dot }
       } else {
+        // One row is selected: the one the place was opened through (a starred shortcut, or its group's row).
         AglynSidebarRow(
-          item.label, selected: navigation.section == section, indent: 1, pill: pill, action: { activate(.section(section)) }
+          item.label, selected: navigation.section == section && navigation.starKey == item.key, indent: 1, pill: pill,
+          action: {
+            activate(.section(section))
+            navigation.starKey = item.key
+          }
         ) { dot }
       }
     }
@@ -523,6 +539,10 @@ struct PhoneMenuRow<Leading: View>: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.aglynRow)
+    // A hairline under each row, across the screen (Figma Phone/List row).
+    .overlay(alignment: .bottom) {
+      Rectangle().fill(AglynColor.divider).frame(height: 1).accessibilityHidden(true)
+    }
   }
 }
 

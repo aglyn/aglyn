@@ -583,6 +583,7 @@ public struct AglynDetailCrumbs: View {
 /// semibold over the detail at 12, and the trailing figures; 64 points tall on the Mac and iPad. On a phone (Size=Phone)
 /// the tile is 36, the title 17 and the detail 13, 68 points tall.
 public struct AglynRecordRow<Trailing: View>: View {
+  @Environment(\.aglynRowPadding) private var rowPadding
   #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
   #endif
@@ -624,7 +625,8 @@ public struct AglynRecordRow<Trailing: View>: View {
       Spacer(minLength: 8)
       VStack(alignment: .trailing, spacing: 4) { trailing }
     }
-    .padding(.vertical, phone ? 12 : 10)
+    // 64 points (68 on a phone) in all, whatever the row around it already pads.
+    .padding(.vertical, max(0, (phone ? 12 : 10) - rowPadding))
     .frame(minHeight: phone ? 44 : 44)
     .accessibilityElement(children: .combine)
   }

@@ -251,9 +251,15 @@ final class AppModel {
       navigate: { [weak navigation] screen, params in navigation?.push(.screen(screen, params)) },
       openBesigner: { [weak navigation] path in navigation?.push(.besigner(path)) },
       siteRole: scopedSite(navigation)?.role, orgRole: workspace?.org?.role,
-      selectSite: { [weak workspace = self.workspace, weak navigation] hostID in
+      selectSite: { [weak self, weak workspace = self.workspace, weak navigation] hostID in
         workspace?.selectSite(hostID)
-        if hostID != nil { navigation?.inSite = true }
+        guard hostID != nil, let navigation else { return }
+        navigation.inSite = true
+        // Opening a site from a workspace screen (a Sites row) drills into it, on its Home; a screen of the site that
+        // asked for one stays where it is.
+        if let self, navigation.section != .home, ShellScope(model: self, navigation: navigation).row(for: navigation.section) == nil {
+          navigation.enterSite()
+        }
       },
       back: { [weak navigation] in
         guard let navigation else { return }
