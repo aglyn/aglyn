@@ -24,6 +24,17 @@ AGLYN_LEGAL_ORIGIN = https:/$()/aglyn.com
 AGLYN_DOCS_ORIGIN = https:/$()/docs.aglyn.com
 AGLYN_APPLE_SIGN_IN = NO
 
+// Debug builds have an identity of their own (AGL-3994): "Aglyn Debug" (com.aglyn.app.debug) and "Aglyn POS Debug"
+// (com.aglyn.pos.debug). A debug build launched from DerivedData then never registers under the shipped bundle id, so it
+// cannot take over the TestFlight or App Store app's Dock item, Launchpad entry, keychain items or settings, and both
+// can run side by side. Release.xcconfig leaves the shipped identity (com.aglyn.app, com.aglyn.pos) alone. In Debug the
+// associated domains, push and Sign in with Apple stay off: the apple-app-site-association names only the shipped ids,
+// the emulator console sends no push, and AGLYN_APPLE_SIGN_IN is NO.
+AGLYN_BUNDLE_ID_Aglyn = com.aglyn.app.debug
+AGLYN_BUNDLE_ID_AglynPOS = com.aglyn.pos.debug
+AGLYN_DISPLAY_NAME_Aglyn = Aglyn Debug
+AGLYN_DISPLAY_NAME_AglynPOS = Aglyn POS Debug
+
 // Debug builds only: with `-AglynAutoSignIn YES` on the launch arguments,
 // an emulator build signs in as this seeded test member (tools/scripts/
 // seed-native-emulator.mjs prints it). Set in Local.xcconfig; never a real account.
