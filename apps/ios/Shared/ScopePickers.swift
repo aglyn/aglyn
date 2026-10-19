@@ -6,6 +6,10 @@ import AglynCore
 import AglynUI
 import SwiftUI
 
+#if os(iOS)
+  import UIKit
+#endif
+
 // The two pickers, workspace then site (AGL-3945, Figma Menus 2:4 and Phone 2:7): search first, then Pinned, Recent and
 // everyone else A to Z, 50 at a time. Pins are the account's (`pinnedOrgs`), shared with the console, five at most.
 
@@ -71,6 +75,15 @@ struct ScopePickerSheet: View {
 
 /// One workspace row: its tile, name, role and plan, and the pin.
 private struct WorkspacePickerRow: View {
+  /// A phone, where the ⌘1–⌘5 shortcuts are not shown.
+  static var isPhone: Bool {
+    #if os(iOS)
+      UIDevice.current.userInterfaceIdiom == .phone
+    #else
+      false
+    #endif
+  }
+
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   let org: WorkspaceOrg
@@ -113,7 +126,8 @@ private struct WorkspacePickerRow: View {
         HStack(spacing: 4) {
           Image(systemName: pinIndex != nil ? "pin.fill" : "pin")
           Text(pinIndex != nil ? "Pinned" : "Pin")
-          if let pinIndex {
+          // The keyboard shortcut, where there is a keyboard to press it (not on a phone).
+          if let pinIndex, !Self.isPhone {
             Text("⌘\(pinIndex + 1)").font(AglynFont.caption).foregroundStyle(.secondary)
           }
         }
