@@ -105,13 +105,20 @@ export function readOwnerApprovalInput(
     nowMs: number
     by: { uid: string; email: string | null }
     previous?: OwnerApprovalRecord | null
+    /**
+     * The most hours the record may carry; `OWNER_APPROVAL_MAX_HOURS` unless
+     * the surface says otherwise. A flat-quoted project (AGL-3970) records
+     * the quote's own whole hours, which a redesign can take past a week.
+     */
+    maxHours?: number
   },
 ): OwnerApprovalInputResult {
   const hours = Number(raw?.['hours'])
-  if (!Number.isInteger(hours) || hours < 1 || hours > OWNER_APPROVAL_MAX_HOURS) {
+  const maxHours = context.maxHours ?? OWNER_APPROVAL_MAX_HOURS
+  if (!Number.isInteger(hours) || hours < 1 || hours > maxHours) {
     return {
       ok: false,
-      error: `Enter the hours the owner approved, a whole number from 1 to ${OWNER_APPROVAL_MAX_HOURS}.`,
+      error: `Enter the hours the owner approved, a whole number from 1 to ${maxHours}.`,
     }
   }
   const channel = String(raw?.['channel'] ?? '') as OwnerApprovalChannel

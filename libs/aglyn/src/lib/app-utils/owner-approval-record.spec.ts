@@ -57,6 +57,15 @@ describe('readOwnerApprovalInput', () => {
     })
   })
 
+  it('takes a surface’s own ceiling on hours (a flat-quoted project, AGL-3970)', () => {
+    expect(readOwnerApprovalInput({ ...INPUT, hours: 120 }, CONTEXT).ok).toBe(false)
+    expect(readOwnerApprovalInput({ ...INPUT, hours: 120 }, { ...CONTEXT, maxHours: 400 }).ok).toBe(true)
+    expect(readOwnerApprovalInput({ ...INPUT, hours: 401 }, { ...CONTEXT, maxHours: 400 })).toEqual({
+      ok: false,
+      error: 'Enter the hours the owner approved, a whole number from 1 to 400.',
+    })
+  })
+
   it('refuses hours that are not a whole number in range', () => {
     for (const hours of [0, 1.5, OWNER_APPROVAL_MAX_HOURS + 1, 'two', undefined]) {
       const read = readOwnerApprovalInput({ ...INPUT, hours }, CONTEXT)

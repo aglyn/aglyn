@@ -1174,6 +1174,28 @@ export const SITE_CARE_INCLUDED_BLOCK_MINUTES = 15
 export const SITE_CARE_EXTRA_HOUR_USD = 79
 
 /**
+ * Site Care projects (AGL-3970): work that adds a page, a form, a design or
+ * a campaign is a flat quote, never hourly. The quote is the estimated hours
+ * × `SITE_CARE_EXTRA_HOUR_USD`, rounded up to the whole hour, and never below
+ * the published starting price of the kind of project it is. These three are
+ * those starting prices, as `/pricing` publishes them.
+ */
+export const SITE_CARE_PROJECT_LANDING_PAGE_FROM_USD = 249
+
+/** A redesign's published starting price (AGL-3970). */
+export const SITE_CARE_PROJECT_REDESIGN_FROM_USD = 749
+
+/** A logo or brand kit's published starting price (AGL-3970). */
+export const SITE_CARE_PROJECT_BRAND_KIT_FROM_USD = 349
+
+/**
+ * A project priced ABOVE this is billed half up front and half at launch, on
+ * two invoices from the same record; at or below it, in full up front
+ * (AGL-3970). `site-care-project.ts` holds the arithmetic.
+ */
+export const SITE_CARE_PROJECT_SPLIT_ABOVE_USD = 500
+
+/**
  * POS Pro register add-on (AGL-329): $89/mo per extra register/location
  * (Shopify POS Pro parity). Purchased add-ons land as a per-org
  * `posRegisters` entitlement override, which

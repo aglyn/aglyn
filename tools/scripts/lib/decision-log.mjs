@@ -89,6 +89,12 @@ export const WATCHED = Object.freeze([
       'SITE_CARE_INCLUDED_MINUTES',
       'SITE_CARE_INCLUDED_BLOCK_MINUTES',
       'SITE_CARE_EXTRA_HOUR_USD',
+      // A project's published starting prices and the line above which it
+      // is billed half and half (AGL-3970), optional for the same reason.
+      'SITE_CARE_PROJECT_LANDING_PAGE_FROM_USD',
+      'SITE_CARE_PROJECT_REDESIGN_FROM_USD',
+      'SITE_CARE_PROJECT_BRAND_KIT_FROM_USD',
+      'SITE_CARE_PROJECT_SPLIT_ABOVE_USD',
     ]),
   }),
   Object.freeze({
