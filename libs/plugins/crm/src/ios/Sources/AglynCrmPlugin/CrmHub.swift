@@ -127,10 +127,11 @@ struct CrmGate<Content: View>: View {
     Group {
       if let scope = scopeModel.scope {
         if !scope.suite {
-          AglynEmptyState(
-            "The CRM is included from Starter", systemImage: "person.2",
-            message: "Leads, contacts, companies, deals and tasks come with the Starter plan and above. Change the plan under Billing to use them."
-          )
+          // The console's notice for a plugin the plan leaves out, with View plans (Figma Notice/Upgrade).
+          AglynUpgradeNotice(upgradeNoticeMessage(title: "CRM", feature: "crm"), kind: .plan) {
+            context.navigate("core.billing.plans")
+          }
+          .asScreen()
           .accessibilityIdentifier("crm-suite-locked")
         } else {
           let api = CrmAPI(api: context.api, reader: context.firestore, scope: scope)

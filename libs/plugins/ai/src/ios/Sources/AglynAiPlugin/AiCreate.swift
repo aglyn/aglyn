@@ -440,18 +440,16 @@ struct AiCreateScreen: View {
 
   @ViewBuilder
   private func upsellSections(_ upsell: AiCreateDoor.Upsell) -> some View {
+    // The console's AiUpsellDialog as the add-on's promo card (Figma Promo/Add-on card): its title, what the entry does,
+    // the offer sentence, then Not now (Close for a member who cannot buy it) and the add-on's action.
     Section {
-      Text(upsell.does)
-      Text(upsell.offer).font(AglynFont.subheadline).foregroundStyle(.secondary)
-    }
-    Section {
-      if let action = upsell.action {
-        Button(action) { context.navigate("core.billing.addons") }
-          .buttonStyle(.borderedProminent)
-          .accessibilityIdentifier("ai-create-add-on")
-      }
-      Button(upsell.dismiss) { context.back() }
-        .accessibilityIdentifier("ai-create-dismiss")
+      AglynAddOnPromoCard(
+        upsell.title, does: upsell.does, offer: upsell.offer, dismissTitle: upsell.dismiss, actionTitle: upsell.action,
+        dismiss: { context.back() }, action: { context.navigate("core.billing.addons") }
+      )
+      .frame(maxWidth: .infinity)
+      .listRowInsets(EdgeInsets())
+      .listRowBackground(Color.clear)
     }
   }
 

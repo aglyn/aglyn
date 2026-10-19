@@ -227,7 +227,9 @@ struct SalesScreen: View {
       if model.failed {
         AglynEmptyState("Could not load sales", systemImage: "exclamationmark.triangle")
       } else if let access = model.access, !access.carried {
-        List { Section { AglynNotice(salesLockedText(access.plan), tone: .info) } }.aglynListBackground()
+        // The console's sentence as the upgrade notice, with View plans (Figma Notice/Upgrade).
+        AglynUpgradeNotice(salesLockedText(access.plan), kind: .plan) { context.navigate("core.billing.plans") }
+        .asScreen()
       } else if let report = model.report {
         Form {
           Section {

@@ -39,3 +39,20 @@ public func marketplaceFeePct(_ org: [String: Any]?) -> Double {
   let rate = number != nil ? usable(number) : usable(MarketplaceFeeDefaults.byPlan[effectivePlan(org)])
   return rate ?? MarketplaceFeeDefaults.byPlan["free"] ?? 30
 }
+
+/// What a workspace reads where a feature its plan leaves out would be, as the console's `upgradeNoticeMessage` words it
+/// (apps/console/utils/extension-entitlement.ts): an add-on's own sentence, else `blockedExtensionNotice`, which names
+/// the plan that includes it, or says no plan does.
+public func upgradeNoticeMessage(title: String, feature: String) -> String {
+  if let own = PlanFeatureDefaults.addOnNotices[feature] { return own }
+  if let plan = PlanFeatureDefaults.grantedFrom[feature] {
+    return "\(title) is not included in your current plan. Manage your plan and add-ons from Billing. Included from \(plan)."
+  }
+  return "\(title) isn't included in any plan — it's a paid add-on. Manage your plan and add-ons from Billing."
+}
+
+/// Whether the console's notice for a feature sends the reader to Billing's add-ons rather than its plans ("View add-ons"
+/// rather than "View plans"): a feature sold only as an add-on.
+public func upgradeNoticeSellsAddOn(_ feature: String) -> Bool {
+  PlanFeatureDefaults.addOnNotices[feature] != nil
+}

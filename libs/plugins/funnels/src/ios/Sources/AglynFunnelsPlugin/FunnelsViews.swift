@@ -34,11 +34,12 @@ struct FunnelsScreen: View {
       if !access.org.ready {
         List { SkeletonRows(count: 4) }.aglynListBackground()
       } else if !access.state.entitled {
-        AglynEmptyState(
-          "Funnels come with analytics", systemImage: FunnelsSymbols.funnel,
-          message:
-            "Funnels come with per-page analytics, included from \(planGranting(ContractValues.shared.funnelFeature) ?? "a paid plan"). Change the plan under Billing to use them."
-        )
+        // The console card's sentence, as the upgrade notice with View plans (Figma Notice/Upgrade).
+        AglynUpgradeNotice(
+          "Funnels come with per-page analytics, included from \(planGranting(ContractValues.shared.funnelFeature) ?? "a paid plan").",
+          kind: .plan
+        ) { context.navigate("core.billing.plans") }
+        .asScreen()
         .accessibilityIdentifier("funnels-locked")
       } else {
         content

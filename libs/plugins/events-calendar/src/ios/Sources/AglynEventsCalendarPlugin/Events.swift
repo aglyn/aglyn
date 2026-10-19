@@ -388,7 +388,10 @@ struct EventEditor: View {
 @MainActor
 public func registerEventsCalendarNative(_ r: NativePluginRegistrar) {
   r.screen(eventsScreen, title: "Events", requiresSite: true, icon: "calendar") { ctx, params in
-    EventsScreen(context: ctx, startNew: params["new"] == "1")
+    // Sold only as an add-on: a workspace without it reads the add-on's own sentence and View add-ons.
+    AglynFeatureGate(context: ctx, feature: "eventCalendar", title: "Events") {
+      EventsScreen(context: ctx, startNew: params["new"] == "1")
+    }
   }
   r.quickAction("events-calendar.open", title: "Events", icon: "calendar", order: 320, screen: eventsScreen, requiresSite: true)
   r.deepLink("events-calendar.page", path: "/events", screen: eventsScreen)

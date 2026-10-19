@@ -97,17 +97,13 @@ struct MarketingHubScreen: View {
         }
       case .overlays:
         if access.org.ready && !access.carries("marketingOverlays") {
-          AglynEmptyState(
-            "Overlays come with Starter", systemImage: "rectangle.on.rectangle",
-            message: "Announcement bars and popups are included from the Starter plan. Change the plan under Billing to use them.")
+          MarketingUpgradeNotice(context: context, title: "Overlays", feature: "marketingOverlays")
         } else {
           SiteBySiteList(context: context, collection: "overlays", noun: "overlays", screen: MarketingSection.overlays.screen)
         }
       case .experiments:
         if access.org.ready && !access.carries("abTesting") {
-          AglynEmptyState(
-            "A/B testing comes with Business", systemImage: "flask",
-            message: "Testing two versions of a page or an email is included from the Business plan.")
+          MarketingUpgradeNotice(context: context, title: "A/B testing", feature: "abTesting")
         } else {
           SiteBySiteList(context: context, collection: "experiments", noun: "experiments", screen: MarketingSection.experiments.screen)
         }
@@ -125,17 +121,13 @@ struct MarketingHubScreen: View {
       case .conversions: ConversionsSection(context: context, actions: actions)
       case .overlays:
         if access.org.ready && !access.carries("marketingOverlays") {
-          AglynEmptyState(
-            "Overlays come with Starter", systemImage: "rectangle.on.rectangle",
-            message: "Announcement bars and popups are included from the Starter plan. Change the plan under Billing to use them.")
+          MarketingUpgradeNotice(context: context, title: "Overlays", feature: "marketingOverlays")
         } else {
           OverlaysSection(context: context, actions: actions, access: access)
         }
       case .experiments:
         if access.org.ready && !access.carries("abTesting") {
-          AglynEmptyState(
-            "A/B testing comes with Business", systemImage: "flask",
-            message: "Testing two versions of a page or an email is included from the Business plan.")
+          MarketingUpgradeNotice(context: context, title: "A/B testing", feature: "abTesting")
         } else {
           ExperimentsSection(context: context, actions: actions, access: access)
         }
@@ -1045,5 +1037,19 @@ private struct SiteRows: View {
       list.show(context.firestore) { FirestoreQuery(path, limit: $0) }
     }
     .onDisappear { list.stop() }
+  }
+}
+
+/// A section the plan leaves out, as the console's hub draws it: the console's notice naming the plan, with View plans.
+private struct MarketingUpgradeNotice: View {
+  let context: NativePluginContext
+  let title: String
+  let feature: String
+
+  var body: some View {
+    AglynUpgradeNotice(upgradeNoticeMessage(title: title, feature: feature), kind: .plan) {
+      context.navigate("core.billing.plans")
+    }
+    .asScreen()
   }
 }
