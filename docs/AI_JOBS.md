@@ -2788,9 +2788,21 @@ written by code.
   The seed still picks within the style: the first section preset, the
   hero's preset, the picture preset, the curve, the duration, the stagger and
   the hero's step, so two sites that chose one style differ.
+- **What a later build adds to a site (AGL-3949).** A build on an existing
+  site (`jobs/ai-job-build-step.ts`, Aglyn Assist's plan-and-build) reads the
+  site's stored look off the host it already loads (`aiLayoutSiteMotionOf`
+  over `hosts/{id}.siteStyle`) and hands the page, layout and template units it
+  makes the look's kind, seed and motion style in
+  `inputs[AI_LAYOUT_SITE_MOTION_INPUT]` (`siteMotion`). `aiLayoutMotionSiteOf`
+  reads it where the unit was handed no `siteStyle`, so an added page moves
+  exactly as the site's own pages do: the same character, not one drawn from
+  the build job's seed. Only the motion travels: no prompt line, header
+  alignment or band rhythm changes. A site whose look stored no seed gives the
+  units nothing, and they move as before (`ai-layout-motion.spec.ts`,
+  `ai-job-build-step.spec.ts`).
 - **The site's character without a style.** A job whose look chose none —
-  every site built before AGL-3941, a replay of one, an Assist job on an
-  existing site, a starter — moves exactly as AGL-3838 drew it:
+  every site built before AGL-3941, a replay of one, a build on a site with
+  no stored look, a starter — moves exactly as AGL-3838 drew it:
   `aiSiteMotion` maps the site's kind to a mood and turns it by the site's
   design seed, so every page of one site moves alike and two sites of one
   kind differ: calm
