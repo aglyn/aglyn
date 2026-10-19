@@ -28,7 +28,6 @@ import {
 import { Stack } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { BUNDLE_ID } from '../../../constants/bundle-common'
-import { posKioskSettings } from '../../../pos-kiosk-config'
 import { posReadersCall } from './pos-api'
 
 type User = Parameters<typeof posReadersCall>[0]
@@ -135,7 +134,10 @@ export function PosKioskReadiness({ user, hostId, registerId, registerName }: Po
   }, [uid, hostId, registerId])
 
   if (!readers || readers === 'error' || !configReady || !payments.settled) return null
-  const payAtCounter = posKioskSettings(config).payAtCounter
+  // `posKioskSettings`'s own reading (pos-kiosk-config.ts), spelled out here:
+  // importing it puts the kiosk's settings module in the plugin's eager
+  // chunk, and this card is drawn only on the pairing dialog.
+  const payAtCounter = config['posKioskPayAtCounter'] !== false
   const gaps = posKioskGaps({
     cardsOffered: readers.available,
     registerReaders: readers.count,
