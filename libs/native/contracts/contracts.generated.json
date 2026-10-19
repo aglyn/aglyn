@@ -5789,7 +5789,7 @@
                 ],
                 "label": "Customer texts",
                 "order": 40,
-                "pluginId": "sms",
+                "pluginId": "commerce",
                 "screen": "sms.texts"
               },
               {

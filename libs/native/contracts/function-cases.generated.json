@@ -50287,7 +50287,7 @@
                     ],
                     "label": "Customer texts",
                     "order": 40,
-                    "pluginId": "sms",
+                    "pluginId": "commerce",
                     "screen": "sms.texts"
                   },
                   {
@@ -50677,6 +50677,31 @@
                         "screen": "inbox.people"
                       }
                     ]
+                  }
+                ]
+              },
+              {
+                "foldable": true,
+                "id": "more",
+                "label": "More",
+                "rows": [
+                  {
+                    "console": {
+                      "id": "sms.texts",
+                      "surface": "nativeOnly"
+                    },
+                    "icon": {
+                      "android": "sms",
+                      "apple": "message"
+                    },
+                    "id": "texts",
+                    "keywords": [
+                      "sms"
+                    ],
+                    "label": "Customer texts",
+                    "order": 40,
+                    "pluginId": "commerce",
+                    "screen": "sms.texts"
                   }
                 ]
               },
