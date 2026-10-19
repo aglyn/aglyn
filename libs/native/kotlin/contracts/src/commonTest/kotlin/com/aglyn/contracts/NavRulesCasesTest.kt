@@ -65,6 +65,7 @@ class NavRulesCasesTest {
     cases("railWorkspaces").forEach { (args, result) ->
       same(result, railWorkspaces(ids(args[0]), ids(args[1]), ids(args[2])), RailWorkspaces.serializer(), args.toString())
     }
+    cases("workspaceInitial").forEach { (args, result) -> assertEquals(text(result), workspaceInitial(text(args[0])), args.toString()) }
   }
 
   @Test

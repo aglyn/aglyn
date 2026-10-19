@@ -20,6 +20,7 @@ import {
   keepPinnedOrgs,
   pinOrg,
   railWorkspaces,
+  workspaceInitial,
   readAppTheme,
   recordRecent,
   recordRecentOrg,
@@ -58,19 +59,27 @@ describe('pins: five everywhere (Zach, 2026-10-18)', () => {
 })
 
 describe('the rail', () => {
-  it('shows a small account everything and no All tile', () => {
-    expect(railWorkspaces(ids(8), ['o3'], ['o5'])).toEqual({
-      pinned: ['o3'],
-      recent: [],
-      rest: ['o1', 'o2', 'o4', 'o5', 'o6', 'o7', 'o8'],
-      allTile: false,
-      total: 8,
+  it('shows a small account the same rail: pins, recents, then All (Zach, 2026-10-19)', () => {
+    expect(railWorkspaces(ids(6), ['o6'], ['o6', 'o2'])).toEqual({
+      pinned: ['o6'],
+      recent: ['o2'],
+      rest: [],
+      allTile: true,
+      total: 6,
     })
+    expect(railWorkspaces([], [], [])).toEqual({ pinned: [], recent: [], rest: [], allTile: false, total: 0 })
   })
 
   it('shows a large one five pins, three recent not pinned, then All', () => {
     const rail = railWorkspaces(ids(100), ['o9', 'o2'], ['o2', 'o40', 'o41', 'o42', 'o43'])
     expect(rail).toEqual({ pinned: ['o9', 'o2'], recent: ['o40', 'o41', 'o42'], rest: [], allTile: true, total: 100 })
+  })
+
+  it('gives a tile one letter, its name\'s first letter or digit', () => {
+    expect(workspaceInitial('Elevated Concepts')).toBe('E')
+    expect(workspaceInitial('  42 Studio')).toBe('4')
+    expect(workspaceInitial('\u{1F33F} fern & fig')).toBe('F')
+    expect(workspaceInitial('—')).toBe('?')
   })
 
   it('moves an opened workspace to the front of the recents', () => {

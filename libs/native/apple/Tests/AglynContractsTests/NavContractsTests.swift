@@ -91,6 +91,9 @@ final class NavContractsTests: XCTestCase {
         railWorkspaces(strings(item.args[0]), pinned: strings(item.args[1]), recent: strings(item.args[2])),
         try decode(RailWorkspaces.self, item.result), item.label)
     }
+    for item in cases("workspaceInitial") {
+      XCTAssertEqual(workspaceInitial(item.args[0] as? String ?? ""), item.result as? String, item.label)
+    }
   }
 
   func testStarsAndRecentsKeepTheirShape() throws {
