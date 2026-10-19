@@ -177,8 +177,46 @@ fun RecordsSection(
     },
   )
   if (creating) {
-    CreateRecordDialog(kind, scope, api, reference, onDismiss = { creating = false }) { id -> creating = false; picked = id }
+    WithSiteScope(context, scope, api, kind.singular.lowercase(), onDismiss = { creating = false }) { siteScope, siteApi ->
+      CreateRecordDialog(kind, siteScope, siteApi, reference, onDismiss = { creating = false }) { id -> creating = false; picked = id }
+    }
   }
+}
+
+/**
+ * The scope a new record is made in: the site's own, or (from the whole workspace's CRM) the site the person picks first,
+ * as the console's workspace page asks.
+ */
+@Composable
+internal fun WithSiteScope(
+  context: NativePluginContext,
+  scope: CrmScope,
+  api: CrmApi,
+  noun: String,
+  onDismiss: () -> Unit,
+  content: @Composable (CrmScope, CrmApi) -> Unit,
+) {
+  if (!scope.workspaceWide) return content(scope, api)
+  var site by remember { mutableStateOf<String?>(null) }
+  val picked = site
+  if (picked == null) {
+    com.aglyn.pluginhost.WhichSiteDialog(context, noun, onPick = { site = it.id }, onDismiss = onDismiss)
+  } else {
+    val siteScope = remember(scope, picked) { scope.forSite(picked) }
+    val siteApi = remember(siteScope, context.api, context.writer) { CrmApi(context.api, context.writer, siteScope) }
+    content(siteScope, siteApi)
+  }
+}
+
+/**
+ * The scope a record's own page works in: from the whole workspace's CRM, the site the record was made on (its tasks,
+ * notes and emails belong there), else the workspace's, stamping what the record itself is visible to.
+ */
+internal fun recordScope(scope: CrmScope, doc: com.aglyn.core.FirestoreDoc): CrmScope {
+  if (!scope.workspaceWide) return scope
+  doc.string("hostId")?.takeIf { it.isNotEmpty() }?.let { return scope.forSite(it) }
+  val visibleTo = (doc.data["visibleTo"] as? List<*>).orEmpty().filterIsInstance<String>()
+  return scope.copy(createTokens = visibleTo.ifEmpty { listOf(ORG_SCOPE_TOKEN) })
 }
 
 internal fun chipTone(kind: CrmKind, row: CrmRow): StatusTone = when (kind) {
@@ -202,8 +240,8 @@ private enum class RecordDialog { EDIT, DELETE, LOG, EMAIL, TASK, STATUS, UNQUAL
  * what it is linked to, its open tasks and its activity timeline.
  */
 @Composable
-fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, scope: CrmScope, api: CrmApi, reference: CrmReference) {
-  val flow = remember(kind, id, scope.orgId, context.firestore) { context.firestore.observeDoc("${crmPath(scope.orgId, kind.collection)}/$id") }
+fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listScope: CrmScope, listApi: CrmApi, reference: CrmReference) {
+  val flow = remember(kind, id, listScope.orgId, context.firestore) { context.firestore.observeDoc("${crmPath(listScope.orgId, kind.collection)}/$id") }
   val live by flow.collectAsState(Live.Loading)
   var dialog by remember(id) { mutableStateOf<RecordDialog?>(null) }
   var notice by remember(id) { mutableStateOf<String?>(null) }
@@ -218,6 +256,8 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, scope:
         EmptyState("This ${kind.singular.lowercase()} is gone", body = "It may have been deleted or converted.", icon = AglynIcons.named(kind.icon))
         return
       }
+      val scope = remember(listScope, doc.string("hostId")) { recordScope(listScope, doc) }
+      val api = remember(scope, listApi) { if (scope == listScope) listApi else CrmApi(context.api, context.writer, scope) }
       val stages = reference.pipeline(doc.string("pipelineId")).stages.associate { it.id to it.name }
       val row = crmRow(kind, doc, scope, stages)
       val fields = reference.fields(kind)

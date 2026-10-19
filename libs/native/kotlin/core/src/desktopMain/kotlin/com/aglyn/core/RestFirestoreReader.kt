@@ -230,7 +230,7 @@ class RestFirestoreReader(
       ?.get("message")?.jsonPrimitive?.content ?: "Could not read Firestore."
 
   private fun structuredQuery(collectionId: String, query: FirestoreQuery): JsonObject = buildJsonObject {
-    put("from", buildJsonArray { add(buildJsonObject { put("collectionId", collectionId) }) })
+    put("from", buildJsonArray { add(buildJsonObject { put("collectionId", collectionId); if (query.collectionGroup) put("allDescendants", true) }) })
     if (query.filters.isNotEmpty()) {
       val filters = query.filters.map(::fieldFilter)
       put("where", if (filters.size == 1) filters.first() else buildJsonObject {

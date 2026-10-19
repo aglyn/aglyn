@@ -36,17 +36,30 @@ data class WorkspaceSite(
  * A workspace's logos as its own document keeps them (`logoUrl`, `logoDarkUrl`): the membership index carries none, so
  * the console's switcher reads each workspace's document for them, and so does [WorkspaceStore].
  */
-data class WorkspaceOrgLogo(val light: String?, val dark: String?) {
+data class WorkspaceOrgLogo(
+  val light: String?,
+  val dark: String?,
+  /** The workspace's own brand color (`brandingProfile.primaryColor`, white-label workspaces), `#RRGGBB`. */
+  val brandColor: String? = null,
+  /** The plugins the workspace keeps on (`enabledPlugins`), null for the defaults. */
+  val enabledPlugins: List<String>? = null,
+  /** The plan in force, as the console's plan chip names it. */
+  val plan: String? = null,
+) {
   companion object {
     fun from(data: Map<String, Any?>?): WorkspaceOrgLogo = WorkspaceOrgLogo(
       light = (data?.get("logoUrl") as? String)?.ifBlank { null },
       dark = (data?.get("logoDarkUrl") as? String)?.ifBlank { null },
+      brandColor = ((data?.get("brandingProfile") as? Map<*, *>)?.get("primaryColor") as? String)?.takeIf { com.aglyn.contracts.isAccountColor(it) },
+      enabledPlugins = (data?.get("enabledPlugins") as? List<*>)?.filterIsInstance<String>(),
+      plan = data?.let { effectivePlan(it) },
     )
   }
 }
 
+/** [whole]: the whole workspace is on screen, no site (the workspace scope). */
 @Serializable
-data class WorkspacePick(val orgId: String? = null, val hostId: String? = null)
+data class WorkspacePick(val orgId: String? = null, val hostId: String? = null, val whole: Boolean = false)
 
 data class WorkspaceState(
   val orgs: List<WorkspaceOrg> = emptyList(),
@@ -63,6 +76,8 @@ data class WorkspaceState(
   val hasMoreOrgs: Boolean = false,
   /** Each workspace's logos read so far, by workspace id: the shown one's always, the others' once the switcher asks. */
   val orgLogos: Map<String, WorkspaceOrgLogo> = emptyMap(),
+  /** The person is looking at the whole workspace rather than one of its sites. */
+  val wholeWorkspace: Boolean = false,
 ) {
   /** The shown workspace's logos; null until read. */
   val orgLogo: WorkspaceOrgLogo? get() = org?.let { orgLogos[it.id] }
@@ -183,6 +198,7 @@ class WorkspaceStore(
       error = error,
       hasMoreOrgs = orgsFull.value,
       orgLogos = logos,
+      wholeWorkspace = effective.whole || (siteList != null && siteList.isEmpty()),
     )
   }.stateIn(scope, SharingStarted.Eagerly, WorkspaceState())
 
@@ -205,8 +221,21 @@ class WorkspaceStore(
     orgWindow.value += ORG_WINDOW
   }
 
+  /**
+   * Opens a workspace where the person last was in it: the whole workspace or the site they had open, remembered per
+   * workspace on this device. A workspace never opened here opens on the whole workspace.
+   */
   fun selectOrg(orgId: String) {
-    picked.value = WorkspacePick(orgId, null)
+    val remembered = restoredFor.value?.let { uid -> prefs.get(scopeKey(uid, orgId)) }
+    picked.value = when (remembered) {
+      null, WHOLE -> WorkspacePick(orgId, null, whole = true)
+      else -> WorkspacePick(orgId, remembered)
+    }
+  }
+
+  /** Shows the whole workspace on screen, no site. */
+  fun selectWholeWorkspace() {
+    picked.value = WorkspacePick(state.value.org?.id ?: picked.value.orgId, null, whole = true)
   }
 
   /**
@@ -234,6 +263,9 @@ class WorkspaceStore(
   private fun persist(uid: String, pick: WorkspacePick) {
     val encoded = Json.encodeToString(WorkspacePick.serializer(), pick)
     if (prefs.get(storageKey(uid)) != encoded) prefs.set(storageKey(uid), encoded)
+    val orgId = pick.orgId ?: return
+    val scope = if (pick.whole) WHOLE else pick.hostId ?: return
+    if (prefs.get(scopeKey(uid, orgId)) != scope) prefs.set(scopeKey(uid, orgId), scope)
   }
 
   companion object {
@@ -242,6 +274,8 @@ class WorkspaceStore(
     const val SITE_WINDOW = 100
 
     fun storageKey(uid: String) = "aglyn.workspace.$uid"
+    fun scopeKey(uid: String, orgId: String) = "aglyn.scope.$uid.$orgId"
+    private const val WHOLE = "*"
 
     fun orgFromMembership(id: String, data: Map<String, Any?>): WorkspaceOrg = WorkspaceOrg(
       id = id,
@@ -269,6 +303,7 @@ class WorkspaceStore(
       sites: List<WorkspaceSite>?,
     ): WorkspacePick {
       val orgId = if (orgs.any { it.id == picked.orgId }) picked.orgId else orgs.firstOrNull()?.id
+      if (picked.whole && orgId == picked.orgId) return WorkspacePick(orgId, null, whole = true)
       // A remembered site belongs to the remembered workspace only. When the
       // workspace falls back, so does the site: to the first one in [sites],
       // which the store loads for the effective workspace.
