@@ -84,7 +84,10 @@ import rewriteStoredBindingTokens, {
 import resolveComponentDefinition, {
   isComponentDefinitionRefusal,
 } from '../utils/component-definition-write'
-import { hasEntitlement } from '../constants/entitlements'
+import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { PlanUpsellNotice } from '@aglyn/shared-ui-jsx/components/plan-upsell-notice.component'
+import { usePlanFeatureLock } from '../hooks/use-plan-feature-lock'
 import { buildRoute, Route } from '../constants/route-links'
 import { useHostSubdomain } from '../components/host-id-provider'
 import { useOrgSlug } from '../hooks/use-org-scope'
@@ -221,7 +224,13 @@ export const BesignerVersionsComponent = observer(
     const { enqueueSnackbar } = useSnackbar()
     const { formsOnForSite, refuse: refuseFormsOff } = useFormsPublishBlock()
     const { queueLoading } = useLoading()
-    const { org, ready: orgReady } = useCurrentOrg()
+    const { ready: orgReady } = useCurrentOrg()
+    // Named versions are Pro and scheduling is Business: both stay on screen,
+    // disabled with the plan that includes them, for a plan without them.
+    const versioning = usePlanFeatureLock('versioning')
+    const scheduling = usePlanFeatureLock('scheduledPublishing')
+    const versioningReason = planLockReason('Saving named versions', versioning.planLabel)
+    const schedulingReason = planLockReason('Scheduled publishing', scheduling.planLabel)
     const createHostVersion = useHostVersionApi()
     const { confirm } = useConfirmationContext()
     const [open, setOpen] = useState(false)
@@ -498,11 +507,11 @@ export const BesignerVersionsComponent = observer(
           persist: false,
         })
       }
-      if (!hasEntitlement('versioning', org)) {
-        return enqueueSnackbar(
-          'Versioning requires a Pro plan — see Billing to upgrade',
-          { variant: 'warning', persist: false },
-        )
+      if (versioning.locked) {
+        return enqueueSnackbar(`${versioningReason} See Billing to upgrade.`, {
+          variant: 'warning',
+          persist: false,
+        })
       }
       // Snapshot the SAVED doc, so unsaved canvas edits are never silently
       // captured (or lost) — require a save first.
@@ -517,7 +526,14 @@ export const BesignerVersionsComponent = observer(
           ?.displayName ?? versionId
       setNameValue(`Copy of ${currentName}`)
       setNameDialog({ mode: 'create' })
-    }, [org, orgReady, enqueueSnackbar, versionDocs, versionId])
+    }, [
+      orgReady,
+      versioning.locked,
+      versioningReason,
+      enqueueSnackbar,
+      versionDocs,
+      versionId,
+    ])
 
     // The File menu's "New version" runs this exact handler (AGL-1218) —
     // gate, unsaved-canvas refusal, name dialog and all.
@@ -655,11 +671,11 @@ export const BesignerVersionsComponent = observer(
             { variant: 'info', persist: false },
           )
         }
-        if (!hasEntitlement('scheduledPublishing', org)) {
-          return void enqueueSnackbar(
-            'Scheduled publishing requires a Business plan — see Billing',
-            { variant: 'warning', persist: false },
-          )
+        if (scheduling.locked) {
+          return void enqueueSnackbar(`${schedulingReason} See Billing to upgrade.`, {
+            variant: 'warning',
+            persist: false,
+          })
         }
         // Default one hour out, in the datetime-local format (local time).
         const initial = new Date(Date.now() + 60 * 60 * 1000)
@@ -672,7 +688,13 @@ export const BesignerVersionsComponent = observer(
         )
         setScheduleFor(targetId)
       },
-      [org, orgReady, enqueueSnackbar, scheduleUnavailableReason],
+      [
+        orgReady,
+        scheduling.locked,
+        schedulingReason,
+        enqueueSnackbar,
+        scheduleUnavailableReason,
+      ],
     )
 
     const handleScheduleConfirm = useCallback(async () => {
@@ -820,16 +842,37 @@ export const BesignerVersionsComponent = observer(
                 sx={{ fontSize: '0.7em' }}
               />
             </Box>
-            <Button
-              variant="outlined"
-              color="primary"
-              size="small"
-              onClick={handleCreateVersion}
-            >
-              {'New version'}
-            </Button>
+            <BlockedControl blocked={versioning.locked} reason={versioningReason}>
+              <Button
+                variant="outlined"
+                color="primary"
+                size="small"
+                onClick={handleCreateVersion}
+              >
+                {'New version'}
+              </Button>
+            </BlockedControl>
           </DialogTitle>
           <DialogContent>
+            {versioning.locked ? (
+              <PlanUpsellNotice
+                planLabel={versioning.planLabel}
+                upgradeHref={versioning.upgradeHref}
+                sx={{ mb: 2 }}
+              >
+                {'Save named versions of this page, reopen any of them, and ' +
+                  'roll back by publishing an earlier one.'}
+              </PlanUpsellNotice>
+            ) : null}
+            {scheduling.locked && !scheduleUnavailableReason ? (
+              <PlanUpsellNotice
+                planLabel={scheduling.planLabel}
+                upgradeHref={scheduling.upgradeHref}
+                sx={{ mb: 2 }}
+              >
+                {'Schedule a version to go live at a set date and time.'}
+              </PlanUpsellNotice>
+            ) : null}
             <ScrollTable size="small">
               <TableHead>
                 <TableRow>
@@ -913,6 +956,7 @@ export const BesignerVersionsComponent = observer(
                         <Tooltip
                           title={
                             scheduleUnavailableReason ??
+                            (scheduling.locked ? schedulingReason : undefined) ??
                             (isPublished
                               ? 'This version is already live — create a new version to schedule it'
                               : 'Publish this version automatically at a date/time')
@@ -923,7 +967,9 @@ export const BesignerVersionsComponent = observer(
                               size="small"
                               color="primary"
                               disabled={
-                                isPublished || Boolean(scheduleUnavailableReason)
+                                isPublished ||
+                                Boolean(scheduleUnavailableReason) ||
+                                scheduling.locked
                               }
                               onClick={handleScheduleOpen(version.$id)}
                               aria-label="schedule publish"
