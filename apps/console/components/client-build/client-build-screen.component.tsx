@@ -32,6 +32,7 @@ import {
 } from '@aglyn/aglyn/app-utils/client-build'
 import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
 import { PLAN_LABELS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { ConsoleClientBuildStart } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { mdiOpenInNew, mdiQrcode, mdiSend } from '@aglyn/shared-data-mdi'
 import BlockedControl from '@aglyn/shared-ui-jsx/components/blocked-control.component'
@@ -913,7 +914,7 @@ function BuildStep(props: {
           href={buildRoute(Route.ADMIN_ORG_DETAIL, { orgId })}
           actionLabel="Staff page"
         >
-          {'The guided AI start is not available on this workspace: it needs Aglyn AI, which can ' +
+          {`The guided AI start is not available on this workspace: it needs ${PLATFORM_BRAND_NAME} AI, which can ` +
             'be added to the comp from the staff organization page. Or give the site the starter for now.'}
         </PrerequisiteNotice>
       )}
