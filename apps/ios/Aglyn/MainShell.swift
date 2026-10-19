@@ -395,6 +395,16 @@ struct TitleBarItems: ToolbarContent {
   @Environment(ShellNavigation.self) private var navigation
   let unread: Int
 
+  /// Where the search field sits: the Mac's toolbar keeps it in the automatic run beside the title, where a primary
+  /// action of a fixed width is dropped from sight.
+  static var searchPlacement: ToolbarItemPlacement {
+    #if os(macOS)
+      .automatic
+    #else
+      .primaryAction
+    #endif
+  }
+
   var body: some ToolbarContent {
     @Bindable var navigation = navigation
     ToolbarItemGroup(placement: .navigation) {
@@ -416,7 +426,7 @@ struct TitleBarItems: ToolbarContent {
       .accessibilityIdentifier("titlebar-forward")
       RecentPlacesMenu()
     }
-    ToolbarItem(placement: .primaryAction) {
+    ToolbarItem(placement: Self.searchPlacement) {
       Button {
         navigation.showOneBox = true
       } label: {
