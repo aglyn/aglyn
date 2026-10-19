@@ -15,24 +15,35 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { hostRoleCanWrite, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
   getOrgForHost,
   isImpersonationSession,
   lockdownRefusal,
+  projectedHostFieldsUpdate,
   syncHostProjectionForMembers,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
- * Re-fan a host's per-member `hostMemberships` rows from its current doc
- * (AGL-844). The site displayName is a client write to the host doc that
- * bypasses the membership funnel, so after such an edit the Setup page pings
- * this to propagate the new name into every member's projection. It only
- * re-reads authoritative host data and rewrites the convenience index — it
- * grants nothing — so a host member (editor+) may trigger it.
+ * Write a site's mirrored name or favicon, and re-fan its per-member
+ * `hostMemberships` rows from the host doc (AGL-844, AGL-3972).
+ *
+ * The rows are what every site list and switcher reads, and they are written
+ * here and at the other Admin-SDK writers of their source fields, never by a
+ * client. The console used to write `displayName` and `seo.favicon` from the
+ * browser and then ping this route, chained on the write's acknowledgement,
+ * which can take a minute under the multi-tab cache (AGL-3806); a page left
+ * in that minute or a failed ping left every member's list on the old name
+ * for good. So a body naming `displayName` or `favicon` is WRITTEN here, then
+ * re-fanned, in one awaited request. A body naming neither only re-fans.
+ *
+ * Open to the roles the rules let write those fields from the browser
+ * (`canWriteHostContent`): an `author` may rename a site there, so refusing
+ * the author here left an author's rename unmirrored. It grants nothing the
+ * rules do not already.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -42,6 +53,8 @@ async function handler(request: Request): Promise<Response> {
   }
   const hostId = String(body?.hostId ?? '')
   if (!hostId) return Response.json({ error: 'Missing hostId' }, { status: 400 })
+  const fields = projectedHostFieldsUpdate(body as Record<string, unknown> | null)
+  if ('error' in fields) return Response.json({ error: fields.error }, { status: 400 })
 
   const authorization = headers.authorization ?? ''
   const idToken = authorization.startsWith('Bearer ')
@@ -60,7 +73,7 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Unknown site' }, { status: 404 })
     }
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (decoded['staff'] !== true && memberRole !== 'admin' && memberRole !== 'editor') {
+    if (decoded['staff'] !== true && !hostRoleCanWrite(memberRole)) {
       return Response.json({ error: 'Not permitted' }, { status: 403 })
     }
 
@@ -77,6 +90,12 @@ async function handler(request: Request): Promise<Response> {
     })
     if (locked) return locked
 
+    if (fields.update) {
+      await hostSnapshot.ref.update({
+        ...fields.update,
+        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      })
+    }
     const orgId = hostSnapshot.get('orgId') as string | undefined
     if (orgId) await syncHostProjectionForMembers(orgId, hostId)
     return Response.json({ ok: true }, { status: 200 })

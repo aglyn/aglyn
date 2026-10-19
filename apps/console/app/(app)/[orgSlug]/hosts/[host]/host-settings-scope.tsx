@@ -1623,9 +1623,49 @@ export function HostSettingsScopeProvider({
         }
       }
 
+      /*
+       * The name is written by the server, which re-fans it into every
+       * member's `hostMemberships` row in the same request (AGL-3972) —
+       * the row every site list and switcher reads. Written from here and
+       * then pinged, the re-fan waited on this tab's write being
+       * acknowledged, which the multi-tab cache can hold for a minute
+       * (AGL-3806): a page left in that minute kept every list on the old
+       * name for good. Awaited, and a refusal stops the save, as the
+       * subdomain's does.
+       */
+      if (displayNameChanged) {
+        try {
+          const response = await authorizedFetch(
+            user,
+            '/api/hosts/sync-memberships',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ hostId, displayName: fields.displayName }),
+            },
+          )
+          if (!response.ok) {
+            const payload = await response.json().catch(() => null)
+            dequeueLoading()
+            return void enqueueSnackbar(
+              payload?.error ?? 'Could not change the site name.',
+              { variant: 'warning', persist: false },
+            )
+          }
+        } catch {
+          dequeueLoading()
+          return void enqueueSnackbar(
+            'Could not reach the server to change the site name.',
+            { variant: 'error' },
+          )
+        }
+      }
+
       // `subdomain` is server-owned above; the rules reject it from here.
+      // `displayName` was written by the server just now.
       const clientFields = { ...fields }
       delete clientFields.subdomain
+      delete clientFields.displayName
       /*
        * A CLEARED field has to be deleted, not left unmentioned. See
        * `CLEARABLE_TRACKING_PATHS` for why an omission reads as "unchanged"
@@ -1660,17 +1700,6 @@ export function HostSettingsScopeProvider({
         .then(() => {
           enqueueSnackbar('Saved!', { variant: 'success' })
           logActivity('Updated host settings', { type: 'host', id: hostId })
-          // DisplayName is a client write to the host doc, so it bypasses the
-          // membership funnel — ping the server to re-fan the new name into
-          // every member's hostMemberships row (AGL-844). Fire-and-forget: a
-          // miss self-heals on the next membership change or backfill.
-          if (displayNameChanged) {
-            void authorizedFetch(user, '/api/hosts/sync-memberships', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ hostId }),
-            }).catch(() => undefined)
-          }
           // The subdomain addresses this page, so a rename leaves the
           // current URL pointing at nothing — the host guard would render
           // the designed 404 on a successful save. Follow it across.

@@ -17,8 +17,28 @@
  */
 
 /**
- * Stamp `nameLower`, `searchTokens`, `hasCustomDomain` and `createdAt` onto
- * every site membership row written before the fields existed (AGL-3321).
+ * Re-derive every host-sourced field of each site membership row from its
+ * host, writing only the rows that differ: `displayName`, `subdomain`, `cname`
+ * and `favicon` (AGL-3972), and `nameLower`, `searchTokens`, `hasCustomDomain`
+ * and `createdAt` (AGL-3321).
+ *
+ * ## The name, address and icon (AGL-3972)
+ *
+ * Every site list and switcher, the native apps' included, shows a site by the
+ * name, address and favicon its row carries. The console wrote the name and
+ * favicon from the browser and re-fanned the rows with a ping that waited on
+ * the write's acknowledgement, which the multi-tab cache can hold for a
+ * minute, so rows were left on an old name for good: production's marketing
+ * site listed as "Aglyn Marketing Website" for two months after it became
+ * "Aglyn". The server now writes those fields and re-fans in one request;
+ * this repairs the rows written before. `cname` is new on the row, so lists
+ * can show the custom domain rather than only the platform address.
+ *
+ * `subdomain` is only ever SET from a host that has one, as the writer does.
+ * `favicon` and `cname` are DELETED from a row whose host has none, as the
+ * writer deletes them, so a cleared icon or a released domain stops showing.
+ *
+ * ## The list fields (AGL-3321)
  *
  * The organization's Sites list is a query over `users/{uid}/hostMemberships`
  * — `where(orgId ==)`, the reader's filters, ordered by `nameLower` or
@@ -77,9 +97,10 @@ const here = dirname(fileURLToPath(import.meta.url))
 const args = parseDeployArgs({
   command: 'backfill-host-memberships-list-fields',
   summary:
-    'Stamp `nameLower`, `searchTokens`, `hasCustomDomain` and `createdAt` onto ' +
-    'site membership rows that predate them, so the Sites list can search, ' +
-    'filter and sort them. Writes to the live project with --apply.',
+    'Re-derive the host-sourced fields of site membership rows (name, address, ' +
+    'custom domain, favicon, search keys, created date) from their hosts, so ' +
+    'every site list shows and finds a site as it is. Writes to the live ' +
+    'project with --apply.',
   effect: { gerund: 'writing', past: 'WRITTEN', failure: 'could not run' },
   flags: [
     { flag: '--apply', key: 'apply', describe: 'Write. Without it, a dry run.' },
@@ -92,6 +113,16 @@ const args = parseDeployArgs({
 const BATCH = 400
 /** Rows read per page of the scan. */
 const PAGE = 500
+
+/**
+ * A field the plan removes from the row, as the writer's `FieldValue.delete()`
+ * does. A plain marker rather than the sentinel itself, so the plan stays pure
+ * and printable for the self-test; `run` swaps it for the real one.
+ */
+export const DELETE = Object.freeze({ $delete: true })
+
+/** A non-blank string, trimmed, or null. */
+const text = (value) => (typeof value === 'string' && value.trim() ? value.trim() : null)
 
 /** A Firestore timestamp, as opposed to a legacy number or string. */
 const isTimestamp = (value) => typeof value?.toMillis === 'function'
@@ -122,8 +153,16 @@ export function planRow(path, row, host) {
   }
   if (!host) return { skip: 'no-host' }
   const update = {}
+  // What every list shows a site by (AGL-3972), as `membershipRow` writes it.
+  const displayName = typeof host.displayName === 'string' ? host.displayName : ''
+  if (row.displayName !== displayName) update.displayName = displayName
+  if (host.subdomain && row.subdomain !== host.subdomain) update.subdomain = host.subdomain
+  const cname = hasCustomDomain(host) ? String(host.cname).trim() : null
+  if (cname ? row.cname !== cname : 'cname' in row) update.cname = cname ?? DELETE
+  const favicon = text(host.seo?.favicon) ? host.seo.favicon : null
+  if (favicon ? row.favicon !== favicon : 'favicon' in row) update.favicon = favicon ?? DELETE
   // The Sites list's default order: a row without it is not listed at all.
-  const nameLower = nameSearchKey(typeof host.displayName === 'string' ? host.displayName : '')
+  const nameLower = nameSearchKey(displayName)
   if (row.nameLower !== nameLower) update.nameLower = nameLower
   const tokens = hostMembershipSearchTokens(host)
   if (!sameSearchTokens(row.searchTokens, tokens)) update.searchTokens = tokens
@@ -154,13 +193,23 @@ function selfTest() {
   const TOKENS = hostMembershipSearchTokens(HOST)
   const ROW = 'users/u1/hostMemberships/h1'
   // What a current row carries besides its tokens and its date.
-  const REST = { nameLower: 'harbor bakery', hasCustomDomain: false }
+  const REST = {
+    displayName: 'Harbor Bakery',
+    subdomain: 'harbor-bakery',
+    nameLower: 'harbor bakery',
+    hasCustomDomain: false,
+  }
   const planCases = [
-    ['a legacy row', ROW, { orgId: 'o1', displayName: 'Harbor Bakery', nameLower: 'harbor bakery' }, HOST, { update: { searchTokens: TOKENS, hasCustomDomain: false, createdAt: HOST.createdAt } }],
+    ['a legacy row', ROW, { orgId: 'o1', displayName: 'Harbor Bakery', subdomain: 'harbor-bakery', nameLower: 'harbor bakery' }, HOST, { update: { searchTokens: TOKENS, hasCustomDomain: false, createdAt: HOST.createdAt } }],
     ['a current row', ROW, { ...REST, searchTokens: TOKENS, createdAt: at(100) }, HOST, { skip: 'current' }],
-    ['a row with no name key, which the list would not list', ROW, { searchTokens: TOKENS, hasCustomDomain: false, createdAt: at(100) }, HOST, { update: { nameLower: 'harbor bakery' } }],
-    ['a row whose host was renamed', ROW, { ...REST, searchTokens: ['old'], createdAt: at(100) }, HOST, { update: { searchTokens: TOKENS } }],
-    ['a row whose site connected a domain', ROW, { ...REST, searchTokens: TOKENS, createdAt: at(100) }, { ...HOST, cname: 'shop.harbor.com' }, { update: { searchTokens: hostMembershipSearchTokens({ ...HOST, cname: 'shop.harbor.com' }), hasCustomDomain: true } }],
+    ['a row with no name key, which the list would not list', ROW, { displayName: 'Harbor Bakery', subdomain: 'harbor-bakery', searchTokens: TOKENS, hasCustomDomain: false, createdAt: at(100) }, HOST, { update: { nameLower: 'harbor bakery' } }],
+    ['a row whose tokens predate the name', ROW, { ...REST, searchTokens: ['old'], createdAt: at(100) }, HOST, { update: { searchTokens: TOKENS } }],
+    ['a row left on the name before a rename (AGL-3972)', ROW, { ...REST, displayName: 'Harbor Bakery Website', nameLower: 'harbor bakery website', searchTokens: ['old'], createdAt: at(100) }, HOST, { update: { displayName: 'Harbor Bakery', nameLower: 'harbor bakery', searchTokens: TOKENS } }],
+    ['a row left on the address before a rename', ROW, { ...REST, subdomain: 'harbor', searchTokens: TOKENS, createdAt: at(100) }, HOST, { update: { subdomain: 'harbor-bakery' } }],
+    ['a row whose site connected a domain', ROW, { ...REST, searchTokens: TOKENS, createdAt: at(100) }, { ...HOST, cname: 'shop.harbor.com' }, { update: { cname: 'shop.harbor.com', searchTokens: hostMembershipSearchTokens({ ...HOST, cname: 'shop.harbor.com' }), hasCustomDomain: true } }],
+    ['a row whose site released its domain', ROW, { ...REST, cname: 'shop.harbor.com', searchTokens: TOKENS, createdAt: at(100) }, HOST, { update: { cname: DELETE } }],
+    ['a row missing the site’s new favicon', ROW, { ...REST, searchTokens: TOKENS, createdAt: at(100) }, { ...HOST, seo: { favicon: 'media:org:icon' } }, { update: { favicon: 'media:org:icon' } }],
+    ['a row still showing a cleared favicon', ROW, { ...REST, favicon: 'media:org:icon', searchTokens: TOKENS, createdAt: at(100) }, { ...HOST, seo: { favicon: '' } }, { update: { favicon: DELETE } }],
     ['a seeded row dated by the seed, not the site', ROW, { ...REST, searchTokens: TOKENS, createdAt: at(7) }, HOST, { update: { createdAt: HOST.createdAt } }],
     ['a site that never recorded a date', ROW, { ...REST, searchTokens: TOKENS }, { ...HOST, createdAt: undefined }, { update: { createdAt: null } }],
     ['a legacy numeric date on the site', ROW, { ...REST, searchTokens: TOKENS, createdAt: null }, { ...HOST, createdAt: 1_700_000_000_000 }, { skip: 'current' }],
@@ -173,7 +222,11 @@ function selfTest() {
   // Idempotent: a row the plan stamped plans nothing the second time.
   for (const [name, path, row, host] of planCases) {
     const once = planRow(path, row, host)
-    const stamped = 'update' in once ? { ...row, ...once.update } : row
+    const stamped = { ...row }
+    for (const [key, value] of Object.entries('update' in once ? once.update : {})) {
+      if (value === DELETE) delete stamped[key]
+      else stamped[key] = value
+    }
     const again = planRow(path, stamped, host)
     check(`${name}: a re-run writes nothing`, 'skip' in again, true)
   }
@@ -191,7 +244,7 @@ function selfTest() {
 
 async function run() {
   const { applicationDefault, initializeApp } = await import('firebase-admin/app')
-  const { getFirestore } = await import('firebase-admin/firestore')
+  const { FieldValue, getFirestore } = await import('firebase-admin/firestore')
   const projectId = process.env.GOOGLE_CLOUD_PROJECT || undefined
   initializeApp({
     credential: applicationDefault(),
@@ -206,6 +259,10 @@ async function run() {
   const counts = {
     scanned: 0,
     current: 0,
+    displayName: 0,
+    subdomain: 0,
+    cname: 0,
+    favicon: 0,
     nameLower: 0,
     tokens: 0,
     hasCustomDomain: 0,
@@ -215,6 +272,7 @@ async function run() {
     written: 0,
   }
   let cursor = null
+  let example = false
   let batch = firestore.batch()
   let pending = 0
   for (;;) {
@@ -240,12 +298,35 @@ async function run() {
         else counts.otherCollections += 1
         continue
       }
+      for (const key of ['displayName', 'subdomain', 'cname', 'favicon']) {
+        if (key in plan.update) counts[key] += 1
+      }
+      if (!example && ('displayName' in plan.update || 'subdomain' in plan.update)) {
+        // One redacted example, so an operator can see what kind of drift
+        // this is without the run printing anyone's site names.
+        example = true
+        const mask = (value) =>
+          typeof value === 'string' && value ? `${[...value][0]}…(${[...value].length})` : value
+        console.log(
+          `  e.g. ${mask(row.get('displayName'))} / ${mask(row.get('subdomain'))}` +
+            ` -> ${mask(plan.update.displayName ?? row.get('displayName'))}` +
+            ` / ${mask(plan.update.subdomain ?? row.get('subdomain'))}`,
+        )
+      }
       if ('nameLower' in plan.update) counts.nameLower += 1
       if ('searchTokens' in plan.update) counts.tokens += 1
       if ('hasCustomDomain' in plan.update) counts.hasCustomDomain += 1
       if ('createdAt' in plan.update) counts.createdAt += 1
       if (!args.apply) continue
-      batch.update(row.ref, plan.update)
+      batch.update(
+        row.ref,
+        Object.fromEntries(
+          Object.entries(plan.update).map(([key, value]) => [
+            key,
+            value === DELETE ? FieldValue.delete() : value,
+          ]),
+        ),
+      )
       pending += 1
       if (pending >= BATCH) {
         // Swap in the fresh batch BEFORE awaiting the full one, so `batch`
@@ -271,6 +352,10 @@ async function run() {
   )
   console.log(`  scanned                         ${counts.scanned}`)
   console.log(`  already current                 ${counts.current}`)
+  console.log(`  set displayName                 ${counts.displayName}`)
+  console.log(`  set subdomain                   ${counts.subdomain}`)
+  console.log(`  set or clear cname              ${counts.cname}`)
+  console.log(`  set or clear favicon            ${counts.favicon}`)
   console.log(`  stamp nameLower                 ${counts.nameLower}`)
   console.log(`  stamp searchTokens              ${counts.tokens}`)
   console.log(`  stamp hasCustomDomain           ${counts.hasCustomDomain}`)

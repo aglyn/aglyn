@@ -26,7 +26,7 @@ import { siteLanguageCode } from '@aglyn/aglyn/app-utils/seo-locale'
 import { isSeoTitleVariable } from '@aglyn/aglyn/app-utils/seo-title-variables'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import type { PluginAiCapabilityArgsSchema } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
-import { syncHostProjectionForMembers } from '@aglyn/tenant-data-admin/server/host-memberships'
+import { changesProjectedHostFields, syncHostProjectionForMembers } from '@aglyn/tenant-data-admin/server/host-memberships'
 import { getLockdownVerdict } from '@aglyn/tenant-data-admin/server/lockdown'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
@@ -646,8 +646,9 @@ export function createAiJobSettingsStep(deps: AiJobSettingsStepDeps = {}): AiJob
       const dropped = await dropCache({ hostIds: [hostId], reason: 'AI build changed site settings' }).catch(() => ({ complete: false }))
       if (dropped.complete) await firestore.collection('publishOutbox').doc(written.outboxId).delete().catch(() => undefined)
     }
-    if (written.changed.includes('displayName')) {
-      // The site switcher lists sites by the name members' projections carry.
+    if (changesProjectedHostFields(written.changed)) {
+      // Every site list reads the name and favicon members' rows carry, so a
+      // new favicon owes the re-fan as much as a new name does (AGL-3972).
       await syncMemberships(job.orgId, hostId).catch((error: unknown) => {
         console.error('ai settings: membership projection not synced', { hostId, jobId: job.$id, error })
       })
