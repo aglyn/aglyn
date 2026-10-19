@@ -40,6 +40,9 @@ export type {
 export * from './lib/server/auth-handoff'
 export * from './lib/server/console-domains'
 export * from './lib/server/dns-probe'
+// Whether a name points at the tenant edge, for the verify route and the
+// domains plugin's one-click DNS (AGL-3963).
+export * from './lib/server/tenant-dns-check'
 export * from './lib/server/sending-domains'
 export * from './lib/server/sender-readiness'
 export * from './lib/server/host-sending-domain'
@@ -103,6 +106,10 @@ export * from './lib/server/firebase-admin'
 export * from './lib/server/free-workspace-cap'
 export * from './lib/server/ga4-measurement-protocol'
 export * from './lib/server/host-memberships'
+// Connecting a name to a site, for the attach route and for plugins that
+// bought the name (AGL-3961).
+export * from './lib/server/host-custom-domain'
+export * from './lib/server/custom-domain-redirects'
 export * from './lib/server/host-visitor-records'
 export * from './lib/server/list-members'
 export * from './lib/server/lockdown'

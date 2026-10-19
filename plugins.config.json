@@ -4289,6 +4289,51 @@
           ]
         }
       }
+    },
+    {
+      "id": "domains",
+      "package": "@aglyn/plugins-domains",
+      "register": {
+        "console": "registerDomainsConsole",
+        "consoleApi": "registerDomainsConsoleApi",
+        "consoleServerDeclarations": "registerDomainsConsoleServerDeclarations",
+        "subprocessors": "domainsSubprocessors"
+      },
+      "apiPrefixes": [
+        "domains"
+      ],
+      "orgKeyedCollections": [
+        {
+          "$comment": "A domain bought through Aglyn, keyed by the name (AGL-3962): its workspace and site, the registrar order, expiry, auto-renew, and the charges and renewals made for it. Top level, so org erasure removes them by orgId; the registration itself stays the customer's at the registrar.",
+          "name": "domainRegistrations",
+          "orgField": "orgId"
+        },
+        {
+          "$comment": "One-click DNS sessions (AGL-3963): the domain a site asked its DNS provider to point here, the provider found for it, and the state token the provider echoes back.",
+          "name": "domainConnectSessions",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 152,
+        "$comment": "Buy a domain for a site and have it connected with no DNS step (AGL-3962), through a registrar driver (Vercel's Registrar API first), and point a domain the owner already holds here in one click through the Domain Connect standard (AGL-3963). On for every workspace and no release flag: buying hides itself until the deployment names a registrar and a Stripe product (DOMAINS_REGISTRAR, DOMAINS_STRIPE_PRODUCT_ID), and one-click DNS until it holds a signing key (DOMAIN_CONNECT_PRIVATE_KEY). Starter and up, through core's customDomain entitlement.",
+        "label": "Domains",
+        "alwaysOnForWorkspace": true,
+        "description": "Buy a domain for a site and have it set up automatically, or point a domain you already own here in one click.",
+        "siteOff": {
+          "stops": "Switching Domains off for this site removes buying a domain and one-click DNS from its Custom Domain page. A domain you already connected keeps serving.",
+          "keeps": "Domains bought for this site stay registered to you and keep renewing until you turn auto-renew off or transfer them out, and Domains keeps working on the workspace’s other sites."
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "slots": [
+            "hostDomain",
+            "hostDomainConnect"
+          ]
+        }
+      }
     }
   ]
 }

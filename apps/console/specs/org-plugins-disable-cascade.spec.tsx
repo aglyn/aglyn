@@ -205,6 +205,7 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
       'music',
       'help-desks',
       'ad-conversions',
+      'domains',
       'commerce',
     ])
   })
@@ -278,6 +279,7 @@ describe('org Plugins page — disable cascade (AGL-2486)', () => {
         'music',
         'help-desks',
         'ad-conversions',
+        'domains',
       ])
       const settingsCalls = (globalThis.fetch as jest.Mock).mock.calls.filter(
         ([url]) => url === '/api/orgs/settings',

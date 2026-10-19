@@ -174,5 +174,9 @@
   "help-desks": {
     "baseline": 7839,
     "budget": 10240
+  },
+  "domains": {
+    "baseline": 3771,
+    "budget": 5120
   }
 }

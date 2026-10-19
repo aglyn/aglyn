@@ -2822,6 +2822,26 @@ allow read, write: if false;
 
 
 
+match /domainRegistrations/{domain} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
+match /domainConnectSessions/{sessionId} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
 
 
 
@@ -3215,6 +3235,10 @@ allow update: if isStaff() ||
 'hosts', 'subdomain',
 'cname', 'cnameAttachmentPending',
 'cnameDetachmentPending', 'themeInstalledFrom',
+
+
+
+'cnameTwin', 'cnameTwinPending',
 'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
 'suspendedUntilMs', 'suspendedMode', 'suspendedEnforcement',
 'suspended', 'bandwidthCeiling',
