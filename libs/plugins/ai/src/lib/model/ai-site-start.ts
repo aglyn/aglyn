@@ -581,25 +581,15 @@ export function aiSiteStartClientBrief(intake: ClientBuildIntake): string {
 }
 
 /**
- * What the review says the client build adds, so staff see the intake is
- * used without it being asked again: "Also from the client's details:
- * Harbor Plumbing, serving Austin, its phone, email and hours, and the
- * owner's own words."
+ * What the review says the client build adds beyond its own rows, so staff
+ * see the intake is used without it being asked again: the business's name
+ * and the owner's own words, which no row shows. The phone, email, towns and
+ * hours are the review's Details rows already (AGL-3995), so the note does
+ * not say them twice: "Also from the client's details: Harbor Plumbing and
+ * the owner's own words."
  */
 export function aiSiteStartClientNote(intake: ClientBuildIntake): string {
-  const name = intake.businessName.trim()
-  const towns = intake.towns.trim()
-  const reach = [
-    intake.phone.trim() ? 'phone' : '',
-    intake.email.trim() ? 'email' : '',
-    intake.hours.trim() ? 'hours' : '',
-  ].filter(Boolean)
-  const parts = [
-    name && towns ? `${name}, serving ${towns}` : name || (towns ? `serving ${towns}` : ''),
-    reach.length ? `its ${reach.length > 1 ? `${reach.slice(0, -1).join(', ')} and ${reach[reach.length - 1]}` : reach[0]}` : '',
-    intake.ownerWords.trim() ? "the owner's own words" : '',
-  ].filter(Boolean)
+  const parts = [intake.businessName.trim(), intake.ownerWords.trim() ? "the owner's own words" : ''].filter(Boolean)
   if (!parts.length) return 'Built from the client’s details.'
-  const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}` : parts[0]
-  return `Also from the client’s details: ${list}.`
+  return `Also from the client’s details: ${parts.join(' and ')}.`
 }

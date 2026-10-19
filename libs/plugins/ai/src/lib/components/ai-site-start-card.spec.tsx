@@ -1142,7 +1142,8 @@ describe('a site staff are building for a client (AGL-3958)', () => {
     render(<Widget {...zoneProps({ leave, clientBuild: { intake, onStarted, ready } })} />)
     await onStep('review')
     expect(ready).toHaveBeenCalledWith(true)
-    expect(screen.getByText(/^Also from the client’s details: Harbor Plumbing, serving Austin and Round Rock/)).toBeTruthy()
+    // The phone, email, towns and hours are rows of the review itself (AGL-3995).
+    expect(screen.getByText('Also from the client’s details: Harbor Plumbing and the owner\'s own words.')).toBeTruthy()
     // The follow that replaces the review reads the job from the same route.
     mockFetch.mockResolvedValue(json({ job: siteJob() }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan my site' }))

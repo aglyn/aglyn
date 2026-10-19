@@ -88,13 +88,15 @@ describe('the guided start for a client build (AGL-3958)', () => {
     )
   })
 
-  it('tells the review what the intake adds', () => {
-    expect(aiSiteStartClientNote(INTAKE)).toBe(
-      'Also from the client’s details: Harbor Plumbing, serving Austin and Round Rock, its phone, email and ' +
-        'hours, and the owner\'s own words.',
-    )
-    expect(aiSiteStartClientNote({ ...EMPTY, businessName: 'Harbor Plumbing' })).toBe(
+  it('tells the review what the intake adds beyond the review’s own rows', () => {
+    // The phone, email, towns and hours are Details rows on the review
+    // (AGL-3995): the note says only what no row does.
+    expect(aiSiteStartClientNote(INTAKE)).toBe('Also from the client’s details: Harbor Plumbing and the owner\'s own words.')
+    expect(aiSiteStartClientNote({ ...EMPTY, businessName: 'Harbor Plumbing', phone: '(512) 555-0123' })).toBe(
       'Also from the client’s details: Harbor Plumbing.',
+    )
+    expect(aiSiteStartClientNote({ ...EMPTY, ownerWords: 'Fixing pipes.' })).toBe(
+      'Also from the client’s details: the owner\'s own words.',
     )
     expect(aiSiteStartClientNote(EMPTY)).toBe('Built from the client’s details.')
   })
