@@ -55,6 +55,23 @@ export const COMMERCE_PRODUCTS = [
 ]
 const PRODUCT_IMAGES = { 'p-mug': 'mug', 'p-beans': 'beans', 'p-tote': 'tote', 'p-pour': 'pour' }
 
+/** The customers the orders name, and the order statuses they cycle through (`returns.mjs` reads both). */
+export const COMMERCE_PEOPLE = [
+  ['Maya Rodriguez', 'maya@example.com'],
+  ['Daniel Kim', 'daniel@example.com'],
+  ['Priya Nair', 'priya@example.com'],
+  ['Renee Fournier', 'renee@example.com'],
+  ['Sam Whitaker', 'sam@example.com'],
+  ['Chloe Martin', 'chloe@example.com'],
+  ['Aaliyah Grant', 'aaliyah@example.com'],
+  ['Tyler Brooks', 'tyler@example.com'],
+  ['Isabel Moreno', 'isabel@example.com'],
+  ['Owen Parker', 'owen@example.com'],
+  ['Naomi Brooks', 'naomi@example.com'],
+  ['Marcus Hale', 'marcus@example.com'],
+]
+export const COMMERCE_ORDER_STATUSES = ['paid', 'paid', 'partially_fulfilled', 'fulfilled', 'delivered', 'refunded', 'paid', 'fulfilled']
+
 export async function seedCommerce({ put, hostId, now: date, nameSearchFields }) {
   const now = date.getTime()
   const products = COMMERCE_PRODUCTS
@@ -88,26 +105,11 @@ export async function seedCommerce({ put, hostId, now: date, nameSearchFields })
   await put(`hosts/${hostId}/settings/store`, { currency: 'USD', name: 'Juniper Street Bakery', tax: { mode: 'manual', pricesIncludeTax: false, origin: { country: 'US', state: 'TX' }, rates: [{ country: 'US', state: 'TX', pct: 8.25, label: 'TX sales tax' }] } })
   await put(`hosts/${hostId}`, { timeZone: ZONE }, { merge: true })
 
-  const people = [
-    ['Maya Rodriguez', 'maya@example.com'],
-    ['Daniel Kim', 'daniel@example.com'],
-    ['Priya Nair', 'priya@example.com'],
-    ['Renee Fournier', 'renee@example.com'],
-    ['Sam Whitaker', 'sam@example.com'],
-    ['Chloe Martin', 'chloe@example.com'],
-    ['Aaliyah Grant', 'aaliyah@example.com'],
-    ['Tyler Brooks', 'tyler@example.com'],
-    ['Isabel Moreno', 'isabel@example.com'],
-    ['Owen Parker', 'owen@example.com'],
-    ['Naomi Brooks', 'naomi@example.com'],
-    ['Marcus Hale', 'marcus@example.com'],
-  ]
-  const statuses = ['paid', 'paid', 'partially_fulfilled', 'fulfilled', 'delivered', 'refunded', 'paid', 'fulfilled']
   let number = 1040
   for (let index = 0; index < 16; index += 1) {
     number += 1
-    const [name, email] = people[(index * 5 + (index >> 2)) % people.length]
-    const status = statuses[index % statuses.length]
+    const [name, email] = COMMERCE_PEOPLE[(index * 5 + (index >> 2)) % COMMERCE_PEOPLE.length]
+    const status = COMMERCE_ORDER_STATUSES[index % COMMERCE_ORDER_STATUSES.length]
     const pool = products.filter((entry) => entry.type !== 'digital')
     const pick = pool[(index * 5) % pool.length]
     const quantity = (index % 3) + 1
