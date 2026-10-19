@@ -8758,6 +8758,62 @@
             "editable": true
           },
           {
+            "key": "site-care-request-received",
+            "name": "Site Care: request received",
+            "description": "Sent to the person who asked when a Site Care request arrives, by email or from the console.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-request-done",
+            "name": "Site Care: request done",
+            "description": "Sent to the workspace owner when staff close a Site Care request: what changed, the time it took, the time left this month, or the extra time billed.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-request-corrected",
+            "name": "Site Care: time corrected",
+            "description": "Sent to the workspace owner when staff correct the minutes on a finished request, with the before and after.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-approval-confirmation",
+            "name": "Site Care: extra time approved",
+            "description": "Sent to the workspace owner the moment staff record their yes to extra time, and again, marked corrected, when the record is corrected. It is the written record of the approval.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-charge-reversed",
+            "name": "Site Care: charge removed, credited or refunded",
+            "description": "Sent to the workspace owner when staff void, credit or refund an extra-time charge from the request.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-statement",
+            "name": "Site Care: monthly statement",
+            "description": "Sent to the workspace owner when staff press Send statement: every request of the month, the minutes, the extra time billed and every correction.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-quote",
+            "name": "Site Care: bigger than Site Care covers",
+            "description": "Sent from a Site Care request by staff when the work adds something new (a page, a form, a design, a campaign): Site Care covers changes to what exists, so this is a flat quote.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
+            "key": "site-care-unknown-sender",
+            "name": "Site Care: sender not recognized",
+            "description": "Sent to someone who emailed the Site Care address from an address no Site Care workspace has as a member.",
+            "deliveredBy": "resend",
+            "editable": true
+          },
+          {
             "key": "domain-purchased",
             "name": "Domain purchased",
             "description": "Sent to a workspace's owners and admins when a domain bought for one of its sites is registered.",
@@ -13982,6 +14038,327 @@
               "name": "preferencesUrl",
               "description": "The product email switch in account settings",
               "sample": "https://app.aglyn.com/manage/user/emails"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-request-received": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "request.title",
+              "description": "The request, as the owner titled it",
+              "sample": "Update our holiday hours"
+            },
+            {
+              "name": "request.message",
+              "description": "What they asked for",
+              "sample": "Please change Saturday to 9 to 2 for December."
+            },
+            {
+              "name": "request.due",
+              "description": "When it will be done at the latest",
+              "sample": "Wednesday, October 21"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-request-done": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "request.title",
+              "description": "The request, as the owner titled it",
+              "sample": "Update our holiday hours"
+            },
+            {
+              "name": "request.changes",
+              "description": "What changed, from the request and the publish that shipped it",
+              "sample": "Published “Home” on Oct 19, 2026, 3:04 PM CDT"
+            },
+            {
+              "name": "request.minutes",
+              "description": "The time it took",
+              "sample": "35 min"
+            },
+            {
+              "name": "month.minutesLeft",
+              "description": "Included time left this month",
+              "sample": "25 min of this month’s included hour"
+            },
+            {
+              "name": "request.billing",
+              "description": "Whether anything bills, in one sentence",
+              "sample": "No extra charge: this fit in your included hour."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-request-corrected": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "request.title",
+              "description": "The request, as the owner titled it",
+              "sample": "Update our holiday hours"
+            },
+            {
+              "name": "correction.before",
+              "description": "The time before",
+              "sample": "75 min"
+            },
+            {
+              "name": "correction.after",
+              "description": "The time now",
+              "sample": "45 min"
+            },
+            {
+              "name": "correction.reason",
+              "description": "Why it changed",
+              "sample": "The timer ran while we waited for your photos."
+            },
+            {
+              "name": "request.billing",
+              "description": "What bills now, in one sentence",
+              "sample": "No extra charge: this now fits in your included hour."
+            },
+            {
+              "name": "month.minutesLeft",
+              "description": "Included time left this month",
+              "sample": "15 min of this month’s included hour"
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-approval-confirmation": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "request.title",
+              "description": "The request, as the owner titled it",
+              "sample": "Update our holiday hours"
+            },
+            {
+              "name": "approval.heading",
+              "description": "“You approved extra time”, or “Corrected” on a correction",
+              "sample": "You approved extra time"
+            },
+            {
+              "name": "approval.sentence",
+              "description": "What was approved, how and when",
+              "sample": "You approved up to 2 hours of extra time at $79 an hour for “Update our holiday hours”, by phone on Oct 19, 2026, 2:10 PM CDT."
+            },
+            {
+              "name": "approval.correction",
+              "description": "What was corrected and why, on a correction; blank otherwise",
+              "sample": "Corrected from 1 hour to 2 hours: the owner asked for the gallery too."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-charge-reversed": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "request.title",
+              "description": "The request, as the owner titled it",
+              "sample": "Update our holiday hours"
+            },
+            {
+              "name": "charge.heading",
+              "description": "“Charge removed”, “Charge credited” or “Charge refunded”",
+              "sample": "Charge removed"
+            },
+            {
+              "name": "charge.sentence",
+              "description": "What happened to the money",
+              "sample": "The $79 for 1 hour of extra time will not be on your next invoice."
+            },
+            {
+              "name": "charge.reason",
+              "description": "Why",
+              "sample": "We took longer than we should have on this one."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-statement": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "month.label",
+              "description": "The month",
+              "sample": "October 2026"
+            },
+            {
+              "name": "statement.summary",
+              "description": "The month in one sentence",
+              "sample": "October 2026: 3 requests, 1 h 35 min of work, 60 of 60 included minutes used, 1 hour of extra time billed."
+            },
+            {
+              "name": "statement.lines",
+              "description": "One line per request",
+              "sample": "Update our holiday hours: 35 min, included\nNew staff photo: 1 h, 1 hour billed ($79), on your next invoice"
+            },
+            {
+              "name": "statement.history",
+              "description": "Everything recorded this month, one dated line each",
+              "sample": "Oct 19, 2026, 3:04 PM CDT: Finished “Update our holiday hours”: 35 min."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-quote": [
+            {
+              "name": "org.name",
+              "description": "The workspace the request is for",
+              "sample": "Test Org"
+            },
+            {
+              "name": "request.title",
+              "description": "The request, as the owner titled it",
+              "sample": "Update our holiday hours"
+            },
+            {
+              "name": "quote.amount",
+              "description": "The flat price",
+              "sample": "$249"
+            },
+            {
+              "name": "quote.scope",
+              "description": "What the price covers",
+              "sample": "A new landing page for the holiday sale, with a sign-up form."
+            },
+            {
+              "name": "brand.productName",
+              "description": "The sender's product name — the org's own on white-label",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.fromName",
+              "description": "Sender display name the mail is delivered under",
+              "sample": "Aglyn"
+            },
+            {
+              "name": "brand.supportUrl",
+              "description": "Where the recipient should go for help",
+              "sample": "https://app.aglyn.com/support"
+            }
+          ],
+          "site-care-unknown-sender": [
+            {
+              "name": "sender.email",
+              "description": "The address the message came from",
+              "sample": "someone@example.com"
             },
             {
               "name": "brand.productName",

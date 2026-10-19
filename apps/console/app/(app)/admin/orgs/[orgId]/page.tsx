@@ -103,6 +103,7 @@ import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade
 import { countManagerSeats, isStaffSeat } from '@aglyn/aglyn/app-utils/organizations'
 import { StaffSiteRowActions } from '../../../../../components/staff-site-row-actions.component'
 import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
+import StaffSiteCareMonthCard from '../../../../../components/site-care/staff-site-care-month-card.component'
 import StaffOrgSubscriptionCard from '../../../../../components/staff-org-subscription-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import StaffOrgUsageTable, {
@@ -2447,6 +2448,12 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
               table a reader scans across, and full width is its shape.
             */}
             <Stack spacing={3} sx={{ mt: 3 }}>
+              {/*
+                Site Care's month (AGL-3959): every request with its minutes,
+                approvals, charges, corrections and emails, and Send
+                statement. Full width: one line per request, read across.
+              */}
+              <StaffSiteCareMonthCard orgId={orgId} siteCare={siteCare} />
               <StaffOrgAdminActionsCard
                 entries={orgAudit}
                 ready={orgReady}

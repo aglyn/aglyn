@@ -943,7 +943,7 @@ export const DOCS_HELP_ANCHORS = {
   actionsBuilder: ['#create-an-action', '#recipes', '#describe-it', '#triggers', '#pick-element', '#crm-events', '#funnel-events', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#crm-steps', '#step-conditions', '#sequences', '#transactional-replies', '#merge-tags', '#run-history', '#what-is-and-isnt-recorded', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
   activities: ['#four-kinds-of-history', '#reading-the-timeline', '#campaign-email', '#logging-an-activity', '#meeting-from-a-booking', '#click-to-call', '#sending-an-email', '#delivery-states', '#captured-email', '#where-an-activity-is-visible', '#the-recent-activity-feed', '#related'],
   addALocale: ['#steps', '#tips', '#related'],
-  addOns: ['#what-you-can-add', '#assigning-register-seats', '#assigning-collaborator-seats', '#aglyn-ai', '#aglyn-ai-questions', '#site-care', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
+  addOns: ['#what-you-can-add', '#assigning-register-seats', '#assigning-collaborator-seats', '#aglyn-ai', '#aglyn-ai-questions', '#site-care', '#site-care-statement', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
   addSearch: ['#steps', '#tips', '#related'],
   adTracking: ['#browser-tags', '#tiktok-pixel', '#pinterest-tag', '#consent', '#related'],
   agencySites: ['#one-brief', '#shared-and-not', '#organization-model', '#per-client-spend', '#off-for-one-site', '#white-label', '#who-publishes', '#related'],
@@ -1135,7 +1135,7 @@ export const DOCS_HELP_ANCHORS = {
   supportAndCommunity: ['#support-tickets', '#your-tickets', '#ticket-status', '#what-to-include', '#community-forum', '#forum-threads', '#support-link', '#related'],
   supportQueue: ['#support-queue-page', '#triage', '#notifications', '#related'],
   supportTiers: ['#why-enterprise-is-in-hours-not-business-days', '#what-starts-and-stops-the-clock', '#where-to-see-it'],
-  supportTriage: ['#why-this-exists', '#1-order-the-queue', '#not-a-support-ticket', '#3-the-billing-answers', '#4-acting-on-the-customers-account', '#escalation', '#related'],
+  supportTriage: ['#why-this-exists', '#1-order-the-queue', '#not-a-support-ticket', '#3-the-billing-answers', '#4-acting-on-the-customers-account', '#escalation', '#site-care', '#site-care-working', '#site-care-month', '#site-care-reconciliation', '#related'],
   tasks: ['#task-picklists', '#the-tasks-page', '#the-calendar-view', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#import-from-csv', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#organization-tasks', '#tasks-on-a-contact-company-or-deal', '#reminders', '#turning-reminders-off', '#next-activity', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
   taxServices: ['#before-you-start', '#connect', '#when-the-service-is-not-used', '#how-sales-are-taxed', '#product-tax-codes', '#exempt-customers', '#recording-orders-and-refunds', '#disconnect', '#what-is-sent-to-the-vendor'],
   team: ['#team-page', '#team-roles', '#organizations', '#three-kinds-of-user', '#site-roles', '#site-collaborators', '#collaborator-ai-access', '#what-a-site-collaborator-sees', '#site-membership', '#visitor-record-ceiling', '#seats', '#related'],
@@ -1193,6 +1193,7 @@ export const DOCS_HELP_SECTION_TITLES: {
   addOns: {
     '#assigning-collaborator-seats': 'Assigning collaborator seats',
     '#assigning-register-seats': 'Assigning register seats',
+    '#site-care-statement': 'Your Site Care statement',
     '#what-you-can-add': 'What you can add',
   },
   adTracking: {
@@ -1924,6 +1925,10 @@ export const DOCS_HELP_SECTION_TITLES: {
   supportQueue: {
     '#support-queue-page': 'The queue page',
     '#triage': 'Triage',
+  },
+  supportTriage: {
+    '#site-care-month': 'The month and the statement',
+    '#site-care-working': 'Working a request',
   },
   tasks: {
     '#the-dashboard-card': 'The dashboard card',

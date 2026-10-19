@@ -40,7 +40,9 @@ import {
   listQueryRefusals,
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import SiteCareRequestPanel from '../../../../components/site-care/site-care-request-panel.component'
 import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
@@ -60,6 +62,11 @@ interface StaffTicket {
   status: 'open' | 'closed'
   createdAt: number | null
   updatedAt: number | null
+  /** `siteCare` on a Site Care request (AGL-3959). */
+  kind?: string
+  siteCare?: { state?: 'open' | 'closed' } | null
+  responseDueAt?: number | null
+  firstRespondedAt?: number | null
 }
 
 interface StaffMessage {
@@ -83,6 +90,22 @@ const NO_WORDS: readonly string[] = []
 function formatWhen(ms: number | null): string {
   return ms ? new Date(ms).toLocaleString() : ''
 }
+
+/**
+ * The response clock on a queue row: when the reply (or, on a Site Care
+ * request, the finished change) is owed, or that it is late. Nothing once
+ * it has been answered or closed.
+ */
+function dueClock(ticket: StaffTicket, nowMs: number): { label: string; late: boolean } | null {
+  if (ticket.status !== 'open' || ticket.firstRespondedAt || !ticket.responseDueAt) return null
+  const late = ticket.responseDueAt < nowMs
+  return {
+    label: late ? `Overdue since ${formatWhen(ticket.responseDueAt)}` : `Due ${formatWhen(ticket.responseDueAt)}`,
+    late,
+  }
+}
+
+const isSiteCare = (ticket: StaffTicket | null | undefined) => ticket?.kind === 'siteCare'
 
 /**
  * Staff support queue (AGL-849): the operator side of the subscriber
@@ -275,7 +298,9 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
                       : 'No tickets to show.'}
                   </Alert>
                 ) : null}
-                {tickets.map((ticket) => (
+                {tickets.map((ticket) => {
+                  const clock = dueClock(ticket, Date.now())
+                  return (
                   <Stack
                     key={ticket.$id}
                     direction="row"
@@ -287,6 +312,9 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
                       label={ticket.status}
                       color={ticket.status === 'open' ? 'warning' : 'default'}
                     />
+                    {isSiteCare(ticket) ? (
+                      <Chip size="small" variant="outlined" color="primary" label="Site Care" />
+                    ) : null}
                     <Stack sx={{ flex: 1, minWidth: 0 }}>
                       <Typography variant="body2" noWrap>
                         {ticket.subject}
@@ -300,12 +328,22 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
                           ticket.updatedAt,
                         )}`}
                       </Typography>
+                      {clock ? (
+                        <Typography
+                          variant="caption"
+                          color={clock.late ? 'error' : 'text.secondary'}
+                          noWrap
+                        >
+                          {clock.label}
+                        </Typography>
+                      ) : null}
                     </Stack>
                     <Button size="small" onClick={openTicket(ticket.$id)}>
                       {'Open'}
                     </Button>
                   </Stack>
-                ))}
+                  )
+                })}
                 <StaffListPaginationControls pagination={queue} />
               </Stack>
             </CardDisplay>
@@ -317,7 +355,7 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
       <Dialog
         open={Boolean(thread)}
         onClose={() => setThread(null)}
-        maxWidth="sm"
+        maxWidth={isSiteCare(thread?.ticket) ? 'md' : 'sm'}
         fullWidth
       >
         <DialogTitle>
@@ -349,6 +387,15 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
         >
+          {thread && isSiteCare(thread.ticket) ? (
+            <SiteCareRequestPanel
+              ticketId={thread.ticket.$id}
+              onChanged={() => {
+                void refresh()
+                void openTicket(thread.ticket.$id)()
+              }}
+            />
+          ) : null}
           {(thread?.messages ?? []).map((message) => (
             <Stack key={message.$id} spacing={0.25}>
               <Typography variant="caption" color="text.secondary">
@@ -372,18 +419,27 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
           />
         </DialogContent>
         <DialogActions sx={{ justifyContent: 'space-between' }}>
-          <Button
-            color={thread?.ticket?.status === 'open' ? 'inherit' : 'primary'}
-            disabled={busy || !thread}
-            onClick={() =>
-              void patchTicket({
-                ticketId: thread?.ticket?.$id,
-                status: thread?.ticket?.status === 'open' ? 'closed' : 'open',
-              })
+          <BlockedControl
+            blocked={
+              isSiteCare(thread?.ticket) &&
+              thread?.ticket?.status === 'open' &&
+              thread?.ticket?.siteCare?.state !== 'closed'
             }
+            reason="Close a Site Care request with Close with minutes, above."
           >
-            {thread?.ticket?.status === 'open' ? 'Close ticket' : 'Reopen'}
-          </Button>
+            <Button
+              color={thread?.ticket?.status === 'open' ? 'inherit' : 'primary'}
+              disabled={busy || !thread}
+              onClick={() =>
+                void patchTicket({
+                  ticketId: thread?.ticket?.$id,
+                  status: thread?.ticket?.status === 'open' ? 'closed' : 'open',
+                })
+              }
+            >
+              {thread?.ticket?.status === 'open' ? 'Close ticket' : 'Reopen'}
+            </Button>
+          </BlockedControl>
           <Stack direction="row" spacing={1}>
             <Button onClick={() => setThread(null)}>{'Done'}</Button>
             <Button

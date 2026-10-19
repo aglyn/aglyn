@@ -128,10 +128,11 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
       // summary's workspace and site emails in AGL-3867 — the five
       // getting-started emails (AGL-3692), one per risk notice kind plus the risk
       // digest and review acknowledgment (AGL-3368, pinned in
-      // `risk-notice-catalog.spec.ts`), and the nine emails of a domain bought
-      // through the domains plugin (AGL-3962, `domain-emails.ts`).
+      // `risk-notice-catalog.spec.ts`), the nine emails of a domain bought
+      // through the domains plugin (AGL-3962, `domain-emails.ts`), and the
+      // eight Site Care emails (AGL-3959).
       expect(editable.length).toBe(
-        31 + 5 + RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length + Object.keys(DOMAIN_EMAIL_KEYS).length,
+        31 + 5 + 8 + RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES.length + Object.keys(DOMAIN_EMAIL_KEYS).length,
       )
       for (const entry of SYSTEM_EMAIL_TEMPLATES) {
         if (isSystemEmailEditable(entry)) {
