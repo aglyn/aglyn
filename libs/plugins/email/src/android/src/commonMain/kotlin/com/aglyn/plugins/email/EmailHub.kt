@@ -275,7 +275,7 @@ fun EmailHubScreen(context: NativePluginContext, initialSection: EmailSection, i
     if (hostId != null) {
       when (section) {
         EmailSection.MESSAGES -> EmailsScreen(context, initial, composeCampaign, composeNew)
-        EmailSection.TEMPLATES -> TemplatesSection(context, actions)
+        EmailSection.TEMPLATES -> TemplatesSection(context, actions, startNew = composeNew)
         EmailSection.AUDIENCES -> AudiencesSection(context, actions, initial)
         EmailSection.TOPICS -> TopicsSection(context, actions)
         EmailSection.SENDING -> SendingSection(actions)
@@ -287,7 +287,7 @@ fun EmailHubScreen(context: NativePluginContext, initialSection: EmailSection, i
           EmailsScreen(site, initial, composeCampaign, composeNew)
         }
         EmailSection.TEMPLATES -> PerSiteSection(context, "templates", "Each template is one site's design. Pick a site to see its templates.") { site ->
-          TemplatesSection(site, EmailActions(site, orgId, site.hostId))
+          TemplatesSection(site, EmailActions(site, orgId, site.hostId), startNew = composeNew)
         }
         EmailSection.AUDIENCES -> AudiencesSection(context, actions, initial)
         EmailSection.TOPICS -> TopicsSection(context, actions)
@@ -325,14 +325,14 @@ fun templateRowOf(doc: FirestoreDoc) = TemplateRow(
 )
 
 @Composable
-fun TemplatesSection(context: NativePluginContext, actions: EmailActions) {
+fun TemplatesSection(context: NativePluginContext, actions: EmailActions, startNew: Boolean = false) {
   val coroutines = rememberCoroutineScope()
   val hostId = actions.hostId ?: return
   val list = remember(hostId) { LiveQueryList(context.firestore, coroutines, 25, ::templateRowOf) }
   val canEdit = rememberCanSend(context)
   var search by rememberSaveable { mutableStateOf("") }
   var asked by rememberSaveable { mutableStateOf("") }
-  var creating by remember { mutableStateOf(false) }
+  var creating by remember { mutableStateOf(startNew) }
   var duplicating by remember { mutableStateOf<TemplateRow?>(null) }
   var deleting by remember { mutableStateOf<TemplateRow?>(null) }
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }

@@ -156,9 +156,9 @@ internal fun PhoneShell(
     ModalBottomSheet(onDismissRequest = { chrome.createMenu = false }, modifier = Modifier.testTag("create-sheet")) {
       Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 16.dp)) {
         Text("Create new", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-        CreateMenuItems(services, workspace, enabled) { entry ->
+        CreateMenuItems(services, workspace, enabled, uid) { item ->
           chrome.createMenu = false
-          actions.openScreen(entry.screen, mapOf("new" to "1"))
+          actions.openScreen(item.screen, item.params ?: mapOf("new" to "1"))
         }
       }
     }

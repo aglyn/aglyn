@@ -336,7 +336,7 @@ internal fun SignedInShell(services: ShellServices, navigator: ShellNavigator, u
             )
             Box(Modifier.align(Alignment.BottomStart)) {
               AccountMenu(services, user, chrome)
-              CreateMenu(services, workspace, chrome, enabled, actions)
+              CreateMenu(services, workspace, chrome, enabled, uid, actions)
             }
           }
           VerticalDivider(color = shellColors.divider)

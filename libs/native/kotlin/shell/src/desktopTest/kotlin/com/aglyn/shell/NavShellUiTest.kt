@@ -111,6 +111,28 @@ class NavShellUiTest {
   }
 
   @Test
+  fun theCreateMenuListsTheManifestsItemsForTheScope() = runComposeUiTest {
+    setContent { AglynShell(testServices(userDoc = emptyMap())) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("rail-create") > 0 }
+    onNodeWithTag("rail-create").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("create-page") > 0 }
+    onNodeWithTag("create-page").assertIsDisplayed()
+    // No plugin is on in this site, so no plugin's item is offered, and the console has no "Booking" create.
+    assertEquals(0, onAllNodesWithTagCount("create-product"))
+    assertEquals(0, onAllNodesWithTagCount("create-booking"))
+  }
+
+  @Test
+  fun createIsGatedByTheMembersStampElseTheirRole() {
+    assertEquals(mapOf("hosts.create" to false, "data.manage" to true), memberPermissions(mapOf("role" to "owner", "resolvedPermissions" to mapOf("hosts.create" to false, "data.manage" to true)), "owner"))
+    assertEquals(mapOf("data.manage" to true), memberPermissions(mapOf("role" to "editor"), "editor"))
+    assertEquals(emptyMap(), memberPermissions(null, "viewer"))
+    assertEquals("admin", createHostRole("author", "owner"))
+    assertEquals("author", createHostRole("author", "editor"))
+  }
+
+  @Test
   fun pinningFromThePickerWritesTheAccountsPins() = runComposeUiTest {
     val writes = Writes()
     val navigator = ShellNavigator()
