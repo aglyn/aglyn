@@ -234,12 +234,48 @@ public struct AglynFoldedSection<Content: View>: View {
   }
 
   public var body: some View {
+    if plain { plainBody } else { groupedBody }
+  }
+
+  /// The Mac and iPad detail column's fold (Figma Section/Folded): a 49-point row under a hairline, its chevron at the
+  /// content's edge with the title after it (a plain list would hang a disclosure triangle in the gutter).
+  @ViewBuilder
+  private var plainBody: some View {
+    Section {
+      Button {
+        withAnimation(.easeInOut(duration: 0.2)) { open.toggle() }
+      } label: {
+        HStack(spacing: 12) {
+          Image(systemName: "chevron.right")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(AglynColor.secondaryText)
+            .rotationEffect(.degrees(open ? 90 : 0))
+            .frame(width: 16)
+          Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(AglynColor.textPrimary)
+          Spacer(minLength: AglynSpace.one)
+          if let count, count > 0 {
+            Text("\(count)").font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText).monospacedDigit()
+          }
+        }
+        .frame(minHeight: 49)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .overlay(alignment: .top) { AglynHairline() }
+      .accessibilityElement(children: .combine)
+      .accessibilityValue(open ? "Open" : "Folded")
+      .accessibilityIdentifier(identifier ?? "fold-\(title)")
+      if open { content }
+    }
+  }
+
+  private var groupedBody: some View {
     Section {
       DisclosureGroup(isExpanded: $open) {
         content
       } label: {
         HStack {
-          Text(title).font(plain ? .system(size: 14, weight: .semibold) : AglynFont.strongSubheadline)
+          Text(title).font(AglynFont.strongSubheadline)
           Spacer(minLength: AglynSpace.one)
           if let count, count > 0 {
             Text("\(count)").font(AglynFont.caption).foregroundStyle(.secondary).monospacedDigit()
@@ -249,10 +285,7 @@ public struct AglynFoldedSection<Content: View>: View {
         .accessibilityElement(children: .combine)
         .accessibilityValue(open ? "Open" : "Folded")
         .accessibilityIdentifier(identifier ?? "fold-\(title)")
-        // In the Mac and iPad detail column a folded section is a 49-point row under a hairline (Figma Section/Folded).
-        .frame(minHeight: plain ? 49 : nil)
       }
-      .overlay(alignment: .top) { if plain { AglynHairline() } }
     }
   }
 }
