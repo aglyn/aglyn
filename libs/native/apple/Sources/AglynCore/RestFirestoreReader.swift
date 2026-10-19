@@ -12,7 +12,8 @@ import Foundation
 /// Firebase Auth SDK, which such a build cannot sign in. REST has no
 /// listener, so a live query reads once and then again every
 /// `refreshInterval` until it is removed; the shell's Refresh (⌘R) re-reads
-/// at once by re-subscribing.
+/// at once by re-subscribing, and so does every write this reader makes, so a
+/// screen shows its own save at once (AGL-3971) rather than a poll later.
 public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
   public typealias TokenSource = @Sendable () async throws -> String?
 
@@ -161,6 +162,7 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
     if !transforms.isEmpty { write["updateTransforms"] = transforms }
     let (status, body) = try await send(url: "\(root):commit", method: "POST", body: ["writes": [write]])
     guard (200..<300).contains(status) else { throw Self.failure(status: status, body: body) }
+    Self.rereadNow()
   }
 
   private func isServerTimestamp(_ value: Any) -> Bool {
@@ -180,11 +182,13 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
     if !transforms.isEmpty { write["updateTransforms"] = transforms }
     let (status, body) = try await send(url: "\(root):commit", method: "POST", body: ["writes": [write]])
     guard (200..<300).contains(status) else { throw Self.failure(status: status, body: body) }
+    Self.rereadNow()
   }
 
   public func deleteDocument(_ path: [String]) async throws {
     let (status, body) = try await send(url: "\(root)/\(Self.encodePath(path))", method: "DELETE", body: nil)
     guard (200..<300).contains(status) || status == 404 else { throw Self.failure(status: status, body: body) }
+    Self.rereadNow()
   }
 
   // MARK: - Wire format

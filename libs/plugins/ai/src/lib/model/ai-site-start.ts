@@ -16,6 +16,13 @@
  */
 
 import type { ClientBuildIntake } from '@aglyn/aglyn/app-utils/client-build'
+import {
+  AI_SITE_DETAIL_KEYS,
+  AI_SITE_NO_DETAILS,
+  aiSiteDetailProblem,
+  type AiSiteDetailKey,
+  type AiSiteDetails,
+} from './ai-site-details'
 import { aiSiteKind, aiSiteKindFor, type AiSiteKind } from './ai-site-kinds'
 import {
   AI_SITE_INSPIRATION_INPUT,
@@ -133,8 +140,14 @@ export const AI_SITE_START_TYPES: readonly string[] = [
   'an event',
 ]
 
-/** What a person answered; the shape the card holds and the brief is built from. */
-export interface AiSiteStartAnswers {
+/**
+ * What a person answered; the shape the card holds and the brief is built from.
+ *
+ * Beside the answers each step asks, the business details its "More details"
+ * offers (AGL-3979, `AiSiteDetails`): every one optional and `''` until given,
+ * the phone number and email on the Details step itself.
+ */
+export interface AiSiteStartAnswers extends AiSiteDetails {
   /** What kind of site this is. The one answer with no default. */
   siteType: string
   /** Who the site is for; empty when they did not say. */
@@ -153,6 +166,10 @@ export interface AiSiteStartAnswers {
   submissions: AiSiteSubmissions
   /** Whether the scaffold also drafts a welcome email. */
   welcomeEmail: boolean
+  /** The city or town the business is in (AGL-3979); empty when they did not say. */
+  city: string
+  /** The brand color, as a six-digit hex (AGL-3979); empty for the style's own. */
+  brand: string
   /**
    * The sites they like (AGL-3975), as typed, one a field; absent or empty
    * for none. Asked only while `release_ai_site_inspiration` is on.
@@ -175,6 +192,49 @@ export const AI_SITE_START_ANSWERS: AiSiteStartAnswers = {
   pages: 5,
   submissions: 'inbox',
   welcomeEmail: true,
+  city: '',
+  brand: '',
+  ...AI_SITE_NO_DETAILS,
+}
+
+/** The answers a person may give beyond the ones each step asks, by key (AGL-3979). */
+export type AiSiteStartExtraKey = AiSiteDetailKey | 'city' | 'brand'
+
+/** Every extra, in the order the review lists them. */
+export const AI_SITE_START_EXTRA_KEYS: readonly AiSiteStartExtraKey[] = [
+  'phone',
+  'email',
+  'tagline',
+  'founded',
+  'serviceArea',
+  'priceRange',
+  'languages',
+  'brand',
+  'street',
+  'city',
+  'region',
+  'postalCode',
+  'country',
+  'hours',
+  'social',
+]
+
+/** What is wrong with one extra, worded for beside its field; `null` when it may be used. */
+export function aiSiteStartExtraProblem(
+  key: AiSiteStartExtraKey,
+  value: string,
+): { code: 'too_long' | 'invalid'; message: string } | null {
+  if (key === 'city' || key === 'brand') {
+    return value.trim().length > AI_SITE_INPUT_MAX_CHARS
+      ? { code: 'too_long', message: `Keep this under ${AI_SITE_INPUT_MAX_CHARS} characters.` }
+      : null
+  }
+  return aiSiteDetailProblem(key, value)
+}
+
+/** The extras a person gave, in the review's order: what "More details" was used for. */
+export function aiSiteStartExtrasGiven(answers: AiSiteStartAnswers): AiSiteStartExtraKey[] {
+  return AI_SITE_START_EXTRA_KEYS.filter((key) => (answers[key] ?? '').trim() !== '')
 }
 
 /** The kind of site the answers pick, else the one what the site is and who it is for suggest. */
@@ -219,6 +279,10 @@ export function aiSiteStartRefusal(
   }
   if (!(AI_SITE_SUBMISSIONS as readonly string[]).includes(answers.submissions)) {
     return 'Say where the contact form’s submissions go.'
+  }
+  for (const key of AI_SITE_START_EXTRA_KEYS) {
+    const problem = aiSiteStartExtraProblem(key, answers[key] ?? '')
+    if (problem) return problem.message
   }
   return aiSiteStartInspirationRefusal(answers, options)
 }
@@ -292,9 +356,17 @@ export function aiSiteStartBrief(answers: AiSiteStartAnswers): string {
  */
 export function aiSiteStartInputs(
   answers: AiSiteStartAnswers,
-): Omit<AiSiteJobInputs, 'batchId' | 'inspiration'> & { inspiration?: string } {
+): Omit<AiSiteJobInputs, 'batchId' | 'inspiration' | AiSiteDetailKey> & Partial<AiSiteDetails> & { inspiration?: string } {
   const example = aiSiteStartExample(answers)
   const kind = aiSiteStartKind(answers)
+  // The details are sent only where given (AGL-3979): the plan step lists
+  // every scalar input on a line of its own, and a start without them is
+  // asked exactly what it was asked before.
+  const details: Partial<AiSiteDetails> = {}
+  for (const key of AI_SITE_DETAIL_KEYS) {
+    const value = (answers[key] ?? '').trim()
+    if (value) details[key] = value
+  }
   // The sites they like travel only when there are some (AGL-3975), so a
   // start without them asks for exactly what it always did.
   const inspiration = aiSiteInspirationInput(aiSiteStartInspirationTyped(answers))
@@ -305,10 +377,11 @@ export function aiSiteStartInputs(
     siteKind: kind.id,
     pages: answers.pages,
     businessName: '',
-    city: '',
-    brand: '',
+    city: (answers.city ?? '').trim(),
+    brand: (answers.brand ?? '').trim(),
     submissions: answers.submissions,
     welcomeEmail: answers.welcomeEmail,
+    ...details,
     ...(inspiration ? { [AI_SITE_INSPIRATION_INPUT]: inspiration } : {}),
   }
 }
@@ -325,6 +398,7 @@ export const AI_SITE_START_INPUT_KEYS = [
   'brand',
   'submissions',
   'welcomeEmail',
+  ...AI_SITE_DETAIL_KEYS,
   AI_SITE_INSPIRATION_INPUT,
 ] as const
 
@@ -369,6 +443,9 @@ export function aiSiteStartAnswersFromInputs(
       ? (submissions as AiSiteSubmissions)
       : AI_SITE_START_ANSWERS.submissions,
     welcomeEmail: options.freeTaste ? false : inputs?.['welcomeEmail'] !== false,
+    city: text('city'),
+    brand: text('brand'),
+    ...(Object.fromEntries(AI_SITE_DETAIL_KEYS.map((key) => [key, text(key)])) as unknown as AiSiteDetails),
     // The sites they liked come back as typed, within the workspace's limit (AGL-3975).
     ...(text(AI_SITE_INSPIRATION_INPUT)
       ? { inspiration: text(AI_SITE_INSPIRATION_INPUT).split(/\s+/).filter(Boolean).slice(0, aiSiteInspirationLimit(options.freeTaste)) }

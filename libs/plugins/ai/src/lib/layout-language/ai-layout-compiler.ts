@@ -61,6 +61,7 @@ import {
   type AiLayoutListingRole,
 } from './ai-layout-listings'
 import { aiStorefrontItemIcons } from './ai-layout-storefront'
+import { aiLayoutContactLabel, aiLayoutWithContactLines } from './ai-layout-contact'
 import { AI_LAYOUT_LABELS_EN, aiLayoutLabel } from './ai-layout-labels'
 import {
   aiLayoutRenamedLabel,
@@ -291,12 +292,16 @@ function formSectionOf(
 
 /** Compiles a page designed in the layout language into the tree it stores. */
 export function aiCompileLayoutPage(
-  sections: readonly AiLayoutSection[],
+  designed: readonly AiLayoutSection[],
   plan: AiLayoutPagePlan,
   targets: AiLayoutTargets,
   options: AiLayoutCompileOptions,
 ): AiLayoutCompiledPage {
   const tree = new AiLayoutTreeBuilder()
+  const formSection = formSectionOf(designed, plan, targets)
+  // The page a visitor opens to get in touch shows the phone and email the
+  // business gave, as links, wherever the design did not (AGL-3979).
+  const sections = aiLayoutWithContactLines(designed, formSection, targets.contact)
   const page: PageScope = {
     tree,
     plan,
@@ -306,7 +311,7 @@ export function aiCompileLayoutPage(
     scrollTo: {},
     images: 0,
     strong: { brand: 0, dark: 0 },
-    formSection: formSectionOf(sections, plan, targets),
+    formSection,
     pageIcon: pageIconOf(sections),
     formsPlaced: new Set(),
     itemIds: plan.sections.map(() => []),
@@ -1082,7 +1087,10 @@ function compileButton(
   scope: SectionScope,
   block: AiLayoutBlock,
 ): string | null {
-  const asked = aiLayoutFitText(block.text, 'label', scope.page.options.language)
+  // Words that carry the phone or the email are kept whole (AGL-3979).
+  const asked =
+    aiLayoutContactLabel(block.text, scope.page.targets.contact) ||
+    aiLayoutFitText(block.text, 'label', scope.page.options.language)
   if (!asked) return null
   const destination = aiLayoutResolveLink(
     block.to,
@@ -1156,6 +1164,8 @@ export function destinationProps(
   if (destination.kind === 'href')
     return { href: destination.href, target: '_blank' }
   if (destination.kind === 'path') return { href: destination.href }
+  // A call or an email opens the phone or the mail app, never a new tab (AGL-3979).
+  if (destination.kind === 'contact') return { href: destination.href }
   return {}
 }
 
@@ -1835,7 +1845,9 @@ function list(scope: SectionScope, block: AiLayoutBlock): string | null {
   // resolves is a Page Link, and one that does not is left out (rule 10).
   if ((block.items ?? []).some((item) => item.to)) {
     const links = (block.items ?? []).flatMap((item) => {
-      const label = aiLayoutFitText(item.title || item.text, 'label', scope.page.options.language)
+      const label =
+        aiLayoutContactLabel(item.title || item.text, scope.page.targets.contact) ||
+        aiLayoutFitText(item.title || item.text, 'label', scope.page.options.language)
       const destination = label
         ? aiLayoutResolveLink(item.to, label, scope.link, scope.page.targets)
         : null

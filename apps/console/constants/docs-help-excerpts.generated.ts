@@ -70,6 +70,7 @@ export const DOCS_HELP_EXCERPTS = {
   buildingFeaturePlugins: 'The console-extension + frontend-UI plugin pair pattern for shipping features as plugins.',
   bulkActions: 'Select rows in any CRM table — contacts, companies, deals, tasks or leads — and act on all of them at once, or export them as a CSV.',
   businessProfile: 'Tell Aglyn AI what your business does, who it is for and how it sounds. Every AI job for the site reads it, uses your real contact details only, and remembers the edits you keep.',
+  buyADomain: 'Search for a domain on your site\'s Custom Domain page, buy it, and your site goes live at it automatically — no DNS records, renewals handled for you.',
   catalog: 'Products with options and variants, categories, tags, and manual or smart collections.',
   comingSoonLaunch: 'Put a coming-soon page on your domain, keep the rest of the site out of search while you finish it, collect signups, and reverse all of it on launch day.',
   commerce: 'Sell physical, digital, and service products with a full catalog, orders pipeline, shipping, taxes, and your own Stripe account.',

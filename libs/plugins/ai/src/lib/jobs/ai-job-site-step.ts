@@ -65,6 +65,7 @@ import {
   AI_SITE_SEO_OUTPUT_ID,
   aiSiteSeoProposalForInputs,
 } from '../model/ai-site-start-seo'
+import { aiSiteDetailsBriefLines } from '../model/ai-site-details'
 import { aiModelForStep } from '../providers/routing'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiOriginJobId, aiRecordedJobDraftId } from './ai-job-draft-ids'
@@ -443,12 +444,11 @@ export function aiSitePendingUnits(
  * output by `aiSitePendingUnits` and cannot move where the scaffold thinks
  * it is.
  */
-export function aiSiteSeoOutputs(job: AiJob): AiJobOutput[] {
-  const outputs = job.outputs ?? []
-  if (outputs.some((output) => output.resource === 'seo' && output.id === AI_SITE_SEO_OUTPUT_ID)) {
-    return []
-  }
-  const proposal = aiSiteSeoProposalForInputs(job.inputs, job.plan?.language)
+export function aiSiteSeoOutputs(job: AiJob, siteName?: string | null): AiJobOutput[] {
+  if (!aiSiteSeoOutputOwed(job)) return []
+  // The site's own name leads it where the start named no business (AGL-3979):
+  // the same listing the publish writes over the seeded default.
+  const proposal = aiSiteSeoProposalForInputs(job.inputs, job.plan?.language, siteName)
   if (!proposal) return []
   return [
     {
@@ -459,6 +459,26 @@ export function aiSiteSeoOutputs(job: AiJob): AiJobOutput[] {
       proposal: proposal as unknown as Record<string, unknown>,
     },
   ]
+}
+
+/** Whether the scaffold has yet to report the site's listing. */
+export function aiSiteSeoOutputOwed(job: Pick<AiJob, 'outputs'>): boolean {
+  return !(job.outputs ?? []).some((output) => output.resource === 'seo' && output.id === AI_SITE_SEO_OUTPUT_ID)
+}
+
+/** The site's own name, which its listing leads with (AGL-3979); `null` when it cannot be read. */
+export async function aiSiteDisplayName(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string | null | undefined,
+): Promise<string | null> {
+  if (!hostId) return null
+  try {
+    const name = (await firestore.collection('hosts').doc(hostId).get()).get('displayName')
+    return typeof name === 'string' && name.trim() ? name.trim() : null
+  } catch {
+    // A listing without the name is the listing every start made before.
+    return null
+  }
 }
 
 /** A record an earlier unit created, as a later one references it. */
@@ -560,6 +580,9 @@ export function aiSiteBriefLines(
   ].filter(Boolean)
   lines.push(`Site — ${site.join('; ')}.`)
   if (inputs.businessName) lines.push(aiSiteNameSentence(inputs.businessName))
+  // The business details the person gave (AGL-3979): how to reach it, where
+  // and when, and that the pages show the phone and email as written.
+  lines.push(...aiSiteDetailsBriefLines(inputs, { city: inputs.city }))
   return lines
 }
 
@@ -1052,6 +1075,8 @@ export interface AiJobSiteStepDeps {
   readNodes?: typeof readAiDraftNodes
   /** The guided start's publish; specs hand in a fake. */
   publish?: typeof aiPublishGuidedSite
+  /** The site's own name, which its listing leads with (AGL-3979); specs hand in a fake. */
+  siteName?: typeof aiSiteDisplayName
   /** The look's pass (AGL-3660); specs hand in a fake. */
   look?: (context: AiJobStepContext, job: AiJob) => Promise<AiJobStepOutcome>
   /** The first posts' and first products' passes (AGL-3676); specs hand in fakes. */
@@ -1207,6 +1232,7 @@ export function createAiJobSiteStep(
   const runnerFor = deps.runnerFor ?? aiJobStepRunnerFor
   const readNodes = deps.readNodes ?? readAiDraftNodes
   const publish = deps.publish ?? aiPublishGuidedSite
+  const siteName = deps.siteName ?? aiSiteDisplayName
   const look = deps.look ?? aiRunSiteLook
   const contentRefusal = deps.contentRefusal ?? aiSiteContentRefusal
   const datasetRefusal = deps.datasetRefusal ?? aiSiteDatasetRefusal
@@ -1393,7 +1419,7 @@ export function createAiJobSiteStep(
     // The site's own listing rides out beside the first unit's output, once
     // (AGL-2918): it is derived from the answers rather than generated, so it
     // is ready before anything is built and costs the pass nothing.
-    const listing = aiSiteSeoOutputs(job)
+    const listing = aiSiteSeoOutputOwed(job) ? aiSiteSeoOutputs(job, await siteName(context.firestore, job.hostId)) : []
     const settle = (item: AiJobItemOutcome, spent: AiJobStepOutcome = aiUnspentOutcome(model)): AiJobStepOutcome => ({
       ...spent,
       outputs: [...listing, ...spent.outputs],

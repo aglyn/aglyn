@@ -178,6 +178,15 @@ describe('the site job prefill (AGL-3661)', () => {
     expect(aiBusinessProfileStartValues(job({ kind: 'page' }))).toBeNull()
   })
 
+  it('names the areas the start serves, as many whole ones as the field holds, before its city (AGL-3979)', () => {
+    const many = Array.from({ length: 12 }, (_, index) => `Neighborhood number ${index + 1}`).join('\n')
+    const inputs = { businessType: 'a local dog groomer', city: 'Austin' }
+    expect(aiBusinessProfileStartValues(job({ inputs: { ...inputs, serviceArea: 'Austin\nRound Rock' } }))?.serviceArea).toBe('Austin, Round Rock')
+    const long = aiBusinessProfileStartValues(job({ inputs: { ...inputs, serviceArea: many } }))?.serviceArea ?? ''
+    expect(long.length).toBeLessThanOrEqual(120)
+    expect(long).toMatch(/^Neighborhood number 1, .*Neighborhood number \d+$/)
+  })
+
   it("writes the start's answers, and the plan's line only where the start said nothing", async () => {
     const { firestore, docs } = memoryFirestore()
     await aiBusinessProfilePrefiller(() => firestore)({ job: job(), to: 'done' })

@@ -132,11 +132,13 @@ extension PushCenter: UNUserNotificationCenterDelegate {
 #elseif os(macOS)
   final class PushAppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static var push: PushCenter?
+    /// Whether the app's main windows are tabs of one group (Aglyn; Aglyn POS keeps one window).
+    @MainActor static var windowTabs = false
 
-    /// A second window is opened on purpose (File › New Window) and stands on its own: macOS never folds the app's
-    /// windows into a tab bar, so a restored or extra window never shows as a duplicate tab under the toolbar.
+    /// Aglyn's main windows are tabs of one group (AGL-3945); Aglyn POS keeps its windows apart, so a restored or
+    /// extra register window never shows as a duplicate tab under the toolbar.
     func applicationWillFinishLaunching(_ notification: Notification) {
-      MainActor.assumeIsolated { NSWindow.allowsAutomaticWindowTabbing = false }
+      MainActor.assumeIsolated { NSWindow.allowsAutomaticWindowTabbing = Self.windowTabs }
     }
 
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {

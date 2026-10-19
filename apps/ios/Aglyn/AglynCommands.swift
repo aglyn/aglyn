@@ -68,3 +68,41 @@ struct AglynCommands: Commands {
     navigation?.enterWorkspace()
   }
 }
+
+#if os(macOS)
+  /// The Mac's tab commands: New Tab (⌘T) beside the one in front, on its workspace and site; Reopen Closed Tab
+  /// (⌘⇧T) and the Recently Closed list. Close Tab is the system's ⌘W, and Show All Tabs its own tab overview.
+  struct TabCommands: Commands {
+    let model: AppModel
+    @FocusedValue(\.shellNavigation) private var navigation
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+      CommandGroup(after: .newItem) {
+        Button("New Tab") {
+          var seed = navigation?.seed(model: model) ?? ShellSeed()
+          seed.id = UUID()
+          seed.screen = nil
+          seed.params = [:]
+          seed.title = "Home"
+          openWindow(id: "main", value: seed)
+        }
+        .keyboardShortcut("t", modifiers: .command)
+        Button("Reopen Closed Tab") {
+          if let seed = model.closedTabs.reopen() { openWindow(id: "main", value: seed) }
+        }
+        .keyboardShortcut("t", modifiers: [.command, .shift])
+        .disabled(model.closedTabs.seeds.isEmpty)
+        Menu("Recently Closed") {
+          ForEach(model.closedTabs.seeds) { seed in
+            Button(seed.title) {
+              model.closedTabs.take(seed)
+              openWindow(id: "main", value: seed)
+            }
+          }
+        }
+        .disabled(model.closedTabs.seeds.isEmpty)
+      }
+    }
+  }
+#endif

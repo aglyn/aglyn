@@ -103,7 +103,8 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
 import { aiSitePlanIsHome } from '../model/ai-site-job'
-import { aiSiteStartBrief, aiSiteStartInputs, type AiSiteStartAnswers } from '../model/ai-site-start'
+import { AI_SITE_START_ANSWERS, aiSiteStartBrief, aiSiteStartInputs, type AiSiteStartAnswers } from '../model/ai-site-start'
+import type { AiSiteDetailKey } from '../model/ai-site-details'
 import { aiLiveRunLedger } from '../runtime/ai-dev-replay'
 import { aiEvalMemoryFirestore } from '../runtime/ai-eval-memory-firestore'
 import { aiPlanCapabilitiesFrom } from './ai-job-drafts'
@@ -131,7 +132,11 @@ const ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: ORG_PLAN, o
  * Briefs as people answer the guided start: a business, who it is for, a look,
  * two pages — and the site's own name, which the create door adds (AGL-3596).
  */
-const BRIEFS: ReadonlyArray<{ businessName: string; businessType: string; audience: string; starter: string; siteKind?: string }> = [
+const BRIEFS: ReadonlyArray<
+  { businessName: string; businessType: string; audience: string; starter: string; siteKind?: string } & Partial<
+    Record<AiSiteDetailKey | 'city', string>
+  >
+> = [
   // The beta.237 store start Zach judged "not a store front" (AGL-3676): its
   // plan is settled into a storefront, which the table reports below.
   { businessName: 'Willow Wick Candles', businessType: 'a small-batch candle shop selling hand-poured soy candles online', audience: 'people who buy candles for themselves and as gifts', starter: 'shop-physical', siteKind: 'store' },
@@ -148,6 +153,30 @@ const BRIEFS: ReadonlyArray<{ businessName: string; businessType: string; audien
   // A Free blog writes its first post since AGL-3798: its plan is told the
   // blog is written and linked, so no page may stand in for it.
   { businessName: 'Slow Roads', businessType: 'a personal travel blog about long train journeys through Europe, written by one person', audience: 'readers planning a slow trip by rail', starter: 'business', siteKind: 'blog' },
+  // A start given every detail (AGL-3979): the phone, the email and what More
+  // details holds ride as inputs, each on a line of its own, as the guided
+  // start sends them, and the plan must keep the rules all the same.
+  {
+    businessName: 'Pipeworks Plumbing',
+    businessType: 'a family plumbing company that fixes leaks and installs water heaters',
+    audience: 'homeowners with a plumbing emergency',
+    starter: 'business',
+    siteKind: 'trades',
+    phone: '(512) 555-0142',
+    email: 'hello@pipeworks.co',
+    tagline: 'Honest plumbing, on time',
+    founded: '2009',
+    serviceArea: 'Austin\nRound Rock\nPflugerville',
+    priceRange: '$$',
+    languages: 'English, Spanish',
+    street: '214 Main Street',
+    city: 'Austin',
+    region: 'TX',
+    postalCode: '78701',
+    country: 'United States',
+    hours: 'Mo-Fr 08:00-18:00\nSa 09:00-13:00',
+    social: 'instagram.com/pipeworksatx\nfacebook.com/pipeworksatx',
+  },
 ]
 
 /**
@@ -270,6 +299,7 @@ describeLanguages("a guided start's plan in another language, from the real mode
     const results = await Promise.all(
       LANGUAGE_BRIEFS.map(async (entry, index) => {
         const answers: AiSiteStartAnswers = {
+          ...AI_SITE_START_ANSWERS,
           siteType: entry.siteType,
           audience: entry.audience,
           example: null,
